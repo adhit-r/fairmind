@@ -1,0 +1,114 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           Int          @id @default(autoincrement())
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  email        String       @unique
+  passwordHash String
+  name         String
+  role         String       @default("USER")
+  simulations  Simulation[]
+  auditLogs    AuditLog[]
+}
+
+model Simulation {
+  id                     Int                      @id @default(autoincrement())
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
+  name                   String
+  description            String?
+  status                 SimulationStatus
+  userId                 Int
+  user                   User                     @relation(fields: [userId], references: [id])
+  config                 Json
+  modelType              String
+  version                String
+  tags                   String[]
+  BiasDetectionResult    BiasDetectionResult[]
+  FairnessAssessment     FairnessAssessment[]
+  ExplainabilityAnalysis ExplainabilityAnalysis[]
+  ComplianceRecord       ComplianceRecord[]
+  RiskAssessment         RiskAssessment[]
+  auditLogs              AuditLog[]
+}
+
+enum SimulationStatus {
+  DRAFT
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  ARCHIVED
+}
+
+model BiasDetectionResult {
+  id           Int        @id @default(autoincrement())
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  simulationId Int
+  simulation   Simulation @relation(fields: [simulationId], references: [id])
+  result       Json
+}
+
+model FairnessAssessment {
+  id           Int        @id @default(autoincrement())
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  simulationId Int
+  simulation   Simulation @relation(fields: [simulationId], references: [id])
+  assessment   Json
+}
+
+model ExplainabilityAnalysis {
+  id           Int        @id @default(autoincrement())
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  simulationId Int
+  simulation   Simulation @relation(fields: [simulationId], references: [id])
+  analysis     Json
+}
+
+model ComplianceRecord {
+  id           Int        @id @default(autoincrement())
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  simulationId Int
+  simulation   Simulation @relation(fields: [simulationId], references: [id])
+  record       Json
+}
+
+model RiskAssessment {
+  id           Int        @id @default(autoincrement())
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  simulationId Int
+  simulation   Simulation @relation(fields: [simulationId], references: [id])
+  assessment   Json
+}
+
+model AuditLog {
+  id           Int         @id @default(autoincrement())
+  createdAt    DateTime    @default(now())
+  userId       Int
+  user         User        @relation(fields: [userId], references: [id])
+  simulationId Int?
+  simulation   Simulation? @relation(fields: [simulationId], references: [id])
+  action       String
+  details      Json
+  ipAddress    String
+  userAgent    String
+}
