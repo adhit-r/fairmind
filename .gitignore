@@ -45,4 +45,4 @@ product/
 *.zip
 *.tar
 *.gz
-*.bz2
+*.bz2.DS_Store
