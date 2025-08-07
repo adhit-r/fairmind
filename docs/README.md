@@ -76,7 +76,7 @@ This directory contains comprehensive documentation for the FairMind Ethical San
 
 ## 📊 **Live Demo**
 
-**Try the platform:** [https://fairmind-demo-app.netlify.app](https://fairmind-demo-app.netlify.app)
+**Try the platform:** [https://app-demo.fairmind.xyz](https://app-demo.fairmind.xyz)
 
 The demo starts with an empty dashboard. Click "Load Demo Data" to explore all features.
 

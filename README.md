@@ -6,7 +6,7 @@ A comprehensive AI governance platform for testing, monitoring, and ensuring eth
 
 ## Live Demo
 
-**Try the platform:** [https://fairmind-demo-app.netlify.app](https://fairmind-demo-app.netlify.app)
+**Try the platform:** [https://app-demo.fairmind.xyz](https://app-demo.fairmind.xyz)
 
 The demo starts with an empty dashboard. Click "Load Demo Data" to explore all features with synthetic data.
 
@@ -84,7 +84,7 @@ open http://localhost:3000
 ./deploy-demo.sh
 
 # Demo will be available at:
-# https://fairmind-demo-app.netlify.app
+# https://app-demo.fairmind.xyz
 ```
 
 ## Project Structure
