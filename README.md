@@ -1,129 +1,174 @@
-# FairMind - AI Governance Platform
+# FairMind Ethical Sandbox™
 
-A comprehensive AI governance and ethical testing platform built with Next.js, FastAPI, and Supabase.
+> **Building responsible AI systems for a better future**
 
-## 🌐 Live Demo
+A comprehensive AI governance platform for testing, monitoring, and ensuring ethical AI deployment through real-time analytics, bias detection, and compliance management.
 
-Visit the live application: [FairMind Dashboard](https://radhi1991.github.io/fairmind/)
+## 🏗️ **Architecture Overview**
 
-## 🚀 Features
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Next.js       │    │   Python        │    │   Supabase      │
+│   Frontend      │◄──►│   FastAPI       │◄──►│   Database      │
+│   (UI/UX)       │    │   (ML/AI)       │    │   (Auth/Data)   │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+```
 
-- **AI Governance Dashboard** - Comprehensive monitoring and management
-- **Model Registry** - Track and manage AI models
-- **Risk Assessment** - Evaluate model risks and compliance
-- **Geographic Bias Detection** - Identify and mitigate bias
-- **AI Model Testing** - Comprehensive testing suite
-- **Real-time Monitoring** - Live updates and alerts
-- **Dark Theme UI** - Modern, accessible interface
+### **Technology Stack**
 
-## 🏗️ Architecture
+| Layer | Technology | Purpose |
+|-------|------------|---------|
+| **Frontend** | Next.js 14 + TypeScript | Modern React UI with real-time updates |
+| **Backend** | Python FastAPI | ML/AI services, bias analysis, compliance |
+| **Database** | Supabase (PostgreSQL) | Data storage, auth, real-time subscriptions |
 
-- **Frontend**: Next.js 14 with TypeScript and Tailwind CSS
-- **Backend**: Python FastAPI with SQLAlchemy
-- **Database**: Supabase PostgreSQL
-- **Authentication**: Supabase Auth
-- **Real-time**: Supabase Realtime
-- **Deployment**: GitHub Pages (Frontend) + Vercel/Railway (Backend)
+## 🚀 **Quick Start**
 
-## 📁 Project Structure
+```bash
+# Clone the repository
+git clone <repository-url>
+cd fairmind-ethical-sandbox
+
+# Install dependencies
+npm install
+cd frontend && bun install
+
+# Start all services
+npm run dev
+
+# Or start specific services
+npm run dev:frontend    # Frontend only
+npm run dev:backend     # Backend only
+```
+
+## 📁 **Project Structure**
 
 ```
 fairmind-ethical-sandbox/
-├── frontend/                 # Next.js application
+├── frontend/              # Next.js frontend application
 │   ├── src/
-│   │   ├── app/             # App router pages
-│   │   ├── components/      # React components
-│   │   ├── lib/             # Utilities and services
-│   │   └── types/           # TypeScript types
-├── backend/                  # FastAPI application
-│   ├── main.py              # FastAPI app
-│   ├── models/              # AI model implementations
-│   └── requirements.txt     # Python dependencies
-├── supabase/                # Database migrations
-└── docs/                    # Documentation
+│   │   ├── app/           # App router pages
+│   │   ├── components/    # React components
+│   │   ├── lib/           # Utilities and services
+│   │   └── types/         # TypeScript definitions
+│   ├── package.json       # Frontend dependencies
+│   └── next.config.js     # Next.js configuration
+├── backend/               # Python FastAPI backend
+│   ├── main.py            # FastAPI application
+│   ├── websocket.py       # Real-time WebSocket server
+│   ├── requirements.txt   # Python dependencies
+│   └── supabase/          # Database migrations
+├── supabase/              # Database configuration
+├── package.json           # Root project configuration
+└── README.md              # This file
 ```
 
-## 🛠️ Development
+## 🎯 **Key Features**
 
-### Prerequisites
+### **Real-time AI Governance Dashboard**
+- Live monitoring of fairness, robustness, and compliance metrics
+- Interactive charts and visualizations
+- Real-time risk assessment and alerting
 
-- Node.js 18+ and Bun
-- Python 3.9+
-- Supabase account
+### **AI/ML Bill Compliance**
+- Regulatory requirement tracking
+- Materials and policy management
+- Comprehensive audit trails
 
-### Frontend Development
+### **Model Management**
+- Centralized model registry
+- Version control and lifecycle tracking
+- Model validation and comparison
 
+### **Advanced Analytics**
+- Bias detection across demographics
+- Explainability and feature importance
+- Model drift monitoring
+
+## 🔧 **Development**
+
+### **Frontend Development**
 ```bash
 cd frontend
-bun install
-bun run dev
+bun run dev          # Start development server
+bun run build        # Build for production
+bun run lint         # Run ESLint
 ```
 
-### Backend Development
-
+### **Backend Development**
 ```bash
 cd backend
-pip install -r requirements.txt
-python main.py
+python main.py       # Start FastAPI server
+# Or with uvicorn
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-## 🚀 Deployment
+### **Database Management**
+```bash
+# Start Supabase locally
+npm run dev:supabase
 
-### GitHub Pages (Frontend)
+# Reset database
+npm run supabase:reset
 
-The frontend is automatically deployed to GitHub Pages when changes are pushed to the `gh-pages` branch.
+# Push migrations
+npm run supabase:db:push
+```
 
-**Live URL**: https://radhi1991.github.io/fairmind/
+## 📊 **API Endpoints**
 
-### Backend Deployment
+### **Health Check**
+```bash
+curl http://localhost:8000/health
+```
 
-The backend can be deployed to:
-- **Vercel**: For serverless deployment
-- **Railway**: For containerized deployment
-- **Heroku**: For traditional deployment
+### **Governance Metrics**
+```bash
+curl http://localhost:8000/governance/metrics
+```
 
-## 📊 Key Features
+### **Models**
+```bash
+curl http://localhost:8000/models
+```
 
-### AI Governance Dashboard
-- Real-time metrics and KPIs
-- Model performance tracking
-- Risk assessment matrix
-- Compliance monitoring
+### **Simulations**
+```bash
+curl http://localhost:8000/simulations
+```
 
-### Geographic Bias Detection
-- Multi-regional bias analysis
-- Cultural sensitivity testing
-- Geographic fairness metrics
-- Bias mitigation strategies
+### **AI Bill Requirements**
+```bash
+curl http://localhost:8000/ai-bill/requirements
+```
 
-### Model Testing Suite
-- Comprehensive test scenarios
-- Automated testing workflows
-- Performance benchmarking
-- Safety and robustness testing
+## 🔒 **Security & Compliance**
 
-## 🔧 Configuration
+- **Authentication**: Supabase Auth with role-based access
+- **Data Privacy**: GDPR and CCPA compliance features
+- **Audit Logging**: Comprehensive activity tracking
+- **Encryption**: Data encryption at rest and in transit
 
-1. Copy `.env.template` to `.env.local`
-2. Configure Supabase credentials
-3. Set up email service (optional)
-4. Configure authentication settings
+## 📈 **Real-time Features**
 
-## 📝 License
+The platform uses Supabase's real-time capabilities for:
+- Live dashboard updates
+- Real-time compliance monitoring
+- Instant alert notifications
+- Live model performance tracking
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🤝 Contributing
+## 🤝 **Contributing**
 
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
-4. Submit a pull request
+4. Add tests
+5. Submit a pull request
 
-## 📞 Support
+## 📄 **License**
 
-For support and questions, please open an issue on GitHub.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
-**FairMind** - Empowering ethical AI development through comprehensive governance and testing.
+**Fairmind Ethical Sandbox** - Building responsible AI systems for a better future.
