@@ -9,10 +9,10 @@ cd ../supabase/functions/fairness-analysis
 
 # Deploy the function using the Supabase CLI
 echo "Deploying fairness-analysis Edge Function..."
-supabase functions deploy fairness-analysis --project-ref swapkvhzyhcruoyjpkyr --no-verify-jwt
+supabase functions deploy fairness-analysis --project-ref YOUR_PROJECT_REF --no-verify-jwt
 
 echo "Deployment complete. You can test the function with:"
-echo "curl -X POST 'https://swapkvhzyhcruoyjpkyr.supabase.co/functions/v1/fairness-analysis' \\"
+echo "curl -X POST 'https://YOUR_PROJECT_REF.supabase.co/functions/v1/fairness-analysis' \\"
 echo "  -H 'Authorization: Bearer $SUPABASE_SERVICE_KEY' \\"
 echo "  -H 'Content-Type: application/json' \\"
 echo "  -d '{\"simulationId\": 1}'"

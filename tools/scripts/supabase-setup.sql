@@ -118,7 +118,7 @@ begin
 end;
 $$ language plpgsql security definer;
 
--- Create a default admin user (password: admin123 - change this after first login)
+-- Create a default admin user (password: CHANGE_THIS_PASSWORD - change this after first login)
 -- First check if user exists
 DO $$
 BEGIN
@@ -130,7 +130,7 @@ BEGIN
       '00000000-0000-0000-0000-000000000000',
       '00000000-0000-0000-0000-000000000000',
       'admin@fairmind.app',
-      crypt('admin123', gen_salt('bf')),
+      crypt('CHANGE_THIS_PASSWORD', gen_salt('bf')),
       now(),
       '{"provider":"email","providers":["email"]}',
       '{"username":"admin"}',
