@@ -1,0 +1,363 @@
+---
+import Layout from '../layouts/Layout.astro';
+
+const dashboardFeatures = [
+  {
+    title: 'Main Dashboard',
+    description: 'Overview with 22 specialized dashboard cards and real-time metrics',
+    image: '/screenshots/dashboard/main-dashboard.png',
+    features: ['Overview Cards', 'Real-time Metrics', 'Quick Actions', 'Recent Activity']
+  },
+  {
+    title: 'Advanced Bias Detection',
+    description: 'SHAP, LIME, and Knowledge Graph integration for comprehensive bias analysis',
+    image: '/screenshots/dashboard/bias-detection.png',
+    features: ['SHAP Analysis', 'LIME Explanations', 'Knowledge Graph', 'Bias Patterns']
+  },
+  {
+    title: 'Knowledge Graph',
+    description: 'Neo4j-powered causal relationship analysis and bias propagation tracking',
+    image: '/screenshots/dashboard/knowledge-graph.png',
+    features: ['Neo4j Integration', 'Causal Chains', 'Bias Patterns', 'Graph Alerts']
+  },
+  {
+    title: 'Geographic Bias Analysis',
+    description: 'Cross-country cultural factors and regional bias detection',
+    image: '/screenshots/dashboard/geographic-bias.png',
+    features: ['Country Analysis', 'Cultural Factors', 'Regional Patterns', 'Bias Metrics']
+  },
+  {
+    title: 'Model DNA Signatures',
+    description: 'Genetic lineage tracking and inheritance pattern analysis',
+    image: '/screenshots/dashboard/model-dna.png',
+    features: ['DNA Signatures', 'Lineage Tracking', 'Inheritance Patterns', 'Genetic Analysis']
+  },
+  {
+    title: 'Real-time Monitoring',
+    description: 'Live alerts, drift detection, and compliance tracking',
+    image: '/screenshots/dashboard/monitoring.png',
+    features: ['Live Alerts', 'Drift Detection', 'Performance Issues', 'System Health']
+  }
+];
+
+const dashboardCategories = [
+  {
+    title: 'GOVERNANCE',
+    description: 'Core management and overview',
+    dashboards: ['Main Dashboard', 'New Simulation', 'Governance Review'],
+    color: 'blue'
+  },
+  {
+    title: 'TESTING',
+    description: 'Advanced bias detection and analysis',
+    dashboards: ['Bias Detection (SHAP/LIME)', 'Geographic Bias', 'Model DNA'],
+    color: 'purple'
+  },
+  {
+    title: 'COMPLIANCE',
+    description: 'Regulatory tracking and monitoring',
+    dashboards: ['AI Bill Compliance', 'Audit Logs', 'Real-time Monitoring'],
+    color: 'green'
+  },
+  {
+    title: 'MANAGEMENT',
+    description: 'Operational tools and analytics',
+    dashboards: ['Model Management', 'Version Control', 'Performance Tracking'],
+    color: 'orange'
+  },
+  {
+    title: 'ADVANCED',
+    description: 'Specialized analysis tools',
+    dashboards: ['Knowledge Graph', 'Cultural Factors', 'Historical Scenarios'],
+    color: 'pink'
+  },
+  {
+    title: 'SYSTEM',
+    description: 'Administration and configuration',
+    dashboards: ['Settings', 'Users', 'Configuration'],
+    color: 'gray'
+  }
+];
+---
+
+<Layout 
+  title="Live Demo | Fairmind"
+  description="Experience the most comprehensive AI governance platform with 22 specialized dashboards for bias detection, compliance tracking, and model management."
+>
+  <!-- Hero Section -->
+  <section class="relative overflow-hidden bg-gradient-to-b from-gray-900 to-gray-800 text-white pt-24 pb-16 md:pt-32 md:pb-24">
+    <div class="absolute inset-0 overflow-hidden pointer-events-none">
+      <div class="absolute -right-20 -top-20 w-96 h-96 bg-primary-500/10 rounded-full mix-blend-soft-light filter blur-3xl"></div>
+      <div class="absolute -left-20 -bottom-20 w-96 h-96 bg-secondary-500/10 rounded-full mix-blend-soft-light filter blur-3xl"></div>
+    </div>
+    
+    <div class="container mx-auto px-4 relative z-10">
+      <div class="max-w-4xl mx-auto text-center">
+        <h1 class="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight text-white mb-6">
+          <span class="block">Live Dashboard Demo</span>
+          <span class="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">22 Specialized Tools</span>
+        </h1>
+        
+        <p class="text-xl text-gray-300 mb-8 max-w-2xl mx-auto leading-relaxed">
+          Experience the most comprehensive AI governance platform featuring SHAP, LIME, and Neo4j Knowledge Graph integration. 
+          Explore 22 specialized dashboards for complete bias detection and compliance tracking.
+        </p>
+        
+        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+          <a 
+            href="http://localhost:3000" 
+            target="_blank"
+            class="btn btn-primary px-8 py-4 text-base font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5"
+          >
+            Launch Live Demo
+          </a>
+          <a 
+            href="/features" 
+            class="btn btn-outline-light px-8 py-4 text-base font-semibold border-2 border-white/20 hover:border-white/40 hover:bg-white/5 transition-all duration-300 transform hover:-translate-y-0.5"
+          >
+            View Features
+          </a>
+        </div>
+        
+        <!-- Feature badges -->
+        <div class="mt-8 flex flex-wrap gap-2 justify-center">
+          <span class="px-3 py-1 bg-purple-500/20 text-purple-300 text-sm rounded-full border border-purple-500/30">SHAP + LIME</span>
+          <span class="px-3 py-1 bg-blue-500/20 text-blue-300 text-sm rounded-full border border-blue-500/30">Knowledge Graph</span>
+          <span class="px-3 py-1 bg-green-500/20 text-green-300 text-sm rounded-full border border-green-500/30">22 Dashboards</span>
+          <span class="px-3 py-1 bg-orange-500/20 text-orange-300 text-sm rounded-full border border-orange-500/30">Real-time Alerts</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Dashboard Categories -->
+  <section class="py-20 bg-gray-50 relative overflow-hidden">
+    <div class="container mx-auto px-4 relative z-10">
+      <div class="max-w-4xl mx-auto text-center mb-16">
+        <span class="inline-block px-4 py-2 text-sm font-medium text-primary-700 bg-primary-50 rounded-full mb-4">Dashboard Organization</span>
+        <h2 class="text-4xl md:text-5xl font-bold text-gray-900 mb-6">22 Specialized Dashboards</h2>
+        <p class="text-xl text-gray-600">Modular organization for focused AI governance workflows</p>
+      </div>
+      
+      <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+        {dashboardCategories.map((category) => (
+          <div class="bg-white rounded-xl p-8 shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-100 hover:-translate-y-1">
+            <div class={`w-16 h-16 bg-${category.color}-50 rounded-xl flex items-center justify-center text-${category.color}-600 mb-6`}>
+              <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                {category.title === 'GOVERNANCE' && (
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                )}
+                {category.title === 'TESTING' && (
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                )}
+                {category.title === 'COMPLIANCE' && (
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                )}
+                {category.title === 'MANAGEMENT' && (
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+                )}
+                {category.title === 'ADVANCED' && (
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                )}
+                {category.title === 'SYSTEM' && (
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                )}
+              </svg>
+            </div>
+            <h3 class="text-xl font-bold text-gray-900 mb-3">{category.title}</h3>
+            <p class="text-gray-600 mb-4">{category.description}</p>
+            <ul class="text-sm text-gray-500 space-y-1.5">
+              {category.dashboards.map((dashboard) => (
+                <li class="flex items-start">
+                  <svg class="h-4 w-4 text-green-500 mr-2 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                  </svg>
+                  <span>{dashboard}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <!-- Dashboard Features Showcase -->
+  <section class="py-20 bg-white relative overflow-hidden">
+    <div class="container mx-auto px-4 relative z-10">
+      <div class="max-w-4xl mx-auto text-center mb-16">
+        <span class="inline-block px-4 py-2 text-sm font-medium text-primary-700 bg-primary-50 rounded-full mb-4">Dashboard Features</span>
+        <h2 class="text-4xl md:text-5xl font-bold text-gray-900 mb-6">Advanced AI Governance Tools</h2>
+        <p class="text-xl text-gray-600">Explore the specialized dashboards and their capabilities</p>
+      </div>
+      
+      <div class="space-y-16">
+        {dashboardFeatures.map((feature, index) => (
+          <div class={`grid lg:grid-cols-2 gap-12 items-center ${index % 2 === 1 ? 'lg:grid-flow-col-dense' : ''}`}>
+            <div class={`${index % 2 === 1 ? 'lg:col-start-2' : ''}`}>
+              <h3 class="text-3xl font-bold text-gray-900 mb-4">{feature.title}</h3>
+              <p class="text-lg text-gray-600 mb-6">{feature.description}</p>
+              <ul class="space-y-3">
+                {feature.features.map((item) => (
+                  <li class="flex items-start">
+                    <svg class="h-5 w-5 text-green-500 mr-3 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                    </svg>
+                    <span class="text-gray-700">{item}</span>
+                  </li>
+                ))}
+              </ul>
+              <div class="mt-8">
+                <a 
+                  href="http://localhost:3000" 
+                  target="_blank"
+                  class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-lg shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors duration-200"
+                >
+                  Try {feature.title}
+                  <svg class="ml-2 -mr-1 w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M12.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd" />
+                  </svg>
+                </a>
+              </div>
+            </div>
+            
+            <div class={`${index % 2 === 1 ? 'lg:col-start-1' : ''}`}>
+              <div class="relative rounded-2xl overflow-hidden shadow-2xl border-8 border-white bg-white transform hover:scale-105 transition-transform duration-500">
+                <img 
+                  src={feature.image} 
+                  alt={`${feature.title} Dashboard`} 
+                  class="w-full h-auto"
+                  loading="lazy"
+                />
+                <!-- Floating elements -->
+                <div class="absolute -bottom-4 -right-4 bg-white p-3 rounded-lg shadow-lg border border-gray-100">
+                  <div class="flex items-center">
+                    <div class="w-3 h-3 rounded-full bg-green-400 mr-2"></div>
+                    <span class="text-sm font-medium text-gray-700">Live Demo</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <!-- Interactive Demo Section -->
+  <section class="py-20 bg-gradient-to-r from-purple-600 to-pink-600 text-white relative overflow-hidden">
+    <div class="absolute inset-0 overflow-hidden pointer-events-none">
+      <div class="absolute -right-40 -top-40 w-80 h-80 bg-white/10 rounded-full mix-blend-soft-light filter blur-3xl"></div>
+      <div class="absolute -left-40 -bottom-40 w-80 h-80 bg-white/10 rounded-full mix-blend-soft-light filter blur-3xl"></div>
+    </div>
+    
+    <div class="container mx-auto px-4 relative z-10">
+      <div class="max-w-4xl mx-auto text-center">
+        <h2 class="text-4xl md:text-5xl font-bold mb-6">Experience the Full Platform</h2>
+        <p class="text-xl mb-8 text-white/90">
+          Launch the live demo to explore all 22 specialized dashboards and advanced features
+        </p>
+        
+        <div class="grid md:grid-cols-3 gap-8 mb-12">
+          <div class="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20">
+            <div class="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center mb-4 mx-auto">
+              <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
+            </div>
+            <h3 class="text-xl font-bold mb-2">Advanced Bias Detection</h3>
+            <p class="text-white/80">SHAP, LIME, and Knowledge Graph integration</p>
+          </div>
+          <div class="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20">
+            <div class="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center mb-4 mx-auto">
+              <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z" />
+              </svg>
+            </div>
+            <h3 class="text-xl font-bold mb-2">Knowledge Graph</h3>
+            <p class="text-white/80">Neo4j-powered causal relationship analysis</p>
+          </div>
+          <div class="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20">
+            <div class="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center mb-4 mx-auto">
+              <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            </div>
+            <h3 class="text-xl font-bold mb-2">Real-time Monitoring</h3>
+            <p class="text-white/80">Live alerts and compliance tracking</p>
+          </div>
+        </div>
+        
+        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+          <a 
+            href="http://localhost:3000" 
+            target="_blank"
+            class="btn btn-white px-8 py-4 text-base font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5"
+          >
+            Launch Live Demo
+          </a>
+          <a 
+            href="/contact" 
+            class="btn btn-outline-white px-8 py-4 text-base font-semibold border-2 border-white/20 hover:border-white/40 hover:bg-white/5 transition-all duration-300 transform hover:-translate-y-0.5"
+          >
+            Schedule Demo
+          </a>
+        </div>
+        
+        <div class="mt-8 text-white/70 text-sm">
+          <p>Demo includes all 22 specialized dashboards • No registration required • Full feature access</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Technical Specifications -->
+  <section class="py-20 bg-gray-50 relative overflow-hidden">
+    <div class="container mx-auto px-4 relative z-10">
+      <div class="max-w-4xl mx-auto text-center mb-16">
+        <span class="inline-block px-4 py-2 text-sm font-medium text-primary-700 bg-primary-50 rounded-full mb-4">Technical Specs</span>
+        <h2 class="text-4xl md:text-5xl font-bold text-gray-900 mb-6">Platform Architecture</h2>
+        <p class="text-xl text-gray-600">Built with modern technologies for enterprise-grade performance</p>
+      </div>
+      
+      <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+        <div class="bg-white rounded-xl p-8 shadow-lg border border-gray-100">
+          <div class="w-12 h-12 bg-blue-50 rounded-lg flex items-center justify-center mb-4">
+            <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zM21 5a2 2 0 00-2-2h-4a2 2 0 00-2 2v12a4 4 0 004 4h4a2 2 0 002-2V5z" />
+            </svg>
+          </div>
+          <h3 class="text-xl font-bold text-gray-900 mb-2">Frontend</h3>
+          <p class="text-gray-600">Next.js 14, React, TypeScript, Tailwind CSS</p>
+        </div>
+        <div class="bg-white rounded-xl p-8 shadow-lg border border-gray-100">
+          <div class="w-12 h-12 bg-green-50 rounded-lg flex items-center justify-center mb-4">
+            <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+            </svg>
+          </div>
+          <h3 class="text-xl font-bold text-gray-900 mb-2">Backend</h3>
+          <p class="text-gray-600">Python, FastAPI, PostgreSQL, Supabase</p>
+        </div>
+        <div class="bg-white rounded-xl p-8 shadow-lg border border-gray-100">
+          <div class="w-12 h-12 bg-purple-50 rounded-lg flex items-center justify-center mb-4">
+            <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z" />
+            </svg>
+          </div>
+          <h3 class="text-xl font-bold text-gray-900 mb-2">Knowledge Graph</h3>
+          <p class="text-gray-600">Neo4j, Cypher queries, Graph algorithms</p>
+        </div>
+        <div class="bg-white rounded-xl p-8 shadow-lg border border-gray-100">
+          <div class="w-12 h-12 bg-orange-50 rounded-lg flex items-center justify-center mb-4">
+            <svg class="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+            </svg>
+          </div>
+          <h3 class="text-xl font-bold text-gray-900 mb-2">ML/AI</h3>
+          <p class="text-gray-600">SHAP, LIME, scikit-learn, TensorFlow</p>
+        </div>
+      </div>
+    </div>
+  </section>
+</Layout>
