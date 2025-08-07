@@ -58,6 +58,12 @@ fairmind-ethical-sandbox/
 │   ├── websocket.py       # Real-time WebSocket server
 │   ├── requirements.txt   # Python dependencies
 │   └── supabase/          # Database migrations
+├── fairmind-website/      # Marketing website (Astro)
+│   ├── src/               # Astro source files
+│   ├── public/            # Static assets
+│   ├── package.json       # Website dependencies
+│   └── netlify.toml       # Deployment configuration
+├── docs/                  # Comprehensive documentation
 ├── supabase/              # Database configuration
 ├── package.json           # Root project configuration
 └── README.md              # This file
@@ -86,6 +92,14 @@ fairmind-ethical-sandbox/
 - Model drift monitoring
 
 ## 🔧 **Development**
+
+### **Marketing Website**
+```bash
+cd fairmind-website
+npm install
+npm run dev          # Start Astro development server
+npm run build        # Build for production
+```
 
 ### **Frontend Development**
 ```bash
