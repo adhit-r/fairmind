@@ -157,6 +157,15 @@ The platform uses Supabase's real-time capabilities for:
 - Instant alert notifications
 - Live model performance tracking
 
+## 🗂️ **Documentation**
+
+- **[Documentation Index](docs/README.md)** - Complete documentation overview
+- **[Feature Checklist](docs/features/FEATURE_CHECKLIST.md)** - Development progress tracking
+- **[Architecture Guide](docs/architecture/)** - System architecture and design
+- **[Setup Guides](docs/setup/)** - Installation and configuration
+- **[API Documentation](docs/api/)** - API endpoints and usage
+- **[Neo4j Setup](docs/guides/QUICK_NEO4J_SETUP.md)** - Knowledge graph setup
+
 ## 🤝 **Contributing**
 
 1. Fork the repository
