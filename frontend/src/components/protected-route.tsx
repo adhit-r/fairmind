@@ -1,42 +1,51 @@
-'use client';
+"use client"
 
-import { ReactNode, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAuth } from '@/contexts/auth-context';
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { useAuth } from '@/contexts/auth-context'
 
 interface ProtectedRouteProps {
-  children: ReactNode;
-  requiredRole?: string;
+  children: React.ReactNode
+  requiredRole?: string
 }
 
 export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) {
-  const { user, loading } = useAuth();
-  const router = useRouter();
+  const { user, profile, loading } = useAuth()
+  const router = useRouter()
 
   useEffect(() => {
-    if (loading) return;
-    
-    // Redirect to login if not authenticated
-    if (!user) {
-      router.push('/login');
-      return;
-    }
+    if (!loading) {
+      if (!user) {
+        router.push('/login')
+        return
+      }
 
-    // If we need to check roles in the future, we can do it here
-    // For now, we're just checking if the user is authenticated
-    if (requiredRole) {
-      // TODO: Implement role-based access control
-      console.warn('Role-based access control not yet implemented');
+      if (requiredRole && profile?.role !== requiredRole) {
+        // Redirect to unauthorized page or show error
+        router.push('/')
+        return
+      }
     }
-  }, [user, loading, router, requiredRole]);
+  }, [user, profile, loading, requiredRole, router])
 
-  if (loading || !user) {
+  if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-2 text-muted-foreground">Loading...</p>
+        </div>
       </div>
-    );
+    )
   }
 
-  return <>{children}</>;
+  if (!user) {
+    return null // Will redirect to login
+  }
+
+  if (requiredRole && profile?.role !== requiredRole) {
+    return null // Will redirect to home
+  }
+
+  return <>{children}</>
 }

@@ -11,37 +11,51 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Badge } from "@/components/ui/badge"
-import { Settings, LogOut, User, Shield, Activity } from "lucide-react"
+import { useAuth } from "@/contexts/auth-context"
+import { LogOut, Settings, User } from "lucide-react"
 
 export function UserNav() {
+  const { user, profile, logout } = useAuth()
+
+  if (!user || !profile) {
+    return null
+  }
+
+  const getInitials = (name: string) => {
+    return name
+      .split(' ')
+      .map(word => word[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2)
+  }
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="relative h-8 w-8 rounded-full">
           <Avatar className="h-8 w-8">
-            <AvatarImage src="/avatars/01.png" alt="@admin" />
-            <AvatarFallback>AD</AvatarFallback>
+            <AvatarImage src={profile.avatar_url} alt={profile.full_name || user.email} />
+            <AvatarFallback>
+              {profile.full_name ? getInitials(profile.full_name) : user.email?.slice(0, 2).toUpperCase()}
+            </AvatarFallback>
           </Avatar>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-56" align="end" forceMount>
         <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col space-y-1">
-            <p className="text-sm font-medium leading-none">Admin User</p>
-            <p className="text-xs leading-none text-muted-foreground">
-              admin@fairmind.ai
+            <p className="text-sm font-medium leading-none">
+              {profile.full_name || 'User'}
             </p>
-            <div className="flex items-center gap-2 mt-1">
-              <Badge variant="secondary" className="text-xs">
-                <Shield className="h-3 w-3 mr-1" />
-                Admin
-              </Badge>
-              <Badge variant="outline" className="text-xs">
-                <Activity className="h-3 w-3 mr-1" />
-                Online
-              </Badge>
-            </div>
+            <p className="text-xs leading-none text-muted-foreground">
+              {user.email}
+            </p>
+            {profile.role && (
+              <p className="text-xs leading-none text-muted-foreground capitalize">
+                {profile.role}
+              </p>
+            )}
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
@@ -56,7 +70,7 @@ export function UserNav() {
           </DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem>
+        <DropdownMenuItem onClick={logout}>
           <LogOut className="mr-2 h-4 w-4" />
           <span>Log out</span>
         </DropdownMenuItem>

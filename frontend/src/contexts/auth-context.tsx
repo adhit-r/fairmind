@@ -11,6 +11,7 @@ type UserProfile = {
   full_name?: string;
   avatar_url?: string;
   role?: string;
+  username?: string;
 };
 
 type LoginResponse = {
@@ -37,6 +38,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const supabase = createClient();
 
+  // Fetch user profile from Supabase
+  const fetchUserProfile = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error) {
+        console.error('Error fetching user profile:', error);
+        return null;
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error fetching user profile:', error);
+      return null;
+    }
+  };
+
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event: string, session: Session | null) => {
@@ -44,19 +66,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(currentUser);
 
         if (currentUser) {
-          // For demo purposes, use mock data
-          if (currentUser.email === 'admin@fairmind.ai') {
+          // Fetch real user profile from database
+          const userProfile = await fetchUserProfile(currentUser.id);
+          if (userProfile) {
             setProfile({
-              id: currentUser.id,
+              id: userProfile.id,
               email: currentUser.email!,
-              full_name: 'Admin User',
-              role: 'admin'
+              full_name: userProfile.full_name,
+              avatar_url: userProfile.avatar_url,
+              role: userProfile.role,
+              username: userProfile.username
             });
-          } else if (currentUser.email === 'user@fairmind.ai') {
+          } else {
+            // Fallback to basic profile if database profile not found
             setProfile({
               id: currentUser.id,
               email: currentUser.email!,
-              full_name: 'Regular User',
+              full_name: currentUser.user_metadata?.full_name,
               role: 'user'
             });
           }
@@ -75,26 +101,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string): Promise<LoginResponse> => {
     try {
-      // For demo purposes, use hardcoded credentials
-      if (email === 'admin@fairmind.ai' && password === 'password') {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email,
-          password: 'password', // In a real app, this would be the actual password
-        });
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-        if (error) throw error;
-        return { success: true };
-      } else if (email === 'user@fairmind.ai' && password === 'password') {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email,
-          password: 'password', // In a real app, this would be the actual password
-        });
-
-        if (error) throw error;
-        return { success: true };
+      if (error) {
+        console.error('Login error:', error);
+        return { 
+          success: false, 
+          error: error.message 
+        };
       }
-      
-      return { success: false, error: 'Invalid credentials' };
+
+      return { success: true };
     } catch (error) {
       console.error('Login failed:', error);
       return { 
