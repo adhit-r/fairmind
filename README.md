@@ -1,10 +1,16 @@
-# FairMind Ethical Sandbox™
+# FairMind Ethical Sandbox
 
-> **Building responsible AI systems for a better future**
+**Building responsible AI systems for a better future**
 
 A comprehensive AI governance platform for testing, monitoring, and ensuring ethical AI deployment through real-time analytics, bias detection, and compliance management.
 
-## 🏗️ **Architecture Overview**
+## Live Demo
+
+**Try the platform:** [https://fairmind-demo-app.netlify.app](https://fairmind-demo-app.netlify.app)
+
+The demo starts with an empty dashboard. Click "Load Demo Data" to explore all features with synthetic data.
+
+## Architecture Overview
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
@@ -14,15 +20,46 @@ A comprehensive AI governance platform for testing, monitoring, and ensuring eth
 └─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
 
-### **Technology Stack**
+## Technology Stack
 
 | Layer | Technology | Purpose |
 |-------|------------|---------|
 | **Frontend** | Next.js 14 + TypeScript | Modern React UI with real-time updates |
 | **Backend** | Python FastAPI | ML/AI services, bias analysis, compliance |
 | **Database** | Supabase (PostgreSQL) | Data storage, auth, real-time subscriptions |
+| **Knowledge Graph** | Neo4j AuraDB | Advanced relationship analysis |
+| **Deployment** | Netlify | Static hosting for demo |
 
-## 🚀 **Quick Start**
+## Key Features
+
+### Advanced Bias Detection
+- **SHAP Analysis**: Model interpretability and feature importance
+- **LIME Analysis**: Local interpretable model explanations
+- **Knowledge Graph**: Neo4j-powered relationship analysis
+- **Geographic Bias**: Cross-country cultural factor analysis
+- **Model DNA**: Genetic lineage and inheritance tracking
+
+### Real-time Monitoring
+- Live dashboard with 22 specialized dashboards
+- Real-time alerts and drift detection
+- Performance monitoring and risk assessment
+- Compliance tracking and audit trails
+
+### AI Bill of Materials (AIBOM)
+- Comprehensive model inventory
+- Dependency tracking and vulnerability assessment
+- Security attestation and compliance mapping
+- Risk profiling and mitigation strategies
+
+### Geographic & Cultural Analysis
+- Cross-country bias detection
+- Cultural factor analysis
+- Regional compliance requirements
+- Demographic fairness assessment
+
+## Quick Start
+
+### Local Development
 
 ```bash
 # Clone the repository
@@ -31,17 +68,26 @@ cd fairmind-ethical-sandbox
 
 # Install dependencies
 npm install
-cd frontend && bun install
+cd frontend && npm install --legacy-peer-deps
 
-# Start all services
-npm run dev
+# Start development server
+cd frontend && npm run dev
 
-# Or start specific services
-npm run dev:frontend    # Frontend only
-npm run dev:backend     # Backend only
+# Access the application
+open http://localhost:3000
 ```
 
-## 📁 **Project Structure**
+### Demo Deployment
+
+```bash
+# Deploy to demo subdomain
+./deploy-demo.sh
+
+# Demo will be available at:
+# https://fairmind-demo-app.netlify.app
+```
+
+## Project Structure
 
 ```
 fairmind-ethical-sandbox/
@@ -69,31 +115,26 @@ fairmind-ethical-sandbox/
 └── README.md              # This file
 ```
 
-## 🎯 **Key Features**
+## Dashboard Features
 
-### **Real-time AI Governance Dashboard**
-- Live monitoring of fairness, robustness, and compliance metrics
-- Interactive charts and visualizations
-- Real-time risk assessment and alerting
+### Main Dashboard
+- Overview of all AI governance metrics
+- Real-time alerts and notifications
+- Quick access to all specialized dashboards
 
-### **AI/ML Bill Compliance**
-- Regulatory requirement tracking
-- Materials and policy management
-- Comprehensive audit trails
+### Specialized Dashboards
+1. **Advanced Bias Detection** - SHAP, LIME, Knowledge Graph analysis
+2. **Geographic Bias Analysis** - Cross-country cultural factors
+3. **Model DNA Signatures** - Genetic lineage and inheritance
+4. **Real-time Monitoring** - Live alerts and drift detection
+5. **Compliance Tracking** - AI Bill compliance and audit trails
+6. **Analytics Dashboard** - Charts, visualizations, and metrics
+7. **Knowledge Graph** - Neo4j-powered relationship analysis
+8. **AIBOM Management** - AI Bill of Materials tracking
 
-### **Model Management**
-- Centralized model registry
-- Version control and lifecycle tracking
-- Model validation and comparison
+## Development
 
-### **Advanced Analytics**
-- Bias detection across demographics
-- Explainability and feature importance
-- Model drift monitoring
-
-## 🔧 **Development**
-
-### **Marketing Website**
+### Marketing Website
 ```bash
 cd fairmind-website
 npm install
@@ -101,15 +142,15 @@ npm run dev          # Start Astro development server
 npm run build        # Build for production
 ```
 
-### **Frontend Development**
+### Frontend Development
 ```bash
 cd frontend
-bun run dev          # Start development server
-bun run build        # Build for production
-bun run lint         # Run ESLint
+npm run dev          # Start development server
+npm run build        # Build for production
+npm run lint         # Run ESLint
 ```
 
-### **Backend Development**
+### Backend Development
 ```bash
 cd backend
 python main.py       # Start FastAPI server
@@ -117,7 +158,7 @@ python main.py       # Start FastAPI server
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### **Database Management**
+### Database Management
 ```bash
 # Start Supabase locally
 npm run dev:supabase
@@ -129,41 +170,41 @@ npm run supabase:reset
 npm run supabase:db:push
 ```
 
-## 📊 **API Endpoints**
+## API Endpoints
 
-### **Health Check**
+### Health Check
 ```bash
 curl http://localhost:8000/health
 ```
 
-### **Governance Metrics**
+### Governance Metrics
 ```bash
 curl http://localhost:8000/governance/metrics
 ```
 
-### **Models**
+### Models
 ```bash
 curl http://localhost:8000/models
 ```
 
-### **Simulations**
+### Simulations
 ```bash
 curl http://localhost:8000/simulations
 ```
 
-### **AI Bill Requirements**
+### AI Bill Requirements
 ```bash
 curl http://localhost:8000/ai-bill/requirements
 ```
 
-## 🔒 **Security & Compliance**
+## Security & Compliance
 
 - **Authentication**: Supabase Auth with role-based access
 - **Data Privacy**: GDPR and CCPA compliance features
 - **Audit Logging**: Comprehensive activity tracking
 - **Encryption**: Data encryption at rest and in transit
 
-## 📈 **Real-time Features**
+## Real-time Features
 
 The platform uses Supabase's real-time capabilities for:
 - Live dashboard updates
@@ -171,7 +212,7 @@ The platform uses Supabase's real-time capabilities for:
 - Instant alert notifications
 - Live model performance tracking
 
-## 🗂️ **Documentation**
+## Documentation
 
 - **[Documentation Index](docs/README.md)** - Complete documentation overview
 - **[Feature Checklist](docs/features/FEATURE_CHECKLIST.md)** - Development progress tracking
@@ -180,7 +221,7 @@ The platform uses Supabase's real-time capabilities for:
 - **[API Documentation](docs/api/)** - API endpoints and usage
 - **[Neo4j Setup](docs/guides/QUICK_NEO4J_SETUP.md)** - Knowledge graph setup
 
-## 🤝 **Contributing**
+## Contributing
 
 1. Fork the repository
 2. Create a feature branch
@@ -188,7 +229,7 @@ The platform uses Supabase's real-time capabilities for:
 4. Add tests
 5. Submit a pull request
 
-## 📄 **License**
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
