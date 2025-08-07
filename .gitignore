@@ -22,7 +22,6 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # env files
-.env*
 
 # vercel
 .vercel
@@ -30,3 +29,15 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+# Local Netlify folder
+.netlify
+
+#folders
+archive/
+product/
+.DS_Store
+#files
+*.zip
+*.tar
+*.gz
+*.bz2

@@ -1,0 +1,81 @@
+---
+import Button from '../ui/Button.astro';
+
+// Navigation links
+const navLinks = [
+  { name: 'Features', href: '/features' },
+  { name: 'Use Cases', href: '/use-cases' },
+  { name: 'Comparison', href: '/comparison' },
+  { name: 'Contact', href: '/contact' },
+];
+---
+
+<header class="fixed top-0 left-0 right-0 z-50">
+  <nav class="container mx-auto px-6 py-3 flex justify-between items-center bg-gray-900/50 backdrop-blur-sm border border-gray-700/50 rounded-full mt-4">
+    <div class="flex-shrink-0">
+      <a href="/" class="flex items-center">
+        <img 
+          src="/logo.png" 
+          alt="Fairmind Logo" 
+          class="h-10 w-auto"
+          width="160"
+          height="40"
+        />
+      </a>
+    </div>
+    <div class="hidden md:flex items-center space-x-8">
+      {navLinks.map((item) => (
+        <a
+          href={item.href}
+          class="font-medium text-brand-gray hover:text-brand-light transition-colors duration-300"
+          class:list={[{
+            'text-brand-pink': Astro.url.pathname === item.href || Astro.url.pathname.startsWith(`${item.href}/`)
+          }]}
+        >
+          {item.name}
+        </a>
+      ))}
+    </div>
+    <div class="hidden md:flex items-center space-x-4">
+        <a href="/contact" class="font-medium text-brand-gray hover:text-brand-light transition-colors duration-300">
+          Contact Us
+        </a>
+        <Button href="/features" class="btn">Get Started</Button>
+    </div>
+    <div class="md:hidden flex items-center">
+      <button id="mobile-menu-button" class="text-brand-gray focus:outline-none">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>
+      </button>
+    </div>
+  </nav>
+  <!-- Mobile Menu -->
+  <div id="mobile-menu" class="hidden md:hidden fixed inset-0 bg-gray-900/90 backdrop-blur-sm z-40">
+      <div class="flex justify-end p-4">
+          <button id="mobile-menu-close-button" class="text-brand-gray focus:outline-none">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+          </button>
+      </div>
+      <div class="flex flex-col items-center justify-center h-full space-y-8 -mt-16">
+          {navLinks.map((item) => (
+              <a href={item.href} class="text-2xl font-bold text-brand-gray hover:text-brand-light transition-colors duration-300">{item.name}</a>
+          ))}
+          <Button href="/features" class="btn text-2xl">Get Started</Button>
+      </div>
+  </div>
+</header>
+
+<script>
+  const mobileMenuButton = document.getElementById('mobile-menu-button');
+  const mobileMenuCloseButton = document.getElementById('mobile-menu-close-button');
+  const mobileMenu = document.getElementById('mobile-menu');
+
+  if (mobileMenuButton && mobileMenu && mobileMenuCloseButton) {
+    mobileMenuButton.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+    });
+
+    mobileMenuCloseButton.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+    });
+  }
+</script>

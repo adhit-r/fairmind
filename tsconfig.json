@@ -1,0 +1,40 @@
+{
+  "compilerOptions": {
+    "target": "es5",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "jsx": "preserve",
+    "allowJs": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "noFallthroughCasesInSwitch": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./apps/web/src/*"],
+      "@/components/*": ["./apps/web/src/components/*"],
+      "@/contexts/*": ["./apps/web/src/contexts/*"],
+      "@/lib/*": ["./apps/web/src/lib/*"],
+      "@/styles/*": ["./apps/web/src/styles/*"],
+      "@/hooks/*": ["./apps/web/src/hooks/*"],
+      "@fairmind/ui": ["./shared/ui/index.ts"],
+      "@fairmind/ui/*": ["./shared/ui/*"]
+    },
+    "types": ["node", "next", "next-themes"]
+  },
+  "include": [
+    "apps/web/**/*.ts",
+    "apps/web/**/*.tsx",
+    "apps/web/next-env.d.ts",
+    "packages/**/*.ts",
+    "packages/**/*.tsx",
+    "turbo.json"
+  ],
+  "exclude": ["node_modules"]
+}

@@ -1,0 +1,228 @@
+---
+import Layout from '../layouts/Layout.astro';
+
+const features = [
+  {
+    id: 'bias-monitoring',
+    title: 'Real-Time Bias Detection',
+    description: 'Go beyond simple post-deployment checks. Fairmind integrates directly into your data pipelines to analyze model behavior in real-time. Our system detects subtle and emergent biases across multiple protected attributes (e.g., race, gender, age) using a suite of advanced statistical tests. Receive instant, actionable alerts with root-cause analysis, allowing you to mitigate fairness issues before they impact users or lead to regulatory penalties.',
+    icon: '🔍',
+    highlights: [
+      'Real-time stream processing for immediate feedback',
+      'Support for 20+ fairness metrics including Disparate Impact and Equalized Odds',
+      'Automated audit trails and one-click compliance reports (GDPR, AI Act, etc.)',
+      'Slice-based analysis to identify bias in specific data segments'
+    ],
+    color: 'brand-purple',
+    video: {
+      src: '/videos/simulation-demo.mp4',
+      poster: '/screenshots/features/ChatGPT Image Aug 1, 2025, 04_17_46 AM.png',
+      alt: 'Real-time bias monitoring simulation',
+      caption: 'Watch our bias detection system in action - real-time monitoring and alerts'
+    },
+    screenshots: [
+      { src: '/screenshots/features/Screenshot 2025-08-01 at 4.18.36 AM.png', alt: 'Bias detection alert' },
+      { src: '/screenshots/features/Screenshot 2025-08-01 at 4.18.49 AM.png', alt: 'Detailed fairness report' }
+    ]
+  },
+  {
+    id: 'explainability',
+    title: 'Advanced Explainability (XAI)',
+    description: 'Turn your AI\'s black box into a transparent glass box. Fairmind provides a powerful, interactive suite of Explainable AI (XAI) tools. We go beyond basic feature importance by offering local (per-prediction) and global (whole-model) explanations through techniques like SHAP, LIME, and Integrated Gradients. The interactive dashboards allow both technical and non-technical users to explore \'what-if\' scenarios, understand decision drivers, and build genuine trust in your AI systems.',
+    icon: '🔬',
+    highlights: [
+      'Native support for SHAP, LIME, and Integrated Gradients',
+      'Interactive \'what-if\' analysis and counterfactual explanations',
+      'One-click export of visual and text-based explanation reports',
+      'Model-agnostic architecture for any framework (TensorFlow, PyTorch, etc.)'
+    ],
+    color: 'brand-pink',
+    screenshots: [
+      { src: '/screenshots/ui/Screenshot 2025-08-01 at 4.15.52 AM.png', alt: 'Feature importance visualization' },
+      { src: '/screenshots/ui/Screenshot 2025-08-01 at 4.19.04 AM.png', alt: 'Model decision explanations' }
+    ]
+  },
+  {
+    id: 'continuous-monitoring',
+    title: 'Continuous Monitoring & Drift Detection',
+    description: 'A model\'s performance on day one is not guaranteed on day 100. Fairmind offers robust, continuous monitoring to ensure your models remain accurate, fair, and reliable in the wild. We automatically track a full spectrum of metrics, including data drift (changes in input data distribution), concept drift (changes in relationships between inputs and outputs), and operational health. Proactive alerts give you a heads-up on performance degradation, allowing for timely retraining and preventing silent model failure.',
+    icon: '📊',
+    highlights: [
+      'Holistic performance monitoring (Accuracy, Precision, Recall, F1, AUC)',
+      'Advanced statistical methods (e.g., Kolmogorov-Smirnov, PSI) for drift detection',
+      'Customizable alert channels (Slack, Email, Webhooks) and retraining triggers',
+      'Comparison dashboards to track model performance across versions'
+    ],
+    color: 'brand-purple',
+    screenshots: [
+      { src: '/screenshots/simulations/Screenshot 2025-08-01 at 4.12.14 AM.png', alt: 'Performance monitoring dashboard' },
+      { src: '/screenshots/simulations/Screenshot 2025-08-01 at 4.12.24 AM.png', alt: 'Drift detection metrics' }
+    ]
+  }
+];
+
+const colorMap = {
+  'brand-purple': {
+    border: 'border-brand-purple',
+    text: 'text-brand-purple',
+    shadow: 'shadow-brand-purple'
+  },
+  'brand-pink': {
+    border: 'border-brand-pink',
+    text: 'text-brand-pink',
+    shadow: 'shadow-brand-pink'
+  }
+};
+---
+
+<Layout 
+  title="Product Features | Fairmind"
+  description="Explore the futuristic features of Fairmind. From real-time bias detection to advanced explainability, discover how we are shaping the future of ethical AI."
+>
+  <div class="relative overflow-hidden">
+    <!-- Background Glows -->
+    <div class="absolute -top-1/4 -left-1/4 w-1/2 h-1/2 bg-brand-purple/20 rounded-full filter blur-3xl opacity-50 animate-pulse-slow"></div>
+    <div class="absolute -bottom-1/4 -right-1/4 w-1/2 h-1/2 bg-brand-pink/20 rounded-full filter blur-3xl opacity-50 animate-pulse-slow animation-delay-2000"></div>
+
+    <!-- Hero Section -->
+    <section class="relative py-32 text-center">
+      <div class="container mx-auto px-4 relative z-10">
+        <h1 class="text-5xl md:text-7xl font-bold mb-4">
+          <span class="text-transparent bg-clip-text bg-gradient-to-r from-brand-purple to-brand-pink">Core Features</span>
+        </h1>
+        <p class="text-xl md:text-2xl text-gray-300 max-w-3xl mx-auto">
+          A deep dive into the technology shaping the future of fair and transparent AI.
+        </p>
+      </div>
+    </section>
+
+    <!-- Features Showcase -->
+    <section class="relative pb-32">
+      <div class="container mx-auto px-4 relative z-10">
+        <div class="space-y-24">
+          {features.map((feature, index) => {
+            const colors = colorMap[feature.color] || colorMap['brand-purple'];
+            const isEven = index % 2 === 0;
+            return (
+              <div class={`flex flex-col ${isEven ? 'md:flex-row' : 'md:flex-row-reverse'} items-center gap-12`}>
+                <!-- Text Content -->
+                <div class="md:w-1/2 text-center md:text-left">
+                  <h2 class={`text-3xl md:text-4xl font-bold mb-4 ${colors.text}`}>{feature.title}</h2>
+                  <p class="text-gray-300 text-lg mb-6">{feature.description}</p>
+                  <ul class="space-y-3 text-left">
+                    {feature.highlights.map(highlight => (
+                      <li class="flex items-start">
+                        <svg class={`w-6 h-6 mr-3 flex-shrink-0 ${colors.text}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        <span class="text-gray-300">{highlight}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <!-- Media Content -->
+                <div class="md:w-1/2 space-y-8">
+                  {/* Video Player */}
+                  {feature.video && (
+                    <div class="relative group w-full">
+                      <a 
+                        href={feature.video.src}
+                        class="video-lightbox"
+                        data-glightbox="type: video; width: 900; height: 506; autoplay: true"
+                        data-title={feature.video.alt}
+                        data-description={feature.video.caption}
+                        data-poster={feature.video.poster}
+                      >
+                        <div class="glowing-border p-1.5 rounded-2xl bg-gray-800/50 border-2 border-brand-purple/40 hover:border-brand-purple/80 transition-all duration-300 overflow-hidden w-full">
+                          <div class="relative pt-[56.25%]">
+                            <img 
+                              src={feature.video.poster} 
+                              alt={feature.video.alt} 
+                              class="absolute inset-0 w-full h-full object-cover rounded-xl"
+                              loading="lazy"
+                            />
+                            <div class="absolute inset-0 bg-black/30 group-hover:bg-black/50 transition-colors duration-300 flex items-center justify-center">
+                              <div class="w-16 h-16 md:w-20 md:h-20 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 md:h-10 md:w-10 text-white ml-1" viewBox="0 0 20 20" fill="currentColor">
+                                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
+                                </svg>
+                              </div>
+                            </div>
+                          </div>
+                          <p class="mt-2 text-sm text-gray-400 text-center">{feature.video.caption}</p>
+                        </div>
+                      </a>
+                    </div>
+                  )}
+                  
+                  {/* Screenshots Grid */}
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {feature.screenshots.map((screenshot, imgIndex) => (
+                      <div 
+                        class="relative group cursor-pointer"
+                        onclick={`
+                          const lightbox = GLightbox({
+                            elements: [{
+                              'href': '${screenshot.src}',
+                              'type': 'image',
+                              'title': '${screenshot.alt.replace(/'/g, "\\'")}',
+                              'description': 'Click outside or press ESC to close',
+                            }],
+                            touchNavigation: true,
+                            touchFollowAxis: true,
+                            keyboardNavigation: true,
+                            closeOnOutsideClick: true,
+                            loop: true,
+                            openEffect: 'fade',
+                            closeEffect: 'fade',
+                            slideEffect: 'slide',
+                            closeButton: true,
+                            width: '90vw',
+                            height: '90vh',
+                            descPosition: 'bottom',
+                            onOpen: () => {
+                              document.body.style.overflow = 'hidden';
+                            },
+                            onClose: () => {
+                              document.body.style.overflow = 'auto';
+                            }
+                          });
+                          lightbox.open();
+                          return false;
+                        `}
+                      >
+                        <div class={`glowing-border p-1 rounded-2xl bg-gray-800/50 ${colors.border} group-hover:scale-105 transition-all duration-300 overflow-hidden`}>
+                          <div class="relative">
+                            <img 
+                              src={screenshot.src} 
+                              alt={screenshot.alt}
+                              class="rounded-xl w-full h-full object-cover aspect-video transition-opacity duration-300"
+                              loading="lazy"
+                              onError="this.onerror=null; this.src='/images/placeholder.svg'; this.alt='Image failed to load'"
+                            />
+                            {/* Hover overlay with zoom icon */}
+                            <div class="absolute inset-0 bg-black bg-opacity-30 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center rounded-xl">
+                              <div class="bg-white bg-opacity-80 rounded-full p-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-800" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7" />
+                                </svg>
+                              </div>
+                            </div>
+                          </div>
+                          {/* Caption */}
+                          <p class="mt-2 text-xs text-gray-400 text-center truncate px-2" title={screenshot.alt}>
+                            {screenshot.alt}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  </div>
+</Layout>

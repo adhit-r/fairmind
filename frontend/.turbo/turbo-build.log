@@ -1,0 +1,7 @@
+
+[0m[2m[35m$[0m [2m[1mnext build[0m
+   [1m[38;2;173;127;168m▲ Next.js 15.4.4[39m[22m
+   - Environments: .env.local
+
+ [37m[1m [22m[39m Creating an optimized production build ...
+[0m[31merror[0m[2m:[0m script [1m"build"[0m exited with code 130[0m

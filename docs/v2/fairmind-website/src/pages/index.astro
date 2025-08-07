@@ -1,0 +1,427 @@
+---
+import Layout from '../layouts/Layout.astro';
+import MarkdownContent from '../components/content/MarkdownContent.astro';
+
+// Hero section data
+const hero = {
+  title: 'AI Governance and Bias Detection Platform',
+  description: 'Ensure fairness, transparency, and compliance in your AI systems with Fairmind\'s comprehensive governance platform.',
+  ctaPrimary: 'Get Started',
+  ctaSecondary: 'Documentation',
+  secondaryLink: '/docs',
+  image: '/images/hero-dashboard.png'
+};
+
+// Features data
+const features = [
+  {
+    title: 'Bias Detection',
+    description: 'Identify and mitigate bias in your AI models with advanced detection algorithms.',
+    icon: '🔍',
+    link: '/features#bias-detection'
+  },
+  {
+    title: 'Model Monitoring',
+    description: 'Continuously monitor your models for fairness metrics and performance drift.',
+    icon: '📊',
+    link: '/features#model-monitoring'
+  },
+  {
+    title: 'Compliance',
+    description: 'Stay compliant with AI regulations and ethical guidelines.',
+    icon: '⚖️',
+    link: '/docs/compliance'
+  },
+  {
+    title: 'Explainability',
+    description: 'Understand model decisions with SHAP and LIME explainability tools.',
+    icon: '💡',
+    link: '/features#explainability'
+  }
+];
+---
+
+<Layout title="Fairmind - AI-Powered Analytics">
+  <!-- Hero Section -->
+  <section class="relative overflow-hidden bg-gradient-to-b from-gray-900 to-gray-800 text-white pt-24 pb-16 md:pt-32 md:pb-24">
+    <!-- Background elements -->
+    <div class="absolute inset-0 overflow-hidden pointer-events-none">
+      <div class="absolute -right-20 -top-20 w-96 h-96 bg-primary-500/10 rounded-full mix-blend-soft-light filter blur-3xl"></div>
+      <div class="absolute -left-20 -bottom-20 w-96 h-96 bg-secondary-500/10 rounded-full mix-blend-soft-light filter blur-3xl"></div>
+    </div>
+    
+    <div class="container mx-auto px-4 relative z-10">
+      <div class="max-w-7xl mx-auto">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+          <!-- Hero Content -->
+          <div class="text-center lg:text-left">
+            <h1 class="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight text-white mb-6">
+              <span class="block">AI Governance</span>
+              <span class="text-primary-400">for Responsible AI</span>
+            </h1>
+            
+            <p class="text-xl text-gray-300 mb-8 max-w-xl mx-auto lg:mx-0 leading-relaxed">
+              Ensure fairness, transparency, and compliance in your AI systems with Fairmind's comprehensive platform.
+              Detect bias, explain model decisions, and maintain ethical AI practices at scale.
+            </p>
+            
+            <div class="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
+              <a 
+                href="/get-started" 
+                class="btn btn-primary px-8 py-4 text-base font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5"
+              >
+                {hero.ctaPrimary}
+              </a>
+              <a 
+                href={hero.secondaryLink} 
+                class="btn btn-outline-light px-8 py-4 text-base font-semibold border-2 border-white/20 hover:border-white/40 hover:bg-white/5 transition-all duration-300 transform hover:-translate-y-0.5"
+              >
+                {hero.ctaSecondary}
+              </a>
+              <a 
+                href="#features" 
+                class="btn btn-outline px-8 py-4 text-base font-semibold border-2 hover:bg-gray-50 transition-all duration-300"
+              >
+                {hero.ctaSecondary}
+              </a>
+            </div>
+            
+            
+          </div>
+          
+          <!-- Hero Image -->
+          <div class="relative">
+            <div class="relative rounded-2xl overflow-hidden shadow-2xl border-8 border-white bg-white transform rotate-1 hover:rotate-0 transition-transform duration-500">
+              <img 
+                src={hero.image} 
+                alt="Fairmind Dashboard Preview" 
+                class="w-full h-auto"
+                loading="eager"
+              />
+              <!-- Floating elements -->
+              <div class="absolute -bottom-4 -right-4 bg-white p-3 rounded-lg shadow-lg border border-gray-100">
+                <div class="flex items-center">
+                  <div class="w-3 h-3 rounded-full bg-green-400 mr-2"></div>
+                  <span class="text-sm font-medium text-gray-700">Live Data</span>
+                </div>
+              </div>
+              <!-- Trusted by Industry Leaders and Join 10,000+ satisfied customers -->
+              <div class="absolute -bottom-4 -right-4 bg-white p-4 rounded-lg shadow-lg border border-gray-100">
+                <div class="flex items-center">
+                  <div class="w-12 h-12 bg-primary-50 rounded-full flex items-center justify-center mr-3">
+                    <svg class="w-6 h-6 text-primary-600" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                    </svg>
+                  </div>
+                  <div>
+                    <div class="font-bold text-gray-900">Trusted by Industry Leaders</div>
+                    <div class="text-sm text-gray-600">Join 10,000+ satisfied customers</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Decorative elements -->
+            <div class="absolute -z-10 w-32 h-32 bg-primary-100 rounded-full -left-10 -bottom-10 opacity-70"></div>
+            <div class="absolute -z-10 w-24 h-24 bg-secondary-100 rounded-full -right-6 -top-6 opacity-70"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features Section -->
+  <section id="features" class="py-20 bg-gray-50 relative overflow-hidden">
+    <!-- Background elements -->
+    <div class="absolute inset-0 overflow-hidden pointer-events-none">
+      <div class="absolute -right-40 -top-40 w-80 h-80 bg-primary-500/5 rounded-full mix-blend-soft-light filter blur-3xl"></div>
+      <div class="absolute -left-40 -bottom-40 w-80 h-80 bg-secondary-500/5 rounded-full mix-blend-soft-light filter blur-3xl"></div>
+    </div>
+    
+    <div class="container mx-auto px-4 relative z-10">
+      <div class="max-w-4xl mx-auto text-center mb-16">
+        <span class="inline-block px-4 py-2 text-sm font-medium text-primary-700 bg-primary-50 rounded-full mb-4">Features</span>
+        <h2 class="text-4xl md:text-5xl font-bold text-gray-900 mb-6">Everything you need to succeed</h2>
+        <p class="text-xl text-gray-600">Powerful analytics tools designed to help you make better decisions, faster.</p>
+      </div>
+      
+      <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+        <div class="bg-white rounded-xl p-8 shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-100 hover:-translate-y-1">
+          <div class="w-16 h-16 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600 text-2xl mb-6">
+            🔍
+          </div>
+          <h3 class="text-xl font-bold text-gray-900 mb-3">Real-time Bias Monitoring</h3>
+          <p class="text-gray-600 mb-4">Continuously monitor model predictions for demographic bias with real-time alerts and automated bias scoring across protected groups.</p>
+          <ul class="text-sm text-gray-500 space-y-1.5 mb-4">
+            <li class="flex items-start">
+              <svg class="h-5 w-5 text-green-500 mr-2 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+              </svg>
+              <span>Live bias detection across protected groups</span>
+            </li>
+            <li class="flex items-start">
+              <svg class="h-5 w-5 text-green-500 mr-2 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+              </svg>
+              <span>Comprehensive fairness metrics</span>
+            </li>
+            <li class="flex items-start">
+              <svg class="h-5 w-5 text-green-500 mr-2 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+              </svg>
+              <span>Regulatory compliance reporting</span>
+            </li>
+          </ul>
+          <a href="/features#bias-monitoring" class="text-blue-600 font-medium inline-flex items-center hover:text-blue-700 transition-colors group">
+            Explore bias monitoring
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 ml-1 transform transition-transform group-hover:translate-x-1" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M10.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L12.586 11H5a1 1 0 110-2h7.586l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd" />
+            </svg>
+          </a>
+        </div>
+        
+        <!-- Model Explainability -->
+        <div class="bg-white rounded-xl p-8 shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-100 hover:-translate-y-1">
+          <div class="w-16 h-16 bg-purple-50 rounded-xl flex items-center justify-center text-purple-600 text-2xl mb-6">
+            🔬
+          </div>
+          <h3 class="text-xl font-bold text-gray-900 mb-3">Model Explainability</h3>
+          <p class="text-gray-600 mb-4">Understand model decisions with SHAP and LIME integration, providing clear insights into how predictions are made.</p>
+          <ul class="text-sm text-gray-500 space-y-1.5 mb-4">
+            <li class="flex items-start">
+              <svg class="h-5 w-5 text-green-500 mr-2 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+              </svg>
+              <span>SHAP and LIME integration</span>
+            </li>
+            <li class="flex items-start">
+              <svg class="h-5 w-5 text-green-500 mr-2 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+              </svg>
+              <span>Interactive explanation dashboards</span>
+            </li>
+            <li class="flex items-start">
+              <svg class="h-5 w-5 text-green-500 mr-2 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+              </svg>
+              <span>Feature importance visualization</span>
+            </li>
+          </ul>
+          <a href="/features#explainability" class="text-purple-600 font-medium inline-flex items-center hover:text-purple-700 transition-colors group">
+            Learn about explainability
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 ml-1 transform transition-transform group-hover:translate-x-1" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M10.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L12.586 11H5a1 1 0 110-2h7.586l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd" />
+            </svg>
+          </a>
+        </div>
+        
+        <!-- Model Monitoring -->
+        <div class="bg-white rounded-xl p-8 shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-100 hover:-translate-y-1">
+          <div class="w-16 h-16 bg-amber-50 rounded-xl flex items-center justify-center text-amber-600 text-2xl mb-6">
+            📊
+          </div>
+          <h3 class="text-xl font-bold text-gray-900 mb-3">Model Monitoring</h3>
+          <p class="text-gray-600 mb-4">Track model performance, data drift, and concept drift with automated alerts and health checks.</p>
+          <ul class="text-sm text-gray-500 space-y-1.5 mb-4">
+            <li class="flex items-start">
+              <svg class="h-5 w-5 text-green-500 mr-2 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+              </svg>
+              <span>Automated performance tracking</span>
+            </li>
+            <li class="flex items-start">
+              <svg class="h-5 w-5 text-green-500 mr-2 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+              </svg>
+              <span>Data and concept drift detection</span>
+            </li>
+            <li class="flex items-start">
+              <svg class="h-5 w-5 text-green-500 mr-2 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+              </svg>
+              <span>Automated retraining triggers</span>
+            </li>
+          </ul>
+          <a href="/features#monitoring" class="text-amber-600 font-medium inline-flex items-center hover:text-amber-700 transition-colors group">
+            View monitoring features
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 ml-1 transform transition-transform group-hover:translate-x-1" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M10.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L12.586 11H5a1 1 0 110-2h7.586l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd" />
+            </svg>
+          </a>
+        </div>
+      </div>
+      
+      <div class="mt-16 text-center">
+        <a 
+          href="/features" 
+          class="inline-flex items-center px-8 py-4 border border-transparent text-base font-medium rounded-lg shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors duration-200"
+        >
+          Explore all features
+          <svg class="ml-2 -mr-1 w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M12.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd" />
+          </svg>
+        </a>
+      </div>
+      
+      <!-- Stats -->
+      <div class="mt-24 grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
+        <div class="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+          <div class="text-4xl font-bold text-primary-600 mb-2">10K+</div>
+          <div class="text-gray-600">Active Users</div>
+        </div>
+        <div class="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+          <div class="text-4xl font-bold text-primary-600 mb-2">98%</div>
+          <div class="text-gray-600">Customer Satisfaction</div>
+        </div>
+        <div class="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+          <div class="text-4xl font-bold text-primary-600 mb-2">24/7</div>
+          <div class="text-gray-600">Support</div>
+        </div>
+        <div class="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+          <div class="text-4xl font-bold text-primary-600 mb-2">4.9★</div>
+          <div class="text-gray-600">Average Rating</div>
+        </div>
+      </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- About Section -->
+  <section class="py-20 bg-gray-50 relative overflow-hidden">
+    <!-- Background elements -->
+    <div class="absolute inset-0 overflow-hidden pointer-events-none">
+      <div class="absolute -right-40 -top-40 w-80 h-80 bg-primary-50 rounded-full mix-blend-multiply filter blur-3xl opacity-30"></div>
+      <div class="absolute -left-40 -bottom-40 w-80 h-80 bg-secondary-50 rounded-full mix-blend-multiply filter blur-3xl opacity-30"></div>
+    </div>
+    
+    <div class="container mx-auto px-4 relative z-10">
+      <div class="max-w-5xl mx-auto">
+        <div class="grid lg:grid-cols-2 gap-12 items-center">
+          <div class="order-2 lg:order-1">
+            <span class="inline-block px-4 py-2 text-sm font-medium text-primary-700 bg-primary-50 rounded-full mb-4">About Us</span>
+            <h2 class="text-4xl md:text-5xl font-bold text-gray-900 mb-6">Empowering businesses with intelligent data solutions</h2>
+            <div class="prose prose-lg text-gray-600 max-w-none">
+              <p>Fairmind is a leading provider of AI governance and bias detection solutions, helping organizations build trustworthy and ethical AI systems. Our platform combines cutting-edge technology with deep domain expertise to deliver actionable insights and ensure regulatory compliance.</p>
+              <p class="mt-4">With a team of AI ethics experts and data scientists, we're committed to making AI more transparent, accountable, and fair for everyone.</p>
+            </div>
+            <div class="mt-8 flex flex-wrap gap-4">
+              <a 
+                href="/about" 
+                class="btn btn-primary px-8 py-3 text-base font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5"
+              >
+                Learn More
+              </a>
+              <a 
+                href="/contact" 
+                class="btn btn-outline px-8 py-3 text-base font-semibold border-2 hover:bg-gray-50 transition-all duration-300"
+              >
+                Contact Us
+              </a>
+            </div>
+          </div>
+          <div class="order-1 lg:order-2 relative">
+            <div class="relative rounded-2xl overflow-hidden shadow-2xl border-8 border-white bg-white transform -rotate-1 hover:rotate-0 transition-transform duration-500">
+              <img 
+                src="/images/about-illustration.jpg" 
+                alt="Team collaboration" 
+                class="w-full h-auto"
+                width="600"
+                height="400"
+                loading="lazy"
+              />
+              <!-- Decorative element -->
+              <div class="absolute -bottom-4 -right-4 bg-white p-4 rounded-lg shadow-lg border border-gray-100">
+                <div class="flex items-center">
+                  <div class="w-12 h-12 bg-primary-50 rounded-full flex items-center justify-center mr-3">
+                    <svg class="w-6 h-6 text-primary-600" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                    </svg>
+                  </div>
+                  <div>
+                    <div class="font-bold text-gray-900">Trusted by Industry Leaders</div>
+                    <div class="text-sm text-gray-600">Join 10,000+ satisfied customers</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- Decorative elements -->
+            <div class="absolute -z-10 w-32 h-32 bg-primary-100 rounded-full -left-10 -bottom-10 opacity-70"></div>
+            <div class="absolute -z-10 w-24 h-24 bg-secondary-100 rounded-full -right-6 -top-6 opacity-70"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA Section -->
+  <section class="relative py-24 bg-gradient-to-r from-primary-600 to-primary-700 text-white overflow-hidden">
+    <!-- Background elements -->
+    <div class="absolute inset-0 overflow-hidden">
+      <div class="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiPjxkZWZzPjxwYXR0ZXJuIGlkPSJwYXR0ZXJuX2N0YSIgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiIHBhdHRlcm5Vbml0cz0idXNlclNwYWNlT25Vc2UiIHBhdHRlcm5UcmFuc2Zvcm09InJvdGF0ZSgzMCkiPjxyZWN0IHdpZHRoPSI1MCIgaGVpZ2h0PSI1MCIgZmlsbD0icmdiYSgyNTUsMjU1LDI1NSwwLjAzKSIvPjwvcGF0dGVybj48L2RlZnM+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0idXJsKCNwYXR0ZXJuX2N0YSkiLz48L3N2Zz4=')] opacity-20"></div>
+      <div class="absolute -right-40 -top-40 w-96 h-96 bg-white/10 rounded-full mix-blend-soft-light filter blur-3xl opacity-30"></div>
+      <div class="absolute -left-40 -bottom-40 w-96 h-96 bg-white/10 rounded-full mix-blend-soft-light filter blur-3xl opacity-30"></div>
+    </div>
+    
+    <div class="container mx-auto px-4 relative z-10">
+      <div class="max-w-4xl mx-auto text-center">
+        <h2 class="text-4xl md:text-5xl font-bold mb-6">Ready to transform your data into insights?</h2>
+        <p class="text-xl md:text-2xl text-primary-50 mb-10 max-w-3xl mx-auto leading-relaxed">
+          Join 10,000+ businesses that trust Fairmind to make data-driven decisions with confidence.
+        </p>
+        
+        <div class="flex flex-col sm:flex-row gap-4 justify-center items-center">
+          <a 
+            href="/get-started" 
+            class="btn bg-white text-primary-700 hover:bg-gray-100 px-8 py-4 text-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5 hover:scale-[1.02]"
+          >
+            Start Your Free Trial
+          </a>
+          <a 
+            href="/demo" 
+            class="btn border-2 border-white/30 bg-transparent hover:bg-white/10 text-white px-8 py-4 text-lg font-semibold transition-colors duration-300"
+          >
+            Schedule a Demo
+          </a>
+        </div>
+        
+        <div class="mt-8 flex flex-wrap items-center justify-center gap-6 text-sm text-primary-100">
+          <div class="flex items-center">
+            <svg class="w-5 h-5 text-white mr-2" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+            </svg>
+            No credit card required
+          </div>
+          <div class="hidden sm:block w-px h-5 bg-white/20"></div>
+          <div class="flex items-center">
+            <svg class="w-5 h-5 text-white mr-2" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+            </svg>
+            14-day free trial
+          </div>
+          <div class="hidden sm:block w-px h-5 bg-white/20"></div>
+          <div class="flex items-center">
+            <svg class="w-5 h-5 text-white mr-2" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+            </svg>
+            Cancel anytime
+          </div>
+        </div>
+        
+        <div class="mt-12 pt-8 border-t border-white/10">
+          <div class="flex flex-wrap items-center justify-center gap-6">
+            <div class="text-sm text-primary-100/80">Trusted by innovative teams at:</div>
+            <div class="flex flex-wrap items-center justify-center gap-6 opacity-80">
+              <span class="font-medium text-white">Acme Inc</span>
+              <span class="text-primary-100">•</span>
+              <span class="font-medium text-white">Globex</span>
+              <span class="text-primary-100 hidden sm:inline">•</span>
+              <span class="font-medium text-white hidden sm:inline">Soylent</span>
+              <span class="text-primary-100">•</span>
+              <span class="font-medium text-white">Initech</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</Layout>

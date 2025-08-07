@@ -1,0 +1,111 @@
+import { Client } from '@authzed/authzed-node';
+import * as grpc from '@grpc/grpc-js';
+
+// Initialize AuthZed client
+export const authz = new Client(
+  'localhost:50051', // Default AuthZed gRPC address
+  grpc.credentials.createInsecure(),
+  {
+    'grpc.max_receive_message_length': 1024 * 1024 * 50, // 50MB
+    'grpc.max_send_message_length': 1024 * 1024 * 50,    // 50MB
+  }
+);
+
+// Define our schema
+export const schema = `
+definition user {}
+
+definition organization {
+  relation admin: user
+  relation member: user
+  
+  permission view = admin + member
+  permission edit = admin
+}
+
+definition simulation {
+  relation org: organization
+  relation owner: user
+  relation editor: user
+  relation viewer: user
+  
+  permission view = owner + editor + viewer + org->view
+  permission edit = owner + editor + org->edit
+  permission admin = owner + org->admin
+}
+`;
+
+// Helper functions for AuthZed operations
+export async function initializeAuthZed() {
+  try {
+    // Write the schema
+    await authz.schema.write({ schema });
+    console.log('AuthZed schema initialized');
+  } catch (error) {
+    console.error('Failed to initialize AuthZed:', error);
+    throw error;
+  }
+}
+
+// Check if a user has a specific permission
+export async function checkPermission(
+  resourceType: string,
+  resourceId: string,
+  permission: string,
+  userId: string
+): Promise<boolean> {
+  try {
+    const response = await authz.permissions.check({
+      resource: {
+        objectType: resourceType,
+        objectId: resourceId,
+      },
+      permission,
+      subject: {
+        object: {
+          objectType: 'user',
+          objectId: userId,
+        },
+      },
+    });
+    
+    return response.permissionship === 'HAS_PERMISSION';
+  } catch (error) {
+    console.error('Error checking permission:', error);
+    return false;
+  }
+}
+
+// Create a relationship in AuthZed
+export async function createRelationship(
+  resourceType: string,
+  resourceId: string,
+  relation: string,
+  userId: string
+) {
+  try {
+    await authz.relationships.write({
+      updates: [
+        {
+          operation: 'OPERATION_CREATE',
+          relationship: {
+            resource: {
+              objectType: resourceType,
+              objectId: resourceId,
+            },
+            relation,
+            subject: {
+              object: {
+                objectType: 'user',
+                objectId: userId,
+              },
+            },
+          },
+        },
+      ],
+    });
+  } catch (error) {
+    console.error('Error creating relationship:', error);
+    throw error;
+  }
+}

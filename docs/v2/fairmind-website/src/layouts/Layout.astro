@@ -1,0 +1,224 @@
+---
+import '../styles/global.css';
+import '../styles/global.css';
+import 'glightbox/dist/css/glightbox.min.css';
+import Navbar from '../components/layout/Navbar.astro';
+import Footer from '../components/layout/Footer.astro';
+
+interface Props {
+  title?: string;
+  description?: string;
+}
+
+const { title = 'Fairmind - AI-Powered Analytics', description = 'Transform your data into actionable insights with Fairmind\'s AI-powered analytics platform.' } = Astro.props;
+---
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="/logo.png" sizes="192x192" />
+    <link rel="apple-touch-icon" href="/logo.png" />
+    <link rel="shortcut icon" href="/logo.png" type="image/png" />
+    <meta name="description" content={description} />
+    <meta name="generator" content={Astro.generator} />
+    <meta name="theme-color" content="#0B021D" />
+    <meta name="author" content="Fairmind" />
+    <meta name="robots" content="index, follow" />
+    <meta name="keywords" content="AI analytics, data insights, machine learning, data visualization, business intelligence" />
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content={new URL(Astro.url.pathname, 'https://fairmind.xyz').toString()} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content="https://fairmind.xyz/images/og-image.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:site_name" content="Fairmind" />
+    
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@fairmind_ai" />
+    <meta name="twitter:creator" content="@fairmind_ai" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content="https://fairmind.xyz/images/twitter-card.jpg" />
+    
+    <!-- Canonical URL -->
+    <link rel="canonical" href={new URL(Astro.url.pathname, 'https://fairmind.xyz').toString()} />
+    
+    <!-- Favicons -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    
+    <!-- Preload critical resources -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    
+    <title>{title}</title>
+    
+    <!-- Structured Data -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "Fairmind",
+        "url": "https://fairmind.xyz",
+        "logo": "https://fairmind.xyz/logo.png",
+        "sameAs": [
+          "https://twitter.com/fairmind_ai",
+          "https://www.linkedin.com/company/fairmind-ai"
+        ]
+      }
+    </script>
+
+    
+  </head>
+  <body class="min-h-screen flex flex-col bg-gray-900 text-gray-100">
+    <Navbar />
+    <main class="flex-grow">
+      <slot />
+    </main>
+    <Footer />
+    
+    <!-- Load GLightbox CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/glightbox/dist/css/glightbox.min.css" />
+    <!-- Load Plyr CSS for video player -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.css" />
+    
+    <!-- Load GLightbox JS with client:only directive -->
+    <script src="https://cdn.jsdelivr.net/gh/mcstudios/glightbox/dist/js/glightbox.min.js"></script>
+    <script>
+      // Initialize GLightbox
+      document.addEventListener('DOMContentLoaded', function() {
+        const lightbox = GLightbox({
+          selector: '.video-lightbox',
+          touchNavigation: true,
+          loop: true,
+          autoplayVideos: true,
+          plyr: {
+            config: { 
+              ratio: '16:9',
+              controls: ['play-large', 'play', 'progress', 'current-time', 'mute', 'volume', 'fullscreen'],
+              autoplay: true
+            }
+          },
+          onOpen: () => {
+            document.body.style.overflow = 'hidden';
+          },
+          onClose: () => {
+            document.body.style.overflow = 'auto';
+          }
+        });
+      });
+    </script>
+    <script>
+      // This script will only run in the browser
+      if (typeof window !== 'undefined') {
+        // Import GLightbox and Plyr dynamically
+        Promise.all([
+          import('https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.min.js'),
+          import('https://cdn.jsdelivr.net/gh/mcstudios/glightbox/dist/js/glightbox.min.js')
+        ]).then(([Plyr]) => {
+          // Initialize Plyr
+          window.Plyr = Plyr.default || Plyr;
+          
+          // Initialize GLightbox after the scripts load
+          document.addEventListener('astro:page-load', () => {
+            // Set default GLightbox settings
+            window.GLightboxSettings = {
+              touchNavigation: true,
+              touchFollowAxis: true,
+              keyboardNavigation: true,
+              closeOnOutsideClick: true,
+              loop: false,
+              openEffect: 'fade',
+              closeEffect: 'fade',
+              slideEffect: 'slide',
+              moreText: 'Read more',
+              moreLength: 60,
+              closeButton: true,
+              width: '90vw',
+              height: '90vh',
+              videosWidth: '90vw',
+              descPosition: 'bottom',
+              plyr: {
+                config: {
+                  controls: ['play-large', 'play', 'progress', 'current', 'mute', 'volume', 'fullscreen'],
+                  settings: ['quality', 'speed'],
+                  quality: {
+                    default: 1080,
+                    options: [4320, 2880, 2160, 1440, 1080, 720, 576, 480, 360, 240]
+                  },
+                  preload: 'auto',
+                  autoplay: true,
+                  muted: false,
+                  loop: { active: false },
+                  seekTime: 5,
+                  volume: 0.8,
+                  clickToPlay: true,
+                  hideControls: true,
+                  resetOnEnd: true,
+                  ratio: '16:9',
+                  displayDuration: true,
+                  invertTime: true,
+                  toggleInvert: true,
+                  tooltips: {
+                    controls: true,
+                    seek: true
+                  },
+                  fullscreen: {
+                    enabled: true,
+                    fallback: true,
+                    iosNative: true
+                  },
+                  captions: {
+                    active: true,
+                    update: true,
+                    language: 'en'
+                  },
+                  vimeo: {
+                    byline: false,
+                    portrait: false,
+                    title: false,
+                    speed: true,
+                    transparent: false
+                  },
+                  youtube: {
+                    noCookie: true,
+                    rel: 0,
+                    showinfo: 0,
+                    iv_load_policy: 3,
+                    modestbranding: 1,
+                    customControls: true
+                  }
+                }
+              },
+              onOpen: () => {
+                document.body.style.overflow = 'hidden';
+              },
+              onClose: () => {
+                document.body.style.overflow = 'auto';
+              }
+            };
+            
+            // Initialize any lightboxes with the default selector
+            if (typeof GLightbox !== 'undefined') {
+              window.defaultLightbox = GLightbox({
+                selector: '.glightbox',
+                ...window.GLightboxSettings
+              });
+            }
+          });
+        })
+        .catch(error => console.error('Error loading GLightbox:', error));
+      }
+    </script>
+  </body>
+</html>

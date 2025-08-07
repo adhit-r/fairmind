@@ -1,0 +1,79 @@
+---
+import Layout from '../layouts/Layout.astro';
+import ContactForm from '../components/ContactForm.astro';
+
+const page = {
+  title: 'Contact Fairmind Support',
+  description: 'Get in touch with the Fairmind team. We\'re here to answer your questions and help you get started with AI governance.',
+  seoImage: 'https://fairmind.xyz/images/contact-og.jpg'
+};
+---
+
+<Layout title={page.title} description={page.description} seoImage={page.seoImage}>
+  <div class="relative overflow-hidden py-16 md:py-24">
+    <!-- Background Glows -->
+    <div class="absolute -top-1/4 -left-1/4 w-1/2 h-1/2 bg-brand-purple/20 rounded-full filter blur-3xl opacity-50 animate-pulse-slow"></div>
+    <div class="absolute -bottom-1/4 -right-1/4 w-1/2 h-1/2 bg-brand-pink/20 rounded-full filter blur-3xl opacity-50 animate-pulse-slow animation-delay-2000"></div>
+    
+    <div class="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <!-- Page Header -->
+      <div class="text-center mb-16">
+        <h1 class="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-brand-purple to-brand-pink bg-clip-text text-transparent">
+          Contact Us
+        </h1>
+        <p class="text-xl text-gray-300 max-w-3xl mx-auto">
+          Have questions about Fairmind? Our team is here to help you with anything from product inquiries to technical support.
+        </p>
+      </div>
+      
+      <!-- Contact Form Section -->
+      <div class="bg-gray-800/50 backdrop-blur-sm rounded-2xl p-6 md:p-8 border border-gray-700/50">
+        <ContactForm 
+          title="Send us a message" 
+          description="Fill out the form below and we'll get back to you as soon as possible." 
+        />
+      </div>
+      
+      <!-- FAQ Section -->
+      <div class="mt-20">
+        <h2 class="text-2xl md:text-3xl font-bold mb-8 text-center">Frequently Asked Questions</h2>
+        
+        <div class="space-y-4 max-w-3xl mx-auto">
+          <div class="bg-gray-800/50 rounded-xl p-6 border border-gray-700/50">
+            <h3 class="text-lg font-semibold text-white mb-2">How quickly can I expect a response?</h3>
+            <p class="text-gray-300">We typically respond to all inquiries within 24 hours during business hours (Monday to Friday, 9 AM - 5 PM EST).</p>
+          </div>
+          
+          <div class="bg-gray-800/50 rounded-xl p-6 border border-gray-700/50">
+            <h3 class="text-lg font-semibold text-white mb-2">Do you offer enterprise support?</h3>
+            <p class="text-gray-300">Yes, we offer enterprise support plans with SLAs. Please contact us for more information about our enterprise offerings.</p>
+          </div>
+          
+          <div class="bg-gray-800/50 rounded-xl p-6 border border-gray-700/50">
+            <h3 class="text-lg font-semibold text-white mb-2">Where can I find documentation?</h3>
+            <p class="text-gray-300">Visit our <a href="/docs" class="text-brand-purple hover:underline">documentation</a> for detailed guides, API references, and tutorials.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</Layout>
+
+<style>
+  /* Animation for FAQ items */
+  .faq-item {
+    transition: all 0.3s ease;
+  }
+  
+  .faq-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  }
+  
+  /* Responsive adjustments */
+  @media (max-width: 640px) {
+    .contact-container {
+      padding: 1.5rem;
+    }
+  }
+</style>

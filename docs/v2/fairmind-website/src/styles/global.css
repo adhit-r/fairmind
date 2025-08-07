@@ -1,0 +1,66 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    @apply scroll-smooth;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-brand-dark text-brand-gray antialiased;
+    font-family: 'Space Grotesk', sans-serif;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-bold text-brand-light;
+  }
+
+  h1 {
+    @apply text-5xl md:text-7xl;
+  }
+
+  h2 {
+    @apply text-4xl md:text-5xl;
+  }
+
+  h3 {
+    @apply text-3xl md:text-4xl;
+  }
+
+  p {
+    @apply text-lg text-brand-gray leading-relaxed mb-4;
+  }
+
+  a {
+    @apply text-brand-purple hover:text-brand-pink transition-colors duration-300;
+  }
+}
+
+@layer components {
+  .glowing-border {
+    @apply border border-transparent;
+    --glow-color: theme('colors.brand.purple');
+    box-shadow: 0 0 2px var(--glow-color), 0 0 5px var(--glow-color), 0 0 10px var(--glow-color);
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center rounded-lg px-6 py-3 text-base font-bold uppercase tracking-wider transition-all duration-300;
+    background-image: linear-gradient(to right, theme('colors.brand.purple'), theme('colors.brand.pink'));
+    color: white;
+  }
+
+  .btn:hover {
+    box-shadow: 0 0 15px theme('colors.brand.purple'), 0 0 20px theme('colors.brand.pink');
+    transform: translateY(-2px);
+  }
+}
+
