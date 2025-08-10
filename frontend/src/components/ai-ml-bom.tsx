@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { fairmindAPI } from '@/lib/fairmind-api'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -45,9 +46,24 @@ export function AIMLBOM() {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedType, setSelectedType] = useState<string>('all')
   const [selectedRisk, setSelectedRisk] = useState<string>('all')
+  const [bomItems, setBomItems] = useState<BOMItem[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [scanning, setScanning] = useState(false)
+  const [projectPath, setProjectPath] = useState('')
 
-  // Mock BOM data
-  const bomItems: BOMItem[] = [
+  // Load BOM data from API
+  useEffect(() => {
+    loadBOMData()
+  }, [])
+
+  const loadBOMData = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      
+      // For now, use mock data until we have real BOM documents
+      const mockBomItems: BOMItem[] = [
     {
       id: 'pytorch-2.0',
       name: 'PyTorch',
@@ -130,6 +146,43 @@ export function AIMLBOM() {
     }
   ]
 
+      setBomItems(mockBomItems)
+    } catch (error) {
+      setError('Failed to load BOM data')
+      console.error('Error loading BOM data:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleScanProject = async () => {
+    if (!projectPath.trim()) {
+      setError('Please enter a project path')
+      return
+    }
+
+    try {
+      setScanning(true)
+      setError(null)
+      
+      const result = await fairmindAPI.scanProjectBOM({
+        project_path: projectPath,
+        scan_type: 'comprehensive',
+        include_dev_dependencies: true,
+        include_transitive: true
+      })
+      
+      if (result.success && result.data.bom_document) {
+        setBomItems(result.data.bom_document.components || [])
+      }
+    } catch (error) {
+      setError('Failed to scan project')
+      console.error('Error scanning project:', error)
+    } finally {
+      setScanning(false)
+    }
+  }
+
   const filteredItems = bomItems.filter(item => {
     const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          item.description.toLowerCase().includes(searchTerm.toLowerCase())
@@ -190,6 +243,39 @@ export function AIMLBOM() {
           </Button>
         </div>
       </div>
+
+      {/* Scan Project Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Scan New Project</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center space-x-4">
+            <div className="flex-1">
+              <Label htmlFor="project-path">Project Path</Label>
+              <Input
+                id="project-path"
+                placeholder="/path/to/your/project"
+                value={projectPath}
+                onChange={(e) => setProjectPath(e.target.value)}
+              />
+            </div>
+            <Button 
+              onClick={handleScanProject} 
+              disabled={scanning || !projectPath.trim()}
+              className="mt-6"
+            >
+              {scanning ? 'Scanning...' : 'Scan Project'}
+            </Button>
+          </div>
+          {error && (
+            <Alert className="mt-4">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Filters */}
       <Card>

@@ -213,6 +213,68 @@ export class FairmindAPI {
     }
   }
 
+  // AI/ML Bill of Materials (BOM)
+  async scanProjectBOM(request: {
+    project_path: string;
+    scan_type?: string;
+    include_dev_dependencies?: boolean;
+    include_transitive?: boolean;
+    output_format?: string;
+  }): Promise<any> {
+    try {
+      const response = await this.request<any>('/bom/scan', {
+        method: 'POST',
+        body: JSON.stringify(request),
+      });
+      return response;
+    } catch (error) {
+      this.handleError(error, 'BOM scan failed');
+      throw error;
+    }
+  }
+
+  async getBOMDocuments(page: number = 1, limit: number = 10): Promise<any> {
+    try {
+      const response = await this.request<any>(`/bom/list?page=${page}&limit=${limit}`);
+      return response;
+    } catch (error) {
+      this.handleError(error, 'Failed to fetch BOM documents');
+      throw error;
+    }
+  }
+
+  async getBOMDocument(bomId: string): Promise<any> {
+    try {
+      const response = await this.request<any>(`/bom/${bomId}`);
+      return response;
+    } catch (error) {
+      this.handleError(error, 'Failed to fetch BOM document');
+      throw error;
+    }
+  }
+
+  async exportBOMDocument(bomId: string, format: string = 'json'): Promise<any> {
+    try {
+      const response = await this.request<any>(`/bom/export/${bomId}?format=${format}`, {
+        method: 'POST'
+      });
+      return response;
+    } catch (error) {
+      this.handleError(error, 'Failed to export BOM document');
+      throw error;
+    }
+  }
+
+  async getBOMAnalysis(bomId: string): Promise<any> {
+    try {
+      const response = await this.request<any>(`/bom/analysis/${bomId}`);
+      return response;
+    } catch (error) {
+      this.handleError(error, 'Failed to fetch BOM analysis');
+      throw error;
+    }
+  }
+
   private handleError(error: unknown, message: string): void {
     console.error(message, error);
     // Could integrate with error reporting service here

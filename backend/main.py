@@ -45,6 +45,11 @@ from models.ai_circus import (
     create_test_scenarios, create_stress_tests, create_edge_cases, create_adversarial_challenges,
     run_comprehensive_test, create_circus_dashboard_data
 )
+from models.ai_bom import (
+    BOMItem, BOMDocument, BOMAnalysis, BOMScanResult, BOMScanRequest,
+    BOMItemType, RiskLevel, ComplianceStatus, Vulnerability, LicenseInfo
+)
+from services.bom_scanner import BOMScanner
 from models.ai_ethics_observatory import (
     EthicsFramework, EthicsViolation, EthicsScore,
     create_ethics_frameworks, assess_model_ethics, create_observatory_dashboard_data
@@ -1000,6 +1005,223 @@ async def get_ai_bill_requirements():
     except Exception as e:
         logger.error(f"Error fetching AI Bill requirements: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch AI Bill requirements: {str(e)}")
+
+# AI/ML Bill of Materials (BOM) Endpoints
+bom_scanner = BOMScanner()
+
+@app.post("/bom/scan")
+async def scan_project_bom(request: BOMScanRequest):
+    """Scan a project and generate a comprehensive BOM"""
+    try:
+        logger.info(f"Starting BOM scan for project: {request.project_path}")
+        
+        scan_result = await bom_scanner.scan_project(request)
+        
+        return {
+            "success": True,
+            "data": scan_result,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error scanning project BOM: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to scan project BOM: {str(e)}")
+
+@app.get("/bom/list")
+async def list_bom_documents(page: int = 1, limit: int = 10):
+    """List BOM documents"""
+    try:
+        # Mock BOM documents for now
+        bom_documents = [
+            {
+                "id": "bom_001",
+                "name": "Fairmind Frontend BOM",
+                "version": "1.0.0",
+                "project_name": "fairmind-frontend",
+                "total_components": 45,
+                "created_at": "2024-01-15T10:30:00Z",
+                "risk_level": "low"
+            },
+            {
+                "id": "bom_002", 
+                "name": "Fairmind Backend BOM",
+                "version": "1.0.0",
+                "project_name": "fairmind-backend",
+                "total_components": 32,
+                "created_at": "2024-01-15T11:00:00Z",
+                "risk_level": "medium"
+            }
+        ]
+        
+        # Pagination
+        start_idx = (page - 1) * limit
+        end_idx = start_idx + limit
+        paginated_documents = bom_documents[start_idx:end_idx]
+        
+        return {
+            "success": True,
+            "data": {
+                "documents": paginated_documents,
+                "total": len(bom_documents),
+                "page": page,
+                "limit": limit,
+                "total_pages": (len(bom_documents) + limit - 1) // limit
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error listing BOM documents: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to list BOM documents: {str(e)}")
+
+@app.get("/bom/{bom_id}")
+async def get_bom_document(bom_id: str):
+    """Get a specific BOM document"""
+    try:
+        # Mock BOM document for now
+        bom_document = {
+            "id": bom_id,
+            "name": f"BOM Document {bom_id}",
+            "version": "1.0.0",
+            "project_name": "fairmind-project",
+            "description": "Comprehensive BOM for Fairmind project",
+            "components": [
+                {
+                    "id": "pytorch-2.0",
+                    "name": "PyTorch",
+                    "version": "2.0.1",
+                    "type": "framework",
+                    "license": "BSD-3-Clause",
+                    "source": "https://pytorch.org/",
+                    "risk_level": "low",
+                    "compliance_status": "compliant",
+                    "description": "Deep learning framework for Python"
+                },
+                {
+                    "id": "transformers-4.35",
+                    "name": "Transformers",
+                    "version": "4.35.0",
+                    "type": "library",
+                    "license": "Apache-2.0",
+                    "source": "https://huggingface.co/transformers",
+                    "risk_level": "low",
+                    "compliance_status": "compliant",
+                    "description": "State-of-the-art Natural Language Processing"
+                }
+            ],
+            "analysis": {
+                "total_components": 2,
+                "risk_distribution": {"low": 2},
+                "compliance_summary": {"compliant": 2},
+                "license_distribution": {"BSD-3-Clause": 1, "Apache-2.0": 1},
+                "critical_issues": [],
+                "recommendations": ["BOM appears to be in good standing"]
+            }
+        }
+        
+        return {
+            "success": True,
+            "data": bom_document,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error fetching BOM document {bom_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch BOM document: {str(e)}")
+
+@app.post("/bom/export/{bom_id}")
+async def export_bom_document(bom_id: str, format: str = "json"):
+    """Export BOM document in specified format"""
+    try:
+        # Mock BOM document
+        bom_document = BOMDocument(
+            id=bom_id,
+            name=f"BOM Document {bom_id}",
+            version="1.0.0",
+            project_name="fairmind-project",
+            project_version="1.0.0",
+            description="Comprehensive BOM for Fairmind project",
+            components=[
+                BOMItem(
+                    id="pytorch-2.0",
+                    name="PyTorch",
+                    version="2.0.1",
+                    type=BOMItemType.FRAMEWORK,
+                    license="BSD-3-Clause",
+                    source="https://pytorch.org/",
+                    description="Deep learning framework for Python"
+                )
+            ]
+        )
+        
+        exported_content = await bom_scanner.export_bom(bom_document, format)
+        
+        return {
+            "success": True,
+            "data": {
+                "bom_id": bom_id,
+                "format": format,
+                "content": exported_content,
+                "filename": f"bom_{bom_id}.{format}"
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error exporting BOM document {bom_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to export BOM document: {str(e)}")
+
+@app.get("/bom/analysis/{bom_id}")
+async def get_bom_analysis(bom_id: str):
+    """Get detailed analysis of a BOM document"""
+    try:
+        # Mock analysis
+        analysis = {
+            "bom_id": bom_id,
+            "total_components": 15,
+            "risk_distribution": {
+                "low": 10,
+                "medium": 3,
+                "high": 1,
+                "critical": 1
+            },
+            "compliance_summary": {
+                "compliant": 12,
+                "non_compliant": 2,
+                "pending": 1
+            },
+            "license_distribution": {
+                "MIT": 5,
+                "Apache-2.0": 4,
+                "BSD-3-Clause": 3,
+                "GPL-3.0": 2,
+                "Proprietary": 1
+            },
+            "vulnerability_summary": {
+                "low": 2,
+                "medium": 1,
+                "high": 0,
+                "critical": 0
+            },
+            "critical_issues": [
+                {
+                    "component": "requests",
+                    "version": "2.25.1",
+                    "issue": "Critical vulnerability",
+                    "details": "CVE-2023-1234: Remote code execution vulnerability"
+                }
+            ],
+            "recommendations": [
+                "Update requests package to version 2.28.0 or higher",
+                "Review license compliance for GPL-3.0 components",
+                "Consider alternatives for proprietary components"
+            ]
+        }
+        
+        return {
+            "success": True,
+            "data": analysis,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error fetching BOM analysis {bom_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch BOM analysis: {str(e)}")
 
 # Placeholder endpoints - to be implemented with actual ML algorithms
 @app.post("/analyze/bias")
