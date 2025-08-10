@@ -294,6 +294,76 @@ export class FairmindAPI {
     }
   }
 
+  // OWASP Top 10 AI/LLM Security Methods
+  async getOWASPTests(): Promise<any> {
+    try {
+      const response = await this.request<any>('/owasp/tests');
+      return response;
+    } catch (error) {
+      this.handleError(error, 'Failed to fetch OWASP tests');
+      throw error;
+    }
+  }
+
+  async getOWASPCategories(): Promise<any> {
+    try {
+      const response = await this.request<any>('/owasp/categories');
+      return response;
+    } catch (error) {
+      this.handleError(error, 'Failed to fetch OWASP categories');
+      throw error;
+    }
+  }
+
+  async getOWASPModelInventory(): Promise<any> {
+    try {
+      const response = await this.request<any>('/owasp/models');
+      return response;
+    } catch (error) {
+      this.handleError(error, 'Failed to fetch OWASP model inventory');
+      throw error;
+    }
+  }
+
+  async runOWASPSecurityAnalysis(request: {
+    model_id: string;
+    test_categories?: string[];
+    include_all_tests?: boolean;
+    test_parameters?: Record<string, any>;
+    priority?: string;
+  }): Promise<any> {
+    try {
+      const response = await this.request<any>('/owasp/analyze', {
+        method: 'POST',
+        body: JSON.stringify(request),
+      });
+      return response;
+    } catch (error) {
+      this.handleError(error, 'Failed to run OWASP security analysis');
+      throw error;
+    }
+  }
+
+  async getOWASPSecurityAnalysis(analysisId: string): Promise<any> {
+    try {
+      const response = await this.request<any>(`/owasp/analysis/${analysisId}`);
+      return response;
+    } catch (error) {
+      this.handleError(error, 'Failed to fetch OWASP security analysis');
+      throw error;
+    }
+  }
+
+  async listOWASPSecurityAnalyses(page: number = 1, limit: number = 10): Promise<any> {
+    try {
+      const response = await this.request<any>(`/owasp/analysis?page=${page}&limit=${limit}`);
+      return response;
+    } catch (error) {
+      this.handleError(error, 'Failed to list OWASP security analyses');
+      throw error;
+    }
+  }
+
   private handleError(error: unknown, message: string): void {
     console.error(message, error);
     // Could integrate with error reporting service here

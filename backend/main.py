@@ -50,6 +50,13 @@ from models.ai_bom import (
     BOMItemType, RiskLevel, ComplianceStatus, Vulnerability, LicenseInfo
 )
 from services.bom_scanner import BOMScanner
+
+# OWASP AI/LLM Security imports
+from models.owasp_ai_security import (
+    SecurityTest, TestResult, SecurityAnalysis, SecurityTestRequest,
+    ModelInventoryItem, OWASPCategory, SecuritySeverity
+)
+from services.owasp_security_tester import OWASPSecurityTester
 from models.ai_ethics_observatory import (
     EthicsFramework, EthicsViolation, EthicsScore,
     create_ethics_frameworks, assess_model_ethics, create_observatory_dashboard_data
@@ -1009,6 +1016,9 @@ async def get_ai_bill_requirements():
 # AI/ML Bill of Materials (BOM) Endpoints
 bom_scanner = BOMScanner()
 
+# OWASP AI/LLM Security Endpoints
+owasp_tester = OWASPSecurityTester()
+
 @app.post("/bom/scan")
 async def scan_project_bom(request: BOMScanRequest):
     """Scan a project and generate a comprehensive BOM"""
@@ -1317,6 +1327,200 @@ async def generate_comprehensive_aibom(request: BOMScanRequest):
     except Exception as e:
         logger.error(f"Error generating comprehensive AIBOM: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to generate comprehensive AIBOM: {str(e)}")
+
+# OWASP Top 10 AI/LLM Security Endpoints
+@app.get("/owasp/tests")
+async def get_available_tests():
+    """Get list of available OWASP security tests"""
+    try:
+        tests = await owasp_tester.get_available_tests()
+        return {
+            "success": True,
+            "data": tests,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error fetching available tests: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch available tests: {str(e)}")
+
+@app.get("/owasp/categories")
+async def get_test_categories():
+    """Get list of OWASP test categories"""
+    try:
+        categories = await owasp_tester.get_test_categories()
+        return {
+            "success": True,
+            "data": categories,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error fetching test categories: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch test categories: {str(e)}")
+
+@app.get("/owasp/models")
+async def get_model_inventory():
+    """Get list of models available for security testing"""
+    try:
+        models = await owasp_tester.get_model_inventory()
+        return {
+            "success": True,
+            "data": models,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error fetching model inventory: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch model inventory: {str(e)}")
+
+@app.post("/owasp/analyze")
+async def run_security_analysis(request: SecurityTestRequest):
+    """Run OWASP security analysis on a model"""
+    try:
+        logger.info(f"Starting OWASP security analysis for model: {request.model_id}")
+        
+        analysis = await owasp_tester.run_security_analysis(request)
+        
+        return {
+            "success": True,
+            "data": analysis,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error running security analysis: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to run security analysis: {str(e)}")
+
+@app.get("/owasp/analysis/{analysis_id}")
+async def get_security_analysis(analysis_id: str):
+    """Get a specific security analysis result"""
+    try:
+        # Mock analysis result - in production, this would query the database
+        analysis = {
+            "analysis_id": analysis_id,
+            "model_id": "model_001",
+            "created_at": "2024-01-15T10:30:00Z",
+            "overall_score": 85.5,
+            "risk_level": "medium",
+            "total_tests": 11,
+            "passed_tests": 8,
+            "failed_tests": 2,
+            "warning_tests": 1,
+            "critical_issues": 1,
+            "high_issues": 1,
+            "medium_issues": 0,
+            "low_issues": 0,
+            "test_results": [
+                {
+                    "test_id": "A01_001",
+                    "category": "A01:2023 - Prompt Injection",
+                    "name": "Prompt Injection Detection",
+                    "description": "Test for prompt injection vulnerabilities",
+                    "severity": "high",
+                    "status": "failed",
+                    "details": {
+                        "patterns_tested": 10,
+                        "vulnerabilities_found": [
+                            {
+                                "pattern": "Ignore previous instructions",
+                                "severity": "high",
+                                "description": "Potential prompt injection detected"
+                            }
+                        ]
+                    },
+                    "recommendations": [
+                        "Implement input validation and sanitization",
+                        "Use prompt engineering techniques"
+                    ]
+                }
+            ],
+            "summary": {
+                "model_info": {
+                    "id": "model_001",
+                    "name": "GPT-4 Chatbot",
+                    "version": "1.0.0",
+                    "type": "language_model",
+                    "framework": "OpenAI"
+                },
+                "test_coverage": {
+                    "total_tests": 11,
+                    "categories_tested": ["A01:2023 - Prompt Injection", "A02:2023 - Insecure Output Handling"],
+                    "automated_tests": 8,
+                    "manual_tests": 3
+                },
+                "risk_distribution": {
+                    "critical": 1,
+                    "high": 1,
+                    "medium": 0,
+                    "low": 0
+                }
+            },
+            "recommendations": [
+                "Address critical security vulnerabilities immediately",
+                "Implement robust input validation and sanitization",
+                "Use prompt engineering techniques to prevent injection attacks"
+            ]
+        }
+        
+        return {
+            "success": True,
+            "data": analysis,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error fetching security analysis {analysis_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch security analysis: {str(e)}")
+
+@app.get("/owasp/analysis")
+async def list_security_analyses(page: int = 1, limit: int = 10):
+    """List security analysis results"""
+    try:
+        # Mock analysis list - in production, this would query the database
+        analyses = [
+            {
+                "analysis_id": "owasp_analysis_20240115_103000_1234",
+                "model_id": "model_001",
+                "model_name": "GPT-4 Chatbot",
+                "created_at": "2024-01-15T10:30:00Z",
+                "overall_score": 85.5,
+                "risk_level": "medium",
+                "total_tests": 11,
+                "passed_tests": 8,
+                "failed_tests": 2,
+                "critical_issues": 1,
+                "high_issues": 1
+            },
+            {
+                "analysis_id": "owasp_analysis_20240115_110000_5678",
+                "model_id": "model_002",
+                "model_name": "Bias Detection Model",
+                "created_at": "2024-01-15T11:00:00Z",
+                "overall_score": 92.0,
+                "risk_level": "low",
+                "total_tests": 11,
+                "passed_tests": 10,
+                "failed_tests": 0,
+                "critical_issues": 0,
+                "high_issues": 0
+            }
+        ]
+        
+        # Pagination
+        start_idx = (page - 1) * limit
+        end_idx = start_idx + limit
+        paginated_analyses = analyses[start_idx:end_idx]
+        
+        return {
+            "success": True,
+            "data": {
+                "analyses": paginated_analyses,
+                "total": len(analyses),
+                "page": page,
+                "limit": limit,
+                "total_pages": (len(analyses) + limit - 1) // limit
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error listing security analyses: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to list security analyses: {str(e)}")
 
 # Placeholder endpoints - to be implemented with actual ML algorithms
 @app.post("/analyze/bias")
