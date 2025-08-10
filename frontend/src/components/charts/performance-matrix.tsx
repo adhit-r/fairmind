@@ -41,29 +41,29 @@ export function PerformanceMatrix({ data }: PerformanceMatrixProps) {
       {
         label: 'Approved',
         data: [847, 31, 19, 14],
-        backgroundColor: 'rgba(16, 185, 129, 0.8)',
-        borderColor: 'rgba(16, 185, 129, 1)',
+        backgroundColor: 'rgba(17, 17, 17, 0.85)',
+        borderColor: 'rgba(17, 17, 17, 1)',
         borderWidth: 1,
       },
       {
         label: 'Denied',
         data: [23, 756, 22, 19],
-        backgroundColor: 'rgba(239, 68, 68, 0.8)',
-        borderColor: 'rgba(239, 68, 68, 1)',
+        backgroundColor: 'rgba(107, 114, 128, 0.85)',
+        borderColor: 'rgba(107, 114, 128, 1)',
         borderWidth: 1,
       },
       {
         label: 'Pending',
         data: [12, 18, 689, 31],
-        backgroundColor: 'rgba(245, 158, 11, 0.8)',
-        borderColor: 'rgba(245, 158, 11, 1)',
+        backgroundColor: 'rgba(156, 163, 175, 0.85)',
+        borderColor: 'rgba(156, 163, 175, 1)',
         borderWidth: 1,
       },
       {
         label: 'Review',
         data: [8, 15, 24, 712],
-        backgroundColor: 'rgba(59, 130, 246, 0.8)',
-        borderColor: 'rgba(59, 130, 246, 1)',
+        backgroundColor: 'rgba(209, 213, 219, 0.85)',
+        borderColor: 'rgba(209, 213, 219, 1)',
         borderWidth: 1,
       },
     ],
@@ -104,24 +104,28 @@ export function PerformanceMatrix({ data }: PerformanceMatrixProps) {
         ticks: {
           color: '#6b7280',
         },
-        grid: {
-          color: '#e5e7eb',
-        },
+        grid: { display: false },
       },
       x: {
         ticks: {
           color: '#6b7280',
         },
-        grid: {
-          color: '#e5e7eb',
-        },
+        grid: { display: false },
       },
     },
   }
 
+  if (!data) {
+    return (
+      <div className="w-full h-80 flex items-center justify-center text-muted-foreground text-sm">
+        No performance data yet.
+      </div>
+    )
+  }
+
   return (
     <div className="w-full h-80">
-      <Bar data={data || defaultData} options={options} />
+      <Bar data={data} options={options} />
     </div>
   )
 }

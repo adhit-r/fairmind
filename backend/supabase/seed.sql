@@ -50,6 +50,10 @@ create table if not exists public.profiles (
   full_name text,
   avatar_url text,
   role user_role not null default 'user'::user_role,
+  default_org_id uuid,
+  onboarding_step text,
+  is_onboarded boolean default false,
+  accepted_terms_at timestamp with time zone,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
@@ -161,6 +165,173 @@ where id = '00000000-0000-0000-0000-000000000000';
 -- Enable realtime for tables
 alter publication supabase_realtime add table public.audit_logs;
 alter publication supabase_realtime add table public.profiles;
+
+-- ============================================================================
+-- ORGANIZATIONS AND MEMBERSHIP (ORG ONBOARDING)
+-- ============================================================================
+
+create table if not exists public.organizations (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  domain text unique,
+  created_by uuid not null,
+  created_at timestamp with time zone not null default now(),
+  unique (lower(name))
+);
+
+create table if not exists public.organization_members (
+  org_id uuid not null references public.organizations(id) on delete cascade,
+  user_id uuid not null,
+  role text not null check (role in ('owner','admin','member','viewer')),
+  status text not null default 'active' check (status in ('active','invited','disabled')),
+  joined_at timestamp with time zone not null default now(),
+  primary key (org_id, user_id)
+);
+
+create table if not exists public.organization_invites (
+  id uuid primary key default gen_random_uuid(),
+  org_id uuid not null references public.organizations(id) on delete cascade,
+  email text not null,
+  role text not null check (role in ('admin','member','viewer')),
+  token text not null unique,
+  expires_at timestamp with time zone not null,
+  invited_by uuid not null,
+  created_at timestamp with time zone not null default now(),
+  unique (org_id, lower(email))
+);
+
+alter table public.organizations enable row level security;
+alter table public.organization_members enable row level security;
+alter table public.organization_invites enable row level security;
+
+create policy if not exists org_select_member on public.organizations
+  for select using (
+    exists (
+      select 1 from public.organization_members m
+      where m.org_id = organizations.id and m.user_id = auth.uid() and m.status = 'active'
+    )
+  );
+
+create policy if not exists org_insert_owner_via_fn on public.organizations
+  for insert with check (created_by = auth.uid());
+
+create policy if not exists org_update_admin on public.organizations
+  for update using (
+    exists (
+      select 1 from public.organization_members m
+      where m.org_id = organizations.id and m.user_id = auth.uid() and m.role in ('owner','admin') and m.status = 'active'
+    )
+  );
+
+create policy if not exists org_delete_owner on public.organizations
+  for delete using (
+    exists (
+      select 1 from public.organization_members m
+      where m.org_id = organizations.id and m.user_id = auth.uid() and m.role = 'owner' and m.status = 'active'
+    )
+  );
+
+create policy if not exists member_select_self_or_admin on public.organization_members
+  for select using (
+    user_id = auth.uid()
+    or exists (
+      select 1 from public.organization_members m2
+      where m2.org_id = organization_members.org_id and m2.user_id = auth.uid() and m2.role in ('owner','admin') and m2.status='active'
+    )
+  );
+
+create policy if not exists member_insert_admin on public.organization_members
+  for insert with check (
+    exists (
+      select 1 from public.organization_members m2
+      where m2.org_id = organization_members.org_id and m2.user_id = auth.uid() and m2.role in ('owner','admin') and m2.status='active'
+    )
+  );
+
+create policy if not exists member_update_admin on public.organization_members
+  for update using (
+    exists (
+      select 1 from public.organization_members m2
+      where m2.org_id = organization_members.org_id and m2.user_id = auth.uid() and m2.role in ('owner','admin') and m2.status='active'
+    )
+  );
+
+create policy if not exists member_delete_admin on public.organization_members
+  for delete using (
+    exists (
+      select 1 from public.organization_members m2
+      where m2.org_id = organization_members.org_id and m2.user_id = auth.uid() and m2.role in ('owner','admin') and m2.status='active'
+    )
+  );
+
+create policy if not exists invite_admin_only_select on public.organization_invites
+  for select using (
+    exists (
+      select 1 from public.organization_members m
+      where m.org_id = organization_invites.org_id and m.user_id = auth.uid() and m.role in ('owner','admin') and m.status='active'
+    )
+  );
+
+create policy if not exists invite_admin_only_cud on public.organization_invites
+  for all using (
+    exists (
+      select 1 from public.organization_members m
+      where m.org_id = organization_invites.org_id and m.user_id = auth.uid() and m.role in ('owner','admin') and m.status='active'
+    )
+  ) with check (
+    exists (
+      select 1 from public.organization_members m
+      where m.org_id = organization_invites.org_id and m.user_id = auth.uid() and m.role in ('owner','admin') and m.status='active'
+    )
+  );
+
+create or replace function public.create_organization(p_name text, p_domain text)
+returns uuid
+language plpgsql
+security definer
+as $$
+declare
+  v_org_id uuid;
+begin
+  insert into public.organizations (name, domain, created_by)
+  values (p_name, p_domain, auth.uid())
+  returning id into v_org_id;
+
+  insert into public.organization_members (org_id, user_id, role, status)
+  values (v_org_id, auth.uid(), 'owner', 'active')
+  on conflict (org_id, user_id) do nothing;
+
+  update public.profiles set default_org_id = v_org_id where id = auth.uid();
+
+  return v_org_id;
+end;
+$$;
+
+create or replace function public.accept_org_invite(p_token text)
+returns boolean
+language plpgsql
+security definer
+as $$
+declare
+  v_inv public.organization_invites%rowtype;
+begin
+  select * into v_inv from public.organization_invites
+  where token = p_token and expires_at > now()
+  for update;
+
+  if not found then
+    return false;
+  end if;
+
+  insert into public.organization_members (org_id, user_id, role, status)
+  values (v_inv.org_id, auth.uid(), v_inv.role, 'active')
+  on conflict (org_id, user_id) do update set status = 'active';
+
+  delete from public.organization_invites where id = v_inv.id;
+
+  return true;
+end;
+$$;
 
 -- ============================================================================
 -- ML MODEL VECTOR STORAGE WITH PGVECTOR
@@ -409,7 +580,8 @@ CREATE TABLE IF NOT EXISTS geographic_bias_analyses (
 CREATE INDEX IF NOT EXISTS idx_geographic_bias_model_id ON geographic_bias_analyses(model_id);
 CREATE INDEX IF NOT EXISTS idx_geographic_bias_countries ON geographic_bias_analyses(source_country, target_country);
 CREATE INDEX IF NOT EXISTS idx_geographic_bias_risk_level ON geographic_bias_analyses(risk_level);
-CREATE INDEX IF NOT EXISTS idx_geographic_bias_created_at ON geographic_bias_analyses(created_at);
+-- created_at does not exist on this table; index by analysis_date instead
+CREATE INDEX IF NOT EXISTS idx_geographic_bias_created_at ON geographic_bias_analyses(analysis_date);
 
 -- Country performance metrics
 CREATE TABLE IF NOT EXISTS country_performance_metrics (
@@ -424,6 +596,8 @@ CREATE TABLE IF NOT EXISTS country_performance_metrics (
 
 CREATE INDEX IF NOT EXISTS idx_country_performance_code ON country_performance_metrics(country_code);
 CREATE INDEX IF NOT EXISTS idx_country_performance_status ON country_performance_metrics(compliance_status);
+-- Ensure upserts on country_code work
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_country_performance_code ON country_performance_metrics(country_code);
 
 -- Cultural factors table
 CREATE TABLE IF NOT EXISTS cultural_factors (
@@ -514,8 +688,11 @@ BEGIN
             NEW.id,
             'high_bias_detected',
             NEW.risk_level,
-            format('High bias detected for model %s: %s to %s (score: %.2f)', 
-                   NEW.model_id, NEW.source_country, NEW.target_country, NEW.bias_score)
+            format('High bias detected for model %s: %s to %s (score: %s)',
+                   NEW.model_id,
+                   NEW.source_country,
+                   NEW.target_country,
+                   to_char(NEW.bias_score, 'FM999990.00'))
         );
     END IF;
     
@@ -571,6 +748,103 @@ INSERT INTO cultural_factors (country_code, factor_name, factor_value, impact_sc
 ('DEU', 'uncertainty_avoidance', '{"score": 0.65, "description": "Moderate uncertainty avoidance"}', 0.7),
 ('DEU', 'masculinity', '{"score": 0.66, "description": "Moderate masculinity"}', 0.6)
 ON CONFLICT DO NOTHING;
+
+-- ============================================================================
+-- MODEL REGISTRY AND SIMULATION RUNS (ORG-SCOPED)
+-- ============================================================================
+
+create table if not exists public.model_registry (
+  id uuid primary key default gen_random_uuid(),
+  org_id uuid not null references public.organizations(id) on delete cascade,
+  model_key text not null,
+  name text not null,
+  version text,
+  type text,
+  framework text,
+  path text,
+  sha256 text,
+  risk_level text,
+  status text,
+  created_at timestamp with time zone not null default now(),
+  created_by uuid references auth.users(id)
+);
+
+create index if not exists idx_model_registry_org on public.model_registry(org_id);
+create unique index if not exists uniq_model_per_org on public.model_registry(org_id, model_key);
+
+alter table public.model_registry enable row level security;
+
+create policy if not exists mr_select_member on public.model_registry
+  for select using (
+    exists (
+      select 1 from public.organization_members m
+      where m.org_id = model_registry.org_id and m.user_id = auth.uid() and m.status = 'active'
+    )
+  );
+
+create policy if not exists mr_insert_admin on public.model_registry
+  for insert with check (
+    exists (
+      select 1 from public.organization_members m
+      where m.org_id = model_registry.org_id and m.user_id = auth.uid() and m.role in ('owner','admin') and m.status = 'active'
+    )
+  );
+
+create policy if not exists mr_update_admin on public.model_registry
+  for update using (
+    exists (
+      select 1 from public.organization_members m
+      where m.org_id = model_registry.org_id and m.user_id = auth.uid() and m.role in ('owner','admin') and m.status = 'active'
+    )
+  );
+
+create policy if not exists mr_delete_admin on public.model_registry
+  for delete using (
+    exists (
+      select 1 from public.organization_members m
+      where m.org_id = model_registry.org_id and m.user_id = auth.uid() and m.role in ('owner','admin') and m.status = 'active'
+    )
+  );
+
+create table if not exists public.simulation_runs (
+  id uuid primary key default gen_random_uuid(),
+  org_id uuid not null references public.organizations(id) on delete cascade,
+  model_key text,
+  artifact jsonb,
+  metrics jsonb,
+  simulation_type text,
+  created_at timestamp with time zone not null default now(),
+  created_by uuid references auth.users(id)
+);
+
+create index if not exists idx_sim_runs_org on public.simulation_runs(org_id);
+create index if not exists idx_sim_runs_created on public.simulation_runs(created_at desc);
+
+alter table public.simulation_runs enable row level security;
+
+create policy if not exists sr_select_member on public.simulation_runs
+  for select using (
+    exists (
+      select 1 from public.organization_members m
+      where m.org_id = simulation_runs.org_id and m.user_id = auth.uid() and m.status = 'active'
+    )
+  );
+
+create policy if not exists sr_insert_member on public.simulation_runs
+  for insert with check (
+    exists (
+      select 1 from public.organization_members m
+      where m.org_id = simulation_runs.org_id and m.user_id = auth.uid() and m.status = 'active'
+    )
+  );
+
+create policy if not exists sr_delete_admin on public.simulation_runs
+  for delete using (
+    exists (
+      select 1 from public.organization_members m
+      where m.org_id = simulation_runs.org_id and m.user_id = auth.uid() and m.role in ('owner','admin') and m.status = 'active'
+    )
+  );
 
 -- Insert sample geographic bias analyses
 INSERT INTO geographic_bias_analyses (model_id, source_country, target_country, bias_score, risk_level, cultural_factors, compliance_status) VALUES

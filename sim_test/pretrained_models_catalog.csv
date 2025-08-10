@@ -1,0 +1,29 @@
+Pickle_File_Name,Pickle_URL,Dataset_Name,Dataset_URL,Model_Type,Use_Case,Industry,Load_Command,Notes,License
+model.pkl (credit-card-fraud-detection),https://github.com/saarques/credit-card-fraud-detection/blob/master/model.pkl,Credit Card Fraud Detection (Kaggle),https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud,RandomForest (scikit-learn),Detect fraudulent credit-card transactions,Finance,"import pickle
+model = pickle.load(open('model.pkl','rb'))","Model provided in GitHub repo; dataset from Kaggle.","Check repository/Kaggle dataset license"
+model.pkl (Loan-Eligibility-Prediction),https://github.com/MohamedKhalidLx/Loan-Eligibility-Prediction-Web-App/blob/main/model.pkl,Loan Prediction (Kaggle or repo CSV),https://www.kaggle.com/competitions/loan-prediction,Logistic Regression / XGBoost (joblib/pickle),Predict loan approval,Finance,"import joblib
+model = joblib.load('model.pkl')","Common example used in Flask apps; model file available in repo.","Check repository"
+model.pkl (diabetes-prediction),https://github.com/TareqAlKushari/People-s-Diabetes-Prediction-Using-Scikit-learn,Pima Indians Diabetes (UCI),https://archive.ics.uci.edu/dataset/37/pima+indians+diabetes,Logistic Regression / RandomForest (pickle),Predict diabetes onset,Healthcare,"import pickle
+model = pickle.load(open('model.pkl','rb'))","UCI dataset; many example repos include pre-trained .pkl models.","UCI dataset license / repo license"
+heart-disease-prediction-randomforest-model.pkl,https://github.com/architsharrma/End-to-End-Heart-Disease-Prediction-ML-Project/blob/main/heart-disease-prediction-randomforest-model.pkl,Heart Disease UCI,https://archive.ics.uci.edu/ml/datasets/Heart+Disease,RandomForest (scikit-learn),Predict presence of heart disease,Healthcare,"import pickle
+model = pickle.load(open('heart-disease-prediction-randomforest-model.pkl','rb'))","Model saved in repo; used in demo web apps.","Check repository"
+model.pkl (breast-cancer-prediction),https://github.com/santiagoahl/breast-cancer-prediction/blob/main/models/model.pkl,Breast Cancer Wisconsin (UCI),https://archive.ics.uci.edu/ml/datasets/Breast+Cancer+Wisconsin+(Diagnostic),RandomForest / XGBoost (pickle),Classify malignant vs benign tumors,Healthcare,"import pickle
+model = pickle.load(open('model.pkl','rb'))","Many repos include a pickled model and Streamlit/Flask demo.","Check repository"
+default_clf_review.pkl (AmazonSentiment),https://github.com/ytabatabaee/AmazonSentiment/blob/master/models/default_clf_review.pkl.zip,Amazon Product Reviews (various),https://nijianmo.github.io/amazon/index.html,scikit-learn classifier (pickle),Sentiment classification of product reviews,Retail / eCommerce,"import zipfile
+import pickle
+zipfile.ZipFile('default_clf_review.pkl.zip').extractall()
+model = pickle.load(open('default_clf_review.pkl','rb'))","Pretrained classifiers provided by the repo authors.","Check repository and dataset license"
+pytorch-cifar pretrained (.pth),https://github.com/chenyaofo/pytorch-cifar-models,CIFAR-10 / CIFAR-100 (Canadian Institute for Advanced Research),https://www.cs.toronto.edu/~kriz/cifar.html,PyTorch models (.pth) - ResNet, VGG, etc.,Image classification (object recognition),Computer Vision / Autonomous / Retail,"import torch
+model = torch.load('model.pth')
+model.eval()","Pretrained models available for CIFAR tasks; files use .pth rather than .pkl.","BSD-3-Clause (repo)"
+Detectron .pkl weights (object detection),https://github.com/facebookresearch/Detectron,COCO (Common Objects in Context),https://cocodataset.org/,Detectron/Mask R-CNN weights (.pkl),Object detection / segmentation,Autonomous, Retail, Surveillance,"# Detectron/convert script required
+# Example: python convert-d2-to-torchvision.py model.pkl model.pth","Detectron historically used .pkl model checkpoints; conversion often needed.","Check repo and model license"
+Human-Activity-Recognition/model.pkl,https://github.com/EvanderChristianDumalang/Human-Activity-Recognition/blob/main/model.pkl,UCI HAR / Smartphone-based activity datasets,https://archive.ics.uci.edu/ml/datasets/Human+Activity+Recognition+Using+Smartphones,RandomForest / SVM (pickle),Recognize activities (walking, sitting, etc.),Wearables / Health / Sports,"import pickle
+model = pickle.load(open('model.pkl','rb'))","Pre-trained pickled models are included in example repos.","Check repository"
+model.pkl (Walmart Store Sales Forecasting),https://github.com/vicky60629/Walmart-Store-Sales-Forecasting/blob/main/model.pkl,Walmart Store Sales (Kaggle),https://www.kaggle.com/c/walmart-recruiting-store-sales-forecasting,Time-series / LSTM / Regression (pickle),Retail sales forecasting,Retail,"import pickle
+model = pickle.load(open('model.pkl','rb'))","Example repos save models for production demos.","Check repository/Kaggle"
+model.pkl (Electronics-Recommender-system),https://github.com/akesh-0909/Electronics-Recommender-system/blob/main/model.pkl,E-commerce product datasets (Kaggle),https://www.kaggle.com/datasets (search relevant dataset),Collaborative / Content-based recommender (pickle),Product recommendations,Retail / eCommerce,"import pickle
+model = pickle.load(open('model.pkl','rb'))","Many recommender demos publish pickled models.","Check repository"
+model.pkl (sales-forecasting LSTM),https://github.com/bhavish2207/Retail-Sales-Forecasting-using-LSTM-in-production/blob/main/model.pkl,Retail Sales / Walmart dataset or custom CSV,https://www.kaggle.com/datasets (search store sales datasets),LSTM (Keras/TensorFlow) serialized (pickle),Forecast demand / sales,Retail / Supply Chain,"import pickle
+model = pickle.load(open('model.pkl','rb'))
+# or Keras: keras.models.load_model('model.h5')","Production demo for forecasting; may require specific preprocessing objects.","Check repository"

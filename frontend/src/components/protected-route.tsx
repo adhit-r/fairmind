@@ -39,9 +39,7 @@ export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) 
     )
   }
 
-  if (!user) {
-    return null // Will redirect to login
-  }
+  if (!user) return null
 
   if (requiredRole && profile?.role !== requiredRole) {
     return null // Will redirect to home

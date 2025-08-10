@@ -50,9 +50,14 @@ const riskDimensions = [
 export function NewSimulationWizard() {
   const [currentStep, setCurrentStep] = useState(1)
   const [selectedModel, setSelectedModel] = useState<string>("")
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null)
+  const [datasetFile, setDatasetFile] = useState<File | null>(null)
+  const [target, setTarget] = useState("")
+  const [features, setFeatures] = useState("")
+  const [protectedAttrs, setProtectedAttrs] = useState("")
   const [selectedRisks, setSelectedRisks] = useState<string[]>([])
   const [customScenario, setCustomScenario] = useState("")
-  const [uploadedFile, setUploadedFile] = useState<File | null>(null)
+  const [engine, setEngine] = useState<"builtin" | "sdv">("builtin")
 
   const handleNext = () => {
     if (currentStep < 3) {
@@ -70,8 +75,9 @@ export function NewSimulationWizard() {
     setSelectedRisks((prev) => (prev.includes(riskId) ? prev.filter((id) => id !== riskId) : [...prev, riskId]))
   }
 
-  const canProceedStep1 = selectedModel || uploadedFile
-  const canProceedStep2 = selectedRisks.length > 0
+  const canProceedStep1 = Boolean(selectedModel || uploadedFile)
+  const canProceedStep2 = Boolean(datasetFile || (target && features))
+  const canProceedStep3 = selectedRisks.length > 0
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -175,11 +181,51 @@ export function NewSimulationWizard() {
         </Card>
       )}
 
-      {/* Step 2: Select Risk Dimensions */}
+      {/* Step 2: Dataset Selection / Generation */}
       {currentStep === 2 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">STEP_2 — SELECT_RISK_DIMENSIONS</CardTitle>
+            <CardTitle className="text-sm">STEP_2 — DATASET_SELECTION</CardTitle>
+            <CardDescription>Upload a dataset or provide schema to generate synthetic data</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="space-y-4">
+              <Label className="text-base font-medium">Upload Dataset (CSV/Parquet)</Label>
+              <Input type="file" accept=".csv,.parquet" onChange={(e) => setDatasetFile(e.target.files?.[0] || null)} />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <div className="space-y-2">
+                  <Label>Target column</Label>
+                  <Input placeholder="label" value={target} onChange={(e) => setTarget(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Feature columns (comma-separated)</Label>
+                  <Input placeholder="age,income" value={features} onChange={(e) => setFeatures(e.target.value)} />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <div className="space-y-2">
+                  <Label>Protected attributes (comma-separated)</Label>
+                  <Input placeholder="gender,race" value={protectedAttrs} onChange={(e) => setProtectedAttrs(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Engine</Label>
+                  <select className="h-9 rounded-md border px-3 text-sm bg-background" value={engine} onChange={(e) => setEngine(e.target.value as any)}>
+                    <option value="builtin">Builtin (NumPy/Pandas)</option>
+                    <option value="sdv">SDV (requires sample data)</option>
+                  </select>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">Note: If you do not upload a dataset, we will generate synthetic data when you provide target and features.</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Step 3: Select Risk Dimensions */}
+      {currentStep === 3 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">STEP_3 — SELECT_RISK_DIMENSIONS</CardTitle>
             <CardDescription>Choose which ethical risks you want to test for</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -221,57 +267,6 @@ export function NewSimulationWizard() {
         </Card>
       )}
 
-      {/* Step 3: Review & Run */}
-      {currentStep === 3 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">STEP_3 — REVIEW_&_RUN</CardTitle>
-            <CardDescription>Review your simulation configuration before running</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <Card className="bg-muted/50">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-lg">Simulation Summary</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label className="text-sm font-medium text-muted-foreground">Model Name</Label>
-                  <p className="text-base">
-                    {uploadedFile ? uploadedFile.name : models.find((m) => m.id === selectedModel)?.name || "Unknown"}
-                  </p>
-                </div>
-
-                <div>
-                  <Label className="text-sm font-medium text-muted-foreground">Selected Risks</Label>
-                  <div className="flex flex-wrap gap-2 mt-1">
-                    {selectedRisks.map((riskId) => {
-                      const risk = riskDimensions.find((r) => r.id === riskId)
-                      return risk ? (
-                        <Badge key={riskId} variant="secondary">
-                          {risk.name}
-                        </Badge>
-                      ) : null
-                    })}
-                  </div>
-                </div>
-
-                {customScenario && (
-                  <div>
-                    <Label className="text-sm font-medium text-muted-foreground">Custom Scenario</Label>
-                    <p className="text-sm mt-1 p-3 bg-background rounded border">{customScenario}</p>
-                  </div>
-                )}
-
-                <div>
-                  <Label className="text-sm font-medium text-muted-foreground">Estimated Run Time</Label>
-                  <p className="text-base">~12 minutes</p>
-                </div>
-              </CardContent>
-            </Card>
-          </CardContent>
-        </Card>
-      )}
-
       {/* Navigation Buttons */}
       <div className="flex justify-between">
         <div>
@@ -297,8 +292,8 @@ export function NewSimulationWizard() {
               <ChevronRight className="ml-2 h-4 w-4" />
             </Button>
           ) : (
-            <Link href="/simulation/1/progress">
-              <Button className="bg-white text-black hover:bg-gray-200 text-xs">RUN_SIMULATION</Button>
+            <Link href="/simulation">
+              <Button className="bg-white text-black hover:bg-gray-200 text-xs">REVIEW & RUN</Button>
             </Link>
           )}
         </div>

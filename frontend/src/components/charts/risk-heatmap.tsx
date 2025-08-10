@@ -42,7 +42,15 @@ const riskDescriptions: Record<RiskLevel, { description: string; bgColor: string
   }
 }
 
-export function RiskHeatmap() {
+export function RiskHeatmap({
+  matrix,
+  probabilityLabels,
+  impactLabels,
+}: {
+  matrix?: RiskLevel[][],
+  probabilityLabels?: readonly string[],
+  impactLabels?: readonly string[],
+}) {
   const [selectedRisk, setSelectedRisk] = React.useState<{
     level: RiskLevel
     probability: string
@@ -81,6 +89,26 @@ export function RiskHeatmap() {
     })
   }
 
+  // Resolve data sources or show empty state
+  const effectiveMatrix = matrix || null
+  const prob = probabilityLabels || riskLabels.probability
+  const imp = impactLabels || riskLabels.impact
+
+  if (!effectiveMatrix) {
+    return (
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-mono">RISK_PROBABILITY_×_IMPACT_MATRIX</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+            No risk data yet.
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -90,7 +118,7 @@ export function RiskHeatmap() {
         <div className="space-y-2">
           <div className="grid grid-cols-6 gap-1 text-xs">
             <div className="p-2 text-center font-bold text-muted-foreground">IMPACT →</div>
-            {riskLabels.impact.map((label) => (
+            {imp.map((label) => (
               <div 
                 key={label} 
                 className="p-2 text-center font-bold text-muted-foreground text-xs"
@@ -99,10 +127,10 @@ export function RiskHeatmap() {
               </div>
             ))}
           </div>
-          {riskMatrix.map((row, rowIndex) => (
+          {effectiveMatrix.map((row, rowIndex) => (
             <div key={rowIndex} className="grid grid-cols-6 gap-1 text-xs">
               <div className="p-2 text-center font-bold text-muted-foreground text-xs">
-                {rowIndex === 2 ? "PROBABILITY ↓" : riskLabels.probability[4 - rowIndex]}
+                {rowIndex === 2 ? "PROBABILITY ↓" : prob[4 - rowIndex]}
               </div>
               {row.map((risk, colIndex) => {
                 const { bgColor, textColor } = riskDescriptions[risk]
@@ -173,7 +201,7 @@ export function RiskHeatmap() {
 
         <div className="mt-4 pt-4 border-t">
           <div className="flex flex-wrap justify-between gap-4">
-            {Object.entries(riskDescriptions).map(([level, { bgColor, textColor, description }]) => (
+            {Object.entries(riskDescriptions).map(([level, { bgColor }]) => (
               <div key={level} className="flex items-center gap-2">
                 <div className={`w-3 h-3 rounded-sm ${bgColor}`} />
                 <span className="text-xs">{level}</span>

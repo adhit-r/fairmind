@@ -41,22 +41,22 @@ export function ComplianceTimeline({ data }: ComplianceTimelineProps) {
       {
         label: 'NIST Compliance',
         data: [65, 72, 78, 82, 85, 88, 90, 92, 94, 96, 98, 99],
-        backgroundColor: 'rgba(59, 130, 246, 0.8)',
-        borderColor: 'rgba(59, 130, 246, 1)',
+        backgroundColor: 'rgba(17, 17, 17, 0.85)',
+        borderColor: 'rgba(17, 17, 17, 1)',
         borderWidth: 1,
       },
       {
         label: 'GDPR Compliance',
         data: [70, 75, 80, 85, 88, 90, 92, 94, 96, 98, 99, 100],
-        backgroundColor: 'rgba(16, 185, 129, 0.8)',
-        borderColor: 'rgba(16, 185, 129, 1)',
+        backgroundColor: 'rgba(107, 114, 128, 0.85)',
+        borderColor: 'rgba(107, 114, 128, 1)',
         borderWidth: 1,
       },
       {
         label: 'ISO Compliance',
         data: [60, 68, 75, 80, 85, 88, 90, 92, 94, 96, 98, 99],
-        backgroundColor: 'rgba(245, 158, 11, 0.8)',
-        borderColor: 'rgba(245, 158, 11, 1)',
+        backgroundColor: 'rgba(156, 163, 175, 0.85)',
+        borderColor: 'rgba(156, 163, 175, 1)',
         borderWidth: 1,
       },
     ],
@@ -101,24 +101,28 @@ export function ComplianceTimeline({ data }: ComplianceTimelineProps) {
             return value + '%'
           }
         },
-        grid: {
-          color: '#e5e7eb',
-        },
+        grid: { display: false },
       },
       x: {
         ticks: {
           color: '#6b7280',
         },
-        grid: {
-          color: '#e5e7eb',
-        },
+        grid: { display: false },
       },
     },
   }
 
+  if (!data) {
+    return (
+      <div className="w-full h-80 flex items-center justify-center text-muted-foreground text-sm">
+        No compliance data yet.
+      </div>
+    )
+  }
+
   return (
     <div className="w-full h-80">
-      <Bar data={data || defaultData} options={options} />
+      <Bar data={data} options={options} />
     </div>
   )
 }

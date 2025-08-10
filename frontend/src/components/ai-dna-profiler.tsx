@@ -527,7 +527,7 @@ function AIDNADashboard() {
             </svg>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{Object.values(dashboardData.bias_inheritance_stats).reduce((a: number, b: number) => a + b, 0)}</div>
+            <div className="text-2xl font-bold">{String(Object.values(dashboardData.bias_inheritance_stats).reduce((a: any, b: any) => (a || 0) + (b || 0), 0))}</div>
             <p className="text-xs text-muted-foreground">Total bias inheritance events</p>
           </CardContent>
         </Card>

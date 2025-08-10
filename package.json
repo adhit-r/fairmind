@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\"",
     "dev:frontend": "cd frontend && bun run dev",
-    "dev:backend": "cd backend && python main.py",
+    "dev:backend": "cd backend && PORT=8001 python main.py",
     "dev:supabase": "supabase start",
     "build": "cd frontend && bun run build",
     "start": "cd frontend && bun run start",

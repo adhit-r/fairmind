@@ -29,6 +29,8 @@ export interface AIModel {
   type: ModelType;
   status: ModelStatus;
   filePath: string;
+  path?: string; // For API compatibility
+  framework?: string; // For API compatibility
   metadata: ModelMetadata;
   createdAt: Date;
   updatedAt: Date;
@@ -326,4 +328,52 @@ export interface MaterialAttachment {
   size: number;
   uploadedAt: Date;
   uploadedBy: string;
+}
+
+// Bias Analysis Types
+export interface BiasAnalysisConfig {
+  modelPath: string;
+  datasetPath: string;
+  target: string;
+  features: string[];
+  protectedAttributes: string[];
+}
+
+export interface BiasAnalysisResult {
+  overall_score: number;
+  bias_detected: boolean;
+  risk_level: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  metrics: BiasMetric[];
+  recommendations: string[];
+  affected_groups: string[];
+  protected_attributes: string[];
+}
+
+export interface BiasMetric {
+  name: string;
+  value: number;
+  threshold: number;
+  status: 'pass' | 'fail' | 'warning';
+  description: string;
+}
+
+// Dataset Types
+export interface Dataset {
+  path: string;
+  name: string;
+  rows: number;
+  columns?: string[];
+  created_at?: string;
+  org_id?: string;
+}
+
+// Simulation Config Types
+export interface SimulationConfig {
+  path: string;
+  dataset_path?: string;
+  target?: string;
+  features?: string[];
+  protected_attributes?: string[];
+  org_id?: string;
+  company?: string;
 } 

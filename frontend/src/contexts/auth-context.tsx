@@ -12,6 +12,7 @@ type UserProfile = {
   avatar_url?: string;
   role?: string;
   username?: string;
+  default_org_id?: string | null;
 };
 
 type LoginResponse = {
@@ -60,44 +61,83 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event: string, session: Session | null) => {
+    let isMounted = true;
+
+    // Initial session check so we don't render a blank screen
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
         const currentUser = session?.user || null;
+        if (!isMounted) return;
         setUser(currentUser);
 
         if (currentUser) {
-          // Fetch real user profile from database
           const userProfile = await fetchUserProfile(currentUser.id);
+          if (!isMounted) return;
           if (userProfile) {
             setProfile({
-              id: userProfile.id,
-              email: currentUser.email!,
-              full_name: userProfile.full_name,
-              avatar_url: userProfile.avatar_url,
-              role: userProfile.role,
-              username: userProfile.username
+              id: String(userProfile.id),
+              email: String(currentUser.email!),
+              full_name: userProfile.full_name ? String(userProfile.full_name) : undefined,
+              avatar_url: userProfile.avatar_url ? String(userProfile.avatar_url) : undefined,
+              role: userProfile.role ? String(userProfile.role) : undefined,
+              username: userProfile.username ? String(userProfile.username) : undefined,
+              default_org_id: userProfile.default_org_id ? String(userProfile.default_org_id) : null,
             });
           } else {
-            // Fallback to basic profile if database profile not found
             setProfile({
               id: currentUser.id,
               email: currentUser.email!,
               full_name: currentUser.user_metadata?.full_name,
-              role: 'user'
+              role: 'user',
+              default_org_id: null,
             });
           }
         } else {
           setProfile(null);
         }
-        
-        setLoading(false);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    })();
+
+    // Subscribe to auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (_event: string, session: Session | null) => {
+        const currentUser = session?.user || null;
+        setUser(currentUser);
+        if (currentUser) {
+          const userProfile = await fetchUserProfile(currentUser.id);
+          if (userProfile) {
+            setProfile({
+              id: String(userProfile.id),
+              email: String(currentUser.email!),
+              full_name: userProfile.full_name ? String(userProfile.full_name) : undefined,
+              avatar_url: userProfile.avatar_url ? String(userProfile.avatar_url) : undefined,
+              role: userProfile.role ? String(userProfile.role) : undefined,
+              username: userProfile.username ? String(userProfile.username) : undefined,
+              default_org_id: userProfile.default_org_id ? String(userProfile.default_org_id) : null,
+            });
+          } else {
+            setProfile({
+              id: currentUser.id,
+              email: currentUser.email!,
+              full_name: currentUser.user_metadata?.full_name,
+              role: 'user',
+              default_org_id: null,
+            });
+          }
+        } else {
+          setProfile(null);
+        }
       }
     );
 
     return () => {
+      isMounted = false;
       subscription.unsubscribe();
     };
-  }, [supabase.auth]);
+  }, [supabase]);
 
   const login = async (email: string, password: string): Promise<LoginResponse> => {
     try {

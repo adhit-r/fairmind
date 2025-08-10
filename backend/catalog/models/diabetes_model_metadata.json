@@ -1,0 +1,16 @@
+{
+  "name": "Diabetes Prediction Model",
+  "source": "locally_trained",
+  "type": "classification",
+  "framework": "scikit-learn",
+  "dataset": "diabetes",
+  "description": "Logistic regression model for diabetes prediction",
+  "tags": [
+    "healthcare",
+    "diabetes",
+    "classification",
+    "logistic-regression"
+  ],
+  "trained_at": "2025-08-10T22:58:28.037821",
+  "accuracy": 0.7825520833333334
+}

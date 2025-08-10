@@ -10,17 +10,6 @@ interface FairnessDataPoint {
   baseline: number
 }
 
-const mockData: FairnessDataPoint[] = [
-  { name: "AGE_GROUP_18_25", score: 0.85, baseline: 0.78 },
-  { name: "AGE_GROUP_26_35", score: 0.89, baseline: 0.82 },
-  { name: "AGE_GROUP_36_50", score: 0.92, baseline: 0.85 },
-  { name: "AGE_GROUP_51_65", score: 0.88, baseline: 0.83 },
-  { name: "AGE_GROUP_65_PLUS", score: 0.82, baseline: 0.79 },
-  { name: "GENDER_MALE", score: 0.87, baseline: 0.85 },
-  { name: "GENDER_FEMALE", score: 0.86, baseline: 0.84 },
-  { name: "GENDER_OTHER", score: 0.84, baseline: 0.82 },
-]
-
 const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: any[]; label?: string }) => {
   if (active && payload && payload.length) {
     const score = payload.find(item => item.dataKey === 'score')?.value
@@ -32,14 +21,14 @@ const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?:
         <div className="mt-2 space-y-1">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-primary"></div>
+              <div className="w-3 h-3 rounded-full bg-foreground"></div>
               <span className="text-xs">Current Score</span>
             </div>
             <span className="text-sm font-mono">{(score * 100).toFixed(1)}%</span>
           </div>
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-muted-foreground/50"></div>
+              <div className="w-3 h-3 rounded-full bg-muted-foreground/60"></div>
               <span className="text-xs">Baseline</span>
             </div>
             <span className="text-sm font-mono">{(baseline * 100).toFixed(1)}%</span>
@@ -51,32 +40,8 @@ const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?:
   return null
 }
 
-export function FairnessChart() {
-  const [data, setData] = React.useState<FairnessDataPoint[]>([])
-  const [loading, setLoading] = React.useState(true)
-  const [error, setError] = React.useState<string | null>(null)
-
-  React.useEffect(() => {
-    setLoading(true)
-    
-    // Simulate API call with timeout
-    const timer = setTimeout(() => {
-      try {
-        // In a real app, you would fetch from your API
-        // const response = await fetch("/api/fairness")
-        // const data = await response.json()
-        setData(mockData)
-        setLoading(false)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load fairness data')
-        setLoading(false)
-      }
-    }, 800)
-
-    return () => clearTimeout(timer)
-  }, [])
-
-  if (loading) {
+export function FairnessChart({ data }: { data?: FairnessDataPoint[] }) {
+  if (!data || data.length === 0) {
     return (
       <Card>
         <CardHeader>
@@ -84,22 +49,7 @@ export function FairnessChart() {
         </CardHeader>
         <CardContent>
           <div className="h-[300px] flex items-center justify-center text-muted-foreground">
-            Loading fairness metrics...
-          </div>
-        </CardContent>
-      </Card>
-    )
-  }
-
-  if (error) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-mono">FAIRNESS_METRICS</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="h-[300px] flex items-center justify-center text-red-500">
-            Error: {error}
+            No fairness data yet. Run a simulation to populate.
           </div>
         </CardContent>
       </Card>
@@ -119,7 +69,7 @@ export function FairnessChart() {
               margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
               barCategoryGap={10}
             >
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+               <CartesianGrid strokeDasharray="3 3" stroke="transparent" vertical={false} />
               <XAxis 
                 dataKey="name" 
                 stroke="hsl(var(--muted-foreground))" 
@@ -158,14 +108,14 @@ export function FairnessChart() {
               <Bar 
                 name="score"
                 dataKey="score" 
-                fill="hsl(var(--primary))" 
+                fill="hsl(var(--foreground))" 
                 radius={[4, 4, 0, 0]}
               />
               <Bar 
                 name="baseline"
                 dataKey="baseline" 
                 fill="hsl(var(--muted-foreground))"
-                fillOpacity={0.5}
+                fillOpacity={0.6}
                 radius={[4, 4, 0, 0]}
               />
             </BarChart>

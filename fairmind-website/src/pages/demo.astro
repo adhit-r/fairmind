@@ -3,78 +3,78 @@ import Layout from '../layouts/Layout.astro';
 
 const dashboardFeatures = [
   {
-    title: 'Main Dashboard',
-    description: 'Overview with 22 specialized dashboard cards and real-time metrics',
-    image: '/screenshots/dashboard/main-dashboard.png',
-    features: ['Overview Cards', 'Real-time Metrics', 'Quick Actions', 'Recent Activity']
+    title: 'Bias Detection Dashboard',
+    description: 'Comprehensive bias analysis with SHAP and LIME integration for model interpretability',
+    image: '/screenshots/Bias Detection.png',
+    features: ['SHAP Analysis', 'LIME Explanations', 'Bias Metrics', 'Protected Groups']
   },
   {
-    title: 'Advanced Bias Detection',
-    description: 'SHAP, LIME, and Knowledge Graph integration for comprehensive bias analysis',
-    image: '/screenshots/dashboard/bias-detection.png',
-    features: ['SHAP Analysis', 'LIME Explanations', 'Knowledge Graph', 'Bias Patterns']
+    title: 'Simulation Results',
+    description: 'Detailed simulation outcomes with performance metrics and fairness analysis',
+    image: '/screenshots/simulation-result.png',
+    features: ['Performance Metrics', 'Fairness Analysis', 'Confusion Matrix', 'Results Visualization']
   },
   {
-    title: 'Knowledge Graph',
-    description: 'Neo4j-powered causal relationship analysis and bias propagation tracking',
-    image: '/screenshots/dashboard/knowledge-graph.png',
-    features: ['Neo4j Integration', 'Causal Chains', 'Bias Patterns', 'Graph Alerts']
+    title: 'Risk Assessment Matrix',
+    description: 'Comprehensive risk evaluation with performance matrix and risk scoring',
+    image: '/screenshots/performance-matrix_RMF_Risk_assesment_matrix.png',
+    features: ['Risk Scoring', 'Performance Matrix', 'Risk Categories', 'Mitigation Strategies']
   },
   {
-    title: 'Geographic Bias Analysis',
-    description: 'Cross-country cultural factors and regional bias detection',
-    image: '/screenshots/dashboard/geographic-bias.png',
-    features: ['Country Analysis', 'Cultural Factors', 'Regional Patterns', 'Bias Metrics']
+    title: 'Model Prediction Analysis',
+    description: 'Confusion matrix and prediction distribution analysis for model evaluation',
+    image: '/screenshots/confusion-matrix_prediction-distribution.png',
+    features: ['Confusion Matrix', 'Prediction Distribution', 'Model Accuracy', 'Error Analysis']
   },
   {
-    title: 'Model DNA Signatures',
-    description: 'Genetic lineage tracking and inheritance pattern analysis',
-    image: '/screenshots/dashboard/model-dna.png',
-    features: ['DNA Signatures', 'Lineage Tracking', 'Inheritance Patterns', 'Genetic Analysis']
+    title: 'Risk Registry',
+    description: 'Centralized risk management and tracking system for AI models',
+    image: '/screenshots/Risk_Registry.png',
+    features: ['Risk Registry', 'Risk Tracking', 'Risk Categories', 'Risk Mitigation']
   },
   {
-    title: 'Real-time Monitoring',
-    description: 'Live alerts, drift detection, and compliance tracking',
-    image: '/screenshots/dashboard/monitoring.png',
-    features: ['Live Alerts', 'Drift Detection', 'Performance Issues', 'System Health']
+    title: 'Simulation Interface',
+    description: 'Interactive simulation interface for model testing and validation',
+    image: '/screenshots/run-simulation-1.png',
+    features: ['Model Upload', 'Dataset Selection', 'Parameter Configuration', 'Simulation Execution']
   }
 ];
 
 const dashboardCategories = [
   {
-    title: 'GOVERNANCE',
-    description: 'Core management and overview',
-    dashboards: ['Main Dashboard', 'New Simulation', 'Governance Review'],
+    title: 'ANALYZE',
+    description: 'Bias detection and model analysis',
+    dashboards: ['Bias Detection', 'Model Explainability', 'Performance Analysis'],
     color: 'blue'
   },
   {
-    title: 'TESTING',
-    description: 'Advanced bias detection and analysis',
-    dashboards: ['Bias Detection (SHAP/LIME)', 'Geographic Bias', 'Model DNA'],
+    title: 'MONITOR',
+    description: 'Real-time monitoring and alerts',
+    dashboards: ['Real-time Monitoring', 'Drift Detection', 'System Health'],
     color: 'purple'
   },
   {
-    title: 'COMPLIANCE',
-    description: 'Regulatory tracking and monitoring',
-    dashboards: ['AI Bill Compliance', 'Audit Logs', 'Real-time Monitoring'],
+    title: 'EXPLAIN',
+    description: 'Model interpretability and transparency',
+    dashboards: ['SHAP Analysis', 'LIME Explanations', 'Feature Importance'],
     color: 'green'
   },
   {
-    title: 'MANAGEMENT',
-    description: 'Operational tools and analytics',
-    dashboards: ['Model Management', 'Version Control', 'Performance Tracking'],
+    title: 'GOVERN',
+    description: 'Compliance and risk management',
+    dashboards: ['Risk Assessment', 'Compliance Tracking', 'Audit Logs'],
     color: 'orange'
   },
   {
-    title: 'ADVANCED',
-    description: 'Specialized analysis tools',
-    dashboards: ['Knowledge Graph', 'Cultural Factors', 'Historical Scenarios'],
+    title: 'SIMULATE',
+    description: 'Model testing and validation',
+    dashboards: ['Simulation Interface', 'Model Testing', 'Validation Results'],
     color: 'pink'
   },
   {
-    title: 'SYSTEM',
-    description: 'Administration and configuration',
-    dashboards: ['Settings', 'Users', 'Configuration'],
+    title: 'MANAGE',
+    description: 'Model and data management',
+    dashboards: ['Model Registry', 'Data Management', 'Version Control'],
     color: 'gray'
   }
 ];
@@ -85,65 +85,65 @@ const dashboardCategories = [
   description="Experience the most comprehensive AI governance platform with 22 specialized dashboards for bias detection, compliance tracking, and model management."
 >
   <!-- Hero Section -->
-  <section class="relative overflow-hidden bg-gradient-to-b from-gray-900 to-gray-800 text-white pt-24 pb-16 md:pt-32 md:pb-24">
+  <section class="relative overflow-hidden bg-gradient-to-b from-gray-900 to-gray-800 text-white pt-16 sm:pt-20 md:pt-24 lg:pt-32 pb-12 sm:pb-16 md:pb-20 lg:pb-24">
     <div class="absolute inset-0 overflow-hidden pointer-events-none">
-      <div class="absolute -right-20 -top-20 w-96 h-96 bg-primary-500/10 rounded-full mix-blend-soft-light filter blur-3xl"></div>
-      <div class="absolute -left-20 -bottom-20 w-96 h-96 bg-secondary-500/10 rounded-full mix-blend-soft-light filter blur-3xl"></div>
+      <div class="absolute -right-10 sm:-right-20 -top-10 sm:-top-20 w-48 sm:w-64 md:w-96 h-48 sm:h-64 md:h-96 bg-primary-500/10 rounded-full mix-blend-soft-light filter blur-3xl"></div>
+      <div class="absolute -left-10 sm:-left-20 -bottom-10 sm:-bottom-20 w-48 sm:w-64 md:w-96 h-48 sm:h-64 md:h-96 bg-secondary-500/10 rounded-full mix-blend-soft-light filter blur-3xl"></div>
     </div>
     
-    <div class="container mx-auto px-4 relative z-10">
+    <div class="container mx-auto px-4 sm:px-6 relative z-10">
       <div class="max-w-4xl mx-auto text-center">
-        <h1 class="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight text-white mb-6">
+        <h1 class="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight text-white mb-4 sm:mb-6">
           <span class="block">Live Dashboard Demo</span>
           <span class="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">22 Specialized Tools</span>
         </h1>
         
-        <p class="text-xl text-gray-300 mb-8 max-w-2xl mx-auto leading-relaxed">
-          Experience the most comprehensive AI governance platform featuring SHAP, LIME, and Neo4j Knowledge Graph integration. 
-          Explore 22 specialized dashboards for complete bias detection and compliance tracking.
+        <p class="text-lg sm:text-xl text-gray-300 mb-6 sm:mb-8 max-w-2xl mx-auto leading-relaxed">
+          Open-source AI governance platform with SHAP, LIME, and advanced bias detection capabilities. 
+          Explore specialized dashboards for comprehensive model analysis and compliance tracking.
         </p>
         
-        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+        <div class="flex flex-col sm:flex-row gap-4 justify-center btn-group">
           <a 
-            href="http://localhost:3000" 
+            href="https://app-demo.fairmind.xyz" 
             target="_blank"
-            class="btn btn-primary px-8 py-4 text-base font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5"
+            class="btn btn-primary px-6 sm:px-8 py-3 sm:py-4 text-sm sm:text-base font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5"
           >
             Launch Live Demo
           </a>
           <a 
             href="/features" 
-            class="btn btn-outline-light px-8 py-4 text-base font-semibold border-2 border-white/20 hover:border-white/40 hover:bg-white/5 transition-all duration-300 transform hover:-translate-y-0.5"
+            class="btn btn-outline-light px-6 sm:px-8 py-3 sm:py-4 text-sm sm:text-base font-semibold border-2 border-white/20 hover:border-white/40 hover:bg-white/5 transition-all duration-300 transform hover:-translate-y-0.5"
           >
             View Features
           </a>
         </div>
         
         <!-- Feature badges -->
-        <div class="mt-8 flex flex-wrap gap-2 justify-center">
-          <span class="px-3 py-1 bg-purple-500/20 text-purple-300 text-sm rounded-full border border-purple-500/30">SHAP + LIME</span>
-          <span class="px-3 py-1 bg-blue-500/20 text-blue-300 text-sm rounded-full border border-blue-500/30">Knowledge Graph</span>
-          <span class="px-3 py-1 bg-green-500/20 text-green-300 text-sm rounded-full border border-green-500/30">22 Dashboards</span>
-          <span class="px-3 py-1 bg-orange-500/20 text-orange-300 text-sm rounded-full border border-orange-500/30">Real-time Alerts</span>
+        <div class="mt-6 sm:mt-8 flex flex-wrap gap-2 justify-center">
+          <span class="px-2 sm:px-3 py-1 bg-purple-500/20 text-purple-300 text-xs sm:text-sm rounded-full border border-purple-500/30">SHAP + LIME</span>
+          <span class="px-2 sm:px-3 py-1 bg-blue-500/20 text-blue-300 text-xs sm:text-sm rounded-full border border-blue-500/30">Bias Detection</span>
+          <span class="px-2 sm:px-3 py-1 bg-green-500/20 text-green-300 text-xs sm:text-sm rounded-full border border-green-500/30">Open Source</span>
+          <span class="px-2 sm:px-3 py-1 bg-orange-500/20 text-orange-300 text-xs sm:text-sm rounded-full border border-orange-500/30">Real-time Monitoring</span>
         </div>
       </div>
     </div>
   </section>
 
   <!-- Dashboard Categories -->
-  <section class="py-20 bg-gray-50 relative overflow-hidden">
-    <div class="container mx-auto px-4 relative z-10">
-      <div class="max-w-4xl mx-auto text-center mb-16">
-        <span class="inline-block px-4 py-2 text-sm font-medium text-primary-700 bg-primary-50 rounded-full mb-4">Dashboard Organization</span>
-        <h2 class="text-4xl md:text-5xl font-bold text-gray-900 mb-6">22 Specialized Dashboards</h2>
-        <p class="text-xl text-gray-600">Modular organization for focused AI governance workflows</p>
+  <section class="py-12 sm:py-16 md:py-20 bg-gray-50 relative overflow-hidden">
+    <div class="container mx-auto px-4 sm:px-6 relative z-10">
+      <div class="max-w-4xl mx-auto text-center mb-12 sm:mb-16">
+        <span class="inline-block px-3 sm:px-4 py-2 text-sm font-medium text-primary-700 bg-primary-50 rounded-full mb-4">Dashboard Organization</span>
+        <h2 class="text-3xl sm:text-4xl md:text-5xl font-bold text-gray-900 mb-4 sm:mb-6">Specialized Dashboards</h2>
+        <p class="text-lg sm:text-xl text-gray-600">Modular organization for focused AI governance workflows</p>
       </div>
       
-      <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
         {dashboardCategories.map((category) => (
-          <div class="bg-white rounded-xl p-8 shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-100 hover:-translate-y-1">
-            <div class={`w-16 h-16 bg-${category.color}-50 rounded-xl flex items-center justify-center text-${category.color}-600 mb-6`}>
-              <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div class="bg-white rounded-xl p-6 sm:p-8 shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-100 hover:-translate-y-1">
+            <div class={`w-12 h-12 sm:w-16 sm:h-16 bg-${category.color}-50 rounded-xl flex items-center justify-center text-${category.color}-600 mb-4 sm:mb-6`}>
+              <svg class="w-6 h-6 sm:w-8 sm:h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 {category.title === 'GOVERNANCE' && (
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                 )}
@@ -164,8 +164,8 @@ const dashboardCategories = [
                 )}
               </svg>
             </div>
-            <h3 class="text-xl font-bold text-gray-900 mb-3">{category.title}</h3>
-            <p class="text-gray-600 mb-4">{category.description}</p>
+            <h3 class="text-lg sm:text-xl font-bold text-gray-900 mb-3">{category.title}</h3>
+            <p class="text-sm sm:text-base text-gray-600 mb-4">{category.description}</p>
             <ul class="text-sm text-gray-500 space-y-1.5">
               {category.dashboards.map((dashboard) => (
                 <li class="flex items-start">
@@ -187,7 +187,7 @@ const dashboardCategories = [
     <div class="container mx-auto px-4 relative z-10">
       <div class="max-w-4xl mx-auto text-center mb-16">
         <span class="inline-block px-4 py-2 text-sm font-medium text-primary-700 bg-primary-50 rounded-full mb-4">Dashboard Features</span>
-        <h2 class="text-4xl md:text-5xl font-bold text-gray-900 mb-6">Advanced AI Governance Tools</h2>
+        <h2 class="text-3xl sm:text-4xl md:text-5xl font-bold text-gray-900 mb-4 sm:mb-6">AI Governance Tools</h2>
         <p class="text-xl text-gray-600">Explore the specialized dashboards and their capabilities</p>
       </div>
       
@@ -209,7 +209,7 @@ const dashboardCategories = [
               </ul>
               <div class="mt-8">
                 <a 
-                  href="http://localhost:3000" 
+                  href="https://app-demo.fairmind.xyz" 
                   target="_blank"
                   class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-lg shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors duration-200"
                 >
@@ -253,9 +253,9 @@ const dashboardCategories = [
     
     <div class="container mx-auto px-4 relative z-10">
       <div class="max-w-4xl mx-auto text-center">
-        <h2 class="text-4xl md:text-5xl font-bold mb-6">Experience the Full Platform</h2>
-        <p class="text-xl mb-8 text-white/90">
-          Launch the live demo to explore all 22 specialized dashboards and advanced features
+        <h2 class="text-3xl sm:text-4xl md:text-5xl font-bold mb-4 sm:mb-6">Experience the Platform</h2>
+        <p class="text-lg sm:text-xl mb-6 sm:mb-8 text-white/90">
+          Launch the live demo to explore specialized dashboards and AI governance features
         </p>
         
         <div class="grid md:grid-cols-3 gap-8 mb-12">
@@ -288,17 +288,17 @@ const dashboardCategories = [
           </div>
         </div>
         
-        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+        <div class="flex flex-col sm:flex-row gap-4 justify-center btn-group">
           <a 
-            href="http://localhost:3000" 
+            href="https://app-demo.fairmind.xyz" 
             target="_blank"
-            class="btn btn-white px-8 py-4 text-base font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5"
+            class="btn btn-white px-6 sm:px-8 py-3 sm:py-4 text-sm sm:text-base font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5"
           >
             Launch Live Demo
           </a>
           <a 
             href="/contact" 
-            class="btn btn-outline-white px-8 py-4 text-base font-semibold border-2 border-white/20 hover:border-white/40 hover:bg-white/5 transition-all duration-300 transform hover:-translate-y-0.5"
+            class="btn btn-outline-white px-6 sm:px-8 py-3 sm:py-4 text-sm sm:text-base font-semibold border-2 border-white/20 hover:border-white/40 hover:bg-white/5 transition-all duration-300 transform hover:-translate-y-0.5"
           >
             Schedule Demo
           </a>

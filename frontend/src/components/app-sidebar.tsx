@@ -1,6 +1,6 @@
 "use client"
 
-import { Home, Plus, History, Settings, HelpCircle, Shield, Brain, FileText, Users, AlertTriangle } from "lucide-react"
+import { Home, Plus, History, Settings, HelpCircle, Shield, Brain, FileText, Users, AlertTriangle, Info } from "lucide-react"
 import {
   Sidebar,
   SidebarContent,
@@ -17,76 +17,39 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useState } from "react"
 
-const governanceItems = [
-  {
-    title: "DASHBOARD",
-    url: "/",
-    icon: Home,
-  },
-  {
-    title: "AI_GOVERNANCE",
-    url: "/governance",
-    icon: Shield,
-  },
-  {
-    title: "MODEL_REGISTRY",
-    url: "/models",
-    icon: Brain,
-  },
-  {
-    title: "RISK_ASSESSMENT",
-    url: "/risk",
-    icon: AlertTriangle,
-  },
+// Sidebar taxonomy: Analyze, Monitor, Explain, Govern, Simulate
+const analyzeItems = [
+  { title: "DASHBOARD", url: "/", icon: Home },
+  { title: "BIAS_DETECTION", url: "/bias-detection", icon: AlertTriangle },
+  { title: "MODEL_DNA", url: "/model-dna", icon: Brain },
+  { title: "KNOWLEDGE_GRAPH", url: "/knowledge-graph", icon: FileText },
+  { title: "LLM_TESTING", url: "/llm-testing", icon: Brain },
 ]
 
-const testingItems = [
-  {
-    title: "NEW_SIMULATION",
-    url: "/simulation/new",
-    icon: Plus,
-  },
-  {
-    title: "SIMULATION_HISTORY",
-    url: "/history",
-    icon: History,
-  },
-  {
-    title: "LLM_TESTING",
-    url: "/llm",
-    icon: Brain,
-  },
+const monitorItems = [
+  { title: "MONITORING", url: "/monitoring", icon: Shield },
+  { title: "ANALYTICS", url: "/analytics", icon: FileText },
+  { title: "GEOGRAPHIC_BIAS", url: "/geographic-bias", icon: AlertTriangle },
 ]
 
-const complianceItems = [
-  {
-    title: "AI_BILL_COMPLIANCE",
-    url: "/ai-bill",
-    icon: Shield,
-  },
-  {
-    title: "AUDIT_LOGS",
-    url: "/audit",
-    icon: FileText,
-  },
-  {
-    title: "STAKEHOLDERS",
-    url: "/stakeholders",
-    icon: Users,
-  },
+const explainItems = [
+  { title: "HOW_IT_WORKS", url: "/how-it-works", icon: Info },
+  { title: "AI_ETHICS_OBSERVATORY", url: "/ai-ethics-observatory", icon: Brain },
+  { title: "HELP_&_SUPPORT", url: "/help", icon: HelpCircle },
 ]
 
-const settingsItems = [
-  {
-    title: "SETTINGS",
-    url: "/settings",
-    icon: Settings,
-  },
-  {
-    title: "HELP_&_SUPPORT",
-    url: "/help",
-    icon: HelpCircle,
-  },
+const governItems = [
+  { title: "COMPLIANCE", url: "/compliance", icon: Shield },
+  { title: "AUDIT_LOGS", url: "/audit-logs", icon: FileText },
+  { title: "STAKEHOLDERS", url: "/stakeholders", icon: Users },
+  { title: "SETTINGS", url: "/settings", icon: Settings },
+]
+
+const simulateItems = [
+  { title: "NEW_SIMULATION", url: "/simulation", icon: Plus },
+  { title: "SIMULATION_HISTORY", url: "/simulation-history", icon: History },
+  { title: "MODEL_INVENTORY", url: "/models", icon: Brain },
+  { title: "MODEL_UPLOAD", url: "/model-upload", icon: FileText },
 ]
 
 export function AppSidebar() {
@@ -111,11 +74,11 @@ export function AppSidebar() {
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupLabel className="text-xs font-bold tracking-wider">
-            {isCollapsed ? "GOV" : "GOVERNANCE"}
+            {isCollapsed ? "ANZ" : "ANALYZE"}
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {governanceItems.map((item) => (
+              {analyzeItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild className="font-mono text-sm">
                     <a href={item.url}>
@@ -133,11 +96,11 @@ export function AppSidebar() {
 
         <SidebarGroup>
           <SidebarGroupLabel className="text-xs font-bold tracking-wider">
-            {isCollapsed ? "TEST" : "TESTING"}
+            {isCollapsed ? "MON" : "MONITOR"}
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {testingItems.map((item) => (
+              {monitorItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild className="font-mono text-sm">
                     <a href={item.url}>
@@ -155,11 +118,11 @@ export function AppSidebar() {
 
         <SidebarGroup>
           <SidebarGroupLabel className="text-xs font-bold tracking-wider">
-            {isCollapsed ? "COMP" : "COMPLIANCE"}
+            {isCollapsed ? "EXP" : "EXPLAIN"}
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {complianceItems.map((item) => (
+              {explainItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild className="font-mono text-sm">
                     <a href={item.url}>
@@ -177,11 +140,33 @@ export function AppSidebar() {
 
         <SidebarGroup>
           <SidebarGroupLabel className="text-xs font-bold tracking-wider">
-            {isCollapsed ? "SYS" : "SYSTEM"}
+            {isCollapsed ? "GOV" : "GOVERN"}
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {settingsItems.map((item) => (
+              {governItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild className="font-mono text-sm">
+                    <a href={item.url}>
+                      <item.icon className="h-4 w-4" />
+                      {!isCollapsed && <span className="tracking-wide">{item.title}</span>}
+                    </a>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarSeparator />
+
+        <SidebarGroup>
+          <SidebarGroupLabel className="text-xs font-bold tracking-wider">
+            {isCollapsed ? "SIM" : "SIMULATE"}
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {simulateItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild className="font-mono text-sm">
                     <a href={item.url}>

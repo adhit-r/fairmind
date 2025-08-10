@@ -1,9 +1,9 @@
 import type { Metadata } from "next"
 import { JetBrains_Mono } from "next/font/google"
 import "./globals.css"
-import { Sidebar } from "@/components/Sidebar"
 import { AuthProvider } from "@/contexts/auth-context"
-import { ProtectedRoute } from "@/components/protected-route"
+import { AppSidebar } from "@/components/app-sidebar"
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 
 const jetbrains = JetBrains_Mono({
   subsets: ["latin"],
@@ -25,13 +25,14 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${jetbrains.className} font-mono`}>
         <AuthProvider>
-          <ProtectedRoute>
-            <Sidebar>
+          <SidebarProvider>
+            <AppSidebar />
+            <SidebarInset>
               <div className="h-full overflow-y-auto bg-background p-6">
                 {children}
               </div>
-            </Sidebar>
-          </ProtectedRoute>
+            </SidebarInset>
+          </SidebarProvider>
         </AuthProvider>
       </body>
     </html>

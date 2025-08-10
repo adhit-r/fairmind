@@ -20,6 +20,7 @@ interface UploadedFile {
   status: 'uploading' | 'success' | 'error'
   progress: number
   error?: string
+  serverPath?: string
 }
 
 interface ModelMetadata {
@@ -36,6 +37,8 @@ interface ModelMetadata {
 
 export function ModelUpload() {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
+  const [fileMap, setFileMap] = useState<Record<string, File>>({})
+  const [simulationOutput, setSimulationOutput] = useState<Record<string, any>>({})
   const [modelMetadata, setModelMetadata] = useState<ModelMetadata>({
     name: '',
     version: '',
@@ -50,6 +53,7 @@ export function ModelUpload() {
   const [currentStep, setCurrentStep] = useState(1)
   const [isUploading, setIsUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files
@@ -65,39 +69,42 @@ export function ModelUpload() {
     }))
 
     setUploadedFiles(prev => [...prev, ...newFiles])
-    simulateUpload(newFiles)
+    const mapUpdate: Record<string, File> = {}
+    Array.from(files).forEach((f, i) => { mapUpdate[newFiles[i].id] = f })
+    setFileMap(prev => ({ ...prev, ...mapUpdate }))
+    void uploadBatch(newFiles)
   }
 
-  const simulateUpload = (files: UploadedFile[]) => {
+  const uploadBatch = async (files: UploadedFile[]) => {
     setIsUploading(true)
-    
-    files.forEach((file, index) => {
-      const interval = setInterval(() => {
-        setUploadedFiles(prev => prev.map(f => {
-          if (f.id === file.id) {
-            const newProgress = f.progress + Math.random() * 20
-            if (newProgress >= 100) {
-              clearInterval(interval)
-              return {
-                ...f,
-                progress: 100,
-                status: 'success' as const
-              }
-            }
-            return { ...f, progress: newProgress }
-          }
-          return f
-        }))
-      }, 200)
-    })
-
-    setTimeout(() => {
-      setIsUploading(false)
-    }, 3000)
+    for (const meta of files) {
+      const file = fileMap[meta.id]
+      if (!file) continue
+      try {
+        // Optimistic progress start
+        setUploadedFiles(prev => prev.map(f => f.id === meta.id ? { ...f, progress: 10 } : f))
+        const form = new FormData()
+        form.append('file', file)
+        form.append('model_id', modelMetadata.name || meta.name)
+        form.append('framework', modelMetadata.framework || 'unknown')
+        const res = await fetch(`${API_URL}/models/upload`, { method: 'POST', body: form })
+        const data = await res.json()
+        if (!res.ok || data.success === false) throw new Error(data.detail || 'Upload failed')
+        setUploadedFiles(prev => prev.map(f => f.id === meta.id ? { ...f, progress: 100, status: 'success', serverPath: data.path } : f))
+      } catch (err: any) {
+        setUploadedFiles(prev => prev.map(f => f.id === meta.id ? { ...f, status: 'error', error: String(err?.message || err) } : f))
+      }
+    }
+    setIsUploading(false)
   }
 
   const removeFile = (fileId: string) => {
     setUploadedFiles(prev => prev.filter(f => f.id !== fileId))
+    setFileMap(prev => {
+      const copy = { ...prev }
+      delete copy[fileId]
+      return copy
+    })
   }
 
   const handleMetadataChange = (field: keyof ModelMetadata, value: string | string[]) => {
@@ -119,8 +126,50 @@ export function ModelUpload() {
   }
 
   const handleSubmit = async () => {
-    // Handle model registration
-    console.log('Submitting model:', { files: uploadedFiles, metadata: modelMetadata })
+    const successful = uploadedFiles.filter(f => f.status === 'success')
+    if (successful.length === 0) return
+    try {
+      const first = successful[0]
+      const res = await fetch(`${API_URL}/models/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: modelMetadata.name || first.name,
+          name: modelMetadata.name || first.name,
+          version: modelMetadata.version || undefined,
+          type: modelMetadata.type || undefined,
+          framework: modelMetadata.framework || undefined,
+          tags: modelMetadata.tags,
+          company: modelMetadata.company || undefined,
+          risk_level: modelMetadata.risk_level,
+          deployment_environment: modelMetadata.deployment_environment,
+          path: first.serverPath,
+          sha256: undefined,
+          created_at: new Date().toISOString(),
+        })
+      })
+      const json = await res.json()
+      if (!res.ok || json.success === false) throw new Error(json.detail || 'Register failed')
+    } catch (e) {
+      // no-op for now
+    }
+  }
+
+  const runSimulation = async (fileId: string) => {
+    const meta = uploadedFiles.find(f => f.id === fileId)
+    if (!meta?.serverPath) return
+    try {
+      const res = await fetch(`${API_URL}/simulation/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: meta.serverPath }),
+      })
+      const data = await res.json()
+      if (!res.ok || data.success === false) throw new Error(data.detail || 'Simulation failed')
+      setSimulationOutput(prev => ({ ...prev, [fileId]: data }))
+    } catch (err) {
+      setSimulationOutput(prev => ({ ...prev, [fileId]: { error: String((err as any)?.message || err) } }))
+    }
   }
 
   const getFileIcon = (fileName: string) => {
@@ -238,7 +287,12 @@ export function ModelUpload() {
                         </div>
                       )}
                       {file.status === 'success' && (
-                        <CheckCircle className="h-5 w-5 text-green-500" />
+                        <>
+                          <CheckCircle className="h-5 w-5 text-green-500" />
+                          <Button size="sm" variant="secondary" onClick={() => runSimulation(file.id)}>
+                            Run Simulation
+                          </Button>
+                        </>
                       )}
                       {file.status === 'error' && (
                         <AlertCircle className="h-5 w-5 text-red-500" />
@@ -436,6 +490,26 @@ export function ModelUpload() {
                   ))}
                 </div>
               </div>
+
+              {uploadedFiles.some(f => simulationOutput[f.id]) && (
+                <div className="space-y-2">
+                  <h4 className="font-medium">Simulation Results</h4>
+                  {uploadedFiles.map((f) => simulationOutput[f.id] && (
+                    <div key={`sim-${f.id}`} className="text-sm p-3 border rounded">
+                      {simulationOutput[f.id]?.error ? (
+                        <p className="text-red-500">{simulationOutput[f.id].error}</p>
+                      ) : (
+                        <>
+                          <p><b>File:</b> {f.name}</p>
+                          <p><b>Fairness:</b> {simulationOutput[f.id]?.metrics?.fairness_score}</p>
+                          <p><b>Robustness:</b> {simulationOutput[f.id]?.metrics?.robustness_score}</p>
+                          <p><b>Compliance:</b> {simulationOutput[f.id]?.metrics?.compliance_score}</p>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
 
               <div>
                 <h4 className="font-medium mb-2">Model Metadata</h4>

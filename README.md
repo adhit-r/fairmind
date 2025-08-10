@@ -4,11 +4,25 @@
 
 A comprehensive AI governance platform for testing, monitoring, and ensuring ethical AI deployment through real-time analytics, bias detection, and compliance management.
 
-## Live Demo
+# Core Philosophy
+Purpose-Built Governance Workflow – More than just analytics; clear paths from insight to action.
 
+Org-Scoped Registry & Runs – Persisted summaries for dashboards, auditability, and organizational compliance.
+
+Actionable Next Steps – One-click synthetic counterfactual generation to validate and iterate immediately.
+
+Lightweight Default Path – Works with just a model file and a minimal dataset; advanced integrations optional.
+
+Opinionated UX – Objective-driven dashboard sections: Analyze, Monitor, Explain, Govern, Simulate.
+
+Enterprise-Ready – Easy integration with Row-Level Security (RLS), approvals, audit trails, and alerts.
+## Live Demo
+ß
 **Try the platform:** [https://app-demo.fairmind.xyz](https://app-demo.fairmind.xyz)
 
 The demo starts with an empty dashboard. Click "Load Demo Data" to explore all features with synthetic data.
+
+
 
 ## Architecture Overview
 

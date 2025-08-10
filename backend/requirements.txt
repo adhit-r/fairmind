@@ -12,3 +12,4 @@ scikit-learn==1.3.2
 supabase==2.3.4
 psycopg2-binary==2.9.9
 sqlalchemy==2.0.23
+sdv==1.10.0
