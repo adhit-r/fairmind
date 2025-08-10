@@ -275,6 +275,25 @@ export class FairmindAPI {
     }
   }
 
+  async generateComprehensiveAIBOM(request: {
+    project_path: string;
+    scan_type?: string;
+    include_dev_dependencies?: boolean;
+    include_transitive?: boolean;
+    output_format?: string;
+  }): Promise<any> {
+    try {
+      const response = await this.request<any>('/bom/generate-comprehensive', {
+        method: 'POST',
+        body: JSON.stringify(request),
+      });
+      return response;
+    } catch (error) {
+      this.handleError(error, 'Failed to generate comprehensive AIBOM');
+      throw error;
+    }
+  }
+
   private handleError(error: unknown, message: string): void {
     console.error(message, error);
     // Could integrate with error reporting service here
