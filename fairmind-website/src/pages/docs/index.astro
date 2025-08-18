@@ -1,0 +1,444 @@
+---
+import Layout from '../../layouts/Layout.astro';
+
+const structuredData = {
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "name": "Fairmind Documentation",
+  "description": "Comprehensive documentation for the Fairmind AI Governance Platform",
+  "url": "https://fairmind.xyz/docs"
+};
+---
+
+<Layout 
+  title="Documentation - Fairmind AI Governance Platform"
+  description="Comprehensive guides, tutorials, and API documentation to help you build responsible AI systems with Fairmind."
+  structuredData={structuredData}
+>
+  <script>
+    // Redirect to Fumadocs-powered documentation
+    window.location.href = '/docs/fumadocs';
+  </script>
+  
+  <div class="min-h-screen bg-gray-50 flex items-center justify-center">
+    <div class="text-center">
+      <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+      <p class="text-gray-600">Redirecting to documentation...</p>
+    </div>
+  </div>
+  <div class="min-h-screen bg-gray-50">
+    <!-- Header -->
+    <div class="bg-white border-b border-gray-200">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div class="text-center">
+          <h1 class="text-4xl md:text-5xl font-bold text-gray-900 mb-6">
+            Fairmind Documentation
+          </h1>
+          <p class="text-xl text-gray-600 max-w-3xl mx-auto">
+            Comprehensive guides, tutorials, and API documentation to help you build responsible AI systems with Fairmind.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <div class="grid grid-cols-1 lg:grid-cols-4 gap-8">
+        
+        <!-- Sidebar Navigation -->
+        <div class="lg:col-span-1">
+          <nav class="sticky top-8">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">Documentation</h3>
+            <ul class="space-y-2">
+              <li>
+                <a href="#getting-started" class="text-blue-600 hover:text-blue-700 font-medium">Getting Started</a>
+              </li>
+              <li>
+                <a href="#user-guides" class="text-gray-600 hover:text-gray-900">User Guides</a>
+              </li>
+              <li>
+                <a href="#api-reference" class="text-gray-600 hover:text-gray-900">API Reference</a>
+              </li>
+              <li>
+                <a href="#developer-docs" class="text-gray-600 hover:text-gray-900">Developer Docs</a>
+              </li>
+              <li>
+                <a href="#tutorials" class="text-gray-600 hover:text-gray-900">Tutorials</a>
+              </li>
+              <li>
+                <a href="#examples" class="text-gray-600 hover:text-gray-900">Examples</a>
+              </li>
+            </ul>
+          </nav>
+        </div>
+
+        <!-- Main Content -->
+        <div class="lg:col-span-3">
+          
+          <!-- Getting Started -->
+          <section id="getting-started" class="mb-16">
+            <h2 class="text-3xl font-bold text-gray-900 mb-8">Getting Started</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div class="bg-white p-6 rounded-lg border border-gray-200">
+                <div class="mb-4">
+                  <img src="/screenshots/quick-start.png" alt="Quick Start Guide" class="w-full h-48 object-cover rounded-lg mb-4" />
+                </div>
+                <h3 class="text-xl font-semibold text-gray-900 mb-4">Quick Start Guide</h3>
+                <p class="text-gray-600 mb-4">
+                  Get up and running with Fairmind in minutes. Learn the basics of bias detection and model governance.
+                </p>
+                <a href="/docs/getting-started" class="text-blue-600 hover:text-blue-700 font-medium">
+                  Read Guide →
+                </a>
+              </div>
+              
+              <div class="bg-white p-6 rounded-lg border border-gray-200">
+                <div class="mb-4">
+                  <img src="/screenshots/installation.png" alt="Installation Guide" class="w-full h-48 object-cover rounded-lg mb-4" />
+                </div>
+                <h3 class="text-xl font-semibold text-gray-900 mb-4">Installation</h3>
+                <p class="text-gray-600 mb-4">
+                  Step-by-step installation instructions for different platforms and deployment options.
+                </p>
+                <a href="/docs/installation" class="text-blue-600 hover:text-blue-700 font-medium">
+                  View Instructions →
+                </a>
+              </div>
+            </div>
+          </section>
+
+          <!-- User Guides -->
+          <section id="user-guides" class="mb-16">
+            <h2 class="text-3xl font-bold text-gray-900 mb-8">User Guides</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div class="bg-white p-6 rounded-lg border border-gray-200">
+                <div class="mb-4">
+                  <img src="/screenshots/bias-detection.png" alt="Bias Detection Dashboard" class="w-full h-32 object-cover rounded-lg mb-4" />
+                </div>
+                <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
+                  <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                  </svg>
+                </div>
+                <h3 class="text-lg font-semibold text-gray-900 mb-2">Bias Detection</h3>
+                <p class="text-gray-600 mb-4">
+                  Learn how to detect and analyze bias in your AI models using statistical methods and custom rules.
+                </p>
+                <a href="/docs/bias-detection" class="text-blue-600 hover:text-blue-700 text-sm font-medium">
+                  Read Guide →
+                </a>
+              </div>
+              
+              <div class="bg-white p-6 rounded-lg border border-gray-200">
+                <div class="mb-4">
+                  <img src="/screenshots/model-provenance.png" alt="Model Provenance" class="w-full h-32 object-cover rounded-lg mb-4" />
+                </div>
+                <div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mb-4">
+                  <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                  </svg>
+                </div>
+                <h3 class="text-lg font-semibold text-gray-900 mb-2">Model Provenance</h3>
+                <p class="text-gray-600 mb-4">
+                  Track model lineage, create digital signatures, and maintain complete audit trails.
+                </p>
+                <a href="/docs/model-provenance" class="text-blue-600 hover:text-blue-700 text-sm font-medium">
+                  Read Guide →
+                </a>
+              </div>
+              
+              <div class="bg-white p-6 rounded-lg border border-gray-200">
+                <div class="mb-4">
+                  <img src="/screenshots/security-compliance.png" alt="Security & Compliance" class="w-full h-32 object-cover rounded-lg mb-4" />
+                </div>
+                <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mb-4">
+                  <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                  </svg>
+                </div>
+                <h3 class="text-lg font-semibold text-gray-900 mb-2">Security & Compliance</h3>
+                <p class="text-gray-600 mb-4">
+                  Implement OWASP AI security practices and ensure GDPR and AI Act compliance.
+                </p>
+                <a href="/docs/security-compliance" class="text-blue-600 hover:text-blue-700 text-sm font-medium">
+                  Read Guide →
+                </a>
+              </div>
+              
+              <div class="bg-white p-6 rounded-lg border border-gray-200">
+                <div class="mb-4">
+                  <img src="/screenshots/monitoring.png" alt="Monitoring Dashboard" class="w-full h-32 object-cover rounded-lg mb-4" />
+                </div>
+                <div class="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center mb-4">
+                  <svg class="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                  </svg>
+                </div>
+                <h3 class="text-lg font-semibold text-gray-900 mb-2">Monitoring & Analytics</h3>
+                <p class="text-gray-600 mb-4">
+                  Set up real-time monitoring, automated alerts, and performance tracking dashboards.
+                </p>
+                <a href="/docs/monitoring" class="text-blue-600 hover:text-blue-700 text-sm font-medium">
+                  Read Guide →
+                </a>
+              </div>
+              
+              <div class="bg-white p-6 rounded-lg border border-gray-200">
+                <div class="mb-4">
+                  <img src="/screenshots/explainability.png" alt="Explainability Dashboard" class="w-full h-32 object-cover rounded-lg mb-4" />
+                </div>
+                <div class="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center mb-4">
+                  <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+                  </svg>
+                </div>
+                <h3 class="text-lg font-semibold text-gray-900 mb-2">Explainability</h3>
+                <p class="text-gray-600 mb-4">
+                  Generate transparent explanations using SHAP, DALEX, and LIME for model interpretability.
+                </p>
+                <a href="/docs/explainability" class="text-blue-600 hover:text-blue-700 text-sm font-medium">
+                  Read Guide →
+                </a>
+              </div>
+              
+              <div class="bg-white p-6 rounded-lg border border-gray-200">
+                <div class="mb-4">
+                  <img src="/screenshots/simulation.png" alt="Simulation Dashboard" class="w-full h-32 object-cover rounded-lg mb-4" />
+                </div>
+                <div class="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center mb-4">
+                  <svg class="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
+                  </svg>
+                </div>
+                <h3 class="text-lg font-semibold text-gray-900 mb-2">Simulation & Testing</h3>
+                <p class="text-gray-600 mb-4">
+                  Run bias simulations and test different scenarios before deploying your models.
+                </p>
+                <a href="/docs/simulation" class="text-blue-600 hover:text-blue-700 text-sm font-medium">
+                  Read Guide →
+                </a>
+              </div>
+            </div>
+          </section>
+
+          <!-- API Reference -->
+          <section id="api-reference" class="mb-16">
+            <h2 class="text-3xl font-bold text-gray-900 mb-8">API Reference</h2>
+            
+            <div class="bg-white p-6 rounded-lg border border-gray-200">
+              <div class="mb-6">
+                <img src="/screenshots/api-docs.png" alt="API Documentation" class="w-full h-64 object-cover rounded-lg mb-4" />
+              </div>
+              <h3 class="text-xl font-semibold text-gray-900 mb-4">REST API</h3>
+              <p class="text-gray-600 mb-6">
+                Complete API documentation with examples, authentication, and error handling.
+              </p>
+              
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="bg-gray-50 p-4 rounded">
+                  <h4 class="font-semibold text-gray-900 mb-2">Bias Detection</h4>
+                  <ul class="text-sm text-gray-600 space-y-1">
+                    <li>• POST /bias/analyze-real</li>
+                    <li>• GET /bias/datasets/available</li>
+                    <li>• GET /bias/dataset-info/&#123;name&#125;</li>
+                  </ul>
+                </div>
+                
+                <div class="bg-gray-50 p-4 rounded">
+                  <h4 class="font-semibold text-gray-900 mb-2">Model Provenance</h4>
+                  <ul class="text-sm text-gray-600 space-y-1">
+                    <li>• POST /provenance/model</li>
+                    <li>• GET /provenance/models</li>
+                    <li>• GET /provenance/verify/&#123;id&#125;</li>
+                  </ul>
+                </div>
+                
+                <div class="bg-gray-50 p-4 rounded">
+                  <h4 class="font-semibold text-gray-900 mb-2">Monitoring</h4>
+                  <ul class="text-sm text-gray-600 space-y-1">
+                    <li>• GET /monitoring/metrics</li>
+                    <li>• POST /monitoring/alerts</li>
+                    <li>• GET /monitoring/dashboard</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div class="mt-6">
+                <a href="/docs/api" class="text-blue-600 hover:text-blue-700 font-medium">
+                  View Full API Documentation →
+                </a>
+              </div>
+            </div>
+          </section>
+
+          <!-- Developer Documentation -->
+          <section id="developer-docs" class="mb-16">
+            <h2 class="text-3xl font-bold text-gray-900 mb-8">Developer Documentation</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div class="bg-white p-6 rounded-lg border border-gray-200">
+                <div class="mb-4">
+                  <img src="/screenshots/architecture.png" alt="System Architecture" class="w-full h-48 object-cover rounded-lg mb-4" />
+                </div>
+                <h3 class="text-xl font-semibold text-gray-900 mb-4">Architecture</h3>
+                <p class="text-gray-600 mb-4">
+                  Understand the system architecture, data flow, and component interactions.
+                </p>
+                <a href="/docs/architecture" class="text-blue-600 hover:text-blue-700 font-medium">
+                  Read Architecture Guide →
+                </a>
+              </div>
+              
+              <div class="bg-white p-6 rounded-lg border border-gray-200">
+                <div class="mb-4">
+                  <img src="/screenshots/contributing.png" alt="Contributing Guide" class="w-full h-48 object-cover rounded-lg mb-4" />
+                </div>
+                <h3 class="text-xl font-semibold text-gray-900 mb-4">Contributing</h3>
+                <p class="text-gray-600 mb-4">
+                  Learn how to contribute to the Fairmind platform and development guidelines.
+                </p>
+                <a href="/docs/contributing" class="text-blue-600 hover:text-blue-700 font-medium">
+                  View Contributing Guide →
+                </a>
+              </div>
+            </div>
+          </section>
+
+          <!-- Tutorials -->
+          <section id="tutorials" class="mb-16">
+            <h2 class="text-3xl font-bold text-gray-900 mb-8">Tutorials</h2>
+            
+            <div class="space-y-6">
+              <div class="bg-white p-6 rounded-lg border border-gray-200">
+                <div class="mb-4">
+                  <img src="/screenshots/tutorial-pipeline.png" alt="Bias Detection Pipeline Tutorial" class="w-full h-48 object-cover rounded-lg mb-4" />
+                </div>
+                <h3 class="text-xl font-semibold text-gray-900 mb-2">Building Your First Bias Detection Pipeline</h3>
+                <p class="text-gray-600 mb-4">
+                  Step-by-step tutorial on creating a complete bias detection workflow for a machine learning model.
+                </p>
+                <div class="flex items-center text-sm text-gray-500">
+                  <span>15 min read</span>
+                  <span class="mx-2">•</span>
+                  <span>Beginner</span>
+                </div>
+                <a href="/docs/tutorials/first-pipeline" class="text-blue-600 hover:text-blue-700 font-medium">
+                  Start Tutorial →
+                </a>
+              </div>
+              
+              <div class="bg-white p-6 rounded-lg border border-gray-200">
+                <div class="mb-4">
+                  <img src="/screenshots/tutorial-custom-rules.png" alt="Custom Fairness Rules Tutorial" class="w-full h-48 object-cover rounded-lg mb-4" />
+                </div>
+                <h3 class="text-xl font-semibold text-gray-900 mb-2">Implementing Custom Fairness Rules</h3>
+                <p class="text-gray-600 mb-4">
+                  Learn how to create and implement custom fairness rules for your specific use case.
+                </p>
+                <div class="flex items-center text-sm text-gray-500">
+                  <span>20 min read</span>
+                  <span class="mx-2">•</span>
+                  <span>Intermediate</span>
+                </div>
+                <a href="/docs/tutorials/custom-rules" class="text-blue-600 hover:text-blue-700 font-medium">
+                  Start Tutorial →
+                </a>
+              </div>
+              
+              <div class="bg-white p-6 rounded-lg border border-gray-200">
+                <div class="mb-4">
+                  <img src="/screenshots/tutorial-monitoring.png" alt="Real-time Monitoring Tutorial" class="w-full h-48 object-cover rounded-lg mb-4" />
+                </div>
+                <h3 class="text-xl font-semibold text-gray-900 mb-2">Setting Up Real-time Monitoring</h3>
+                <p class="text-gray-600 mb-4">
+                  Configure real-time monitoring dashboards and automated alerts for your AI models.
+                </p>
+                <div class="flex items-center text-sm text-gray-500">
+                  <span>25 min read</span>
+                  <span class="mx-2">•</span>
+                  <span>Advanced</span>
+                </div>
+                <a href="/docs/tutorials/monitoring" class="text-blue-600 hover:text-blue-700 font-medium">
+                  Start Tutorial →
+                </a>
+              </div>
+            </div>
+          </section>
+
+          <!-- Examples -->
+          <section id="examples" class="mb-16">
+            <h2 class="text-3xl font-bold text-gray-900 mb-8">Examples</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div class="bg-white p-6 rounded-lg border border-gray-200">
+                <div class="mb-4">
+                  <img src="/screenshots/python-examples.png" alt="Python SDK Examples" class="w-full h-48 object-cover rounded-lg mb-4" />
+                </div>
+                <h3 class="text-lg font-semibold text-gray-900 mb-2">Python SDK Examples</h3>
+                <p class="text-gray-600 mb-4">
+                  Code examples and snippets for integrating Fairmind with Python applications.
+                </p>
+                <a href="/docs/examples/python" class="text-blue-600 hover:text-blue-700 font-medium">
+                  View Examples →
+                </a>
+              </div>
+              
+              <div class="bg-white p-6 rounded-lg border border-gray-200">
+                <div class="mb-4">
+                  <img src="/screenshots/javascript-examples.png" alt="JavaScript Examples" class="w-full h-48 object-cover rounded-lg mb-4" />
+                </div>
+                <h3 class="text-lg font-semibold text-gray-900 mb-2">JavaScript/TypeScript Examples</h3>
+                <p class="text-gray-600 mb-4">
+                  Frontend integration examples and web application implementations.
+                </p>
+                <a href="/docs/examples/javascript" class="text-blue-600 hover:text-blue-700 font-medium">
+                  View Examples →
+                </a>
+              </div>
+            </div>
+          </section>
+
+          <!-- Technical Documentation -->
+          <section class="mb-16">
+            <h2 class="text-3xl font-bold text-gray-900 mb-8">Technical Documentation</h2>
+            
+            <div class="bg-gradient-to-r from-blue-50 to-purple-50 p-8 rounded-lg border border-blue-200">
+              <div class="flex items-center mb-6">
+                <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mr-4">
+                  <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                  </svg>
+                </div>
+                <div>
+                  <h3 class="text-xl font-semibold text-gray-900">Complete Technical Documentation</h3>
+                  <p class="text-gray-600">Comprehensive guides for developers, architects, and DevOps teams</p>
+                </div>
+              </div>
+              
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="bg-white p-4 rounded-lg">
+                  <h4 class="font-semibold text-gray-900 mb-2">API & Integration</h4>
+                  <p class="text-sm text-gray-600">OpenAPI specs, SDKs, backend design</p>
+                </div>
+                <div class="bg-white p-4 rounded-lg">
+                  <h4 class="font-semibold text-gray-900 mb-2">Architecture & Design</h4>
+                  <p class="text-sm text-gray-600">System overview, components, UI library</p>
+                </div>
+                <div class="bg-white p-4 rounded-lg">
+                  <h4 class="font-semibold text-gray-900 mb-2">Deployment & Infrastructure</h4>
+                  <p class="text-sm text-gray-600">Production guides, cloud setup</p>
+                </div>
+              </div>
+              
+              <a href="/docs/technical" class="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-lg hover:shadow-lg transform hover:-translate-y-1 transition-all duration-200">
+                View Technical Documentation →
+              </a>
+            </div>
+          </section>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</Layout>

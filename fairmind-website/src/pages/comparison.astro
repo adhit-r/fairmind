@@ -20,7 +20,6 @@ const competitors = {
     logo: 'https://fiddler.ai/hubfs/Fiddler_Logo_White.svg',
     tagline: 'AI Observability Platform',
     url: 'https://fiddler.ai',
-    pricing: 'Contact Sales',
     founded: 2018
   },
   'arthur': {
@@ -28,7 +27,6 @@ const competitors = {
     logo: 'https://arthur.ai/wp-content/uploads/2022/03/Arthur_Logo_White.svg',
     tagline: 'AI Performance & Governance',
     url: 'https://arthur.ai',
-    pricing: 'Contact Sales',
     founded: 2018
   },
   'whylabs': {
@@ -36,7 +34,6 @@ const competitors = {
     logo: 'https://whylabs.ai/wp-content/uploads/2022/01/whylabs-logo-white.png',
     tagline: 'AI Observability',
     url: 'https://whylabs.ai',
-    pricing: 'Starts at $999/month',
     founded: 2019
   },
   'arize': {
@@ -44,7 +41,6 @@ const competitors = {
     logo: 'https://arize.com/wp-content/uploads/2023/01/arize-logo-white.svg',
     tagline: 'ML Observability',
     url: 'https://arize.com',
-    pricing: 'Contact Sales',
     founded: 2019
   }
 };
@@ -137,14 +133,14 @@ const comparisonData = {
       }
     },
     {
-      feature: 'Pricing Transparency',
-      description: 'Pricing model and transparency',
+      feature: 'Enterprise Features',
+      description: 'Advanced enterprise capabilities and integrations',
       values: {
-        fairmind: { value: '✅ Transparent, usage-based', highlight: true },
-        fiddler: { value: '❌ Enterprise-only' },
-        arthur: { value: '❌ Enterprise-only' },
-        whylabs: { value: '✅ Transparent tiers' },
-        arize: { value: '❌ Enterprise-focused' }
+        fairmind: { value: '✅ SSO, RBAC, Custom integrations', highlight: true },
+        fiddler: { value: '✅ SSO, Limited RBAC' },
+        arthur: { value: '✅ SSO, Basic integrations' },
+        whylabs: { value: '⚠️ Limited enterprise features' },
+        arize: { value: '✅ SSO, API integrations' }
       }
     },
     {
@@ -162,7 +158,7 @@ const comparisonData = {
       feature: 'Customer Support',
       description: 'Support levels and SLAs',
       values: {
-        fairmind: { value: '✅ 24/7 Enterprise Support', highlight: true },
+        fairmind: { value: '✅ Coming Soon', highlight: true },
         fiddler: { value: '✅ 24/7 Enterprise Support' },
         arthur: { value: '✅ Business Hours Support' },
         whylabs: { value: '✅ Community + Paid Support' },
@@ -184,14 +180,8 @@ const comparisonData = {
         "@type": "Brand",
         "name": "Fairmind"
       },
-      "offers": {
-        "@type": "Offer",
-        "url": "https://fairmind.xyz/comparison",
-        "priceCurrency": "USD",
-        "price": "0",
-        "priceValidUntil": "2024-12-31",
-        "availability": "https://schema.org/InStock"
-      }
+      "url": "https://fairmind.xyz/comparison",
+      "category": "AI Governance Platform"
     }
   </script>
   <div class="relative overflow-hidden py-20 md:py-32">
@@ -283,8 +273,8 @@ const comparisonData = {
           <p class="text-gray-300">Get started in under an hour with our intuitive platform and extensive documentation.</p>
         </div>
         <div class="bg-gray-800/50 p-6 rounded-xl border border-brand-purple/20">
-          <h3 class="text-xl font-bold mb-3 text-brand-light">Best Value</h3>
-          <p class="text-gray-300">Transparent, usage-based pricing that scales with your needs, without hidden costs.</p>
+          <h3 class="text-xl font-bold mb-3 text-brand-light">Enterprise Ready</h3>
+          <p class="text-gray-300">Built for enterprise scale with advanced security, compliance, and integration capabilities.</p>
         </div>
       </div>
       
@@ -293,8 +283,8 @@ const comparisonData = {
         <h2 class="text-3xl md:text-4xl font-bold mb-4">Ready to Experience the Difference?</h2>
         <p class="text-xl text-gray-300 mb-8 max-w-3xl mx-auto">Join leading companies that trust Fairmind for their AI governance needs.</p>
         <div class="flex flex-col sm:flex-row justify-center gap-4">
-          <a href="/get-started" class="px-8 py-3 bg-brand-purple hover:bg-brand-pink text-white font-semibold rounded-lg transition-colors duration-300 transform hover:scale-105">
-            Start Free Trial
+          <a href="/demo" class="px-8 py-3 bg-brand-purple hover:bg-brand-pink text-white font-semibold rounded-lg transition-colors duration-300 transform hover:scale-105">
+            Request Demo
           </a>
           <a href="#demo" class="px-8 py-3 border-2 border-brand-purple text-brand-light hover:bg-brand-purple/20 font-semibold rounded-lg transition-colors duration-300">
             Request Demo

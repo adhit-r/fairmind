@@ -57,6 +57,7 @@ from models.owasp_ai_security import (
     ModelInventoryItem, OWASPCategory, SecuritySeverity
 )
 from services.owasp_security_tester import OWASPSecurityTester
+from services.bias_detection_service import BiasDetectionService
 from models.ai_ethics_observatory import (
     EthicsFramework, EthicsViolation, EthicsScore,
     create_ethics_frameworks, assess_model_ethics, create_observatory_dashboard_data
@@ -851,6 +852,51 @@ async def get_models(page: int = 1, limit: int = 10, company: Optional[str] = No
         logger.error(f"Error fetching models: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch models: {str(e)}")
 
+
+@app.get("/activity/recent")
+async def get_recent_activity(limit: int = 10, company: Optional[str] = None, org_id: Optional[str] = None):
+    """Get recent activity for dashboard"""
+    try:
+        # Mock recent activity data
+        activities = [
+            {
+                "id": "1",
+                "type": "model_upload",
+                "title": "New Model Uploaded",
+                "description": "Credit Risk Model v2.1 uploaded by John Doe",
+                "timestamp": "2 minutes ago",
+                "status": "success"
+            },
+            {
+                "id": "2",
+                "type": "analysis_complete",
+                "title": "Bias Analysis Complete",
+                "description": "Gender bias analysis completed for Loan Approval Model",
+                "timestamp": "15 minutes ago",
+                "status": "warning"
+            },
+            {
+                "id": "3",
+                "type": "security_alert",
+                "title": "Security Vulnerability Detected",
+                "description": "OWASP A01 vulnerability found in Chatbot Model",
+                "timestamp": "1 hour ago",
+                "status": "error"
+            },
+            {
+                "id": "4",
+                "type": "compliance_check",
+                "title": "Compliance Check Passed",
+                "description": "EU AI Act compliance check passed for all models",
+                "timestamp": "2 hours ago",
+                "status": "success"
+            }
+        ]
+        
+        return {"success": True, "data": activities[:limit]}
+    except Exception as e:
+        logger.error(f"Error fetching recent activity: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch recent activity: {str(e)}")
 
 @app.get("/simulations/recent")
 async def get_recent_simulations(limit: int = 10, company: Optional[str] = None, org_id: Optional[str] = None):
@@ -1738,6 +1784,65 @@ async def detect_model_drift(model_id: str, current_data: List[Dict[str, Any]], 
 async def websocket(websocket: WebSocket):
     await websocket_endpoint(websocket)
 
+# Model Bias Analysis
+@app.post("/bias/analyze")
+async def run_bias_analysis(request: dict):
+    """Run comprehensive bias analysis on a model-dataset combination"""
+    try:
+        model_id = request.get("model_id")
+        dataset_id = request.get("dataset_id")
+        sensitive_attributes = request.get("sensitive_attributes", [])
+        target_column = request.get("target_column")
+        analysis_type = request.get("analysis_type", "comprehensive")
+        
+        if not all([model_id, dataset_id, target_column]):
+            raise HTTPException(status_code=400, detail="Missing required parameters")
+        
+        # Load the dataset
+        dataset_path = None
+        if dataset_id == "diabetes":
+            dataset_path = "datasets/diabetes.csv"
+        elif dataset_id == "titanic":
+            dataset_path = "datasets/titanic.csv"
+        elif dataset_id == "credit_fraud":
+            dataset_path = "datasets/credit_fraud.csv"
+        else:
+            raise HTTPException(status_code=404, detail="Dataset not found")
+        
+        if not os.path.exists(dataset_path):
+            raise HTTPException(status_code=404, detail="Dataset file not found")
+        
+        # Load dataset
+        df = pd.read_csv(dataset_path)
+        
+        # Initialize bias detection service
+        bias_service = BiasDetectionService()
+        
+        # Run bias analysis
+        analysis_results = bias_service.analyze_dataset_bias(
+            df=df,
+            sensitive_attributes=sensitive_attributes,
+            target_column=target_column
+        )
+        
+        # Add model information
+        analysis_results["model_info"] = {
+            "model_id": model_id,
+            "dataset_id": dataset_id,
+            "analysis_type": analysis_type,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        return {
+            "success": True,
+            "data": analysis_results,
+            "message": "Bias analysis completed successfully"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in bias analysis: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Bias analysis failed: {str(e)}")
+
 # Geographic Bias Detection
 @app.post("/analyze/geographic-bias", response_model=GeographicBiasResponse)
 async def analyze_geographic_bias(request: GeographicBiasRequest):
@@ -2521,6 +2626,341 @@ async def test_email():
     except Exception as e:
         logger.error(f"Error sending test email: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Test email failed: {str(e)}")
+
+from services.real_bias_detection_service import RealBiasDetectionService
+from services.model_provenance_service import ModelProvenanceService
+
+# Initialize real bias detection service
+real_bias_service = RealBiasDetectionService()
+
+# Initialize model provenance service
+provenance_service = ModelProvenanceService()
+
+@app.get("/datasets/available")
+async def get_available_datasets():
+    """Get list of available datasets for bias analysis"""
+    try:
+        datasets = real_bias_service.get_available_datasets()
+        return {
+            "success": True,
+            "data": datasets,
+            "message": f"Found {len(datasets)} available datasets"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "Failed to get available datasets"
+        }
+
+@app.post("/bias/analyze-real")
+async def analyze_dataset_bias(request: dict):
+    """Perform real bias analysis on a dataset"""
+    try:
+        dataset_name = request.get("dataset_name")
+        target_column = request.get("target_column")
+        sensitive_columns = request.get("sensitive_columns", [])
+        
+        if not dataset_name or not target_column:
+            return {
+                "success": False,
+                "error": "dataset_name and target_column are required"
+            }
+        
+        # Perform real bias analysis
+        results = real_bias_service.analyze_dataset_bias(
+            dataset_name=dataset_name,
+            target_column=target_column,
+            sensitive_columns=sensitive_columns
+        )
+        
+        if "error" in results:
+            return {
+                "success": False,
+                "error": results["error"]
+            }
+        
+        # Calculate overall assessment score
+        total_bias_score = 0
+        bias_count = 0
+        
+        for sensitive_col, bias_metrics in results["bias_metrics"].items():
+            total_bias_score += bias_metrics["overall_bias_score"]
+            bias_count += 1
+        
+        overall_score = 100 - (total_bias_score / max(bias_count, 1)) * 100
+        overall_score = max(0, min(100, overall_score))  # Clamp between 0-100
+        
+        # Format results for frontend
+        formatted_results = {
+            "dataset_name": results["dataset_name"],
+            "total_samples": results["total_samples"],
+            "overall_score": round(overall_score, 1),
+            "assessment_status": "Complete",
+            "issues_found": [],
+            "bias_details": {},
+            "recommendations": results["recommendations"]
+        }
+        
+        # Extract issues found
+        for sensitive_col, bias_metrics in results["bias_metrics"].items():
+            bias_score = bias_metrics["overall_bias_score"]
+            if bias_score > 0.05:  # Only report significant bias
+                issue = {
+                    "type": f"Bias detected in {sensitive_col}",
+                    "severity": bias_metrics["demographic_parity"]["bias_level"],
+                    "description": f"{round(bias_score * 100, 1)}% difference in outcomes",
+                    "details": bias_metrics
+                }
+                formatted_results["issues_found"].append(issue)
+            
+            formatted_results["bias_details"][sensitive_col] = {
+                "statistical_parity": bias_metrics["statistical_parity"],
+                "demographic_parity": bias_metrics["demographic_parity"],
+                "fairness_tests": results["fairness_tests"].get(sensitive_col, {})
+            }
+        
+        return {
+            "success": True,
+            "data": formatted_results,
+            "message": f"Bias analysis completed for {dataset_name}"
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "Failed to perform bias analysis"
+        }
+
+@app.get("/bias/dataset-info/{dataset_name}")
+async def get_dataset_info(dataset_name: str):
+    """Get information about a specific dataset"""
+    try:
+        if dataset_name not in real_bias_service.supported_datasets:
+            return {
+                "success": False,
+                "error": f"Dataset {dataset_name} not supported"
+            }
+        
+        # Load dataset to get info
+        df = real_bias_service.supported_datasets[dataset_name]()
+        
+        # Get column information
+        columns_info = []
+        for col in df.columns:
+            col_info = {
+                "name": col,
+                "type": str(df[col].dtype),
+                "unique_values": len(df[col].unique()),
+                "missing_values": df[col].isnull().sum(),
+                "sample_values": df[col].dropna().head(5).tolist()
+            }
+            
+            # Add specific info for categorical columns
+            if df[col].dtype == 'object' or len(df[col].unique()) < 20:
+                col_info["value_counts"] = df[col].value_counts().head(10).to_dict()
+            
+            columns_info.append(col_info)
+        
+        return {
+            "success": True,
+            "data": {
+                "name": dataset_name,
+                "description": real_bias_service._get_dataset_description(dataset_name),
+                "total_samples": len(df),
+                "columns": columns_info,
+                "shape": df.shape
+            }
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "Failed to get dataset information"
+        }
+
+# Model Provenance and Model Cards endpoints
+@app.post("/provenance/dataset")
+async def create_dataset_provenance(request: dict):
+    """Create provenance record for a dataset"""
+    try:
+        dataset_provenance = provenance_service.create_dataset_provenance(request)
+        return {
+            "success": True,
+            "data": asdict(dataset_provenance),
+            "message": "Dataset provenance created successfully"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "Failed to create dataset provenance"
+        }
+
+@app.post("/provenance/model")
+async def create_model_provenance(request: dict):
+    """Create provenance record for a model"""
+    try:
+        model_info = request.get("model_info", {})
+        training_datasets = request.get("training_datasets", [])
+        
+        # Convert dataset info to DatasetProvenance objects
+        dataset_provenances = []
+        for dataset_info in training_datasets:
+            dataset_provenance = provenance_service.create_dataset_provenance(dataset_info)
+            dataset_provenances.append(dataset_provenance)
+        
+        model_provenance = provenance_service.create_model_provenance(model_info, dataset_provenances)
+        
+        return {
+            "success": True,
+            "data": asdict(model_provenance),
+            "message": "Model provenance created successfully"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "Failed to create model provenance"
+        }
+
+@app.post("/provenance/scan-model")
+async def scan_model(request: dict):
+    """Scan model for security vulnerabilities and quality issues"""
+    try:
+        model_path = request.get("model_path")
+        model_info = request.get("model_info", {})
+        
+        if not model_path:
+            return {
+                "success": False,
+                "error": "model_path is required"
+            }
+        
+        scan_results = provenance_service.scan_model(model_path, model_info)
+        
+        return {
+            "success": True,
+            "data": scan_results,
+            "message": "Model scan completed"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "Failed to scan model"
+        }
+
+@app.post("/provenance/verify-authenticity")
+async def verify_model_authenticity(request: dict):
+    """Verify model authenticity using digital signature and checksum"""
+    try:
+        model_id = request.get("model_id")
+        model_content = request.get("model_content", "").encode('utf-8')
+        
+        if not model_id:
+            return {
+                "success": False,
+                "error": "model_id is required"
+            }
+        
+        verification_result = provenance_service.verify_model_authenticity(model_id, model_content)
+        
+        return {
+            "success": True,
+            "data": verification_result,
+            "message": "Model authenticity verification completed"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "Failed to verify model authenticity"
+        }
+
+@app.get("/provenance/model-card/{model_id}")
+async def generate_model_card(model_id: str):
+    """Generate a Model Card for responsible AI"""
+    try:
+        model_card = provenance_service.generate_model_card(model_id)
+        
+        return {
+            "success": True,
+            "data": asdict(model_card),
+            "message": "Model card generated successfully"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "Failed to generate model card"
+        }
+
+@app.get("/provenance/chain/{model_id}")
+async def get_provenance_chain(model_id: str):
+    """Get the complete provenance chain for a model"""
+    try:
+        chain = provenance_service.get_provenance_chain(model_id)
+        
+        return {
+            "success": True,
+            "data": chain,
+            "message": f"Provenance chain retrieved for model {model_id}"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "Failed to get provenance chain"
+        }
+
+@app.get("/provenance/report/{model_id}")
+async def export_provenance_report(model_id: str):
+    """Export comprehensive provenance report"""
+    try:
+        report = provenance_service.export_provenance_report(model_id)
+        
+        return {
+            "success": True,
+            "data": report,
+            "message": "Provenance report generated successfully"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "Failed to generate provenance report"
+        }
+
+@app.get("/provenance/models")
+async def list_provenance_models():
+    """List all models with provenance records"""
+    try:
+        models = []
+        for model_id, provenance in provenance_service.provenance_db.items():
+            models.append({
+                "model_id": model_id,
+                "name": provenance.name,
+                "version": provenance.version,
+                "developer": provenance.developer,
+                "organization": provenance.organization,
+                "training_date": provenance.training_date,
+                "signature_verified": provenance.signature_verified
+            })
+        
+        return {
+            "success": True,
+            "data": models,
+            "message": f"Found {len(models)} models with provenance records"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "Failed to list provenance models"
+        }
 
 if __name__ == "__main__":
     import uvicorn

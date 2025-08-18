@@ -1,21 +1,16 @@
 ---
 import Layout from '../layouts/Layout.astro';
-import HeroSection from '../components/sections/HeroSection.astro';
-import FeaturesSection from '../components/sections/FeaturesSection.astro';
-import AboutSection from '../components/sections/AboutSection.astro';
-import CTASection from '../components/sections/CTASection.astro';
-import { 
-  heroData, 
-  featuresData, 
-  aboutData, 
-  ctaData, 
-  statsData 
-} from '../data/homepage';
+import Hero from '../components/Hero.astro';
+import Features from '../components/Features.astro';
+import HowItWorks from '../components/HowItWorks.astro';
+
+import CTA from '../components/CTA.astro';
 ---
 
-<Layout title="Fairmind - AI Governance Platform">
-  <HeroSection data={heroData} />
-  <FeaturesSection features={featuresData} stats={statsData} />
-  <AboutSection data={aboutData} />
-  <CTASection data={ctaData} />
+<Layout title="Fairmind - AI Governance Platform | Responsible AI Development">
+  <Hero />
+  <Features />
+  <HowItWorks />
+  
+  <CTA />
 </Layout>

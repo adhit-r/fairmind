@@ -1,252 +1,267 @@
-# FairMind Ethical Sandbox
+# Fairmind - AI Governance Platform
 
-**Building responsible AI systems for a better future**
+A comprehensive AI governance platform designed for enterprise-scale responsible AI development, featuring bias detection, model provenance tracking, and compliance automation.
 
-A comprehensive AI governance platform for testing, monitoring, and ensuring ethical AI deployment through real-time analytics, bias detection, and compliance management.
+## 🚀 Project Status
 
-# Core Philosophy
-Purpose-Built Governance Workflow – More than just analytics; clear paths from insight to action.
+**Current Phase**: MVP Development (Q3 2024)
+- ✅ Core bias detection algorithms
+- ✅ Basic dashboard interface  
+- ✅ User authentication system
+- ✅ Model registry foundation
+- 🔄 Advanced monitoring capabilities
+- 🔄 Model provenance tracking
+- 📋 Production launch preparation
 
-Org-Scoped Registry & Runs – Persisted summaries for dashboards, auditability, and organizational compliance.
-
-Actionable Next Steps – One-click synthetic counterfactual generation to validate and iterate immediately.
-
-Lightweight Default Path – Works with just a model file and a minimal dataset; advanced integrations optional.
-
-Opinionated UX – Objective-driven dashboard sections: Analyze, Monitor, Explain, Govern, Simulate.
-
-Enterprise-Ready – Easy integration with Row-Level Security (RLS), approvals, audit trails, and alerts.
-## Live Demo
-ß
-**Try the platform:** [https://app-demo.fairmind.xyz](https://app-demo.fairmind.xyz)
-
-The demo starts with an empty dashboard. Click "Load Demo Data" to explore all features with synthetic data.
-
-
-
-## Architecture Overview
-
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Next.js       │    │   Python        │    │   Supabase      │
-│   Frontend      │◄──►│   FastAPI       │◄──►│   Database      │
-│   (UI/UX)       │    │   (ML/AI)       │    │   (Auth/Data)   │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-```
-
-## Technology Stack
-
-| Layer | Technology | Purpose |
-|-------|------------|---------|
-| **Frontend** | Next.js 14 + TypeScript | Modern React UI with real-time updates |
-| **Backend** | Python FastAPI | ML/AI services, bias analysis, compliance |
-| **Database** | Supabase (PostgreSQL) | Data storage, auth, real-time subscriptions |
-| **Knowledge Graph** | Neo4j AuraDB | Advanced relationship analysis |
-| **Deployment** | Netlify | Static hosting for demo |
-
-## Key Features
-
-### Advanced Bias Detection
-- **SHAP Analysis**: Model interpretability and feature importance
-- **LIME Analysis**: Local interpretable model explanations
-- **Knowledge Graph**: Neo4j-powered relationship analysis
-- **Geographic Bias**: Cross-country cultural factor analysis
-- **Model DNA**: Genetic lineage and inheritance tracking
-
-### Real-time Monitoring
-- Live dashboard with 22 specialized dashboards
-- Real-time alerts and drift detection
-- Performance monitoring and risk assessment
-- Compliance tracking and audit trails
-
-### AI Bill of Materials (AIBOM)
-- Comprehensive model inventory
-- Dependency tracking and vulnerability assessment
-- Security attestation and compliance mapping
-- Risk profiling and mitigation strategies
-
-### Geographic & Cultural Analysis
-- Cross-country bias detection
-- Cultural factor analysis
-- Regional compliance requirements
-- Demographic fairness assessment
-
-## Quick Start
-
-### Local Development
-
-```bash
-# Clone the repository
-git clone <repository-url>
-cd fairmind-ethical-sandbox
-
-# Install dependencies
-npm install
-cd frontend && npm install --legacy-peer-deps
-
-# Start development server
-cd frontend && npm run dev
-
-# Access the application
-open http://localhost:3000
-```
-
-### Demo Deployment
-
-```bash
-# Deploy to demo subdomain
-./deploy-demo.sh
-
-# Demo will be available at:
-# https://app-demo.fairmind.xyz
-```
-
-## Project Structure
+## 📁 Project Structure
 
 ```
 fairmind-ethical-sandbox/
-├── frontend/              # Next.js frontend application
+├── frontend/                 # Next.js React application
 │   ├── src/
-│   │   ├── app/           # App router pages
-│   │   ├── components/    # React components
-│   │   ├── lib/           # Utilities and services
-│   │   └── types/         # TypeScript definitions
-│   ├── package.json       # Frontend dependencies
-│   └── next.config.js     # Next.js configuration
-├── backend/               # Python FastAPI backend
-│   ├── main.py            # FastAPI application
-│   ├── websocket.py       # Real-time WebSocket server
-│   ├── requirements.txt   # Python dependencies
-│   └── supabase/          # Database migrations
-├── fairmind-website/      # Marketing website (Astro)
-│   ├── src/               # Astro source files
-│   ├── public/            # Static assets
-│   ├── package.json       # Website dependencies
-│   └── netlify.toml       # Deployment configuration
-├── docs/                  # Comprehensive documentation
-├── supabase/              # Database configuration
-├── package.json           # Root project configuration
-└── README.md              # This file
+│   │   ├── app/             # App router pages
+│   │   ├── components/      # React components
+│   │   ├── styles/          # CSS and styling
+│   │   └── lib/             # Utilities and helpers
+│   └── package.json
+├── backend/                  # FastAPI Python backend
+│   ├── main.py              # Main application entry
+│   ├── services/            # Business logic services
+│   ├── models/              # Pydantic data models
+│   └── requirements.txt
+├── fairmind-website/         # Astro public website
+│   ├── src/
+│   │   ├── pages/           # Website pages
+│   │   ├── components/      # Astro components
+│   │   └── layouts/         # Page layouts
+│   └── package.json
+├── docs/                     # Project documentation
+├── tools/                    # Development utilities
+└── README.md
 ```
 
-## Dashboard Features
+## 🛠️ Technology Stack
 
-### Main Dashboard
-- Overview of all AI governance metrics
-- Real-time alerts and notifications
-- Quick access to all specialized dashboards
+### Frontend (Next.js)
+- **Framework**: Next.js 14 with App Router
+- **Styling**: Tailwind CSS + Custom Neobrutalism theme
+- **State Management**: Zustand
+- **Charts**: Chart.js, Recharts
+- **Icons**: Lucide React
+- **Package Manager**: Bun
 
-### Specialized Dashboards
-1. **Advanced Bias Detection** - SHAP, LIME, Knowledge Graph analysis
-2. **Geographic Bias Analysis** - Cross-country cultural factors
-3. **Model DNA Signatures** - Genetic lineage and inheritance
-4. **Real-time Monitoring** - Live alerts and drift detection
-5. **Compliance Tracking** - AI Bill compliance and audit trails
-6. **Analytics Dashboard** - Charts, visualizations, and metrics
-7. **Knowledge Graph** - Neo4j-powered relationship analysis
-8. **AIBOM Management** - AI Bill of Materials tracking
+### Backend (FastAPI)
+- **Framework**: FastAPI
+- **Data Processing**: Pandas, NumPy, Scikit-learn
+- **AI/ML**: Fairlearn, AIF360, SHAP, LIME
+- **Security**: Cryptography for digital signing
+- **Validation**: Pydantic
 
-## Development
+### Website (Astro)
+- **Framework**: Astro
+- **Styling**: Tailwind CSS
+- **Deployment**: Netlify
+- **Documentation**: Fumadocs integration
 
-### Marketing Website
+## 🚀 Quick Start
+
+### Prerequisites
+- Node.js 18+ (recommended: Node.js 20+)
+- Python 3.9+
+- Bun (package manager)
+
+### Development Setup
+
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd fairmind-ethical-sandbox
+   ```
+
+2. **Install dependencies**
+   ```bash
+   # Install root dependencies
+   bun install
+   
+   # Install frontend dependencies
+   cd frontend && bun install
+   
+   # Install backend dependencies
+   cd ../backend && pip install -r requirements.txt
+   
+   # Install website dependencies
+   cd ../fairmind-website && bun install
+   ```
+
+3. **Environment Setup**
+   ```bash
+   # Copy environment templates
+   cp .env.template .env.local
+   
+   # Update with your configuration
+   # See .env.template for required variables
+   ```
+
+4. **Start Development Servers**
+   ```bash
+   # Start all services
+   bun run dev
+   
+   # Or start individually:
+   bun run dev:frontend    # Frontend on http://localhost:3001
+   bun run dev:backend     # Backend on http://localhost:8000
+   bun run dev:website     # Website on http://localhost:4321
+   ```
+
+## 🌐 Access Points
+
+- **Frontend App**: http://localhost:3001
+- **Backend API**: http://localhost:8000
+- **Public Website**: http://localhost:4321
+- **API Documentation**: http://localhost:8000/docs
+
+## 📋 Features
+
+### Core Features
+- **Bias Detection**: Real-time bias analysis with 20+ fairness metrics
+- **Model Provenance**: Complete lineage tracking and digital signatures
+- **Explainability**: SHAP, LIME, and Integrated Gradients support
+- **Monitoring**: Continuous drift detection and performance monitoring
+- **Compliance**: GDPR and AI Act compliance automation
+
+### Industry Use Cases
+- **Financial Services**: Fair lending and regulatory compliance
+- **Healthcare**: Trustworthy AI for patient care
+- **E-commerce**: Fair recommendation systems
+- **Human Resources**: Bias-free hiring processes
+- **Insurance**: Transparent risk assessment
+- **Government**: Public trust in AI services
+
+## 🏗️ Architecture
+
+### Frontend Architecture
+- Component-based UI with TypeScript
+- Responsive design with mobile-first approach
+- Accessibility compliance (WCAG 2.1 AA)
+- Dark/light mode support
+
+### Backend Architecture
+- RESTful API with FastAPI
+- Modular service architecture
+- Real-time processing capabilities
+- Comprehensive error handling
+
+### Data Flow
+1. **Model Upload** → **Validation** → **Analysis**
+2. **Bias Detection** → **Report Generation** → **Alerts**
+3. **Provenance Tracking** → **Audit Trail** → **Compliance**
+
+## 🔧 Development
+
+### Code Style
+- **Frontend**: ESLint + Prettier
+- **Backend**: Black + isort
+- **TypeScript**: Strict mode enabled
+
+### Testing
 ```bash
-cd fairmind-website
-npm install
-npm run dev          # Start Astro development server
-npm run build        # Build for production
+# Frontend tests
+cd frontend && bun test
+
+# Backend tests
+cd backend && python -m pytest
+
+# E2E tests
+bun run test:e2e
 ```
 
-### Frontend Development
+### Building
 ```bash
-cd frontend
-npm run dev          # Start development server
-npm run build        # Build for production
-npm run lint         # Run ESLint
+# Frontend build
+cd frontend && bun run build
+
+# Backend build
+cd backend && python -m build
+
+# Website build
+cd fairmind-website && bun run build
 ```
 
-### Backend Development
-```bash
-cd backend
-python main.py       # Start FastAPI server
-# Or with uvicorn
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
-```
+## 🚀 Deployment
 
-### Database Management
-```bash
-# Start Supabase locally
-npm run dev:supabase
+### Frontend Deployment
+- **Platform**: Vercel (recommended) or Netlify
+- **Environment**: Production build with optimized assets
+- **Domain**: Configured via platform dashboard
 
-# Reset database
-npm run supabase:reset
+### Backend Deployment
+- **Platform**: Railway, Render, or AWS
+- **Environment**: Python 3.9+ with FastAPI
+- **Database**: PostgreSQL (Supabase)
 
-# Push migrations
-npm run supabase:db:push
-```
+### Website Deployment
+- **Platform**: Netlify
+- **Build Command**: `bun run build`
+- **Publish Directory**: `dist`
 
-## API Endpoints
+## 📚 Documentation
 
-### Health Check
-```bash
-curl http://localhost:8000/health
-```
+- **API Reference**: `/docs` (Swagger UI)
+- **User Guide**: `/docs/user-guide`
+- **Developer Guide**: `/docs/developer`
+- **Architecture**: `/docs/architecture`
 
-### Governance Metrics
-```bash
-curl http://localhost:8000/governance/metrics
-```
-
-### Models
-```bash
-curl http://localhost:8000/models
-```
-
-### Simulations
-```bash
-curl http://localhost:8000/simulations
-```
-
-### AI Bill Requirements
-```bash
-curl http://localhost:8000/ai-bill/requirements
-```
-
-## Security & Compliance
-
-- **Authentication**: Supabase Auth with role-based access
-- **Data Privacy**: GDPR and CCPA compliance features
-- **Audit Logging**: Comprehensive activity tracking
-- **Encryption**: Data encryption at rest and in transit
-
-## Real-time Features
-
-The platform uses Supabase's real-time capabilities for:
-- Live dashboard updates
-- Real-time compliance monitoring
-- Instant alert notifications
-- Live model performance tracking
-
-## Documentation
-
-- **[Documentation Index](docs/README.md)** - Complete documentation overview
-- **[Feature Checklist](docs/features/FEATURE_CHECKLIST.md)** - Development progress tracking
-- **[Architecture Guide](docs/architecture/)** - System architecture and design
-- **[Setup Guides](docs/setup/)** - Installation and configuration
-- **[API Documentation](docs/api/)** - API endpoints and usage
-- **[Neo4j Setup](docs/guides/QUICK_NEO4J_SETUP.md)** - Knowledge graph setup
-
-## Contributing
+## 🤝 Contributing
 
 1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests
-5. Submit a pull request
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-## License
+### Development Guidelines
+- Follow the existing code style
+- Add tests for new features
+- Update documentation as needed
+- Ensure accessibility compliance
+
+## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
+## 🆘 Support
+
+- **Documentation**: [docs.fairmind.xyz](https://docs.fairmind.xyz)
+- **Issues**: [GitHub Issues](https://github.com/your-org/fairmind-ethical-sandbox/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/your-org/fairmind-ethical-sandbox/discussions)
+
+## 🗺️ Roadmap
+
+### Q3 2024 (Current)
+- [x] MVP Development
+- [x] Beta Release
+- [ ] Public Beta
+- [ ] Advanced monitoring capabilities
+- [ ] Model provenance tracking
+
+### Q4 2024
+- [ ] Production Launch
+- [ ] Enterprise security features
+- [ ] Advanced compliance tools
+- [ ] Performance optimization
+
+### Q1 2025
+- [ ] Advanced Features
+- [ ] AI-powered bias mitigation
+- [ ] Custom rule engine
+- [ ] Integration marketplace
+
+### Q2 2025
+- [ ] Enterprise Platform
+- [ ] Multi-tenant architecture
+- [ ] Advanced analytics dashboard
+- [ ] Enterprise integrations
+
 ---
 
-**Fairmind Ethical Sandbox** - Building responsible AI systems for a better future.
+**Built with ❤️ for responsible AI development**

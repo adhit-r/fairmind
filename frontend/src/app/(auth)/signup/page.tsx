@@ -1,11 +1,11 @@
 "use client"
 
 import { useState } from 'react'
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Button } from "@/components/ui/common/button"
+import { Input } from "@/components/ui/common/input"
+import { Label } from "@/components/ui/common/label"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/common/card"
+import { Alert, AlertDescription } from "@/components/ui/common/alert"
 import { Eye, EyeOff, Shield, Bot, Zap, ArrowLeft } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import { useRouter } from "next/navigation"

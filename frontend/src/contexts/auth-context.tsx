@@ -13,6 +13,13 @@ type UserProfile = {
   role?: string;
   username?: string;
   default_org_id?: string | null;
+  onboarding_completed?: boolean;
+  organization?: any;
+  department?: string;
+  experience?: string;
+  goals?: string[];
+  compliance_goals?: string[];
+  notification_preferences?: any;
 };
 
 type LoginResponse = {
@@ -26,6 +33,7 @@ type AuthContextType = {
   login: (email: string, password: string) => Promise<LoginResponse>;
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null }>;
   logout: () => Promise<void>;
+  updateProfile: (updates: Partial<UserProfile>) => Promise<void>;
   hasPermission: (resourceType: string, resourceId: string, permission: string) => Promise<boolean>;
   loading: boolean;
 };
@@ -197,6 +205,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const updateProfile = async (updates: Partial<UserProfile>) => {
+    if (!user) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .update(updates)
+        .eq('id', user.id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error updating profile:', error);
+        return;
+      }
+
+      setProfile(prev => prev ? { ...prev, ...updates } : null);
+    } catch (error) {
+      console.error('Error updating profile:', error);
+    }
+  };
+
   const hasPermission = async (resourceType: string, resourceId: string, permission: string) => {
     if (!user || !profile) return false;
     
@@ -217,6 +247,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     login,
     signUp,
     logout,
+    updateProfile,
     hasPermission,
     loading,
   };

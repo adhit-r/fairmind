@@ -6,7 +6,7 @@ const features = [
     id: 'bias-monitoring',
     title: 'Real-Time Bias Detection',
     description: 'Go beyond simple post-deployment checks. Fairmind integrates directly into your data pipelines to analyze model behavior in real-time. Our system detects subtle and emergent biases across multiple protected attributes (e.g., race, gender, age) using a suite of advanced statistical tests. Receive instant, actionable alerts with root-cause analysis, allowing you to mitigate fairness issues before they impact users or lead to regulatory penalties.',
-    icon: '🔍',
+    icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>',
     highlights: [
       'Real-time stream processing for immediate feedback',
       'Support for 20+ fairness metrics including Disparate Impact and Equalized Odds',
@@ -16,20 +16,20 @@ const features = [
     color: 'brand-purple',
     video: {
       src: '/videos/simulation-demo.mp4',
-      poster: '/screenshots/features/ChatGPT Image Aug 1, 2025, 04_17_46 AM.png',
+      poster: '/screenshots/app-dashboard.png',
       alt: 'Real-time bias monitoring simulation',
       caption: 'Watch our bias detection system in action - real-time monitoring and alerts'
     },
     screenshots: [
-      { src: '/screenshots/features/Screenshot 2025-08-01 at 4.18.36 AM.png', alt: 'Bias detection alert' },
-      { src: '/screenshots/features/Screenshot 2025-08-01 at 4.18.49 AM.png', alt: 'Detailed fairness report' }
+      { src: '/screenshots/app-bias-detection.png', alt: 'Bias detection alert' },
+      { src: '/screenshots/app-dashboard.png', alt: 'Detailed fairness report' }
     ]
   },
   {
     id: 'explainability',
     title: 'Advanced Explainability (XAI)',
     description: 'Turn your AI\'s black box into a transparent glass box. Fairmind provides a powerful, interactive suite of Explainable AI (XAI) tools. We go beyond basic feature importance by offering local (per-prediction) and global (whole-model) explanations through techniques like SHAP, LIME, and Integrated Gradients. The interactive dashboards allow both technical and non-technical users to explore \'what-if\' scenarios, understand decision drivers, and build genuine trust in your AI systems.',
-    icon: '🔬',
+    icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg>',
     highlights: [
       'Native support for SHAP, LIME, and Integrated Gradients',
       'Interactive \'what-if\' analysis and counterfactual explanations',
@@ -38,15 +38,15 @@ const features = [
     ],
     color: 'brand-pink',
     screenshots: [
-      { src: '/screenshots/ui/Screenshot 2025-08-01 at 4.15.52 AM.png', alt: 'Feature importance visualization' },
-      { src: '/screenshots/ui/Screenshot 2025-08-01 at 4.19.04 AM.png', alt: 'Model decision explanations' }
+      { src: '/screenshots/app-dashboard.png', alt: 'Feature importance visualization' },
+      { src: '/screenshots/app-models.png', alt: 'Model decision explanations' }
     ]
   },
   {
     id: 'continuous-monitoring',
     title: 'Continuous Monitoring & Drift Detection',
     description: 'A model\'s performance on day one is not guaranteed on day 100. Fairmind offers robust, continuous monitoring to ensure your models remain accurate, fair, and reliable in the wild. We automatically track a full spectrum of metrics, including data drift (changes in input data distribution), concept drift (changes in relationships between inputs and outputs), and operational health. Proactive alerts give you a heads-up on performance degradation, allowing for timely retraining and preventing silent model failure.',
-    icon: '📊',
+    icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 11V7a4 4 0 10-8 0v4H2a2 2 0 00-2 2v5a2 2 0 002 2h8a2 2 0 002-2v-5a2 2 0 00-2-2H3m8 0h-2"></path></svg>',
     highlights: [
       'Holistic performance monitoring (Accuracy, Precision, Recall, F1, AUC)',
       'Advanced statistical methods (e.g., Kolmogorov-Smirnov, PSI) for drift detection',
@@ -55,9 +55,168 @@ const features = [
     ],
     color: 'brand-purple',
     screenshots: [
-      { src: '/screenshots/simulations/Screenshot 2025-08-01 at 4.12.14 AM.png', alt: 'Performance monitoring dashboard' },
-      { src: '/screenshots/simulations/Screenshot 2025-08-01 at 4.12.24 AM.png', alt: 'Drift detection metrics' }
+      { src: '/screenshots/app-monitoring.png', alt: 'Performance monitoring dashboard' },
+      { src: '/screenshots/app-dashboard.png', alt: 'Drift detection metrics' }
     ]
+  },
+  {
+    id: 'model-provenance',
+    title: 'Model Provenance & Lineage',
+    description: 'Track the complete lifecycle of your AI models from data source to deployment. Fairmind provides comprehensive model provenance capabilities including digital signatures, audit trails, and complete lineage tracking. This ensures transparency, accountability, and compliance with regulatory requirements while enabling you to trace any model decision back to its training data and configuration.',
+    icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>',
+    highlights: [
+      'Digital signatures for model authenticity and integrity',
+      'Complete data lineage from source to model',
+      'Automated model cards and documentation',
+      'Compliance-ready audit trails for GDPR and AI Act'
+    ],
+    color: 'brand-pink',
+    screenshots: [
+      { src: '/screenshots/app-provenance.png', alt: 'Model lineage visualization' },
+      { src: '/screenshots/app-dashboard.png', alt: 'Digital signature verification' }
+    ]
+  },
+  {
+    id: 'security-compliance',
+    title: 'Security & Compliance',
+    description: 'Built with enterprise-grade security and comprehensive compliance features. Fairmind implements OWASP AI/LLM Security Top 10 protections, provides GDPR and AI Act compliance tools, and offers advanced security features like role-based access control, audit logging, and data encryption. Our platform helps you meet regulatory requirements while maintaining the highest security standards.',
+    icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>',
+    highlights: [
+      'OWASP AI/LLM Security Top 10 implementation',
+      'GDPR and AI Act compliance automation',
+      'Enterprise-grade security with SSO and RBAC',
+      'Comprehensive audit logging and reporting'
+    ],
+    color: 'brand-purple',
+    screenshots: [
+      { src: '/screenshots/app-monitoring.png', alt: 'Security dashboard' },
+      { src: '/screenshots/app-dashboard.png', alt: 'Compliance reporting' }
+    ]
+  },
+  {
+    id: 'simulation-testing',
+    title: 'Simulation & Testing',
+    description: 'Test your AI models in virtual environments before real-world deployment. Fairmind provides comprehensive simulation capabilities including bias simulation, adversarial testing, stress testing, and scenario modeling. This allows you to identify potential issues, validate model behavior under different conditions, and ensure your AI systems are robust and reliable.',
+    icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg>',
+    highlights: [
+      'Bias simulation across demographic scenarios',
+      'Adversarial attack testing and robustness validation',
+      'Load testing and performance stress testing',
+      'Business scenario modeling and impact analysis'
+    ],
+    color: 'brand-pink',
+    screenshots: [
+      { src: '/screenshots/app-dashboard.png', alt: 'Simulation dashboard' },
+      { src: '/screenshots/app-bias-detection.png', alt: 'Testing results' }
+    ]
+  }
+];
+
+const useCases = [
+  {
+    title: 'Financial Services',
+    description: 'Ensure fair lending practices and regulatory compliance',
+    features: ['Credit scoring fairness', 'Loan approval bias detection', 'Regulatory reporting', 'Risk assessment transparency'],
+    icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path></svg>'
+  },
+  {
+    title: 'Healthcare',
+    description: 'Build trustworthy AI for patient care and diagnosis',
+    features: ['Diagnostic model fairness', 'Treatment recommendation bias', 'Patient outcome monitoring', 'Clinical decision support'],
+    icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg>'
+  },
+  {
+    title: 'E-commerce',
+    description: 'Create fair and transparent recommendation systems',
+    features: ['Product recommendation fairness', 'Pricing algorithm transparency', 'Customer segmentation bias', 'Search result fairness'],
+    icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-2.5 5M7 13l2.5 5m6-5v6a2 2 0 01-2 2H9a2 2 0 01-2-2v-6m6 0V9a2 2 0 00-2-2H9a2 2 0 00-2 2v4.01"></path></svg>'
+  },
+  {
+    title: 'Human Resources',
+    description: 'Ensure fair hiring and promotion processes',
+    features: ['Resume screening fairness', 'Performance evaluation bias', 'Promotion decision transparency', 'Diversity and inclusion metrics'],
+    icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"></path></svg>'
+  },
+  {
+    title: 'Insurance',
+    description: 'Build fair and transparent insurance models',
+    features: ['Claims processing fairness', 'Risk assessment transparency', 'Premium calculation bias', 'Fraud detection explainability'],
+    icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>'
+  },
+  {
+    title: 'Government',
+    description: 'Ensure public trust in AI-powered services',
+    features: ['Public service fairness', 'Resource allocation transparency', 'Policy impact assessment', 'Citizen engagement bias'],
+    icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>'
+  }
+];
+
+const roadmap = [
+  {
+    quarter: 'Q1 2024',
+    title: 'MVP Development',
+    features: [
+      'Basic bias detection algorithms',
+      'Simple dashboard interface',
+      'Core API endpoints',
+      'Documentation foundation'
+    ],
+    status: 'completed'
+  },
+  {
+    quarter: 'Q2 2024',
+    title: 'Beta Release',
+    features: [
+      'Enhanced bias detection',
+      'User authentication system',
+      'Basic model registry',
+      'Initial compliance features'
+    ],
+    status: 'completed'
+  },
+  {
+    quarter: 'Q3 2024',
+    title: 'Public Beta',
+    features: [
+      'Advanced monitoring capabilities',
+      'Model provenance tracking',
+      'Comprehensive documentation',
+      'Community feedback integration'
+    ],
+    status: 'in-progress'
+  },
+  {
+    quarter: 'Q4 2024',
+    title: 'Production Launch',
+    features: [
+      'Enterprise security features',
+      'Advanced compliance tools',
+      'Performance optimization',
+      'Customer support system'
+    ],
+    status: 'planned'
+  },
+  {
+    quarter: 'Q1 2025',
+    title: 'Advanced Features',
+    features: [
+      'AI-powered bias mitigation',
+      'Advanced explainability tools',
+      'Custom rule engine',
+      'Integration marketplace'
+    ],
+    status: 'planned'
+  },
+  {
+    quarter: 'Q2 2025',
+    title: 'Enterprise Platform',
+    features: [
+      'Multi-tenant architecture',
+      'Advanced analytics dashboard',
+      'Automated compliance reporting',
+      'Enterprise integrations'
+    ],
+    status: 'planned'
   }
 ];
 
@@ -77,7 +236,7 @@ const colorMap = {
 
 <Layout 
   title="Product Features | Fairmind"
-  description="Explore the futuristic features of Fairmind. From real-time bias detection to advanced explainability, discover how we are shaping the future of ethical AI."
+  description="Explore the comprehensive features of Fairmind. From real-time bias detection to advanced explainability, discover how we are shaping the future of ethical AI."
 >
   <div class="relative overflow-hidden">
     <!-- Background Glows -->
@@ -88,139 +247,184 @@ const colorMap = {
     <section class="relative py-32 text-center">
       <div class="container mx-auto px-4 relative z-10">
         <h1 class="text-5xl md:text-7xl font-bold mb-4">
-          <span class="text-transparent bg-clip-text bg-gradient-to-r from-brand-purple to-brand-pink">Core Features</span>
+          <span class="text-transparent bg-clip-text bg-gradient-to-r from-brand-purple to-brand-pink">Comprehensive Features</span>
         </h1>
-        <p class="text-xl md:text-2xl text-gray-300 max-w-3xl mx-auto">
-          A deep dive into the technology shaping the future of fair and transparent AI.
+        <p class="text-xl md:text-2xl text-gray-700 max-w-3xl mx-auto">
+          A complete AI governance platform designed for enterprise-scale responsible AI development.
         </p>
       </div>
     </section>
 
     <!-- Features Showcase -->
     <section class="relative pb-32">
-      <div class="container mx-auto px-4 relative z-10">
-        <div class="space-y-24">
-          {features.map((feature, index) => {
-            const colors = colorMap[feature.color] || colorMap['brand-purple'];
-            const isEven = index % 2 === 0;
-            return (
-              <div class={`flex flex-col ${isEven ? 'md:flex-row' : 'md:flex-row-reverse'} items-center gap-12`}>
-                <!-- Text Content -->
-                <div class="md:w-1/2 text-center md:text-left">
-                  <h2 class={`text-3xl md:text-4xl font-bold mb-4 ${colors.text}`}>{feature.title}</h2>
-                  <p class="text-gray-300 text-lg mb-6">{feature.description}</p>
-                  <ul class="space-y-3 text-left">
+      <div class="container mx-auto px-4">
+        {features.map((feature, index) => (
+          <div class={`mb-32 ${index % 2 === 0 ? '' : 'md:flex-row-reverse'} flex flex-col md:flex-row items-center gap-12`}>
+            <!-- Content -->
+            <div class="flex-1 space-y-6">
+              <div class="flex items-center space-x-4">
+                <span class="text-4xl" set:html={feature.icon}></span>
+                <h2 class="text-3xl md:text-4xl font-bold text-gray-900">{feature.title}</h2>
+              </div>
+              <p class="text-lg text-gray-700 leading-relaxed">{feature.description}</p>
+              
+              <div class="space-y-3">
                     {feature.highlights.map(highlight => (
-                      <li class="flex items-start">
-                        <svg class={`w-6 h-6 mr-3 flex-shrink-0 ${colors.text}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                        </svg>
-                        <span class="text-gray-300">{highlight}</span>
-                      </li>
-                    ))}
-                  </ul>
+                  <div class="flex items-start space-x-3">
+                    <div class="w-2 h-2 bg-brand-purple rounded-full mt-2 flex-shrink-0"></div>
+                        <span class="text-gray-700">{highlight}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            <!-- Media -->
+            <div class="flex-1">
+              {feature.video ? (
+                <div class="relative">
+                  <video 
+                    class="w-full rounded-2xl shadow-2xl" 
+                    poster={feature.video.poster}
+                    controls
+                    preload="metadata"
+                  >
+                    <source src={feature.video.src} type="video/mp4" />
+                    Your browser does not support the video tag.
+                  </video>
+                  <p class="text-sm text-gray-400 mt-2 text-center">{feature.video.caption}</p>
                 </div>
-                <!-- Media Content -->
-                <div class="md:w-1/2 space-y-8">
-                  {/* Video Player */}
-                  {feature.video && (
-                    <div class="relative group w-full">
-                      <a 
-                        href={feature.video.src}
-                        class="video-lightbox"
-                        data-glightbox="type: video; width: 900; height: 506; autoplay: true"
-                        data-title={feature.video.alt}
-                        data-description={feature.video.caption}
-                        data-poster={feature.video.poster}
-                      >
-                        <div class="glowing-border p-1.5 rounded-2xl bg-gray-800/50 border-2 border-brand-purple/40 hover:border-brand-purple/80 transition-all duration-300 overflow-hidden w-full">
-                          <div class="relative pt-[56.25%]">
-                            <img 
-                              src={feature.video.poster} 
-                              alt={feature.video.alt} 
-                              class="absolute inset-0 w-full h-full object-cover rounded-xl"
-                              loading="lazy"
-                            />
-                            <div class="absolute inset-0 bg-black/30 group-hover:bg-black/50 transition-colors duration-300 flex items-center justify-center">
-                              <div class="w-16 h-16 md:w-20 md:h-20 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 md:h-10 md:w-10 text-white ml-1" viewBox="0 0 20 20" fill="currentColor">
-                                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
-                                </svg>
-                              </div>
-                            </div>
-                          </div>
-                          <p class="mt-2 text-sm text-gray-400 text-center">{feature.video.caption}</p>
-                        </div>
-                      </a>
-                    </div>
-                  )}
-                  
-                  {/* Screenshots Grid */}
-                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {feature.screenshots.map((screenshot, imgIndex) => (
-                      <div 
-                        class="relative group cursor-pointer"
-                        onclick={`
-                          const lightbox = GLightbox({
-                            elements: [{
-                              'href': '${screenshot.src}',
-                              'type': 'image',
-                              'title': '${screenshot.alt.replace(/'/g, "\\'")}',
-                              'description': 'Click outside or press ESC to close',
-                            }],
-                            touchNavigation: true,
-                            touchFollowAxis: true,
-                            keyboardNavigation: true,
-                            closeOnOutsideClick: true,
-                            loop: true,
-                            openEffect: 'fade',
-                            closeEffect: 'fade',
-                            slideEffect: 'slide',
-                            closeButton: true,
-                            width: '90vw',
-                            height: '90vh',
-                            descPosition: 'bottom',
-                            onOpen: () => {
-                              document.body.style.overflow = 'hidden';
-                            },
-                            onClose: () => {
-                              document.body.style.overflow = 'auto';
-                            }
-                          });
-                          lightbox.open();
-                          return false;
-                        `}
-                      >
-                        <div class={`glowing-border p-1 rounded-2xl bg-gray-800/50 ${colors.border} group-hover:scale-105 transition-all duration-300 overflow-hidden`}>
-                          <div class="relative">
-                            <img 
-                              src={screenshot.src} 
-                              alt={screenshot.alt}
-                              class="rounded-xl w-full h-full object-cover aspect-video transition-opacity duration-300"
-                              loading="lazy"
-                              onError="this.onerror=null; this.src='/images/placeholder.svg'; this.alt='Image failed to load'"
-                            />
-                            {/* Hover overlay with zoom icon */}
-                            <div class="absolute inset-0 bg-black bg-opacity-30 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center rounded-xl">
-                              <div class="bg-white bg-opacity-80 rounded-full p-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-800" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7" />
-                                </svg>
-                              </div>
-                            </div>
-                          </div>
-                          {/* Caption */}
-                          <p class="mt-2 text-xs text-gray-400 text-center truncate px-2" title={screenshot.alt}>
-                            {screenshot.alt}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
+              ) : (
+                <div class="grid grid-cols-2 gap-4">
+                  {feature.screenshots.map(screenshot => (
+                    <img 
+                      src={screenshot.src} 
+                      alt={screenshot.alt}
+                      class="w-full rounded-xl shadow-lg hover:shadow-xl transition-shadow duration-300"
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+
+        <!-- Use Cases Section -->
+    <section class="relative py-32 bg-gradient-to-br from-gray-50 to-gray-100">
+      <div class="container mx-auto px-4">
+        <div class="text-center mb-16">
+          <h2 class="text-4xl md:text-5xl font-bold mb-6">
+            <span class="text-transparent bg-clip-text bg-gradient-to-r from-brand-purple to-brand-pink">Industry Use Cases</span>
+          </h2>
+          <p class="text-xl text-gray-700 max-w-3xl mx-auto">
+            See how organizations across industries are using Fairmind to build trustworthy AI systems.
+          </p>
+        </div>
+        
+        <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+          {useCases.map(useCase => (
+            <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-200 hover:shadow-xl hover:border-brand-purple/30 transition-all duration-300">
+              <div class="flex items-center space-x-3 mb-4">
+                <span class="text-2xl text-brand-purple" set:html={useCase.icon}></span>
+                <h3 class="text-xl font-bold text-gray-900">{useCase.title}</h3>
+              </div>
+              <p class="text-gray-700 mb-4">{useCase.description}</p>
+              <ul class="space-y-2">
+                {useCase.features.map(feature => (
+                  <li class="flex items-center space-x-2 text-sm text-gray-600">
+                    <div class="w-1.5 h-1.5 bg-brand-purple rounded-full"></div>
+                    <span>{feature}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+
+        <!-- Roadmap Section -->
+    <section class="relative py-32 bg-gradient-to-br from-gray-50 to-gray-100">
+      <div class="container mx-auto px-4">
+        <div class="text-center mb-16">
+          <h2 class="text-4xl md:text-5xl font-bold mb-6">
+            <span class="text-transparent bg-clip-text bg-gradient-to-r from-brand-purple to-brand-pink">Product Roadmap</span>
+          </h2>
+          <p class="text-xl text-gray-700 max-w-3xl mx-auto">
+            Our development journey from MVP to enterprise platform.
+          </p>
+        </div>
+        
+        <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+          {roadmap.map((item, index) => (
+            <div class="relative group">
+              {/* Status Badge */}
+              <div class="absolute -top-3 -right-3 z-10">
+                <span class={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
+                  item.status === 'completed' ? 'bg-green-100 text-green-800 border border-green-200' :
+                  item.status === 'in-progress' ? 'bg-yellow-100 text-yellow-800 border border-yellow-200' : 
+                  'bg-gray-100 text-gray-800 border border-gray-200'
+                }`}>
+                  {item.status === 'completed' ? '✓ Completed' :
+                   item.status === 'in-progress' ? '⟳ In Progress' : '○ Planned'}
+                </span>
+              </div>
+              
+              {/* Card */}
+              <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-200 hover:shadow-xl transition-all duration-300 group-hover:border-brand-purple/30">
+                <div class="mb-4">
+                  <h3 class="text-xl font-bold text-gray-900 mb-2">{item.title}</h3>
+                  <span class="text-sm text-gray-500 font-medium">{item.quarter}</span>
+                </div>
+                
+                <ul class="space-y-3">
+                  {item.features.map(feature => (
+                    <li class="flex items-start space-x-3">
+                      <div class="w-2 h-2 bg-brand-purple rounded-full mt-2 flex-shrink-0"></div>
+                      <span class="text-gray-700 text-sm">{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+                
+                {/* Progress Bar */}
+                <div class="mt-6">
+                  <div class="w-full bg-gray-200 rounded-full h-2">
+                    <div class={`h-2 rounded-full transition-all duration-500 ${
+                      item.status === 'completed' ? 'bg-green-500 w-full' :
+                      item.status === 'in-progress' ? 'bg-yellow-500 w-2/3' : 'bg-gray-300 w-0'
+                    }`}></div>
                   </div>
                 </div>
               </div>
-            );
-          })}
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="relative py-24 bg-gradient-to-br from-blue-600 via-purple-600 to-indigo-700">
+      <div class="container mx-auto px-4 text-center">
+        <h2 class="text-4xl md:text-5xl font-bold text-white mb-6">
+          Ready to Experience the Future of AI Governance?
+        </h2>
+        <p class="text-xl text-blue-100 mb-8 max-w-3xl mx-auto">
+          Join leading organizations that trust Fairmind to ensure their AI systems are fair, transparent, and compliant.
+        </p>
+        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+          <a href="/demo" class="inline-flex items-center px-8 py-4 bg-white text-blue-600 font-semibold rounded-lg shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200">
+            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            Request Demo
+          </a>
+          <a href="/contact" class="inline-flex items-center px-8 py-4 border-2 border-white text-white font-semibold rounded-lg hover:bg-white hover:text-blue-600 transition-all duration-200">
+            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+            </svg>
+            Get Started
+          </a>
         </div>
       </div>
     </section>

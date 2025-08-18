@@ -2,6 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Import Neobrutalism Design System */
+@import '../styles/neobrutalism.css';
+
 @layer base {
   :root {
     --background: 0 0% 8%;

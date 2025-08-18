@@ -1,5 +1,5 @@
 "use client"
-import { EnhancedDashboard } from "@/components/dashboard/enhanced-dashboard"
+import { EnhancedDashboard } from "@/components/features/dashboard/enhanced-dashboard"
 
 export default function DashboardPage() {
   return (
