@@ -72,10 +72,12 @@ class BOMItem(BaseModel):
     vulnerabilities: List[Dict[str, Any]] = Field(default_factory=list, description="Security vulnerabilities")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
     
-    class Config:
-        json_encoders = {
+    model_config = {
+        "protected_namespaces": (),
+        "json_encoders": {
             datetime: lambda v: v.isoformat()
         }
+    }
 
 class Vulnerability(BaseModel):
     """Security vulnerability information"""
@@ -89,10 +91,12 @@ class Vulnerability(BaseModel):
     references: List[str] = Field(default_factory=list, description="Reference URLs")
     discovered_date: Optional[datetime] = Field(None, description="Discovery date")
     
-    class Config:
-        json_encoders = {
+    model_config = {
+        "protected_namespaces": (),
+        "json_encoders": {
             datetime: lambda v: v.isoformat()
         }
+    }
 
 class LicenseInfo(BaseModel):
     """License information and compliance"""

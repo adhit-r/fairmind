@@ -2,20 +2,29 @@ const puppeteer = require('puppeteer');
 const fs = require('fs');
 const path = require('path');
 
-// Dashboard pages to capture
-const dashboardPages = [
-  { name: 'main-dashboard', url: 'http://localhost:3000', description: 'Main Dashboard Overview' },
-  { name: 'bias-detection', url: 'http://localhost:3000/bias-detection', description: 'Advanced Bias Detection with SHAP/LIME' },
-  { name: 'knowledge-graph', url: 'http://localhost:3000/knowledge-graph', description: 'Knowledge Graph Integration' },
-  { name: 'geographic-bias', url: 'http://localhost:3000/geographic-bias', description: 'Geographic Bias Analysis' },
-  { name: 'model-dna', url: 'http://localhost:3000/model-dna', description: 'Model DNA Signatures' },
-  { name: 'monitoring', url: 'http://localhost:3000/monitoring', description: 'Real-time Monitoring' },
-  { name: 'compliance', url: 'http://localhost:3000/compliance', description: 'Compliance Tracking' },
-  { name: 'analytics', url: 'http://localhost:3000/analytics', description: 'Analytics Dashboard' }
+// Documentation and app pages to capture
+const BASE_URL_WEBSITE = process.env.WEBSITE_URL || 'http://localhost:4321';
+const BASE_URL_APP = process.env.APP_URL || 'http://localhost:3000';
+
+const documentationPages = [
+  // App (Fairmind) screenshots
+  { name: 'app-dashboard', url: `${BASE_URL_APP}/`, description: 'App Dashboard' },
+  { name: 'app-bias-detection', url: `${BASE_URL_APP}/bias-detection`, description: 'Bias Detection' },
+  { name: 'app-models', url: `${BASE_URL_APP}/models`, description: 'Model Registry' },
+  { name: 'app-monitoring', url: `${BASE_URL_APP}/monitoring`, description: 'Monitoring' },
+  { name: 'app-provenance', url: `${BASE_URL_APP}/provenance`, description: 'Model Provenance' },
+  // Website screenshots used in docs cards
+  { name: 'docs-overview', url: `${BASE_URL_WEBSITE}/docs`, description: 'Documentation Overview' },
+  { name: 'docs-fumadocs', url: `${BASE_URL_WEBSITE}/docs/fumadocs`, description: 'Docs Landing' },
+  { name: 'features', url: `${BASE_URL_WEBSITE}/features`, description: 'Features Page' },
+  { name: 'about', url: `${BASE_URL_WEBSITE}/about`, description: 'About Page' },
+  { name: 'contact', url: `${BASE_URL_WEBSITE}/contact`, description: 'Contact Page' },
+  { name: 'references', url: `${BASE_URL_WEBSITE}/blog`, description: 'References Page' },
+  { name: 'demo', url: `${BASE_URL_WEBSITE}/demo`, description: 'Demo Page' }
 ];
 
 // Create screenshots directory
-const screenshotsDir = path.join(__dirname, 'docs/v2/fairmind-website/public/screenshots/dashboard');
+const screenshotsDir = path.join(__dirname, '../fairmind-website/public/screenshots');
 if (!fs.existsSync(screenshotsDir)) {
   fs.mkdirSync(screenshotsDir, { recursive: true });
 }
@@ -30,7 +39,7 @@ async function captureScreenshots() {
   });
 
   try {
-    for (const page of dashboardPages) {
+    for (const page of documentationPages) {
       console.log(`📸 Capturing ${page.name}...`);
       
       const browserPage = await browser.newPage();
@@ -44,8 +53,18 @@ async function captureScreenshots() {
         timeout: 30000 
       });
       
-      // Wait for content to load
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      // Wait for content to load - longer wait for app pages
+      const waitTime = page.url.includes('localhost:300') ? 8000 : 3000;
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+      
+      // For app pages, wait for specific content to load
+      if (page.url.includes('localhost:300')) {
+        try {
+          await browserPage.waitForSelector('main, .main-content, [data-testid="main-content"]', { timeout: 10000 });
+        } catch (e) {
+          console.log(`⚠️  No main content selector found for ${page.name}, proceeding anyway`);
+        }
+      }
       
       // Take screenshot
       const screenshotPath = path.join(screenshotsDir, `${page.name}.png`);
@@ -77,7 +96,7 @@ async function main() {
   
   // Check if server is running
   try {
-    const response = await fetch('http://localhost:3000');
+    const response = await fetch('http://localhost:4321');
     if (response.ok) {
       console.log('✅ Server is ready!');
       await captureScreenshots();

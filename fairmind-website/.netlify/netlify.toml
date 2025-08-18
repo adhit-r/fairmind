@@ -1,0 +1,94 @@
+headersOrigin = "config"
+redirectsOrigin = "config"
+plugins = []
+
+[dev]
+command = "bun run dev"
+port = 4321.0
+publish = "dist"
+
+[functions]
+
+[functions."*"]
+
+[build]
+publish = "/Users/adhi/Desktop/Documents/learn/fairmind-ethical-sandbox/fairmind-website/dist"
+publishOrigin = "config"
+commandOrigin = "config"
+base = "/Users/adhi/Desktop/Documents/learn/fairmind-ethical-sandbox/fairmind-website"
+command = "bun run build"
+
+[build.environment]
+NODE_VERSION = "18"
+NPM_FLAGS = "--production=false"
+NETLIFY_IMAGES_CDN_DOMAIN = "fairmind.xyz"
+
+[build.processing]
+
+[build.processing.css]
+
+[build.processing.html]
+
+[build.processing.images]
+
+[build.processing.js]
+
+[build.services]
+
+[[headers]]
+for = "/*"
+
+[headers.values]
+X-Frame-Options = "DENY"
+X-XSS-Protection = "1; mode=block"
+X-Content-Type-Options = "nosniff"
+Referrer-Policy = "strict-origin-when-cross-origin"
+Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'; form-action 'self';"
+
+[[redirects]]
+from = "/contact"
+to = "/contact.html"
+status = 200.0
+force = false
+
+[redirects.query]
+
+[redirects.conditions]
+
+[redirects.headers]
+
+[[redirects]]
+from = "/*"
+to = "/index.html"
+status = 200.0
+force = false
+
+[redirects.query]
+
+[redirects.conditions]
+
+[redirects.headers]
+
+[[redirects]]
+from = "/contact-success"
+to = "/contact?success=true"
+status = 200.0
+force = false
+
+[redirects.query]
+
+[redirects.conditions]
+
+[redirects.headers]
+
+[[redirects]]
+from = "/contact-error"
+to = "/contact?error=true"
+status = 200.0
+force = false
+
+[redirects.query]
+
+[redirects.conditions]
+
+[redirects.headers]

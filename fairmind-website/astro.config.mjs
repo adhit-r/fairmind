@@ -17,8 +17,7 @@ export default defineConfig({
   integrations: [
     tailwind({
       // Tailwind configuration is automatically loaded from tailwind.config.js
-      // Disable applying base styles since we handle them in global.css
-      applyBaseStyles: false,
+      applyBaseStyles: true,
     }),
     image({
       serviceEntryPoint: '@astrojs/image/sharp',

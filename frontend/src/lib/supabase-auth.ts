@@ -1,92 +1,140 @@
 import { createClient } from '@supabase/supabase-js'
 
-// Supabase client configuration
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
-// Company-specific roles and permissions
-export const COMPANY_ROLES = {
-  SUPER_ADMIN: {
-    name: 'super_admin',
-    permissions: ['*'] // All permissions
-  },
-  COMPANY_ADMIN: {
-    name: 'company_admin',
-    permissions: [
-      'models:read',
-      'models:write',
-      'models:delete',
-      'simulations:read',
-      'simulations:write',
-      'compliance:read',
-      'compliance:write',
-      'users:read',
-      'users:write'
-    ]
-  },
-  COMPLIANCE_OFFICER: {
-    name: 'compliance_officer',
-    permissions: [
-      'models:read',
-      'compliance:read',
-      'compliance:write',
-      'audit:read',
-      'reports:read',
-      'reports:write'
-    ]
-  },
-  DATA_SCIENTIST: {
-    name: 'data_scientist',
-    permissions: [
-      'models:read',
-      'models:write',
-      'simulations:read',
-      'simulations:write',
-      'testing:read',
-      'testing:write'
-    ]
-  },
-  AUDITOR: {
-    name: 'auditor',
-    permissions: [
-      'models:read',
-      'audit:read',
-      'compliance:read',
-      'reports:read'
-    ]
-  }
+// Test organization with dummy data
+export const TEST_ORG_CONFIG = {
+  id: 'test-org-123',
+  name: 'Fairmind Demo Corp',
+  type: 'demo',
+  industry: 'technology',
+  size: 'medium',
+  models: [
+    {
+      id: 'model-1',
+      name: 'Credit Risk Model',
+      framework: 'scikit-learn',
+      type: 'classification',
+      accuracy: 0.89,
+      bias_score: 0.15,
+      security_score: 0.92,
+      compliance_score: 0.88,
+      uploaded_at: '2024-01-15T10:30:00Z',
+      file_path: '/models/credit_risk_model.pkl'
+    },
+    {
+      id: 'model-2', 
+      name: 'Fraud Detection Model',
+      framework: 'tensorflow',
+      type: 'classification',
+      accuracy: 0.94,
+      bias_score: 0.08,
+      security_score: 0.95,
+      compliance_score: 0.91,
+      uploaded_at: '2024-01-20T14:15:00Z',
+      file_path: '/models/fraud_detection_model.h5'
+    },
+    {
+      id: 'model-3',
+      name: 'Customer Segmentation Model',
+      framework: 'pytorch',
+      type: 'clustering',
+      accuracy: 0.87,
+      bias_score: 0.12,
+      security_score: 0.89,
+      compliance_score: 0.85,
+      uploaded_at: '2024-01-25T09:45:00Z',
+      file_path: '/models/customer_segmentation.pt'
+    }
+  ],
+  datasets: [
+    {
+      id: 'dataset-1',
+      name: 'Credit Card Transactions',
+      samples: 100000,
+      features: 30,
+      description: 'Credit card transaction data for fraud detection',
+      bias_issues: ['geographic_bias', 'age_bias'],
+      compliance_status: 'gdpr_compliant'
+    },
+    {
+      id: 'dataset-2',
+      name: 'Customer Demographics',
+      samples: 50000,
+      features: 15,
+      description: 'Customer demographic data for segmentation',
+      bias_issues: ['gender_bias', 'income_bias'],
+      compliance_status: 'ccpa_compliant'
+    }
+  ],
+  bias_analyses: [
+    {
+      id: 'analysis-1',
+      model_id: 'model-1',
+      dataset_id: 'dataset-1',
+      score: 0.85,
+      issues: [
+        'Statistical parity bias: 15% difference in approval rates',
+        'Equal opportunity bias: 8% difference in true positive rates'
+      ],
+      recommendations: [
+        'Implement MinDiff during training',
+        'Add more diverse training data'
+      ],
+      created_at: '2024-01-16T11:00:00Z'
+    }
+  ],
+  security_tests: [
+    {
+      id: 'security-1',
+      model_id: 'model-1',
+      score: 0.92,
+      vulnerabilities: [
+        'Potential prompt injection vulnerability',
+        'Output filtering needs improvement'
+      ],
+      recommendations: [
+        'Implement input validation',
+        'Add output sanitization'
+      ],
+      created_at: '2024-01-17T13:30:00Z'
+    }
+  ],
+  compliance_checks: [
+    {
+      id: 'compliance-1',
+      model_id: 'model-1',
+      score: 0.88,
+      gaps: [
+        'GDPR data retention policy needs review',
+        'CCPA consent management requires updates'
+      ],
+      recommendations: [
+        'Update data retention policies',
+        'Implement consent management system'
+      ],
+      created_at: '2024-01-18T15:45:00Z'
+    }
+  ]
 }
 
-// Company configurations
+// Organization configurations for different types
 export const COMPANY_CONFIGS = {
-  'bankcorp': {
-    name: 'BankCorp',
-    domain: 'bankcorp.com',
-    logo: '/logos/bankcorp.png',
-    theme: 'bankcorp-theme',
-    features: ['credit-scoring', 'fraud-detection', 'compliance'],
-    compliance_frameworks: ['NIST', 'GDPR', 'SOX'],
-    risk_levels: ['low', 'medium', 'high', 'critical']
-  },
-  'securebank': {
-    name: 'SecureBank',
-    domain: 'securebank.com',
-    logo: '/logos/securebank.png',
-    theme: 'securebank-theme',
-    features: ['fraud-detection', 'aml', 'kyc'],
-    compliance_frameworks: ['NIST', 'GDPR', 'PCI-DSS'],
-    risk_levels: ['low', 'medium', 'high', 'critical']
-  },
-  'visiontech': {
-    name: 'VisionTech',
-    domain: 'visiontech.com',
-    logo: '/logos/visiontech.png',
-    theme: 'visiontech-theme',
-    features: ['computer-vision', 'image-classification'],
-    compliance_frameworks: ['NIST', 'GDPR'],
-    risk_levels: ['low', 'medium', 'high']
+  test: TEST_ORG_CONFIG,
+  new: {
+    id: null,
+    name: '',
+    type: 'new',
+    industry: '',
+    size: '',
+    models: [],
+    datasets: [],
+    bias_analyses: [],
+    security_tests: [],
+    compliance_checks: []
   }
 }
 
@@ -111,13 +159,12 @@ export const signUp = async (email: string, password: string, fullName: string) 
     password,
     options: {
       data: {
-        full_name: fullName
-      }
-    }
+        full_name: fullName,
+      },
+    },
   })
-  
+
   if (error) throw error
-  
   return data
 }
 
@@ -126,200 +173,74 @@ export const signOut = async () => {
   if (error) throw error
 }
 
-export const getCurrentUser = async () => {
-  const { data: { user }, error } = await supabase.auth.getUser()
-  if (error) throw error
-  return user
-}
-
-// User profile management
+// Create or update user profile
 export const createUserProfile = async (user: any) => {
-  const companyId = getUserCompanyFromEmail(user.email)
-  
-  const { error } = await supabase
-    .from('users')
-    .upsert({
-      id: user.id,
-      email: user.email,
-      full_name: user.user_metadata?.full_name,
-      company_id: companyId,
-      role: 'data_scientist', // Default role
-      permissions: COMPANY_ROLES.DATA_SCIENTIST.permissions,
-      created_at: new Date().toISOString()
-    })
-  
-  if (error) throw error
+  const { data: existingProfile } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', user.id)
+    .single()
+
+  if (!existingProfile) {
+    // Create new profile
+    const { error } = await supabase
+      .from('profiles')
+      .insert([
+        {
+          id: user.id,
+          email: user.email,
+          full_name: user.user_metadata?.full_name || '',
+          role: 'user',
+          default_org_id: null,
+          onboarding_completed: false
+        }
+      ])
+
+    if (error) {
+      console.error('Error creating profile:', error)
+    }
+  }
 }
 
-export const getUserProfile = async (userId: string) => {
-  const { data, error } = await supabase
-    .from('users')
-    .select(`
-      *,
-      companies (
-        id,
-        name,
-        domain,
-        logo_url,
-        theme,
-        compliance_frameworks
-      )
-    `)
-    .eq('id', userId)
-    .single()
+// Get organization data
+export const getOrganizationData = async (orgId: string) => {
+  if (orgId === 'test-org-123') {
+    return TEST_ORG_CONFIG
+  }
   
-  if (error) throw error
+  // For real organizations, fetch from database
+  const { data, error } = await supabase
+    .from('organizations')
+    .select('*')
+    .eq('id', orgId)
+    .single()
+
+  if (error) {
+    console.error('Error fetching organization:', error)
+    return null
+  }
+
   return data
 }
 
-// Company management
-export const getUserCompanyFromEmail = (email: string): string | null => {
-  const domain = email.split('@')[1]
-  
-  const domainToCompany: Record<string, string> = {
-    'bankcorp.com': 'bankcorp',
-    'securebank.com': 'securebank',
-    'visiontech.com': 'visiontech'
-  }
-  
-  return domainToCompany[domain] || null
-}
-
-export const getUserCompany = async () => {
-  const user = await getCurrentUser()
-  if (!user) return null
-  
-  const profile = await getUserProfile(user.id)
-  return profile?.companies
-}
-
-export const getCompanyConfig = (companyId: string) => {
-  return COMPANY_CONFIGS[companyId as keyof typeof COMPANY_CONFIGS] || null
-}
-
-// Permission checking
-export const hasPermission = async (permission: string): Promise<boolean> => {
-  try {
-    const user = await getCurrentUser()
-    if (!user) return false
-    
-    const profile = await getUserProfile(user.id)
-    if (!profile) return false
-    
-    // Super admin has all permissions
-    if (profile.role === 'super_admin') return true
-    
-    // Check user's permissions
-    const userPermissions = profile.permissions || []
-    return userPermissions.includes(permission) || userPermissions.includes('*')
-  } catch (error) {
-    console.error('Permission check failed:', error)
-    return false
-  }
-}
-
-export const getUserPermissions = async (): Promise<string[]> => {
-  try {
-    const user = await getCurrentUser()
-    if (!user) return []
-    
-    const profile = await getUserProfile(user.id)
-    if (!profile) return []
-    
-    return profile.permissions || []
-  } catch (error) {
-    console.error('Failed to get user permissions:', error)
-    return []
-  }
-}
-
-// Company-specific data queries
-export const getCompanyModels = async () => {
-  const user = await getCurrentUser()
-  if (!user) return []
-  
+// Create new organization
+export const createOrganization = async (orgData: any, userId: string) => {
   const { data, error } = await supabase
-    .from('models')
-    .select('*')
-    .order('created_at', { ascending: false })
-  
-  if (error) throw error
-  return data || []
-}
-
-export const getCompanySimulations = async () => {
-  const user = await getCurrentUser()
-  if (!user) return []
-  
-  const { data, error } = await supabase
-    .from('simulations')
-    .select('*')
-    .order('created_at', { ascending: false })
-  
-  if (error) throw error
-  return data || []
-}
-
-// Real-time subscriptions
-export const subscribeToCompanyData = (table: string, callback: (payload: any) => void) => {
-  return supabase
-    .channel(`${table}_changes`)
-    .on('postgres_changes', 
-      { 
-        event: '*', 
-        schema: 'public', 
-        table 
-      }, 
-      callback
-    )
-    .subscribe()
-}
-
-// Auth state management
-export const onAuthStateChange = (callback: (event: string, session: any) => void) => {
-  return supabase.auth.onAuthStateChange(callback)
-}
-
-// Password reset
-export const resetPassword = async (email: string) => {
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${window.location.origin}/reset-password`
-  })
-  
-  if (error) throw error
-}
-
-// Update user profile
-export const updateUserProfile = async (updates: any) => {
-  const user = await getCurrentUser()
-  if (!user) throw new Error('No authenticated user')
-  
-  const { error } = await supabase
-    .from('users')
-    .update(updates)
-    .eq('id', user.id)
-  
-  if (error) throw error
-}
-
-// Company management functions
-export const createCompany = async (companyData: any) => {
-  const { data, error } = await supabase
-    .from('companies')
-    .insert(companyData)
+    .from('organizations')
+    .insert([
+      {
+        ...orgData,
+        created_by: userId,
+        created_at: new Date().toISOString()
+      }
+    ])
     .select()
     .single()
-  
-  if (error) throw error
-  return data
-}
 
-export const getCompanies = async () => {
-  const { data, error } = await supabase
-    .from('companies')
-    .select('*')
-    .order('name')
-  
-  if (error) throw error
-  return data || []
+  if (error) {
+    console.error('Error creating organization:', error)
+    throw error
+  }
+
+  return data
 } 

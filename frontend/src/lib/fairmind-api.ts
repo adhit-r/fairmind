@@ -8,7 +8,7 @@ import {
   SimulationConfig
 } from '@/types';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export class FairmindAPI {
   private static instance: FairmindAPI;
@@ -360,6 +360,223 @@ export class FairmindAPI {
       return response;
     } catch (error) {
       this.handleError(error, 'Failed to list OWASP security analyses');
+      throw error;
+    }
+  }
+
+  // Bias Analysis Methods
+  async runBiasAnalysis(request: {
+    model_id: string
+    dataset_id: string
+    sensitive_attributes: string[]
+    target_column: string
+    analysis_type: 'comprehensive' | 'quick' | 'targeted'
+  }): Promise<any> {
+    try {
+      const response = await this.request<any>('/bias/analyze', {
+        method: 'POST',
+        body: JSON.stringify(request),
+      });
+      return response;
+    } catch (error) {
+      this.handleError(error, 'Failed to run bias analysis');
+      throw error;
+    }
+  }
+
+  async getBiasAnalysisHistory(): Promise<any> {
+    try {
+      const response = await this.request<any>('/bias/history');
+      return response;
+    } catch (error) {
+      this.handleError(error, 'Failed to fetch bias analysis history');
+      throw error;
+    }
+  }
+
+  // Dashboard Methods
+  async getRecentActivity(limit: number = 10): Promise<any> {
+    try {
+      const response = await this.request<any>(`/activity/recent?limit=${limit}`);
+      return response;
+    } catch (error) {
+      this.handleError(error, 'Failed to fetch recent activity');
+      throw error;
+    }
+  }
+
+  // Real Bias Detection Methods
+  async getAvailableDatasets(): Promise<any> {
+    try {
+      const response = await fetch(`${this.baseUrl}/datasets/available`);
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error fetching available datasets:', error);
+      throw error;
+    }
+  }
+
+  async analyzeDatasetBias(params: {
+    dataset_name: string;
+    target_column: string;
+    sensitive_columns: string[];
+    custom_rules?: any[];
+    llm_enabled?: boolean;
+    llm_prompt?: string;
+    simulation_enabled?: boolean;
+  }): Promise<any> {
+    try {
+      const formData = new FormData();
+      formData.append('dataset_name', params.dataset_name);
+      formData.append('target_column', params.target_column);
+      formData.append('sensitive_columns', JSON.stringify(params.sensitive_columns));
+      formData.append('custom_rules', JSON.stringify(params.custom_rules || []));
+      formData.append('llm_enabled', String(params.llm_enabled || false));
+      formData.append('llm_prompt', params.llm_prompt || '');
+      formData.append('simulation_enabled', String(params.simulation_enabled || false));
+
+      const response = await fetch(`${this.baseUrl}/bias/analyze-real`, {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error analyzing dataset bias:', error);
+      throw error;
+    }
+  }
+
+  async getDatasetInfo(datasetName: string): Promise<any> {
+    try {
+      const response = await fetch(`${this.baseUrl}/bias/dataset-info/${datasetName}`);
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error fetching dataset info:', error);
+      throw error;
+    }
+  }
+
+  // Model Provenance and Model Cards Methods
+  async createDatasetProvenance(datasetInfo: any): Promise<any> {
+    try {
+      const response = await fetch(`${this.baseUrl}/provenance/dataset`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(datasetInfo),
+      });
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error creating dataset provenance:', error);
+      throw error;
+    }
+  }
+
+  async createModelProvenance(modelInfo: any, trainingDatasets: any[]): Promise<any> {
+    try {
+      const response = await fetch(`${this.baseUrl}/provenance/model`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model_info: modelInfo,
+          training_datasets: trainingDatasets
+        }),
+      });
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error creating model provenance:', error);
+      throw error;
+    }
+  }
+
+  async scanModel(modelPath: string, modelInfo: any): Promise<any> {
+    try {
+      const response = await fetch(`${this.baseUrl}/provenance/scan-model`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model_path: modelPath,
+          model_info: modelInfo
+        }),
+      });
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error scanning model:', error);
+      throw error;
+    }
+  }
+
+  async verifyModelAuthenticity(modelId: string, modelContent: string): Promise<any> {
+    try {
+      const response = await fetch(`${this.baseUrl}/provenance/verify-authenticity`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model_id: modelId,
+          model_content: modelContent
+        }),
+      });
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error verifying model authenticity:', error);
+      throw error;
+    }
+  }
+
+  async generateModelCard(modelId: string): Promise<any> {
+    try {
+      const response = await fetch(`${this.baseUrl}/provenance/model-card/${modelId}`);
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error generating model card:', error);
+      throw error;
+    }
+  }
+
+  async getProvenanceChain(modelId: string): Promise<any> {
+    try {
+      const response = await fetch(`${this.baseUrl}/provenance/chain/${modelId}`);
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error getting provenance chain:', error);
+      throw error;
+    }
+  }
+
+  async exportProvenanceReport(modelId: string): Promise<any> {
+    try {
+      const response = await fetch(`${this.baseUrl}/provenance/report/${modelId}`);
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error exporting provenance report:', error);
+      throw error;
+    }
+  }
+
+  async listProvenanceModels(): Promise<any> {
+    try {
+      const response = await fetch(`${this.baseUrl}/provenance/models`);
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error listing provenance models:', error);
       throw error;
     }
   }

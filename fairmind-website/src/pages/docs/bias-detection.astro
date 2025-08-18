@@ -1,0 +1,199 @@
+---
+import Layout from '../../layouts/Layout.astro';
+
+const structuredData = {
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "name": "Bias Detection Guide - Fairmind Documentation",
+  "description": "Learn how to detect and analyze bias in your AI models using Fairmind's comprehensive bias detection tools.",
+  "url": "https://fairmind.xyz/docs/bias-detection"
+};
+---
+
+<Layout 
+  title="Bias Detection Guide - Fairmind Documentation"
+  description="Learn how to detect and analyze bias in your AI models using Fairmind's comprehensive bias detection tools."
+  structuredData={structuredData}
+>
+  <div class="min-h-screen bg-gray-50">
+    <!-- Header -->
+    <div class="bg-white border-b border-gray-200">
+      <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div class="mb-4">
+          <a href="/docs/fumadocs" class="text-blue-600 hover:text-blue-700 font-medium">
+            ← Back to Documentation
+          </a>
+        </div>
+        <h1 class="text-4xl font-bold text-gray-900 mb-4">Bias Detection Guide</h1>
+        <p class="text-xl text-gray-700">
+          Learn how to detect and analyze bias in your AI models using statistical methods, custom rules, and advanced fairness metrics.
+        </p>
+      </div>
+    </div>
+
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <div class="prose prose-lg max-w-none">
+        <h2>What is Bias Detection?</h2>
+        <p>
+          Bias detection in AI systems involves identifying and measuring unfair treatment of individuals or groups based on protected characteristics such as race, gender, age, or other sensitive attributes. Fairmind provides comprehensive tools to detect various types of bias in your AI models.
+        </p>
+
+        <h2>Types of Bias</h2>
+        
+        <h3>Statistical Parity</h3>
+        <p>
+          Statistical parity ensures that the proportion of positive predictions is the same across different demographic groups. This is measured using the demographic parity ratio.
+        </p>
+
+        <h3>Equal Opportunity</h3>
+        <p>
+          Equal opportunity ensures that the true positive rate (sensitivity) is the same across different groups. This is particularly important for applications where false negatives have significant consequences.
+        </p>
+
+        <h3>Equalized Odds</h3>
+        <p>
+          Equalized odds ensures that both true positive rates and false positive rates are equal across different demographic groups.
+        </p>
+
+        <h3>Individual Fairness</h3>
+        <p>
+          Individual fairness ensures that similar individuals receive similar predictions, regardless of their demographic characteristics.
+        </p>
+
+        <h2>Getting Started with Bias Detection</h2>
+        
+        <h3>Step 1: Upload Your Model</h3>
+        <p>
+          Start by uploading your trained AI model to the Fairmind platform. Supported formats include:
+        </p>
+        <ul>
+          <li>Scikit-learn models (.pkl, .joblib)</li>
+          <li>TensorFlow models (.h5, .pb)</li>
+          <li>PyTorch models (.pt, .pth)</li>
+          <li>ONNX models (.onnx)</li>
+        </ul>
+
+        <h3>Step 2: Provide Training Data</h3>
+        <p>
+          Upload your training dataset with the following requirements:
+        </p>
+        <ul>
+          <li>CSV or JSON format</li>
+          <li>Include protected attributes (e.g., gender, race, age)</li>
+          <li>Include target variable (what you're predicting)</li>
+          <li>Include feature columns used by your model</li>
+        </ul>
+
+        <h3>Step 3: Configure Bias Detection</h3>
+        <p>
+          Configure your bias detection analysis:
+        </p>
+        <ul>
+          <li>Select protected attributes to analyze</li>
+          <li>Choose fairness metrics to compute</li>
+          <li>Set thresholds for bias alerts</li>
+          <li>Define custom fairness rules if needed</li>
+        </ul>
+
+        <h2>Bias Detection Methods</h2>
+        
+        <h3>Statistical Methods</h3>
+        <p>
+          Fairmind uses established statistical methods to measure bias:
+        </p>
+        <ul>
+          <li><strong>Demographic Parity:</strong> Measures if the prediction rate is equal across groups</li>
+          <li><strong>Equal Opportunity:</strong> Measures if true positive rates are equal across groups</li>
+          <li><strong>Equalized Odds:</strong> Measures if both true positive and false positive rates are equal</li>
+          <li><strong>Calibration:</strong> Measures if prediction probabilities are well-calibrated across groups</li>
+        </ul>
+
+        <h3>SHAP Analysis</h3>
+        <p>
+          SHAP (SHapley Additive exPlanations) helps understand how each feature contributes to predictions and can reveal bias in feature importance across different demographic groups.
+        </p>
+
+        <h3>LIME Analysis</h3>
+        <p>
+          LIME (Local Interpretable Model-agnostic Explanations) provides local explanations for individual predictions, helping identify bias in specific cases.
+        </p>
+
+        <h2>Interpreting Results</h2>
+        
+        <h3>Fairness Metrics</h3>
+        <p>
+          The bias detection results include:
+        </p>
+        <ul>
+          <li><strong>Disparity Ratio:</strong> Ratio of prediction rates between groups (1.0 = fair)</li>
+          <li><strong>Statistical Parity Difference:</strong> Difference in prediction rates between groups</li>
+          <li><strong>Equal Opportunity Difference:</strong> Difference in true positive rates between groups</li>
+          <li><strong>Calibration Error:</strong> Measure of probability calibration across groups</li>
+        </ul>
+
+        <h3>Visualizations</h3>
+        <p>
+          Fairmind provides various visualizations to help understand bias:
+        </p>
+        <ul>
+          <li>Fairness metrics comparison charts</li>
+          <li>Feature importance analysis by demographic group</li>
+          <li>Prediction distribution plots</li>
+          <li>Bias trend analysis over time</li>
+        </ul>
+
+        <h2>Custom Fairness Rules</h2>
+        <p>
+          In addition to standard fairness metrics, you can define custom fairness rules:
+        </p>
+        <ul>
+          <li>Business-specific fairness constraints</li>
+          <li>Regulatory compliance requirements</li>
+          <li>Domain-specific bias definitions</li>
+          <li>Multi-attribute fairness rules</li>
+        </ul>
+
+        <h2>Bias Mitigation</h2>
+        <p>
+          Once bias is detected, Fairmind provides tools to help mitigate it:
+        </p>
+        <ul>
+          <li><strong>Pre-processing:</strong> Modify training data to reduce bias</li>
+          <li><strong>In-processing:</strong> Modify the training process to incorporate fairness constraints</li>
+          <li><strong>Post-processing:</strong> Adjust model predictions to improve fairness</li>
+        </ul>
+
+        <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-6 my-8">
+          <h3 class="text-lg font-semibold text-yellow-900 mb-2">Important Note</h3>
+          <p class="text-yellow-800">
+            Bias detection is currently in development. The MVP version includes basic statistical parity and demographic parity measurements. Advanced features like SHAP analysis and custom fairness rules will be available in future releases.
+          </p>
+        </div>
+
+        <h2>Best Practices</h2>
+        <ul>
+          <li>Always test for bias before deploying models to production</li>
+          <li>Consider multiple fairness metrics, not just one</li>
+          <li>Understand the trade-offs between fairness and accuracy</li>
+          <li>Document your bias detection process and results</li>
+          <li>Regularly re-evaluate bias as your data and models evolve</li>
+        </ul>
+
+        <h2>Next Steps</h2>
+        <p>
+          Continue your AI governance journey with these related guides:
+        </p>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+          <a href="/docs/model-provenance" class="block p-4 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-colors">
+            <h4 class="font-semibold text-gray-900">Model Provenance</h4>
+            <p class="text-gray-600 text-sm">Track model lineage and maintain audit trails</p>
+          </a>
+          <a href="/docs/monitoring" class="block p-4 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-colors">
+            <h4 class="font-semibold text-gray-900">Monitoring & Alerts</h4>
+            <p class="text-gray-600 text-sm">Set up real-time monitoring for bias detection</p>
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</Layout>

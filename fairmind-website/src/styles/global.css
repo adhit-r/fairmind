@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -11,8 +11,8 @@
   }
 
   body {
-    @apply bg-brand-dark text-brand-gray antialiased;
-    font-family: 'Space Grotesk', sans-serif;
+    @apply bg-white text-gray-900 antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
   }
 
   h1,
@@ -21,7 +21,7 @@
   h4,
   h5,
   h6 {
-    @apply font-bold text-brand-light;
+    @apply font-bold text-gray-900;
   }
 
   h1 {
@@ -37,27 +37,26 @@
   }
 
   p {
-    @apply text-base sm:text-lg text-brand-gray leading-relaxed mb-4;
+    @apply text-base sm:text-lg text-gray-700 leading-relaxed mb-4;
   }
 
   a {
-    @apply text-brand-purple hover:text-brand-pink transition-colors duration-300;
+    @apply text-blue-600 hover:text-blue-700 transition-colors duration-300;
+  }
+
+  /* Improve text contrast for better readability */
+  .text-gray-600 {
+    @apply text-gray-700 !important;
   }
 }
 
 @layer components {
-  .glowing-border {
-    @apply border border-transparent;
-    --glow-color: theme('colors.brand.purple');
-    box-shadow: 0 0 2px var(--glow-color), 0 0 5px var(--glow-color), 0 0 10px var(--glow-color);
-  }
-
   .btn {
     @apply inline-flex items-center justify-center rounded-lg px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base font-semibold transition-all duration-300;
   }
 
   .btn-primary {
-    @apply text-white bg-primary-600 hover:bg-primary-700 shadow-lg hover:shadow-xl;
+    @apply text-white bg-gradient-to-r from-blue-600 to-purple-600 hover:shadow-lg transform hover:-translate-y-1;
   }
 
   .btn-outline {

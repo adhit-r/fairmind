@@ -4,9 +4,9 @@
   "private": true,
   "description": "AI Governance Platform - Testing, monitoring, and ensuring ethical AI deployment",
   "scripts": {
-    "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\"",
+    "dev": "concurrently \"bun run dev:frontend\" \"bun run dev:backend\"",
     "dev:frontend": "cd frontend && bun run dev",
-    "dev:backend": "cd backend && PORT=8001 python main.py",
+    "dev:backend": "cd backend && PORT=8001 python main_new.py",
     "dev:supabase": "supabase start",
     "build": "cd frontend && bun run build",
     "start": "cd frontend && bun run start",
@@ -28,6 +28,7 @@
     "@supabase/supabase-js": "^2.53.0",
     "concurrently": "^9.2.0",
     "dotenv": "^17.2.1",
+    "puppeteer": "^24.16.2",
     "supabase": "^2.31.8"
   },
   "devDependencies": {

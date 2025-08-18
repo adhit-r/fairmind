@@ -24,14 +24,14 @@ class SupabaseService:
         self.supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
         
         if not self.supabase_url or not self.supabase_key or create_client is None:
-            logger.warning("Supabase credentials not found or package not installed. Using mock data.")
+            logger.info("Supabase credentials not found. Using mock data for development.")
             self.client = None
         else:
             try:
                 self.client = create_client(self.supabase_url, self.supabase_key)
                 logger.info("Supabase client initialized successfully")
             except Exception as e:
-                logger.error(f"Failed to initialize Supabase client: {e}")
+                logger.info(f"Failed to initialize Supabase client: {e}. Using mock data for development.")
                 self.client = None
     
     def is_connected(self) -> bool:
