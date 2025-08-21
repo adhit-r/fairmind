@@ -1,0 +1,21 @@
+{
+  "total_models": 14,
+  "models": [
+    "storage/models/demo_org/credit_risk_v2.1.pkl",
+    "storage/models/demo_org/fraud_detection_v1.5.2.json",
+    "storage/models/demo_org/customer_segmentation_v1.0.pkl",
+    "storage/models/demo_org/sentiment_analysis_v1.2.1.json",
+    "storage/models/demo_org/chatbot_gpt4_finetuned.json",
+    "storage/models/demo_org/claude_content_gen_v1.1.json",
+    "storage/models/demo_org/medical_diagnosis_v1.0.json",
+    "storage/models/demo_org/recommendation_engine_v1.4.pkl",
+    "storage/models/admin_org/loan_approval_v3.0.json",
+    "storage/models/admin_org/hiring_assistant_v2.2.json",
+    "storage/models/admin_org/price_optimization_v1.3.pkl",
+    "storage/models/admin_org/inventory_forecast_v1.1.json",
+    "storage/models/admin_org/legal_assistant_gpt4.json",
+    "storage/models/admin_org/code_reviewer_claude.json"
+  ],
+  "generated_at": "2025-08-20T08:01:26.429168",
+  "storage_location": "storage/models"
+}

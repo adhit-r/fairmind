@@ -1,9 +1,9 @@
-import { ModelCatalog } from "@/components/model-catalog"
+import { EnhancedModelCatalog } from "@/components/features/model-catalog/enhanced-model-catalog"
 
 export default function ModelCatalogPage() {
   return (
     <div className="container mx-auto py-8">
-      <ModelCatalog />
+      <EnhancedModelCatalog />
     </div>
   )
 } 

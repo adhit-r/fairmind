@@ -1,0 +1,97 @@
+---
+import Layout from '../../layouts/Layout.astro';
+---
+
+<Layout title="Getting Started - Fairmind Documentation">
+  <div class="min-h-screen bg-gray-50">
+    <!-- Header -->
+    <div class="bg-white border-b border-gray-200">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div class="text-center">
+          <h1 class="text-4xl md:text-5xl font-bold text-gray-900 mb-6">
+            Getting Started with Fairmind
+          </h1>
+          <p class="text-xl text-gray-600 max-w-3xl mx-auto">
+            Get up and running with Fairmind in minutes. Learn the basics of bias detection and model governance.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <div class="bg-white rounded-lg shadow-lg p-8">
+        <div class="mb-8">
+          <img src="/screenshots/quick-start.png" alt="Quick Start Guide" class="w-full h-64 object-cover rounded-lg mb-6" />
+        </div>
+        
+        <div class="prose prose-lg max-w-none">
+          <h2>Welcome to Fairmind</h2>
+          <p>
+            Fairmind is a comprehensive AI governance platform that helps you build trustworthy AI systems. 
+            This guide will walk you through the essential steps to get started.
+          </p>
+          
+          <h3>Prerequisites</h3>
+          <ul>
+            <li>Python 3.9 or higher</li>
+            <li>Node.js 18 or higher</li>
+            <li>Basic understanding of machine learning concepts</li>
+          </ul>
+          
+          <h3>Installation</h3>
+          <p>Follow these steps to install and configure Fairmind:</p>
+          
+          <h4>1. Clone the Repository</h4>
+          <pre><code>git clone https://github.com/your-org/fairmind-ethical-sandbox.git
+cd fairmind-ethical-sandbox</code></pre>
+          
+          <h4>2. Install Dependencies</h4>
+          <pre><code>bun install
+cd backend && pip install -r requirements.txt</code></pre>
+          
+          <h4>3. Start the Development Servers</h4>
+          <pre><code>bun run dev</code></pre>
+          
+          <h3>Your First Bias Detection</h3>
+          <p>
+            Now that you have Fairmind running, let's perform your first bias detection analysis:
+          </p>
+          
+          <ol>
+            <li>Navigate to the bias detection section</li>
+            <li>Upload your dataset or select a sample dataset</li>
+            <li>Configure your bias detection parameters</li>
+            <li>Run the analysis and review the results</li>
+          </ol>
+          
+          <div class="bg-blue-50 border-l-4 border-blue-400 p-4 my-6">
+            <div class="flex">
+              <div class="flex-shrink-0">
+                <svg class="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                </svg>
+              </div>
+              <div class="ml-3">
+                <p class="text-sm text-blue-700">
+                  <strong>Tip:</strong> Start with the sample datasets to understand how bias detection works before using your own data.
+                </p>
+              </div>
+            </div>
+          </div>
+          
+          <h3>Next Steps</h3>
+          <p>
+            Now that you have the basics, explore these areas to deepen your understanding:
+          </p>
+          
+          <ul>
+            <li><a href="/docs/bias-detection">Bias Detection Guide</a> - Learn about different bias detection methods</li>
+            <li><a href="/docs/model-provenance">Model Provenance</a> - Track your model lineage and create audit trails</li>
+            <li><a href="/docs/monitoring">Monitoring & Analytics</a> - Set up real-time monitoring for your models</li>
+            <li><a href="/docs/api">API Reference</a> - Integrate Fairmind into your applications</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</Layout>

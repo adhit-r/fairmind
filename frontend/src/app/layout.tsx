@@ -1,19 +1,15 @@
 import type { Metadata } from "next"
-import { JetBrains_Mono } from "next/font/google"
+import { Inter } from "next/font/google"
 import "./globals.css"
+import "../styles/accessibility.css"
 import { AuthProvider } from "@/contexts/auth-context"
-import { AppSidebar } from "@/components/app-sidebar"
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
+import { MainLayout } from "@/components/core/layout/main-layout"
 
-const jetbrains = JetBrains_Mono({
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
-  variable: "--font-jetbrains",
-})
+const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "FairMind - Simulated Ethical Sandbox™",
-  description: "Test your AI models in synthetic, high-stakes scenarios to uncover ethical risks before deployment.",
+  title: "Fairmind - AI Governance Platform",
+  description: "Comprehensive AI governance, bias detection, and compliance platform for responsible AI development.",
 }
 
 export default function RootLayout({
@@ -22,17 +18,12 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
-      <body className={`${jetbrains.className} font-mono`}>
+    <html lang="en" className="neo-base">
+      <body className={`${inter.className} min-h-screen bg-gray-50`}>
         <AuthProvider>
-          <SidebarProvider>
-            <AppSidebar />
-            <SidebarInset>
-              <div className="h-full overflow-y-auto bg-background p-6">
-                {children}
-              </div>
-            </SidebarInset>
-          </SidebarProvider>
+          <MainLayout>
+            {children}
+          </MainLayout>
         </AuthProvider>
       </body>
     </html>

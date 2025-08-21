@@ -4,7 +4,7 @@ const path = require('path');
 const dotenv = require('dotenv');
 
 // Load environment variables from .env.local
-dotenv.config({ path: path.resolve(__dirname, '../.env.local') });
+dotenv.config({ path: path.resolve(__dirname, '../../.env.local') });
 
 async function runSQLFile(client, filePath) {
   try {

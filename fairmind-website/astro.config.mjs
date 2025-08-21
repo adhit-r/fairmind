@@ -1,7 +1,6 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
 import tailwind from '@astrojs/tailwind';
-import image from '@astrojs/image';
 
 // https://astro.build/config
 export default defineConfig({
@@ -9,19 +8,10 @@ export default defineConfig({
   base: '/',
   output: 'static',
   trailingSlash: 'ignore',
-  build: {
-    format: 'file',
-    inlineStylesheets: 'auto',
-    assets: '_assets',
-  },
   integrations: [
     tailwind({
       // Tailwind configuration is automatically loaded from tailwind.config.js
-      // Disable applying base styles since we handle them in global.css
-      applyBaseStyles: false,
-    }),
-    image({
-      serviceEntryPoint: '@astrojs/image/sharp',
+      applyBaseStyles: true,
     }),
   ],
   vite: {
@@ -36,9 +26,5 @@ export default defineConfig({
       minify: true,
       target: 'esnext',
     }
-  },
-  // Enable prefetch for better performance
-  prefetch: {
-    prefetchAll: true,
   },
 });

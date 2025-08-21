@@ -1,224 +1,259 @@
-import { 
-  ApiResponse, 
-  AIModel, 
-  Simulation, 
-  BiasAnalysisConfig,
-  BiasAnalysisResult,
-  Dataset,
-  SimulationConfig
-} from '@/types';
+// Fairmind API Client
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001';
+export interface Dataset {
+  name: string
+  samples: number
+  columns: string[]
+  description: string
+}
 
-export class FairmindAPI {
-  private static instance: FairmindAPI;
-  private baseUrl: string;
-  private headers: HeadersInit;
+export interface BiasAnalysisRequest {
+  dataset_name: string
+  target_column: string
+  sensitive_columns: string[]
+  custom_rules?: any[]
+  llm_enabled?: boolean
+  llm_prompt?: string
+  simulation_enabled?: boolean
+}
 
-  private constructor(baseUrl: string = API_BASE_URL) {
-    this.baseUrl = baseUrl;
-    this.headers = {
-      'Content-Type': 'application/json',
-    };
-  }
+export interface BiasAnalysisResult {
+  dataset_name: string
+  total_samples: number
+  overall_score: number
+  assessment_status: string
+  issues_found: Array<{
+    type: string
+    severity: string
+    description: string
+    details: any
+  }>
+  bias_details: Record<string, any>
+  recommendations: string[]
+  custom_rules_results: any[]
+  llm_analysis?: any
+  simulation_results?: any
+}
 
-  static getInstance(): FairmindAPI {
-    if (!FairmindAPI.instance) {
-      FairmindAPI.instance = new FairmindAPI();
-    }
-    return FairmindAPI.instance;
+export interface ModelProvenanceRequest {
+  model_name: string
+  model_type: string
+  dataset_name: string
+  training_parameters: Record<string, any>
+  performance_metrics: Record<string, any>
+}
+
+export interface ProvenanceResult {
+  model_id: string
+  signature: string
+  timestamp: string
+  lineage: any
+  audit_trail: any[]
+}
+
+export interface SecurityScanRequest {
+  model_id: string
+  scan_type: 'owasp' | 'comprehensive'
+  parameters?: Record<string, any>
+}
+
+export interface SecurityScanResult {
+  scan_id: string
+  vulnerabilities: any[]
+  risk_score: number
+  recommendations: string[]
+  compliance_status: Record<string, boolean>
+}
+
+class FairmindAPI {
+  private baseURL: string
+
+  constructor(baseURL: string = API_BASE_URL) {
+    this.baseURL = baseURL
   }
 
   private async request<T>(
-    endpoint: string, 
+    endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
-    const url = `${this.baseUrl}${endpoint}`;
-    const config: RequestInit = {
-      headers: this.headers,
-      ...options,
-    };
+    const url = `${this.baseURL}${endpoint}`
+    
+    const defaultOptions: RequestInit = {
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    }
 
+    const response = await fetch(url, { ...defaultOptions, ...options })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.detail || `HTTP error! status: ${response.status}`)
+    }
+
+    return response.json()
+  }
+
+  // Bias Detection Methods
+  async getAvailableDatasets(): Promise<Dataset[]> {
     try {
-      const response = await fetch(url, config);
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.detail || data.error || `HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      return data;
+      const response = await this.request<{ success: boolean; datasets: Dataset[] }>('/api/v1/bias/datasets/available')
+      return response.datasets || []
     } catch (error) {
-      console.error('API request failed:', error);
-      throw error;
+      console.error('Error fetching datasets:', error)
+      // Return mock data for development
+      return [
+        {
+          name: 'Credit Risk Dataset',
+          samples: 10000,
+          columns: ['age', 'income', 'credit_score', 'loan_amount', 'gender', 'race'],
+          description: 'Credit risk assessment dataset'
+        },
+        {
+          name: 'Fraud Detection Dataset',
+          samples: 50000,
+          columns: ['transaction_amount', 'location', 'time', 'user_id', 'device_type'],
+          description: 'Financial fraud detection dataset'
+        }
+      ]
     }
   }
 
-  // Models
-  async getModels(orgId?: string): Promise<AIModel[]> {
-    try {
-      const endpoint = orgId ? `/models?org_id=${orgId}` : '/models';
-      const response = await this.request<{ data: AIModel[] }>(endpoint);
-      return response.data || [];
-    } catch (error) {
-      this.handleError(error, 'Failed to fetch models');
-      return [];
-    }
+  async getDatasetInfo(datasetName: string): Promise<any> {
+    const response = await this.request<{ success: boolean; dataset_info: any }>(`/bias/dataset-info/${datasetName}`)
+    return response.dataset_info
   }
 
-  async uploadModel(file: File, metadata?: Partial<AIModel>): Promise<{ path: string; validation?: string }> {
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      if (metadata?.framework) {
-        formData.append('framework', metadata.framework);
-      }
-      if (metadata?.name) {
-        formData.append('model_id', metadata.name);
-      }
+  async analyzeDatasetBias(request: BiasAnalysisRequest): Promise<BiasAnalysisResult> {
+    const formData = new FormData()
+    formData.append('dataset_name', request.dataset_name)
+    formData.append('target_column', request.target_column)
+    formData.append('sensitive_columns', JSON.stringify(request.sensitive_columns))
+    formData.append('custom_rules', JSON.stringify(request.custom_rules || []))
+    formData.append('llm_enabled', request.llm_enabled?.toString() || 'false')
+    formData.append('llm_prompt', request.llm_prompt || '')
+    formData.append('simulation_enabled', request.simulation_enabled?.toString() || 'false')
 
-      const response = await fetch(`${this.baseUrl}/models/upload`, {
-        method: 'POST',
-        body: formData,
-      });
+    const response = await fetch(`${this.baseURL}/api/v1/bias/analyze-real`, {
+      method: 'POST',
+      body: formData,
+    })
 
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.detail || 'Model upload failed');
-      }
-
-      return data;
-    } catch (error) {
-      this.handleError(error, 'Failed to upload model');
-      throw error;
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.detail || `HTTP error! status: ${response.status}`)
     }
+
+    const result = await response.json()
+    return result.data
   }
 
-  // Datasets
-  async getDatasets(orgId?: string): Promise<Dataset[]> {
-    try {
-      const endpoint = orgId ? `/datasets?org_id=${orgId}` : '/datasets';
-      const response = await this.request<{ data: Dataset[] }>(endpoint);
-      return response.data || [];
-    } catch (error) {
-      this.handleError(error, 'Failed to fetch datasets');
-      return [];
+  async analyzeDatasetComprehensive(datasetName: string, targetColumn: string, sensitiveColumns: string[]): Promise<any> {
+    const formData = new FormData()
+    formData.append('dataset_name', datasetName)
+    formData.append('target_column', targetColumn)
+    formData.append('sensitive_columns', JSON.stringify(sensitiveColumns))
+
+    const response = await fetch(`${this.baseURL}/api/v1/bias/analyze-comprehensive`, {
+      method: 'POST',
+      body: formData,
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.detail || `HTTP error! status: ${response.status}`)
     }
+
+    const result = await response.json()
+    return result.data
   }
 
-  async uploadDataset(file: File): Promise<{ path: string }> {
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
+  async mitigateBias(datasetName: string, targetColumn: string, sensitiveColumns: string[], 
+                    privilegedGroups: Record<string, any>, unprivilegedGroups: Record<string, any>): Promise<any> {
+    const formData = new FormData()
+    formData.append('dataset_name', datasetName)
+    formData.append('target_column', targetColumn)
+    formData.append('sensitive_columns', JSON.stringify(sensitiveColumns))
+    formData.append('privileged_groups', JSON.stringify(privilegedGroups))
+    formData.append('unprivileged_groups', JSON.stringify(unprivilegedGroups))
 
-      const response = await fetch(`${this.baseUrl}/datasets/upload`, {
-        method: 'POST',
-        body: formData,
-      });
+    const response = await fetch(`${this.baseURL}/bias/mitigate-bias`, {
+      method: 'POST',
+      body: formData,
+    })
 
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.detail || 'Dataset upload failed');
-      }
-
-      return data;
-    } catch (error) {
-      this.handleError(error, 'Failed to upload dataset');
-      throw error;
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.detail || `HTTP error! status: ${response.status}`)
     }
+
+    const result = await response.json()
+    return result.data
   }
 
-  async generateDataset(config: {
-    row_count: number;
-    schema: { columns: Array<{ name: string; dtype: string }> };
-    engine?: string;
-  }): Promise<{ path: string }> {
-    try {
-      const response = await this.request<{ path: string }>('/datasets/generate', {
-        method: 'POST',
-        body: JSON.stringify(config),
-      });
-      return response;
-    } catch (error) {
-      this.handleError(error, 'Failed to generate dataset');
-      throw error;
-    }
+  async analyzeModelBias(modelId: string, datasetName: string, targetColumn: string, sensitiveColumns: string[]): Promise<any> {
+    const response = await this.request<{ success: boolean; data: any }>('/bias/analyze-model', {
+      method: 'POST',
+      body: JSON.stringify({
+        model_id: modelId,
+        dataset_name: datasetName,
+        target_column: targetColumn,
+        sensitive_columns: sensitiveColumns
+      })
+    })
+    return response.data
   }
 
-  // Bias Analysis
-  async analyzeBias(config: BiasAnalysisConfig): Promise<BiasAnalysisResult> {
-    try {
-      const response = await this.request<BiasAnalysisResult>('/analyze/bias', {
-        method: 'POST',
-        body: JSON.stringify({
-          model_path: config.modelPath,
-          dataset_path: config.datasetPath,
-          target: config.target,
-          features: config.features,
-          protected_attributes: config.protectedAttributes
-        }),
-      });
-      return response;
-    } catch (error) {
-      this.handleError(error, 'Bias analysis failed');
-      throw error;
-    }
+  // Model Provenance Methods
+  async createModelProvenance(request: ModelProvenanceRequest): Promise<ProvenanceResult> {
+    const response = await this.request<{ success: boolean; data: ProvenanceResult }>('/provenance/model', {
+      method: 'POST',
+      body: JSON.stringify(request)
+    })
+    return response.data
   }
 
-  // Simulations
-  async runSimulation(config: SimulationConfig): Promise<Simulation> {
-    try {
-      const response = await this.request<Simulation>('/simulation/run', {
-        method: 'POST',
-        body: JSON.stringify(config),
-      });
-      return response;
-    } catch (error) {
-      this.handleError(error, 'Simulation failed');
-      throw error;
-    }
+  async getModelProvenance(modelId: string): Promise<ProvenanceResult> {
+    const response = await this.request<{ success: boolean; data: ProvenanceResult }>(`/provenance/model/${modelId}`)
+    return response.data
   }
 
-  async getRecentSimulations(orgId?: string, limit: number = 10): Promise<Simulation[]> {
-    try {
-      const endpoint = orgId ? `/simulations/recent?org_id=${orgId}&limit=${limit}` : `/simulations/recent?limit=${limit}`;
-      const response = await this.request<Simulation[]>(endpoint);
-      return response || [];
-    } catch (error) {
-      this.handleError(error, 'Failed to fetch recent simulations');
-      return [];
-    }
+  async verifyModelSignature(modelId: string): Promise<{ valid: boolean; details: any }> {
+    const response = await this.request<{ success: boolean; data: { valid: boolean; details: any } }>(`/provenance/verify/${modelId}`)
+    return response.data
   }
 
-  // Metrics
-  async getMetricsSummary(orgId?: string): Promise<any> {
-    try {
-      const endpoint = orgId ? `/metrics/summary?company=${orgId}` : '/metrics/summary';
-      const response = await this.request<any>(endpoint);
-      return response;
-    } catch (error) {
-      this.handleError(error, 'Failed to fetch metrics summary');
-      return null;
-    }
+  // Security & Compliance Methods
+  async scanModelSecurity(request: SecurityScanRequest): Promise<SecurityScanResult> {
+    const response = await this.request<{ success: boolean; data: SecurityScanResult }>('/security/scan', {
+      method: 'POST',
+      body: JSON.stringify(request)
+    })
+    return response.data
   }
 
-  // Health check
-  async healthCheck(): Promise<{ status: string }> {
-    try {
-      const response = await this.request<{ status: string }>('/health');
-      return response;
-    } catch (error) {
-      this.handleError(error, 'Health check failed');
-      throw error;
-    }
+  async getComplianceReport(modelId: string): Promise<any> {
+    const response = await this.request<{ success: boolean; data: any }>(`/compliance/report/${modelId}`)
+    return response.data
   }
 
-  private handleError(error: unknown, message: string): void {
-    console.error(message, error);
-    // Could integrate with error reporting service here
-    // Could also dispatch to a global error store
+  // Monitoring Methods
+  async getModelMetrics(modelId: string): Promise<any> {
+    const response = await this.request<{ success: boolean; data: any }>(`/monitoring/metrics/${modelId}`)
+    return response.data
+  }
+
+  async getDriftAnalysis(modelId: string): Promise<any> {
+    const response = await this.request<{ success: boolean; data: any }>(`/monitoring/drift/${modelId}`)
+    return response.data
+  }
+
+  // Health Check
+  async healthCheck(): Promise<{ status: string; version: string }> {
+    return this.request<{ status: string; version: string }>('/health')
   }
 }
 
-// Export singleton instance
-export const fairmindAPI = FairmindAPI.getInstance();
+export const fairmindAPI = new FairmindAPI()

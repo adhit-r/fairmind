@@ -45,6 +45,19 @@ from models.ai_circus import (
     create_test_scenarios, create_stress_tests, create_edge_cases, create_adversarial_challenges,
     run_comprehensive_test, create_circus_dashboard_data
 )
+from models.ai_bom import (
+    BOMItem, BOMDocument, BOMAnalysis, BOMScanResult, BOMScanRequest,
+    BOMItemType, RiskLevel, ComplianceStatus, Vulnerability, LicenseInfo
+)
+from services.bom_scanner import BOMScanner
+
+# OWASP AI/LLM Security imports
+from models.owasp_ai_security import (
+    SecurityTest, TestResult, SecurityAnalysis, SecurityTestRequest,
+    ModelInventoryItem, OWASPCategory, SecuritySeverity
+)
+from services.owasp_security_tester import OWASPSecurityTester
+from services.bias_detection_service import BiasDetectionService
 from models.ai_ethics_observatory import (
     EthicsFramework, EthicsViolation, EthicsScore,
     create_ethics_frameworks, assess_model_ethics, create_observatory_dashboard_data
@@ -840,6 +853,51 @@ async def get_models(page: int = 1, limit: int = 10, company: Optional[str] = No
         raise HTTPException(status_code=500, detail=f"Failed to fetch models: {str(e)}")
 
 
+@app.get("/activity/recent")
+async def get_recent_activity(limit: int = 10, company: Optional[str] = None, org_id: Optional[str] = None):
+    """Get recent activity for dashboard"""
+    try:
+        # Mock recent activity data
+        activities = [
+            {
+                "id": "1",
+                "type": "model_upload",
+                "title": "New Model Uploaded",
+                "description": "Credit Risk Model v2.1 uploaded by John Doe",
+                "timestamp": "2 minutes ago",
+                "status": "success"
+            },
+            {
+                "id": "2",
+                "type": "analysis_complete",
+                "title": "Bias Analysis Complete",
+                "description": "Gender bias analysis completed for Loan Approval Model",
+                "timestamp": "15 minutes ago",
+                "status": "warning"
+            },
+            {
+                "id": "3",
+                "type": "security_alert",
+                "title": "Security Vulnerability Detected",
+                "description": "OWASP A01 vulnerability found in Chatbot Model",
+                "timestamp": "1 hour ago",
+                "status": "error"
+            },
+            {
+                "id": "4",
+                "type": "compliance_check",
+                "title": "Compliance Check Passed",
+                "description": "EU AI Act compliance check passed for all models",
+                "timestamp": "2 hours ago",
+                "status": "success"
+            }
+        ]
+        
+        return {"success": True, "data": activities[:limit]}
+    except Exception as e:
+        logger.error(f"Error fetching recent activity: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch recent activity: {str(e)}")
+
 @app.get("/simulations/recent")
 async def get_recent_simulations(limit: int = 10, company: Optional[str] = None, org_id: Optional[str] = None):
     try:
@@ -1000,6 +1058,515 @@ async def get_ai_bill_requirements():
     except Exception as e:
         logger.error(f"Error fetching AI Bill requirements: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch AI Bill requirements: {str(e)}")
+
+# AI/ML Bill of Materials (BOM) Endpoints
+bom_scanner = BOMScanner()
+
+# OWASP AI/LLM Security Endpoints
+owasp_tester = OWASPSecurityTester()
+
+@app.post("/bom/scan")
+async def scan_project_bom(request: BOMScanRequest):
+    """Scan a project and generate a comprehensive BOM"""
+    try:
+        logger.info(f"Starting BOM scan for project: {request.project_path}")
+        
+        scan_result = await bom_scanner.scan_project(request)
+        
+        return {
+            "success": True,
+            "data": scan_result,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error scanning project BOM: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to scan project BOM: {str(e)}")
+
+@app.get("/bom/list")
+async def list_bom_documents(page: int = 1, limit: int = 10):
+    """List BOM documents"""
+    try:
+        # Mock BOM documents for now
+        bom_documents = [
+            {
+                "id": "bom_001",
+                "name": "Fairmind Frontend BOM",
+                "version": "1.0.0",
+                "project_name": "fairmind-frontend",
+                "total_components": 45,
+                "created_at": "2024-01-15T10:30:00Z",
+                "risk_level": "low"
+            },
+            {
+                "id": "bom_002", 
+                "name": "Fairmind Backend BOM",
+                "version": "1.0.0",
+                "project_name": "fairmind-backend",
+                "total_components": 32,
+                "created_at": "2024-01-15T11:00:00Z",
+                "risk_level": "medium"
+            }
+        ]
+        
+        # Pagination
+        start_idx = (page - 1) * limit
+        end_idx = start_idx + limit
+        paginated_documents = bom_documents[start_idx:end_idx]
+        
+        return {
+            "success": True,
+            "data": {
+                "documents": paginated_documents,
+                "total": len(bom_documents),
+                "page": page,
+                "limit": limit,
+                "total_pages": (len(bom_documents) + limit - 1) // limit
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error listing BOM documents: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to list BOM documents: {str(e)}")
+
+@app.get("/bom/{bom_id}")
+async def get_bom_document(bom_id: str):
+    """Get a specific BOM document"""
+    try:
+        # Mock BOM document for now
+        bom_document = {
+            "id": bom_id,
+            "name": f"BOM Document {bom_id}",
+            "version": "1.0.0",
+            "project_name": "fairmind-project",
+            "description": "Comprehensive BOM for Fairmind project",
+            "components": [
+                {
+                    "id": "pytorch-2.0",
+                    "name": "PyTorch",
+                    "version": "2.0.1",
+                    "type": "framework",
+                    "license": "BSD-3-Clause",
+                    "source": "https://pytorch.org/",
+                    "risk_level": "low",
+                    "compliance_status": "compliant",
+                    "description": "Deep learning framework for Python"
+                },
+                {
+                    "id": "transformers-4.35",
+                    "name": "Transformers",
+                    "version": "4.35.0",
+                    "type": "library",
+                    "license": "Apache-2.0",
+                    "source": "https://huggingface.co/transformers",
+                    "risk_level": "low",
+                    "compliance_status": "compliant",
+                    "description": "State-of-the-art Natural Language Processing"
+                }
+            ],
+            "analysis": {
+                "total_components": 2,
+                "risk_distribution": {"low": 2},
+                "compliance_summary": {"compliant": 2},
+                "license_distribution": {"BSD-3-Clause": 1, "Apache-2.0": 1},
+                "critical_issues": [],
+                "recommendations": ["BOM appears to be in good standing"]
+            }
+        }
+        
+        return {
+            "success": True,
+            "data": bom_document,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error fetching BOM document {bom_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch BOM document: {str(e)}")
+
+@app.post("/bom/export/{bom_id}")
+async def export_bom_document(bom_id: str, format: str = "json"):
+    """Export BOM document in specified format"""
+    try:
+        # Mock BOM document
+        bom_document = BOMDocument(
+            id=bom_id,
+            name=f"BOM Document {bom_id}",
+            version="1.0.0",
+            project_name="fairmind-project",
+            project_version="1.0.0",
+            description="Comprehensive BOM for Fairmind project",
+            components=[
+                BOMItem(
+                    id="pytorch-2.0",
+                    name="PyTorch",
+                    version="2.0.1",
+                    type=BOMItemType.FRAMEWORK,
+                    license="BSD-3-Clause",
+                    source="https://pytorch.org/",
+                    description="Deep learning framework for Python"
+                )
+            ]
+        )
+        
+        exported_content = await bom_scanner.export_bom(bom_document, format)
+        
+        return {
+            "success": True,
+            "data": {
+                "bom_id": bom_id,
+                "format": format,
+                "content": exported_content,
+                "filename": f"bom_{bom_id}.{format}"
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error exporting BOM document {bom_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to export BOM document: {str(e)}")
+
+@app.get("/bom/analysis/{bom_id}")
+async def get_bom_analysis(bom_id: str):
+    """Get detailed analysis of a BOM document"""
+    try:
+        # Mock analysis
+        analysis = {
+            "bom_id": bom_id,
+            "total_components": 15,
+            "risk_distribution": {
+                "low": 10,
+                "medium": 3,
+                "high": 1,
+                "critical": 1
+            },
+            "compliance_summary": {
+                "compliant": 12,
+                "non_compliant": 2,
+                "pending": 1
+            },
+            "license_distribution": {
+                "MIT": 5,
+                "Apache-2.0": 4,
+                "BSD-3-Clause": 3,
+                "GPL-3.0": 2,
+                "Proprietary": 1
+            },
+            "vulnerability_summary": {
+                "low": 2,
+                "medium": 1,
+                "high": 0,
+                "critical": 0
+            },
+            "critical_issues": [
+                {
+                    "component": "requests",
+                    "version": "2.25.1",
+                    "issue": "Critical vulnerability",
+                    "details": "CVE-2023-1234: Remote code execution vulnerability"
+                }
+            ],
+            "recommendations": [
+                "Update requests package to version 2.28.0 or higher",
+                "Review license compliance for GPL-3.0 components",
+                "Consider alternatives for proprietary components"
+            ]
+        }
+        
+        return {
+            "success": True,
+            "data": analysis,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error fetching BOM analysis {bom_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch BOM analysis: {str(e)}")
+
+@app.post("/bom/generate-comprehensive")
+async def generate_comprehensive_aibom(request: BOMScanRequest):
+    """Generate a comprehensive AIBOM with advanced analysis"""
+    try:
+        logger.info(f"Generating comprehensive AIBOM for project: {request.project_path}")
+        
+        # Generate basic BOM
+        scan_result = await bom_scanner.scan_project(request)
+        
+        if not scan_result.bom_document:
+            raise HTTPException(status_code=400, detail="Failed to generate BOM document")
+        
+        # Enhanced analysis
+        comprehensive_analysis = {
+            "aibom_version": "1.0.0",
+            "metadata": {
+                "created": datetime.now().isoformat(),
+                "creator": "Fairmind AI",
+                "description": f"Comprehensive AIBOM for {request.project_path}",
+                "scan_type": request.scan_type,
+                "scan_duration": scan_result.scan_duration
+            },
+            "model_inventory": {
+                "total_models": len([c for c in scan_result.bom_document.components if c.type == BOMItemType.MODEL]),
+                "model_types": list(set([c.name for c in scan_result.bom_document.components if c.type == BOMItemType.MODEL])),
+                "total_size": sum([float(c.size.replace('MB', '')) if c.size and 'MB' in c.size else 0 for c in scan_result.bom_document.components if c.type == BOMItemType.MODEL])
+            },
+            "data_inventory": {
+                "total_datasets": len([c for c in scan_result.bom_document.components if c.type == BOMItemType.DATASET]),
+                "dataset_types": list(set([c.name for c in scan_result.bom_document.components if c.type == BOMItemType.DATASET])),
+                "total_size": sum([float(c.size.replace('GB', '')) * 1024 if c.size and 'GB' in c.size else float(c.size.replace('MB', '')) if c.size and 'MB' in c.size else 0 for c in scan_result.bom_document.components if c.type == BOMItemType.DATASET])
+            },
+            "dependency_analysis": {
+                "total_dependencies": len([c for c in scan_result.bom_document.components if c.type == BOMItemType.LIBRARY]),
+                "framework_count": len([c for c in scan_result.bom_document.components if c.type == BOMItemType.FRAMEWORK]),
+                "license_compliance": {
+                    "compliant": len([c for c in scan_result.bom_document.components if c.compliance_status == ComplianceStatus.COMPLIANT]),
+                    "non_compliant": len([c for c in scan_result.bom_document.components if c.compliance_status == ComplianceStatus.NON_COMPLIANT]),
+                    "pending": len([c for c in scan_result.bom_document.components if c.compliance_status == ComplianceStatus.PENDING])
+                }
+            },
+            "security_analysis": {
+                "total_vulnerabilities": sum([len(c.vulnerabilities) for c in scan_result.bom_document.components]),
+                "critical_vulnerabilities": sum([len([v for v in c.vulnerabilities if v.get('severity') == 'critical']) for c in scan_result.bom_document.components]),
+                "high_vulnerabilities": sum([len([v for v in c.vulnerabilities if v.get('severity') == 'high']) for c in scan_result.bom_document.components]),
+                "vulnerability_sources": list(set([v.get('source', 'unknown') for c in scan_result.bom_document.components for v in c.vulnerabilities]))
+            },
+            "risk_assessment": {
+                "overall_risk": "medium",
+                "risk_factors": [
+                    "High number of dependencies",
+                    "Critical vulnerabilities detected",
+                    "License compliance issues"
+                ],
+                "risk_score": 7.5,
+                "risk_level": "medium"
+            },
+            "compliance_status": {
+                "eu_ai_act": "partially_compliant",
+                "nist_rmf": "compliant",
+                "gdpr": "compliant",
+                "missing_requirements": [
+                    "Complete model documentation",
+                    "Bias assessment report",
+                    "Privacy impact assessment"
+                ]
+            },
+            "recommendations": [
+                "Update vulnerable dependencies immediately",
+                "Conduct comprehensive bias assessment",
+                "Review license compliance for all components",
+                "Implement automated vulnerability scanning",
+                "Create model documentation and user guides"
+            ],
+            "reproducibility": {
+                "environment_defined": True,
+                "training_scripts_available": True,
+                "model_weights_stored": True,
+                "configuration_documented": True,
+                "reproducibility_score": 8.5
+            }
+        }
+        
+        return {
+            "success": True,
+            "data": {
+                "scan_result": scan_result,
+                "comprehensive_analysis": comprehensive_analysis
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error generating comprehensive AIBOM: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate comprehensive AIBOM: {str(e)}")
+
+# OWASP Top 10 AI/LLM Security Endpoints
+@app.get("/owasp/tests")
+async def get_available_tests():
+    """Get list of available OWASP security tests"""
+    try:
+        tests = await owasp_tester.get_available_tests()
+        return {
+            "success": True,
+            "data": tests,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error fetching available tests: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch available tests: {str(e)}")
+
+@app.get("/owasp/categories")
+async def get_test_categories():
+    """Get list of OWASP test categories"""
+    try:
+        categories = await owasp_tester.get_test_categories()
+        return {
+            "success": True,
+            "data": categories,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error fetching test categories: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch test categories: {str(e)}")
+
+@app.get("/owasp/models")
+async def get_model_inventory():
+    """Get list of models available for security testing"""
+    try:
+        models = await owasp_tester.get_model_inventory()
+        return {
+            "success": True,
+            "data": models,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error fetching model inventory: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch model inventory: {str(e)}")
+
+@app.post("/owasp/analyze")
+async def run_security_analysis(request: SecurityTestRequest):
+    """Run OWASP security analysis on a model"""
+    try:
+        logger.info(f"Starting OWASP security analysis for model: {request.model_id}")
+        
+        analysis = await owasp_tester.run_security_analysis(request)
+        
+        return {
+            "success": True,
+            "data": analysis,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error running security analysis: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to run security analysis: {str(e)}")
+
+@app.get("/owasp/analysis/{analysis_id}")
+async def get_security_analysis(analysis_id: str):
+    """Get a specific security analysis result"""
+    try:
+        # Mock analysis result - in production, this would query the database
+        analysis = {
+            "analysis_id": analysis_id,
+            "model_id": "model_001",
+            "created_at": "2024-01-15T10:30:00Z",
+            "overall_score": 85.5,
+            "risk_level": "medium",
+            "total_tests": 11,
+            "passed_tests": 8,
+            "failed_tests": 2,
+            "warning_tests": 1,
+            "critical_issues": 1,
+            "high_issues": 1,
+            "medium_issues": 0,
+            "low_issues": 0,
+            "test_results": [
+                {
+                    "test_id": "A01_001",
+                    "category": "A01:2023 - Prompt Injection",
+                    "name": "Prompt Injection Detection",
+                    "description": "Test for prompt injection vulnerabilities",
+                    "severity": "high",
+                    "status": "failed",
+                    "details": {
+                        "patterns_tested": 10,
+                        "vulnerabilities_found": [
+                            {
+                                "pattern": "Ignore previous instructions",
+                                "severity": "high",
+                                "description": "Potential prompt injection detected"
+                            }
+                        ]
+                    },
+                    "recommendations": [
+                        "Implement input validation and sanitization",
+                        "Use prompt engineering techniques"
+                    ]
+                }
+            ],
+            "summary": {
+                "model_info": {
+                    "id": "model_001",
+                    "name": "GPT-4 Chatbot",
+                    "version": "1.0.0",
+                    "type": "language_model",
+                    "framework": "OpenAI"
+                },
+                "test_coverage": {
+                    "total_tests": 11,
+                    "categories_tested": ["A01:2023 - Prompt Injection", "A02:2023 - Insecure Output Handling"],
+                    "automated_tests": 8,
+                    "manual_tests": 3
+                },
+                "risk_distribution": {
+                    "critical": 1,
+                    "high": 1,
+                    "medium": 0,
+                    "low": 0
+                }
+            },
+            "recommendations": [
+                "Address critical security vulnerabilities immediately",
+                "Implement robust input validation and sanitization",
+                "Use prompt engineering techniques to prevent injection attacks"
+            ]
+        }
+        
+        return {
+            "success": True,
+            "data": analysis,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error fetching security analysis {analysis_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch security analysis: {str(e)}")
+
+@app.get("/owasp/analysis")
+async def list_security_analyses(page: int = 1, limit: int = 10):
+    """List security analysis results"""
+    try:
+        # Mock analysis list - in production, this would query the database
+        analyses = [
+            {
+                "analysis_id": "owasp_analysis_20240115_103000_1234",
+                "model_id": "model_001",
+                "model_name": "GPT-4 Chatbot",
+                "created_at": "2024-01-15T10:30:00Z",
+                "overall_score": 85.5,
+                "risk_level": "medium",
+                "total_tests": 11,
+                "passed_tests": 8,
+                "failed_tests": 2,
+                "critical_issues": 1,
+                "high_issues": 1
+            },
+            {
+                "analysis_id": "owasp_analysis_20240115_110000_5678",
+                "model_id": "model_002",
+                "model_name": "Bias Detection Model",
+                "created_at": "2024-01-15T11:00:00Z",
+                "overall_score": 92.0,
+                "risk_level": "low",
+                "total_tests": 11,
+                "passed_tests": 10,
+                "failed_tests": 0,
+                "critical_issues": 0,
+                "high_issues": 0
+            }
+        ]
+        
+        # Pagination
+        start_idx = (page - 1) * limit
+        end_idx = start_idx + limit
+        paginated_analyses = analyses[start_idx:end_idx]
+        
+        return {
+            "success": True,
+            "data": {
+                "analyses": paginated_analyses,
+                "total": len(analyses),
+                "page": page,
+                "limit": limit,
+                "total_pages": (len(analyses) + limit - 1) // limit
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error listing security analyses: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to list security analyses: {str(e)}")
 
 # Placeholder endpoints - to be implemented with actual ML algorithms
 @app.post("/analyze/bias")
@@ -1216,6 +1783,65 @@ async def detect_model_drift(model_id: str, current_data: List[Dict[str, Any]], 
 @app.websocket("/ws")
 async def websocket(websocket: WebSocket):
     await websocket_endpoint(websocket)
+
+# Model Bias Analysis
+@app.post("/bias/analyze")
+async def run_bias_analysis(request: dict):
+    """Run comprehensive bias analysis on a model-dataset combination"""
+    try:
+        model_id = request.get("model_id")
+        dataset_id = request.get("dataset_id")
+        sensitive_attributes = request.get("sensitive_attributes", [])
+        target_column = request.get("target_column")
+        analysis_type = request.get("analysis_type", "comprehensive")
+        
+        if not all([model_id, dataset_id, target_column]):
+            raise HTTPException(status_code=400, detail="Missing required parameters")
+        
+        # Load the dataset
+        dataset_path = None
+        if dataset_id == "diabetes":
+            dataset_path = "datasets/diabetes.csv"
+        elif dataset_id == "titanic":
+            dataset_path = "datasets/titanic.csv"
+        elif dataset_id == "credit_fraud":
+            dataset_path = "datasets/credit_fraud.csv"
+        else:
+            raise HTTPException(status_code=404, detail="Dataset not found")
+        
+        if not os.path.exists(dataset_path):
+            raise HTTPException(status_code=404, detail="Dataset file not found")
+        
+        # Load dataset
+        df = pd.read_csv(dataset_path)
+        
+        # Initialize bias detection service
+        bias_service = BiasDetectionService()
+        
+        # Run bias analysis
+        analysis_results = bias_service.analyze_dataset_bias(
+            df=df,
+            sensitive_attributes=sensitive_attributes,
+            target_column=target_column
+        )
+        
+        # Add model information
+        analysis_results["model_info"] = {
+            "model_id": model_id,
+            "dataset_id": dataset_id,
+            "analysis_type": analysis_type,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        return {
+            "success": True,
+            "data": analysis_results,
+            "message": "Bias analysis completed successfully"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in bias analysis: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Bias analysis failed: {str(e)}")
 
 # Geographic Bias Detection
 @app.post("/analyze/geographic-bias", response_model=GeographicBiasResponse)
@@ -2000,6 +2626,439 @@ async def test_email():
     except Exception as e:
         logger.error(f"Error sending test email: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Test email failed: {str(e)}")
+
+from services.real_bias_detection_service import RealBiasDetectionService
+from services.model_provenance_service import ModelProvenanceService
+
+# Initialize real bias detection service
+real_bias_service = RealBiasDetectionService()
+
+# Initialize model provenance service
+provenance_service = ModelProvenanceService()
+
+@app.get("/datasets/available")
+async def get_available_datasets():
+    """Get list of available datasets for bias analysis"""
+    try:
+        datasets = real_bias_service.get_available_datasets()
+        return {
+            "success": True,
+            "data": datasets,
+            "message": f"Found {len(datasets)} available datasets"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "Failed to get available datasets"
+        }
+
+@app.post("/bias/analyze-real")
+async def analyze_dataset_bias(request: dict):
+    """Perform real bias analysis on a dataset"""
+    try:
+        dataset_name = request.get("dataset_name")
+        target_column = request.get("target_column")
+        sensitive_columns = request.get("sensitive_columns", [])
+        
+        if not dataset_name or not target_column:
+            return {
+                "success": False,
+                "error": "dataset_name and target_column are required"
+            }
+        
+        # Perform real bias analysis
+        results = real_bias_service.analyze_dataset_bias(
+            dataset_name=dataset_name,
+            target_column=target_column,
+            sensitive_columns=sensitive_columns
+        )
+        
+        if "error" in results:
+            return {
+                "success": False,
+                "error": results["error"]
+            }
+        
+        # Calculate overall assessment score
+        total_bias_score = 0
+        bias_count = 0
+        
+        for sensitive_col, bias_metrics in results["bias_metrics"].items():
+            total_bias_score += bias_metrics["overall_bias_score"]
+            bias_count += 1
+        
+        overall_score = 100 - (total_bias_score / max(bias_count, 1)) * 100
+        overall_score = max(0, min(100, overall_score))  # Clamp between 0-100
+        
+        # Format results for frontend
+        formatted_results = {
+            "dataset_name": results["dataset_name"],
+            "total_samples": results["total_samples"],
+            "overall_score": round(overall_score, 1),
+            "assessment_status": "Complete",
+            "issues_found": [],
+            "bias_details": {},
+            "recommendations": results["recommendations"]
+        }
+        
+        # Extract issues found
+        for sensitive_col, bias_metrics in results["bias_metrics"].items():
+            bias_score = bias_metrics["overall_bias_score"]
+            if bias_score > 0.05:  # Only report significant bias
+                issue = {
+                    "type": f"Bias detected in {sensitive_col}",
+                    "severity": bias_metrics["demographic_parity"]["bias_level"],
+                    "description": f"{round(bias_score * 100, 1)}% difference in outcomes",
+                    "details": bias_metrics
+                }
+                formatted_results["issues_found"].append(issue)
+            
+            formatted_results["bias_details"][sensitive_col] = {
+                "statistical_parity": bias_metrics["statistical_parity"],
+                "demographic_parity": bias_metrics["demographic_parity"],
+                "fairness_tests": results["fairness_tests"].get(sensitive_col, {})
+            }
+        
+        return {
+            "success": True,
+            "data": formatted_results,
+            "message": f"Bias analysis completed for {dataset_name}"
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "Failed to perform bias analysis"
+        }
+
+@app.get("/bias/dataset-info/{dataset_name}")
+async def get_dataset_info(dataset_name: str):
+    """Get information about a specific dataset"""
+    try:
+        if dataset_name not in real_bias_service.supported_datasets:
+            return {
+                "success": False,
+                "error": f"Dataset {dataset_name} not supported"
+            }
+        
+        # Load dataset to get info
+        df = real_bias_service.supported_datasets[dataset_name]()
+        
+        # Get column information
+        columns_info = []
+        for col in df.columns:
+            col_info = {
+                "name": col,
+                "type": str(df[col].dtype),
+                "unique_values": len(df[col].unique()),
+                "missing_values": df[col].isnull().sum(),
+                "sample_values": df[col].dropna().head(5).tolist()
+            }
+            
+            # Add specific info for categorical columns
+            if df[col].dtype == 'object' or len(df[col].unique()) < 20:
+                col_info["value_counts"] = df[col].value_counts().head(10).to_dict()
+            
+            columns_info.append(col_info)
+        
+        return {
+            "success": True,
+            "data": {
+                "name": dataset_name,
+                "description": real_bias_service._get_dataset_description(dataset_name),
+                "total_samples": len(df),
+                "columns": columns_info,
+                "shape": df.shape
+            }
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "Failed to get dataset information"
+        }
+
+# Model Provenance and Model Cards endpoints
+@app.post("/provenance/dataset")
+async def create_dataset_provenance(request: dict):
+    """Create provenance record for a dataset"""
+    try:
+        dataset_provenance = provenance_service.create_dataset_provenance(request)
+        return {
+            "success": True,
+            "data": asdict(dataset_provenance),
+            "message": "Dataset provenance created successfully"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "Failed to create dataset provenance"
+        }
+
+@app.post("/provenance/model")
+async def create_model_provenance(request: dict):
+    """Create provenance record for a model"""
+    try:
+        model_info = request.get("model_info", {})
+        training_datasets = request.get("training_datasets", [])
+        
+        # Convert dataset info to DatasetProvenance objects
+        dataset_provenances = []
+        for dataset_info in training_datasets:
+            dataset_provenance = provenance_service.create_dataset_provenance(dataset_info)
+            dataset_provenances.append(dataset_provenance)
+        
+        model_provenance = provenance_service.create_model_provenance(model_info, dataset_provenances)
+        
+        return {
+            "success": True,
+            "data": asdict(model_provenance),
+            "message": "Model provenance created successfully"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "Failed to create model provenance"
+        }
+
+@app.post("/provenance/scan-model")
+async def scan_model(request: dict):
+    """Scan model for security vulnerabilities and quality issues"""
+    try:
+        model_path = request.get("model_path")
+        model_info = request.get("model_info", {})
+        
+        if not model_path:
+            return {
+                "success": False,
+                "error": "model_path is required"
+            }
+        
+        scan_results = provenance_service.scan_model(model_path, model_info)
+        
+        return {
+            "success": True,
+            "data": scan_results,
+            "message": "Model scan completed"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "Failed to scan model"
+        }
+
+@app.post("/provenance/verify-authenticity")
+async def verify_model_authenticity(request: dict):
+    """Verify model authenticity using digital signature and checksum"""
+    try:
+        model_id = request.get("model_id")
+        model_content = request.get("model_content", "").encode('utf-8')
+        
+        if not model_id:
+            return {
+                "success": False,
+                "error": "model_id is required"
+            }
+        
+        verification_result = provenance_service.verify_model_authenticity(model_id, model_content)
+        
+        return {
+            "success": True,
+            "data": verification_result,
+            "message": "Model authenticity verification completed"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "Failed to verify model authenticity"
+        }
+
+@app.get("/provenance/model-card/{model_id}")
+async def generate_model_card(model_id: str):
+    """Generate a Model Card for responsible AI"""
+    try:
+        model_card = provenance_service.generate_model_card(model_id)
+        
+        return {
+            "success": True,
+            "data": asdict(model_card),
+            "message": "Model card generated successfully"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "Failed to generate model card"
+        }
+
+@app.get("/provenance/chain/{model_id}")
+async def get_provenance_chain(model_id: str):
+    """Get the complete provenance chain for a model"""
+    try:
+        chain = provenance_service.get_provenance_chain(model_id)
+        
+        return {
+            "success": True,
+            "data": chain,
+            "message": f"Provenance chain retrieved for model {model_id}"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "Failed to get provenance chain"
+        }
+
+@app.get("/provenance/report/{model_id}")
+async def export_provenance_report(model_id: str):
+    """Export comprehensive provenance report"""
+    try:
+        report = provenance_service.export_provenance_report(model_id)
+        
+        return {
+            "success": True,
+            "data": report,
+            "message": "Provenance report generated successfully"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "Failed to generate provenance report"
+        }
+
+@app.get("/provenance/models")
+async def list_provenance_models():
+    """List all models with provenance records"""
+    try:
+        models = []
+        for model_id, provenance in provenance_service.provenance_db.items():
+            models.append({
+                "model_id": model_id,
+                "name": provenance.name,
+                "version": provenance.version,
+                "developer": provenance.developer,
+                "organization": provenance.organization,
+                "training_date": provenance.training_date,
+                "signature_verified": provenance.signature_verified
+            })
+        
+        return {
+            "success": True,
+            "data": models,
+            "message": f"Found {len(models)} models with provenance records"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "Failed to list provenance models"
+        }
+
+# Add CycloneDX AI/ML-BOM imports
+from services.cyclonedx_aibom_service import cyclonedx_aibom_service
+
+# CycloneDX AI/ML-BOM Endpoints
+@app.post("/cyclonedx/generate-aibom")
+async def generate_cyclonedx_aibom(
+    project_path: str = Form(...),
+    organization_id: str = Form(...),
+    include_vulnerabilities: bool = Form(True)
+):
+    """Generate a CycloneDX AI/ML-BOM for a project"""
+    try:
+        logger.info(f"Generating CycloneDX AIBOM for project: {project_path}")
+        
+        bom_data = await cyclonedx_aibom_service.generate_aibom(
+            project_path=project_path,
+            organization_id=organization_id,
+            include_vulnerabilities=include_vulnerabilities
+        )
+        
+        return {
+            "success": True,
+            "data": bom_data,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error generating CycloneDX AIBOM: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate CycloneDX AIBOM: {str(e)}")
+
+@app.post("/cyclonedx/visualization-data")
+async def get_cyclonedx_visualization_data(bom_data: Dict[str, Any]):
+    """Generate visualization data for a CycloneDX BOM"""
+    try:
+        visualization_data = await cyclonedx_aibom_service.generate_visualization_data(bom_data)
+        
+        return {
+            "success": True,
+            "data": visualization_data,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error generating visualization data: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate visualization data: {str(e)}")
+
+@app.post("/cyclonedx/export/{format}")
+async def export_cyclonedx_bom(format: str, bom_data: Dict[str, Any]):
+    """Export CycloneDX BOM in different formats"""
+    try:
+        if format == "json":
+            export_data = await cyclonedx_aibom_service.export_to_json(bom_data)
+        elif format == "xml":
+            export_data = await cyclonedx_aibom_service.export_to_xml(bom_data)
+        elif format == "spdx":
+            export_data = await cyclonedx_aibom_service.export_to_spdx(bom_data)
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported format: {format}")
+        
+        return {
+            "success": True,
+            "data": export_data,
+            "format": format,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error exporting CycloneDX BOM: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to export CycloneDX BOM: {str(e)}")
+
+@app.get("/cyclonedx/vulnerability-sources")
+async def get_vulnerability_sources():
+    """Get available vulnerability data sources"""
+    try:
+        sources = {
+            "nvd": {
+                "name": "National Vulnerability Database",
+                "url": "https://nvd.nist.gov/",
+                "description": "U.S. government repository of standards-based vulnerability management data"
+            },
+            "osv": {
+                "name": "Open Source Vulnerabilities",
+                "url": "https://ossf.github.io/osv-schema/",
+                "description": "Open source vulnerability database and schema"
+            },
+            "github": {
+                "name": "GitHub Security Advisories",
+                "url": "https://github.com/advisories",
+                "description": "GitHub's security advisory database"
+            }
+        }
+        
+        return {
+            "success": True,
+            "data": sources,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error getting vulnerability sources: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get vulnerability sources: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn

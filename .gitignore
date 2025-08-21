@@ -1,31 +1,64 @@
 # Dependencies
 node_modules/
+*/node_modules/
 .pnp
 .pnp.js
-bun.lockb
 
-# Build outputs
-.next/
-out/
-dist/
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
 build/
-*.tsbuildinfo
-next-env.d.ts
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
-# Environment files
+# Virtual environments
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-.env.example
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 
 # Logs
+logs
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-.pnpm-debug.log*
-*.log
+lerna-debug.log*
 
 # Runtime data
 pids
@@ -70,6 +103,7 @@ jspm_packages/
 
 # Next.js build output
 .next
+out/
 
 # Nuxt.js build / generate output
 .nuxt
@@ -88,70 +122,117 @@ tmp/
 temp/
 
 # Editor directories and files
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
 
-# OS generated files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
+# Local environment files
+.env*.local
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 
-# Local Netlify folder
-.netlify
+# Vercel
+.vercel
 
-# Project specific
-archive/
-product/
-*.zip
-*.tar
-*.gz
-*.bz2
-plan.md
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-.pytest_cache/
-.coverage
-htmlcov/
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
 
 # Supabase
 .supabase/
-
-# Screenshots and media (if not needed in repo)
-screenshots/
-*.png
-*.jpg
-*.jpeg
-*.gif
-*.mp4
-*.mov
 
 # Database
 *.db
 *.sqlite
 *.sqlite3
 
+# Model files
+*.pkl
+*.joblib
+*.h5
+*.onnx
+*.pb
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# PEP 582
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
 # Backup files
 *.bak
 *.backup
 *.old
 
-# Lock files (keep package-lock.json but ignore others)
-yarn.lock
-pnpm-lock.yaml 
+# Archive directories
+archive/
+sim_test/
+
+# Build artifacts
+dist/
+build/
+*.tar.gz
+*.zip
+
+# Docker
+.dockerignore
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+
+# Kubernetes
+*.kubeconfig
+
+# Local development
+.local/ 
+
+# Documentation
+/docs/
+/tools/
+/generated/prisma

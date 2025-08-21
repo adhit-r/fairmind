@@ -1,0 +1,61 @@
+{
+  "model_id": "diabetes-prediction-v1.0",
+  "name": "Diabetes Risk Prediction Model",
+  "version": "1.0.0",
+  "description": "Machine learning model to predict diabetes risk based on patient demographics and health indicators",
+  "category": "healthcare",
+  "use_case": "Medical diagnosis assistance",
+  "algorithm": "Random Forest",
+  "framework": "scikit-learn",
+  "created_date": "2024-01-15",
+  "last_updated": "2024-01-15",
+  "author": "FairMind Team",
+  "license": "MIT",
+  "performance_metrics": {
+    "accuracy": 0.87,
+    "precision": 0.85,
+    "recall": 0.82,
+    "f1_score": 0.83,
+    "auc": 0.89
+  },
+  "fairness_metrics": {
+    "statistical_parity_difference": 0.03,
+    "equalized_odds_difference": 0.05,
+    "demographic_parity_ratio": 0.97,
+    "overall_fairness_score": 0.85
+  },
+  "data_requirements": {
+    "features": [
+      "age", "gender", "bmi", "blood_pressure", "glucose_level",
+      "insulin_level", "family_history", "physical_activity"
+    ],
+    "target": "diabetes_risk",
+    "data_size": "10,000 samples",
+    "demographic_balance": "Balanced across age and gender"
+  },
+  "risk_assessment": {
+    "risk_level": "MEDIUM",
+    "bias_risk": "LOW",
+    "privacy_risk": "MEDIUM",
+    "safety_risk": "LOW",
+    "compliance_status": "COMPLIANT"
+  },
+  "usage_guidelines": {
+    "intended_use": "Screening and risk assessment only",
+    "limitations": "Not for final diagnosis",
+    "recommendations": "Always consult healthcare professionals",
+    "disclaimers": "Model predictions are probabilistic and should not replace medical advice"
+  },
+  "deployment_info": {
+    "environment": "Production",
+    "api_endpoint": "/api/v1/models/diabetes-prediction",
+    "input_format": "JSON",
+    "output_format": "JSON with confidence scores"
+  },
+  "maintenance": {
+    "retraining_schedule": "Quarterly",
+    "performance_monitoring": "Continuous",
+    "bias_monitoring": "Monthly",
+    "last_validation": "2024-01-15"
+  }
+}

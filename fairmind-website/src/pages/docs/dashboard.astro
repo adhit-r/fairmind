@@ -1,0 +1,137 @@
+---
+import Layout from '../../layouts/Layout.astro';
+
+const structuredData = {
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "name": "Dashboard Guide - Fairmind Documentation",
+  "description": "Learn how to use the Fairmind dashboard to monitor AI systems, view bias detection results, and manage model provenance.",
+  "url": "https://fairmind.xyz/docs/dashboard"
+};
+---
+
+<Layout 
+  title="Dashboard Guide - Fairmind Documentation"
+  description="Learn how to use the Fairmind dashboard to monitor AI systems, view bias detection results, and manage model provenance."
+  structuredData={structuredData}
+>
+  <div class="min-h-screen bg-gray-50">
+    <!-- Header -->
+    <div class="bg-white border-b border-gray-200">
+      <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div class="mb-4">
+          <a href="/docs/fumadocs" class="text-blue-600 hover:text-blue-700 font-medium">
+            ← Back to Documentation
+          </a>
+        </div>
+        <h1 class="text-4xl font-bold text-gray-900 mb-4">Dashboard Guide</h1>
+        <p class="text-xl text-gray-700">
+          Learn how to use the Fairmind dashboard to monitor your AI systems, view bias detection results, and manage model provenance.
+        </p>
+      </div>
+    </div>
+
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <div class="prose prose-lg max-w-none">
+        <h2>Overview</h2>
+        <p>
+          The Fairmind dashboard is your central hub for AI governance and monitoring. It provides real-time insights into your AI systems' performance, fairness metrics, and compliance status.
+        </p>
+
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-6 my-8">
+          <h3 class="text-lg font-semibold text-blue-900 mb-2">Key Features</h3>
+          <ul class="text-blue-800 space-y-2">
+            <li>• Real-time bias detection monitoring</li>
+            <li>• Model performance analytics</li>
+            <li>• Compliance dashboard</li>
+            <li>• Alert management</li>
+            <li>• Model registry overview</li>
+          </ul>
+        </div>
+
+        <h2>Getting Started</h2>
+        <p>
+          When you first access the dashboard, you'll see an overview of all your registered AI models and their current status. The dashboard is organized into several key sections:
+        </p>
+
+        <h3>Main Dashboard</h3>
+        <p>
+          The main dashboard displays:
+        </p>
+        <ul>
+          <li><strong>Model Overview:</strong> Total number of models, active models, and models requiring attention</li>
+          <li><strong>Bias Detection Results:</strong> Recent bias analysis results and alerts</li>
+          <li><strong>Performance Metrics:</strong> Model accuracy, fairness scores, and drift indicators</li>
+          <li><strong>Recent Activity:</strong> Latest model updates, deployments, and alerts</li>
+        </ul>
+
+        <h3>Navigation</h3>
+        <p>
+          Use the sidebar navigation to access different sections:
+        </p>
+        <ul>
+          <li><strong>Dashboard:</strong> Main overview and metrics</li>
+          <li><strong>Bias Detection:</strong> Detailed bias analysis tools and results</li>
+          <li><strong>Models:</strong> Model registry and management</li>
+          <li><strong>Monitoring:</strong> Real-time monitoring and alerting</li>
+          <li><strong>Provenance:</strong> Model lineage and audit trails</li>
+        </ul>
+
+        <h2>Dashboard Components</h2>
+        
+        <h3>Metrics Cards</h3>
+        <p>
+          The top of the dashboard displays key metrics in card format:
+        </p>
+        <ul>
+          <li><strong>Total Models:</strong> Number of registered AI models</li>
+          <li><strong>Active Models:</strong> Models currently in production</li>
+          <li><strong>Bias Alerts:</strong> Number of active bias detection alerts</li>
+          <li><strong>Compliance Score:</strong> Overall compliance rating</li>
+        </ul>
+
+        <h3>Charts and Visualizations</h3>
+        <p>
+          Interactive charts help you visualize:
+        </p>
+        <ul>
+          <li>Bias detection trends over time</li>
+          <li>Model performance comparisons</li>
+          <li>Fairness metrics across different demographic groups</li>
+          <li>Compliance status by model</li>
+        </ul>
+
+        <h2>Best Practices</h2>
+        <ul>
+          <li>Check the dashboard regularly for new alerts and insights</li>
+          <li>Set up custom alerts for specific bias thresholds</li>
+          <li>Use the filtering options to focus on specific models or time periods</li>
+          <li>Export reports for stakeholder communication</li>
+          <li>Review bias detection results before model deployments</li>
+        </ul>
+
+        <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-6 my-8">
+          <h3 class="text-lg font-semibold text-yellow-900 mb-2">Note</h3>
+          <p class="text-yellow-800">
+            The dashboard is currently in development. Some features may not be fully functional in the MVP version.
+          </p>
+        </div>
+
+        <h2>Next Steps</h2>
+        <p>
+          Now that you understand the dashboard, explore these related guides:
+        </p>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+          <a href="/docs/bias-detection" class="block p-4 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-colors">
+            <h4 class="font-semibold text-gray-900">Bias Detection Guide</h4>
+            <p class="text-gray-600 text-sm">Learn how to detect and analyze bias in your AI models</p>
+          </a>
+          <a href="/docs/model-provenance" class="block p-4 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-colors">
+            <h4 class="font-semibold text-gray-900">Model Provenance</h4>
+            <p class="text-gray-600 text-sm">Track model lineage and maintain audit trails</p>
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</Layout>
