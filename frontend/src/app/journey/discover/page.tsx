@@ -3,17 +3,6 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  NeoContainer,
-  NeoGrid,
-  NeoHeading,
-  NeoText,
-  NeoAlert,
-  NeoCard,
-  NeoButton,
-  NeoBadge,
-  NeoProgress
-} from "@/components/ui/common/neo-components"
-import {
   Compass,
   Brain,
   Database,
@@ -30,7 +19,14 @@ import {
   Building,
   TestTube,
   FileText,
-  AlertTriangle
+  AlertTriangle,
+  ArrowLeft,
+  Play,
+  Clock,
+  Settings,
+  Globe,
+  Lock,
+  Scale
 } from 'lucide-react'
 
 export default function DiscoverPage() {
@@ -48,57 +44,61 @@ export default function DiscoverPage() {
     {
       id: 1,
       title: 'Organization Overview',
-      description: 'Tell us about your organization and AI usage'
+      description: 'Tell us about your organization and AI usage',
+      icon: Building
     },
     {
       id: 2,
       title: 'AI Model Inventory',
-      description: 'Identify your current AI models and use cases'
+      description: 'Identify your current AI models and use cases',
+      icon: Brain
     },
     {
       id: 3,
       title: 'Compliance Requirements',
-      description: 'Define your regulatory and compliance needs'
+      description: 'Define your regulatory and compliance needs',
+      icon: Shield
     },
     {
       id: 4,
       title: 'Risk Assessment',
-      description: 'Evaluate your current risk exposure'
+      description: 'Evaluate your current risk exposure',
+      icon: AlertTriangle
     }
   ]
 
   const organizationSizes = [
-    { value: 'startup', label: 'Startup (1-50 employees)', description: 'Early-stage company with limited AI usage' },
-    { value: 'sme', label: 'Small-Medium Enterprise (51-500)', description: 'Growing company with some AI implementations' },
-    { value: 'enterprise', label: 'Enterprise (500+ employees)', description: 'Large organization with extensive AI usage' },
-    { value: 'government', label: 'Government/Public Sector', description: 'Public sector with strict compliance requirements' }
+    { value: 'startup', label: 'Startup (1-50 employees)', description: 'Early-stage company with limited AI usage', icon: Zap },
+    { value: 'sme', label: 'Small-Medium Enterprise (51-500)', description: 'Growing company with some AI implementations', icon: Users },
+    { value: 'enterprise', label: 'Enterprise (500+ employees)', description: 'Large organization with extensive AI usage', icon: Building },
+    { value: 'government', label: 'Government/Public Sector', description: 'Public sector with strict compliance requirements', icon: Globe }
   ]
 
   const useCaseOptions = [
-    { id: 'customer-service', label: 'Customer Service & Chatbots', risk: 'medium' },
-    { id: 'fraud-detection', label: 'Fraud Detection & Security', risk: 'high' },
-    { id: 'recommendations', label: 'Recommendation Systems', risk: 'low' },
-    { id: 'predictive-analytics', label: 'Predictive Analytics', risk: 'medium' },
-    { id: 'computer-vision', label: 'Computer Vision & Image Processing', risk: 'high' },
-    { id: 'nlp', label: 'Natural Language Processing', risk: 'medium' },
-    { id: 'autonomous-systems', label: 'Autonomous Systems', risk: 'critical' },
-    { id: 'financial-modeling', label: 'Financial Modeling & Trading', risk: 'high' }
+    { id: 'customer-service', label: 'Customer Service & Chatbots', risk: 'medium', icon: Users },
+    { id: 'fraud-detection', label: 'Fraud Detection & Security', risk: 'high', icon: Shield },
+    { id: 'recommendations', label: 'Recommendation Systems', risk: 'low', icon: Target },
+    { id: 'predictive-analytics', label: 'Predictive Analytics', risk: 'medium', icon: BarChart3 },
+    { id: 'computer-vision', label: 'Computer Vision & Image Processing', risk: 'high', icon: Eye },
+    { id: 'nlp', label: 'Natural Language Processing', risk: 'medium', icon: FileText },
+    { id: 'autonomous-systems', label: 'Autonomous Systems', risk: 'critical', icon: Settings },
+    { id: 'financial-modeling', label: 'Financial Modeling & Trading', risk: 'high', icon: Scale }
   ]
 
   const complianceOptions = [
-    { id: 'gdpr', label: 'GDPR (EU Data Protection)', required: true },
-    { id: 'ccpa', label: 'CCPA (California Privacy)', required: false },
-    { id: 'hipaa', label: 'HIPAA (Healthcare)', required: false },
-    { id: 'sox', label: 'SOX (Financial Reporting)', required: false },
-    { id: 'iso27001', label: 'ISO 27001 (Information Security)', required: false },
-    { id: 'fedramp', label: 'FedRAMP (US Government)', required: false }
+    { id: 'gdpr', label: 'GDPR (EU Data Protection)', required: true, icon: Lock },
+    { id: 'ccpa', label: 'CCPA (California Privacy)', required: false, icon: Shield },
+    { id: 'hipaa', label: 'HIPAA (Healthcare)', required: false, icon: Users },
+    { id: 'sox', label: 'SOX (Financial Reporting)', required: false, icon: FileText },
+    { id: 'iso27001', label: 'ISO 27001 (Information Security)', required: false, icon: Lock },
+    { id: 'fedramp', label: 'FedRAMP (US Government)', required: false, icon: Globe }
   ]
 
   const handleNext = () => {
     if (currentStep < 4) {
       setCurrentStep(currentStep + 1)
     } else {
-      // Complete discovery and move to next journey step
+      // Complete discovery and move to next phase
       router.push('/journey/assess')
     }
   }
@@ -106,11 +106,45 @@ export default function DiscoverPage() {
   const handleBack = () => {
     if (currentStep > 1) {
       setCurrentStep(currentStep - 1)
+    } else {
+      router.push('/')
     }
   }
 
-  const updateDiscoveryData = (field: string, value: any) => {
-    setDiscoveryData(prev => ({ ...prev, [field]: value }))
+  const handleOrganizationSelect = (size: string) => {
+    setDiscoveryData(prev => ({ ...prev, organizationSize: size }))
+  }
+
+  const handleUseCaseToggle = (useCase: string) => {
+    setDiscoveryData(prev => ({
+      ...prev,
+      useCases: prev.useCases.includes(useCase)
+        ? prev.useCases.filter(c => c !== useCase)
+        : [...prev.useCases, useCase]
+    }))
+  }
+
+  const handleComplianceToggle = (compliance: string) => {
+    setDiscoveryData(prev => ({
+      ...prev,
+      complianceNeeds: prev.complianceNeeds.includes(compliance)
+        ? prev.complianceNeeds.filter(c => c !== compliance)
+        : [...prev.complianceNeeds, compliance]
+    }))
+  }
+
+  const handleRiskLevelSelect = (level: string) => {
+    setDiscoveryData(prev => ({ ...prev, riskLevel: level }))
+  }
+
+  const getRiskColor = (risk: string) => {
+    switch (risk) {
+      case 'low': return 'bg-green-100 text-green-800 border-green-300'
+      case 'medium': return 'bg-yellow-100 text-yellow-800 border-yellow-300'
+      case 'high': return 'bg-orange-100 text-orange-800 border-orange-300'
+      case 'critical': return 'bg-red-100 text-red-800 border-red-300'
+      default: return 'bg-gray-100 text-gray-800 border-gray-300'
+    }
   }
 
   const renderStepContent = () => {
@@ -118,193 +152,138 @@ export default function DiscoverPage() {
       case 1:
         return (
           <div className="space-y-6">
-            <NeoHeading size="lg" className="mb-6">
-              <Building className="h-6 w-6 inline mr-2" />
-              Organization Overview
-            </NeoHeading>
+            <div className="text-center mb-8">
+              <h2 className="text-2xl font-black text-gray-900 mb-4">Organization Overview</h2>
+              <p className="text-lg font-bold text-gray-600">Help us understand your organization's AI governance needs</p>
+            </div>
             
-            <NeoCard>
-              <h3 className="neo-heading neo-heading--md mb-4">Organization Size</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {organizationSizes.map((size) => (
-                  <div
-                    key={size.value}
-                    className={`neo-card cursor-pointer transition-all duration-300 ${
-                      discoveryData.organizationSize === size.value ? 'border-blue-500 border-4' : ''
-                    }`}
-                    onClick={() => updateDiscoveryData('organizationSize', size.value)}
-                  >
-                    <h4 className="neo-text neo-text--bold mb-2">{size.label}</h4>
-                    <p className="neo-text text-sm text-gray-600">{size.description}</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {organizationSizes.map((size) => (
+                <div
+                  key={size.value}
+                  onClick={() => handleOrganizationSelect(size.value)}
+                  className={`p-6 border-2 rounded-lg cursor-pointer transition-all duration-200 ${
+                    discoveryData.organizationSize === size.value
+                      ? 'border-blue-500 bg-blue-50 shadow-4px-4px-0px-black'
+                      : 'border-gray-300 bg-white hover:border-gray-400 shadow-2px-2px-0px-black'
+                  }`}
+                >
+                  <div className="flex items-center space-x-3 mb-3">
+                    <div className="p-2 bg-blue-100 rounded-lg">
+                      <size.icon className="h-5 w-5 text-blue-600" />
+                    </div>
+                    <h3 className="font-black text-gray-900">{size.label}</h3>
                   </div>
-                ))}
-              </div>
-            </NeoCard>
-
-            <NeoCard>
-              <h3 className="neo-heading neo-heading--md mb-4">AI Models Count</h3>
-              <div className="flex items-center gap-4">
-                <input
-                  type="number"
-                  min="0"
-                  value={discoveryData.aiModels}
-                  onChange={(e) => updateDiscoveryData('aiModels', parseInt(e.target.value) || 0)}
-                  className="neo-text border-2 border-gray-300 rounded-lg px-4 py-2 w-32"
-                  placeholder="0"
-                />
-                <NeoText>AI models in production or development</NeoText>
-              </div>
-            </NeoCard>
+                  <p className="text-sm font-bold text-gray-600">{size.description}</p>
+                </div>
+              ))}
+            </div>
           </div>
         )
 
       case 2:
         return (
           <div className="space-y-6">
-            <NeoHeading size="lg" className="mb-6">
-              <Brain className="h-6 w-6 inline mr-2" />
-              AI Model Inventory
-            </NeoHeading>
+            <div className="text-center mb-8">
+              <h2 className="text-2xl font-black text-gray-900 mb-4">AI Model Inventory</h2>
+              <p className="text-lg font-bold text-gray-600">Select the AI use cases that apply to your organization</p>
+            </div>
             
-            <NeoCard>
-              <h3 className="neo-heading neo-heading--md mb-4">AI Use Cases</h3>
-              <p className="neo-text text-gray-600 mb-4">Select all the AI use cases that apply to your organization:</p>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {useCaseOptions.map((useCase) => (
-                  <div
-                    key={useCase.id}
-                    className={`neo-card cursor-pointer transition-all duration-300 ${
-                      discoveryData.useCases.includes(useCase.id) ? 'border-blue-500 border-4' : ''
-                    }`}
-                    onClick={() => {
-                      const updated = discoveryData.useCases.includes(useCase.id)
-                        ? discoveryData.useCases.filter(id => id !== useCase.id)
-                        : [...discoveryData.useCases, useCase.id]
-                      updateDiscoveryData('useCases', updated)
-                    }}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="neo-text neo-text--bold">{useCase.label}</h4>
-                      <NeoBadge variant={useCase.risk === 'critical' ? 'danger' : useCase.risk === 'high' ? 'warning' : 'info'}>
-                        {useCase.risk}
-                      </NeoBadge>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {useCaseOptions.map((useCase) => (
+                <div
+                  key={useCase.id}
+                  onClick={() => handleUseCaseToggle(useCase.id)}
+                  className={`p-4 border-2 rounded-lg cursor-pointer transition-all duration-200 ${
+                    discoveryData.useCases.includes(useCase.id)
+                      ? 'border-green-500 bg-green-50 shadow-4px-4px-0px-black'
+                      : 'border-gray-300 bg-white hover:border-gray-400 shadow-2px-2px-0px-black'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center space-x-3">
+                      <div className="p-2 bg-gray-100 rounded-lg">
+                        <useCase.icon className="h-4 w-4 text-gray-600" />
+                      </div>
+                      <span className="font-black text-gray-900">{useCase.label}</span>
                     </div>
-                    {discoveryData.useCases.includes(useCase.id) && (
-                      <CheckCircle className="h-5 w-5 text-green-500" />
-                    )}
+                    <span className={`px-2 py-1 rounded text-xs font-bold border ${getRiskColor(useCase.risk)}`}>
+                      {useCase.risk.toUpperCase()}
+                    </span>
                   </div>
-                ))}
-              </div>
-            </NeoCard>
+                </div>
+              ))}
+            </div>
           </div>
         )
 
       case 3:
         return (
           <div className="space-y-6">
-            <NeoHeading size="lg" className="mb-6">
-              <FileText className="h-6 w-6 inline mr-2" />
-              Compliance Requirements
-            </NeoHeading>
+            <div className="text-center mb-8">
+              <h2 className="text-2xl font-black text-gray-900 mb-4">Compliance Requirements</h2>
+              <p className="text-lg font-bold text-gray-600">Select the regulatory frameworks that apply to your organization</p>
+            </div>
             
-            <NeoCard>
-              <h3 className="neo-heading neo-heading--md mb-4">Regulatory Compliance</h3>
-              <p className="neo-text text-gray-600 mb-4">Select the compliance frameworks that apply to your organization:</p>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {complianceOptions.map((compliance) => (
-                  <div
-                    key={compliance.id}
-                    className={`neo-card cursor-pointer transition-all duration-300 ${
-                      discoveryData.complianceNeeds.includes(compliance.id) ? 'border-blue-500 border-4' : ''
-                    }`}
-                    onClick={() => {
-                      const updated = discoveryData.complianceNeeds.includes(compliance.id)
-                        ? discoveryData.complianceNeeds.filter(id => id !== compliance.id)
-                        : [...discoveryData.complianceNeeds, compliance.id]
-                      updateDiscoveryData('complianceNeeds', updated)
-                    }}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="neo-text neo-text--bold">{compliance.label}</h4>
-                      {compliance.required && (
-                        <NeoBadge variant="danger">Required</NeoBadge>
-                      )}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {complianceOptions.map((compliance) => (
+                <div
+                  key={compliance.id}
+                  onClick={() => handleComplianceToggle(compliance.id)}
+                  className={`p-4 border-2 rounded-lg cursor-pointer transition-all duration-200 ${
+                    discoveryData.complianceNeeds.includes(compliance.id)
+                      ? 'border-purple-500 bg-purple-50 shadow-4px-4px-0px-black'
+                      : 'border-gray-300 bg-white hover:border-gray-400 shadow-2px-2px-0px-black'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <div className="p-2 bg-purple-100 rounded-lg">
+                        <compliance.icon className="h-4 w-4 text-purple-600" />
+                      </div>
+                      <span className="font-black text-gray-900">{compliance.label}</span>
                     </div>
-                    {discoveryData.complianceNeeds.includes(compliance.id) && (
-                      <CheckCircle className="h-5 w-5 text-green-500" />
+                    {compliance.required && (
+                      <span className="px-2 py-1 bg-red-100 text-red-800 border border-red-300 rounded text-xs font-bold">
+                        REQUIRED
+                      </span>
                     )}
                   </div>
-                ))}
-              </div>
-            </NeoCard>
+                </div>
+              ))}
+            </div>
           </div>
         )
 
       case 4:
         return (
           <div className="space-y-6">
-            <NeoHeading size="lg" className="mb-6">
-              <AlertTriangle className="h-6 w-6 inline mr-2" />
-              Risk Assessment
-            </NeoHeading>
+            <div className="text-center mb-8">
+              <h2 className="text-2xl font-black text-gray-900 mb-4">Risk Assessment</h2>
+              <p className="text-lg font-bold text-gray-600">Evaluate your current AI risk exposure level</p>
+            </div>
             
-            <NeoCard>
-              <h3 className="neo-heading neo-heading--md mb-4">Current Risk Level</h3>
-              <p className="neo-text text-gray-600 mb-4">Based on your AI usage, what's your current risk exposure?</p>
-              
-              <div className="space-y-4">
-                {[
-                  { value: 'low', label: 'Low Risk', description: 'Limited AI usage, low-impact applications', color: 'green' },
-                  { value: 'medium', label: 'Medium Risk', description: 'Moderate AI usage, some high-impact areas', color: 'yellow' },
-                  { value: 'high', label: 'High Risk', description: 'Extensive AI usage, critical applications', color: 'orange' },
-                  { value: 'critical', label: 'Critical Risk', description: 'AI in safety-critical or regulated domains', color: 'red' }
-                ].map((risk) => (
-                  <div
-                    key={risk.value}
-                    className={`neo-card cursor-pointer transition-all duration-300 ${
-                      discoveryData.riskLevel === risk.value ? 'border-blue-500 border-4' : ''
-                    }`}
-                    onClick={() => updateDiscoveryData('riskLevel', risk.value)}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="neo-text neo-text--bold">{risk.label}</h4>
-                        <p className="neo-text text-sm text-gray-600">{risk.description}</p>
-                      </div>
-                      <NeoBadge variant={risk.color as any}>{risk.label}</NeoBadge>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </NeoCard>
-
-            {/* Discovery Summary */}
-            <NeoCard neo-card--info>
-              <h3 className="neo-heading neo-heading--md mb-4">
-                <Target className="h-5 w-5 inline mr-2" />
-                Assessment Summary
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <NeoText className="font-bold">Organization:</NeoText>
-                  <NeoText>{discoveryData.organizationSize || 'Not specified'}</NeoText>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {[
+                { value: 'low', label: 'Low Risk', description: 'Limited AI usage, basic governance needs', color: 'green' },
+                { value: 'medium', label: 'Medium Risk', description: 'Moderate AI usage, standard governance', color: 'yellow' },
+                { value: 'high', label: 'High Risk', description: 'Extensive AI usage, advanced governance', color: 'orange' },
+                { value: 'critical', label: 'Critical Risk', description: 'Sensitive AI applications, strict governance', color: 'red' }
+              ].map((risk) => (
+                <div
+                  key={risk.value}
+                  onClick={() => handleRiskLevelSelect(risk.value)}
+                  className={`p-6 border-2 rounded-lg cursor-pointer transition-all duration-200 ${
+                    discoveryData.riskLevel === risk.value
+                      ? `border-${risk.color}-500 bg-${risk.color}-50 shadow-4px-4px-0px-black`
+                      : 'border-gray-300 bg-white hover:border-gray-400 shadow-2px-2px-0px-black'
+                  }`}
+                >
+                  <h3 className="font-black text-gray-900 mb-2">{risk.label}</h3>
+                  <p className="text-sm font-bold text-gray-600">{risk.description}</p>
                 </div>
-                <div>
-                  <NeoText className="font-bold">AI Models:</NeoText>
-                  <NeoText>{discoveryData.aiModels} models</NeoText>
-                </div>
-                <div>
-                  <NeoText className="font-bold">Use Cases:</NeoText>
-                  <NeoText>{discoveryData.useCases.length} selected</NeoText>
-                </div>
-                <div>
-                  <NeoText className="font-bold">Compliance:</NeoText>
-                  <NeoText>{discoveryData.complianceNeeds.length} frameworks</NeoText>
-                </div>
-              </div>
-            </NeoCard>
+              ))}
+            </div>
           </div>
         )
 
@@ -316,60 +295,69 @@ export default function DiscoverPage() {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="text-center mb-8">
-        <NeoHeading size="xl" className="mb-4">
-          <Search className="h-8 w-8 inline mr-3" />
+      <div className="text-center">
+        <h1 className="text-3xl font-black text-gray-900 mb-4 flex items-center justify-center">
+          <Search className="h-8 w-8 mr-3 text-blue-600" />
           AI Landscape Assessment
-        </NeoHeading>
-        <NeoText className="text-xl max-w-3xl mx-auto">
+        </h1>
+        <p className="text-lg font-bold text-gray-600 max-w-2xl mx-auto">
           Comprehensive analysis of your current AI infrastructure and governance requirements.
           This assessment will inform the development of a tailored governance strategy.
-        </NeoText>
+        </p>
       </div>
 
       {/* Progress Bar */}
-      <NeoCard>
+      <div className="bg-white border-2 border-black rounded-lg p-6 shadow-4px-4px-0px-black">
         <div className="flex items-center justify-between mb-4">
-          <NeoText className="font-bold">Step {currentStep} of 4</NeoText>
-          <NeoText>{Math.round((currentStep / 4) * 100)}% Complete</NeoText>
+          <div className="font-black text-gray-900">Step {currentStep} of 4</div>
+          <div className="font-black text-gray-900">{Math.round((currentStep / 4) * 100)}% Complete</div>
         </div>
-        <NeoProgress value={(currentStep / 4) * 100} variant="success" />
         
-        <div className="flex justify-between mt-4 text-sm text-gray-600">
+        <div className="w-full bg-gray-200 border border-black rounded-full h-4 mb-4">
+          <div 
+            className="bg-gradient-to-r from-blue-500 to-green-500 h-4 rounded-full border border-black transition-all duration-500"
+            style={{ width: `${(currentStep / 4) * 100}%` }}
+          ></div>
+        </div>
+        
+        <div className="flex justify-between text-sm font-bold text-gray-600">
           {steps.map((step) => (
             <div key={step.id} className="text-center">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center mx-auto mb-2 ${
-                step.id <= currentStep ? 'bg-blue-500 text-white' : 'bg-gray-300'
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center mx-auto mb-2 border-2 ${
+                step.id <= currentStep ? 'bg-blue-500 text-white border-black' : 'bg-gray-300 border-gray-300'
               }`}>
                 {step.id < currentStep ? <CheckCircle className="h-4 w-4" /> : step.id}
               </div>
-              <NeoText className="text-xs">{step.title}</NeoText>
+              <div className="text-xs font-bold">{step.title}</div>
             </div>
           ))}
         </div>
-      </NeoCard>
+      </div>
 
       {/* Step Content */}
-      {renderStepContent()}
+      <div className="bg-white border-2 border-black rounded-lg p-8 shadow-4px-4px-0px-black">
+        {renderStepContent()}
+      </div>
 
       {/* Navigation */}
       <div className="flex justify-between">
-        <NeoButton
-          variant="secondary"
+        <button
           onClick={handleBack}
-          disabled={currentStep === 1}
+          className="bg-gray-100 text-gray-700 border-2 border-gray-300 px-6 py-3 rounded-lg font-bold hover:bg-gray-200 shadow-2px-2px-0px-black transition-all duration-200"
         >
-          ← Back
-        </NeoButton>
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          {currentStep === 1 ? 'Back to Dashboard' : 'Previous'}
+        </button>
         
-        <NeoButton
-          variant="primary"
+        <button
           onClick={handleNext}
+          disabled={!discoveryData.organizationSize || discoveryData.useCases.length === 0}
+          className="bg-blue-500 text-white border-2 border-black px-6 py-3 rounded-lg font-bold hover:bg-blue-600 shadow-2px-2px-0px-black transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {currentStep === 4 ? (
             <>
-              Complete Discovery
-              <ArrowRight className="h-4 w-4 ml-2" />
+              <Play className="h-4 w-4 mr-2" />
+              Complete Assessment
             </>
           ) : (
             <>
@@ -377,23 +365,8 @@ export default function DiscoverPage() {
               <ArrowRight className="h-4 w-4 ml-2" />
             </>
           )}
-        </NeoButton>
+        </button>
       </div>
-
-      {/* Tips */}
-      <NeoAlert variant="info">
-        <div className="flex items-start gap-4">
-          <div className="flex-shrink-0">
-            <Zap className="h-6 w-6" />
-          </div>
-          <div>
-            <NeoText variant="bold" className="mb-2">Discovery Tips</NeoText>
-            <NeoText className="mb-2">• Be honest about your current AI usage - this helps us provide better recommendations</NeoText>
-            <NeoText className="mb-2">• Include all AI models, even those in development</NeoText>
-            <NeoText>• Don't worry if you're unsure about compliance - we'll help you identify requirements</NeoText>
-          </div>
-        </div>
-      </NeoAlert>
     </div>
   )
 }

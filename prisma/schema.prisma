@@ -1,0 +1,893 @@
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["auth", "public"]
+}
+
+model Profile {
+  id        String    @id @db.Uuid
+  username  String?   @unique
+  fullName  String?   @map("full_name")
+  avatarUrl String?   @map("avatar_url")
+  role      user_role @default(user)
+  createdAt DateTime  @default(dbgenerated("timezone('utc'::text, now())")) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @default(dbgenerated("timezone('utc'::text, now())")) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  users     users     @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  
+  // Relations
+  mlModels  MLModel[]
+  aiBomDocuments AIBOMDocument[]
+
+  @@map("profiles")
+  @@schema("public")
+}
+
+model GeographicBiasAnalysis {
+  id               String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  modelId          String                @map("model_id") @db.VarChar(255)
+  sourceCountry    String                @map("source_country") @db.VarChar(3)
+  targetCountry    String                @map("target_country") @db.VarChar(3)
+  biasScore        Float?                @map("bias_score")
+  riskLevel        String?               @map("risk_level") @db.VarChar(20)
+  culturalFactors  Json?                 @map("cultural_factors")
+  complianceStatus String?               @default("pending") @map("compliance_status") @db.VarChar(20)
+  analysisDate     DateTime?             @default(now()) @map("analysis_date") @db.Timestamptz(6)
+  createdBy        String?               @map("created_by") @db.Uuid
+  alerts           GeographicBiasAlert[]
+  creator          users?                @relation(fields: [createdBy], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([sourceCountry, targetCountry], map: "idx_geographic_bias_countries")
+  @@index([analysisDate], map: "idx_geographic_bias_created_at")
+  @@index([modelId], map: "idx_geographic_bias_model_id")
+  @@index([riskLevel], map: "idx_geographic_bias_risk_level")
+  @@map("geographic_bias_analyses")
+  @@schema("public")
+}
+
+model GeographicBiasAlert {
+  id         String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  analysisId String?                 @map("analysis_id") @db.Uuid
+  alertType  String                  @map("alert_type") @db.VarChar(50)
+  severity   String?                 @db.VarChar(20)
+  message    String
+  isResolved Boolean?                @default(false) @map("is_resolved")
+  resolvedAt DateTime?               @map("resolved_at") @db.Timestamptz(6)
+  createdAt  DateTime?               @default(now()) @map("created_at") @db.Timestamptz(6)
+  analysis   GeographicBiasAnalysis? @relation(fields: [analysisId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([isResolved], map: "idx_geographic_bias_alerts_resolved")
+  @@index([severity], map: "idx_geographic_bias_alerts_severity")
+  @@index([alertType], map: "idx_geographic_bias_alerts_type")
+  @@map("geographic_bias_alerts")
+  @@schema("public")
+}
+
+model CountryPerformanceMetric {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  countryCode      String    @unique(map: "uniq_country_performance_code") @map("country_code") @db.VarChar(3)
+  countryName      String    @map("country_name") @db.VarChar(100)
+  complianceStatus String?   @default("pending") @map("compliance_status") @db.VarChar(20)
+  riskScore        Float?    @default(0.0) @map("risk_score")
+  lastUpdated      DateTime? @default(now()) @map("last_updated") @db.Timestamptz(6)
+  metricsData      Json?     @map("metrics_data")
+
+  @@index([countryCode], map: "idx_country_performance_code")
+  @@index([complianceStatus], map: "idx_country_performance_status")
+  @@map("country_performance_metrics")
+  @@schema("public")
+}
+
+model CulturalFactor {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  countryCode String    @map("country_code") @db.VarChar(3)
+  factorName  String    @map("factor_name") @db.VarChar(100)
+  factorValue Json?     @map("factor_value")
+  impactScore Float?    @map("impact_score")
+  createdAt   DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("cultural_factors")
+  @@schema("public")
+}
+
+model MLModelEmbedding {
+  id                  String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  modelId             String                 @map("model_id") @db.VarChar(255)
+  modelName           String                 @map("model_name") @db.VarChar(255)
+  embedding           Unsupported("vector")?
+  modelMetadata       Json                   @map("model_metadata")
+  biasCharacteristics Json?                  @map("bias_characteristics")
+  performanceMetrics  Json?                  @map("performance_metrics")
+  ethicalFramework    Json?                  @map("ethical_framework")
+  createdAt           DateTime?              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime?              @default(now()) @map("updated_at") @db.Timestamptz(6)
+  createdBy           String?                @map("created_by") @db.Uuid
+  creator             users?                 @relation(fields: [createdBy], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([modelId], map: "idx_ml_model_embeddings_model_id")
+  @@index([embedding], map: "idx_ml_model_embeddings_vector")
+  @@map("ml_model_embeddings")
+  @@schema("public")
+}
+
+model ModelDNASignature {
+  id                         String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  modelId                    String                 @map("model_id") @db.VarChar(255)
+  dnaSignature               String                 @map("dna_signature") @db.VarChar(64)
+  dna_embedding              Unsupported("vector")?
+  parentModels               String[]               @map("parent_models")
+  childModels                String[]               @map("child_models")
+  inheritanceType            String?                @map("inheritance_type") @db.VarChar(50)
+  algorithmFamily            String?                @map("algorithm_family") @db.VarChar(100)
+  biasInheritance            Json?                  @map("bias_inheritance")
+  performanceCharacteristics Json?                  @map("performance_characteristics")
+  ethicalFramework           Json?                  @map("ethical_framework")
+  riskProfile                Json?                  @map("risk_profile")
+  createdAt                  DateTime?              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                  DateTime?              @default(now()) @map("updated_at") @db.Timestamptz(6)
+  createdBy                  String?                @map("created_by") @db.Uuid
+  creator                    users?                 @relation(fields: [createdBy], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([dnaSignature], map: "idx_model_dna_signatures_signature")
+  @@index([dna_embedding], map: "idx_model_dna_signatures_vector")
+  @@map("model_dna_signatures")
+  @@schema("public")
+}
+
+model ModelLineageVector {
+  id                 String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  modelId            String                 @map("model_id") @db.VarChar(255)
+  lineage_embedding  Unsupported("vector")?
+  lineagePath        String[]               @map("lineage_path")
+  generationDepth    Int?                   @map("generation_depth")
+  parentModels       String[]               @map("parent_models")
+  childModels        String[]               @map("child_models")
+  inheritancePattern Json?                  @map("inheritance_pattern")
+  createdAt          DateTime?              @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy          String?                @map("created_by") @db.Uuid
+  creator            users?                 @relation(fields: [createdBy], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([lineage_embedding], map: "idx_model_lineage_vectors_vector")
+  @@map("model_lineage_vectors")
+  @@schema("public")
+}
+
+model ModelModification {
+  id                     String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  modelId                String                 @map("model_id") @db.VarChar(255)
+  modificationType       String?                @map("modification_type") @db.VarChar(100)
+  modification_embedding Unsupported("vector")?
+  beforeState            Json?                  @map("before_state")
+  afterState             Json?                  @map("after_state")
+  impactAssessment       Json?                  @map("impact_assessment")
+  createdAt              DateTime?              @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy              String?                @map("created_by") @db.Uuid
+  creator                users?                 @relation(fields: [createdBy], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([modification_embedding], map: "idx_model_modifications_vector")
+  @@map("model_modifications")
+  @@schema("public")
+}
+
+model HistoricalScenarioEmbedding {
+  id                 String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  scenarioName       String                 @map("scenario_name") @db.VarChar(255)
+  scenario_embedding Unsupported("vector")?
+  scenarioData       Json?                  @map("scenario_data")
+  historicalContext  Json?                  @map("historical_context")
+  biasAnalysis       Json?                  @map("bias_analysis")
+  createdAt          DateTime?              @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy          String?                @map("created_by") @db.Uuid
+  creator            users?                 @relation(fields: [createdBy], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([scenario_embedding], map: "idx_historical_scenario_embeddings_vector")
+  @@map("historical_scenario_embeddings")
+  @@schema("public")
+}
+
+model AuditLog {
+  id           BigInt   @id @default(autoincrement())
+  userId       String?  @map("user_id") @db.Uuid
+  action       String
+  resourceType String?  @map("resource_type")
+  resourceId   String?  @map("resource_id")
+  details      Json?
+  ipAddress    String?  @map("ip_address") @db.Inet
+  userAgent    String?  @map("user_agent")
+  createdAt    DateTime @default(dbgenerated("timezone('utc'::text, now())")) @map("created_at") @db.Timestamptz(6)
+  user         users?   @relation(fields: [userId], references: [id], onUpdate: NoAction)
+
+  @@index([createdAt], map: "idx_audit_logs_created_at")
+  @@index([resourceType, resourceId], map: "idx_audit_logs_resource")
+  @@index([userId], map: "idx_audit_logs_user_id")
+  @@map("audit_logs")
+  @@schema("public")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model audit_log_entries {
+  instance_id String?   @db.Uuid
+  id          String    @id @db.Uuid
+  payload     Json?     @db.Json
+  created_at  DateTime? @db.Timestamptz(6)
+  ip_address  String    @default("") @db.VarChar(64)
+
+  @@index([instance_id], map: "audit_logs_instance_id_idx")
+  @@schema("auth")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model flow_state {
+  id                     String                @id @db.Uuid
+  user_id                String?               @db.Uuid
+  auth_code              String
+  code_challenge_method  code_challenge_method
+  code_challenge         String
+  provider_type          String
+  provider_access_token  String?
+  provider_refresh_token String?
+  created_at             DateTime?             @db.Timestamptz(6)
+  updated_at             DateTime?             @db.Timestamptz(6)
+  authentication_method  String
+  auth_code_issued_at    DateTime?             @db.Timestamptz(6)
+  saml_relay_states      saml_relay_states[]
+
+  @@index([created_at(sort: Desc)])
+  @@index([auth_code], map: "idx_auth_code")
+  @@index([user_id, authentication_method], map: "idx_user_id_auth_method")
+  @@schema("auth")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model identities {
+  provider_id     String
+  user_id         String    @db.Uuid
+  identity_data   Json
+  provider        String
+  last_sign_in_at DateTime? @db.Timestamptz(6)
+  created_at      DateTime? @db.Timestamptz(6)
+  updated_at      DateTime? @db.Timestamptz(6)
+  email           String?   @default(dbgenerated("lower((identity_data ->> 'email'::text))"))
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  users           users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([provider_id, provider], map: "identities_provider_id_provider_unique")
+  @@index([email])
+  @@index([user_id])
+  @@schema("auth")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model instances {
+  id              String    @id @db.Uuid
+  uuid            String?   @db.Uuid
+  raw_base_config String?
+  created_at      DateTime? @db.Timestamptz(6)
+  updated_at      DateTime? @db.Timestamptz(6)
+
+  @@schema("auth")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model mfa_amr_claims {
+  session_id            String   @db.Uuid
+  created_at            DateTime @db.Timestamptz(6)
+  updated_at            DateTime @db.Timestamptz(6)
+  authentication_method String
+  id                    String   @id(map: "amr_id_pk") @db.Uuid
+  sessions              sessions @relation(fields: [session_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([session_id, authentication_method], map: "mfa_amr_claims_session_id_authentication_method_pkey")
+  @@schema("auth")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model mfa_challenges {
+  id                     String      @id @db.Uuid
+  factor_id              String      @db.Uuid
+  created_at             DateTime    @db.Timestamptz(6)
+  verified_at            DateTime?   @db.Timestamptz(6)
+  ip_address             String      @db.Inet
+  otp_code               String?
+  web_authn_session_data Json?
+  mfa_factors            mfa_factors @relation(fields: [factor_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "mfa_challenges_auth_factor_id_fkey")
+
+  @@index([created_at(sort: Desc)], map: "mfa_challenge_created_at_idx")
+  @@schema("auth")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model mfa_factors {
+  id                   String           @id @db.Uuid
+  user_id              String           @db.Uuid
+  friendly_name        String?
+  factor_type          factor_type
+  status               factor_status
+  created_at           DateTime         @db.Timestamptz(6)
+  updated_at           DateTime         @db.Timestamptz(6)
+  secret               String?
+  phone                String?
+  last_challenged_at   DateTime?        @unique @db.Timestamptz(6)
+  web_authn_credential Json?
+  web_authn_aaguid     String?          @db.Uuid
+  mfa_challenges       mfa_challenges[]
+  users                users            @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, phone], map: "unique_phone_factor_per_user")
+  @@index([user_id, created_at], map: "factor_id_created_at_idx")
+  @@index([user_id])
+  @@schema("auth")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model one_time_tokens {
+  id         String              @id @db.Uuid
+  user_id    String              @db.Uuid
+  token_type one_time_token_type
+  token_hash String
+  relates_to String
+  created_at DateTime            @default(now()) @db.Timestamp(6)
+  updated_at DateTime            @default(now()) @db.Timestamp(6)
+  users      users               @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, token_type])
+  @@index([relates_to], map: "one_time_tokens_relates_to_hash_idx", type: Hash)
+  @@index([token_hash], map: "one_time_tokens_token_hash_hash_idx", type: Hash)
+  @@schema("auth")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model refresh_tokens {
+  instance_id String?   @db.Uuid
+  id          BigInt    @id @default(autoincrement())
+  token       String?   @unique(map: "refresh_tokens_token_unique") @db.VarChar(255)
+  user_id     String?   @db.VarChar(255)
+  revoked     Boolean?
+  created_at  DateTime? @db.Timestamptz(6)
+  updated_at  DateTime? @db.Timestamptz(6)
+  parent      String?   @db.VarChar(255)
+  session_id  String?   @db.Uuid
+  sessions    sessions? @relation(fields: [session_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([instance_id])
+  @@index([instance_id, user_id])
+  @@index([parent])
+  @@index([session_id, revoked])
+  @@index([updated_at(sort: Desc)])
+  @@schema("auth")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model saml_providers {
+  id                String        @id @db.Uuid
+  sso_provider_id   String        @db.Uuid
+  entity_id         String        @unique
+  metadata_xml      String
+  metadata_url      String?
+  attribute_mapping Json?
+  created_at        DateTime?     @db.Timestamptz(6)
+  updated_at        DateTime?     @db.Timestamptz(6)
+  name_id_format    String?
+  sso_providers     sso_providers @relation(fields: [sso_provider_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([sso_provider_id])
+  @@schema("auth")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model saml_relay_states {
+  id              String        @id @db.Uuid
+  sso_provider_id String        @db.Uuid
+  request_id      String
+  for_email       String?
+  redirect_to     String?
+  created_at      DateTime?     @db.Timestamptz(6)
+  updated_at      DateTime?     @db.Timestamptz(6)
+  flow_state_id   String?       @db.Uuid
+  flow_state      flow_state?   @relation(fields: [flow_state_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  sso_providers   sso_providers @relation(fields: [sso_provider_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([created_at(sort: Desc)])
+  @@index([for_email])
+  @@index([sso_provider_id])
+  @@schema("auth")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model schema_migrations {
+  version String @id @db.VarChar(255)
+
+  @@schema("auth")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model sessions {
+  id             String           @id @db.Uuid
+  user_id        String           @db.Uuid
+  created_at     DateTime?        @db.Timestamptz(6)
+  updated_at     DateTime?        @db.Timestamptz(6)
+  factor_id      String?          @db.Uuid
+  aal            aal_level?
+  not_after      DateTime?        @db.Timestamptz(6)
+  refreshed_at   DateTime?        @db.Timestamp(6)
+  user_agent     String?
+  ip             String?          @db.Inet
+  tag            String?
+  mfa_amr_claims mfa_amr_claims[]
+  refresh_tokens refresh_tokens[]
+  users          users            @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([not_after(sort: Desc)])
+  @@index([user_id])
+  @@index([user_id, created_at], map: "user_id_created_at_idx")
+  @@schema("auth")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+/// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
+model sso_domains {
+  id              String        @id @db.Uuid
+  sso_provider_id String        @db.Uuid
+  domain          String
+  created_at      DateTime?     @db.Timestamptz(6)
+  updated_at      DateTime?     @db.Timestamptz(6)
+  sso_providers   sso_providers @relation(fields: [sso_provider_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([sso_provider_id])
+  @@schema("auth")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+/// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
+model sso_providers {
+  id                String              @id @db.Uuid
+  resource_id       String?
+  created_at        DateTime?           @db.Timestamptz(6)
+  updated_at        DateTime?           @db.Timestamptz(6)
+  disabled          Boolean?
+  saml_providers    saml_providers[]
+  saml_relay_states saml_relay_states[]
+  sso_domains       sso_domains[]
+
+  @@index([resource_id], map: "sso_providers_resource_id_pattern_idx")
+  @@schema("auth")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+/// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
+model users {
+  instance_id                  String?                       @db.Uuid
+  id                           String                        @id @db.Uuid
+  aud                          String?                       @db.VarChar(255)
+  role                         String?                       @db.VarChar(255)
+  email                        String?                       @db.VarChar(255)
+  encrypted_password           String?                       @db.VarChar(255)
+  email_confirmed_at           DateTime?                     @db.Timestamptz(6)
+  invited_at                   DateTime?                     @db.Timestamptz(6)
+  confirmation_token           String?                       @db.VarChar(255)
+  confirmation_sent_at         DateTime?                     @db.Timestamptz(6)
+  recovery_token               String?                       @db.VarChar(255)
+  recovery_sent_at             DateTime?                     @db.Timestamptz(6)
+  email_change_token_new       String?                       @db.VarChar(255)
+  email_change                 String?                       @db.VarChar(255)
+  email_change_sent_at         DateTime?                     @db.Timestamptz(6)
+  last_sign_in_at              DateTime?                     @db.Timestamptz(6)
+  raw_app_meta_data            Json?
+  raw_user_meta_data           Json?
+  is_super_admin               Boolean?
+  created_at                   DateTime?                     @db.Timestamptz(6)
+  updated_at                   DateTime?                     @db.Timestamptz(6)
+  phone                        String?                       @unique
+  phone_confirmed_at           DateTime?                     @db.Timestamptz(6)
+  phone_change                 String?                       @default("")
+  phone_change_token           String?                       @default("") @db.VarChar(255)
+  phone_change_sent_at         DateTime?                     @db.Timestamptz(6)
+  confirmed_at                 DateTime?                     @default(dbgenerated("LEAST(email_confirmed_at, phone_confirmed_at)")) @db.Timestamptz(6)
+  email_change_token_current   String?                       @default("") @db.VarChar(255)
+  email_change_confirm_status  Int?                          @default(0) @db.SmallInt
+  banned_until                 DateTime?                     @db.Timestamptz(6)
+  reauthentication_token       String?                       @default("") @db.VarChar(255)
+  reauthentication_sent_at     DateTime?                     @db.Timestamptz(6)
+  is_sso_user                  Boolean                       @default(false)
+  deleted_at                   DateTime?                     @db.Timestamptz(6)
+  is_anonymous                 Boolean                       @default(false)
+  identities                   identities[]
+  mfa_factors                  mfa_factors[]
+  one_time_tokens              one_time_tokens[]
+  sessions                     sessions[]
+  auditLogs                    AuditLog[]
+  geographicBiasAnalyses       GeographicBiasAnalysis[]
+  historicalScenarioEmbeddings HistoricalScenarioEmbedding[]
+  mlModelEmbeddings            MLModelEmbedding[]
+  modelDNASignatures           ModelDNASignature[]
+  modelLineageVectors          ModelLineageVector[]
+  modelModifications           ModelModification[]
+  profiles                     Profile?
+
+  @@index([instance_id])
+  @@index([is_anonymous])
+  @@schema("auth")
+}
+
+model public_AuditLog {
+  id           Int         @id @default(autoincrement())
+  createdAt    DateTime    @default(now())
+  userId       Int
+  simulationId Int?
+  action       String
+  details      Json
+  ipAddress    String
+  userAgent    String
+  Simulation   Simulation? @relation(fields: [simulationId], references: [id])
+  User         User        @relation(fields: [userId], references: [id])
+
+  @@map("AuditLog")
+  @@schema("public")
+}
+
+model BiasDetectionResult {
+  id           Int        @id @default(autoincrement())
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime
+  simulationId Int
+  result       Json
+  Simulation   Simulation @relation(fields: [simulationId], references: [id])
+
+  @@schema("public")
+}
+
+model ComplianceRecord {
+  id           Int        @id @default(autoincrement())
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime
+  simulationId Int
+  record       Json
+  Simulation   Simulation @relation(fields: [simulationId], references: [id])
+
+  @@schema("public")
+}
+
+model ExplainabilityAnalysis {
+  id           Int        @id @default(autoincrement())
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime
+  simulationId Int
+  analysis     Json
+  Simulation   Simulation @relation(fields: [simulationId], references: [id])
+
+  @@schema("public")
+}
+
+model FairnessAssessment {
+  id           Int        @id @default(autoincrement())
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime
+  simulationId Int
+  assessment   Json
+  Simulation   Simulation @relation(fields: [simulationId], references: [id])
+
+  @@schema("public")
+}
+
+model RiskAssessment {
+  id           Int        @id @default(autoincrement())
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime
+  simulationId Int
+  assessment   Json
+  Simulation   Simulation @relation(fields: [simulationId], references: [id])
+
+  @@schema("public")
+}
+
+model Simulation {
+  id                     Int                      @id @default(autoincrement())
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime
+  name                   String
+  description            String?
+  status                 SimulationStatus
+  userId                 Int
+  config                 Json
+  modelType              String
+  version                String
+  tags                   String[]
+  AuditLog               public_AuditLog[]
+  BiasDetectionResult    BiasDetectionResult[]
+  ComplianceRecord       ComplianceRecord[]
+  ExplainabilityAnalysis ExplainabilityAnalysis[]
+  FairnessAssessment     FairnessAssessment[]
+  RiskAssessment         RiskAssessment[]
+  User                   User                     @relation(fields: [userId], references: [id])
+
+  @@schema("public")
+}
+
+model User {
+  id           Int               @id @default(autoincrement())
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime
+  email        String            @unique
+  passwordHash String
+  name         String
+  role         String            @default("USER")
+  AuditLog     public_AuditLog[]
+  Simulation   Simulation[]
+
+  @@schema("public")
+}
+
+// ML Models
+model MLModel {
+  id                    String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                  String
+  version               String
+  type                  ModelType
+  framework             String
+  description           String?
+  tags                  String[]
+  orgId                 String                @map("org_id")
+  riskLevel             RiskLevel             @default(medium) @map("risk_level")
+  deploymentEnvironment DeploymentEnvironment @default(development) @map("deployment_environment")
+  path                  String
+  sha256                String
+  fileSize              BigInt?               @map("file_size")
+  createdAt             DateTime              @default(now()) @map("created_at")
+  updatedAt             DateTime              @updatedAt @map("updated_at")
+  createdBy             String?               @db.Uuid @map("created_by")
+  performanceMetrics    Json                  @default("{}") @map("performance_metrics")
+  biasAnalysis          Json                  @default("{}") @map("bias_analysis")
+  metadata              Json                  @default("{}")
+  isActive              Boolean               @default(true) @map("is_active")
+  modelFileUrl          String?               @map("model_file_url")
+  documentationUrl      String?               @map("documentation_url")
+  license               String?
+  useCase               String?               @map("use_case")
+  trainingDataInfo      Json                  @default("{}") @map("training_data_info")
+  validationMetrics     Json                  @default("{}") @map("validation_metrics")
+  deploymentInfo        Json                  @default("{}") @map("deployment_info")
+
+  // Relations
+  createdByProfile      Profile?              @relation(fields: [createdBy], references: [id])
+
+  @@map("ml_models")
+  @@schema("public")
+}
+
+// AI BOM Models
+model AIBOMDocument {
+  id                      String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                    String
+  version                 String
+  description             String
+  projectName             String    @map("project_name")
+  organization            String
+  overallRiskLevel        RiskLevel @map("overall_risk_level")
+  overallComplianceStatus String    @map("overall_compliance_status") @db.VarChar(20)
+  totalComponents         Int       @map("total_components")
+  createdBy               String    @map("created_by")
+  createdAt               DateTime  @default(now()) @map("created_at")
+  updatedAt               DateTime  @updatedAt @map("updated_at")
+  tags                    String[]
+  riskAssessment          Json      @default("{}") @map("risk_assessment")
+  complianceReport        Json      @default("{}") @map("compliance_report")
+  recommendations         String[]
+  
+  // Layer data
+  dataLayer               Json      @default("{}") @map("data_layer")
+  modelDevelopmentLayer   Json      @default("{}") @map("model_development_layer")
+  infrastructureLayer     Json      @default("{}") @map("infrastructure_layer")
+  deploymentLayer         Json      @default("{}") @map("deployment_layer")
+  monitoringLayer         Json      @default("{}") @map("monitoring_layer")
+  securityLayer           Json      @default("{}") @map("security_layer")
+  complianceLayer         Json      @default("{}") @map("compliance_layer")
+
+  // Relations
+  components              AIBOMComponent[]
+  analyses                AIBOMAnalysis[]
+  createdByProfile        Profile?  @relation(fields: [createdBy], references: [id])
+
+  @@map("ai_bom_documents")
+  @@schema("public")
+}
+
+model AIBOMComponent {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  bomId             String    @map("bom_id") @db.Uuid
+  name              String
+  type              String
+  version           String
+  description       String
+  vendor            String?
+  license           String?
+  riskLevel         RiskLevel @map("risk_level")
+  complianceStatus  String    @map("compliance_status") @db.VarChar(20)
+  dependencies      String[]
+  metadata          Json      @default("{}")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  bomDocument       AIBOMDocument @relation(fields: [bomId], references: [id], onDelete: Cascade)
+
+  @@map("ai_bom_components")
+  @@schema("public")
+}
+
+model AIBOMAnalysis {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  bomId             String    @map("bom_id") @db.Uuid
+  analysisType      String    @map("analysis_type")
+  riskScore         Float     @map("risk_score")
+  complianceScore   Float     @map("compliance_score")
+  securityScore     Float     @map("security_score")
+  performanceScore  Float     @map("performance_score")
+  costAnalysis      Json      @default("{}") @map("cost_analysis")
+  recommendations   String[]
+  createdAt         DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  bomDocument       AIBOMDocument @relation(fields: [bomId], references: [id], onDelete: Cascade)
+
+  @@map("ai_bom_analyses")
+  @@schema("public")
+}
+
+enum UserRole {
+  user
+  admin
+  auditor
+  developer
+  analyst
+  manager
+  guest
+
+  @@schema("public")
+}
+
+enum SimulationStatus {
+  DRAFT
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  ARCHIVED
+
+  @@schema("public")
+}
+
+enum ModelType {
+  classification
+  regression
+  clustering
+  nlp
+  llm
+  deep_learning
+  ensemble
+
+  @@schema("public")
+}
+
+enum DeploymentEnvironment {
+  development
+  staging
+  production
+  testing
+  archived
+
+  @@schema("public")
+}
+
+enum RiskLevel {
+  low
+  medium
+  high
+  critical
+
+  @@schema("public")
+}
+
+enum aal_level {
+  aal1
+  aal2
+  aal3
+
+  @@schema("auth")
+}
+
+enum code_challenge_method {
+  s256
+  plain
+
+  @@schema("auth")
+}
+
+enum factor_status {
+  unverified
+  verified
+
+  @@schema("auth")
+}
+
+enum factor_type {
+  totp
+  webauthn
+  phone
+
+  @@schema("auth")
+}
+
+enum one_time_token_type {
+  confirmation_token
+  reauthentication_token
+  recovery_token
+  email_change_token_new
+  email_change_token_current
+  phone_change_token
+
+  @@schema("auth")
+}
+
+enum AnalysisStatus {
+  pending
+  in_progress
+  completed
+  failed
+  cancelled
+
+  @@schema("public")
+}
+
+enum MemberStatus {
+  active
+  invited
+  disabled
+
+  @@schema("public")
+}
+
+enum OrgRole {
+  owner
+  admin
+  member
+  viewer
+
+  @@schema("public")
+}
+
+enum user_role {
+  user
+  admin
+  auditor
+  developer
+  analyst
+  manager
+  guest
+
+  @@schema("public")
+}

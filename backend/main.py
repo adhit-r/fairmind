@@ -2962,6 +2962,104 @@ async def list_provenance_models():
             "message": "Failed to list provenance models"
         }
 
+# Add CycloneDX AI/ML-BOM imports
+from services.cyclonedx_aibom_service import cyclonedx_aibom_service
+
+# CycloneDX AI/ML-BOM Endpoints
+@app.post("/cyclonedx/generate-aibom")
+async def generate_cyclonedx_aibom(
+    project_path: str = Form(...),
+    organization_id: str = Form(...),
+    include_vulnerabilities: bool = Form(True)
+):
+    """Generate a CycloneDX AI/ML-BOM for a project"""
+    try:
+        logger.info(f"Generating CycloneDX AIBOM for project: {project_path}")
+        
+        bom_data = await cyclonedx_aibom_service.generate_aibom(
+            project_path=project_path,
+            organization_id=organization_id,
+            include_vulnerabilities=include_vulnerabilities
+        )
+        
+        return {
+            "success": True,
+            "data": bom_data,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error generating CycloneDX AIBOM: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate CycloneDX AIBOM: {str(e)}")
+
+@app.post("/cyclonedx/visualization-data")
+async def get_cyclonedx_visualization_data(bom_data: Dict[str, Any]):
+    """Generate visualization data for a CycloneDX BOM"""
+    try:
+        visualization_data = await cyclonedx_aibom_service.generate_visualization_data(bom_data)
+        
+        return {
+            "success": True,
+            "data": visualization_data,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error generating visualization data: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate visualization data: {str(e)}")
+
+@app.post("/cyclonedx/export/{format}")
+async def export_cyclonedx_bom(format: str, bom_data: Dict[str, Any]):
+    """Export CycloneDX BOM in different formats"""
+    try:
+        if format == "json":
+            export_data = await cyclonedx_aibom_service.export_to_json(bom_data)
+        elif format == "xml":
+            export_data = await cyclonedx_aibom_service.export_to_xml(bom_data)
+        elif format == "spdx":
+            export_data = await cyclonedx_aibom_service.export_to_spdx(bom_data)
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported format: {format}")
+        
+        return {
+            "success": True,
+            "data": export_data,
+            "format": format,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error exporting CycloneDX BOM: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to export CycloneDX BOM: {str(e)}")
+
+@app.get("/cyclonedx/vulnerability-sources")
+async def get_vulnerability_sources():
+    """Get available vulnerability data sources"""
+    try:
+        sources = {
+            "nvd": {
+                "name": "National Vulnerability Database",
+                "url": "https://nvd.nist.gov/",
+                "description": "U.S. government repository of standards-based vulnerability management data"
+            },
+            "osv": {
+                "name": "Open Source Vulnerabilities",
+                "url": "https://ossf.github.io/osv-schema/",
+                "description": "Open source vulnerability database and schema"
+            },
+            "github": {
+                "name": "GitHub Security Advisories",
+                "url": "https://github.com/advisories",
+                "description": "GitHub's security advisory database"
+            }
+        }
+        
+        return {
+            "success": True,
+            "data": sources,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error getting vulnerability sources: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get vulnerability sources: {str(e)}")
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", "8000"))
