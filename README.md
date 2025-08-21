@@ -10,7 +10,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178c6.svg)](https://www.typescriptlang.org/)
 
 <!-- Security & Best Practices Badges -->
-[![OSSF Scorecard](https://img.shields.io/badge/OSSF%20Scorecard-A%20(95%2F100)-green)](https://securityscorecards.dev/viewer/?uri=github.com/radhi1991/fairmind)
+[![OSSF Scorecard](https://img.shields.io/badge/OSSF%20Scorecard-Pending-blue)](https://securityscorecards.dev/viewer/?uri=github.com/radhi1991/fairmind)
 [![Security Rating](https://img.shields.io/badge/Security%20Rating-A%2B-green)](https://github.com/radhi1991/fairmind/security)
 [![CodeQL](https://github.com/radhi1991/fairmind/workflows/CodeQL/badge.svg)](https://github.com/radhi1991/fairmind/actions?query=workflow%3ACodeQL)
 [![Dependency Review](https://github.com/radhi1991/fairmind/workflows/Dependency%20Review/badge.svg)](https://github.com/radhi1991/fairmind/actions?query=workflow%3A%22Dependency+Review%22)
@@ -34,6 +34,8 @@
 > **The most comprehensive AI governance platform for building ethical, fair, and accountable AI systems** 🚀
 
 FairMind is a complete AI governance platform that provides **comprehensive tools for AI ethics, bias detection, model management, security testing, and compliance automation**. We help organizations build AI systems that are fair, transparent, secure, and compliant with global regulations.
+
+> **Note**: OSSF Scorecard analysis is pending. The repository will be automatically analyzed once it becomes more active. You can also manually trigger analysis through the [OSSF Scorecard website](https://securityscorecards.dev/viewer/?uri=github.com/radhi1991/fairmind).
 
 ## 🎯 What FairMind Actually Does
 
@@ -215,7 +217,7 @@ fairmind/
 - [x] **AI BOM System** - Complete component tracking and compliance
 - [x] **Model Registry** - Model lifecycle and provenance management
 - [x] **50+ API Endpoints** - Comprehensive REST API
-- [x] **Security Framework** - OSSF Scorecard A (95/100)
+- [x] **Security Framework** - OSSF Scorecard (pending analysis)
 - [x] **26+ GitHub Issues** - Active development roadmap
 
 ### 🔄 In Progress
@@ -268,7 +270,7 @@ We welcome contributions from developers of all skill levels! Here's how you can
 - **🐛 Issues**: 26+ open issues
 - **📈 Contributors**: Join our growing community
 - **🚀 Releases**: Regular updates
-- **🛡️ Security**: A+ rating with OSSF Scorecard
+- **🛡️ Security**: Comprehensive security framework with OSSF Scorecard
 - **🔍 Features**: 8 major feature categories
 - **📡 Endpoints**: 50+ API endpoints
 
