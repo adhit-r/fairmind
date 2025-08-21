@@ -1,59 +1,386 @@
 [
   {
-    "id": "diabetes_model_001",
-    "name": "Diabetes Prediction Model",
-    "version": "1.0.0",
+    "id": "demo_org_credit_risk_v1",
+    "name": "Credit Risk Assessment Model",
+    "version": "2.1.0",
     "type": "classification",
     "framework": "scikit-learn",
-    "tags": [
-      "healthcare",
-      "diabetes",
-      "classification"
-    ],
-    "company": "axonome.xyz",
-    "org_id": "axonome.xyz",
-    "risk_level": "MEDIUM",
-    "deployment_environment": "development",
-    "path": "/Users/adhi/Desktop/Documents/learn/fairmind-ethical-sandbox/sim_test/assets/models/diabetes_model.pkl",
-    "sha256": "sample_sha256_diabetes",
-    "created_at": "2025-08-10T11:18:48.812145"
-  },
-  {
-    "id": "titanic_model_001",
-    "name": "Titanic Survival Model",
-    "version": "1.0.0",
-    "type": "classification",
-    "framework": "scikit-learn",
-    "tags": [
-      "survival",
-      "titanic",
-      "classification"
-    ],
-    "company": "axonome.xyz",
-    "org_id": "axonome.xyz",
-    "risk_level": "LOW",
-    "deployment_environment": "development",
-    "path": "/Users/adhi/Desktop/Documents/learn/fairmind-ethical-sandbox/sim_test/assets/models/titanic_model.pkl",
-    "sha256": "sample_sha256_titanic",
-    "created_at": "2025-08-10T11:18:48.812161"
-  },
-  {
-    "id": "credit_fraud_model_001",
-    "name": "Credit Card Fraud Detection",
-    "version": "1.0.0",
-    "type": "classification",
-    "framework": "scikit-learn",
-    "tags": [
-      "fraud",
-      "finance",
-      "classification"
-    ],
-    "company": "axonome.xyz",
-    "org_id": "axonome.xyz",
+    "tags": ["finance", "credit", "risk", "lending"],
+    "company": "Demo Organization",
+    "org_id": "demo_org",
     "risk_level": "HIGH",
-    "deployment_environment": "development",
-    "path": "/Users/adhi/Desktop/Documents/learn/fairmind-ethical-sandbox/sim_test/assets/models/credit_fraud_model.pkl",
-    "sha256": "sample_sha256_credit_fraud",
-    "created_at": "2025-08-10T11:18:48.812164"
+    "deployment_environment": "production",
+    "path": "storage/models/demo_org/credit_risk_v2.1.pkl",
+    "sha256": "a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456",
+    "created_at": "2024-01-15T10:30:00.000Z",
+    "description": "Advanced credit risk assessment model using gradient boosting for loan approval decisions",
+    "use_case": "Financial Services - Lending",
+    "performance_metrics": {
+      "accuracy": 0.87,
+      "precision": 0.85,
+      "recall": 0.89,
+      "f1_score": 0.87
+    },
+    "bias_analysis": {
+      "demographic_parity": 0.12,
+      "equalized_odds": 0.08,
+      "last_analyzed": "2024-01-14T15:45:00.000Z"
+    }
+  },
+  {
+    "id": "demo_org_fraud_detection_v1",
+    "name": "Real-time Fraud Detection",
+    "version": "1.5.2",
+    "type": "classification",
+    "framework": "tensorflow",
+    "tags": ["security", "fraud", "finance", "real-time"],
+    "company": "Demo Organization",
+    "org_id": "demo_org",
+    "risk_level": "HIGH",
+    "deployment_environment": "production",
+    "path": "storage/models/demo_org/fraud_detection_v1.5.2.h5",
+    "sha256": "b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef1234567890",
+    "created_at": "2024-01-14T14:20:00.000Z",
+    "description": "Deep learning model for real-time credit card fraud detection using transaction patterns",
+    "use_case": "Financial Services - Fraud Prevention",
+    "performance_metrics": {
+      "accuracy": 0.94,
+      "precision": 0.91,
+      "recall": 0.96,
+      "f1_score": 0.93
+    },
+    "bias_analysis": {
+      "demographic_parity": 0.15,
+      "equalized_odds": 0.11,
+      "last_analyzed": "2024-01-13T09:30:00.000Z"
+    }
+  },
+  {
+    "id": "demo_org_customer_segmentation_v1",
+    "name": "Customer Segmentation Model",
+    "version": "1.0.0",
+    "type": "clustering",
+    "framework": "scikit-learn",
+    "tags": ["marketing", "segmentation", "customers", "analytics"],
+    "company": "Demo Organization",
+    "org_id": "demo_org",
+    "risk_level": "MEDIUM",
+    "deployment_environment": "testing",
+    "path": "storage/models/demo_org/customer_segmentation_v1.0.pkl",
+    "sha256": "c3d4e5f6789012345678901234567890abcdef1234567890abcdef1234567890ab",
+    "created_at": "2024-01-13T11:15:00.000Z",
+    "description": "K-means clustering model for customer segmentation based on purchasing behavior",
+    "use_case": "E-commerce - Marketing",
+    "performance_metrics": {
+      "silhouette_score": 0.72,
+      "inertia": 0.15,
+      "n_clusters": 5
+    },
+    "bias_analysis": {
+      "cluster_balance": 0.18,
+      "demographic_distribution": "balanced",
+      "last_analyzed": "2024-01-12T16:20:00.000Z"
+    }
+  },
+  {
+    "id": "demo_org_sentiment_analysis_v1",
+    "name": "Customer Sentiment Analysis",
+    "version": "1.2.1",
+    "type": "nlp",
+    "framework": "pytorch",
+    "tags": ["nlp", "sentiment", "feedback", "customer-service"],
+    "company": "Demo Organization",
+    "org_id": "demo_org",
+    "risk_level": "LOW",
+    "deployment_environment": "inactive",
+    "path": "storage/models/demo_org/sentiment_analysis_v1.2.1.pt",
+    "sha256": "d4e5f6789012345678901234567890abcdef1234567890abcdef1234567890abcd",
+    "created_at": "2024-01-12T09:45:00.000Z",
+    "description": "BERT-based sentiment analysis model for customer feedback and reviews",
+    "use_case": "Customer Service - Feedback Analysis",
+    "performance_metrics": {
+      "accuracy": 0.89,
+      "precision": 0.87,
+      "recall": 0.91,
+      "f1_score": 0.89
+    },
+    "bias_analysis": {
+      "demographic_parity": 0.05,
+      "equalized_odds": 0.03,
+      "last_analyzed": "2024-01-11T14:10:00.000Z"
+    }
+  },
+  {
+    "id": "demo_org_llm_chatbot_v1",
+    "name": "Customer Support Chatbot",
+    "version": "1.0.0",
+    "type": "llm",
+    "framework": "openai",
+    "tags": ["llm", "chatbot", "customer-support", "automation"],
+    "company": "Demo Organization",
+    "org_id": "demo_org",
+    "risk_level": "MEDIUM",
+    "deployment_environment": "production",
+    "path": "storage/models/demo_org/chatbot_gpt4_finetuned.json",
+    "sha256": "e5f6789012345678901234567890abcdef1234567890abcdef1234567890abcdef",
+    "created_at": "2024-01-10T13:30:00.000Z",
+    "description": "Fine-tuned GPT-4 model for customer support automation and query resolution",
+    "use_case": "Customer Service - Automation",
+    "performance_metrics": {
+      "response_accuracy": 0.92,
+      "customer_satisfaction": 4.2,
+      "resolution_rate": 0.78
+    },
+    "bias_analysis": {
+      "response_fairness": 0.08,
+      "cultural_sensitivity": "high",
+      "last_analyzed": "2024-01-09T10:15:00.000Z"
+    }
+  },
+  {
+    "id": "demo_org_llm_content_gen_v1",
+    "name": "Marketing Content Generator",
+    "version": "1.1.0",
+    "type": "llm",
+    "framework": "anthropic",
+    "tags": ["llm", "content-generation", "marketing", "copywriting"],
+    "company": "Demo Organization",
+    "org_id": "demo_org",
+    "risk_level": "LOW",
+    "deployment_environment": "production",
+    "path": "storage/models/demo_org/claude_content_gen_v1.1.json",
+    "sha256": "f6789012345678901234567890abcdef1234567890abcdef1234567890abcdef12",
+    "created_at": "2024-01-08T15:20:00.000Z",
+    "description": "Claude-based content generation model for marketing copy and product descriptions",
+    "use_case": "Marketing - Content Creation",
+    "performance_metrics": {
+      "content_quality": 0.88,
+      "brand_consistency": 0.91,
+      "engagement_rate": 0.15
+    },
+    "bias_analysis": {
+      "content_fairness": 0.06,
+      "inclusivity_score": 0.89,
+      "last_analyzed": "2024-01-07T11:45:00.000Z"
+    }
+  },
+  {
+    "id": "admin_org_loan_approval_v1",
+    "name": "Automated Loan Approval System",
+    "version": "3.0.0",
+    "type": "classification",
+    "framework": "xgboost",
+    "tags": ["finance", "lending", "automation", "risk-assessment"],
+    "company": "Admin Organization",
+    "org_id": "admin_org",
+    "risk_level": "HIGH",
+    "deployment_environment": "production",
+    "path": "storage/models/admin_org/loan_approval_v3.0.xgb",
+    "sha256": "7890123456789012345678901234567890abcdef1234567890abcdef1234567890",
+    "created_at": "2024-01-16T08:45:00.000Z",
+    "description": "XGBoost-based automated loan approval system with advanced risk scoring",
+    "use_case": "Financial Services - Lending",
+    "performance_metrics": {
+      "accuracy": 0.91,
+      "precision": 0.89,
+      "recall": 0.93,
+      "f1_score": 0.91
+    },
+    "bias_analysis": {
+      "demographic_parity": 0.09,
+      "equalized_odds": 0.06,
+      "last_analyzed": "2024-01-15T16:30:00.000Z"
+    }
+  },
+  {
+    "id": "admin_org_hiring_assistant_v1",
+    "name": "AI Hiring Assistant",
+    "version": "2.2.0",
+    "type": "classification",
+    "framework": "tensorflow",
+    "tags": ["hr", "hiring", "recruitment", "resume-screening"],
+    "company": "Admin Organization",
+    "org_id": "admin_org",
+    "risk_level": "HIGH",
+    "deployment_environment": "production",
+    "path": "storage/models/admin_org/hiring_assistant_v2.2.h5",
+    "sha256": "890123456789012345678901234567890abcdef1234567890abcdef12345678901",
+    "created_at": "2024-01-15T12:10:00.000Z",
+    "description": "Deep learning model for resume screening and candidate ranking",
+    "use_case": "Human Resources - Recruitment",
+    "performance_metrics": {
+      "accuracy": 0.86,
+      "precision": 0.84,
+      "recall": 0.88,
+      "f1_score": 0.86
+    },
+    "bias_analysis": {
+      "demographic_parity": 0.14,
+      "equalized_odds": 0.12,
+      "last_analyzed": "2024-01-14T13:20:00.000Z"
+    }
+  },
+  {
+    "id": "admin_org_price_optimization_v1",
+    "name": "Dynamic Pricing Optimization",
+    "version": "1.3.0",
+    "type": "regression",
+    "framework": "scikit-learn",
+    "tags": ["pricing", "optimization", "revenue", "analytics"],
+    "company": "Admin Organization",
+    "org_id": "admin_org",
+    "risk_level": "MEDIUM",
+    "deployment_environment": "production",
+    "path": "storage/models/admin_org/price_optimization_v1.3.pkl",
+    "sha256": "90123456789012345678901234567890abcdef1234567890abcdef123456789012",
+    "created_at": "2024-01-14T10:25:00.000Z",
+    "description": "Machine learning model for dynamic pricing optimization based on demand and competition",
+    "use_case": "E-commerce - Pricing Strategy",
+    "performance_metrics": {
+      "r2_score": 0.82,
+      "mae": 0.15,
+      "rmse": 0.23
+    },
+    "bias_analysis": {
+      "price_fairness": 0.07,
+      "market_segment_balance": 0.11,
+      "last_analyzed": "2024-01-13T14:50:00.000Z"
+    }
+  },
+  {
+    "id": "admin_org_inventory_forecast_v1",
+    "name": "Inventory Demand Forecasting",
+    "version": "1.1.0",
+    "type": "time_series",
+    "framework": "prophet",
+    "tags": ["forecasting", "inventory", "supply-chain", "analytics"],
+    "company": "Admin Organization",
+    "org_id": "admin_org",
+    "risk_level": "LOW",
+    "deployment_environment": "production",
+    "path": "storage/models/admin_org/inventory_forecast_v1.1.json",
+    "sha256": "0123456789012345678901234567890abcdef1234567890abcdef1234567890123",
+    "created_at": "2024-01-13T16:40:00.000Z",
+    "description": "Prophet-based time series model for inventory demand forecasting",
+    "use_case": "Supply Chain - Inventory Management",
+    "performance_metrics": {
+      "mape": 0.12,
+      "mae": 0.08,
+      "forecast_accuracy": 0.88
+    },
+    "bias_analysis": {
+      "seasonal_fairness": 0.04,
+      "regional_balance": 0.06,
+      "last_analyzed": "2024-01-12T11:30:00.000Z"
+    }
+  },
+  {
+    "id": "admin_org_llm_legal_assistant_v1",
+    "name": "Legal Document Assistant",
+    "version": "1.0.0",
+    "type": "llm",
+    "framework": "openai",
+    "tags": ["llm", "legal", "document-analysis", "compliance"],
+    "company": "Admin Organization",
+    "org_id": "admin_org",
+    "risk_level": "HIGH",
+    "deployment_environment": "production",
+    "path": "storage/models/admin_org/legal_assistant_gpt4.json",
+    "sha256": "123456789012345678901234567890abcdef1234567890abcdef12345678901234",
+    "created_at": "2024-01-12T09:15:00.000Z",
+    "description": "GPT-4 fine-tuned model for legal document analysis and contract review",
+    "use_case": "Legal - Document Analysis",
+    "performance_metrics": {
+      "document_accuracy": 0.94,
+      "compliance_detection": 0.91,
+      "review_speed": "10x_faster"
+    },
+    "bias_analysis": {
+      "legal_fairness": 0.05,
+      "jurisdiction_balance": 0.08,
+      "last_analyzed": "2024-01-11T15:45:00.000Z"
+    }
+  },
+  {
+    "id": "admin_org_llm_code_review_v1",
+    "name": "AI Code Reviewer",
+    "version": "1.2.0",
+    "type": "llm",
+    "framework": "anthropic",
+    "tags": ["llm", "code-review", "development", "security"],
+    "company": "Admin Organization",
+    "org_id": "admin_org",
+    "risk_level": "MEDIUM",
+    "deployment_environment": "production",
+    "path": "storage/models/admin_org/code_reviewer_claude.json",
+    "sha256": "23456789012345678901234567890abcdef1234567890abcdef123456789012345",
+    "created_at": "2024-01-11T14:20:00.000Z",
+    "description": "Claude-based code review assistant for security and quality analysis",
+    "use_case": "Development - Code Review",
+    "performance_metrics": {
+      "bug_detection": 0.89,
+      "security_issues": 0.92,
+      "code_quality": 0.87
+    },
+    "bias_analysis": {
+      "code_fairness": 0.03,
+      "language_balance": 0.06,
+      "last_analyzed": "2024-01-10T12:30:00.000Z"
+    }
+  },
+  {
+    "id": "demo_org_healthcare_diagnosis_v1",
+    "name": "Medical Diagnosis Assistant",
+    "version": "1.0.0",
+    "type": "classification",
+    "framework": "tensorflow",
+    "tags": ["healthcare", "diagnosis", "medical", "clinical"],
+    "company": "Demo Organization",
+    "org_id": "demo_org",
+    "risk_level": "HIGH",
+    "deployment_environment": "testing",
+    "path": "storage/models/demo_org/medical_diagnosis_v1.0.h5",
+    "sha256": "3456789012345678901234567890abcdef1234567890abcdef1234567890123456",
+    "created_at": "2024-01-10T11:30:00.000Z",
+    "description": "Deep learning model for medical diagnosis assistance using patient symptoms",
+    "use_case": "Healthcare - Clinical Decision Support",
+    "performance_metrics": {
+      "accuracy": 0.89,
+      "precision": 0.87,
+      "recall": 0.91,
+      "f1_score": 0.89
+    },
+    "bias_analysis": {
+      "demographic_parity": 0.11,
+      "equalized_odds": 0.09,
+      "last_analyzed": "2024-01-09T16:15:00.000Z"
+    }
+  },
+  {
+    "id": "demo_org_recommendation_engine_v1",
+    "name": "Product Recommendation Engine",
+    "version": "1.4.0",
+    "type": "recommendation",
+    "framework": "surprise",
+    "tags": ["recommendation", "e-commerce", "personalization", "collaborative-filtering"],
+    "company": "Demo Organization",
+    "org_id": "demo_org",
+    "risk_level": "MEDIUM",
+    "deployment_environment": "production",
+    "path": "storage/models/demo_org/recommendation_engine_v1.4.pkl",
+    "sha256": "456789012345678901234567890abcdef1234567890abcdef12345678901234567",
+    "created_at": "2024-01-09T13:45:00.000Z",
+    "description": "Collaborative filtering recommendation engine for personalized product suggestions",
+    "use_case": "E-commerce - Personalization",
+    "performance_metrics": {
+      "precision_at_k": 0.78,
+      "recall_at_k": 0.82,
+      "ndcg": 0.85
+    },
+    "bias_analysis": {
+      "recommendation_fairness": 0.08,
+      "diversity_score": 0.76,
+      "last_analyzed": "2024-01-08T10:20:00.000Z"
+    }
   }
 ]

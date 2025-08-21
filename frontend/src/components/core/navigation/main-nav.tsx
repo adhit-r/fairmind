@@ -93,6 +93,23 @@ export function MainNav() {
       label: "Provenance",
       active: pathname === "/provenance",
     },
+    {
+      href: "/ai-bom",
+      label: "AI BOM",
+      active: pathname === "/ai-bom",
+      badge: "New",
+    },
+                {
+              href: "/model-upload",
+              label: "Model Upload",
+              active: pathname === "/model-upload",
+            },
+            {
+              href: "/advanced-fairness",
+              label: "Advanced Fairness",
+              active: pathname === "/advanced-fairness",
+              badge: "New",
+            },
   ]
 
   return (

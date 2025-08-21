@@ -1697,3 +1697,245 @@ Sensitive Attribute Analysis:
         recommendations.append("Regular bias audits and model retraining recommended.")
         
         return recommendations[:5]  # Limit to top 5 recommendations
+
+    def analyze_model_bias(self, model_id: str, dataset_name: str, target_column: str, 
+                          sensitive_columns: List[str]) -> Dict[str, Any]:
+        """
+        Analyze bias in model predictions
+        
+        Args:
+            model_id: ID of the model to analyze
+            dataset_name: Name of the dataset
+            target_column: Target variable column name
+            sensitive_columns: List of sensitive attribute column names
+            
+        Returns:
+            Dictionary containing model bias analysis results
+        """
+        try:
+            # Load dataset
+            df = self._load_dataset_by_name(dataset_name)
+            
+            # For now, we'll use a simple model for demonstration
+            # In production, you would load the actual model
+            from sklearn.ensemble import RandomForestClassifier
+            from sklearn.model_selection import train_test_split
+            from sklearn.preprocessing import LabelEncoder
+            
+            # Prepare data
+            X = df.drop([target_column] + sensitive_columns, axis=1, errors='ignore')
+            y = df[target_column]
+            
+            # Handle categorical variables
+            le = LabelEncoder()
+            for col in X.select_dtypes(include=['object']).columns:
+                X[col] = le.fit_transform(X[col].astype(str))
+            
+            # Train a simple model for demonstration
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+            model = RandomForestClassifier(n_estimators=100, random_state=42)
+            model.fit(X_train, y_train)
+            
+            # Generate predictions
+            predictions = model.predict(X_test)
+            
+            # Add predictions to test data
+            test_data = X_test.copy()
+            test_data[target_column] = y_test
+            test_data['predictions'] = predictions
+            
+            # Calculate model fairness metrics
+            model_fairness = {}
+            
+            for attr in sensitive_columns:
+                if attr in df.columns:
+                    # Demographic parity with predictions
+                    demo_parity = self._calculate_demographic_parity(
+                        test_data, attr, 'predictions'
+                    )
+                    
+                    # Equality of opportunity with predictions
+                    eq_opportunity = self._calculate_equality_of_opportunity(
+                        test_data, attr, target_column
+                    )
+                    
+                    # Subgroup performance analysis
+                    subgroup_performance = self._analyze_subgroup_performance(
+                        test_data, attr, target_column, 'predictions'
+                    )
+                    
+                    model_fairness[attr] = {
+                        'demographic_parity': demo_parity,
+                        'equality_of_opportunity': eq_opportunity,
+                        'subgroup_performance': subgroup_performance
+                    }
+            
+            # Calculate overall performance
+            from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+            overall_performance = {
+                'accuracy': accuracy_score(y_test, predictions),
+                'precision': precision_score(y_test, predictions, zero_division=0),
+                'recall': recall_score(y_test, predictions, zero_division=0),
+                'f1_score': f1_score(y_test, predictions, zero_division=0)
+            }
+            
+            # Summarize bias findings
+            bias_summary = self._summarize_model_bias(model_fairness)
+            
+            return {
+                'model_id': model_id,
+                'timestamp': datetime.now().isoformat(),
+                'model_fairness': model_fairness,
+                'overall_performance': overall_performance,
+                'bias_summary': bias_summary,
+                'recommendations': self._generate_model_recommendations(model_fairness, bias_summary)
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in model bias analysis: {str(e)}")
+            raise
+
+    def _calculate_demographic_parity(self, df: pd.DataFrame, sensitive_attr: str, 
+                                    prediction_column: str) -> Dict[str, Any]:
+        """Calculate demographic parity across groups"""
+        
+        groups = df[sensitive_attr].unique()
+        acceptance_rates = {}
+        
+        for group in groups:
+            group_data = df[df[sensitive_attr] == group]
+            acceptance_rates[group] = group_data[prediction_column].mean()
+        
+        # Calculate disparity
+        max_rate = max(acceptance_rates.values())
+        min_rate = min(acceptance_rates.values())
+        disparity = max_rate - min_rate
+        ratio = max_rate / min_rate if min_rate > 0 else float('inf')
+        
+        return {
+            'acceptance_rates': acceptance_rates,
+            'disparity': disparity,
+            'ratio': ratio,
+            'fair': disparity < 0.1,  # Less than 10% difference
+            'groups': list(groups)
+        }
+
+    def _calculate_equality_of_opportunity(self, df: pd.DataFrame, sensitive_attr: str, 
+                                         target_column: str) -> Dict[str, Any]:
+        """Calculate equality of opportunity for positive class"""
+        
+        groups = df[sensitive_attr].unique()
+        opportunity_rates = {}
+        
+        for group in groups:
+            group_data = df[df[sensitive_attr] == group]
+            # Only consider positive examples (target = 1)
+            positive_data = group_data[group_data[target_column] == 1]
+            
+            if len(positive_data) > 0:
+                # Calculate true positive rate for this group
+                opportunity_rates[group] = len(positive_data) / len(group_data)
+            else:
+                opportunity_rates[group] = 0
+        
+        # Calculate disparity
+        max_rate = max(opportunity_rates.values())
+        min_rate = min(opportunity_rates.values())
+        disparity = max_rate - min_rate
+        ratio = max_rate / min_rate if min_rate > 0 else float('inf')
+        
+        return {
+            'opportunity_rates': opportunity_rates,
+            'disparity': disparity,
+            'ratio': ratio,
+            'fair': disparity < 0.1,  # Less than 10% difference
+            'groups': list(groups)
+        }
+
+    def _analyze_subgroup_performance(self, df: pd.DataFrame, sensitive_attr: str, 
+                                    target_column: str, prediction_column: str) -> Dict[str, Any]:
+        """Analyze model performance across subgroups"""
+        
+        groups = df[sensitive_attr].unique()
+        performance_by_group = {}
+        
+        for group in groups:
+            group_data = df[df[sensitive_attr] == group]
+            
+            if len(group_data) > 0:
+                y_true = group_data[target_column]
+                y_pred = group_data[prediction_column]
+                
+                from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+                
+                performance_by_group[group] = {
+                    'sample_size': len(group_data),
+                    'accuracy': accuracy_score(y_true, y_pred),
+                    'precision': precision_score(y_true, y_pred, zero_division=0),
+                    'recall': recall_score(y_true, y_pred, zero_division=0),
+                    'f1_score': f1_score(y_true, y_pred, zero_division=0)
+                }
+        
+        return performance_by_group
+
+    def _summarize_model_bias(self, model_fairness: Dict[str, Any]) -> Dict[str, Any]:
+        """Summarize bias findings across all sensitive attributes"""
+        
+        bias_summary = {
+            'total_attributes_analyzed': len(model_fairness),
+            'attributes_with_bias': 0,
+            'demographic_parity_violations': 0,
+            'equality_of_opportunity_violations': 0,
+            'performance_disparities': 0
+        }
+        
+        for attr, metrics in model_fairness.items():
+            if not metrics['demographic_parity']['fair']:
+                bias_summary['demographic_parity_violations'] += 1
+            
+            if not metrics['equality_of_opportunity']['fair']:
+                bias_summary['equality_of_opportunity_violations'] += 1
+            
+            # Check for performance disparities
+            subgroup_perf = metrics['subgroup_performance']
+            if len(subgroup_perf) > 1:
+                accuracies = [perf['accuracy'] for perf in subgroup_perf.values()]
+                if max(accuracies) - min(accuracies) > 0.1:  # 10% difference
+                    bias_summary['performance_disparities'] += 1
+        
+        bias_summary['attributes_with_bias'] = (
+            bias_summary['demographic_parity_violations'] +
+            bias_summary['equality_of_opportunity_violations'] +
+            bias_summary['performance_disparities']
+        )
+        
+        bias_summary['overall_bias_level'] = 'high' if bias_summary['attributes_with_bias'] > 2 else \
+                                           'medium' if bias_summary['attributes_with_bias'] > 0 else 'low'
+        
+        return bias_summary
+
+    def _generate_model_recommendations(self, model_fairness: Dict[str, Any], 
+                                      bias_summary: Dict[str, Any]) -> List[str]:
+        """Generate recommendations for model bias mitigation"""
+        
+        recommendations = []
+        
+        if bias_summary['demographic_parity_violations'] > 0:
+            recommendations.append("Consider using demographic parity constraints during training")
+        
+        if bias_summary['equality_of_opportunity_violations'] > 0:
+            recommendations.append("Implement equal opportunity constraints to ensure fair treatment")
+        
+        if bias_summary['performance_disparities'] > 0:
+            recommendations.append("Use subgroup-specific training or post-processing techniques")
+        
+        if bias_summary['overall_bias_level'] == 'high':
+            recommendations.append("Consider retraining the model with bias mitigation techniques")
+            recommendations.append("Implement continuous monitoring for bias drift")
+        
+        if not recommendations:
+            recommendations.append("Model appears fair across analyzed attributes. Continue monitoring.")
+        
+        recommendations.append("Regular bias audits and model retraining recommended")
+        
+        return recommendations[:5]  # Limit to top 5 recommendations

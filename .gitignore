@@ -235,3 +235,4 @@ build/
 # Documentation
 /docs/
 /tools/
+/generated/prisma

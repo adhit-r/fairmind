@@ -1,11 +1,8 @@
 headersOrigin = "config"
 redirectsOrigin = "config"
 plugins = []
-
-[dev]
-command = "bun run dev"
-port = 4321.0
-publish = "dist"
+functionsDirectory = "/Users/adhi/Desktop/Documents/learn/fairmind-ethical-sandbox/fairmind-website/functions"
+functionsDirectoryOrigin = "config"
 
 [functions]
 
@@ -17,11 +14,12 @@ publishOrigin = "config"
 commandOrigin = "config"
 base = "/Users/adhi/Desktop/Documents/learn/fairmind-ethical-sandbox/fairmind-website"
 command = "bun run build"
+functions = "/Users/adhi/Desktop/Documents/learn/fairmind-ethical-sandbox/fairmind-website/functions"
 
 [build.environment]
 NODE_VERSION = "18"
-NPM_FLAGS = "--production=false"
-NETLIFY_IMAGES_CDN_DOMAIN = "fairmind.xyz"
+NODE_ENV = "production"
+SITE_URL = "https://fairmind.xyz"
 
 [build.processing]
 
@@ -43,19 +41,50 @@ X-Frame-Options = "DENY"
 X-XSS-Protection = "1; mode=block"
 X-Content-Type-Options = "nosniff"
 Referrer-Policy = "strict-origin-when-cross-origin"
-Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'; form-action 'self';"
+Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://www.googletagmanager.com https://static.hotjar.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://unpkg.com https://www.google-analytics.com; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';"
 
-[[redirects]]
-from = "/contact"
-to = "/contact.html"
-status = 200.0
-force = false
+[[headers]]
+for = "/assets/*"
 
-[redirects.query]
+[headers.values]
+Cache-Control = "public, max-age=31536000, immutable"
 
-[redirects.conditions]
+[[headers]]
+for = "*.js"
 
-[redirects.headers]
+[headers.values]
+Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+for = "*.css"
+
+[headers.values]
+Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+for = "*.png"
+
+[headers.values]
+Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+for = "*.jpg"
+
+[headers.values]
+Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+for = "*.svg"
+
+[headers.values]
+Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+for = "*.html"
+
+[headers.values]
+Cache-Control = "public, max-age=0, must-revalidate"
 
 [[redirects]]
 from = "/*"
@@ -70,9 +99,9 @@ force = false
 [redirects.headers]
 
 [[redirects]]
-from = "/contact-success"
-to = "/contact?success=true"
-status = 200.0
+from = "/docs"
+to = "/docs/"
+status = 301.0
 force = false
 
 [redirects.query]
@@ -82,9 +111,9 @@ force = false
 [redirects.headers]
 
 [[redirects]]
-from = "/contact-error"
-to = "/contact?error=true"
-status = 200.0
+from = "/blog"
+to = "/blog/"
+status = 301.0
 force = false
 
 [redirects.query]

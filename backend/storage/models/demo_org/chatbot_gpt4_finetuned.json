@@ -1,0 +1,11 @@
+{
+  "model": "gpt-4",
+  "temperature": 0.7,
+  "max_tokens": 500,
+  "system_prompt": "You are a helpful AI assistant for FairMind.",
+  "fine_tuned": true,
+  "training_data": "chatbot_gpt4_finetuned_training_data.json",
+  "version": "1.0.0",
+  "model_name": "chatbot_gpt4_finetuned",
+  "created_at": "2025-08-20T08:01:26.421529"
+}

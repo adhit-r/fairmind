@@ -10,7 +10,7 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) {
-  const { user, profile, loading } = useAuth()
+  const { user, loading } = useAuth()
   const router = useRouter()
 
   useEffect(() => {
@@ -20,13 +20,13 @@ export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) 
         return
       }
 
-      if (requiredRole && profile?.role !== requiredRole) {
+      if (requiredRole && user?.role !== requiredRole) {
         // Redirect to unauthorized page or show error
-        router.push('/')
+        router.push('/dashboard')
         return
       }
     }
-  }, [user, profile, loading, requiredRole, router])
+  }, [user, loading, requiredRole, router])
 
   if (loading) {
     return (
@@ -41,8 +41,8 @@ export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) 
 
   if (!user) return null
 
-  if (requiredRole && profile?.role !== requiredRole) {
-    return null // Will redirect to home
+  if (requiredRole && user?.role !== requiredRole) {
+    return null // Will redirect to dashboard
   }
 
   return <>{children}</>
