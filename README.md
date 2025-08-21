@@ -292,11 +292,12 @@ Explore our collection of ethically-vetted AI models:
 
 ## 📚 Documentation
 
-- **[API Reference](https://github.com/radhi1991/fairmind/tree/main/docs/api)** - Complete API documentation (50+ endpoints)
-- **[User Guide](https://github.com/radhi1991/fairmind/tree/main/docs/user-guide)** - How to use FairMind
-- **[Developer Guide](https://github.com/radhi1991/fairmind/tree/main/docs/developer)** - Contributing guidelines
-- **[Architecture](https://github.com/radhi1991/fairmind/tree/main/docs/architecture)** - System design
-- **[Security](https://github.com/radhi1991/fairmind/tree/main/docs/security)** - Security practices
+- **[📚 Documentation Hub](docs/README.md)** - Complete documentation index
+- **[🎯 Guides](docs/guides/)** - User guides, deployment, and best practices
+- **[📋 Plans](docs/plans/)** - Strategic plans and feature roadmaps
+- **[🔧 Implementation](docs/implementation/)** - Technical implementation details
+- **[🛡️ Security](docs/security/)** - Security practices and policies
+- **[📊 Reports](docs/reports/)** - Status reports and progress tracking
 
 ## 🏆 Recognition
 
