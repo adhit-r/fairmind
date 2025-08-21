@@ -97,6 +97,12 @@ class ActivityItem(BaseModel):
     severity: str = "info"
     metadata: Dict[str, Any] = {}
 
+class BaseResponse(BaseModel):
+    """Base response model for all API endpoints"""
+    success: bool
+    message: str
+    timestamp: datetime
+
 class MetricsSummary(BaseModel):
     total_models: int
     total_datasets: int

@@ -26,6 +26,21 @@ try:
 except ImportError:
     FAIRNESS_AVAILABLE = False
     logging.warning("TensorFlow Fairness Indicators not available - using fallback fairness metrics")
+    # Fallback classes for when TensorFlow Fairness is not available
+    class MinDiffModel:
+        def __init__(self, original_model, loss, loss_weight):
+            self.original_model = original_model
+            self.loss = loss
+            self.loss_weight = loss_weight
+        
+        def compile(self, **kwargs):
+            pass
+        
+        def fit(self, data, **kwargs):
+            return None
+    
+    def pack_min_diff_data(original_dataset, sensitive_group_dataset, nonsensitive_group_dataset):
+        return None
 
 logger = logging.getLogger(__name__)
 
