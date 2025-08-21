@@ -4,9 +4,12 @@ Comprehensive models for documenting and tracking AI system components
 """
 
 from pydantic import BaseModel, Field
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any, Optional, Union, TYPE_CHECKING
 from datetime import datetime
 from enum import Enum
+
+if TYPE_CHECKING:
+    from .ai_bom import AIBOMComponent
 
 class ComponentType(str, Enum):
     """Types of AI BOM components"""
@@ -35,49 +38,49 @@ class ComplianceStatus(str, Enum):
 
 class DataLayer(BaseModel):
     """Data layer components"""
-    components: List[AIBOMComponent] = Field(description="Data layer components")
+    components: List['AIBOMComponent'] = Field(description="Data layer components")
     total_components: int = Field(description="Total number of components")
     risk_level: RiskLevel = Field(description="Overall risk level")
     compliance_status: ComplianceStatus = Field(description="Overall compliance status")
 
 class ModelDevelopmentLayer(BaseModel):
     """Model development layer components"""
-    components: List[AIBOMComponent] = Field(description="Model development layer components")
+    components: List['AIBOMComponent'] = Field(description="Model development layer components")
     total_components: int = Field(description="Total number of components")
     risk_level: RiskLevel = Field(description="Overall risk level")
     compliance_status: ComplianceStatus = Field(description="Overall compliance status")
 
 class InfrastructureLayer(BaseModel):
     """Infrastructure layer components"""
-    components: List[AIBOMComponent] = Field(description="Infrastructure layer components")
+    components: List['AIBOMComponent'] = Field(description="Infrastructure layer components")
     total_components: int = Field(description="Total number of components")
     risk_level: RiskLevel = Field(description="Overall risk level")
     compliance_status: ComplianceStatus = Field(description="Overall compliance status")
 
 class DeploymentLayer(BaseModel):
     """Deployment layer components"""
-    components: List[AIBOMComponent] = Field(description="Deployment layer components")
+    components: List['AIBOMComponent'] = Field(description="Deployment layer components")
     total_components: int = Field(description="Total number of components")
     risk_level: RiskLevel = Field(description="Overall risk level")
     compliance_status: ComplianceStatus = Field(description="Overall compliance status")
 
 class MonitoringLayer(BaseModel):
     """Monitoring and maintenance layer components"""
-    components: List[AIBOMComponent] = Field(description="Monitoring layer components")
+    components: List['AIBOMComponent'] = Field(description="Monitoring layer components")
     total_components: int = Field(description="Total number of components")
     risk_level: RiskLevel = Field(description="Overall risk level")
     compliance_status: ComplianceStatus = Field(description="Overall compliance status")
 
 class SecurityLayer(BaseModel):
     """Security layer components"""
-    components: List[AIBOMComponent] = Field(description="Security layer components")
+    components: List['AIBOMComponent'] = Field(description="Security layer components")
     total_components: int = Field(description="Total number of components")
     risk_level: RiskLevel = Field(description="Overall risk level")
     compliance_status: ComplianceStatus = Field(description="Overall compliance status")
 
 class ComplianceLayer(BaseModel):
     """Compliance layer components"""
-    components: List[AIBOMComponent] = Field(description="Compliance layer components")
+    components: List['AIBOMComponent'] = Field(description="Compliance layer components")
     total_components: int = Field(description="Total number of components")
     risk_level: RiskLevel = Field(description="Overall compliance status")
     compliance_status: ComplianceStatus = Field(description="Overall compliance status")
@@ -133,8 +136,8 @@ class AIBOMDocument(BaseModel):
     recommendations: List[str] = Field(description="Recommendations")
     
     # Components and analyses
-    components: List[AIBOMComponent] = Field(description="List of components")
-    analyses: List[AIBOMAnalysis] = Field(description="List of analyses")
+    components: List['AIBOMComponent'] = Field(description="List of components")
+    analyses: List['AIBOMAnalysis'] = Field(description="List of analyses")
 
 class AIBOMAnalysis(BaseModel):
     """AI BOM analysis results"""
