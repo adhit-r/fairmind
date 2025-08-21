@@ -1,0 +1,61 @@
+{
+  "model_id": "credit-risk-v2.1",
+  "name": "Credit Risk Assessment Model",
+  "version": "2.1.0",
+  "description": "Advanced credit risk assessment model using machine learning to evaluate loan applications",
+  "category": "financial",
+  "use_case": "Loan approval and credit scoring",
+  "algorithm": "Gradient Boosting (XGBoost)",
+  "framework": "scikit-learn + XGBoost",
+  "created_date": "2024-01-10",
+  "last_updated": "2024-01-15",
+  "author": "FairMind Team",
+  "license": "MIT",
+  "performance_metrics": {
+    "accuracy": 0.92,
+    "precision": 0.89,
+    "recall": 0.91,
+    "f1_score": 0.90,
+    "auc": 0.94
+  },
+  "fairness_metrics": {
+    "statistical_parity_difference": 0.02,
+    "equalized_odds_difference": 0.03,
+    "demographic_parity_ratio": 0.98,
+    "overall_fairness_score": 0.88
+  },
+  "data_requirements": {
+    "features": [
+      "income", "employment_length", "credit_score", "debt_to_income_ratio",
+      "payment_history", "credit_utilization", "age", "education_level"
+    ],
+    "target": "default_risk",
+    "data_size": "50,000 samples",
+    "demographic_balance": "Balanced across income levels and demographics"
+  },
+  "risk_assessment": {
+    "risk_level": "HIGH",
+    "bias_risk": "MEDIUM",
+    "privacy_risk": "HIGH",
+    "safety_risk": "MEDIUM",
+    "compliance_status": "COMPLIANT"
+  },
+  "usage_guidelines": {
+    "intended_use": "Credit risk assessment and loan approval",
+    "limitations": "Should be used with human oversight",
+    "recommendations": "Combine with traditional credit scoring methods",
+    "disclaimers": "Model predictions are one component of credit decision process"
+  },
+  "deployment_info": {
+    "environment": "Production",
+    "api_endpoint": "/api/v1/models/credit-risk",
+    "input_format": "JSON",
+    "output_format": "JSON with risk score and explanation"
+  },
+  "maintenance": {
+    "retraining_schedule": "Monthly",
+    "performance_monitoring": "Real-time",
+    "bias_monitoring": "Weekly",
+    "last_validation": "2024-01-15"
+  }
+}
