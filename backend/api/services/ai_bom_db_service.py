@@ -21,6 +21,7 @@ from ..models.ai_bom import (
     DataLayer, ModelDevelopmentLayer, InfrastructureLayer, DeploymentLayer,
     MonitoringLayer, SecurityLayer, ComplianceLayer
 )
+from ..repositories.ai_bom_repository import AIBOMRepository
 
 logger = logging.getLogger(__name__)
 
@@ -62,12 +63,12 @@ class AIBOMDatabaseService:
     
     def __init__(self, config: Optional[DatabaseConfig] = None):
         self.config = config or DatabaseConfig()
+        self.repository = AIBOMRepository()
         self._is_connected = False
         self._connection_pool = None
         self.executor = ThreadPoolExecutor(max_workers=4)
         
-        # For now, we'll use in-memory storage with persistence hooks
-        # This allows us to implement the enhanced features without Prisma issues
+        # Keep in-memory storage as fallback when database is not available
         self.bom_documents: Dict[str, AIBOMDocument] = {}
         self.analyses: Dict[str, AIBOMAnalysis] = {}
         self._document_versions: Dict[str, List[AIBOMDocument]] = {}  # For versioning support
@@ -136,30 +137,54 @@ class AIBOMDatabaseService:
             self._validate_bom_request(request)
             
             async with self._database_connection() as db:
-                # Calculate metrics
-                overall_risk = self._calculate_overall_risk(request.components)
-                overall_compliance = self._calculate_overall_compliance(request.components)
-                
-                # Create layer components
-                layers = await self._create_all_layers(request.components)
-                
-                # Generate unique ID
-                bom_id = str(uuid.uuid4())
-                
-                # Create BOM document
-                bom_document = AIBOMDocument(
-                    id=bom_id,
-                    name=f"AI BOM - {request.project_name}",
-                    version=request.version or "1.0.0",
-                    description=request.description,
-                    project_name=request.project_name,
-                    organization=request.organization or self.config.organization_name,
+                # Try to use database repository first
+                try:
+                    if self.repository.supabase.is_connected():
+                        logger.info("Creating BOM document in database")
+                        document = await self.repository.create_bom_document(request)
+                        
+                        # Store in cache as well
+                        self.bom_documents[document.id] = document
+                        
+                        # Store version if versioning is enabled
+                        if self.config.enable_versioning:
+                            if document.id not in self._document_versions:
+                                self._document_versions[document.id] = []
+                            self._document_versions[document.id].append(document)
+                        
+                        logger.info(f"AI BOM document created successfully in database: {document.id}")
+                        return document
+                    else:
+                        raise Exception("Database not connected, falling back to in-memory storage")
+                        
+                except Exception as db_error:
+                    logger.warning(f"Database creation failed: {db_error}, using in-memory fallback")
                     
-                    # Layer components
-                    data_layer=layers['data'],
-                    model_development_layer=layers['modelDevelopment'],
-                    infrastructure_layer=layers['infrastructure'],
-                    deployment_layer=layers['deployment'],
+                    # Fallback to in-memory creation
+                    # Calculate metrics
+                    overall_risk = self._calculate_overall_risk(request.components)
+                    overall_compliance = self._calculate_overall_compliance(request.components)
+                    
+                    # Create layer components
+                    layers = await self._create_all_layers(request.components)
+                    
+                    # Generate unique ID
+                    bom_id = str(uuid.uuid4())
+                    
+                    # Create BOM document
+                    bom_document = AIBOMDocument(
+                        id=bom_id,
+                        name=f"AI BOM - {request.project_name}",
+                        version=request.version or "1.0.0",
+                        description=request.description,
+                        project_name=request.project_name,
+                        organization=request.organization or self.config.organization_name,
+                        
+                        # Layer components
+                        data_layer=layers['data'],
+                        model_development_layer=layers['modelDevelopment'],
+                        infrastructure_layer=layers['infrastructure'],
+                        deployment_layer=layers['deployment'],
                     monitoring_layer=layers['monitoring'],
                     security_layer=layers['security'],
                     compliance_layer=layers['compliance'],
@@ -205,26 +230,57 @@ class AIBOMDatabaseService:
             raise AIBOMDatabaseError(f"Failed to create BOM document: {e}")
     
     async def list_bom_documents(self, 
-                                limit: Optional[int] = None, 
-                                offset: Optional[int] = 0,
-                                filters: Optional[Dict[str, Any]] = None) -> List[AIBOMDocument]:
+                                skip: Optional[int] = 0, 
+                                limit: Optional[int] = 10,
+                                project_name: Optional[str] = None,
+                                risk_level: Optional[str] = None,
+                                compliance_status: Optional[str] = None) -> List[AIBOMDocument]:
         """List AI BOM documents with pagination and filtering"""
         try:
             async with self._database_connection() as db:
-                documents = list(self.bom_documents.values())
-                
-                # Apply filters
-                if filters:
-                    documents = self._apply_filters(documents, filters)
-                
-                # Sort by creation date (newest first)
-                documents.sort(key=lambda x: x.created_at, reverse=True)
-                
-                # Apply pagination
-                if offset:
-                    documents = documents[offset:]
-                if limit:
-                    documents = documents[:limit]
+                # Try to use database repository first
+                try:
+                    if self.repository.supabase.is_connected():
+                        logger.info("Listing BOM documents from database")
+                        documents = await self.repository.list_bom_documents(
+                            skip=skip or 0,
+                            limit=limit or 10,
+                            project_name=project_name,
+                            risk_level=risk_level,
+                            compliance_status=compliance_status
+                        )
+                        
+                        # Update cache
+                        for doc in documents:
+                            self.bom_documents[doc.id] = doc
+                        
+                        logger.info(f"Retrieved {len(documents)} documents from database")
+                        return documents
+                    else:
+                        raise Exception("Database not connected, falling back to in-memory storage")
+                        
+                except Exception as db_error:
+                    logger.warning(f"Database listing failed: {db_error}, using in-memory fallback")
+                    
+                    # Fallback to in-memory listing
+                    documents = list(self.bom_documents.values())
+                    
+                    # Apply filters
+                    if project_name:
+                        documents = [d for d in documents if project_name.lower() in d.project_name.lower()]
+                    if risk_level:
+                        documents = [d for d in documents if d.overall_risk_level.value == risk_level]
+                    if compliance_status:
+                        documents = [d for d in documents if d.overall_compliance_status.value == compliance_status]
+                    
+                    # Sort by creation date (newest first)
+                    documents.sort(key=lambda x: x.created_at, reverse=True)
+                    
+                    # Apply pagination
+                    if skip:
+                        documents = documents[skip:]
+                    if limit:
+                        documents = documents[:limit]
                 
                 return documents
                 
@@ -239,13 +295,34 @@ class AIBOMDatabaseService:
             uuid.UUID(bom_id)
             
             async with self._database_connection() as db:
-                document = self.bom_documents.get(bom_id)
-                
-                if not document:
-                    logger.warning(f"BOM document not found: {bom_id}")
-                    return None
-                
-                return document
+                # Try to use database repository first
+                try:
+                    if self.repository.supabase.is_connected():
+                        logger.info(f"Getting BOM document from database: {bom_id}")
+                        document = await self.repository.get_bom_document(bom_id)
+                        
+                        if document:
+                            # Update cache
+                            self.bom_documents[document.id] = document
+                            logger.info(f"Retrieved document from database: {document.project_name}")
+                            return document
+                        else:
+                            logger.warning(f"BOM document not found in database: {bom_id}")
+                            return None
+                    else:
+                        raise Exception("Database not connected, falling back to in-memory storage")
+                        
+                except Exception as db_error:
+                    logger.warning(f"Database get failed: {db_error}, using in-memory fallback")
+                    
+                    # Fallback to in-memory storage
+                    document = self.bom_documents.get(bom_id)
+                    
+                    if not document:
+                        logger.warning(f"BOM document not found: {bom_id}")
+                        return None
+                    
+                    return document
                 
         except ValueError:
             raise AIBOMDatabaseError(f"Invalid BOM ID format: {bom_id}")
@@ -306,12 +383,47 @@ class AIBOMDatabaseService:
         try:
             uuid.UUID(bom_id)  # Validate format
             
-            if bom_id not in self.bom_documents:
-                raise AIBOMNotFoundError(f"BOM document not found: {bom_id}")
-            
-            # Delete associated analyses
-            analyses_to_delete = [
-                analysis_id for analysis_id, analysis in self.analyses.items()
+            async with self._database_connection() as db:
+                # Try to use database repository first
+                try:
+                    if self.repository.supabase.is_connected():
+                        logger.info(f"Deleting BOM document from database: {bom_id}")
+                        success = await self.repository.delete_bom_document(bom_id)
+                        
+                        if success:
+                            # Also remove from cache
+                            if bom_id in self.bom_documents:
+                                del self.bom_documents[bom_id]
+                            
+                            # Remove from versions
+                            if bom_id in self._document_versions:
+                                del self._document_versions[bom_id]
+                            
+                            # Delete associated analyses from cache
+                            analyses_to_delete = [
+                                analysis_id for analysis_id, analysis in self.analyses.items()
+                                if hasattr(analysis, 'bom_id') and analysis.bom_id == bom_id  # Handle potential missing attribute
+                            ]
+                            for analysis_id in analyses_to_delete:
+                                del self.analyses[analysis_id]
+                            
+                            logger.info(f"Successfully deleted BOM document from database: {bom_id}")
+                            return True
+                        else:
+                            raise AIBOMNotFoundError(f"BOM document not found in database: {bom_id}")
+                    else:
+                        raise Exception("Database not connected, falling back to in-memory storage")
+                        
+                except Exception as db_error:
+                    logger.warning(f"Database delete failed: {db_error}, using in-memory fallback")
+                    
+                    # Fallback to in-memory deletion
+                    if bom_id not in self.bom_documents:
+                        raise AIBOMNotFoundError(f"BOM document not found: {bom_id}")
+                    
+                    # Delete associated analyses
+                    analyses_to_delete = [
+                        analysis_id for analysis_id, analysis in self.analyses.items()
                 if analysis.bom_id == bom_id
             ]
             
@@ -334,33 +446,58 @@ class AIBOMDatabaseService:
             logger.error(f"Error deleting AI BOM document {bom_id}: {e}")
             raise AIBOMDatabaseError(f"Failed to delete BOM document: {e}")
     
-    async def update_bom_document(self, bom_id: str, updates: Dict[str, Any]) -> AIBOMDocument:
+    async def update_bom_document(self, bom_id: str, request: AIBOMRequest) -> AIBOMDocument:
         """Update an AI BOM document"""
         try:
             uuid.UUID(bom_id)  # Validate format
             
             async with self._database_connection() as db:
-                if bom_id not in self.bom_documents:
-                    raise AIBOMNotFoundError(f"BOM document not found: {bom_id}")
-                
-                document = self.bom_documents[bom_id]
-                
-                # Store version if versioning is enabled
-                if self.config.enable_versioning:
-                    if bom_id not in self._document_versions:
-                        self._document_versions[bom_id] = []
-                    self._document_versions[bom_id].append(document)
-                
-                # Apply updates
-                for key, value in updates.items():
-                    if hasattr(document, key):
-                        setattr(document, key, value)
-                
-                # Update timestamp
-                document.updated_at = datetime.now()
-                
-                # Recalculate metrics if components changed
-                if 'components' in updates:
+                # Try to use database repository first
+                try:
+                    if self.repository.supabase.is_connected():
+                        logger.info(f"Updating BOM document in database: {bom_id}")
+                        document = await self.repository.update_bom_document(bom_id, request)
+                        
+                        # Update cache
+                        self.bom_documents[document.id] = document
+                        
+                        # Store version if versioning is enabled
+                        if self.config.enable_versioning:
+                            if bom_id not in self._document_versions:
+                                self._document_versions[bom_id] = []
+                            self._document_versions[bom_id].append(document)
+                        
+                        logger.info(f"Successfully updated BOM document in database: {bom_id}")
+                        return document
+                    else:
+                        raise Exception("Database not connected, falling back to in-memory storage")
+                        
+                except Exception as db_error:
+                    logger.warning(f"Database update failed: {db_error}, using in-memory fallback")
+                    
+                    # Fallback to in-memory update
+                    if bom_id not in self.bom_documents:
+                        raise AIBOMNotFoundError(f"BOM document not found: {bom_id}")
+                    
+                    document = self.bom_documents[bom_id]
+                    
+                    # Store version if versioning is enabled
+                    if self.config.enable_versioning:
+                        if bom_id not in self._document_versions:
+                            self._document_versions[bom_id] = []
+                        self._document_versions[bom_id].append(document)
+                    
+                    # Apply updates from request
+                    document.version = request.version or document.version
+                    document.description = request.description
+                    document.project_name = request.project_name
+                    document.organization = request.organization or self.config.organization_name
+                    document.components = request.components
+                    
+                    # Update timestamp
+                    document.updated_at = datetime.now()
+                    
+                    # Recalculate metrics
                     document.overall_risk_level = self._calculate_overall_risk(document.components)
                     document.overall_compliance_status = self._calculate_overall_compliance(document.components)
                     document.total_components = len(document.components)
