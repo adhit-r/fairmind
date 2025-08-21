@@ -15,7 +15,7 @@ import os
 from pathlib import Path
 
 # Import routes
-from .routes import bias_detection, database, ai_bom, core, advanced_fairness
+from .routes import bias_detection, database, ai_bom, core, advanced_fairness, monitoring
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -48,6 +48,7 @@ app.include_router(database.router, prefix="/api/v1", tags=["database"])
 app.include_router(ai_bom.router, prefix="/api/v1", tags=["ai-bom"])
 app.include_router(core.router, prefix="/api/v1", tags=["core"])
 app.include_router(advanced_fairness.router, prefix="/api/v1", tags=["advanced-fairness"])
+app.include_router(monitoring.router, prefix="/api/v1", tags=["monitoring"])
 
 @app.get("/")
 async def root():
@@ -55,7 +56,15 @@ async def root():
     return {
         "message": "Fairmind ML Service - AI Governance and Bias Detection",
         "version": "1.0.0",
-        "status": "running"
+        "status": "running",
+        "features": [
+            "Bias Detection & Fairness Analysis",
+            "AI BOM Management",
+            "Real-time Monitoring & Alerts",
+            "Model Explainability",
+            "Compliance Scoring",
+            "Advanced Analytics"
+        ]
     }
 
 @app.get("/health")
@@ -64,7 +73,68 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "Fairmind ML Service",
-        "timestamp": "2024-01-01T00:00:00Z"
+        "timestamp": "2024-01-01T00:00:00Z",
+        "endpoints": {
+            "bias_detection": "/api/v1/bias-detection",
+            "ai_bom": "/api/v1/ai-bom",
+            "monitoring": "/api/v1/monitoring",
+            "core": "/api/v1/core",
+            "advanced_fairness": "/api/v1/advanced-fairness"
+        }
+    }
+
+@app.get("/api")
+async def api_info():
+    """API information endpoint"""
+    return {
+        "name": "Fairmind ML Service API",
+        "version": "1.0.0",
+        "description": "Comprehensive AI governance and bias detection API",
+        "documentation": "/docs",
+        "endpoints": {
+            "bias_detection": {
+                "description": "Bias detection and fairness analysis",
+                "endpoints": [
+                    "POST /api/v1/bias-detection/analyze",
+                    "GET /api/v1/bias-detection/models",
+                    "GET /api/v1/bias-detection/reports"
+                ]
+            },
+            "ai_bom": {
+                "description": "AI Bill of Materials management",
+                "endpoints": [
+                    "POST /api/v1/ai-bom/documents",
+                    "GET /api/v1/ai-bom/documents",
+                    "PUT /api/v1/ai-bom/documents/{bom_id}",
+                    "DELETE /api/v1/ai-bom/documents/{bom_id}"
+                ]
+            },
+            "monitoring": {
+                "description": "Real-time monitoring and alerting",
+                "endpoints": [
+                    "POST /api/v1/monitoring/config",
+                    "GET /api/v1/monitoring/metrics/{model_id}",
+                    "POST /api/v1/monitoring/metrics",
+                    "GET /api/v1/monitoring/alerts",
+                    "WS /api/v1/monitoring/ws/{user_id}"
+                ]
+            },
+            "core": {
+                "description": "Core platform functionality",
+                "endpoints": [
+                    "GET /api/v1/core/dashboard",
+                    "GET /api/v1/core/models",
+                    "GET /api/v1/core/datasets"
+                ]
+            },
+            "advanced_fairness": {
+                "description": "Advanced fairness analysis",
+                "endpoints": [
+                    "POST /api/v1/advanced-fairness/analyze",
+                    "GET /api/v1/advanced-fairness/reports"
+                ]
+            }
+        }
     }
 
 if __name__ == "__main__":
