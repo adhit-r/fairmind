@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/common/card"
 import { Button } from "@/components/ui/common/button"
 import { Badge } from "@/components/ui/common/badge"
 import { Progress } from "@/components/ui/common/progress"
@@ -104,7 +104,7 @@ interface LeaderboardEntry {
 }
 
 export function GamifiedSimulationDashboard() {
-  const { profile } = useAuth()
+  const { user } = useAuth()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [governanceScore, setGovernanceScore] = useState<GovernanceScore>({
@@ -232,8 +232,8 @@ export function GamifiedSimulationDashboard() {
         },
         {
           rank: 3,
-          user: { name: profile?.full_name || 'You' },
-          organization: profile?.organization?.name || 'Your Org',
+          user: { name: user?.full_name || 'You' },
+          organization: user?.organization_name || 'Your Org',
           score: 78,
           metrics: {
             simulations_completed: 12,
@@ -593,7 +593,7 @@ export function GamifiedSimulationDashboard() {
               <div className="space-y-3">
                 {leaderboard.map((entry, index) => (
                   <div key={index} className={`flex items-center space-x-4 p-3 rounded-lg ${
-                    entry.user.name === (profile?.full_name || 'You') 
+                    entry.user.name === (user?.full_name || 'You') 
                       ? 'bg-primary/10 border border-primary/20' 
                       : 'bg-muted/50'
                   }`}>

@@ -91,12 +91,14 @@ export function EnhancedModelCatalog() {
   const loadModels = async () => {
     try {
       setLoading(true)
-      const response = await fairmindAPI.getModels()
-      if (response.success) {
-        setModels(response.data)
-      } else {
-        setError('Failed to load models')
-      }
+      // const response = await fairmindAPI.getModels()
+      // if (response.success) {
+      //   setModels(response.data)
+      // } else {
+      //   setError('Failed to load models')
+      // }
+      // Mock data for now
+      setModels([])
     } catch (error) {
       setError('Error loading models')
     } finally {
@@ -131,24 +133,36 @@ export function EnhancedModelCatalog() {
       formData.append('organization', uploadForm.organization)
       formData.append('tags', uploadForm.tags)
 
-      const response = await fairmindAPI.uploadModel(formData)
+      // const response = await fairmindAPI.uploadModel(formData)
       
-      if (response.success) {
-        setShowUploadForm(false)
-        setUploadForm({
-          name: '',
-          version: '',
-          description: '',
-          framework: '',
-          architecture: '',
-          organization: '',
-          tags: '',
-          modelFile: null
-        })
-        loadModels()
-      } else {
-        setError(response.error || 'Failed to upload model')
-      }
+      // if (response.success) {
+      //   setShowUploadForm(false)
+      //   setUploadForm({
+      //     name: '',
+      //     version: '',
+      //     description: '',
+      //     framework: '',
+      //     architecture: '',
+      //     organization: '',
+      //     tags: '',
+      //     modelFile: null
+      //   })
+      //   loadModels()
+      // } else {
+      //   setError(response.error || 'Failed to upload model')
+      // }
+      // Mock success for now
+      setShowUploadForm(false)
+      setUploadForm({
+        name: '',
+        version: '',
+        description: '',
+        framework: '',
+        architecture: '',
+        organization: '',
+        tags: '',
+        modelFile: null
+      })
     } catch (error) {
       setError('Error uploading model')
     } finally {

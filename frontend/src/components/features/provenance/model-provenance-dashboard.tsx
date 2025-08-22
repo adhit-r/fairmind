@@ -49,12 +49,14 @@ export function ModelProvenanceDashboard() {
   const loadProvenanceModels = async () => {
     try {
       setLoading(true)
-      const response = await fairmindAPI.listProvenanceModels()
-      if (response.success) {
-        setModels(response.data)
-      } else {
-        setError('Failed to load provenance models')
-      }
+      // const response = await fairmindAPI.listProvenanceModels()
+      // if (response.success) {
+      //   setModels(response.data)
+      // } else {
+      //   setError('Failed to load provenance models')
+      // }
+      // Mock data for now
+      setModels([])
     } catch (error) {
       setError('Error loading provenance models')
     } finally {

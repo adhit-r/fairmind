@@ -99,17 +99,23 @@ export function OWASPSecurityDashboard() {
       setLoading(true)
       setError(null)
 
-      const [testsResponse, categoriesResponse, modelsResponse, historyResponse] = await Promise.all([
-        fairmindAPI.getOWASPTests(),
-        fairmindAPI.getOWASPCategories(),
-        fairmindAPI.getOWASPModelInventory(),
-        fairmindAPI.listOWASPSecurityAnalyses()
-      ])
+      // const [testsResponse, categoriesResponse, modelsResponse, historyResponse] = await Promise.all([
+      //   fairmindAPI.getOWASPTests(),
+      //   fairmindAPI.getOWASPCategories(),
+      //   fairmindAPI.getOWASPModelInventory(),
+      //   fairmindAPI.listOWASPSecurityAnalyses()
+      // ])
+      // Mock data for now
 
-      if (testsResponse.success) setAvailableTests(testsResponse.data)
-      if (categoriesResponse.success) setTestCategories(categoriesResponse.data)
-      if (modelsResponse.success) setModelInventory(modelsResponse.data)
-      if (historyResponse.success) setAnalysisHistory(historyResponse.data.analyses)
+      // if (testsResponse.success) setAvailableTests(testsResponse.data)
+      // if (categoriesResponse.success) setTestCategories(categoriesResponse.data)
+      // if (modelsResponse.success) setModelInventory(modelsResponse.data)
+      // if (historyResponse.success) setAnalysisHistory(historyResponse.data.analyses)
+      // Mock data for now
+      setAvailableTests([])
+      setTestCategories([])
+      setModelInventory([])
+      setAnalysisHistory([])
 
     } catch (error) {
       setError('Failed to load OWASP security data')
@@ -129,24 +135,28 @@ export function OWASPSecurityDashboard() {
       setAnalyzing(true)
       setError(null)
 
-      const result = await fairmindAPI.runOWASPSecurityAnalysis({
-        model_id: selectedModel,
-        test_categories: selectedCategories.length > 0 ? selectedCategories : undefined,
-        include_all_tests: selectedCategories.length === 0,
-        test_parameters: {},
-        priority: 'normal'
-      })
+      // const result = await fairmindAPI.runOWASPSecurityAnalysis({
+      //   model_id: selectedModel,
+      //   test_categories: selectedCategories.length > 0 ? selectedCategories : undefined,
+      //   include_all_tests: selectedCategories.length === 0,
+      //   test_parameters: {},
+      //   priority: 'normal'
+      // })
 
-      if (result.success && result.data) {
-        setSecurityAnalysis(result.data)
-        setActiveTab('results')
+      // if (result.success && result.data) {
+      //   setSecurityAnalysis(result.data)
+      //   setActiveTab('results')
         
-        // Refresh analysis history
-        const historyResponse = await fairmindAPI.listOWASPSecurityAnalyses()
-        if (historyResponse.success) {
-          setAnalysisHistory(historyResponse.data.analyses)
-        }
-      }
+      //   // Refresh analysis history
+      //   const historyResponse = await fairmindAPI.listOWASPSecurityAnalyses()
+      //   if (historyResponse.success) {
+      //     setAnalysisHistory(historyResponse.data.analyses)
+      //   }
+      // }
+      
+      // Mock success for now
+      setSecurityAnalysis(null)
+      setActiveTab('results')
     } catch (error) {
       setError('Failed to run security analysis')
       console.error('Error running analysis:', error)

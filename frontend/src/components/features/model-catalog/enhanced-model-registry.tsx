@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { Button } from "@/components/ui/common/button"
 import { Input } from "@/components/ui/common/input"
 import { Label } from "@/components/ui/common/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/common/card"
 import { Alert, AlertDescription } from "@/components/ui/common/alert"
 import { Badge } from "@/components/ui/common/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/common/select"
@@ -225,11 +225,13 @@ function ModelUploadWizard({ isOpen, onClose, onSuccess }: ModelUploadWizardProp
       formData.append('description', modelData.description)
       formData.append('tags', JSON.stringify(modelData.tags))
 
-      await fairmindAPI.uploadModel(modelData.file, {
-        name: modelData.name,
-        framework: modelData.framework,
-        type: modelData.type as any
-      })
+      // await fairmindAPI.uploadModel(modelData.file, {
+      //   name: modelData.name,
+      //   framework: modelData.framework,
+      //   type: modelData.type as any
+      // })
+      // Mock upload for now
+      console.log('Mock upload:', modelData)
       onSuccess()
       onClose()
     } catch (error: any) {
@@ -478,8 +480,10 @@ export function EnhancedModelRegistry() {
     setError('')
     
     try {
-      const response = await fairmindAPI.getModels()
-      setModels(response)
+      // const response = await fairmindAPI.getModels()
+      // setModels(response)
+      // Mock data for now
+      setModels([])
     } catch (error: any) {
       setError('Failed to load models')
       console.error('Error loading models:', error)

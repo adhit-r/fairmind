@@ -207,12 +207,14 @@ export function ComprehensiveBiasDashboard() {
 
     try {
       // In production, this would call the actual API
-      const result = await fairmindAPI.analyzeBias({
-        datasetPath: selectedDataset,
-        protectedAttributes: sensitiveAttributes,
-        target: targetColumn,
-        modelPath: '',
-        features: []
+      const result = await fairmindAPI.analyzeDatasetBias({
+        dataset_name: selectedDataset,
+        target_column: targetColumn,
+        sensitive_columns: sensitiveAttributes,
+        custom_rules: [],
+        llm_enabled: false,
+        llm_prompt: '',
+        simulation_enabled: false
       })
 
       // Mock the result for now since the API returns a different format

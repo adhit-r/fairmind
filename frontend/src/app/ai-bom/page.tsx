@@ -14,7 +14,7 @@ import { AIBOMExport } from "@/components/features/ai-bom/ai-bom-export"
 
 export default function AIBOMPage() {
   const [activeTab, setActiveTab] = useState("dashboard")
-  const [bomDocuments, setBomDocuments] = useState([])
+  const [bomDocuments, setBomDocuments] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -160,15 +160,15 @@ export default function AIBOMPage() {
         </TabsContent>
 
         <TabsContent value="analyze" className="space-y-4">
-          <AIBOMAnalyzer bomDocuments={bomDocuments} />
+          <AIBOMAnalyzer />
         </TabsContent>
 
         <TabsContent value="compliance" className="space-y-4">
-          <AIBOMCompliance bomDocuments={bomDocuments} />
+          <AIBOMCompliance />
         </TabsContent>
 
         <TabsContent value="export" className="space-y-4">
-          <AIBOMExport bomDocuments={bomDocuments} />
+          <AIBOMExport />
         </TabsContent>
       </Tabs>
     </div>

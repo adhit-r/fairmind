@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url)
+  const orgId = searchParams.get('org_id')
+  const company = searchParams.get('company')
+  
   try {
-    const { searchParams } = new URL(request.url)
-    const orgId = searchParams.get('org_id')
-    const company = searchParams.get('company')
     
     // Call the backend API
     const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000'

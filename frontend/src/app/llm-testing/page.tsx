@@ -6,7 +6,7 @@ import {
   TestTube, 
   Play, 
   Pause, 
-  Stop, 
+  Square, 
   RotateCcw, 
   Save, 
   Edit, 

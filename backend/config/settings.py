@@ -14,12 +14,8 @@ API_TITLE = "Fairmind ML Service"
 API_DESCRIPTION = "AI Governance and Bias Detection ML Service"
 API_VERSION = "1.0.0"
 
-# CORS Settings
-ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "https://app-demo.fairmind.xyz"
-]
+# CORS Settings - FIXED: Use environment variables
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",")
 
 # File Upload Settings
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", BASE_DIR / "uploads"))
@@ -34,10 +30,17 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./fairmind.db")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
-# Security Settings
-SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-here")
+# Security Settings - FIXED: Use environment variables
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise ValueError("SECRET_KEY environment variable must be set")
+
+JWT_SECRET = os.getenv("JWT_SECRET")
+if not JWT_SECRET:
+    raise ValueError("JWT_SECRET environment variable must be set")
+
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
 
 # Logging Settings
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")

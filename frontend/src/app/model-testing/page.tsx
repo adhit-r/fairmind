@@ -62,11 +62,7 @@ export default function ModelTestingPage() {
           </Button>
         </div>
 
-        <ModelTesting
-          models={models}
-          selectedModel={model}
-          onBack={handleBackToSelection}
-        />
+        <ModelTesting />
       </div>
     )
   }

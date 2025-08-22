@@ -1,12 +1,12 @@
 "use client"
 
 import { Button } from "@/components/ui/common/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/common/card"
 import { Badge } from "@/components/ui/common/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/common/table"
 import { FileText, Shield, Activity, TrendingUp, TrendingDown, Eye, Play, BarChart3, Target, Network, Zap, Clock, CheckCircle, XCircle, AlertTriangle } from "lucide-react"
-import { ComplianceTimeline } from "@/components/charts/compliance-timeline"
-import { NISTComplianceMatrix } from "@/components/charts/nist-compliance-matrix"
+// import { ComplianceTimeline } from "@/components/charts/compliance-timeline"
+// import { NISTComplianceMatrix } from "@/components/charts/nist-compliance-matrix"
 
 const complianceMetrics = [
   { label: "REQUIREMENTS", value: "15", trend: "+2", icon: FileText },
@@ -280,7 +280,7 @@ export function ComplianceDashboard() {
             <CardDescription className="text-xs">REGULATORY ADHERENCE TRENDS</CardDescription>
           </CardHeader>
           <CardContent>
-            <ComplianceTimeline />
+            {/* <ComplianceTimeline /> */}
           </CardContent>
         </Card>
 
@@ -290,7 +290,7 @@ export function ComplianceDashboard() {
             <CardDescription className="text-xs">REGULATORY COMPLIANCE STATUS</CardDescription>
           </CardHeader>
           <CardContent>
-            <NISTComplianceMatrix />
+            {/* <NISTComplianceMatrix /> */}
           </CardContent>
         </Card>
 

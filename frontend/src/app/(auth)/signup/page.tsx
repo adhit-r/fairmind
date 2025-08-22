@@ -16,6 +16,7 @@ export default function SignupPage() {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [fullName, setFullName] = useState('')
+  const [organizationName, setOrganizationName] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -44,7 +45,7 @@ export default function SignupPage() {
     }
 
     try {
-      const result = await signUp(email, password, fullName)
+      const result = await signUp(email, password, fullName, organizationName)
       if (result.error) {
         setError(result.error.message || 'Signup failed')
       } else {
@@ -113,6 +114,19 @@ export default function SignupPage() {
                   placeholder="Enter your full name"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
+                  required
+                  className="bg-background border-border"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="organizationName">Organization Name</Label>
+                <Input
+                  id="organizationName"
+                  type="text"
+                  placeholder="Enter your organization name"
+                  value={organizationName}
+                  onChange={(e) => setOrganizationName(e.target.value)}
                   required
                   className="bg-background border-border"
                 />

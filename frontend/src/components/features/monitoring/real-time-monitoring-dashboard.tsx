@@ -88,7 +88,7 @@ export const RealTimeMonitoringDashboard: React.FC = () => {
   const [showAcknowledged, setShowAcknowledged] = useState(false)
 
   const wsRef = useRef<WebSocket | null>(null)
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout>()
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined)
 
   // WebSocket connection management
   const connectWebSocket = useCallback((userId: string = 'default-user') => {
@@ -263,7 +263,7 @@ export const RealTimeMonitoringDashboard: React.FC = () => {
   )
 
   if (isLoading) {
-    return <DashboardSkeleton />
+    return <div className="p-4">Loading...</div>
   }
 
   return (
@@ -425,7 +425,7 @@ export const RealTimeMonitoringDashboard: React.FC = () => {
                               <span className="text-sm text-gray-600">Accuracy</span>
                               <div className="flex items-center space-x-1">
                                 <span className="font-semibold">
-                                  {(latestMetrics.accuracy * 100).toFixed(1)}%
+                                  {((latestMetrics.accuracy || 0) * 100).toFixed(1)}%
                                 </span>
                                 {previousMetrics && getTrendIcon(
                                   latestMetrics.accuracy || 0,
@@ -444,7 +444,7 @@ export const RealTimeMonitoringDashboard: React.FC = () => {
                             <div className="flex items-center justify-between">
                               <span className="text-sm text-gray-600">Error Rate</span>
                               <span className="font-semibold">
-                                {(latestMetrics.error_rate * 100).toFixed(2)}%
+                                {((latestMetrics.error_rate || 0) * 100).toFixed(2)}%
                               </span>
                             </div>
                           </div>

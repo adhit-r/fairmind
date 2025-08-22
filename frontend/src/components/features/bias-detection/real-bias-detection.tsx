@@ -72,11 +72,7 @@ export function RealBiasDetection() {
   const loadAvailableDatasets = async () => {
     try {
       const response = await fairmindAPI.getAvailableDatasets()
-      if (response.success) {
-        setDatasets(response.data)
-      } else {
-        setError('Failed to load datasets')
-      }
+      setDatasets(response)
     } catch (error) {
       setError('Error loading datasets')
     }
@@ -111,11 +107,7 @@ export function RealBiasDetection() {
         sensitive_columns: sensitiveColumns
       })
 
-      if (response.success) {
-        setAnalysisResult(response.data)
-      } else {
-        setError(response.error || 'Analysis failed')
-      }
+      setAnalysisResult(response)
     } catch (error) {
       setError('Error running bias analysis')
     } finally {

@@ -1,7 +1,7 @@
 "use client"
 
 import { Badge } from "@/components/ui/common/badge"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/common/card"
 import { Progress } from "@/components/ui/common/progress"
 
 const nistCategories = [
