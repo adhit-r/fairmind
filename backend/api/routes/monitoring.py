@@ -131,7 +131,7 @@ alert_service = AlertService()
 async def create_monitoring_config(config: MonitoringConfig):
     """Create monitoring configuration for a model"""
     try:
-        result = await monitoring_service.create_config(config.dict())
+        result = await monitoring_service.create_config(config.model_dump())
         return BaseResponse(
             success=True,
             message="Monitoring configuration created successfully",
@@ -186,7 +186,7 @@ async def delete_monitoring_config(model_id: str):
 async def create_alert_rule(rule: AlertRule):
     """Create an alert rule"""
     try:
-        result = await alert_service.create_rule(rule.dict())
+        result = await alert_service.create_rule(rule.model_dump())
         return BaseResponse(
             success=True,
             message="Alert rule created successfully",
@@ -305,10 +305,10 @@ async def get_model_metrics(
 async def record_metrics(metrics: ModelMetrics):
     """Record metrics for a model"""
     try:
-        result = await monitoring_service.record_metrics(metrics.dict())
+        result = await monitoring_service.record_metrics(metrics.model_dump())
         
         # Check for alerts
-        alerts = await alert_service.check_alerts(metrics.dict())
+        alerts = await alert_service.check_alerts(metrics.model_dump())
         
         # Broadcast to WebSocket subscribers
         if alerts:

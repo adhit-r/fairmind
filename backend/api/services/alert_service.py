@@ -11,7 +11,7 @@ This service handles:
 import asyncio
 import logging
 from typing import Dict, List, Any, Optional, Union
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import json
 import uuid
 from collections import defaultdict
@@ -69,8 +69,8 @@ class AlertService:
                 threshold=rule_data["threshold"],
                 severity=rule_data.get("severity", "medium"),
                 enabled=rule_data.get("enabled", True),
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow()
+                        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc)
             )
             
             self.rules[rule_id] = rule

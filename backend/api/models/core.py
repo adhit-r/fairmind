@@ -2,7 +2,7 @@
 Core data models for the Fairmind API
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from enum import Enum
@@ -101,7 +101,7 @@ class BaseResponse(BaseModel):
     """Base response model for all API endpoints"""
     success: bool
     message: str
-    timestamp: datetime
+    timestamp: datetime = Field(default_factory=datetime.now)
 
 class MetricsSummary(BaseModel):
     total_models: int

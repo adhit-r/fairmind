@@ -11,7 +11,7 @@ This service handles:
 import asyncio
 import logging
 from typing import Dict, List, Any, Optional, Union
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import json
 import uuid
 from collections import defaultdict
@@ -61,8 +61,8 @@ class MonitoringService:
                 "thresholds": config.get("thresholds", {}),
                 "frequency": config.get("frequency", 300),
                 "enabled": config.get("enabled", True),
-                "created_at": datetime.utcnow().isoformat(),
-                "updated_at": datetime.utcnow().isoformat()
+                            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat()
             }
             
             self.configs[model_id] = config_data
@@ -115,7 +115,7 @@ class MonitoringService:
         """Record metrics for a model"""
         try:
             model_id = metrics["model_id"]
-            timestamp = metrics.get("timestamp", datetime.utcnow())
+            timestamp = metrics.get("timestamp", datetime.now(timezone.utc))
             
             # Add metadata
             metric_record = {
@@ -129,7 +129,7 @@ class MonitoringService:
                 "throughput": metrics.get("throughput"),
                 "error_rate": metrics.get("error_rate"),
                 "custom_metrics": metrics.get("custom_metrics", {}),
-                "created_at": datetime.utcnow().isoformat()
+                "created_at": datetime.now(timezone.utc).isoformat()
             }
             
             # Store metrics
