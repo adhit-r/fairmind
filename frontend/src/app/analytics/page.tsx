@@ -6,75 +6,29 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/common
 import { Button } from '@/components/ui/common/button'
 import { Badge } from '@/components/ui/common/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/common/tabs'
-import { 
-  ArrowLeft, 
-  BarChart3, 
-  TrendingUp, 
-  TrendingDown, 
-  Target, 
-  Shield, 
+import { Progress } from '@/components/ui/common/progress'
+import {
+  ArrowLeft,
+  BarChart3,
+  TrendingUp,
+  TrendingDown,
+  Target,
+  Shield,
   AlertTriangle,
   CheckCircle,
   Clock,
   Download,
-  FileText
+  FileText,
+  Users,
+  Activity,
+  PieChart,
+  LineChart
 } from 'lucide-react'
-
-// Mock analytics data
-const mockAnalytics = {
-  overview: {
-    totalModels: 3,
-    activeModels: 2,
-    modelsInTesting: 1,
-    averageBiasScore: 84.7,
-    averageSecurityScore: 91.7,
-    totalTests: 12,
-    criticalIssues: 1,
-    complianceScore: 89.2
-  },
-  recentTests: [
-    {
-      id: '1',
-      modelName: 'Credit Risk Model v2.1',
-      testType: 'Bias Detection',
-      status: 'completed',
-      score: 85,
-      date: '2024-01-20T14:15:00Z',
-      issues: 2,
-      recommendations: 3
-    },
-    {
-      id: '2',
-      modelName: 'Customer Churn Predictor',
-      testType: 'Security Analysis',
-      status: 'running',
-      score: null,
-      date: '2024-01-21T09:30:00Z',
-      issues: null,
-      recommendations: null
-    },
-    {
-      id: '3',
-      modelName: 'Revenue Forecasting Model',
-      testType: 'Performance Testing',
-      status: 'completed',
-      score: 91,
-      date: '2024-01-19T11:30:00Z',
-      issues: 0,
-      recommendations: 1
-    }
-  ],
-  trends: {
-    biasScores: [78, 82, 85, 87, 84, 86, 85],
-    securityScores: [88, 90, 92, 91, 93, 92, 92],
-    testVolume: [3, 5, 4, 6, 8, 7, 12],
-    complianceScores: [85, 87, 89, 88, 90, 89, 89]
-  }
-}
+import { demoAnalytics, demoTestResults, demoReports } from '@/data/demo-data'
 
 export default function AnalyticsPage() {
   const router = useRouter()
-  const [analytics, setAnalytics] = useState(mockAnalytics)
+  const [analytics, setAnalytics] = useState(demoAnalytics)
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
@@ -151,6 +105,12 @@ export default function AnalyticsPage() {
               </div>
               <Target className="w-8 h-8 text-blue-600" />
             </div>
+            <div className="mt-4">
+              <div className="flex items-center text-sm text-gray-600">
+                <TrendingUp className="w-4 h-4 mr-1" />
+                <span>+2.3% from last month</span>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
@@ -165,6 +125,12 @@ export default function AnalyticsPage() {
               </div>
               <Shield className="w-8 h-8 text-green-600" />
             </div>
+            <div className="mt-4">
+              <div className="flex items-center text-sm text-gray-600">
+                <CheckCircle className="w-4 h-4 mr-1" />
+                <span>All models secure</span>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
@@ -173,11 +139,17 @@ export default function AnalyticsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Compliance Score</p>
-                <p className={`text-2xl font-bold ${getScoreColor(analytics.overview.complianceScore)}`}>
-                  {analytics.overview.complianceScore}%
+                <p className={`text-2xl font-bold ${getScoreColor(analytics.overview.averageComplianceScore)}`}>
+                  {analytics.overview.averageComplianceScore}%
                 </p>
               </div>
               <CheckCircle className="w-8 h-8 text-purple-600" />
+            </div>
+            <div className="mt-4">
+              <div className="flex items-center text-sm text-gray-600">
+                <TrendingUp className="w-4 h-4 mr-1" />
+                <span>+1.8% from last month</span>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -193,15 +165,22 @@ export default function AnalyticsPage() {
               </div>
               <AlertTriangle className="w-8 h-8 text-red-600" />
             </div>
+            <div className="mt-4">
+              <div className="flex items-center text-sm text-gray-600">
+                <Clock className="w-4 h-4 mr-1" />
+                <span>1 requires attention</span>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>
 
       <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="tests">Recent Tests</TabsTrigger>
           <TabsTrigger value="trends">Trends</TabsTrigger>
+          <TabsTrigger value="teams">Team Performance</TabsTrigger>
           <TabsTrigger value="reports">Reports</TabsTrigger>
         </TabsList>
 
@@ -229,6 +208,10 @@ export default function AnalyticsPage() {
                     <Badge variant="outline">{analytics.overview.modelsInTesting}</Badge>
                   </div>
                   <div className="flex justify-between items-center">
+                    <span>Archived Models</span>
+                    <Badge variant="outline">{analytics.overview.archivedModels}</Badge>
+                  </div>
+                  <div className="flex justify-between items-center">
                     <span>Total Tests Run</span>
                     <Badge variant="secondary">{analytics.overview.totalTests}</Badge>
                   </div>
@@ -250,41 +233,51 @@ export default function AnalyticsPage() {
                       <span>Bias Detection</span>
                       <span>{analytics.overview.averageBiasScore}%</span>
                     </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div 
-                        className="bg-blue-600 h-2 rounded-full" 
-                        style={{ width: `${analytics.overview.averageBiasScore}%` }}
-                      />
-                    </div>
+                    <Progress value={analytics.overview.averageBiasScore} className="h-2" />
                   </div>
                   <div>
                     <div className="flex justify-between text-sm mb-1">
                       <span>Security Analysis</span>
                       <span>{analytics.overview.averageSecurityScore}%</span>
                     </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div 
-                        className="bg-green-600 h-2 rounded-full" 
-                        style={{ width: `${analytics.overview.averageSecurityScore}%` }}
-                      />
-                    </div>
+                    <Progress value={analytics.overview.averageSecurityScore} className="h-2" />
                   </div>
                   <div>
                     <div className="flex justify-between text-sm mb-1">
                       <span>Compliance</span>
-                      <span>{analytics.overview.complianceScore}%</span>
+                      <span>{analytics.overview.averageComplianceScore}%</span>
                     </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div 
-                        className="bg-purple-600 h-2 rounded-full" 
-                        style={{ width: `${analytics.overview.complianceScore}%` }}
-                      />
-                    </div>
+                    <Progress value={analytics.overview.averageComplianceScore} className="h-2" />
                   </div>
                 </div>
               </CardContent>
             </Card>
           </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <Activity className="w-5 h-5 mr-2" />
+                Issue Distribution
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="text-center">
+                  <div className="text-3xl font-bold text-red-600 mb-2">{analytics.overview.criticalIssues}</div>
+                  <div className="text-sm text-gray-600">Critical Issues</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-3xl font-bold text-yellow-600 mb-2">{analytics.overview.mediumIssues}</div>
+                  <div className="text-sm text-gray-600">Medium Issues</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-3xl font-bold text-blue-600 mb-2">{analytics.overview.lowIssues}</div>
+                  <div className="text-sm text-gray-600">Low Issues</div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="tests" className="space-y-6">
@@ -297,7 +290,7 @@ export default function AnalyticsPage() {
           </div>
 
           <div className="space-y-4">
-            {analytics.recentTests.map((test) => (
+            {demoTestResults.map((test) => (
               <Card key={test.id}>
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between">
@@ -313,6 +306,7 @@ export default function AnalyticsPage() {
                       </div>
                       <div className="mt-2 flex items-center space-x-6 text-sm text-gray-600">
                         <span>{new Date(test.date).toLocaleDateString()}</span>
+                        <span>Duration: {test.duration}</span>
                         {test.score && (
                           <span className={`font-medium ${getScoreColor(test.score)}`}>
                             Score: {test.score}%
@@ -323,6 +317,9 @@ export default function AnalyticsPage() {
                         )}
                         {test.recommendations !== null && (
                           <span>Recommendations: {test.recommendations}</span>
+                        )}
+                        {test.progress && (
+                          <span>Progress: {test.progress}%</span>
                         )}
                       </div>
                     </div>
@@ -345,17 +342,17 @@ export default function AnalyticsPage() {
 
         <TabsContent value="trends" className="space-y-6">
           <h2 className="text-xl font-semibold">Performance Trends</h2>
-          
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card>
               <CardHeader>
-                <CardTitle>Bias Score Trend</CardTitle>
+                <CardTitle>Bias Score Trend (12 Months)</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
                   {analytics.trends.biasScores.map((score, index) => (
                     <div key={index} className="flex items-center justify-between">
-                      <span className="text-sm text-gray-600">Week {index + 1}</span>
+                      <span className="text-sm text-gray-600">Month {index + 1}</span>
                       <div className="flex items-center space-x-2">
                         <span className="font-medium">{score}%</span>
                         {index > 0 && getTrendIcon(score, analytics.trends.biasScores[index - 1])}
@@ -368,13 +365,13 @@ export default function AnalyticsPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Security Score Trend</CardTitle>
+                <CardTitle>Security Score Trend (12 Months)</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
                   {analytics.trends.securityScores.map((score, index) => (
                     <div key={index} className="flex items-center justify-between">
-                      <span className="text-sm text-gray-600">Week {index + 1}</span>
+                      <span className="text-sm text-gray-600">Month {index + 1}</span>
                       <div className="flex items-center space-x-2">
                         <span className="font-medium">{score}%</span>
                         {index > 0 && getTrendIcon(score, analytics.trends.securityScores[index - 1])}
@@ -384,6 +381,81 @@ export default function AnalyticsPage() {
                 </div>
               </CardContent>
             </Card>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Test Volume Trend</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <h4 className="font-medium mb-3">Tests Run per Month</h4>
+                  <div className="space-y-2">
+                    {analytics.trends.testVolume.map((volume, index) => (
+                      <div key={index} className="flex items-center justify-between">
+                        <span className="text-sm text-gray-600">Month {index + 1}</span>
+                        <span className="font-medium">{volume} tests</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <h4 className="font-medium mb-3">Model Uploads per Month</h4>
+                  <div className="space-y-2">
+                    {analytics.trends.modelUploads.map((uploads, index) => (
+                      <div key={index} className="flex items-center justify-between">
+                        <span className="text-sm text-gray-600">Month {index + 1}</span>
+                        <span className="font-medium">{uploads} models</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="teams" className="space-y-6">
+          <h2 className="text-xl font-semibold">Team Performance Analysis</h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {analytics.teamPerformance.map((team) => (
+              <Card key={team.team}>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-semibold text-gray-900">{team.team}</h3>
+                    <Users className="w-5 h-5 text-gray-400" />
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex justify-between text-sm">
+                      <span>Models:</span>
+                      <span className="font-medium">{team.models}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span>Avg Score:</span>
+                      <span className={`font-medium ${getScoreColor(team.averageScore)}`}>
+                        {team.averageScore}%
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span>Tests Run:</span>
+                      <span className="font-medium">{team.testsRun}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span>Issues:</span>
+                      <span className="font-medium text-red-600">{team.issues}</span>
+                    </div>
+                  </div>
+                  <div className="mt-4 pt-4 border-t">
+                    <Button size="sm" variant="outline" className="w-full">
+                      <BarChart3 className="w-4 h-4 mr-2" />
+                      View Details
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
           </div>
         </TabsContent>
 
@@ -396,23 +468,55 @@ export default function AnalyticsPage() {
             </Button>
           </div>
 
-          <Card>
-            <CardContent className="p-6">
-              <div className="text-center">
-                <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                  No Reports Generated Yet
-                </h3>
-                <p className="text-gray-600 mb-6">
-                  Generate comprehensive reports for your models including bias analysis, security assessment, and compliance verification.
-                </p>
-                <Button size="lg">
-                  <FileText className="w-4 h-4 mr-2" />
-                  Generate First Report
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          {demoReports.length === 0 ? (
+            <Card>
+              <CardContent className="p-6">
+                <div className="text-center">
+                  <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                    No Reports Generated Yet
+                  </h3>
+                  <p className="text-gray-600 mb-6">
+                    Generate comprehensive reports for your models including bias analysis, security assessment, and compliance verification.
+                  </p>
+                  <Button size="lg">
+                    <FileText className="w-4 h-4 mr-2" />
+                    Generate First Report
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-4">
+              {demoReports.map((report) => (
+                <Card key={report.id}>
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-gray-900">{report.name}</h3>
+                        <p className="text-sm text-gray-600 mt-1">{report.summary}</p>
+                        <div className="flex items-center space-x-4 mt-2 text-sm text-gray-600">
+                          <span>Generated: {new Date(report.generatedAt).toLocaleDateString()}</span>
+                          <span>Size: {report.size}</span>
+                          <span>Models: {report.models.length}</span>
+                        </div>
+                      </div>
+                      <div className="flex space-x-2">
+                        <Button size="sm" variant="outline">
+                          <FileText className="w-4 h-4 mr-1" />
+                          View
+                        </Button>
+                        <Button size="sm" variant="outline">
+                          <Download className="w-4 h-4 mr-1" />
+                          Download
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </TabsContent>
       </Tabs>
     </div>

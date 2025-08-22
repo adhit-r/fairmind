@@ -6,50 +6,13 @@ import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/common/card'
 import { Button } from '@/components/ui/common/button'
 import { Badge } from '@/components/ui/common/badge'
-import { ArrowLeft, TestTube, BarChart3, Shield, Target } from 'lucide-react'
-
-// Mock models for demonstration
-const mockModels = [
-  {
-    id: '1',
-    name: 'Credit Risk Model v2.1',
-    version: '2.1.0',
-    type: 'Classification',
-    framework: 'Scikit-learn',
-    status: 'active' as const,
-    uploadDate: '2024-01-15T10:30:00Z',
-    lastTested: '2024-01-20T14:15:00Z',
-    biasScore: 85,
-    securityScore: 92
-  },
-  {
-    id: '2',
-    name: 'Customer Churn Predictor',
-    version: '1.5.2',
-    type: 'Classification',
-    framework: 'TensorFlow',
-    status: 'testing' as const,
-    uploadDate: '2024-01-18T09:45:00Z',
-    biasScore: 78,
-    securityScore: 88
-  },
-  {
-    id: '3',
-    name: 'Revenue Forecasting Model',
-    version: '3.0.1',
-    type: 'Regression',
-    framework: 'PyTorch',
-    status: 'active' as const,
-    uploadDate: '2024-01-10T16:20:00Z',
-    lastTested: '2024-01-19T11:30:00Z',
-    biasScore: 91,
-    securityScore: 95
-  }
-]
+import { Progress } from '@/components/ui/common/progress'
+import { ArrowLeft, TestTube, BarChart3, Shield, Target, AlertTriangle, Clock, Users, FileText } from 'lucide-react'
+import { demoModels } from '@/data/demo-data'
 
 export default function ModelTestingPage() {
   const router = useRouter()
-  const [models, setModels] = useState(mockModels)
+  const [models, setModels] = useState(demoModels)
   const [selectedModel, setSelectedModel] = useState<string>('')
   const [showTesting, setShowTesting] = useState(false)
 
@@ -99,7 +62,7 @@ export default function ModelTestingPage() {
           </Button>
         </div>
 
-        <ModelTesting 
+        <ModelTesting
           models={models}
           selectedModel={model}
           onBack={handleBackToSelection}
@@ -144,8 +107,8 @@ export default function ModelTestingPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {models.map((model) => (
-            <Card 
-              key={model.id} 
+            <Card
+              key={model.id}
               className="hover:shadow-lg transition-shadow cursor-pointer"
               onClick={() => handleModelSelect(model.id)}
             >
@@ -170,6 +133,10 @@ export default function ModelTestingPage() {
                   <span className="font-medium">{model.framework}</span>
                 </div>
                 <div className="flex justify-between text-sm">
+                  <span>Team:</span>
+                  <span className="font-medium">{model.team}</span>
+                </div>
+                <div className="flex justify-between text-sm">
                   <span>Uploaded:</span>
                   <span>{new Date(model.uploadDate).toLocaleDateString()}</span>
                 </div>
@@ -179,23 +146,27 @@ export default function ModelTestingPage() {
                     <span>{new Date(model.lastTested).toLocaleDateString()}</span>
                   </div>
                 )}
-                
-                {model.biasScore && (
+
+                <div className="pt-4 border-t space-y-2">
                   <div className="flex justify-between text-sm">
                     <span>Bias Score:</span>
                     <span className={`font-medium ${getScoreColor(model.biasScore)}`}>
                       {model.biasScore}%
                     </span>
                   </div>
-                )}
-                {model.securityScore && (
                   <div className="flex justify-between text-sm">
                     <span>Security Score:</span>
                     <span className={`font-medium ${getScoreColor(model.securityScore)}`}>
                       {model.securityScore}%
                     </span>
                   </div>
-                )}
+                  <div className="flex justify-between text-sm">
+                    <span>Compliance Score:</span>
+                    <span className={`font-medium ${getScoreColor(model.complianceScore)}`}>
+                      {model.complianceScore}%
+                    </span>
+                  </div>
+                </div>
 
                 <div className="pt-4 border-t">
                   <div className="flex space-x-2">
@@ -256,6 +227,82 @@ export default function ModelTestingPage() {
               <p className="text-sm text-gray-600">
                 GDPR, CCPA, SOX, and industry-specific regulatory compliance verification
               </p>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      {/* Testing Statistics */}
+      <div className="mt-12">
+        <h2 className="text-2xl font-bold text-gray-900 mb-6">Testing Statistics</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Total Tests Run</p>
+                  <p className="text-2xl font-bold text-gray-900">18</p>
+                </div>
+                <TestTube className="w-8 h-8 text-blue-600" />
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span>This Week:</span>
+                  <span className="font-medium">5</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>This Month:</span>
+                  <span className="font-medium">18</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Average Test Duration</p>
+                  <p className="text-2xl font-bold text-gray-900">2m 45s</p>
+                </div>
+                <Clock className="w-8 h-8 text-green-600" />
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span>Bias Tests:</span>
+                  <span className="font-medium">1m 30s</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>Security Tests:</span>
+                  <span className="font-medium">3m 15s</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Issues Found</p>
+                  <p className="text-2xl font-bold text-red-600">6</p>
+                </div>
+                <AlertTriangle className="w-8 h-8 text-red-600" />
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span>Critical:</span>
+                  <span className="font-medium text-red-600">1</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>Medium:</span>
+                  <span className="font-medium text-yellow-600">3</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>Low:</span>
+                  <span className="font-medium text-blue-600">2</span>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </div>

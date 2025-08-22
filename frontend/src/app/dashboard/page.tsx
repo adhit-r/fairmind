@@ -1,64 +1,42 @@
 "use client"
 
-import React, { useState, useEffect } from 'react'
+import React from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/common/card'
 import { Button } from '@/components/ui/common/button'
 import { Badge } from '@/components/ui/common/badge'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/common/tabs'
+import { Progress } from '@/components/ui/common/progress'
 import { 
   Upload, 
   TestTube, 
-  Shield, 
   BarChart3, 
-  Settings, 
-  Plus,
+  Shield, 
+  Target, 
+  AlertTriangle,
+  CheckCircle,
+  Clock,
+  TrendingUp,
+  Users,
   FileText,
-    AlertTriangle,
-    CheckCircle,
-    Clock,
-    Users,
-    Database
+  Settings,
+  Bell
 } from 'lucide-react'
-
-interface Model {
-  id: string
-  name: string
-  version: string
-  type: string
-  status: 'active' | 'testing' | 'archived'
-  uploadDate: string
-  lastTested?: string
-  biasScore?: number
-  securityScore?: number
-}
-
-interface DashboardStats {
-  totalModels: number
-  activeModels: number
-  modelsInTesting: number
-  criticalIssues: number
-  recentTests: number
-}
+import { demoModels, demoAnalytics, demoNotifications } from '@/data/demo-data'
 
 export default function DashboardPage() {
   const router = useRouter()
-  const [models, setModels] = useState<Model[]>([])
-  const [stats, setStats] = useState<DashboardStats>({
-    totalModels: 0,
-    activeModels: 0,
-    modelsInTesting: 0,
-    criticalIssues: 0,
-    recentTests: 0
-  })
-  const [isLoading, setIsLoading] = useState(true)
 
-  useEffect(() => {
-    // Simulate loading dashboard data
-    setTimeout(() => {
-      setIsLoading(false)
-    }, 1000)
-  }, [])
+  const handleUploadModel = () => {
+    router.push('/model-upload')
+  }
+
+  const handleTestModels = () => {
+    router.push('/model-testing')
+  }
+
+  const handleViewAnalytics = () => {
+    router.push('/analytics')
+  }
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -75,47 +53,49 @@ export default function DashboardPage() {
     return 'text-red-600'
   }
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading SQ1 Dashboard...</p>
-        </div>
-      </div>
-    )
-  }
+  const unreadNotifications = demoNotifications.filter(n => !n.read).length
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="container mx-auto p-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">SQ1 Dashboard</h1>
-          <p className="text-gray-600">AI Governance & Model Management</p>
+          <h1 className="text-3xl font-bold text-gray-900">SQ1 AI Governance Dashboard</h1>
+          <p className="text-gray-600 mt-2">Comprehensive AI model management and monitoring</p>
         </div>
         <div className="flex items-center space-x-4">
-          <Badge variant="outline" className="bg-blue-50 text-blue-700">
-            <Users className="w-4 h-4 mr-1" />
-            SQ1 Team
-          </Badge>
-          <Button>
-            <Plus className="w-4 h-4 mr-2" />
-            Add Model
+          <Button variant="outline" size="sm">
+            <Bell className="w-4 h-4 mr-2" />
+            {unreadNotifications > 0 && (
+              <Badge variant="destructive" className="ml-1">
+                {unreadNotifications}
+              </Badge>
+            )}
+          </Button>
+          <Button variant="outline" size="sm">
+            <Settings className="w-4 h-4 mr-2" />
+            Settings
           </Button>
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {/* Overview Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Total Models</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.totalModels}</p>
+                <p className="text-2xl font-bold text-gray-900">{demoAnalytics.overview.totalModels}</p>
               </div>
-              <Database className="w-8 h-8 text-blue-600" />
+              <FileText className="w-8 h-8 text-blue-600" />
+            </div>
+            <div className="mt-4">
+              <div className="flex justify-between text-sm mb-1">
+                <span>Active</span>
+                <span>{demoAnalytics.overview.activeModels}</span>
+              </div>
+              <Progress value={(demoAnalytics.overview.activeModels / demoAnalytics.overview.totalModels) * 100} className="h-2" />
             </div>
           </CardContent>
         </Card>
@@ -124,10 +104,18 @@ export default function DashboardPage() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Active Models</p>
-                <p className="text-2xl font-bold text-green-600">{stats.activeModels}</p>
+                <p className="text-sm font-medium text-gray-600">Average Bias Score</p>
+                <p className={`text-2xl font-bold ${getScoreColor(demoAnalytics.overview.averageBiasScore)}`}>
+                  {demoAnalytics.overview.averageBiasScore}%
+                </p>
               </div>
-              <CheckCircle className="w-8 h-8 text-green-600" />
+              <Target className="w-8 h-8 text-blue-600" />
+            </div>
+            <div className="mt-4">
+              <div className="flex items-center text-sm text-gray-600">
+                <TrendingUp className="w-4 h-4 mr-1" />
+                <span>+2.3% from last month</span>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -136,10 +124,18 @@ export default function DashboardPage() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">In Testing</p>
-                <p className="text-2xl font-bold text-yellow-600">{stats.modelsInTesting}</p>
+                <p className="text-sm font-medium text-gray-600">Security Score</p>
+                <p className={`text-2xl font-bold ${getScoreColor(demoAnalytics.overview.averageSecurityScore)}`}>
+                  {demoAnalytics.overview.averageSecurityScore}%
+                </p>
               </div>
-              <TestTube className="w-8 h-8 text-yellow-600" />
+              <Shield className="w-8 h-8 text-green-600" />
+            </div>
+            <div className="mt-4">
+              <div className="flex items-center text-sm text-gray-600">
+                <CheckCircle className="w-4 h-4 mr-1" />
+                <span>All models secure</span>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -149,234 +145,185 @@ export default function DashboardPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Critical Issues</p>
-                <p className="text-2xl font-bold text-red-600">{stats.criticalIssues}</p>
+                <p className="text-2xl font-bold text-red-600">{demoAnalytics.overview.criticalIssues}</p>
               </div>
               <AlertTriangle className="w-8 h-8 text-red-600" />
+            </div>
+            <div className="mt-4">
+              <div className="flex items-center text-sm text-gray-600">
+                <Clock className="w-4 h-4 mr-1" />
+                <span>1 requires attention</span>
+              </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Main Content */}
-      <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="models">Model Registry</TabsTrigger>
-          <TabsTrigger value="testing">Testing</TabsTrigger>
-          <TabsTrigger value="analytics">Analytics</TabsTrigger>
-        </TabsList>
+      {/* Quick Actions */}
+      <div className="mb-8">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Quick Actions</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Button 
+            onClick={handleUploadModel}
+            className="h-20 flex flex-col items-center justify-center space-y-2 bg-blue-50 hover:bg-blue-100 border-blue-200"
+          >
+            <Upload className="w-6 h-6 text-blue-600" />
+            <span className="text-blue-900 font-medium">Upload Your First Model</span>
+          </Button>
+          
+          <Button 
+            onClick={handleTestModels}
+            className="h-20 flex flex-col items-center justify-center space-y-2 bg-green-50 hover:bg-green-100 border-green-200"
+          >
+            <TestTube className="w-6 h-6 text-green-600" />
+            <span className="text-green-900 font-medium">Run New Test</span>
+          </Button>
+          
+          <Button 
+            onClick={handleViewAnalytics}
+            className="h-20 flex flex-col items-center justify-center space-y-2 bg-purple-50 hover:bg-purple-100 border-purple-200"
+          >
+            <BarChart3 className="w-6 h-6 text-purple-600" />
+            <span className="text-purple-900 font-medium">View Analytics</span>
+          </Button>
+        </div>
+      </div>
 
-        <TabsContent value="overview" className="space-y-6">
-          {models.length === 0 ? (
-            <Card className="border-dashed border-2 border-gray-300">
-              <CardContent className="p-12 text-center">
-                <Upload className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                  Welcome to SQ1 Dashboard
-                </h3>
-                <p className="text-gray-600 mb-6 max-w-md mx-auto">
-                  Get started by uploading your first ML model. We'll help you test it for bias, 
-                  security, and compliance issues.
-                </p>
-                <div className="space-y-4">
-                                          <Button size="lg" className="w-full sm:w-auto" onClick={() => router.push('/model-upload')}>
-                        <Upload className="w-4 h-4 mr-2" />
-                        Upload Your First Model
-                        </Button>
-                  <div className="text-sm text-gray-500">
-                    Supported formats: .pkl, .joblib, .h5, .onnx, .pb
+      {/* Recent Models */}
+      <div className="mb-8">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-semibold text-gray-900">Recent Models</h2>
+          <Button variant="outline" size="sm">
+            View All Models
+          </Button>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {demoModels.slice(0, 3).map((model) => (
+            <Card key={model.id} className="hover:shadow-lg transition-shadow cursor-pointer">
+              <CardHeader>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <CardTitle className="text-lg">{model.name}</CardTitle>
+                    <p className="text-sm text-gray-600">v{model.version}</p>
+                  </div>
+                  <Badge className={getStatusColor(model.status)}>
+                    {model.status}
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex justify-between text-sm">
+                  <span>Type:</span>
+                  <span className="font-medium">{model.type}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>Framework:</span>
+                  <span className="font-medium">{model.framework}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>Team:</span>
+                  <span className="font-medium">{model.team}</span>
+                </div>
+                
+                <div className="pt-4 border-t space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span>Bias Score:</span>
+                    <span className={`font-medium ${getScoreColor(model.biasScore)}`}>
+                      {model.biasScore}%
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span>Security Score:</span>
+                    <span className={`font-medium ${getScoreColor(model.securityScore)}`}>
+                      {model.securityScore}%
+                    </span>
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t">
+                  <div className="flex space-x-2">
+                    <Button size="sm" className="flex-1">
+                      <TestTube className="w-4 h-4 mr-1" />
+                      Test
+                    </Button>
+                    <Button size="sm" variant="outline" className="flex-1">
+                      <BarChart3 className="w-4 h-4 mr-1" />
+                      View
+                    </Button>
                   </div>
                 </div>
               </CardContent>
             </Card>
-          ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <BarChart3 className="w-5 h-5 mr-2" />
-                    Recent Activity
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {models.slice(0, 3).map((model) => (
-                      <div key={model.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                        <div>
-                          <p className="font-medium">{model.name}</p>
-                          <p className="text-sm text-gray-600">v{model.version}</p>
-                        </div>
-                        <Badge className={getStatusColor(model.status)}>
-                          {model.status}
-                        </Badge>
-                      </div>
-                    ))}
+          ))}
+        </div>
+      </div>
+
+      {/* Team Performance */}
+      <div className="mb-8">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Team Performance</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {demoAnalytics.teamPerformance.map((team) => (
+            <Card key={team.team}>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold text-gray-900">{team.team}</h3>
+                  <Users className="w-5 h-5 text-gray-400" />
+                </div>
+                <div className="space-y-3">
+                  <div className="flex justify-between text-sm">
+                    <span>Models:</span>
+                    <span className="font-medium">{team.models}</span>
                   </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <Shield className="w-5 h-5 mr-2" />
-                    Security Overview
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center">
-                      <span>Models with Issues</span>
-                      <Badge variant="destructive">{stats.criticalIssues}</Badge>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span>Tests This Week</span>
-                      <Badge variant="secondary">{stats.recentTests}</Badge>
-                    </div>
+                  <div className="flex justify-between text-sm">
+                    <span>Avg Score:</span>
+                    <span className={`font-medium ${getScoreColor(team.averageScore)}`}>
+                      {team.averageScore}%
+                    </span>
                   </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="models" className="space-y-6">
-                              <div className="flex justify-between items-center">
-                    <h2 className="text-xl font-semibold">Model Registry</h2>
-                    <Button onClick={() => router.push('/model-upload')}>
-                        <Plus className="w-4 h-4 mr-2" />
-                        Add Model
-                    </Button>
-                    </div>
-
-          {models.length === 0 ? (
-            <Card className="border-dashed border-2 border-gray-300">
-              <CardContent className="p-12 text-center">
-                <Database className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                  No Models Yet
-                </h3>
-                <p className="text-gray-600 mb-6">
-                  Upload your ML models to start testing them for bias, security, and compliance.
-                </p>
-                                        <Button size="lg" onClick={() => router.push('/model-upload')}>
-                            <Upload className="w-4 h-4 mr-2" />
-                            Upload Model
-                        </Button>
+                  <div className="flex justify-between text-sm">
+                    <span>Tests Run:</span>
+                    <span className="font-medium">{team.testsRun}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span>Issues:</span>
+                    <span className="font-medium text-red-600">{team.issues}</span>
+                  </div>
+                </div>
               </CardContent>
             </Card>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {models.map((model) => (
-                <Card key={model.id} className="hover:shadow-lg transition-shadow">
-                  <CardHeader>
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <CardTitle className="text-lg">{model.name}</CardTitle>
-                        <p className="text-sm text-gray-600">v{model.version}</p>
-                      </div>
-                      <Badge className={getStatusColor(model.status)}>
-                        {model.status}
-                      </Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="flex justify-between text-sm">
-                      <span>Type:</span>
-                      <span className="font-medium">{model.type}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span>Uploaded:</span>
-                      <span>{new Date(model.uploadDate).toLocaleDateString()}</span>
-                    </div>
-                    {model.biasScore && (
-                      <div className="flex justify-between text-sm">
-                        <span>Bias Score:</span>
-                        <span className={`font-medium ${getScoreColor(model.biasScore)}`}>
-                          {model.biasScore}%
-                        </span>
-                      </div>
-                    )}
-                    {model.securityScore && (
-                      <div className="flex justify-between text-sm">
-                        <span>Security Score:</span>
-                        <span className={`font-medium ${getScoreColor(model.securityScore)}`}>
-                          {model.securityScore}%
-                        </span>
-                      </div>
-                    )}
-                    <div className="flex space-x-2 pt-2">
-                      <Button size="sm" variant="outline" className="flex-1">
-                        <TestTube className="w-4 h-4 mr-1" />
-                        Test
-                      </Button>
-                      <Button size="sm" variant="outline" className="flex-1">
-                        <BarChart3 className="w-4 h-4 mr-1" />
-                        Analyze
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
+          ))}
+        </div>
+      </div>
+
+      {/* Recent Activity */}
+      <div>
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Recent Activity</h2>
+        <Card>
+          <CardContent className="p-6">
+            <div className="space-y-4">
+              {demoNotifications.slice(0, 4).map((notification) => (
+                <div key={notification.id} className="flex items-center space-x-4 p-3 rounded-lg hover:bg-gray-50">
+                  <div className={`w-2 h-2 rounded-full ${
+                    notification.severity === 'error' ? 'bg-red-500' :
+                    notification.severity === 'warning' ? 'bg-yellow-500' : 'bg-blue-500'
+                  }`} />
+                  <div className="flex-1">
+                    <p className="font-medium text-gray-900">{notification.title}</p>
+                    <p className="text-sm text-gray-600">{notification.message}</p>
+                  </div>
+                  <div className="text-sm text-gray-500">
+                    {new Date(notification.timestamp).toLocaleDateString()}
+                  </div>
+                  {!notification.read && (
+                    <div className="w-2 h-2 bg-blue-500 rounded-full" />
+                  )}
+                </div>
               ))}
             </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="testing" className="space-y-6">
-                              <div className="flex justify-between items-center">
-                    <h2 className="text-xl font-semibold">Model Testing</h2>
-                    <Button onClick={() => router.push('/model-testing')}>
-                        <TestTube className="w-4 h-4 mr-2" />
-                        Run New Test
-                    </Button>
-                    </div>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="text-center">
-                <TestTube className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                  No Tests Yet
-                </h3>
-                <p className="text-gray-600 mb-6">
-                  Start testing your models for bias detection, security vulnerabilities, and compliance issues.
-                </p>
-                                        <Button size="lg" onClick={() => router.push('/model-testing')}>
-                            <TestTube className="w-4 h-4 mr-2" />
-                            Start Testing
-                        </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="analytics" className="space-y-6">
-                              <div className="flex justify-between items-center">
-                    <h2 className="text-xl font-semibold">Analytics & Reports</h2>
-                    <Button onClick={() => router.push('/analytics')}>
-                        <FileText className="w-4 h-4 mr-2" />
-                        View Analytics
-                    </Button>
-                    </div>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="text-center">
-                <BarChart3 className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                  No Analytics Data
-                </h3>
-                <p className="text-gray-600 mb-6">
-                  Analytics and reports will appear here once you start testing your models.
-                </p>
-                                        <Button size="lg" onClick={() => router.push('/analytics')}>
-                            <BarChart3 className="w-4 h-4 mr-2" />
-                            View Analytics
-                        </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   )
 }
