@@ -1,0 +1,43 @@
+---
+import type { CTASection } from '../../data/homepage';
+
+interface Props {
+  data: CTASection;
+}
+
+const { data } = Astro.props;
+---
+
+<section class="relative py-24 bg-gradient-to-r from-primary-600 to-primary-700 text-white overflow-hidden" aria-labelledby="cta-title">
+  <!-- Background elements -->
+  <div class="absolute inset-0 overflow-hidden" aria-hidden="true">
+    <div class="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiPjxkZWZzPjxwYXR0ZXJuIGlkPSJwYXR0ZXJuX2N0YSIgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiIHBhdHRlcm5Vbml0cz0idXNlclNwYWNlT25Vc2UiIHBhdHRlcm5UcmFuc2Zvcm09InJvdGF0ZSgzMCkiPjxyZWN0IHdpZHRoPSI1MCIgaGVpZ2h0PSI1MCIgZmlsbD0icmdiYSgyNTUsMjU1LDI1NSwwLjAzKSIvPjwvcGF0dGVybj48L2RlZnM+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0idXJsKCNwYXR0ZXJuX2N0YSkiLz48L3N2Zz4=')] opacity-20"></div>
+    <div class="absolute -right-40 -top-40 w-96 h-96 bg-white/10 rounded-full mix-blend-soft-light filter blur-3xl opacity-30"></div>
+    <div class="absolute -left-40 -bottom-40 w-96 h-96 bg-white/10 rounded-full mix-blend-soft-light filter blur-3xl opacity-30"></div>
+  </div>
+  
+  <div class="container mx-auto px-4 relative z-10">
+    <div class="max-w-4xl mx-auto text-center">
+      <h2 id="cta-title" class="text-4xl md:text-5xl font-bold mb-6">{data.title}</h2>
+      <p class="text-xl md:text-2xl text-primary-50 mb-10 max-w-3xl mx-auto leading-relaxed">
+        {data.description}
+      </p>
+      
+      <div class="flex flex-col sm:flex-row gap-4 justify-center items-center">
+        <a 
+          href={data.ctaPrimary.href}
+          class="inline-flex items-center justify-center px-8 py-4 text-lg font-semibold text-primary-700 bg-white hover:bg-gray-100 rounded-lg shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5 hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-primary-600"
+          aria-describedby="cta-title"
+        >
+          {data.ctaPrimary.text}
+        </a>
+        <a 
+          href={data.ctaSecondary.href}
+          class="inline-flex items-center justify-center px-8 py-4 text-lg font-semibold text-white border-2 border-white/30 bg-transparent hover:bg-white/10 rounded-lg transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-primary-600"
+        >
+          {data.ctaSecondary.text}
+        </a>
+      </div>
+    </div>
+  </div>
+</section>

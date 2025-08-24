@@ -1,0 +1,595 @@
+/* Adobe Spectrum 2 Design System Implementation */
+
+/* Design Tokens */
+:root {
+  /* Colors - Adobe Spectrum 2 */
+  --spectrum-color-gray-50: #f5f5f5;
+  --spectrum-color-gray-100: #e8e8e8;
+  --spectrum-color-gray-200: #d1d1d1;
+  --spectrum-color-gray-300: #b3b3b3;
+  --spectrum-color-gray-400: #8a8a8a;
+  --spectrum-color-gray-500: #6e6e6e;
+  --spectrum-color-gray-600: #464646;
+  --spectrum-color-gray-700: #2c2c2c;
+  --spectrum-color-gray-800: #1c1c1c;
+  --spectrum-color-gray-900: #0f0f0f;
+
+  /* Blue */
+  --spectrum-color-blue-50: #e6f3ff;
+  --spectrum-color-blue-100: #cce7ff;
+  --spectrum-color-blue-200: #99cfff;
+  --spectrum-color-blue-300: #66b7ff;
+  --spectrum-color-blue-400: #339fff;
+  --spectrum-color-blue-500: #0066cc;
+  --spectrum-color-blue-600: #0052a3;
+  --spectrum-color-blue-700: #003d7a;
+  --spectrum-color-blue-800: #002952;
+  --spectrum-color-blue-900: #001429;
+
+  /* Green */
+  --spectrum-color-green-50: #e6f7ed;
+  --spectrum-color-green-100: #ccefdb;
+  --spectrum-color-green-200: #99dfb7;
+  --spectrum-color-green-300: #66cf93;
+  --spectrum-color-green-400: #33bf6f;
+  --spectrum-color-green-500: #00a84b;
+  --spectrum-color-green-600: #00863c;
+  --spectrum-color-green-700: #00642d;
+  --spectrum-color-green-800: #00431e;
+  --spectrum-color-green-900: #00210f;
+
+  /* Red */
+  --spectrum-color-red-50: #ffe6e6;
+  --spectrum-color-red-100: #ffcccc;
+  --spectrum-color-red-200: #ff9999;
+  --spectrum-color-red-300: #ff6666;
+  --spectrum-color-red-400: #ff3333;
+  --spectrum-color-red-500: #e60000;
+  --spectrum-color-red-600: #b80000;
+  --spectrum-color-red-700: #8a0000;
+  --spectrum-color-red-800: #5c0000;
+  --spectrum-color-red-900: #2e0000;
+
+  /* Yellow */
+  --spectrum-color-yellow-50: #fff8e6;
+  --spectrum-color-yellow-100: #fff1cc;
+  --spectrum-color-yellow-200: #ffe399;
+  --spectrum-color-yellow-300: #ffd566;
+  --spectrum-color-yellow-400: #ffc733;
+  --spectrum-color-yellow-500: #ffb900;
+  --spectrum-color-yellow-600: #cc9400;
+  --spectrum-color-yellow-700: #996f00;
+  --spectrum-color-yellow-800: #664a00;
+  --spectrum-color-yellow-900: #332500;
+
+  /* Typography */
+  --spectrum-font-family: 'Adobe Clean', 'Source Sans Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --spectrum-font-size-xs: 0.75rem;
+  --spectrum-font-size-s: 0.875rem;
+  --spectrum-font-size-m: 1rem;
+  --spectrum-font-size-l: 1.125rem;
+  --spectrum-font-size-xl: 1.25rem;
+  --spectrum-font-size-xxl: 1.5rem;
+  --spectrum-font-size-xxxl: 2rem;
+
+  /* Spacing */
+  --spectrum-spacing-xs: 0.25rem;
+  --spectrum-spacing-s: 0.5rem;
+  --spectrum-spacing-m: 1rem;
+  --spectrum-spacing-l: 1.5rem;
+  --spectrum-spacing-xl: 2rem;
+  --spectrum-spacing-xxl: 3rem;
+
+  /* Border Radius */
+  --spectrum-border-radius-s: 0.25rem;
+  --spectrum-border-radius-m: 0.5rem;
+  --spectrum-border-radius-l: 0.75rem;
+  --spectrum-border-radius-xl: 1rem;
+
+  /* Shadows */
+  --spectrum-shadow-s: 0 1px 3px rgba(0, 0, 0, 0.1);
+  --spectrum-shadow-m: 0 4px 6px rgba(0, 0, 0, 0.1);
+  --spectrum-shadow-l: 0 10px 15px rgba(0, 0, 0, 0.1);
+  --spectrum-shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.1);
+}
+
+/* Base Styles */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--spectrum-font-family);
+  font-size: var(--spectrum-font-size-m);
+  line-height: 1.5;
+  color: var(--spectrum-color-gray-900);
+  background-color: var(--spectrum-color-gray-50);
+  margin: 0;
+  padding: 0;
+}
+
+/* Layout Components */
+.spectrum-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--spectrum-spacing-l);
+}
+
+.spectrum-section {
+  margin-bottom: var(--spectrum-spacing-xl);
+}
+
+.spectrum-main {
+  display: flex;
+  min-height: 100vh;
+}
+
+.spectrum-content {
+  flex: 1;
+  padding: var(--spectrum-spacing-l);
+  background-color: var(--spectrum-color-gray-50);
+}
+
+/* Header */
+.spectrum-header {
+  background-color: white;
+  border-bottom: 1px solid var(--spectrum-color-gray-200);
+  padding: var(--spectrum-spacing-m) var(--spectrum-spacing-l);
+  box-shadow: var(--spectrum-shadow-s);
+}
+
+/* Sidebar */
+.spectrum-sidebar {
+  width: 280px;
+  background-color: white;
+  border-right: 1px solid var(--spectrum-color-gray-200);
+  padding: var(--spectrum-spacing-m);
+  box-shadow: var(--spectrum-shadow-s);
+}
+
+.spectrum-sidebar-nav {
+  margin-top: var(--spectrum-spacing-l);
+}
+
+.spectrum-nav-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.spectrum-sidebar-item {
+  margin-bottom: var(--spectrum-spacing-xs);
+}
+
+.spectrum-sidebar-link {
+  display: flex;
+  align-items: center;
+  padding: var(--spectrum-spacing-s) var(--spectrum-spacing-m);
+  color: var(--spectrum-color-gray-700);
+  text-decoration: none;
+  border-radius: var(--spectrum-border-radius-m);
+  transition: all 0.2s ease;
+}
+
+.spectrum-sidebar-link:hover {
+  background-color: var(--spectrum-color-gray-100);
+  color: var(--spectrum-color-gray-900);
+}
+
+.spectrum-sidebar-link.active {
+  background-color: var(--spectrum-color-blue-50);
+  color: var(--spectrum-color-blue-600);
+  font-weight: 600;
+}
+
+/* Typography */
+.spectrum-heading {
+  font-family: var(--spectrum-font-family);
+  font-weight: 600;
+  line-height: 1.2;
+  margin: 0 0 var(--spectrum-spacing-s) 0;
+}
+
+.spectrum-heading--size-xs { font-size: var(--spectrum-font-size-xs); }
+.spectrum-heading--size-s { font-size: var(--spectrum-font-size-s); }
+.spectrum-heading--size-m { font-size: var(--spectrum-font-size-m); }
+.spectrum-heading--size-l { font-size: var(--spectrum-font-size-l); }
+.spectrum-heading--size-xl { font-size: var(--spectrum-font-size-xl); }
+.spectrum-heading--size-xxl { font-size: var(--spectrum-font-size-xxl); }
+.spectrum-heading--size-xxxl { font-size: var(--spectrum-font-size-xxxl); }
+
+.spectrum-body {
+  font-family: var(--spectrum-font-family);
+  line-height: 1.5;
+  margin: 0 0 var(--spectrum-spacing-s) 0;
+}
+
+.spectrum-body--size-s { font-size: var(--spectrum-font-size-s); }
+.spectrum-body--size-m { font-size: var(--spectrum-font-size-m); }
+.spectrum-body--size-l { font-size: var(--spectrum-font-size-l); }
+
+/* Text Colors */
+.spectrum-text-gray-50 { color: var(--spectrum-color-gray-50); }
+.spectrum-text-gray-100 { color: var(--spectrum-color-gray-100); }
+.spectrum-text-gray-200 { color: var(--spectrum-color-gray-200); }
+.spectrum-text-gray-300 { color: var(--spectrum-color-gray-300); }
+.spectrum-text-gray-400 { color: var(--spectrum-color-gray-400); }
+.spectrum-text-gray-500 { color: var(--spectrum-color-gray-500); }
+.spectrum-text-gray-600 { color: var(--spectrum-color-gray-600); }
+.spectrum-text-gray-700 { color: var(--spectrum-color-gray-700); }
+.spectrum-text-gray-800 { color: var(--spectrum-color-gray-800); }
+.spectrum-text-gray-900 { color: var(--spectrum-color-gray-900); }
+
+.spectrum-text-blue-500 { color: var(--spectrum-color-blue-500); }
+.spectrum-text-blue-600 { color: var(--spectrum-color-blue-600); }
+.spectrum-text-green-500 { color: var(--spectrum-color-green-500); }
+.spectrum-text-green-600 { color: var(--spectrum-color-green-600); }
+.spectrum-text-red-500 { color: var(--spectrum-color-red-500); }
+.spectrum-text-red-600 { color: var(--spectrum-color-red-600); }
+.spectrum-text-yellow-500 { color: var(--spectrum-color-yellow-500); }
+.spectrum-text-yellow-600 { color: var(--spectrum-color-yellow-600); }
+
+.spectrum-text-accent { color: var(--spectrum-color-blue-600); }
+.spectrum-text-success { color: var(--spectrum-color-green-600); }
+.spectrum-text-error { color: var(--spectrum-color-red-600); }
+.spectrum-text-warning { color: var(--spectrum-color-yellow-600); }
+.spectrum-text-info { color: var(--spectrum-color-blue-600); }
+
+/* Buttons */
+.spectrum-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spectrum-spacing-s) var(--spectrum-spacing-m);
+  font-family: var(--spectrum-font-family);
+  font-size: var(--spectrum-font-size-s);
+  font-weight: 500;
+  line-height: 1;
+  border: 1px solid transparent;
+  border-radius: var(--spectrum-border-radius-m);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.spectrum-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.spectrum-button--primary {
+  background-color: var(--spectrum-color-blue-600);
+  color: white;
+  border-color: var(--spectrum-color-blue-600);
+}
+
+.spectrum-button--primary:hover:not(:disabled) {
+  background-color: var(--spectrum-color-blue-700);
+  border-color: var(--spectrum-color-blue-700);
+}
+
+.spectrum-button--secondary {
+  background-color: white;
+  color: var(--spectrum-color-gray-700);
+  border-color: var(--spectrum-color-gray-300);
+}
+
+.spectrum-button--secondary:hover:not(:disabled) {
+  background-color: var(--spectrum-color-gray-50);
+  border-color: var(--spectrum-color-gray-400);
+}
+
+.spectrum-button--ghost {
+  background-color: transparent;
+  color: var(--spectrum-color-gray-700);
+  border-color: transparent;
+}
+
+.spectrum-button--ghost:hover:not(:disabled) {
+  background-color: var(--spectrum-color-gray-100);
+}
+
+.spectrum-button--fullWidth {
+  width: 100%;
+}
+
+.spectrum-button--size-s {
+  padding: var(--spectrum-spacing-xs) var(--spectrum-spacing-s);
+  font-size: var(--spectrum-font-size-xs);
+}
+
+.spectrum-button--size-m {
+  padding: var(--spectrum-spacing-s) var(--spectrum-spacing-m);
+  font-size: var(--spectrum-font-size-s);
+}
+
+.spectrum-button--size-l {
+  padding: var(--spectrum-spacing-m) var(--spectrum-spacing-l);
+  font-size: var(--spectrum-font-size-m);
+}
+
+/* Cards */
+.spectrum-card {
+  background-color: white;
+  border: 1px solid var(--spectrum-color-gray-200);
+  border-radius: var(--spectrum-border-radius-l);
+  box-shadow: var(--spectrum-shadow-s);
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+.spectrum-card:hover {
+  box-shadow: var(--spectrum-shadow-m);
+}
+
+.spectrum-card--interactive {
+  cursor: pointer;
+}
+
+.spectrum-card--interactive:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--spectrum-shadow-l);
+}
+
+.spectrum-card--success {
+  border-color: var(--spectrum-color-green-200);
+  background-color: var(--spectrum-color-green-50);
+}
+
+.spectrum-card--error {
+  border-color: var(--spectrum-color-red-200);
+  background-color: var(--spectrum-color-red-50);
+}
+
+.spectrum-card--warning {
+  border-color: var(--spectrum-color-yellow-200);
+  background-color: var(--spectrum-color-yellow-50);
+}
+
+.spectrum-card--info {
+  border-color: var(--spectrum-color-blue-200);
+  background-color: var(--spectrum-color-blue-50);
+}
+
+.spectrum-card--secondary {
+  background-color: var(--spectrum-color-gray-50);
+  border-color: var(--spectrum-color-gray-200);
+}
+
+.spectrum-card--accent {
+  border-color: var(--spectrum-color-blue-200);
+  background-color: var(--spectrum-color-blue-50);
+}
+
+.spectrum-card--empty {
+  border: 2px dashed var(--spectrum-color-gray-300);
+  background-color: transparent;
+  box-shadow: none;
+}
+
+.spectrum-card-content {
+  padding: var(--spectrum-spacing-l);
+}
+
+.spectrum-text-center {
+  text-align: center;
+}
+
+/* Status Badge */
+.spectrum-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--spectrum-spacing-xs) var(--spectrum-spacing-s);
+  font-size: var(--spectrum-font-size-xs);
+  font-weight: 500;
+  border-radius: var(--spectrum-border-radius-s);
+  white-space: nowrap;
+}
+
+.spectrum-status-badge--success {
+  background-color: var(--spectrum-color-green-100);
+  color: var(--spectrum-color-green-700);
+}
+
+.spectrum-status-badge--error {
+  background-color: var(--spectrum-color-red-100);
+  color: var(--spectrum-color-red-700);
+}
+
+.spectrum-status-badge--warning {
+  background-color: var(--spectrum-color-yellow-100);
+  color: var(--spectrum-color-yellow-700);
+}
+
+.spectrum-status-badge--info {
+  background-color: var(--spectrum-color-blue-100);
+  color: var(--spectrum-color-blue-700);
+}
+
+/* Grid System */
+.spectrum-grid {
+  display: grid;
+  gap: var(--spectrum-spacing-l);
+}
+
+.spectrum-grid--cols-1 { grid-template-columns: repeat(1, 1fr); }
+.spectrum-grid--cols-2 { grid-template-columns: repeat(2, 1fr); }
+.spectrum-grid--cols-3 { grid-template-columns: repeat(3, 1fr); }
+.spectrum-grid--cols-4 { grid-template-columns: repeat(4, 1fr); }
+
+/* Flexbox Utilities */
+.spectrum-flex {
+  display: flex;
+}
+
+.spectrum-flex--row { flex-direction: row; }
+.spectrum-flex--column { flex-direction: column; }
+.spectrum-flex--wrap { flex-wrap: wrap; }
+.spectrum-flex--nowrap { flex-wrap: nowrap; }
+
+.spectrum-flex--justify-start { justify-content: flex-start; }
+.spectrum-flex--justify-center { justify-content: center; }
+.spectrum-flex--justify-end { justify-content: flex-end; }
+.spectrum-flex--justify-between { justify-content: space-between; }
+.spectrum-flex--justify-around { justify-content: space-around; }
+
+.spectrum-flex--align-start { align-items: flex-start; }
+.spectrum-flex--align-center { align-items: center; }
+.spectrum-flex--align-end { align-items: flex-end; }
+.spectrum-flex--align-stretch { align-items: stretch; }
+
+.spectrum-flex--gap-1 { gap: var(--spectrum-spacing-xs); }
+.spectrum-flex--gap-2 { gap: var(--spectrum-spacing-s); }
+.spectrum-flex--gap-3 { gap: var(--spectrum-spacing-m); }
+.spectrum-flex--gap-4 { gap: var(--spectrum-spacing-l); }
+.spectrum-flex--gap-5 { gap: var(--spectrum-spacing-xl); }
+
+.spectrum-flex-shrink-0 { flex-shrink: 0; }
+.spectrum-flex-grow-1 { flex-grow: 1; }
+
+/* Icons */
+.spectrum-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.spectrum-icon--size-xs { width: 12px; height: 12px; }
+.spectrum-icon--size-s { width: 16px; height: 16px; }
+.spectrum-icon--size-m { width: 20px; height: 20px; }
+.spectrum-icon--size-l { width: 24px; height: 24px; }
+.spectrum-icon--size-xl { width: 32px; height: 32px; }
+.spectrum-icon--size-xxl { width: 48px; height: 48px; }
+
+.spectrum-icon--accent { color: var(--spectrum-color-blue-600); }
+.spectrum-icon--success { color: var(--spectrum-color-green-600); }
+.spectrum-icon--error { color: var(--spectrum-color-red-600); }
+.spectrum-icon--warning { color: var(--spectrum-color-yellow-600); }
+.spectrum-icon--neutral { color: var(--spectrum-color-gray-500); }
+
+/* Lists */
+.spectrum-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.spectrum-list--unordered {
+  list-style: disc;
+  padding-left: var(--spectrum-spacing-l);
+}
+
+.spectrum-list--ordered {
+  list-style: decimal;
+  padding-left: var(--spectrum-spacing-l);
+}
+
+.spectrum-list li {
+  margin-bottom: var(--spectrum-spacing-xs);
+}
+
+/* Detail Lists */
+.spectrum-detail-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spectrum-spacing-s);
+}
+
+.spectrum-detail-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spectrum-spacing-s) 0;
+  border-bottom: 1px solid var(--spectrum-color-gray-200);
+}
+
+.spectrum-detail-item:last-child {
+  border-bottom: none;
+}
+
+.spectrum-detail-label {
+  font-weight: 500;
+  color: var(--spectrum-color-gray-600);
+}
+
+.spectrum-detail-value {
+  font-weight: 600;
+  color: var(--spectrum-color-gray-900);
+}
+
+/* Tabs */
+.spectrum-tabs {
+  border-bottom: 1px solid var(--spectrum-color-gray-200);
+  margin-bottom: var(--spectrum-spacing-l);
+}
+
+.spectrum-tabList {
+  display: flex;
+  gap: var(--spectrum-spacing-s);
+}
+
+.spectrum-tab {
+  display: flex;
+  align-items: center;
+  padding: var(--spectrum-spacing-s) var(--spectrum-spacing-m);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--spectrum-color-gray-600);
+  cursor: pointer;
+  font-family: var(--spectrum-font-family);
+  font-size: var(--spectrum-font-size-s);
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.spectrum-tab:hover {
+  color: var(--spectrum-color-gray-900);
+}
+
+.spectrum-tab--selected {
+  color: var(--spectrum-color-blue-600);
+  border-bottom-color: var(--spectrum-color-blue-600);
+}
+
+.spectrum-tab-icon {
+  margin-right: var(--spectrum-spacing-s);
+}
+
+.spectrum-tabPanel {
+  padding: var(--spectrum-spacing-l) 0;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .spectrum-grid--cols-2,
+  .spectrum-grid--cols-3,
+  .spectrum-grid--cols-4 {
+    grid-template-columns: repeat(1, 1fr);
+  }
+
+  .spectrum-sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--spectrum-color-gray-200);
+  }
+
+  .spectrum-main {
+    flex-direction: column;
+  }
+
+  .spectrum-container {
+    padding: var(--spectrum-spacing-m);
+  }
+}
+
+@media (max-width: 480px) {
+  .spectrum-flex--row {
+    flex-direction: column;
+  }
+
+  .spectrum-card-content {
+    padding: var(--spectrum-spacing-m);
+  }
+}

@@ -1,44 +1,27 @@
 {
-  "name": "fairmind-ethical-sandbox",
-  "version": "0.1.0",
+  "name": "fairmind-workspace",
+  "version": "1.0.0",
   "private": true,
-  "description": "AI Governance Platform - Testing, monitoring, and ensuring ethical AI deployment",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "concurrently \"bun run dev:frontend\" \"bun run dev:backend\"",
-    "dev:frontend": "cd frontend && bun run dev",
-    "dev:backend": "cd backend && PORT=8001 python main_new.py",
-    "dev:supabase": "supabase start",
-    "build": "cd frontend && bun run build",
-    "start": "cd frontend && bun run start",
-    "lint": "cd frontend && bun run lint",
-    "format": "prettier --write \"**/*.{ts,tsx,md,py}\"",
-    "clean": "rm -rf node_modules frontend/node_modules frontend/.next",
-    "typecheck": "cd frontend && bun run typecheck",
-    "test": "cd frontend && bun run test",
-    "supabase:start": "DOCKER_HOST=unix:///var/run/docker.sock supabase start",
-    "supabase:stop": "DOCKER_HOST=unix:///var/run/docker.sock supabase stop",
-    "supabase:reset": "DOCKER_HOST=unix:///var/run/docker.sock supabase db reset",
-    "supabase:db:push": "DOCKER_HOST=unix:///var/run/docker.sock supabase db push"
-  },
-  "dependencies": {
-    "@prisma/client": "^6.14.0",
-    "@supabase/auth-helpers-nextjs": "^0.10.0",
-    "@supabase/auth-ui-react": "^0.4.7",
-    "@supabase/auth-ui-shared": "^0.1.8",
-    "@supabase/ssr": "^0.6.1",
-    "@supabase/supabase-js": "^2.53.0",
-    "concurrently": "^9.2.0",
-    "dotenv": "^17.2.1",
-    "pg": "^8.16.3",
-    "prisma": "^6.14.0",
-    "puppeteer": "^24.16.2",
-    "supabase": "^2.31.8"
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "clean": "turbo run clean",
+    "docker:build": "docker-compose build",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "setup": "npm install && npm run build"
   },
   "devDependencies": {
-    "prettier": "^3.6.2"
+    "turbo": "^1.10.0"
   },
   "engines": {
     "node": ">=18.0.0",
-    "bun": ">=1.0.0"
+    "npm": ">=8.0.0"
   }
 }

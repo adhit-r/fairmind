@@ -1,0 +1,296 @@
+--- 
+import Layout from '../layouts/Layout.astro';
+
+const page = {
+  title: 'Fairmind vs. The Competition',
+  description: 'See how Fairmind\'s unified, proactive approach to AI governance sets a new standard in the industry.',
+  seoImage: 'https://fairmind.xyz/images/comparison-og.jpg'
+};
+
+const competitors = {
+  'fairmind': {
+    name: 'Fairmind',
+    logo: '/images/logo.svg',
+    tagline: 'The Complete AI Governance Platform',
+    url: 'https://fairmind.xyz',
+    highlight: true
+  },
+  'fiddler': {
+    name: 'Fiddler AI',
+    logo: 'https://fiddler.ai/hubfs/Fiddler_Logo_White.svg',
+    tagline: 'AI Observability Platform',
+    url: 'https://fiddler.ai',
+    founded: 2018
+  },
+  'arthur': {
+    name: 'Arthur AI',
+    logo: 'https://arthur.ai/wp-content/uploads/2022/03/Arthur_Logo_White.svg',
+    tagline: 'AI Performance & Governance',
+    url: 'https://arthur.ai',
+    founded: 2018
+  },
+  'whylabs': {
+    name: 'WhyLabs',
+    logo: 'https://whylabs.ai/wp-content/uploads/2022/01/whylabs-logo-white.png',
+    tagline: 'AI Observability',
+    url: 'https://whylabs.ai',
+    founded: 2019
+  },
+  'arize': {
+    name: 'Arize AI',
+    logo: 'https://arize.com/wp-content/uploads/2023/01/arize-logo-white.svg',
+    tagline: 'ML Observability',
+    url: 'https://arize.com',
+    founded: 2019
+  }
+};
+
+const comparisonData = {
+  headers: [
+    { id: 'capability', name: 'Capability' },
+    { id: 'fairmind', name: competitors.fairmind.name, logo: competitors.fairmind.logo },
+    { id: 'fiddler', name: competitors.fiddler.name, logo: competitors.fiddler.logo },
+    { id: 'arthur', name: competitors.arthur.name, logo: competitors.arthur.logo },
+    { id: 'whylabs', name: competitors.whylabs.name, logo: competitors.whylabs.logo },
+    { id: 'arize', name: competitors.arize.name, logo: competitors.arize.logo }
+  ],
+  rows: [
+    {
+      feature: 'Bias & Fairness',
+      description: 'Comprehensive bias detection across protected attributes',
+      values: {
+        fairmind: { value: '✅ 20+ metrics, Real-time', highlight: true },
+        fiddler: { value: '✅ 15+ metrics, Near real-time' },
+        arthur: { value: '✅ 10+ metrics, Batch processing' },
+        whylabs: { value: '⚠️ Limited metrics' },
+        arize: { value: '✅ 15+ metrics, Near real-time' }
+      }
+    },
+    {
+      feature: 'Explainability (XAI)',
+      description: 'Model interpretability and feature importance',
+      values: {
+        fairmind: { value: '✅ SHAP, LIME, What-If, Interactive', highlight: true },
+        fiddler: { value: '✅ SHAP, LIME, Static reports' },
+        arthur: { value: '✅ SHAP, Limited interactivity' },
+        whylabs: { value: '⚠️ Basic feature importance' },
+        arize: { value: '✅ SHAP, LIME, Limited interactivity' }
+      }
+    },
+    {
+      feature: 'Drift Monitoring',
+      description: 'Automated detection of data and concept drift',
+      values: {
+        fairmind: { value: '✅ Both data & concept drift, Real-time', highlight: true },
+        fiddler: { value: '✅ Both, Near real-time' },
+        arthur: { value: '✅ Both, Batch processing' },
+        whylabs: { value: '✅ Data drift only' },
+        arize: { value: '✅ Both, Near real-time' }
+      }
+    },
+    {
+      feature: 'Model Performance',
+      description: 'Comprehensive model performance monitoring',
+      values: {
+        fairmind: { value: '✅ Full lifecycle monitoring', highlight: true },
+        fiddler: { value: '✅ Full lifecycle monitoring' },
+        arthur: { value: '✅ Full lifecycle monitoring' },
+        whylabs: { value: '⚠️ Limited to data quality' },
+        arize: { value: '✅ Full lifecycle monitoring' }
+      }
+    },
+    {
+      feature: 'Integration',
+      description: 'Supported platforms and frameworks',
+      values: {
+        fairmind: { value: '✅ 15+ MLOps tools, API-first', highlight: true },
+        fiddler: { value: '✅ 10+ integrations' },
+        arthur: { value: '✅ 8+ integrations' },
+        whylabs: { value: '✅ 5+ integrations' },
+        arize: { value: '✅ 12+ integrations' }
+      }
+    },
+    {
+      feature: 'Scalability',
+      description: 'Handling of large-scale deployments',
+      values: {
+        fairmind: { value: '✅ Billions of predictions/day', highlight: true },
+        fiddler: { value: '✅ Billions of predictions/day' },
+        arthur: { value: '✅ Millions of predictions/day' },
+        whylabs: { value: '✅ Millions of predictions/day' },
+        arize: { value: '✅ Billions of predictions/day' }
+      }
+    },
+    {
+      feature: 'Regulatory Compliance',
+      description: 'Built-in compliance features',
+      values: {
+        fairmind: { value: '✅ GDPR, AI Act, 1-click reports', highlight: true },
+        fiddler: { value: '✅ GDPR, Custom reports' },
+        arthur: { value: '✅ GDPR, Custom reports' },
+        whylabs: { value: '⚠️ Limited compliance features' },
+        arize: { value: '✅ GDPR, Custom reports' }
+      }
+    },
+    {
+      feature: 'Enterprise Features',
+      description: 'Advanced enterprise capabilities and integrations',
+      values: {
+        fairmind: { value: '✅ SSO, RBAC, Custom integrations', highlight: true },
+        fiddler: { value: '✅ SSO, Limited RBAC' },
+        arthur: { value: '✅ SSO, Basic integrations' },
+        whylabs: { value: '⚠️ Limited enterprise features' },
+        arize: { value: '✅ SSO, API integrations' }
+      }
+    },
+    {
+      feature: 'Ease of Implementation',
+      description: 'Time to value and setup complexity',
+      values: {
+        fairmind: { value: '🚀 < 1 hour setup', highlight: true },
+        fiddler: { value: '⏳ 1-2 weeks' },
+        arthur: { value: '⏳ 1-2 weeks' },
+        whylabs: { value: '⏳ 2-3 days' },
+        arize: { value: '⏳ 3-5 days' }
+      }
+    },
+    {
+      feature: 'Customer Support',
+      description: 'Support levels and SLAs',
+      values: {
+        fairmind: { value: '✅ Coming Soon', highlight: true },
+        fiddler: { value: '✅ 24/7 Enterprise Support' },
+        arthur: { value: '✅ Business Hours Support' },
+        whylabs: { value: '✅ Community + Paid Support' },
+        arize: { value: '✅ Business Hours Support' }
+      }
+    }
+  ]
+};
+---
+
+<Layout title={page.title} description={page.description} seoImage={page.seoImage}>
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Product",
+      "name": "Fairmind",
+      "description": "${page.description}",
+      "brand": {
+        "@type": "Brand",
+        "name": "Fairmind"
+      },
+      "url": "https://fairmind.xyz/comparison",
+      "category": "AI Governance Platform"
+    }
+  </script>
+  <div class="relative overflow-hidden py-20 md:py-32">
+    <!-- Background Glows -->
+    <div class="absolute -top-1/4 -left-1/4 w-1/2 h-1/2 bg-brand-purple/20 rounded-full filter blur-3xl opacity-50 animate-pulse-slow"></div>
+    <div class="absolute -bottom-1/4 -right-1/4 w-1/2 h-1/2 bg-brand-pink/20 rounded-full filter blur-3xl opacity-50 animate-pulse-slow animation-delay-2000"></div>
+
+    <!-- Hero Section -->
+    <section class="relative text-center mb-20">
+      <div class="container mx-auto px-4 relative z-10">
+        <h1 class="text-5xl md:text-7xl font-bold mb-4">
+          <span class="text-transparent bg-clip-text bg-gradient-to-r from-brand-purple to-brand-pink">{page.title}</span>
+        </h1>
+        <p class="text-xl md:text-2xl text-gray-300 max-w-3xl mx-auto">
+          {page.description}
+        </p>
+      </div>
+    </section>
+
+    <!-- Comparison Table -->
+    <section class="container mx-auto px-4 relative z-10 mb-20">
+      <div class="bg-gray-800/50 rounded-2xl glowing-border border-brand-purple/50 overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left">
+            <thead class="bg-gray-900/80 sticky top-0 z-10">
+              <tr>
+                {comparisonData.headers.map((header, idx) => (
+                  <th class={`p-4 text-lg font-bold ${idx === 0 ? 'text-left' : 'text-center'} min-w-[200px]`}>
+                    {header.logo ? (
+                      <div class="flex flex-col items-center justify-center space-y-2">
+                        <img src={header.logo} alt={`${header.name} logo`} class="h-8 max-w-[120px] object-contain" onError="this.src='/images/logo.svg'"/>
+                        {idx === 0 ? (
+                          <span class="text-brand-light">{header.name}</span>
+                        ) : (
+                          <a href={competitors[header.id.toLowerCase()]?.url} target="_blank" rel="noopener noreferrer" class="text-brand-purple hover:text-brand-pink transition-colors text-sm">
+                            Visit {competitors[header.id.toLowerCase()]?.name}
+                          </a>
+                        )}
+                      </div>
+                    ) : (
+                      <span class="text-brand-light">{header.name}</span>
+                    )}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {comparisonData.rows.map((row, rowIndex) => (
+                <>
+                  <tr class={`border-t border-gray-700/50 ${rowIndex % 2 === 0 ? 'bg-gray-800/30' : 'bg-gray-800/10'}`}>
+                    <td colspan={comparisonData.headers.length} class="p-2 px-4 text-sm text-gray-400">
+                      {row.description}
+                    </td>
+                  </tr>
+                  <tr class={`border-t border-gray-700/30 ${rowIndex % 2 === 0 ? 'bg-gray-800/30' : 'bg-gray-800/10'}`}>
+                    <td class="p-4 font-bold text-brand-light align-top whitespace-nowrap">
+                      {row.feature}
+                    </td>
+                    {comparisonData.headers.slice(1).map(header => {
+                      const value = row.values[header.id.toLowerCase()];
+                      if (!value) return <td class="p-4 text-gray-500">—</td>;
+                      
+                      return (
+                        <td class={`p-4 ${value.highlight ? 'bg-brand-purple/10' : ''} ${header.id === 'fairmind' ? 'font-semibold' : ''}`}>
+                          <div class="flex items-center justify-center text-center">
+                            <span class={value.highlight ? 'text-brand-pink' : 'text-gray-300'}>
+                              {value.value}
+                            </span>
+                          </div>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                </>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      
+      {/* Key Takeaways */}
+      <div class="mt-16 grid md:grid-cols-3 gap-8">
+        <div class="bg-gray-800/50 p-6 rounded-xl border border-brand-purple/20">
+          <h3 class="text-xl font-bold mb-3 text-brand-light">Most Comprehensive</h3>
+          <p class="text-gray-300">Fairmind offers the most complete set of AI governance features, from real-time monitoring to automated compliance reporting.</p>
+        </div>
+        <div class="bg-gray-800/50 p-6 rounded-xl border border-brand-purple/20">
+          <h3 class="text-xl font-bold mb-3 text-brand-light">Easiest to Implement</h3>
+          <p class="text-gray-300">Get started in under an hour with our intuitive platform and extensive documentation.</p>
+        </div>
+        <div class="bg-gray-800/50 p-6 rounded-xl border border-brand-purple/20">
+          <h3 class="text-xl font-bold mb-3 text-brand-light">Enterprise Ready</h3>
+          <p class="text-gray-300">Built for enterprise scale with advanced security, compliance, and integration capabilities.</p>
+        </div>
+      </div>
+      
+      {/* CTA Section */}
+      <div class="mt-16 text-center bg-gradient-to-r from-brand-purple/10 to-brand-pink/10 p-8 rounded-2xl">
+        <h2 class="text-3xl md:text-4xl font-bold mb-4">Ready to Experience the Difference?</h2>
+        <p class="text-xl text-gray-300 mb-8 max-w-3xl mx-auto">Join leading companies that trust Fairmind for their AI governance needs.</p>
+        <div class="flex flex-col sm:flex-row justify-center gap-4">
+          <a href="/demo" class="px-8 py-3 bg-brand-purple hover:bg-brand-pink text-white font-semibold rounded-lg transition-colors duration-300 transform hover:scale-105">
+            Request Demo
+          </a>
+          <a href="#demo" class="px-8 py-3 border-2 border-brand-purple text-brand-light hover:bg-brand-purple/20 font-semibold rounded-lg transition-colors duration-300">
+            Request Demo
+          </a>
+        </div>
+      </div>
+    </section>
+  </div>
+</Layout>

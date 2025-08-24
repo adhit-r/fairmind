@@ -1,0 +1,172 @@
+---
+title: Bias Detection Guide
+description: Learn how to detect and analyze bias in your AI models using statistical methods and custom rules.
+---
+
+# Bias Detection Guide
+
+Fairmind provides comprehensive bias detection capabilities to help you identify and mitigate bias in your AI models. This guide covers the various bias detection methods and how to use them effectively.
+
+## Types of Bias Detection
+
+### Statistical Parity
+Statistical parity ensures that the proportion of positive predictions is the same across different demographic groups.
+
+```python
+from fairmind import BiasDetector
+
+detector = BiasDetector()
+results = detector.check_statistical_parity(
+    model=your_model,
+    dataset=your_dataset,
+    sensitive_features=['gender', 'race']
+)
+```
+
+### Demographic Parity
+Demographic parity measures whether the model's predictions are independent of sensitive attributes.
+
+### Equalized Odds
+Equalized odds ensures that the true positive and false positive rates are equal across groups.
+
+## Custom Fairness Rules
+
+Fairmind allows you to define custom fairness rules tailored to your specific use case:
+
+```python
+from fairmind import CustomFairnessRule
+
+# Define a custom fairness rule
+rule = CustomFairnessRule(
+    name="custom_parity",
+    description="Custom parity rule for our use case",
+    function=lambda predictions, sensitive_features: custom_parity_check(predictions, sensitive_features)
+)
+
+# Apply the rule
+results = detector.apply_custom_rule(rule, model, dataset)
+```
+
+## Bias Detection Workflow
+
+### 1. Data Preparation
+Ensure your dataset includes:
+- **Features**: Input variables for your model
+- **Target**: The variable you're predicting
+- **Sensitive Features**: Protected attributes (gender, race, age, etc.)
+
+### 2. Model Analysis
+Run bias detection on your trained model:
+
+```python
+# Comprehensive bias analysis
+analysis = detector.comprehensive_analysis(
+    model=model,
+    dataset=dataset,
+    sensitive_features=['gender', 'race', 'age'],
+    methods=['statistical_parity', 'demographic_parity', 'equalized_odds']
+)
+```
+
+### 3. Results Interpretation
+Review the bias detection results:
+
+- **Bias Scores**: Numerical measures of bias
+- **Visualizations**: Charts and graphs showing bias patterns
+- **Recommendations**: Suggestions for bias mitigation
+
+## Bias Mitigation Strategies
+
+### Pre-processing
+- **Reweighting**: Adjust sample weights to balance groups
+- **Resampling**: Oversample or undersample to achieve balance
+
+### In-processing
+- **Adversarial Debiasing**: Train with adversarial objectives
+- **Constraint-based Methods**: Add fairness constraints during training
+
+### Post-processing
+- **Threshold Adjustment**: Modify decision thresholds per group
+- **Calibration**: Calibrate predictions to reduce bias
+
+## Real-world Example
+
+Here's a complete example of bias detection for a credit scoring model:
+
+```python
+import pandas as pd
+from fairmind import BiasDetector, BiasReport
+
+# Load your data
+data = pd.read_csv('credit_data.csv')
+
+# Initialize bias detector
+detector = BiasDetector()
+
+# Run comprehensive bias analysis
+report = detector.analyze_model(
+    model=credit_model,
+    dataset=data,
+    sensitive_features=['gender', 'race'],
+    target='loan_approved'
+)
+
+# Generate detailed report
+report.generate_html('bias_report.html')
+report.generate_pdf('bias_report.pdf')
+```
+
+## Best Practices
+
+1. **Start Early**: Include bias detection in your model development pipeline
+2. **Multiple Methods**: Use various bias detection methods for comprehensive analysis
+3. **Domain Expertise**: Consult with domain experts to understand context-specific bias
+4. **Regular Monitoring**: Continuously monitor for bias in production models
+5. **Documentation**: Document your bias detection process and findings
+
+## Advanced Features
+
+### LLM-based Analysis
+Fairmind supports LLM-based bias analysis for text and complex scenarios:
+
+```python
+# LLM-based bias analysis
+llm_analysis = detector.llm_analysis(
+    model=model,
+    dataset=dataset,
+    llm_provider='openai',
+    analysis_type='comprehensive'
+)
+```
+
+### Simulation-based Testing
+Run bias simulations to test different scenarios:
+
+```python
+# Bias simulation
+simulation = detector.run_simulation(
+    model=model,
+    scenarios=['demographic_shift', 'data_drift'],
+    iterations=1000
+)
+```
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Missing Sensitive Features**: Ensure your dataset includes all relevant protected attributes
+2. **Small Sample Sizes**: Some bias detection methods require sufficient samples per group
+3. **Data Quality**: Poor data quality can affect bias detection accuracy
+
+### Performance Optimization
+
+- Use sampling for large datasets
+- Enable parallel processing for multiple analyses
+- Cache results for repeated analyses
+
+## Next Steps
+
+- [Model Provenance](/docs/model-provenance) - Track model lineage and audit trails
+- [Monitoring & Analytics](/docs/monitoring) - Set up continuous bias monitoring
+- [API Reference](/docs/api) - Integrate bias detection into your applications

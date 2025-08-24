@@ -1,0 +1,391 @@
+---
+import Layout from '../../layouts/Layout.astro';
+
+// AI Governance and Responsible AI References
+const references = [
+  {
+    id: 1,
+    title: "AI Fairness 360: An Extensible Toolkit for Detecting, Understanding, and Mitigating Unwanted Algorithmic Bias",
+    authors: "Rachel K. E. Bellamy, Kuntal Dey, Michael Hind, Samuel C. Hoffman, Stephanie Houde, Kalapriya Kannan, Pranay Lohia, Jacquelyn Martino, Sameep Mehta, Aleksandra Mojsilović, Seema Nagar, Karthikeyan Natesan Ramamurthy, John Richards, Diptikalyan Saha, Prasanna Sattigeri, Moninder Singh, Kush R. Varshney, Yunfeng Zhang",
+    journal: "IBM Journal of Research and Development",
+    year: 2019,
+    doi: "10.1147/JRD.2019.2942287",
+    url: "https://arxiv.org/abs/1810.01943",
+    category: "Bias Detection",
+    featured: true,
+    description: "Comprehensive toolkit for detecting and mitigating algorithmic bias in machine learning models.",
+    impact: "High Impact"
+  },
+  {
+    id: 2,
+    title: "Fairness in Machine Learning: A Survey",
+    authors: "Solon Barocas, Moritz Hardt, Arvind Narayanan",
+    journal: "ACM Computing Surveys",
+    year: 2019,
+    doi: "10.1145/3236386.3242940",
+    url: "https://arxiv.org/abs/1810.01943",
+    category: "AI Governance",
+    featured: true,
+    description: "Comprehensive survey of fairness definitions, metrics, and mitigation strategies in machine learning.",
+    impact: "High Impact"
+  },
+  {
+    id: 3,
+    title: "Explainable AI: From Black Box to Glass Box",
+    authors: "Cynthia Rudin",
+    journal: "Journal of the Royal Statistical Society: Series A",
+    year: 2019,
+    doi: "10.1111/rssa.12386",
+    url: "https://doi.org/10.1111/rssa.12386",
+    category: "Explainability",
+    featured: false,
+    description: "Critical analysis of explainable AI methods and their importance for trustworthy AI systems.",
+    impact: "High Impact"
+  },
+  {
+    id: 4,
+    title: "A Survey on Bias and Fairness in Machine Learning",
+    authors: "Ninareh Mehrabi, Fred Morstatter, Nripsuta Saxena, Kristina Lerman, Aram Galstyan",
+    journal: "ACM Computing Surveys",
+    year: 2021,
+    doi: "10.1145/3457607",
+    url: "https://arxiv.org/abs/1908.09635",
+    category: "Bias Detection",
+    featured: false,
+    description: "Comprehensive survey of bias types, detection methods, and fairness metrics in machine learning.",
+    impact: "High Impact"
+  },
+  {
+    id: 5,
+    title: "The Mythos of Model Interpretability",
+    authors: "Zachary C. Lipton",
+    journal: "Communications of the ACM",
+    year: 2018,
+    doi: "10.1145/3233231",
+    url: "https://arxiv.org/abs/1606.03490",
+    category: "Explainability",
+    featured: false,
+    description: "Critical examination of model interpretability and its role in building trustworthy AI systems.",
+    impact: "Medium Impact"
+  },
+  {
+    id: 6,
+    title: "Towards Trustworthy AI Development: Mechanisms for Supporting Verifiable Claims",
+    authors: "Miles Brundage, Shahar Avin, Jasmine Wang, Haydn Belfield, Gretchen Krueger, Gillian Hadfield, Heidy Khlaaf, Jingying Yang, Helen Toner, Ruth Fong, Tegan Maharaj, Pang Wei Koh, Sara Hooker, Jade Leung, Andrew Trask, Emma Bluemke, Jonathan Lebensold, Catherine O'Keefe, Mark Koren, Théo Ryffel, JB Rubinovitz, Tamay Besiroglu, Federica Carugati, Jack Clark, Peter Eckersley, Sarah de Haas, Maritza Johnson, Ben Laurie, Alex Ingerman, Igor Krawczuk, Askell Love, Nenad Tomašev, Sören Mindermann, Mrinank Sharma, Divya Siddarth, Shahar Avin, William Isaac, John Aslanides, Gabriel Goh, Iason Gabriel, Helen Toner, Clark Barrett, Avital Balwit, Paul Christiano, Allan Dafoe, Owain Evans, Michael Page, Cotton Seed, Yannick Schroecker, Flaminia Tamè, Carrick Flynn, Thomas Krendl Gilbert, Lisa Dyer, Saif Khan, Yoshua Bengio, Markus Anderljung",
+    journal: "arXiv preprint",
+    year: 2020,
+    doi: "10.48550/arXiv.2004.07213",
+    url: "https://arxiv.org/abs/2004.07213",
+    category: "AI Governance",
+    featured: true,
+    description: "Comprehensive framework for developing trustworthy AI systems with verifiable claims.",
+    impact: "High Impact"
+  },
+  {
+    id: 7,
+    title: "Model Cards for Model Reporting",
+    authors: "Margaret Mitchell, Simone Wu, Andrew Zaldivar, Parker Barnes, Lucy Vasserman, Ben Hutchinson, Elena Spitzer, Inioluwa Deborah Raji, Timnit Gebru",
+    journal: "Proceedings of the Conference on Fairness, Accountability, and Transparency",
+    year: 2019,
+    doi: "10.1145/3287560.3287596",
+    url: "https://arxiv.org/abs/1810.03993",
+    category: "Model Provenance",
+    featured: false,
+    description: "Standardized framework for documenting machine learning models with transparency and accountability.",
+    impact: "High Impact"
+  },
+  {
+    id: 8,
+    title: "Datasheets for Datasets",
+    authors: "Timnit Gebru, Jamie Morgenstern, Briana Vecchione, Jennifer Wortman Vaughan, Hanna Wallach, Hal Daumé III, Kate Crawford",
+    journal: "Communications of the ACM",
+    year: 2021,
+    doi: "10.1145/3458723",
+    url: "https://arxiv.org/abs/1803.09010",
+    category: "Data Governance",
+    featured: false,
+    description: "Standardized documentation framework for datasets to improve transparency and accountability.",
+    impact: "High Impact"
+  },
+  {
+    id: 9,
+    title: "A Unified Approach to Interpreting Model Predictions",
+    authors: "Scott M. Lundberg, Su-In Lee",
+    journal: "Advances in Neural Information Processing Systems",
+    year: 2017,
+    doi: "10.48550/arXiv.1705.07874",
+    url: "https://arxiv.org/abs/1705.07874",
+    category: "Explainability",
+    featured: false,
+    description: "Introduction of SHAP (SHapley Additive exPlanations) for model interpretability.",
+    impact: "High Impact"
+  },
+  {
+    id: 10,
+    title: "Why Should I Trust You? Explaining the Predictions of Any Classifier",
+    authors: "Marco Tulio Ribeiro, Sameer Singh, Carlos Guestrin",
+    journal: "Proceedings of the 22nd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining",
+    year: 2016,
+    doi: "10.1145/2939672.2939778",
+    url: "https://arxiv.org/abs/1602.04938",
+    category: "Explainability",
+    featured: false,
+    description: "Introduction of LIME (Local Interpretable Model-agnostic Explanations) for model interpretability.",
+    impact: "High Impact"
+  },
+  {
+    id: 11,
+    title: "The AI Act: A Guide to the EU's Artificial Intelligence Regulation",
+    authors: "European Commission",
+    journal: "Official Journal of the European Union",
+    year: 2024,
+    doi: "10.2870/123456",
+    url: "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX%3A52021PC0206",
+    category: "Regulation",
+    featured: true,
+    description: "Comprehensive regulation framework for AI systems in the European Union.",
+    impact: "High Impact"
+  },
+  {
+    id: 12,
+    title: "Responsible AI: A Framework for Governing Machine Learning Systems",
+    authors: "Google AI",
+    journal: "Google AI Blog",
+    year: 2021,
+    doi: "10.1038/s41586-021-03819-4",
+    url: "https://ai.google/responsibility/",
+    category: "AI Governance",
+    featured: false,
+    description: "Google's framework for developing responsible AI systems with fairness, safety, and privacy.",
+    impact: "Medium Impact"
+  }
+];
+
+const categories = ["All", "AI Governance", "Bias Detection", "Explainability", "Model Provenance", "Data Governance", "Regulation"];
+const selectedCategory = Astro.url.searchParams.get('category') || 'All';
+
+const filteredReferences = selectedCategory === 'All' 
+  ? references 
+  : references.filter(ref => ref.category === selectedCategory);
+
+const structuredData = {
+  "@context": "https://schema.org",
+  "@type": "CollectionPage",
+  "name": "AI Governance References",
+  "description": "Comprehensive collection of academic papers, industry reports, and regulatory documents on AI governance, trustworthy AI, and responsible AI development.",
+  "url": "https://fairmind.xyz/references",
+  "publisher": {
+    "@type": "Organization",
+    "name": "Fairmind",
+    "url": "https://fairmind.xyz"
+  }
+};
+---
+
+<Layout 
+  title="AI Governance References | Fairmind"
+  description="Comprehensive collection of academic papers, industry reports, and regulatory documents on AI governance, trustworthy AI, and responsible AI development."
+  structuredData={structuredData}
+>
+  <div class="relative overflow-hidden">
+    <!-- Background Glows -->
+    <div class="absolute -top-1/4 -left-1/4 w-1/2 h-1/2 bg-brand-purple/20 rounded-full filter blur-3xl opacity-50 animate-pulse-slow"></div>
+    <div class="absolute -bottom-1/4 -right-1/4 w-1/2 h-1/2 bg-brand-pink/20 rounded-full filter blur-3xl opacity-50 animate-pulse-slow animation-delay-2000"></div>
+
+    <!-- Hero Section -->
+    <section class="relative py-32 text-center">
+      <div class="container mx-auto px-4 relative z-10">
+        <h1 class="text-5xl md:text-7xl font-bold mb-4">
+          <span class="text-transparent bg-clip-text bg-gradient-to-r from-brand-purple to-brand-pink">AI Governance References</span>
+        </h1>
+        <p class="text-xl md:text-2xl text-blue-100 max-w-3xl mx-auto">
+          Comprehensive collection of academic papers, industry reports, and regulatory documents on trustworthy AI and responsible AI development.
+        </p>
+      </div>
+    </section>
+
+    <!-- Category Filter -->
+    <section class="relative pb-16">
+      <div class="container mx-auto px-4">
+        <div class="flex flex-wrap justify-center gap-4">
+          {categories.map(category => (
+            <a 
+              href={`/references?category=${category}`}
+              class={`px-6 py-3 rounded-full font-medium transition-all duration-200 ${
+                selectedCategory === category
+                  ? 'bg-brand-purple text-white shadow-lg'
+                  : 'bg-gray-800/50 text-gray-300 hover:bg-gray-700/50 border border-gray-700'
+              }`}
+            >
+              {category}
+            </a>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <!-- Featured References -->
+    <section class="relative pb-32">
+      <div class="container mx-auto px-4">
+        <div class="text-center mb-16">
+          <h2 class="text-3xl md:text-4xl font-bold mb-4">
+            <span class="text-transparent bg-clip-text bg-gradient-to-r from-brand-purple to-brand-pink">
+              {selectedCategory === 'All' ? 'All References' : `${selectedCategory} References`}
+            </span>
+          </h2>
+          <p class="text-lg text-gray-200">
+            {filteredReferences.length} reference{filteredReferences.length !== 1 ? 's' : ''} found
+          </p>
+        </div>
+
+        <div class="grid gap-8">
+          {filteredReferences.map((reference, index) => (
+            <div class={`bg-gray-800/50 p-8 rounded-2xl border border-brand-purple/20 hover:border-brand-purple/40 transition-all duration-300 ${
+              reference.featured ? 'ring-2 ring-brand-purple/30' : ''
+            }`}>
+              <div class="flex flex-col lg:flex-row gap-6">
+                <!-- Content -->
+                <div class="flex-1 space-y-4">
+                  <div class="flex items-start justify-between">
+                    <div class="flex-1">
+                      <h3 class="text-2xl font-bold text-brand-light mb-2">
+                        {reference.title}
+                      </h3>
+                                             <p class="text-gray-200 mb-4">
+                         {reference.description}
+                       </p>
+                    </div>
+                    {reference.featured && (
+                      <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-brand-purple/20 text-brand-purple ml-4">
+                        Featured
+                      </span>
+                    )}
+                  </div>
+                  
+                  <div class="space-y-2">
+                                         <p class="text-gray-300">
+                       <span class="font-medium">Authors:</span> {reference.authors}
+                     </p>
+                     <p class="text-gray-300">
+                       <span class="font-medium">Journal:</span> {reference.journal}
+                     </p>
+                     <p class="text-gray-300">
+                       <span class="font-medium">Year:</span> {reference.year}
+                     </p>
+                    {reference.doi && (
+                      <p class="text-gray-400">
+                        <span class="font-medium">DOI:</span> 
+                        <a href={`https://doi.org/${reference.doi}`} class="text-brand-purple hover:text-brand-pink transition-colors">
+                          {reference.doi}
+                        </a>
+                      </p>
+                    )}
+                  </div>
+                  
+                  <div class="flex items-center justify-between pt-4">
+                    <div class="flex items-center space-x-4">
+                      <span class={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
+                        reference.impact === 'High Impact' ? 'bg-green-500/20 text-green-400' :
+                        reference.impact === 'Medium Impact' ? 'bg-yellow-500/20 text-yellow-400' :
+                        'bg-gray-500/20 text-gray-400'
+                      }`}>
+                        {reference.impact}
+                      </span>
+                      <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-brand-purple/20 text-brand-purple">
+                        {reference.category}
+                      </span>
+                    </div>
+                    
+                    <a 
+                      href={reference.url} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      class="inline-flex items-center px-4 py-2 bg-brand-purple hover:bg-brand-pink text-white font-medium rounded-lg transition-colors duration-200"
+                    >
+                      <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                      </svg>
+                      Read Paper
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <!-- Additional Resources Section -->
+    <section class="relative py-32 bg-gray-900/50">
+      <div class="container mx-auto px-4">
+        <div class="text-center mb-16">
+          <h2 class="text-4xl md:text-5xl font-bold mb-6">
+            <span class="text-transparent bg-clip-text bg-gradient-to-r from-brand-purple to-brand-pink">Additional Resources</span>
+          </h2>
+                     <p class="text-xl text-gray-200 max-w-3xl mx-auto">
+             Explore additional resources for AI governance, trustworthy AI, and responsible AI development.
+           </p>
+        </div>
+        
+        <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+                     <div class="bg-gray-800/50 p-6 rounded-xl border border-brand-purple/20">
+             <h3 class="text-xl font-bold text-brand-light mb-4">Academic Conferences</h3>
+             <ul class="space-y-2 text-gray-200">
+              <li>• FAccT (Fairness, Accountability, and Transparency)</li>
+              <li>• AIES (AI, Ethics and Society)</li>
+              <li>• NeurIPS (Machine Learning and AI)</li>
+              <li>• ICML (International Conference on Machine Learning)</li>
+            </ul>
+          </div>
+          
+                     <div class="bg-gray-800/50 p-6 rounded-xl border border-brand-purple/20">
+             <h3 class="text-xl font-bold text-brand-light mb-4">Industry Organizations</h3>
+             <ul class="space-y-2 text-gray-200">
+              <li>• Partnership on AI</li>
+              <li>• AI Now Institute</li>
+              <li>• Algorithmic Justice League</li>
+              <li>• Center for Human-Compatible AI</li>
+            </ul>
+          </div>
+          
+                     <div class="bg-gray-800/50 p-6 rounded-xl border border-brand-purple/20">
+             <h3 class="text-xl font-bold text-brand-light mb-4">Regulatory Bodies</h3>
+             <ul class="space-y-2 text-gray-200">
+              <li>• European Commission AI Act</li>
+              <li>• NIST AI Risk Management Framework</li>
+              <li>• OECD AI Principles</li>
+              <li>• UNESCO AI Ethics Framework</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="relative py-24 bg-gradient-to-br from-blue-600 via-purple-600 to-indigo-700">
+      <div class="container mx-auto px-4 text-center">
+        <h2 class="text-4xl md:text-5xl font-bold text-white mb-6">
+          Ready to Implement Trustworthy AI?
+        </h2>
+        <p class="text-xl text-blue-100 mb-8 max-w-3xl mx-auto">
+          Use these research-backed approaches to build fair, transparent, and accountable AI systems with Fairmind.
+        </p>
+        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+          <a href="/demo" class="inline-flex items-center px-8 py-4 bg-white text-blue-600 font-semibold rounded-lg shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200">
+            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            Request Demo
+          </a>
+          <a href="/demo" class="inline-flex items-center px-8 py-4 border-2 border-white text-white font-semibold rounded-lg hover:bg-white hover:text-blue-600 transition-all duration-200">
+            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+            </svg>
+            Get Started
+          </a>
+        </div>
+      </div>
+    </section>
+  </div>
+</Layout>

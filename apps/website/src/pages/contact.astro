@@ -1,0 +1,327 @@
+---
+import Layout from '../layouts/Layout.astro';
+
+const structuredData = {
+  "@context": "https://schema.org",
+  "@type": "ContactPage",
+  "name": "Contact Fairmind",
+  "description": "Get in touch with the Fairmind team for AI governance solutions, support, or partnership opportunities.",
+  "url": "https://fairmind.xyz/contact",
+  "mainEntity": {
+    "@type": "Organization",
+    "name": "Fairmind",
+    "contactPoint": {
+      "@type": "ContactPoint",
+      "contactType": "customer service",
+      "email": "contact@fairmind.xyz",
+      "availableLanguage": "English"
+    }
+  }
+};
+---
+
+<Layout 
+  title="Contact Us - Fairmind AI Governance Platform"
+  description="Get in touch with the Fairmind team for AI governance solutions, support, or partnership opportunities."
+  structuredData={structuredData}
+>
+  <div class="min-h-screen bg-gray-50">
+    <!-- Header -->
+    <div class="bg-white border-b border-gray-200">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+        <div class="text-center">
+          <h1 class="text-4xl md:text-5xl font-bold text-gray-900 mb-6">
+            Get in Touch
+          </h1>
+          <p class="text-xl text-gray-600 max-w-3xl mx-auto">
+            Ready to build trustworthy AI systems? Our team is here to help you implement comprehensive AI governance solutions.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-12">
+        
+        <!-- Contact Form -->
+        <div class="bg-white p-8 rounded-2xl shadow-lg border border-gray-200">
+          <h2 class="text-2xl font-bold text-gray-900 mb-6">Send us a Message</h2>
+          
+          <form id="contact-form" class="space-y-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label for="first-name" class="block text-sm font-medium text-gray-700 mb-2">
+                  First Name *
+                </label>
+                <input
+                  type="text"
+                  id="first-name"
+                  name="firstName"
+                  required
+                  class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="John"
+                />
+              </div>
+              
+              <div>
+                <label for="last-name" class="block text-sm font-medium text-gray-700 mb-2">
+                  Last Name *
+                </label>
+                <input
+                  type="text"
+                  id="last-name"
+                  name="lastName"
+                  required
+                  class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Doe"
+                />
+              </div>
+            </div>
+            
+            <div>
+              <label for="email" class="block text-sm font-medium text-gray-700 mb-2">
+                Email Address *
+              </label>
+              <input
+                type="email"
+                id="email"
+                name="email"
+                required
+                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="john@company.com"
+              />
+            </div>
+            
+            <div>
+              <label for="company" class="block text-sm font-medium text-gray-700 mb-2">
+                Company
+              </label>
+              <input
+                type="text"
+                id="company"
+                name="company"
+                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Your Company"
+              />
+            </div>
+            
+            <div>
+              <label for="inquiry-type" class="block text-sm font-medium text-gray-700 mb-2">
+                Inquiry Type *
+              </label>
+              <select
+                id="inquiry-type"
+                name="inquiryType"
+                required
+                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="">Select an option</option>
+                <option value="sales">Sales Inquiry</option>
+                <option value="support">Technical Support</option>
+                <option value="partnership">Partnership</option>
+                <option value="demo">Request Demo</option>
+                <option value="enterprise">Enterprise Features</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            
+            <div>
+              <label for="message" class="block text-sm font-medium text-gray-700 mb-2">
+                Message *
+              </label>
+              <textarea
+                id="message"
+                name="message"
+                rows="6"
+                required
+                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Tell us about your AI governance needs..."
+              ></textarea>
+            </div>
+            
+            <div class="flex items-start space-x-3">
+              <input
+                type="checkbox"
+                id="privacy"
+                name="privacy"
+                required
+                class="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              />
+              <label for="privacy" class="text-sm text-gray-600">
+                I agree to the <a href="/privacy" class="text-blue-600 hover:text-blue-700">Privacy Policy</a> and consent to being contacted about Fairmind's services.
+              </label>
+            </div>
+            
+            <button
+              type="submit"
+              class="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 px-6 rounded-lg font-semibold hover:shadow-lg transform hover:-translate-y-1 transition-all duration-200"
+            >
+              Send Message
+            </button>
+          </form>
+        </div>
+        
+        <!-- Contact Information -->
+        <div class="space-y-8">
+          <!-- General Contact -->
+          <div class="bg-white p-8 rounded-2xl shadow-lg border border-gray-200">
+            <h3 class="text-xl font-bold text-gray-900 mb-6">Contact Information</h3>
+            
+            <div class="space-y-4">
+              <div class="flex items-center space-x-4">
+                <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                  </svg>
+                </div>
+                <div>
+                  <p class="font-medium text-gray-900">Email</p>
+                  <a href="mailto:contact@fairmind.xyz" class="text-blue-600 hover:text-blue-700">
+                    contact@fairmind.xyz
+                  </a>
+                </div>
+              </div>
+              
+              <div class="flex items-center space-x-4">
+                <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                  <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                  </svg>
+                </div>
+                <div>
+                  <p class="font-medium text-gray-900">Location</p>
+                  <p class="text-gray-600">San Francisco, CA</p>
+                </div>
+              </div>
+              
+              <div class="flex items-center space-x-4">
+                <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                  <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                  </svg>
+                </div>
+                <div>
+                  <p class="font-medium text-gray-900">Response Time</p>
+                  <p class="text-gray-600">Within 24 hours</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Support Options -->
+          <div class="bg-white p-8 rounded-2xl shadow-lg border border-gray-200">
+            <h3 class="text-xl font-bold text-gray-900 mb-6">Support Options</h3>
+            
+            <div class="space-y-4">
+              <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                <div>
+                  <h4 class="font-medium text-gray-900">Documentation</h4>
+                  <p class="text-sm text-gray-600">Comprehensive guides and tutorials</p>
+                </div>
+                <a href="/docs" class="text-blue-600 hover:text-blue-700 font-medium">
+                  View Docs →
+                </a>
+              </div>
+              
+              <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                <div>
+                  <h4 class="font-medium text-gray-900">Community Forum</h4>
+                  <p class="text-sm text-gray-600">Connect with other users</p>
+                </div>
+                <a href="/community" class="text-blue-600 hover:text-blue-700 font-medium">
+                  Join Forum →
+                </a>
+              </div>
+              
+              <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                <div>
+                  <h4 class="font-medium text-gray-900">Live Chat</h4>
+                  <p class="text-sm text-gray-600">Get instant help</p>
+                </div>
+                <button class="text-blue-600 hover:text-blue-700 font-medium">
+                  Start Chat →
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          <!-- FAQ Link -->
+          <div class="bg-gradient-to-r from-blue-50 to-purple-50 p-8 rounded-2xl border border-blue-200">
+            <h3 class="text-xl font-bold text-gray-900 mb-4">Frequently Asked Questions</h3>
+            <p class="text-gray-600 mb-4">
+              Find quick answers to common questions about Fairmind's AI governance platform.
+            </p>
+            <a href="/faq" class="inline-flex items-center text-blue-600 hover:text-blue-700 font-medium">
+              View FAQ
+              <svg class="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+              </svg>
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</Layout>
+
+<script>
+  // Contact form handling
+  document.getElementById('contact-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const submitButton = this.querySelector('button[type="submit"]');
+    const originalText = submitButton.textContent;
+    
+    // Show loading state
+    submitButton.textContent = 'Sending...';
+    submitButton.disabled = true;
+    
+    try {
+      // Simulate form submission (replace with actual endpoint)
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Show success message
+      alert('Thank you for your message! We\'ll get back to you within 24 hours.');
+      this.reset();
+      
+    } catch (error) {
+      // Show error message
+      alert('Sorry, there was an error sending your message. Please try again.');
+      
+    } finally {
+      // Reset button state
+      submitButton.textContent = originalText;
+      submitButton.disabled = false;
+    }
+  });
+  
+  // Track form interactions
+  document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('contact-form');
+    const inputs = form.querySelectorAll('input, textarea, select');
+    
+    inputs.forEach(input => {
+      input.addEventListener('focus', function() {
+        // Track form field focus
+        if (window.tb) {
+          tb('track', 'form_field_focus', {
+            field_name: this.name,
+            page: 'contact'
+          });
+        }
+      });
+    });
+    
+    form.addEventListener('submit', function() {
+      // Track form submission
+      if (window.tb) {
+        tb('track', 'form_submit', {
+          form_name: 'contact',
+          page: 'contact'
+        });
+      }
+    });
+  });
+</script>

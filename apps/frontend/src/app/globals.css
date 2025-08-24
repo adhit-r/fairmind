@@ -1,0 +1,125 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+  :root {
+  --background: 0 0% 8%;
+  --foreground: 0 0% 95%;
+  --card: 0 0% 12%;
+  --card-foreground: 0 0% 95%;
+  --popover: 0 0% 12%;
+  --popover-foreground: 0 0% 95%;
+  --primary: 0 0% 95%;
+  --primary-foreground: 0 0% 8%;
+  --secondary: 0 0% 16%;
+  --secondary-foreground: 0 0% 95%;
+  --muted: 0 0% 16%;
+  --muted-foreground: 0 0% 75%;
+  --accent: 0 0% 20%;
+  --accent-foreground: 0 0% 95%;
+  --destructive: 0 0% 45%;
+  --destructive-foreground: 0 0% 95%;
+  --border: 0 0% 20%;
+  --input: 0 0% 16%;
+  --ring: 0 0% 30%;
+  --radius: 0.25rem;
+  --chart-1: 0 0% 95%;
+  --chart-2: 0 0% 75%;
+  --chart-3: 0 0% 55%;
+  --chart-4: 0 0% 35%;
+  --chart-5: 0 0% 25%;
+
+  /* Gold accent color */
+  --gold: 45 100% 50%;
+  --gold-foreground: 0 0% 8%;
+
+  /* Sidebar colors */
+  --sidebar-background: 0 0% 6%;
+  --sidebar-foreground: 0 0% 95%;
+  --sidebar-primary: 0 0% 95%;
+  --sidebar-primary-foreground: 0 0% 8%;
+  --sidebar-accent: 0 0% 14%;
+  --sidebar-accent-foreground: 0 0% 95%;
+  --sidebar-border: 0 0% 18%;
+  --sidebar-ring: 0 0% 30%;
+}
+
+  body {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: "JetBrains Mono", monospace;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: "JetBrains Mono", monospace;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: hsl(var(--muted));
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground));
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--foreground));
+}
+
+/* Terminal-like styling */
+.terminal {
+  background: #000;
+  color: #fff;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* Chart styling */
+.recharts-text {
+  font-family: "JetBrains Mono", monospace !important;
+  fill: hsl(var(--foreground)) !important;
+}
+
+.recharts-cartesian-axis-tick-value {
+  font-family: "JetBrains Mono", monospace !important;
+  fill: hsl(var(--muted-foreground)) !important;
+}
+
+.recharts-legend-item-text {
+  color: hsl(var(--foreground)) !important;
+  font-family: "JetBrains Mono", monospace !important;
+}
+
+/* Ensure all text has proper contrast */
+.text-foreground {
+  color: hsl(var(--foreground)) !important;
+}
+
+.text-muted-foreground {
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+/* Input styling for better contrast */
+input, textarea, select {
+  color: hsl(var(--foreground)) !important;
+  background-color: hsl(var(--background)) !important;
+}
+
+input::placeholder, textarea::placeholder {
+  color: hsl(var(--muted-foreground)) !important;
+}

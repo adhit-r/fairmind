@@ -1,0 +1,688 @@
+---
+import Layout from '../layouts/Layout.astro';
+
+const page = {
+  title: 'Use Cases & Applications - Fairmind AI',
+  description: 'Discover how Fairmind AI powers fair and ethical AI across industries including finance, healthcare, HR, legal, insurance, e-commerce, and government sectors.',
+  seoImage: 'https://fairmind.xyz/images/use-cases-og.jpg'
+};
+
+// Industry data with icons and colors
+const industries = [
+  {
+    id: 'financial',
+    name: 'Financial Services',
+    icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path></svg>',
+    color: 'from-blue-500 to-indigo-600',
+    useCases: [
+      {
+        title: 'Credit Scoring & Loan Approval',
+        challenge: 'Ensure fair lending practices and avoid discriminatory bias in credit decisions.',
+        solution: [
+          'Real-time bias monitoring for loan approval models',
+          'Demographic parity analysis across protected groups',
+          'SHAP explanations for loan denial reasons',
+          'Regulatory compliance for fair lending laws'
+        ],
+        impact: [
+          '40% reduction in biased lending decisions',
+          '100% regulatory compliance maintenance',
+          'Improved customer trust and brand reputation',
+          'Reduced legal and regulatory risk'
+        ]
+      },
+      {
+        title: 'Investment & Trading Algorithms',
+        challenge: 'Detect bias in algorithmic trading and investment recommendation systems.',
+        solution: [
+          'Multi-model comparison for trading algorithms',
+          'Bias detection in client recommendation systems',
+          'Performance vs. fairness trade-off analysis',
+          'Audit trail for regulatory compliance'
+        ],
+        impact: [
+          'Enhanced algorithmic transparency',
+          'Improved client satisfaction scores',
+          'Reduced regulatory scrutiny',
+          'Better risk-adjusted returns'
+        ]
+      }
+    ]
+  },
+  {
+    id: 'healthcare',
+    name: 'Healthcare',
+    icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg>',
+    color: 'from-green-500 to-teal-600',
+    useCases: [
+      {
+        title: 'Diagnostic AI Systems',
+        challenge: 'Ensure medical AI systems provide equitable healthcare across demographic groups.',
+        solution: [
+          'Bias detection in diagnostic model predictions',
+          'Explainability for medical decision support',
+          'Clinical trial fairness analysis',
+          'FDA compliance documentation'
+        ],
+        impact: [
+          'Improved health equity outcomes',
+          'Enhanced physician trust in AI tools',
+          'Reduced medical malpractice risk',
+          'Faster FDA approval processes'
+        ]
+      },
+      {
+        title: 'Drug Discovery & Clinical Trials',
+        challenge: 'Ensure diverse representation and fair outcomes in clinical research.',
+        solution: [
+          'Patient selection bias analysis',
+          'Treatment efficacy fairness assessment',
+          'Multi-population model validation',
+          'Regulatory submission support'
+        ],
+        impact: [
+          'More inclusive clinical trials',
+          'Better drug efficacy across populations',
+          'Improved regulatory approval rates',
+          'Enhanced patient safety'
+        ]
+      }
+    ]
+  },
+  {
+    id: 'hr',
+    name: 'HR & Recruitment',
+    icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"></path></svg>',
+    color: 'from-purple-500 to-pink-600',
+    useCases: [
+      {
+        title: 'Resume Screening & Hiring',
+        challenge: 'Eliminate bias in automated resume screening and candidate evaluation.',
+        solution: [
+          'Real-time bias detection in hiring algorithms',
+          'Demographic fairness analysis',
+          'SHAP explanations for hiring decisions',
+          'EEOC compliance reporting'
+        ],
+        impact: [
+          '60% improvement in hiring diversity',
+          'Reduced legal liability for discrimination',
+          'Enhanced employer brand reputation',
+          'Better candidate experience'
+        ]
+      },
+      {
+        title: 'Performance Evaluation',
+        challenge: 'Ensure fair performance assessments and promotion decisions.',
+        solution: [
+          'Bias analysis in performance rating systems',
+          'Manager bias detection and training',
+          'Promotion fairness assessment',
+          'Historical bias trend analysis'
+        ],
+        impact: [
+          'Improved employee satisfaction',
+          'Reduced turnover and discrimination claims',
+          'Enhanced workplace diversity',
+          'Better talent retention'
+        ]
+      }
+    ]
+  },
+  {
+    id: 'legal',
+    name: 'Legal Technology',
+    icon: '⚖️',
+    color: 'from-yellow-500 to-amber-600',
+    useCases: [
+      {
+        title: 'Legal Decision Support',
+        challenge: 'Ensure fairness in AI-assisted legal decision-making systems.',
+        solution: [
+          'Bias detection in sentencing recommendation systems',
+          'Explainable AI for legal reasoning',
+          'Fairness analysis across demographic groups',
+          'Audit trails for legal compliance'
+        ],
+        impact: [
+          'More equitable legal outcomes',
+          'Enhanced judicial system trust',
+          'Reduced appeal rates',
+          'Improved public confidence'
+        ]
+      },
+      {
+        title: 'Contract Analysis & Review',
+        challenge: 'Detect bias in automated contract review and risk assessment.',
+        solution: [
+          'Bias analysis in contract risk scoring',
+          'Explainable contract recommendations',
+          'Multi-party fairness assessment',
+          'Legal compliance monitoring'
+        ],
+        impact: [
+          'Fairer contract terms and conditions',
+          'Reduced legal disputes',
+          'Enhanced client trust',
+          'Improved business relationships'
+        ]
+      }
+    ]
+  },
+  {
+    id: 'insurance',
+    name: 'Insurance',
+    icon: '',
+    color: 'from-blue-400 to-cyan-600',
+    useCases: [
+      {
+        title: 'Claims Processing',
+        challenge: 'Ensure fair and unbiased insurance claim processing and payouts.',
+        solution: [
+          'Real-time bias monitoring in claims decisions',
+          'Fairness analysis across policyholder demographics',
+          'Explainable claim denial reasons',
+          'Regulatory compliance reporting'
+        ],
+        impact: [
+          'Improved customer satisfaction',
+          'Reduced regulatory penalties',
+          'Enhanced brand reputation',
+          'Better risk management'
+        ]
+      },
+      {
+        title: 'Underwriting & Risk Assessment',
+        challenge: 'Balance risk assessment accuracy with demographic fairness.',
+        solution: [
+          'Bias detection in underwriting models',
+          'Fair pricing analysis',
+          'Risk vs. fairness optimization',
+          'Regulatory compliance monitoring'
+        ],
+        impact: [
+          'Fairer insurance pricing',
+          'Expanded market access',
+          'Improved regulatory standing',
+          'Enhanced competitive advantage'
+        ]
+      }
+    ]
+  },
+  {
+    id: 'ecommerce',
+    name: 'E-commerce & Retail',
+    icon: '🛒',
+    color: 'from-pink-500 to-rose-600',
+    useCases: [
+      {
+        title: 'Recommendation Systems',
+        challenge: 'Avoid bias in product recommendations and personalization algorithms.',
+        solution: [
+          'Bias detection in recommendation algorithms',
+          'Fairness analysis across user demographics',
+          'A/B testing for fair recommendations',
+          'Conversion vs. fairness optimization'
+        ],
+        impact: [
+          'Improved user experience diversity',
+          'Enhanced customer satisfaction',
+          'Reduced algorithmic discrimination',
+          'Better long-term customer relationships'
+        ]
+      },
+      {
+        title: 'Dynamic Pricing',
+        challenge: 'Ensure fair pricing strategies across different customer segments.',
+        solution: [
+          'Price discrimination analysis',
+          'Demographic fairness in pricing models',
+          'Regulatory compliance monitoring',
+          'Competitive pricing fairness assessment'
+        ],
+        impact: [
+          'Fairer pricing strategies',
+          'Improved customer trust',
+          'Reduced regulatory risk',
+          'Enhanced market position'
+        ]
+      }
+    ]
+  },
+  {
+    id: 'government',
+    name: 'Government & Public Sector',
+    icon: '🏛️',
+    color: 'from-gray-500 to-gray-700',
+    useCases: [
+      {
+        title: 'Benefit Allocation Systems',
+        challenge: 'Ensure fair distribution of government benefits and services.',
+        solution: [
+          'Bias detection in benefit eligibility algorithms',
+          'Fairness analysis across demographic groups',
+          'Transparent decision-making processes',
+          'Public accountability reporting'
+        ],
+        impact: [
+          'More equitable benefit distribution',
+          'Enhanced public trust',
+          'Reduced discrimination complaints',
+          'Improved social outcomes'
+        ]
+      },
+      {
+        title: 'Criminal Justice Systems',
+        challenge: 'Eliminate bias in risk assessment and sentencing algorithms.',
+        solution: [
+          'Bias analysis in recidivism prediction models',
+          'Fairness assessment in sentencing recommendations',
+          'Demographic parity analysis',
+          'Constitutional compliance monitoring'
+        ],
+        impact: [
+          'More equitable justice outcomes',
+          'Reduced recidivism rates',
+          'Enhanced system credibility',
+          'Improved public safety'
+        ]
+      }
+    ]
+  },
+  {
+    id: 'education',
+    name: 'Education',
+    icon: '🎓',
+    color: 'from-indigo-500 to-purple-600',
+    useCases: [
+      {
+        title: 'Admissions & Assessment',
+        challenge: 'Ensure fair student admissions and academic assessment processes.',
+        solution: [
+          'Bias detection in admissions algorithms',
+          'Fairness analysis in standardized testing',
+          'Multi-demographic performance assessment',
+          'Educational equity reporting'
+        ],
+        impact: [
+          'Improved educational access',
+          'Enhanced student diversity',
+          'Better academic outcomes',
+          'Reduced discrimination claims'
+        ]
+      },
+      {
+        title: 'Personalized Learning',
+        challenge: 'Provide equitable personalized learning experiences for all students.',
+        solution: [
+          'Bias analysis in learning recommendation systems',
+          'Fairness assessment across student demographics',
+          'Educational outcome equity analysis',
+          'Performance gap identification'
+        ],
+        impact: [
+          'Improved learning outcomes for all students',
+          'Reduced achievement gaps',
+          'Enhanced educational equity',
+          'Better student engagement'
+        ]
+      }
+    ]
+  }
+];
+---
+
+<Layout title={page.title} description={page.description} seoImage={page.seoImage}>
+  <div class="relative overflow-hidden py-16 md:py-24">
+    <!-- Background Glows -->
+    <div class="absolute -top-1/4 -left-1/4 w-1/2 h-1/2 bg-brand-purple/20 rounded-full filter blur-3xl opacity-50 animate-pulse-slow"></div>
+    <div class="absolute -bottom-1/4 -right-1/4 w-1/2 h-1/2 bg-brand-pink/20 rounded-full filter blur-3xl opacity-50 animate-pulse-slow animation-delay-2000"></div>
+    
+    <div class="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <!-- Page Header -->
+      <div class="text-center mb-16">
+        <h1 class="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-brand-purple to-brand-pink bg-clip-text text-transparent">
+          Use Cases & Applications
+        </h1>
+        <p class="text-xl text-gray-300 max-w-3xl mx-auto">
+          Discover how Fairmind powers fair and ethical AI across industries
+        </p>
+      </div>
+
+      <!-- Industry Navigation -->
+      <div class="mb-12">
+        <div class="flex flex-wrap justify-center gap-4 mb-8">
+          {industries.map(industry => (
+            <a 
+              href={`#${industry.id}`}
+              class="px-6 py-3 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-200 hover:text-white transition-colors duration-300 flex items-center space-x-2"
+            >
+              <span class="text-xl">{industry.icon}</span>
+              <span>{industry.name}</span>
+            </a>
+          ))}
+        </div>
+      </div>
+
+      <!-- Industry Sections -->
+      <div class="space-y-24">
+        {industries.map(industry => (
+          <section id={industry.id} class="scroll-mt-24">
+            <div class="mb-8 flex items-center space-x-4">
+              <div class={`text-4xl`}>{industry.icon}</div>
+              <h2 class="text-3xl font-bold text-white">{industry.name}</h2>
+            </div>
+
+            <div class="space-y-12">
+              {industry.useCases.map((useCase, index) => (
+                <div class="bg-gray-800/50 backdrop-blur-sm rounded-2xl p-6 md:p-8 border border-gray-700/50 hover:border-brand-purple/50 transition-all duration-300">
+                  <h3 class="text-2xl font-bold text-white mb-4">{useCase.title}</h3>
+                  
+                  <div class="grid md:grid-cols-2 gap-8">
+                    <div>
+                      <h4 class="text-lg font-semibold text-brand-pink mb-2">Challenge</h4>
+                      <p class="text-gray-300 mb-6">{useCase.challenge}</p>
+                      
+                      <div class="space-y-4">
+                        <h4 class="text-lg font-semibold text-brand-purple">Fairmind Solution</h4>
+                        <ul class="space-y-3">
+                          {useCase.solution.map(item => (
+                            <li class="flex items-start">
+                              <svg class="h-5 w-5 text-brand-pink mt-0.5 mr-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                              </svg>
+                              <span class="text-gray-300">{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                    
+                    <div class="bg-gray-900/50 rounded-xl p-6 border border-gray-700/50">
+                      <h4 class="text-lg font-semibold text-brand-purple mb-4">Impact</h4>
+                      <ul class="space-y-3">
+                        {useCase.impact.map(item => (
+                          <li class="flex items-start">
+                            <svg class="h-5 w-5 text-green-400 mt-0.5 mr-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span class="text-gray-300">{item}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
+
+      <!-- Implementation Patterns -->
+      <div class="mt-24">
+        <h2 class="text-3xl md:text-4xl font-bold text-center mb-12">Implementation Patterns</h2>
+        
+        <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+          <div class="bg-gray-800/50 backdrop-blur-sm rounded-2xl p-6 border border-gray-700/50 hover:border-brand-purple/50 transition-all duration-300">
+            <div class="text-brand-purple text-2xl mb-4">1</div>
+            <h3 class="text-xl font-bold text-white mb-3">Pre-deployment Assessment</h3>
+            <ul class="space-y-2 text-gray-300">
+              <li class="flex items-start">
+                <span class="text-brand-pink mr-2">•</span>
+                <span>Model bias analysis during development</span>
+              </li>
+              <li class="flex items-start">
+                <span class="text-brand-pink mr-2">•</span>
+                <span>Fairness metric evaluation</span>
+              </li>
+              <li class="flex items-start">
+                <span class="text-brand-pink mr-2">•</span>
+                <span>Compliance documentation generation</span>
+              </li>
+              <li class="flex items-start">
+                <span class="text-brand-pink mr-2">•</span>
+                <span>Stakeholder review and approval</span>
+              </li>
+            </ul>
+          </div>
+          
+          <div class="bg-gray-800/50 backdrop-blur-sm rounded-2xl p-6 border border-gray-700/50 hover:border-brand-purple/50 transition-all duration-300">
+            <div class="text-brand-purple text-2xl mb-4">2</div>
+            <h3 class="text-xl font-bold text-white mb-3">Real-time Monitoring</h3>
+            <ul class="space-y-2 text-gray-300">
+              <li class="flex items-start">
+                <span class="text-brand-pink mr-2">•</span>
+                <span>Live bias detection on production models</span>
+              </li>
+              <li class="flex items-start">
+                <span class="text-brand-pink mr-2">•</span>
+                <span>Automated alert generation</span>
+              </li>
+              <li class="flex items-start">
+                <span class="text-brand-pink mr-2">•</span>
+                <span>Immediate intervention triggers</span>
+              </li>
+              <li class="flex items-start">
+                <span class="text-brand-pink mr-2">•</span>
+                <span>Continuous compliance monitoring</span>
+              </li>
+            </ul>
+          </div>
+          
+          <div class="bg-gray-800/50 backdrop-blur-sm rounded-2xl p-6 border border-gray-700/50 hover:border-brand-purple/50 transition-all duration-300">
+            <div class="text-brand-purple text-2xl mb-4">3</div>
+            <h3 class="text-xl font-bold text-white mb-3">Periodic Auditing</h3>
+            <ul class="space-y-2 text-gray-300">
+              <li class="flex items-start">
+                <span class="text-brand-pink mr-2">•</span>
+                <span>Regular model fairness assessments</span>
+              </li>
+              <li class="flex items-start">
+                <span class="text-brand-pink mr-2">•</span>
+                <span>Historical bias trend analysis</span>
+              </li>
+              <li class="flex items-start">
+                <span class="text-brand-pink mr-2">•</span>
+                <span>Compliance report generation</span>
+              </li>
+              <li class="flex items-start">
+                <span class="text-brand-pink mr-2">•</span>
+                <span>Stakeholder reporting and review</span>
+              </li>
+            </ul>
+          </div>
+          
+          <div class="bg-gray-800/50 backdrop-blur-sm rounded-2xl p-6 border border-gray-700/50 hover:border-brand-purple/50 transition-all duration-300">
+            <div class="text-brand-purple text-2xl mb-4">4</div>
+            <h3 class="text-xl font-bold text-white mb-3">Incident Response</h3>
+            <ul class="space-y-2 text-gray-300">
+              <li class="flex items-start">
+                <span class="text-brand-pink mr-2">•</span>
+                <span>Bias incident detection and alerting</span>
+              </li>
+              <li class="flex items-start">
+                <span class="text-brand-pink mr-2">•</span>
+                <span>Impact assessment and containment</span>
+              </li>
+              <li class="flex items-start">
+                <span class="text-brand-pink mr-2">•</span>
+                <span>Root cause analysis and remediation</span>
+              </li>
+              <li class="flex items-start">
+                <span class="text-brand-pink mr-2">•</span>
+                <span>Process improvement and prevention</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- Success Metrics -->
+      <div class="mt-16 bg-gradient-to-r from-gray-800/50 to-gray-900/70 backdrop-blur-sm rounded-2xl p-8 border border-gray-700/50">
+        <h2 class="text-3xl md:text-4xl font-bold text-center mb-12">Success Metrics</h2>
+        
+        <div class="grid md:grid-cols-3 gap-8">
+          <div>
+            <h3 class="text-xl font-bold text-brand-purple mb-4">Business Impact</h3>
+            <ul class="space-y-3">
+              <li class="flex items-start">
+                <div class="bg-brand-purple/20 text-brand-pink rounded-full w-6 h-6 flex items-center justify-center flex-shrink-0 mt-0.5 mr-2">
+                  <span class="text-xs font-bold">✓</span>
+                </div>
+                <span class="text-gray-300"><strong>40-60%</strong> reduction in algorithmic bias</span>
+              </li>
+              <li class="flex items-start">
+                <div class="bg-brand-purple/20 text-brand-pink rounded-full w-6 h-6 flex items-center justify-center flex-shrink-0 mt-0.5 mr-2">
+                  <span class="text-xs font-bold">✓</span>
+                </div>
+                <span class="text-gray-300"><strong>100%</strong> regulatory compliance</span>
+              </li>
+              <li class="flex items-start">
+                <div class="bg-brand-purple/20 text-brand-pink rounded-full w-6 h-6 flex items-center justify-center flex-shrink-0 mt-0.5 mr-2">
+                  <span class="text-xs font-bold">✓</span>
+                </div>
+                <span class="text-gray-300"><strong>70%</strong> reduction in discrimination risk</span>
+              </li>
+              <li class="flex items-start">
+                <div class="bg-brand-purple/20 text-brand-pink rounded-full w-6 h-6 flex items-center justify-center flex-shrink-0 mt-0.5 mr-2">
+                  <span class="text-xs font-bold">✓</span>
+                </div>
+                <span class="text-gray-300">Enhanced brand reputation</span>
+              </li>
+            </ul>
+          </div>
+          
+          <div>
+            <h3 class="text-xl font-bold text-brand-purple mb-4">Technical Metrics</h3>
+            <ul class="space-y-3">
+              <li class="flex items-start">
+                <div class="bg-brand-purple/20 text-brand-pink rounded-full w-6 h-6 flex items-center justify-center flex-shrink-0 mt-0.5 mr-2">
+                  <span class="text-xs font-bold">✓</span>
+                </div>
+                <span class="text-gray-300"><strong>95%+</strong> bias detection accuracy</span>
+              </li>
+              <li class="flex items-start">
+                <div class="bg-brand-purple/20 text-brand-pink rounded-full w-6 h-6 flex items-center justify-center flex-shrink-0 mt-0.5 mr-2">
+                  <span class="text-xs font-bold">✓</span>
+                </div>
+                <span class="text-gray-300"><strong>&lt;1 second</strong> response time</span>
+              </li>
+              <li class="flex items-start">
+                <div class="bg-brand-purple/20 text-brand-pink rounded-full w-6 h-6 flex items-center justify-center flex-shrink-0 mt-0.5 mr-2">
+                  <span class="text-xs font-bold">✓</span>
+                </div>
+                <span class="text-gray-300"><strong>100%</strong> model coverage</span>
+              </li>
+              <li class="flex items-start">
+                <div class="bg-brand-purple/20 text-brand-pink rounded-full w-6 h-6 flex items-center justify-center flex-shrink-0 mt-0.5 mr-2">
+                  <span class="text-xs font-bold">✓</span>
+                </div>
+                <span class="text-gray-300"><strong>Coming Soon</strong> platform uptime</span>
+              </li>
+            </ul>
+          </div>
+          
+          <div>
+            <h3 class="text-xl font-bold text-brand-purple mb-4">User Satisfaction</h3>
+            <ul class="space-y-3">
+              <li class="flex items-start">
+                <div class="bg-brand-purple/20 text-brand-pink rounded-full w-6 h-6 flex items-center justify-center flex-shrink-0 mt-0.5 mr-2">
+                  <span class="text-xs font-bold">✓</span>
+                </div>
+                <span class="text-gray-300"><strong>90%+</strong> data scientist satisfaction</span>
+              </li>
+              <li class="flex items-start">
+                <div class="bg-brand-purple/20 text-brand-pink rounded-full w-6 h-6 flex items-center justify-center flex-shrink-0 mt-0.5 mr-2">
+                  <span class="text-xs font-bold">✓</span>
+                </div>
+                <span class="text-gray-300"><strong>95%+</strong> compliance team satisfaction</span>
+              </li>
+              <li class="flex items-start">
+                <div class="bg-brand-purple/20 text-brand-pink rounded-full w-6 h-6 flex items-center justify-center flex-shrink-0 mt-0.5 mr-2">
+                  <span class="text-xs font-bold">✓</span>
+                </div>
+                <span class="text-gray-300"><strong>85%+</strong> executive confidence</span>
+              </li>
+              <li class="flex items-start">
+                <div class="bg-brand-purple/20 text-brand-pink rounded-full w-6 h-6 flex items-center justify-center flex-shrink-0 mt-0.5 mr-2">
+                  <span class="text-xs font-bold">✓</span>
+                </div>
+                <span class="text-gray-300">Improved end-user fairness perception</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- CTA Section -->
+      <div class="mt-24 text-center">
+        <h2 class="text-3xl md:text-4xl font-bold mb-6">Ready to see Fairmind in action for your use case?</h2>
+        <p class="text-xl text-gray-300 mb-8 max-w-3xl mx-auto">
+          Schedule a demo to learn how Fairmind can help you build fairer AI systems.
+        </p>
+        <div class="flex flex-col sm:flex-row justify-center gap-4">
+          <a href="/contact" class="px-8 py-3 bg-gradient-to-r from-brand-purple to-brand-pink text-white font-semibold rounded-lg hover:opacity-90 transition-opacity duration-300 transform hover:scale-105">
+            Request a Demo
+          </a>
+          <a href="/contact" class="px-8 py-3 border-2 border-brand-purple text-brand-light hover:bg-brand-purple/20 font-semibold rounded-lg transition-colors duration-300">
+            Get Started
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</Layout>
+
+<style>
+  /* Smooth scrolling for anchor links */
+  html {
+    scroll-behavior: smooth;
+  }
+  
+  /* Animation for industry sections */
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  section {
+    animation: fadeInUp 0.6s ease-out forwards;
+  }
+  
+  /* Staggered animations */
+  section:nth-child(1) { animation-delay: 0.1s; }
+  section:nth-child(2) { animation-delay: 0.2s; }
+  section:nth-child(3) { animation-delay: 0.3s; }
+  section:nth-child(4) { animation-delay: 0.4s; }
+  section:nth-child(5) { animation-delay: 0.5s; }
+  section:nth-child(6) { animation-delay: 0.6s; }
+  
+  /* Hover effects for use case cards */
+  .use-case-card {
+    transition: all 0.3s ease;
+  }
+  
+  .use-case-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  }
+  
+  /* Responsive adjustments */
+  @media (max-width: 768px) {
+    .industry-nav {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    
+    .industry-nav a {
+      justify-content: center;
+    }
+  }
+</style>
