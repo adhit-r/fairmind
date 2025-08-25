@@ -14,8 +14,6 @@ sqlalchemy==2.0.23
 requests==2.31.0
 
 # Data analysis and machine learning
-pandas>=1.5.0
-numpy>=1.21.0
 scikit-learn>=1.1.0
 scipy>=1.9.0
 
@@ -28,28 +26,10 @@ openai>=1.0.0
 # Responsible AI Tools Integration
 # Fairness and Bias Detection
 fairlearn>=0.8.0
-aif360>=0.5.0
 
 # Explainability and Transparency
-dalex>=1.4.0
 shap>=0.41.0
 lime>=0.2.0
 
-# Privacy and Security
-tensorflow-privacy>=0.7.0
-federated-learning>=0.1.0
-
-# Adversarial Machine Learning
-textattack>=0.3.0
-advertorch>=0.2.0
-
-# Model Cards and Documentation
-model-card-toolkit>=1.0.0
-
-# Data Validation
-tensorflow-data-validation>=1.8.0
-
 # Database dependencies
-sqlalchemy>=2.0.0
 alembic>=1.12.0
-psycopg2-binary>=2.9.0

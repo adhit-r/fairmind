@@ -298,3 +298,6 @@ apps/frontend/src/app/\(auth\)/login/page.tsx
 apps/frontend/src/app/\(auth\)/signup/page.tsx
 apps/website/bun.lock
 apps/website/src/content/docs/installation.mdx
+
+# Local Netlify folder
+.netlify

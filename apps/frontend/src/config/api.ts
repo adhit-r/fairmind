@@ -1,5 +1,5 @@
 // API Configuration - Updated for backend integration
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.fairmind.xyz'
 
 // API Response Types
 interface ApiResponse<T> {

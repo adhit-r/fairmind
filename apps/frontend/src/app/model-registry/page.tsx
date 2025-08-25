@@ -71,12 +71,12 @@ export default function ModelRegistry() {
       <div className="space-y-2">
         <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-gold">
           MODEL_REGISTRY
-        </h1>
+            </h1>
         <p className="text-xs md:text-sm text-muted-foreground font-mono">
           MANAGE.AND.TRACK.AI.MODELS.FOR.GOVERNANCE.AND.COMPLIANCE
-        </p>
-      </div>
-
+            </p>
+          </div>
+          
       {/* Registry Metrics */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="bg-card border border-border rounded-lg p-4">
@@ -141,9 +141,9 @@ export default function ModelRegistry() {
                 <span className="text-xs text-muted-foreground">NO_DATA</span>
               </div>
             </div>
+            </div>
           </div>
         </div>
-      </div>
 
       {/* Action Section */}
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
@@ -171,8 +171,8 @@ export default function ModelRegistry() {
               className="pl-10 font-mono text-xs h-9 w-full bg-background border border-border rounded px-3"
             />
           </div>
-        </div>
-      </div>
+                  </div>
+                </div>
 
       {/* Model Categories */}
       <div className="grid gap-4 md:gap-6 grid-cols-1 md:grid-cols-3">
@@ -192,14 +192,14 @@ export default function ModelRegistry() {
                 <h4 className="text-sm font-bold mb-2">NO_RECENT_UPLOADS</h4>
                 <p className="text-xs text-muted-foreground font-mono">UPLOAD_YOUR_FIRST_MODEL_TO_GET_STARTED</p>
               </div>
-            </div>
-          </div>
-        </div>
+                  </div>
+                  </div>
+                </div>
         <div className="bg-card border border-border rounded-lg min-h-[400px] flex flex-col">
           <div className="p-4 border-b border-border">
             <h3 className="text-sm font-bold text-gold">MODEL_TYPES</h3>
             <p className="text-xs text-muted-foreground font-mono">CLASSIFICATION.REGRESSION.NLP.CV</p>
-          </div>
+                  </div>
           <div className="flex-1 p-4">
             <div className="h-full w-full flex items-center justify-center">
               <div className="text-center">
@@ -218,7 +218,7 @@ export default function ModelRegistry() {
           <div className="p-4 border-b border-border">
             <h3 className="text-sm font-bold text-gold">MODEL_STATUS</h3>
             <p className="text-xs text-muted-foreground font-mono">ACTIVE.TESTING.PENDING.INACTIVE</p>
-          </div>
+              </div>
           <div className="flex-1 p-4">
             <div className="h-full w-full flex items-center justify-center">
               <div className="text-center">
@@ -229,11 +229,11 @@ export default function ModelRegistry() {
                 </div>
                 <h4 className="text-sm font-bold mb-2">NO_STATUS_DATA</h4>
                 <p className="text-xs text-muted-foreground font-mono">UPLOAD_MODELS_TO_SEE_STATUS_DISTRIBUTION</p>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
+    </div>
+            </div>
+        </div>
+        </div>
 
       {/* Model Registry Table */}
       <div className="bg-card border border-border rounded-lg overflow-hidden">
