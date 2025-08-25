@@ -1,0 +1,403 @@
+/* Accessibility Enhancements for Fairmind AI Governance Platform */
+
+/* WCAG 2.1 AA Compliance - Minimum contrast ratios */
+/* Normal text: 4.5:1, Large text: 3:1 */
+
+/* Base accessibility improvements */
+* {
+  /* Ensure focus indicators are always visible */
+  scroll-behavior: smooth;
+}
+
+/* Focus management */
+*:focus {
+  outline: 2px solid var(--neo-primary, #2563eb);
+  outline-offset: 2px;
+}
+
+*:focus:not(:focus-visible) {
+  outline: none;
+}
+
+*:focus-visible {
+  outline: 2px solid var(--neo-primary, #2563eb);
+  outline-offset: 2px;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  :root {
+    --neo-text-primary: #000000;
+    --neo-text-secondary: #333333;
+    --neo-bg-primary: #ffffff;
+    --neo-bg-card: #ffffff;
+    --neo-border-color: #000000;
+  }
+  
+  [data-theme="dark"] {
+    --neo-text-primary: #ffffff;
+    --neo-text-secondary: #cccccc;
+    --neo-bg-primary: #000000;
+    --neo-bg-card: #1a1a1a;
+    --neo-border-color: #ffffff;
+  }
+  
+  /* Increase border widths for better visibility */
+  .neo-card {
+    border-width: 3px !important;
+  }
+  
+  .neo-button {
+    border-width: 3px !important;
+  }
+  
+  .neo-alert {
+    border-width: 3px !important;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  
+  .neo-card,
+  .neo-button,
+  .neo-alert {
+    transition: none !important;
+  }
+  
+  .neo-bounce,
+  .neo-pulse {
+    animation: none !important;
+  }
+}
+
+/* Color vision deficiency support */
+@media (prefers-color-scheme: light) {
+  /* Ensure sufficient contrast in light mode */
+  .neo-text {
+    color: #0f172a !important; /* Dark text on light background */
+  }
+  
+  .neo-heading {
+    color: #0f172a !important;
+  }
+  
+  .neo-card {
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+  }
+  
+  body {
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  /* Ensure sufficient contrast in dark mode */
+  .neo-text {
+    color: #ffffff !important; /* Light text on dark background */
+  }
+  
+  .neo-heading {
+    color: #ffffff !important;
+  }
+  
+  .neo-card {
+    background-color: #1a1a1a !important;
+    color: #ffffff !important;
+  }
+  
+  body {
+    background-color: #0a0a0a !important;
+    color: #ffffff !important;
+  }
+}
+
+/* Screen reader only content */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Skip to main content link */
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 6px;
+  background: var(--neo-primary, #2563eb);
+  color: white;
+  padding: 8px;
+  text-decoration: none;
+  border-radius: 4px;
+  z-index: 1000;
+}
+
+.skip-link:focus {
+  top: 6px;
+}
+
+/* Ensure interactive elements are keyboard accessible */
+button,
+input,
+select,
+textarea,
+a[href],
+[tabindex] {
+  cursor: pointer;
+}
+
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Ensure sufficient touch targets on mobile */
+@media (max-width: 768px) {
+  button,
+  input[type="button"],
+  input[type="submit"],
+  input[type="reset"],
+  a[href] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="search"],
+  input[type="tel"],
+  input[type="url"],
+  textarea,
+  select {
+    min-height: 44px;
+  }
+}
+
+/* Ensure text is always readable */
+p, span, div, h1, h2, h3, h4, h5, h6 {
+  color: var(--neo-text-primary);
+  line-height: 1.5;
+}
+
+/* Ensure links are distinguishable */
+a {
+  color: var(--neo-primary, #2563eb);
+  text-decoration: underline;
+}
+
+a:hover {
+  text-decoration: none;
+}
+
+/* Ensure form labels are associated with inputs */
+label {
+  display: inline-block;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+  color: var(--neo-text-primary);
+}
+
+/* Ensure error messages are clearly visible */
+.error-message {
+  color: var(--neo-danger, #dc2626);
+  font-weight: 500;
+  margin-top: 0.25rem;
+}
+
+/* Ensure success messages are clearly visible */
+.success-message {
+  color: var(--neo-success, #16a34a);
+  font-weight: 500;
+  margin-top: 0.25rem;
+}
+
+/* Ensure warning messages are clearly visible */
+.warning-message {
+  color: var(--neo-warning, #ea580c);
+  font-weight: 500;
+  margin-top: 0.25rem;
+}
+
+/* Ensure info messages are clearly visible */
+.info-message {
+  color: var(--neo-info, #0891b2);
+  font-weight: 500;
+  margin-top: 0.25rem;
+}
+
+/* Ensure loading states are accessible */
+.loading {
+  position: relative;
+}
+
+.loading::after {
+  content: "Loading...";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  font-size: 0.875rem;
+}
+
+/* Ensure data tables are accessible */
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+th, td {
+  border: 1px solid var(--neo-border-color, #000000);
+  padding: 0.5rem;
+  text-align: left;
+}
+
+th {
+  background-color: var(--neo-bg-secondary, #f8f9fa);
+  font-weight: 600;
+}
+
+/* Ensure lists are properly structured */
+ul, ol {
+  padding-left: 1.5rem;
+}
+
+li {
+  margin-bottom: 0.25rem;
+}
+
+/* Ensure images have alt text fallbacks */
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+img[alt=""] {
+  border: 2px dashed var(--neo-border-color, #000000);
+}
+
+/* Ensure icons are accessible */
+.icon {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  vertical-align: middle;
+}
+
+/* Ensure progress indicators are accessible */
+progress {
+  width: 100%;
+  height: 1.5rem;
+}
+
+progress::-webkit-progress-bar {
+  background-color: var(--neo-bg-secondary, #f8f9fa);
+  border-radius: 4px;
+}
+
+progress::-webkit-progress-value {
+  background-color: var(--neo-primary, #2563eb);
+  border-radius: 4px;
+}
+
+/* Ensure tooltips are accessible */
+[data-tooltip] {
+  position: relative;
+}
+
+[data-tooltip]:hover::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.9);
+  color: white;
+  padding: 0.5rem;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  white-space: nowrap;
+  z-index: 1000;
+}
+
+/* Ensure modals are accessible */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: var(--neo-bg-card, #ffffff);
+  padding: 2rem;
+  border-radius: 8px;
+  max-width: 90vw;
+  max-height: 90vh;
+  overflow: auto;
+}
+
+/* Ensure notifications are accessible */
+.notification {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  background: var(--neo-bg-card, #ffffff);
+  border: 2px solid var(--neo-border-color, #000000);
+  padding: 1rem;
+  border-radius: 4px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  z-index: 1000;
+  max-width: 400px;
+}
+
+/* Print styles for accessibility */
+@media print {
+  * {
+    background: white !important;
+    color: black !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+  
+  a {
+    text-decoration: underline;
+  }
+  
+  a[href]:after {
+    content: " (" attr(href) ")";
+  }
+  
+  .no-print {
+    display: none !important;
+  }
+}

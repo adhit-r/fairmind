@@ -1,0 +1,21 @@
+{
+  "name": "Fairmind - AI Governance Platform",
+  "short_name": "Fairmind",
+  "description": "Open-source AI governance platform with bias detection and model explainability",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0B021D",
+  "theme_color": "#0B021D",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

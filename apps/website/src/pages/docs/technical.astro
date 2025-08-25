@@ -1,0 +1,285 @@
+---
+import Layout from '../../layouts/Layout.astro';
+
+const structuredData = {
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "name": "Technical Documentation - Fairmind",
+  "description": "Comprehensive technical documentation for the Fairmind AI Governance Platform",
+  "url": "https://fairmind.xyz/docs/technical"
+};
+---
+
+<Layout 
+  title="Technical Documentation - Fairmind AI Governance Platform"
+  description="Comprehensive technical documentation including API reference, architecture, deployment guides, and development resources."
+  structuredData={structuredData}
+>
+  <div class="min-h-screen bg-gray-50">
+    <!-- Header -->
+    <div class="bg-white border-b border-gray-200">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div class="text-center">
+          <h1 class="text-4xl md:text-5xl font-bold text-gray-900 mb-6">
+            Technical Documentation
+          </h1>
+          <p class="text-xl text-gray-600 max-w-3xl mx-auto">
+            Comprehensive technical documentation for developers, architects, and DevOps teams.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <div class="grid grid-cols-1 lg:grid-cols-4 gap-8">
+        
+        <!-- Sidebar Navigation -->
+        <div class="lg:col-span-1">
+          <nav class="sticky top-8">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">Documentation</h3>
+            <ul class="space-y-2">
+              <li>
+                <a href="#api-integration" class="text-blue-600 hover:text-blue-700 font-medium">API & Integration</a>
+              </li>
+              <li>
+                <a href="#architecture" class="text-gray-600 hover:text-gray-900">Architecture & Design</a>
+              </li>
+              <li>
+                <a href="#deployment" class="text-gray-600 hover:text-gray-900">Deployment & Infrastructure</a>
+              </li>
+              <li>
+                <a href="#ml-ai" class="text-gray-600 hover:text-gray-900">Machine Learning & AI</a>
+              </li>
+              <li>
+                <a href="#guides" class="text-gray-600 hover:text-gray-900">Guides & Setup</a>
+              </li>
+              <li>
+                <a href="#features" class="text-gray-600 hover:text-gray-900">Features & Implementation</a>
+              </li>
+            </ul>
+          </nav>
+        </div>
+
+        <!-- Main Content -->
+        <div class="lg:col-span-3">
+          
+          <!-- API & Integration -->
+          <section id="api-integration" class="mb-16">
+            <h2 class="text-3xl font-bold text-gray-900 mb-8">API & Integration</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div class="bg-white p-6 rounded-lg border border-gray-200">
+                <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
+                  <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                  </svg>
+                </div>
+                <h3 class="text-xl font-semibold text-gray-900 mb-4">API Reference</h3>
+                <p class="text-gray-600 mb-4">
+                  Complete OpenAPI 3.0 specification with TypeScript/Python SDKs for seamless integration.
+                </p>
+                <a href="/docs/api/reference" class="text-blue-600 hover:text-blue-700 font-medium">
+                  View API Reference →
+                </a>
+              </div>
+              
+              <div class="bg-white p-6 rounded-lg border border-gray-200">
+                <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mb-4">
+                  <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                  </svg>
+                </div>
+                <h3 class="text-xl font-semibold text-gray-900 mb-4">Backend API Design</h3>
+                <p class="text-gray-600 mb-4">
+                  FastAPI ML service architecture and implementation details.
+                </p>
+                <a href="/docs/backend/api-design" class="text-blue-600 hover:text-blue-700 font-medium">
+                  View Backend Design →
+                </a>
+              </div>
+              
+              <div class="bg-white p-6 rounded-lg border border-gray-200">
+                <div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mb-4">
+                  <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"></path>
+                  </svg>
+                </div>
+                <h3 class="text-xl font-semibold text-gray-900 mb-4">Database Schema</h3>
+                <p class="text-gray-600 mb-4">
+                  PostgreSQL schema design with RLS and performance optimization.
+                </p>
+                <a href="/docs/database/schema-design" class="text-blue-600 hover:text-blue-700 font-medium">
+                  View Database Schema →
+                </a>
+              </div>
+              
+              <div class="bg-white p-6 rounded-lg border border-gray-200">
+                <div class="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center mb-4">
+                  <svg class="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                  </svg>
+                </div>
+                <h3 class="text-xl font-semibold text-gray-900 mb-4">Supabase Integration</h3>
+                <p class="text-gray-600 mb-4">
+                  Real-time features and authentication setup with Supabase.
+                </p>
+                <a href="/docs/database/supabase-integration" class="text-blue-600 hover:text-blue-700 font-medium">
+                  View Supabase Guide →
+                </a>
+              </div>
+            </div>
+          </section>
+
+          <!-- Architecture & Design -->
+          <section id="architecture" class="mb-16">
+            <h2 class="text-3xl font-bold text-gray-900 mb-8">Architecture & Design</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div class="bg-white p-6 rounded-lg border border-gray-200">
+                <div class="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center mb-4">
+                  <svg class="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+                  </svg>
+                </div>
+                <h3 class="text-xl font-semibold text-gray-900 mb-4">System Overview</h3>
+                <p class="text-gray-600 mb-4">
+                  High-level system architecture and technology stack overview.
+                </p>
+                <a href="/docs/architecture/system-overview" class="text-blue-600 hover:text-blue-700 font-medium">
+                  View System Overview →
+                </a>
+              </div>
+              
+              <div class="bg-white p-6 rounded-lg border border-gray-200">
+                <div class="w-12 h-12 bg-pink-100 rounded-lg flex items-center justify-center mb-4">
+                  <svg class="w-6 h-6 text-pink-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path>
+                  </svg>
+                </div>
+                <h3 class="text-xl font-semibold text-gray-900 mb-4">Component Architecture</h3>
+                <p class="text-gray-600 mb-4">
+                  Detailed component breakdown and communication patterns.
+                </p>
+                <a href="/docs/architecture/component-architecture" class="text-blue-600 hover:text-blue-700 font-medium">
+                  View Component Architecture →
+                </a>
+              </div>
+              
+              <div class="bg-white p-6 rounded-lg border border-gray-200">
+                <div class="w-12 h-12 bg-teal-100 rounded-lg flex items-center justify-center mb-4">
+                  <svg class="w-6 h-6 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zM21 5a2 2 0 00-2-2h-4a2 2 0 00-2 2v12a4 4 0 004 4h4a2 2 0 002-2V5z"></path>
+                  </svg>
+                </div>
+                <h3 class="text-xl font-semibold text-gray-900 mb-4">Frontend UI Components</h3>
+                <p class="text-gray-600 mb-4">
+                  UI component library and design system documentation.
+                </p>
+                <a href="/docs/frontend/ui-components" class="text-blue-600 hover:text-blue-700 font-medium">
+                  View UI Components →
+                </a>
+              </div>
+            </div>
+          </section>
+
+          <!-- Deployment & Infrastructure -->
+          <section id="deployment" class="mb-16">
+            <h2 class="text-3xl font-bold text-gray-900 mb-8">Deployment & Infrastructure</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div class="bg-white p-6 rounded-lg border border-gray-200">
+                <div class="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center mb-4">
+                  <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"></path>
+                  </svg>
+                </div>
+                <h3 class="text-xl font-semibold text-gray-900 mb-4">Production Deployment</h3>
+                <p class="text-gray-600 mb-4">
+                  Production deployment guides and monitoring setup.
+                </p>
+                <a href="/docs/deployment/production" class="text-blue-600 hover:text-blue-700 font-medium">
+                  View Production Guide →
+                </a>
+              </div>
+              
+              <div class="bg-white p-6 rounded-lg border border-gray-200">
+                <div class="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center mb-4">
+                  <svg class="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"></path>
+                  </svg>
+                </div>
+                <h3 class="text-xl font-semibold text-gray-900 mb-4">Infrastructure Setup</h3>
+                <p class="text-gray-600 mb-4">
+                  Cloud infrastructure and scaling strategies.
+                </p>
+                <a href="/docs/deployment/infrastructure" class="text-blue-600 hover:text-blue-700 font-medium">
+                  View Infrastructure Guide →
+                </a>
+              </div>
+            </div>
+          </section>
+
+          <!-- Machine Learning & AI -->
+          <section id="ml-ai" class="mb-16">
+            <h2 class="text-3xl font-bold text-gray-900 mb-8">Machine Learning & AI</h2>
+            
+            <div class="bg-white p-6 rounded-lg border border-gray-200">
+              <div class="w-12 h-12 bg-cyan-100 rounded-lg flex items-center justify-center mb-4">
+                <svg class="w-6 h-6 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+                </svg>
+              </div>
+              <h3 class="text-xl font-semibold text-gray-900 mb-4">ML Algorithms</h3>
+              <p class="text-gray-600 mb-4">
+                Bias detection algorithms, explainability, and AI governance implementation.
+              </p>
+              <a href="/docs/ml/algorithms" class="text-blue-600 hover:text-blue-700 font-medium">
+                View ML Algorithms →
+              </a>
+            </div>
+          </section>
+
+          <!-- Quick Links -->
+          <section class="mb-16">
+            <h2 class="text-3xl font-bold text-gray-900 mb-8">Quick Links</h2>
+            
+            <div class="bg-gradient-to-r from-blue-50 to-purple-50 p-8 rounded-lg border border-blue-200">
+              <h3 class="text-xl font-semibold text-gray-900 mb-6">Essential Resources</h3>
+              
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <h4 class="font-semibold text-gray-900 mb-3">Getting Started</h4>
+                  <ul class="space-y-2 text-sm">
+                    <li><a href="/docs/guides/QUICK_NEO4J_SETUP" class="text-blue-600 hover:text-blue-700">• Neo4j Quick Setup (5 min)</a></li>
+                    <li><a href="/docs/deployment/deploy-demo" class="text-blue-600 hover:text-blue-700">• Demo Deployment Script</a></li>
+                    <li><a href="/docs/features/FEATURE_CHECKLIST" class="text-blue-600 hover:text-blue-700">• Feature Implementation Status</a></li>
+                  </ul>
+                </div>
+                
+                <div>
+                  <h4 class="font-semibold text-gray-900 mb-3">Development</h4>
+                  <ul class="space-y-2 text-sm">
+                    <li><a href="/docs/architecture/system-overview" class="text-blue-600 hover:text-blue-700">• System Architecture</a></li>
+                    <li><a href="/docs/api/reference" class="text-blue-600 hover:text-blue-700">• Complete API Reference</a></li>
+                    <li><a href="/docs/database/schema-design" class="text-blue-600 hover:text-blue-700">• Database Schema</a></li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div class="mt-6 p-4 bg-white rounded-lg border">
+                <h4 class="font-semibold text-gray-900 mb-2">Live Demo</h4>
+                <p class="text-sm text-gray-600 mb-3">
+                  Try the platform: <a href="https://app-demo.fairmind.xyz" class="text-blue-600 hover:text-blue-700 font-medium">https://app-demo.fairmind.xyz</a>
+                </p>
+                <p class="text-xs text-gray-500">
+                  The demo starts with an empty dashboard. Click "Load Demo Data" to explore all features.
+                </p>
+              </div>
+            </div>
+          </section>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</Layout>
