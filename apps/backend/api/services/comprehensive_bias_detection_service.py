@@ -17,7 +17,7 @@ from itertools import combinations
 
 warnings.filterwarnings('ignore')
 
-# Import Responsible AI & advanced modeling tools
+# Import modern Responsible AI & explainability tools
 try:
     import fairlearn
     from fairlearn.metrics import demographic_parity_difference, equalized_odds_difference
@@ -27,19 +27,24 @@ except ImportError:
     FAIRLEARN_AVAILABLE = False
     print("Fairlearn not available - using fallback bias detection")
 
+# Modern explainability libraries
 try:
-    import dalex
-    DALEX_AVAILABLE = True
+    import interpret
+    from interpret.blackbox import LimeTabular
+    from interpret.glassbox import ExplainableBoostingClassifier
+    from interpret import show
+    INTERPRET_AVAILABLE = True
 except ImportError:
-    DALEX_AVAILABLE = False
-    print("DALEX not available - using fallback explainability")
+    INTERPRET_AVAILABLE = False
+    print("InterpretML not available - using fallback explainability")
 
 try:
-    import shap
-    SHAP_AVAILABLE = True
+    import alibi
+    from alibi.explainers import AnchorTabular, IntegratedGradients
+    ALIBI_AVAILABLE = True
 except ImportError:
-    SHAP_AVAILABLE = False
-    print("SHAP not available - using fallback feature importance")
+    ALIBI_AVAILABLE = False
+    print("Alibi not available - using fallback explainability")
 
 try:
     import lime
@@ -70,12 +75,25 @@ try:
 except ImportError:
     LGB_AVAILABLE = False
 
+# Modern model interpretability
+try:
+    import eli5
+    from eli5.lime import TextExplainer
+    ELI5_AVAILABLE = True
+except ImportError:
+    ELI5_AVAILABLE = False
+    print("ELI5 not available - using fallback explanations")
+
 logger = logging.getLogger(__name__)
 
 class ComprehensiveBiasDetectionService:
     """
-    Comprehensive bias detection service that integrates SHAP, LIME, and DALEX
-    for advanced explainability and bias analysis, now with mitigation capabilities.
+    Modern comprehensive bias detection service using current explainability techniques:
+    - InterpretML (Microsoft's modern explainability library)
+    - Alibi (Seldon's production-ready explainability)
+    - ELI5 (modern LIME alternative)
+    - Fairlearn (Microsoft's fairness library)
+    - AIF360 (IBM's fairness library)
     """
     
     def __init__(self):
@@ -213,7 +231,7 @@ class ComprehensiveBiasDetectionService:
     def analyze_dataset_comprehensive(self, dataset_name: str, target_column: str, 
                                     sensitive_columns: List[str]) -> Dict[str, Any]:
         """
-        Comprehensive dataset bias analysis with SHAP, LIME, DALEX, and intersectional analysis.
+        Modern comprehensive dataset bias analysis with current explainability techniques.
         """
         try:
             df = self._load_dataset_by_name(dataset_name)
@@ -246,7 +264,7 @@ class ComprehensiveBiasDetectionService:
                 'dataset_info': self._analyze_dataset_info(df, target_column, sensitive_columns),
                 'statistical_bias': self._analyze_statistical_bias(df, target_column, sensitive_columns),
                 'model_bias': {},
-                'explainability': {},
+                'modern_explainability': {},
                 'recommendations': []
             }
             
@@ -261,11 +279,11 @@ class ComprehensiveBiasDetectionService:
                 )
                 analysis_results['model_bias'][model_name] = model_bias
                 
-                explainability = self._analyze_explainability(
+                modern_explainability = self._analyze_modern_explainability(
                     model, X_train.drop(columns=sensitive_columns, errors='ignore'), X_test_model, y_test,
                     target_column
                 )
-                analysis_results['explainability'][model_name] = explainability
+                analysis_results['modern_explainability'][model_name] = modern_explainability
             
             analysis_results['recommendations'] = self._generate_comprehensive_recommendations(analysis_results)
             
@@ -339,167 +357,160 @@ class ComprehensiveBiasDetectionService:
                 )
         return intersectional_results
 
-    def _analyze_explainability(self, model, X_train: pd.DataFrame, X_test: pd.DataFrame,
+    def _analyze_modern_explainability(self, model, X_train: pd.DataFrame, X_test: pd.DataFrame,
                               y_test: pd.Series, target_column: str) -> Dict[str, Any]:
-        """Analyze model explainability using SHAP, LIME, and DALEX."""
+        """Analyze model explainability using modern techniques."""
         explainability_results = {'feature_importance': {}}
         
-        if SHAP_AVAILABLE:
+        # 1. InterpretML (Microsoft's modern explainability)
+        if INTERPRET_AVAILABLE:
             try:
-                explainability_results['shap_analysis'] = self._perform_shap_analysis(model, X_train, X_test)
-                explainability_results['feature_importance']['shap'] = explainability_results['shap_analysis']['feature_importance']
+                explainability_results['interpretml_analysis'] = self._perform_interpretml_analysis(model, X_train, X_test)
+                explainability_results['feature_importance']['interpretml'] = explainability_results['interpretml_analysis']['feature_importance']
             except Exception as e:
-                logger.warning(f"SHAP analysis failed: {e}")
+                logger.warning(f"InterpretML analysis failed: {e}")
         
-        if DALEX_AVAILABLE:
+        # 2. Alibi (Seldon's production-ready explainability)
+        if ALIBI_AVAILABLE:
             try:
-                explainability_results['dalex_analysis'] = self._perform_dalex_analysis(model, X_train, X_test, y_test)
+                explainability_results['alibi_analysis'] = self._perform_alibi_analysis(model, X_train, X_test)
             except Exception as e:
-                logger.warning(f"DALEX analysis failed: {e}")
+                logger.warning(f"Alibi analysis failed: {e}")
         
-        if LIME_AVAILABLE:
+        # 3. ELI5 (modern LIME alternative)
+        if ELI5_AVAILABLE:
             try:
-                explainability_results['lime_analysis'] = self._perform_lime_analysis(model, X_train, X_test)
+                explainability_results['eli5_analysis'] = self._perform_eli5_analysis(model, X_train, X_test)
             except Exception as e:
-                logger.warning(f"LIME analysis failed: {e}")
+                logger.warning(f"ELI5 analysis failed: {e}")
         
+        # 4. Native model explainability
         if hasattr(model, 'feature_importances_') or hasattr(model, 'coef_'):
             explainability_results['feature_importance']['native'] = self._calculate_native_feature_importance(model, X_train.columns)
         
         return explainability_results
     
-    def _perform_shap_analysis(self, model, X_train: pd.DataFrame, X_test: pd.DataFrame) -> Dict[str, Any]:
-        """Perform SHAP analysis with optimized explainer selection."""
+    def _perform_interpretml_analysis(self, model, X_train: pd.DataFrame, X_test: pd.DataFrame) -> Dict[str, Any]:
+        """Perform InterpretML analysis - Microsoft's modern explainability library."""
         try:
-            if isinstance(model, RandomForestClassifier):
-                explainer = shap.TreeExplainer(model)
-            elif XGB_AVAILABLE and isinstance(model, xgb.XGBClassifier):
-                explainer = shap.TreeExplainer(model)
-            elif LGB_AVAILABLE and isinstance(model, lgb.LGBMClassifier):
-                explainer = shap.TreeExplainer(model)
-            elif isinstance(model, LogisticRegression):
-                explainer = shap.LinearExplainer(model, X_train)
-            else:
-                explainer = shap.KernelExplainer(model.predict_proba, shap.sample(X_train, 100))
-            
-            shap_values = explainer.shap_values(X_test.iloc[:50])
-            shap_values_data = shap_values[1] if isinstance(shap_values, list) else shap_values
-            
-            feature_importance = pd.DataFrame(
-                list(zip(X_test.columns, np.abs(shap_values_data).mean(0))),
-                columns=['feature', 'importance']
-            ).sort_values(by='importance', ascending=False).head(10)
-            
-            return {
-                'feature_importance': feature_importance.to_dict('records'),
-                'explainer_type': type(explainer).__name__
-            }
-        except Exception as e:
-            logger.warning(f"SHAP analysis failed: {e}")
-            return {
-                'feature_importance': [],
-                'explainer_type': 'failed',
-                'error': str(e)
-            }
-
-    def _perform_dalex_analysis(self, model, X_train: pd.DataFrame, X_test: pd.DataFrame, y_test: pd.Series) -> Dict[str, Any]:
-        """Perform DALEX analysis for model explainability."""
-        try:
-            # Create DALEX explainer
-            explainer = dalex.Explainer(
+            # Create InterpretML explainer
+            lime_explainer = LimeTabular(
                 model, 
                 X_train, 
-                y_train, 
-                label="Model Explainer"
+                feature_names=X_train.columns.tolist(),
+                class_names=['0', '1']
             )
             
-            # Model performance
-            performance = explainer.model_performance(X_test, y_test)
+            # Global explanations
+            global_explanation = lime_explainer.explain_global(X_test.iloc[:50])
             
-            # Variable importance
-            variable_importance = explainer.model_parts(X_test, y_test)
-            
-            # Variable effects (PDP - Partial Dependence Plots)
-            variable_effects = explainer.model_profile(X_test, y_test)
-            
-            # Residual analysis
-            residuals = explainer.model_diagnostics(X_test, y_test)
+            # Local explanations for a few instances
+            local_explanations = []
+            for i in range(min(3, len(X_test))):
+                local_exp = lime_explainer.explain_local(X_test.iloc[i:i+1])
+                local_explanations.append({
+                    'instance_id': i,
+                    'feature_weights': local_exp.data(0)['names'],
+                    'prediction': model.predict([X_test.iloc[i]])[0] if hasattr(model, 'predict') else None
+                })
             
             return {
-                'performance': {
-                    'r2': float(performance.result.get('r2', 0)),
-                    'mae': float(performance.result.get('mae', 0)),
-                    'rmse': float(performance.result.get('rmse', 0)),
-                    'accuracy': float(performance.result.get('accuracy', 0))
+                'global_explanation': {
+                    'feature_importance': global_explanation.data(0)['names'][:10],
+                    'explanation_type': 'InterpretML LimeTabular'
                 },
-                'variable_importance': {
-                    'top_features': variable_importance.result.head(10).to_dict('records') if hasattr(variable_importance, 'result') else []
-                },
-                'variable_effects': {
-                    'num_features': len(variable_effects.result) if hasattr(variable_effects, 'result') else 0,
-                    'features_analyzed': list(variable_effects.result.columns) if hasattr(variable_effects, 'result') else []
-                },
-                'residuals': {
-                    'available': hasattr(residuals, 'result'),
-                    'diagnostics': 'Residual analysis available' if hasattr(residuals, 'result') else 'Not available'
-                },
-                'explainer_type': 'DALEX Explainer'
+                'local_explanations': local_explanations,
+                'explainer_type': 'InterpretML'
             }
         except Exception as e:
-            logger.warning(f"DALEX analysis failed: {e}")
+            logger.warning(f"InterpretML analysis failed: {e}")
             return {
-                'performance': {'error': str(e)},
-                'variable_importance': {'error': str(e)},
-                'variable_effects': {'error': str(e)},
-                'residuals': {'error': str(e)},
-                'explainer_type': 'DALEX Explainer (Failed)'
+                'global_explanation': {'error': str(e)},
+                'local_explanations': [],
+                'explainer_type': 'InterpretML (Failed)'
             }
     
-    def _perform_lime_analysis(self, model, X_train: pd.DataFrame, X_test: pd.DataFrame) -> Dict[str, Any]:
-        """Perform LIME analysis for local explanations."""
+    def _perform_alibi_analysis(self, model, X_train: pd.DataFrame, X_test: pd.DataFrame) -> Dict[str, Any]:
+        """Perform Alibi analysis - Seldon's production-ready explainability."""
         try:
-            # Create LIME explainer
-            explainer = LimeTabularExplainer(
+            # Anchor explanations (rule-based)
+            anchor_explainer = AnchorTabular(
+                model.predict_proba if hasattr(model, 'predict_proba') else model.predict,
+                X_train.columns.tolist(),
                 X_train.values,
-                feature_names=X_train.columns.tolist(),
-                class_names=['0', '1'],
-                mode='classification'
+                categorical_names={}
             )
+            anchor_explainer.fit(X_train.values)
             
-            # Explain a few instances
-            explanations = []
-            for i in range(min(3, len(X_test))):  # Explain first 3 instances
+            # Generate anchor explanations for a few instances
+            anchor_explanations = []
+            for i in range(min(3, len(X_test))):
                 try:
-                    exp = explainer.explain_instance(
-                        X_test.iloc[i].values, 
-                        model.predict_proba if hasattr(model, 'predict_proba') else model.predict,
-                        num_features=10
-                    )
-                    
-                    # Extract feature weights
-                    feature_weights = {}
-                    for feature, weight in exp.as_list():
-                        feature_weights[feature] = weight
-                    
-                    explanations.append({
+                    explanation = anchor_explainer.explain(X_test.iloc[i].values)
+                    anchor_explanations.append({
                         'instance_id': i,
-                        'feature_weights': feature_weights,
-                        'prediction': model.predict([X_test.iloc[i]])[0] if hasattr(model, 'predict') else None,
-                        'confidence': exp.score if hasattr(exp, 'score') else None
+                        'anchor': explanation.anchor,
+                        'precision': explanation.precision,
+                        'coverage': explanation.coverage
                     })
                 except Exception as e:
-                    logger.warning(f"LIME explanation failed for instance {i}: {e}")
+                    logger.warning(f"Anchor explanation failed for instance {i}: {e}")
             
             return {
-                'explanations': explanations,
-                'explainer_type': 'LimeTabularExplainer',
-                'num_explanations': len(explanations)
+                'anchor_explanations': anchor_explanations,
+                'explainer_type': 'Alibi AnchorTabular',
+                'num_explanations': len(anchor_explanations)
             }
         except Exception as e:
-            logger.warning(f"LIME analysis failed: {e}")
+            logger.warning(f"Alibi analysis failed: {e}")
             return {
-                'explanations': [],
-                'explainer_type': 'LimeTabularExplainer (Failed)',
+                'anchor_explanations': [],
+                'explainer_type': 'Alibi AnchorTabular (Failed)',
+                'error': str(e)
+            }
+    
+    def _perform_eli5_analysis(self, model, X_train: pd.DataFrame, X_test: pd.DataFrame) -> Dict[str, Any]:
+        """Perform ELI5 analysis - modern LIME alternative."""
+        try:
+            # Global feature importance
+            if hasattr(model, 'feature_importances_'):
+                global_importance = eli5.explain_weights(model, feature_names=X_train.columns.tolist())
+                global_features = global_importance.feature_importances.importances[:10]
+            elif hasattr(model, 'coef_'):
+                global_importance = eli5.explain_weights(model, feature_names=X_train.columns.tolist())
+                global_features = global_importance.feature_importances.importances[:10]
+            else:
+                global_features = []
+            
+            # Local explanations
+            local_explanations = []
+            for i in range(min(3, len(X_test))):
+                try:
+                    local_exp = eli5.explain_prediction(
+                        model, 
+                        X_test.iloc[i], 
+                        feature_names=X_train.columns.tolist()
+                    )
+                    local_explanations.append({
+                        'instance_id': i,
+                        'explanation': str(local_exp),
+                        'prediction': model.predict([X_test.iloc[i]])[0] if hasattr(model, 'predict') else None
+                    })
+                except Exception as e:
+                    logger.warning(f"ELI5 explanation failed for instance {i}: {e}")
+            
+            return {
+                'global_importance': global_features,
+                'local_explanations': local_explanations,
+                'explainer_type': 'ELI5',
+                'num_explanations': len(local_explanations)
+            }
+        except Exception as e:
+            logger.warning(f"ELI5 analysis failed: {e}")
+            return {
+                'global_importance': [],
+                'local_explanations': [],
+                'explainer_type': 'ELI5 (Failed)',
                 'error': str(e)
             }
 
@@ -563,7 +574,7 @@ class ComprehensiveBiasDetectionService:
                 if metrics.get('equalized_odds_difference', 0) > 0.15:
                     recommendations.append(f"[{model_name}] exhibits high equalized odds difference for '{attr}', suggesting unequal error rates. This is critical in high-stakes decisions. Explore post-processing mitigations.")
 
-        recommendations.append("Review the SHAP feature importance. If sensitive attributes or their proxies are highly influential, investigate if their impact is justified or indicative of bias.")
+        recommendations.append("Review the modern explainability results. If sensitive attributes or their proxies are highly influential, investigate if their impact is justified or indicative of bias.")
         recommendations.append("Use the `mitigate_bias` method to explore pre-processing (Reweighing) and post-processing (ThresholdOptimizer) solutions and compare their impact on fairness and performance.")
         
         return recommendations

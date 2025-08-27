@@ -65,6 +65,49 @@ try:
 except Exception as e:
     logger.warning(f"Could not load AI BOM routes: {e}")
 
+# Enable additional routes for full API integration
+try:
+    from .routes import bias_detection
+    app.include_router(bias_detection.router, prefix="/api/v1", tags=["bias-detection"])
+    logger.info("Bias detection routes loaded successfully")
+except Exception as e:
+    logger.warning(f"Could not load bias detection routes: {e}")
+
+try:
+    from .routes import security
+    app.include_router(security.router, prefix="/api/v1", tags=["security"])
+    logger.info("Security testing routes loaded successfully")
+except Exception as e:
+    logger.warning(f"Could not load security routes: {e}")
+
+try:
+    from .routes import monitoring
+    app.include_router(monitoring.router, prefix="/api/v1", tags=["monitoring"])
+    logger.info("Monitoring routes loaded successfully")
+except Exception as e:
+    logger.warning(f"Could not load monitoring routes: {e}")
+
+try:
+    from .routes import fairness_governance
+    app.include_router(fairness_governance.router, prefix="/api/v1", tags=["fairness-governance"])
+    logger.info("Fairness governance routes loaded successfully")
+except Exception as e:
+    logger.warning(f"Could not load fairness governance routes: {e}")
+
+try:
+    from .routes import provenance
+    app.include_router(provenance.router, prefix="/api/v1", tags=["provenance"])
+    logger.info("Provenance routes loaded successfully")
+except Exception as e:
+    logger.warning(f"Could not load provenance routes: {e}")
+
+try:
+    from .routes import advanced_fairness
+    app.include_router(advanced_fairness.router, prefix="/api/v1", tags=["advanced-fairness"])
+    logger.info("Advanced fairness routes loaded successfully")
+except Exception as e:
+    logger.warning(f"Could not load advanced fairness routes: {e}")
+
 @app.get("/")
 async def root():
     """Root endpoint"""
@@ -79,7 +122,10 @@ async def root():
             "Real-time Monitoring & Alerts",
             "Model Explainability",
             "Compliance Scoring",
-            "Advanced Analytics"
+            "Advanced Analytics",
+            "OWASP Security Testing",
+            "Model Provenance",
+            "Advanced Fairness Analysis"
         ]
     }
 
@@ -94,7 +140,13 @@ async def health_check():
         "endpoints": {
             "core": "/api/v1/core",
             "database": "/api/v1/database",
-            "ai_bom": "/api/v1/ai-bom"
+            "ai_bom": "/api/v1/ai-bom",
+            "bias_detection": "/api/v1/bias",
+            "security": "/api/v1/owasp",
+            "monitoring": "/api/v1/monitor",
+            "fairness_governance": "/api/v1/fairness",
+            "provenance": "/api/v1/provenance",
+            "advanced_fairness": "/api/v1/advanced-fairness"
         }
     }
 

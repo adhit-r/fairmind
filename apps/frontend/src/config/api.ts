@@ -228,6 +228,13 @@ class ApiClient {
     })
   }
 
+  async analyzeBiasClassic(request: BiasAnalysisRequest): Promise<ApiResponse<BiasAnalysisResult>> {
+    return this.request<BiasAnalysisResult>('/bias/analyze-classic', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    })
+  }
+
   async analyzeBiasReal(request: BiasAnalysisRequest): Promise<ApiResponse<BiasAnalysisResult>> {
     return this.request<BiasAnalysisResult>('/bias/analyze-real', {
       method: 'POST',
@@ -237,6 +244,10 @@ class ApiClient {
 
   async getBiasAnalysisHistory(): Promise<ApiResponse<BiasAnalysisResult[]>> {
     return this.request<BiasAnalysisResult[]>('/bias/analysis')
+  }
+
+  async getExplainabilityTools(): Promise<ApiResponse<any>> {
+    return this.request<any>('/bias/explainability-tools')
   }
 
   // Security Testing Methods
