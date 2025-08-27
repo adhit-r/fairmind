@@ -61,23 +61,61 @@ h6 {
   color: hsl(var(--foreground));
 }
 
-/* Custom scrollbar */
+/* Custom scrollbar - Global */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
   background: hsl(var(--muted));
+  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb {
   background: hsl(var(--muted-foreground));
-  border-radius: 3px;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
 }
 
 ::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--foreground));
+}
+
+::-webkit-scrollbar-corner {
+  background: hsl(var(--muted));
+}
+
+/* Sidebar specific scrollbar */
+.scrollbar-thin {
+  scrollbar-width: thin;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 4px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: hsl(var(--sidebar-border));
+  border-radius: 2px;
+  opacity: 0.5;
+  transition: opacity 0.2s ease;
+}
+
+.scrollbar-thin:hover::-webkit-scrollbar-thumb {
+  opacity: 1;
+}
+
+.scrollbar-thumb-sidebar-border::-webkit-scrollbar-thumb {
+  background: hsl(var(--sidebar-border));
+}
+
+.scrollbar-track-transparent::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 /* Terminal-like styling */
@@ -100,26 +138,221 @@ h6 {
   fill: hsl(var(--muted-foreground)) !important;
 }
 
-.recharts-legend-item-text {
-  color: hsl(var(--foreground)) !important;
-  font-family: "JetBrains Mono", monospace !important;
+/* Smooth transitions for better UX */
+* {
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 
-/* Ensure all text has proper contrast */
-.text-foreground {
-  color: hsl(var(--foreground)) !important;
+/* Focus states for better accessibility */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid hsl(var(--gold));
+  outline-offset: 2px;
 }
 
-.text-muted-foreground {
-  color: hsl(var(--muted-foreground)) !important;
+/* Loading states */
+.loading {
+  opacity: 0.6;
+  pointer-events: none;
 }
 
-/* Input styling for better contrast */
-input, textarea, select {
-  color: hsl(var(--foreground)) !important;
-  background-color: hsl(var(--background)) !important;
+/* Responsive text truncation */
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-input::placeholder, textarea::placeholder {
-  color: hsl(var(--muted-foreground)) !important;
+/* Custom focus ring for better visibility */
+.focus-ring:focus {
+  outline: 2px solid hsl(var(--gold));
+  outline-offset: 2px;
+}
+
+/* Hover effects for interactive elements */
+.hover-lift {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.hover-lift:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Status indicators */
+.status-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 8px;
+}
+
+.status-success {
+  background-color: #10b981;
+}
+
+.status-warning {
+  background-color: #f59e0b;
+}
+
+.status-error {
+  background-color: #ef4444;
+}
+
+.status-info {
+  background-color: #3b82f6;
+}
+
+/* Code block styling */
+.code-block {
+  background: hsl(var(--muted));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  padding: 1rem;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  overflow-x: auto;
+}
+
+/* Table improvements */
+.table-container {
+  overflow-x: auto;
+  border-radius: var(--radius);
+  border: 1px solid hsl(var(--border));
+}
+
+.table-container table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table-container th,
+.table-container td {
+  padding: 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+.table-container th {
+  background: hsl(var(--muted));
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+/* Card improvements */
+.card {
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card:hover {
+  border-color: hsl(var(--gold));
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Button improvements */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius);
+  font-weight: 500;
+  font-size: 0.875rem;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: hsl(var(--gold));
+  color: hsl(var(--gold-foreground));
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: hsl(var(--gold) / 0.9);
+}
+
+.btn-secondary {
+  background: hsl(var(--secondary));
+  color: hsl(var(--secondary-foreground));
+  border-color: hsl(var(--border));
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: hsl(var(--secondary) / 0.8);
+}
+
+/* Form improvements */
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.form-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: hsl(var(--foreground));
+}
+
+.form-input {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  background: hsl(var(--input));
+  color: hsl(var(--foreground));
+  font-size: 0.875rem;
+  transition: border-color 0.2s ease;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: hsl(var(--gold));
+}
+
+/* Badge improvements */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius);
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.badge-success {
+  background: hsl(142 76% 36% / 0.2);
+  color: hsl(142 76% 36%);
+}
+
+.badge-warning {
+  background: hsl(48 96% 53% / 0.2);
+  color: hsl(48 96% 53%);
+}
+
+.badge-error {
+  background: hsl(0 84% 60% / 0.2);
+  color: hsl(0 84% 60%);
+}
+
+.badge-info {
+  background: hsl(221 83% 53% / 0.2);
+  color: hsl(221 83% 53%);
 }

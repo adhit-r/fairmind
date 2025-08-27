@@ -1,414 +1,408 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import {
-  ArrowLeft,
-  BarChart3,
-  TrendingUp,
-  TrendingDown,
-  Target,
-  Shield,
-  AlertTriangle,
-  CheckCircle,
-  Clock,
-  Download,
-  FileText,
-  Users,
-  Activity,
-  PieChart,
-  LineChart,
-  Eye,
-  Filter
-} from 'lucide-react'
-import { PageWrapper } from '@/components/core/PageWrapper'
-import { Card } from '@/components/core/Card'
-import { Button } from '@/components/core/Button'
 
 interface AnalyticsMetric {
   id: string
-  title: string
-  value: string
-  change: string
-  trend: 'up' | 'down' | 'neutral'
-  icon: React.ReactNode
+  name: string
+  value: number
+  change: number
+  trend: 'up' | 'down' | 'stable'
+  category: 'performance' | 'security' | 'compliance' | 'usage'
 }
 
-interface TestResult {
+interface AnalyticsChart {
+  timestamp: string
+  models: number
+  requests: number
+  errors: number
+  compliance: number
+}
+
+interface TopModel {
   id: string
-  model: string
-  testType: string
-  score: number
-  status: 'passed' | 'failed' | 'warning'
-  date: string
+  name: string
+  requests: number
+  accuracy: number
+  latency: number
+  usage: number
 }
 
-interface Report {
-  id: string
-  title: string
-  type: string
-  status: 'completed' | 'generating' | 'failed'
-  date: string
-  size: string
-}
+export default function Analytics() {
+  const [loading, setLoading] = useState(true)
+  const [metrics, setMetrics] = useState<AnalyticsMetric[]>([])
+  const [chartData, setChartData] = useState<AnalyticsChart[]>([])
+  const [topModels, setTopModels] = useState<TopModel[]>([])
+  const [selectedCategory, setSelectedCategory] = useState<string>('all')
+  const [timeRange, setTimeRange] = useState<'7d' | '30d' | '90d'>('30d')
 
-const demoMetrics: AnalyticsMetric[] = [
-  {
-    id: '1',
-    title: 'Total Models',
-    value: '24',
-    change: '+12%',
-    trend: 'up',
-    icon: <BarChart3 className="h-5 w-5" />
-  },
-  {
-    id: '2',
-    title: 'Average Accuracy',
-    value: '87.3%',
-    change: '+2.1%',
-    trend: 'up',
-    icon: <Target className="h-5 w-5" />
-  },
-  {
-    id: '3',
-    title: 'Bias Score',
-    value: '92.1%',
-    change: '-1.2%',
-    trend: 'down',
-    icon: <Shield className="h-5 w-5" />
-  },
-  {
-    id: '4',
-    title: 'Security Score',
-    value: '94.7%',
-    change: '+0.8%',
-    trend: 'up',
-    icon: <AlertTriangle className="h-5 w-5" />
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setMetrics([
+        {
+          id: '1',
+          name: 'Total Model Requests',
+          value: 15420,
+          change: 12.5,
+          trend: 'up',
+          category: 'usage'
+        },
+        {
+          id: '2',
+          name: 'Average Response Time',
+          value: 245,
+          change: -8.3,
+          trend: 'down',
+          category: 'performance'
+        },
+        {
+          id: '3',
+          name: 'Security Incidents',
+          value: 3,
+          change: -25.0,
+          trend: 'down',
+          category: 'security'
+        },
+        {
+          id: '4',
+          name: 'Compliance Score',
+          value: 94.2,
+          change: 2.1,
+          trend: 'up',
+          category: 'compliance'
+        },
+        {
+          id: '5',
+          name: 'Model Accuracy',
+          value: 92.8,
+          change: 1.5,
+          trend: 'up',
+          category: 'performance'
+        },
+        {
+          id: '6',
+          name: 'Data Processing Volume',
+          value: 1250,
+          change: 18.7,
+          trend: 'up',
+          category: 'usage'
+        }
+      ])
+
+      // Generate mock chart data
+      const mockChartData: AnalyticsChart[] = []
+      const now = new Date()
+      for (let i = 29; i >= 0; i--) {
+        const time = new Date(now.getTime() - i * 24 * 60 * 60 * 1000)
+        mockChartData.push({
+          timestamp: time.toISOString(),
+          models: 5 + Math.floor(Math.random() * 3),
+          requests: 400 + Math.random() * 200,
+          errors: Math.random() * 10,
+          compliance: 90 + Math.random() * 8
+        })
+      }
+      setChartData(mockChartData)
+
+      setTopModels([
+        {
+          id: '1',
+          name: 'GPT-4-Financial',
+          requests: 5420,
+          accuracy: 94.2,
+          latency: 245,
+          usage: 35.2
+        },
+        {
+          id: '2',
+          name: 'BERT-Sentiment',
+          requests: 3890,
+          accuracy: 87.5,
+          latency: 89,
+          usage: 25.2
+        },
+        {
+          id: '3',
+          name: 'ResNet-Image',
+          requests: 3240,
+          accuracy: 96.8,
+          latency: 156,
+          usage: 21.0
+        },
+        {
+          id: '4',
+          name: 'T5-Text',
+          requests: 1870,
+          accuracy: 91.3,
+          latency: 189,
+          usage: 12.1
+        },
+        {
+          id: '5',
+          name: 'YOLO-Object',
+          requests: 1000,
+          accuracy: 89.7,
+          latency: 78,
+          usage: 6.5
+        }
+      ])
+
+      setLoading(false)
+    }, 1000)
+
+    return () => clearTimeout(timer)
+  }, [])
+
+  const filteredMetrics = metrics.filter(metric =>
+    selectedCategory === 'all' || metric.category === selectedCategory
+  )
+
+  const getTrendColor = (trend: string) => {
+    switch (trend) {
+      case 'up': return 'text-green-400'
+      case 'down': return 'text-red-400'
+      case 'stable': return 'text-yellow-400'
+      default: return 'text-muted-foreground'
+    }
   }
-]
 
-const demoTestResults: TestResult[] = [
-  {
-    id: '1',
-    model: 'Credit Risk Model v2.1',
-    testType: 'Bias Detection',
-    score: 89.2,
-    status: 'passed',
-    date: '2024-01-17T10:00:00Z'
-  },
-  {
-    id: '2',
-    model: 'Fraud Detection AI',
-    testType: 'Security Testing',
-    score: 94.1,
-    status: 'passed',
-    date: '2024-01-16T14:30:00Z'
-  },
-  {
-    id: '3',
-    model: 'Customer Segmentation',
-    testType: 'Performance Test',
-    score: 76.8,
-    status: 'warning',
-    date: '2024-01-15T09:15:00Z'
-  },
-  {
-    id: '4',
-    model: 'Loan Approval System',
-    testType: 'Compliance Check',
-    score: 91.5,
-    status: 'passed',
-    date: '2024-01-14T16:45:00Z'
+  const getTrendIcon = (trend: string) => {
+    switch (trend) {
+      case 'up': return '↗'
+      case 'down': return '↘'
+      case 'stable': return '→'
+      default: return '→'
+    }
   }
-]
 
-const demoReports: Report[] = [
-  {
-    id: '1',
-    title: 'Monthly Bias Analysis Report',
-    type: 'Bias Detection',
-    status: 'completed',
-    date: '2024-01-17T10:00:00Z',
-    size: '2.4 MB'
-  },
-  {
-    id: '2',
-    title: 'Security Assessment Q1 2024',
-    type: 'Security Testing',
-    status: 'completed',
-    date: '2024-01-16T14:30:00Z',
-    size: '1.8 MB'
-  },
-  {
-    id: '3',
-    title: 'Compliance Audit Report',
-    type: 'Compliance',
-    status: 'generating',
-    date: '2024-01-15T09:15:00Z',
-    size: '3.2 MB'
+  const getCategoryColor = (category: string) => {
+    switch (category) {
+      case 'performance': return 'text-blue-400'
+      case 'security': return 'text-red-400'
+      case 'compliance': return 'text-green-400'
+      case 'usage': return 'text-purple-400'
+      default: return 'text-muted-foreground'
+    }
   }
-]
 
-export default function AnalyticsPage() {
+  if (loading) {
+    return (
+      <div className="space-y-6 p-4 md:p-6 max-w-[2000px] mx-auto">
+        <div className="space-y-2">
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-gold">
+            Analytics
+          </h1>
+          <p className="text-xs md:text-sm text-muted-foreground font-mono">
+            AI Platform Analytics & Performance Insights
+          </p>
+        </div>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="w-8 h-8 border-2 border-gold border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-sm text-muted-foreground font-mono">Loading Analytics Data...</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6 p-4 md:p-6 max-w-[2000px] mx-auto">
-      {/* Header Section */}
+      {/* Header */}
       <div className="space-y-2">
         <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-gold">
-          ANALYTICS
+          Analytics
         </h1>
         <p className="text-xs md:text-sm text-muted-foreground font-mono">
-          COMPREHENSIVE.INSIGHTS.INTO.MODEL.PERFORMANCE.AND.TESTING.RESULTS
+          AI Platform Analytics & Performance Insights
         </p>
       </div>
 
-      {/* Analytics Metrics */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="bg-card border border-border rounded-lg p-4">
-            <div className="flex items-center justify-between">
-              <div>
-              <p className="text-xs text-muted-foreground font-mono">TOTAL_MODELS</p>
-              <p className="text-lg font-bold">0</p>
+      {/* Controls */}
+      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+        <div className="flex gap-2">
+          <select
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value)}
+            className="px-3 py-1 text-sm bg-card border border-border rounded-md font-mono"
+          >
+            <option value="all">All Categories</option>
+            <option value="performance">Performance</option>
+            <option value="security">Security</option>
+            <option value="compliance">Compliance</option>
+            <option value="usage">Usage</option>
+          </select>
+        </div>
+        <div className="flex gap-2">
+          {(['7d', '30d', '90d'] as const).map(range => (
+            <button
+              key={range}
+              onClick={() => setTimeRange(range)}
+              className={`px-3 py-1 text-xs font-mono rounded-md transition-colors ${
+                timeRange === range
+                  ? 'bg-gold text-gold-foreground'
+                  : 'bg-card border border-border text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {range}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Key Metrics */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {filteredMetrics.map((metric) => (
+          <div key={metric.id} className="bg-card border border-border rounded-lg p-4">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs text-muted-foreground font-mono">{metric.name}</p>
+              <span className={`text-xs font-mono ${getCategoryColor(metric.category)}`}>
+                {metric.category}
+              </span>
             </div>
-            <div className="flex items-center gap-2">
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-              </svg>
+            <div className="flex items-center justify-between">
+              <p className="text-lg font-bold text-foreground">
+                {metric.value.toLocaleString()}
+                {metric.name.includes('Score') || metric.name.includes('Accuracy') ? '%' : ''}
+                {metric.name.includes('Time') ? 'ms' : ''}
+              </p>
               <div className="flex items-center gap-1">
-                <span className="text-xs text-muted-foreground">NO_MODELS</span>
+                <span className={`text-xs font-mono ${getTrendColor(metric.trend)}`}>
+                  {getTrendIcon(metric.trend)} {Math.abs(metric.change)}%
+                </span>
               </div>
             </div>
           </div>
-        </div>
-        <div className="bg-card border border-border rounded-lg p-4">
-            <div className="flex items-center justify-between">
-              <div>
-              <p className="text-xs text-muted-foreground font-mono">AVERAGE_ACCURACY</p>
-              <p className="text-lg font-bold">--</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-              </svg>
-              <div className="flex items-center gap-1">
-                <span className="text-xs text-muted-foreground">NO_DATA</span>
-              </div>
+        ))}
+      </div>
+
+      {/* Analytics Charts */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Usage Trends */}
+        <div className="bg-card border border-border rounded-lg p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold text-foreground">Usage Trends</h3>
+            <div className="text-xs text-muted-foreground font-mono">
+              Last {timeRange === '7d' ? '7 days' : timeRange === '30d' ? '30 days' : '90 days'}
             </div>
           </div>
-        </div>
-        <div className="bg-card border border-border rounded-lg p-4">
-            <div className="flex items-center justify-between">
-              <div>
-              <p className="text-xs text-muted-foreground font-mono">BIAS_SCORE</p>
-              <p className="text-lg font-bold">--</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
-              </svg>
-              <div className="flex items-center gap-1">
-                <span className="text-xs text-muted-foreground">NO_ANALYSIS</span>
+          <div className="h-64 flex items-end justify-between gap-1">
+            {chartData.slice(-7).map((point, index) => (
+              <div key={index} className="flex-1 flex flex-col items-center">
+                <div className="w-full bg-gold/20 rounded-t-sm" style={{ height: `${(point.requests / 600) * 100}%` }}></div>
+                <div className="w-full bg-blue-500/20 rounded-t-sm mt-1" style={{ height: `${(point.models / 8) * 100}%` }}></div>
               </div>
-            </div>
+            ))}
+          </div>
+          <div className="flex justify-between text-xs text-muted-foreground mt-2">
+            <span>Requests</span>
+            <span>Active Models</span>
           </div>
         </div>
-        <div className="bg-card border border-border rounded-lg p-4">
-            <div className="flex items-center justify-between">
-              <div>
-              <p className="text-xs text-muted-foreground font-mono">SECURITY_SCORE</p>
-              <p className="text-lg font-bold">--</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-              </svg>
-              <div className="flex items-center gap-1">
-                <span className="text-xs text-muted-foreground">NO_TESTS</span>
+
+        {/* Performance Metrics */}
+        <div className="bg-card border border-border rounded-lg p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold text-foreground">Performance Metrics</h3>
+          </div>
+          <div className="h-64 flex items-end justify-between gap-1">
+            {chartData.slice(-7).map((point, index) => (
+              <div key={index} className="flex-1 flex flex-col items-center">
+                <div className="w-full bg-green-500/20 rounded-t-sm" style={{ height: `${point.compliance - 85}%` }}></div>
+                <div className="w-full bg-red-500/20 rounded-t-sm mt-1" style={{ height: `${point.errors * 5}%` }}></div>
               </div>
-            </div>
+            ))}
+          </div>
+          <div className="flex justify-between text-xs text-muted-foreground mt-2">
+            <span>Compliance (%)</span>
+            <span>Errors</span>
           </div>
         </div>
       </div>
 
-      {/* Action Section */}
-      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-        <div className="flex flex-wrap gap-2">
-          <button className="bg-gold text-gold-foreground hover:bg-gold/90 w-full sm:w-auto px-4 py-2 rounded font-mono text-sm transition-colors">
-            <svg className="inline mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            <span className="whitespace-nowrap">GENERATE_REPORT</span>
-          </button>
-          <button className="bg-transparent border border-border hover:bg-accent w-full sm:w-auto px-4 py-2 rounded font-mono text-sm transition-colors">
-            <svg className="inline mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            <span className="whitespace-nowrap">EXPORT_DATA</span>
-          </button>
-                  </div>
-                </div>
-
-      {/* Main Content Grid */}
-      <div className="grid gap-4 md:gap-6 grid-cols-1 lg:grid-cols-3">
-        {/* Analytics Dashboard */}
-        <div className="bg-card border border-border rounded-lg lg:col-span-2 min-h-[500px] flex flex-col">
-          <div className="p-4 border-b border-border">
-            <h3 className="text-sm font-bold text-gold">ANALYTICS_DASHBOARD</h3>
-            <p className="text-xs text-muted-foreground font-mono">
-              PERFORMANCE.METRICS.AND.TRENDING.ANALYSIS
-            </p>
-          </div>
-          <div className="flex-1 p-4">
-            <div className="h-full w-full flex items-center justify-center">
-                <div className="text-center">
-                <div className="w-24 h-24 bg-muted rounded-lg flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-12 h-12 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                </div>
-                <h4 className="text-lg font-bold mb-2">NO_ANALYTICS_DATA_AVAILABLE</h4>
-                <p className="text-sm text-muted-foreground font-mono">
-                  UPLOAD_MODELS_AND_RUN_TESTS_TO_SEE_ANALYTICS
-                </p>
-              </div>
-            </div>
-          </div>
-                        </div>
-
-        {/* Quick Actions */}
-        <div className="bg-card border border-border rounded-lg min-h-[500px] flex flex-col">
-          <div className="p-4 border-b border-border">
-            <h3 className="text-sm font-bold text-gold">QUICK_ACTIONS</h3>
-            <p className="text-xs text-muted-foreground font-mono">RAPID.ANALYTICS.TOOLS</p>
-                      </div>
-          <div className="flex-1 p-4">
-            <div className="space-y-4">
-              <button className="w-full p-3 bg-gold text-gold-foreground hover:bg-gold/90 rounded font-mono text-sm transition-colors">
-                <svg className="inline mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                GENERATE_REPORT
-              </button>
-              <button className="w-full p-3 bg-transparent border border-border hover:bg-accent rounded font-mono text-sm transition-colors">
-                <svg className="inline mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                EXPORT_DATA
-              </button>
-              <button className="w-full p-3 bg-transparent border border-border hover:bg-accent rounded font-mono text-sm transition-colors">
-                <svg className="inline mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-                </svg>
-                FILTER_RESULTS
-              </button>
-                      </div>
-                    </div>
-                    </div>
-                  </div>
-
-      {/* Analytics Categories */}
-      <div className="grid gap-4 md:gap-6 grid-cols-1 md:grid-cols-3">
-        <div className="bg-card border border-border rounded-lg min-h-[400px] flex flex-col">
-          <div className="p-4 border-b border-border">
-            <h3 className="text-sm font-bold text-gold">TEST_RESULTS</h3>
-            <p className="text-xs text-muted-foreground font-mono">RECENT.TESTING.ANALYSIS</p>
-          </div>
-          <div className="flex-1 p-4">
-            <div className="h-full w-full flex items-center justify-center">
-              <div className="text-center">
-                <div className="w-16 h-16 bg-muted rounded-lg flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-8 h-8 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                  </svg>
-                </div>
-                <h4 className="text-sm font-bold mb-2">NO_TEST_RESULTS</h4>
-                <p className="text-xs text-muted-foreground font-mono">RUN_TESTS_TO_SEE_RESULTS</p>
-                      </div>
-                    </div>
-          </div>
-                      </div>
-        <div className="bg-card border border-border rounded-lg min-h-[400px] flex flex-col">
-          <div className="p-4 border-b border-border">
-            <h3 className="text-sm font-bold text-gold">GENERATED_REPORTS</h3>
-            <p className="text-xs text-muted-foreground font-mono">ANALYTICS.AND.COMPLIANCE.REPORTS</p>
-                  </div>
-          <div className="flex-1 p-4">
-            <div className="h-full w-full flex items-center justify-center">
-              <div className="text-center">
-                <div className="w-16 h-16 bg-muted rounded-lg flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-8 h-8 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                </div>
-                <h4 className="text-sm font-bold mb-2">NO_REPORTS_GENERATED</h4>
-                <p className="text-xs text-muted-foreground font-mono">GENERATE_REPORTS_TO_SEE_ANALYTICS</p>
-              </div>
-                  </div>
-          </div>
-        </div>
-        <div className="bg-card border border-border rounded-lg min-h-[400px] flex flex-col">
-          <div className="p-4 border-b border-border">
-            <h3 className="text-sm font-bold text-gold">PERFORMANCE_TRENDS</h3>
-            <p className="text-xs text-muted-foreground font-mono">MODEL.PERFORMANCE.OVER.TIME</p>
-          </div>
-          <div className="flex-1 p-4">
-            <div className="h-full w-full flex items-center justify-center">
-                <div className="text-center">
-                <div className="w-16 h-16 bg-muted rounded-lg flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-8 h-8 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                  </svg>
-                </div>
-                <h4 className="text-sm font-bold mb-2">NO_TREND_DATA</h4>
-                <p className="text-xs text-muted-foreground font-mono">UPLOAD_MODELS_TO_SEE_TRENDS</p>
-              </div>
-            </div>
-          </div>
-                        </div>
-                      </div>
-
-      {/* Analytics Reports Table */}
+      {/* Top Models */}
       <div className="bg-card border border-border rounded-lg overflow-hidden">
         <div className="p-4 border-b border-border">
-          <div className="flex flex-col space-y-1.5">
-            <h3 className="text-sm font-bold text-gold">ANALYTICS_REPORTS</h3>
-            <p className="text-xs text-muted-foreground font-mono">COMPREHENSIVE.ANALYTICS.AND.REPORTING</p>
-          </div>
+          <h3 className="text-lg font-bold text-foreground">Top Performing Models</h3>
         </div>
-        <div className="p-4">
-          <div className="rounded-md border border-border">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="text-left p-3 text-xs font-mono">REPORT_NAME</th>
-                  <th className="text-left p-3 text-xs font-mono">TYPE</th>
-                  <th className="text-left p-3 text-xs font-mono">STATUS</th>
-                  <th className="text-left p-3 text-xs font-mono">GENERATED_DATE</th>
-                  <th className="text-left p-3 text-xs font-mono">SIZE</th>
-                  <th className="text-right p-3 text-xs font-mono">ACTIONS</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr className="border-b border-border">
-                  <td className="p-3 text-xs font-mono text-muted-foreground" colSpan={6}>
-                    <div className="text-center py-8">
-                      <div className="w-16 h-16 bg-muted rounded-lg flex items-center justify-center mx-auto mb-4">
-                        <svg className="w-8 h-8 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-muted/50">
+              <tr>
+                <th className="p-3 text-left text-xs font-mono text-muted-foreground">Model</th>
+                <th className="p-3 text-left text-xs font-mono text-muted-foreground">Requests</th>
+                <th className="p-3 text-left text-xs font-mono text-muted-foreground">Accuracy</th>
+                <th className="p-3 text-left text-xs font-mono text-muted-foreground">Latency</th>
+                <th className="p-3 text-left text-xs font-mono text-muted-foreground">Usage %</th>
+                <th className="p-3 text-left text-xs font-mono text-muted-foreground">Trend</th>
+              </tr>
+            </thead>
+            <tbody>
+              {topModels.map((model, index) => (
+                <tr key={model.id} className="border-b border-border hover:bg-muted/30">
+                  <td className="p-3 text-sm font-mono">{model.name}</td>
+                  <td className="p-3 text-sm">{model.requests.toLocaleString()}</td>
+                  <td className="p-3 text-sm">{model.accuracy.toFixed(1)}%</td>
+                  <td className="p-3 text-sm">{model.latency}ms</td>
+                  <td className="p-3 text-sm">{model.usage.toFixed(1)}%</td>
+                  <td className="p-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-16 h-2 bg-muted rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-gold rounded-full" 
+                          style={{ width: `${model.usage}%` }}
+                        ></div>
                       </div>
-                      <h4 className="text-sm font-bold mb-2">NO_ANALYTICS_REPORTS</h4>
-                      <p className="text-xs text-muted-foreground font-mono">
-                        GENERATE_REPORTS_TO_SEE_ANALYTICS_AND_INSIGHTS
-                      </p>
+                      <span className="text-xs text-muted-foreground">
+                        #{index + 1}
+                      </span>
                     </div>
                   </td>
                 </tr>
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </table>
         </div>
-            </div>
+      </div>
+
+      {/* Insights */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="bg-card border border-border rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <svg className="h-4 w-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+            </svg>
+            <h4 className="text-sm font-bold text-foreground">Performance Insight</h4>
+          </div>
+          <p className="text-xs text-muted-foreground font-mono">
+            Average response time improved by 8.3% over the last 30 days, indicating better model optimization.
+          </p>
+        </div>
+
+        <div className="bg-card border border-border rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <svg className="h-4 w-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+            <h4 className="text-sm font-bold text-foreground">Usage Trend</h4>
+          </div>
+          <p className="text-xs text-muted-foreground font-mono">
+            GPT-4-Financial model usage increased by 35.2%, showing growing demand for financial AI services.
+          </p>
+        </div>
+
+        <div className="bg-card border border-border rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <svg className="h-4 w-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+            <h4 className="text-sm font-bold text-foreground">Security Alert</h4>
+          </div>
+          <p className="text-xs text-muted-foreground font-mono">
+            Security incidents decreased by 25%, but continuous monitoring is recommended for emerging threats.
+          </p>
+        </div>
+      </div>
     </div>
   )
 }

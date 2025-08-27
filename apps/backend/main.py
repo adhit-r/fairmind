@@ -26,6 +26,10 @@ from websocket import websocket_endpoint, start_periodic_updates
 import asyncio
 from email_service import email_service
 from supabase_client import supabase_service
+
+# Import governance routes for real data integration
+from api.routes.governance import router as governance_router
+
 from models.ai_dna_profiling import (
     ModelDNAProfile, BiasInheritancePattern, ModelLineageNode, ModelEvolution,
     generate_dna_signature, analyze_bias_inheritance, create_model_lineage_tree, analyze_model_evolution
@@ -85,6 +89,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include governance routes for real data integration
+app.include_router(governance_router)
 
 # Ensure uploads directory exists
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "uploads"))

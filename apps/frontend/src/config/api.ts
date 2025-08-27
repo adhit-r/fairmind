@@ -1,5 +1,5 @@
-// API Configuration - Updated for backend integration
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.fairmind.xyz'
+// API Configuration - Real data integration for FairMind
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'
 
 // API Response Types
 interface ApiResponse<T> {
@@ -100,37 +100,13 @@ interface SecurityAnalysisResult {
   testResults: Array<{
     testId: string
     testName: string
+    category: string
     status: 'passed' | 'failed' | 'skipped'
     severity: 'critical' | 'high' | 'medium' | 'low'
     description: string
-    recommendations: string[]
+    recommendation: string
+    executionTime: number
   }>
-  recommendations: string[]
-  createdAt: string
-}
-
-// Model and Dataset Types
-interface Dataset {
-  id: string
-  name: string
-  description: string
-  size: number
-  columns: string[]
-  createdAt: string
-}
-
-interface Model {
-  id: string
-  name: string
-  type: 'llm' | 'classic_ml'
-  framework: string
-  version: string
-  status: 'active' | 'inactive' | 'testing' | 'pending'
-  createdAt: string
-  accuracy?: number
-  biasScore?: number
-  securityScore?: number
-  complianceScore?: number
 }
 
 interface SecurityTest {
@@ -139,230 +115,405 @@ interface SecurityTest {
   category: string
   description: string
   severity: 'critical' | 'high' | 'medium' | 'low'
+  enabled: boolean
+  lastRun?: string
+  status?: 'passed' | 'failed' | 'skipped'
+}
+
+// Model Registry Types
+interface Model {
+  id: string
+  name: string
+  version: string
+  type: 'llm' | 'classic_ml' | 'deep_learning'
+  status: 'active' | 'inactive' | 'deprecated'
+  accuracy: number
+  biasScore: number
+  securityScore: number
+  lastUpdated: string
+  description: string
+  tags: string[]
+}
+
+interface Dataset {
+  id: string
+  name: string
+  type: 'training' | 'validation' | 'test'
+  size: number
+  records: number
+  features: number
+  lastUpdated: string
+  description: string
+  tags: string[]
 }
 
 // AI BOM Types
-interface BOMItem {
+interface BOMDocument {
+  id: string
+  name: string
+  version: string
+  createdAt: string
+  lastUpdated: string
+  totalComponents: number
+  riskComponents: number
+  complianceScore: number
+  licenseCompliance: number
+  securityScore: number
+  components: BOMComponent[]
+}
+
+interface BOMComponent {
+  id: string
+  name: string
+  type: 'model' | 'dataset' | 'framework' | 'library' | 'service' | 'infrastructure'
+  version: string
+  source: string
+  license: string
+  licenseType: 'open-source' | 'proprietary' | 'commercial' | 'research'
+  riskLevel: 'low' | 'medium' | 'high' | 'critical'
+  dependencies: string[]
+  lastUpdated: string
+  maintainer: string
+  description: string
+  usage: string
+  complianceStatus: 'compliant' | 'non-compliant' | 'review' | 'pending'
+}
+
+// Compliance Types
+interface ComplianceFramework {
   id: string
   name: string
   type: string
-  version: string
-  license: string
-  riskLevel: 'low' | 'medium' | 'high' | 'critical'
-  vulnerabilities: string[]
+  status: string
+  complianceScore: number
+  lastAssessment: string
+  nextReview: string
 }
 
-interface BOMDocument {
+interface ComplianceProject {
   id: string
-  modelId: string
-  modelName: string
-  items: BOMItem[]
-  totalItems: number
-  riskItems: number
-  createdAt: string
+  name: string
+  type: string
+  status: string
+  progress: number
+  framework: string
+  owner: string
+  dueDate: string
 }
 
-// API Client Class
-class ApiClient {
-  private baseUrl: string
+interface AttestationResult {
+  id: string
+  name: string
+  type: string
+  framework: string
+  status: string
+  score: number
+  auditDate: string
+  expiryDate: string
+}
 
+// Governance Types
+interface GovernancePolicy {
+  id: string
+  name: string
+  category: string
+  status: string
+  priority: string
+  complianceRate: number
+  effectiveness: number
+  violations: number
+  enforcement: string
+}
+
+interface GovernanceEvent {
+  id: string
+  timestamp: string
+  type: string
+  severity: string
+  description: string
+  affectedPolicy: string
+  status: string
+  automated: boolean
+}
+
+// Regulatory Mapping Types
+interface RegulatoryMapping {
+  id: string
+  frameworkName: string
+  requirementName: string
+  mappedControls: string[]
+  mappingStrength: string
+  lastMapped: string
+  mappedBy: string
+}
+
+// Report Types
+interface ReportTemplate {
+  id: string
+  name: string
+  type: string
+  description: string
+  sections: string[]
+  lastUsed: string
+  usageCount: number
+}
+
+interface GeneratedReport {
+  id: string
+  name: string
+  type: string
+  status: string
+  author: string
+  createdAt: string
+  lastUpdated: string
+  audience: string[]
+  score: number
+}
+
+class ApiClient {
+  private baseUrl: string;
+  
   constructor(baseUrl: string) {
-    this.baseUrl = baseUrl
+    this.baseUrl = baseUrl;
   }
 
-  private async request<T>(
-    endpoint: string,
-    options: RequestInit = {}
-  ): Promise<ApiResponse<T>> {
+  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<ApiResponse<T>> {
     try {
-      const url = `${this.baseUrl}${endpoint}`
+      const url = `${this.baseUrl}${endpoint}`;
       const response = await fetch(url, {
         headers: {
           'Content-Type': 'application/json',
           ...options.headers,
         },
         ...options,
-      })
+      });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const data = await response.json()
-      return data
+      const data = await response.json();
+      return {
+        success: true,
+        data: data,
+      };
     } catch (error) {
-      console.error(`API request failed for ${endpoint}:`, error)
+      console.error(`API request failed for ${endpoint}:`, error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
-      }
+      };
     }
   }
 
-  // Dashboard Methods
+  // Dashboard Methods - Real data integration
   async getGovernanceMetrics(): Promise<ApiResponse<GovernanceMetrics>> {
-    return this.request<GovernanceMetrics>('/governance/metrics')
+    return this.request<GovernanceMetrics>('/api/v1/governance/metrics');
   }
 
   async getRecentActivity(): Promise<ApiResponse<RecentActivity[]>> {
-    return this.request<RecentActivity[]>('/activity/recent')
+    return this.request<RecentActivity[]>('/api/v1/activity/recent');
   }
 
   async getMetricsSummary(): Promise<ApiResponse<any>> {
-    return this.request<any>('/metrics/summary')
+    return this.request<any>('/api/v1/metrics/summary');
   }
 
-  // Bias Detection Methods
+  // Bias Detection Methods - Real data integration
   async getBiasDatasets(): Promise<ApiResponse<Dataset[]>> {
-    return this.request<Dataset[]>('/datasets')
+    return this.request<Dataset[]>('/api/v1/bias/datasets');
   }
 
   async getModels(): Promise<ApiResponse<Model[]>> {
-    return this.request<Model[]>('/models')
+    return this.request<Model[]>('/api/v1/models');
   }
 
   async analyzeBias(request: BiasAnalysisRequest): Promise<ApiResponse<BiasAnalysisResult>> {
-    return this.request<BiasAnalysisResult>('/bias/analyze', {
+    return this.request<BiasAnalysisResult>('/api/v1/bias/analyze', {
       method: 'POST',
       body: JSON.stringify(request),
-    })
+    });
   }
 
   async analyzeBiasClassic(request: BiasAnalysisRequest): Promise<ApiResponse<BiasAnalysisResult>> {
-    return this.request<BiasAnalysisResult>('/bias/analyze-classic', {
+    return this.request<BiasAnalysisResult>('/api/v1/bias/analyze-classic', {
       method: 'POST',
       body: JSON.stringify(request),
-    })
+    });
   }
 
   async analyzeBiasReal(request: BiasAnalysisRequest): Promise<ApiResponse<BiasAnalysisResult>> {
-    return this.request<BiasAnalysisResult>('/bias/analyze-real', {
+    return this.request<BiasAnalysisResult>('/api/v1/bias/analyze-real', {
       method: 'POST',
       body: JSON.stringify(request),
-    })
+    });
   }
 
   async getBiasAnalysisHistory(): Promise<ApiResponse<BiasAnalysisResult[]>> {
-    return this.request<BiasAnalysisResult[]>('/bias/analysis')
+    return this.request<BiasAnalysisResult[]>('/api/v1/bias/analysis');
   }
 
   async getExplainabilityTools(): Promise<ApiResponse<any>> {
-    return this.request<any>('/bias/explainability-tools')
+    return this.request<any>('/api/v1/bias/explainability-tools');
   }
 
-  // Security Testing Methods
+  // Security Testing Methods - Real data integration
   async runSecurityAnalysis(request: SecurityTestRequest): Promise<ApiResponse<SecurityAnalysisResult>> {
-    return this.request<SecurityAnalysisResult>('/owasp/analyze', {
+    return this.request<SecurityAnalysisResult>('/api/v1/security/analyze', {
       method: 'POST',
       body: JSON.stringify(request),
-    })
+    });
   }
 
   async getSecurityTestHistory(): Promise<ApiResponse<SecurityAnalysisResult[]>> {
-    return this.request<SecurityAnalysisResult[]>('/owasp/analysis')
+    return this.request<SecurityAnalysisResult[]>('/api/v1/security/history');
   }
 
   async getSecurityTests(): Promise<ApiResponse<SecurityTest[]>> {
-    return this.request<SecurityTest[]>('/owasp/tests')
+    return this.request<SecurityTest[]>('/api/v1/security/tests');
   }
 
   async getOWASPCategories(): Promise<ApiResponse<any[]>> {
-    return this.request<any[]>('/owasp/categories')
+    return this.request<any[]>('/api/v1/security/owasp-categories');
   }
 
-  // Model Registry Methods
+  // Model Registry Methods - Real data integration
   async getModelRegistry(): Promise<ApiResponse<Model[]>> {
-    return this.request<Model[]>('/models')
+    return this.request<Model[]>('/api/v1/models');
   }
 
   async registerModel(model: Partial<Model>): Promise<ApiResponse<Model>> {
-    return this.request<Model>('/models/register', {
+    return this.request<Model>('/api/v1/models', {
       method: 'POST',
       body: JSON.stringify(model),
-    })
+    });
   }
 
   async uploadModel(formData: FormData): Promise<Response> {
-    const url = `${this.baseUrl}/models/upload`
+    const url = `${this.baseUrl}/api/v1/models`;
     return fetch(url, {
       method: 'POST',
       body: formData,
-    })
+    });
   }
 
-  // Dataset Management Methods
+  // Dataset Management Methods - Real data integration
   async uploadDataset(file: File): Promise<ApiResponse<Dataset>> {
-    const formData = new FormData()
-    formData.append('file', file)
+    const formData = new FormData();
+    formData.append('file', file);
     
-    return this.request<Dataset>('/datasets/upload', {
+    const url = `${this.baseUrl}/api/v1/datasets`;
+    const response = await fetch(url, {
       method: 'POST',
       body: formData,
-      headers: {}, // Let browser set Content-Type for FormData
-    })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    return {
+      success: true,
+      data: data,
+    };
   }
 
   async getAvailableDatasets(): Promise<ApiResponse<Dataset[]>> {
-    return this.request<Dataset[]>('/datasets/available')
+    return this.request<Dataset[]>('/api/v1/datasets');
   }
 
-  // AI BOM Methods
+  // AI BOM Methods - Real data integration
   async scanBOM(request: any): Promise<ApiResponse<BOMDocument>> {
-    return this.request<BOMDocument>('/bom/scan', {
+    return this.request<BOMDocument>('/api/v1/bom/scan', {
       method: 'POST',
       body: JSON.stringify(request),
-    })
+    });
   }
 
   async getBOMList(): Promise<ApiResponse<BOMDocument[]>> {
-    return this.request<BOMDocument[]>('/bom/list')
+    return this.request<BOMDocument[]>('/api/v1/bom/list');
   }
 
   async getBOMById(bomId: string): Promise<ApiResponse<BOMDocument>> {
-    return this.request<BOMDocument>(`/bom/${bomId}`)
+    return this.request<BOMDocument>(`/api/v1/bom/${bomId}`);
   }
 
   async generateComprehensiveBOM(request: any): Promise<ApiResponse<BOMDocument>> {
-    return this.request<BOMDocument>('/bom/generate-comprehensive', {
+    return this.request<BOMDocument>('/api/v1/bom/generate-comprehensive', {
       method: 'POST',
       body: JSON.stringify(request),
-    })
+    });
   }
 
-  // Monitoring Methods
+  // Monitoring Methods - Real data integration
   async getMonitoringMetrics(): Promise<ApiResponse<any>> {
-    return this.request<any>('/monitor/drift')
+    return this.request<any>('/api/v1/monitoring/metrics');
   }
 
   async getDriftAnalysis(): Promise<ApiResponse<any>> {
-    return this.request<any>('/monitor/drift')
+    return this.request<any>('/api/v1/monitoring/drift');
   }
 
-  // Compliance Methods
+  // Compliance Methods - Real data integration
+  async getComplianceFrameworks(): Promise<ApiResponse<ComplianceFramework[]>> {
+    return this.request<ComplianceFramework[]>('/api/v1/compliance/frameworks');
+  }
+
+  async getComplianceProjects(): Promise<ApiResponse<ComplianceProject[]>> {
+    return this.request<ComplianceProject[]>('/api/v1/compliance/projects');
+  }
+
+  async getAttestationResults(): Promise<ApiResponse<AttestationResult[]>> {
+    return this.request<AttestationResult[]>('/api/v1/attestation/results');
+  }
+
   async getNISTComplianceScore(request: any): Promise<ApiResponse<any>> {
-    return this.request<any>('/compliance/nist-score', {
+    return this.request<any>('/api/v1/compliance/nist-score', {
       method: 'POST',
       body: JSON.stringify(request),
-    })
+    });
   }
 
-  // Provenance Methods
+  // Governance Methods - Real data integration
+  async getGovernancePolicies(): Promise<ApiResponse<GovernancePolicy[]>> {
+    return this.request<GovernancePolicy[]>('/api/v1/governance/policies');
+  }
+
+  async getGovernanceEvents(): Promise<ApiResponse<GovernanceEvent[]>> {
+    return this.request<GovernanceEvent[]>('/api/v1/governance/events');
+  }
+
+  // Regulatory Mapping Methods - Real data integration
+  async getRegulatoryMapping(): Promise<ApiResponse<RegulatoryMapping[]>> {
+    return this.request<RegulatoryMapping[]>('/api/v1/regulatory/mapping');
+  }
+
+  // Report Methods - Real data integration
+  async getReportTemplates(): Promise<ApiResponse<ReportTemplate[]>> {
+    return this.request<ReportTemplate[]>('/api/v1/reports/templates');
+  }
+
+  async getGeneratedReports(): Promise<ApiResponse<GeneratedReport[]>> {
+    return this.request<GeneratedReport[]>('/api/v1/reports/generated');
+  }
+
+  // Provenance Methods - Real data integration
   async getProvenanceModels(): Promise<ApiResponse<Model[]>> {
-    return this.request<Model[]>('/provenance/models')
+    return this.request<Model[]>('/api/v1/provenance/models');
   }
 
   async getProvenanceModelCard(modelId: string): Promise<ApiResponse<any>> {
-    return this.request<any>(`/provenance/model-card/${modelId}`)
+    return this.request<any>(`/api/v1/provenance/model-card/${modelId}`);
   }
 
   // Health Check
   async healthCheck(): Promise<ApiResponse<{ status: string; timestamp: string }>> {
-    return this.request<{ status: string; timestamp: string }>('/health')
+    return this.request<{ status: string; timestamp: string }>('/health');
   }
 }
 
-// Export singleton instance
-export const api = new ApiClient(API_BASE_URL)
+export const api = new ApiClient(API_BASE_URL);
 
 // Export types for use in components
 export type {
@@ -373,9 +524,17 @@ export type {
   BiasAnalysisResult,
   SecurityTestRequest,
   SecurityAnalysisResult,
-  Dataset,
-  Model,
   SecurityTest,
-  BOMItem,
+  Model,
+  Dataset,
   BOMDocument,
-}
+  BOMComponent,
+  ComplianceFramework,
+  ComplianceProject,
+  AttestationResult,
+  GovernancePolicy,
+  GovernanceEvent,
+  RegulatoryMapping,
+  ReportTemplate,
+  GeneratedReport,
+};
