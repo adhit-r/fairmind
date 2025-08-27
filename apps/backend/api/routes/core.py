@@ -9,8 +9,6 @@ from datetime import datetime
 import uuid
 import json
 
-from ..models.core import ModelInfo, DatasetInfo, ActivityItem, MetricsSummary
-
 router = APIRouter(tags=["core"])
 
 logger = logging.getLogger(__name__)
@@ -27,7 +25,8 @@ MOCK_MODELS = [
         "file_path": "/uploads/credit_risk_model.pkl",
         "file_size": 1024000,
         "tags": ["finance", "risk", "classification"],
-        "metadata": {"accuracy": 0.85, "precision": 0.82}
+        "metadata": {"accuracy": 0.85, "precision": 0.82},
+        "status": "active"
     },
     {
         "id": "model-2", 
@@ -39,7 +38,8 @@ MOCK_MODELS = [
         "file_path": "/uploads/fraud_detection_model.pkl",
         "file_size": 2048000,
         "tags": ["security", "fraud", "classification"],
-        "metadata": {"accuracy": 0.92, "recall": 0.89}
+        "metadata": {"accuracy": 0.92, "recall": 0.89},
+        "status": "active"
     }
 ]
 
@@ -107,154 +107,61 @@ async def health_check():
     """Health check endpoint"""
     return {
         "status": "healthy",
-        "service": "fairmind-ml",
-        "version": "1.0.0",
+        "service": "Fairmind AI Governance API",
         "timestamp": datetime.now().isoformat()
+    }
+
+@router.get("/models")
+async def get_models():
+    """Get all models"""
+    return {
+        "success": True,
+        "data": MOCK_MODELS
+    }
+
+@router.get("/datasets")
+async def get_datasets():
+    """Get all datasets"""
+    return {
+        "success": True,
+        "data": MOCK_DATASETS
+    }
+
+@router.get("/activity/recent")
+async def get_recent_activity():
+    """Get recent activity"""
+    return {
+        "success": True,
+        "data": MOCK_ACTIVITY
     }
 
 @router.get("/governance/metrics")
 async def get_governance_metrics():
-    """Get governance metrics for dashboard"""
-    try:
-        metrics = {
-            "total_models": len(MOCK_MODELS),
-            "total_datasets": len(MOCK_DATASETS),
-            "active_analyses": 2,
-            "security_score": 0.92,
-            "compliance_score": 0.88,
-            "bias_score": 0.85,
-            "last_updated": datetime.now().isoformat()
+    """Get governance metrics"""
+    return {
+        "success": True,
+        "data": {
+            "totalModels": len(MOCK_MODELS),
+            "activeModels": len([m for m in MOCK_MODELS if m["status"] == "active"]),
+            "criticalRisks": 2,
+            "llmSafetyScore": 85,
+            "nistCompliance": 78
         }
-        
-        return {
-            "success": True,
-            "metrics": metrics
-        }
-    except Exception as e:
-        logger.error(f"Error getting governance metrics: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/models")
-async def get_models():
-    """Get list of all models"""
-    try:
-        return {
-            "success": True,
-            "models": MOCK_MODELS
-        }
-    except Exception as e:
-        logger.error(f"Error getting models: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.post("/models/upload")
-async def upload_model(
-    file: UploadFile = File(...),
-    name: str = Form(...),
-    description: str = Form(...),
-    model_type: str = Form(...),
-    version: str = Form(...),
-    tags: str = Form("[]"),  # JSON string
-    metadata: str = Form("{}")  # JSON string
-):
-    """Upload a new model"""
-    try:
-        # Parse JSON strings
-        try:
-            tags_list = json.loads(tags)
-        except json.JSONDecodeError:
-            tags_list = []
-            
-        try:
-            metadata_dict = json.loads(metadata)
-        except json.JSONDecodeError:
-            metadata_dict = {}
-        
-        # Create model info
-        model_id = str(uuid.uuid4())
-        
-        # Read file content for size calculation
-        file_content = await file.read()
-        
-        model_info = {
-            "id": model_id,
-            "name": name,
-            "description": description,
-            "model_type": model_type,
-            "version": version,
-            "upload_date": datetime.now().isoformat(),
-            "file_path": f"/uploads/{file.filename}",
-            "file_size": len(file_content),
-            "tags": tags_list,
-            "metadata": metadata_dict,
-            "status": "active"
-        }
-        
-        # In a real implementation, save the file and store in database
-        # For now, just return the model info
-        MOCK_MODELS.append(model_info)
-        
-        # Add activity record
-        activity_item = {
-            "id": f"activity-{len(MOCK_ACTIVITY) + 1}",
-            "type": "model_upload",
-            "title": f"Model uploaded: {name}",
-            "description": f"New model {name} v{version} uploaded successfully",
-            "timestamp": datetime.now().isoformat(),
-            "severity": "low"
-        }
-        MOCK_ACTIVITY.insert(0, activity_item)
-        
-        return {
-            "success": True,
-            "model": model_info
-        }
-    except Exception as e:
-        logger.error(f"Error uploading model: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/activity/recent")
-async def get_recent_activity():
-    """Get recent activity for dashboard"""
-    try:
-        return {
-            "success": True,
-            "activity": MOCK_ACTIVITY
-        }
-    except Exception as e:
-        logger.error(f"Error getting recent activity: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/datasets")
-async def get_datasets():
-    """Get list of all datasets"""
-    try:
-        return {
-            "success": True,
-            "datasets": MOCK_DATASETS
-        }
-    except Exception as e:
-        logger.error(f"Error getting datasets: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    }
 
 @router.get("/metrics/summary")
 async def get_metrics_summary():
-    """Get metrics summary for dashboard"""
-    try:
-        summary = {
+    """Get metrics summary"""
+    return {
+        "success": True,
+        "data": {
             "total_models": len(MOCK_MODELS),
             "total_datasets": len(MOCK_DATASETS),
-            "active_analyses": 2,
-            "security_score": 0.92,
-            "compliance_score": 0.88,
-            "bias_score": 0.85,
+            "active_analyses": 3,
+            "security_score": 85.0,
+            "compliance_score": 78.0,
+            "bias_score": 92.0,
             "last_updated": datetime.now().isoformat()
         }
-        
-        return {
-            "success": True,
-            "summary": summary
-        }
-    except Exception as e:
-        logger.error(f"Error getting metrics summary: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    }
 

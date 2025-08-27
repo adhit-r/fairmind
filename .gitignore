@@ -167,12 +167,14 @@ id_ed25519*
 secrets*
 config/secrets*
 credentials*
+
+# JSON files (but allow important config files)
 *.json
 !package.json
 !package-lock.json
 !tsconfig.json
 !next.config.js
-!tailwind.config.js
+!tailwind.config.ts
 !postcss.config.js
 !eslint.config.js
 !babel.config.js
@@ -267,7 +269,6 @@ checkpoints/
 
 # Data files
 *.csv
-*.json
 *.xml
 *.yaml
 *.yml
@@ -298,3 +299,6 @@ apps/frontend/src/app/\(auth\)/login/page.tsx
 apps/frontend/src/app/\(auth\)/signup/page.tsx
 apps/website/bun.lock
 apps/website/src/content/docs/installation.mdx
+
+# Local Netlify folder
+.netlify

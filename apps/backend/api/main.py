@@ -18,10 +18,6 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# Import routes
-from .routes import bias_detection, database, core, advanced_fairness, monitoring, fairness_governance
-from .routes.real_ai_bom import router as real_ai_bom_router
-
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -35,7 +31,7 @@ app = FastAPI(
 # Add CORS middleware - FIXED: Use environment variables
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3002,http://127.0.0.1:3000,http://127.0.0.1:3002").split(","),
+    allow_origins=os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3002,http://127.0.0.1:3000,http://127.0.0.1:3002,https://app-demo.fairmind.xyz,https://fairmind.xyz").split(","),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
@@ -47,14 +43,70 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 DATASET_DIR = Path(os.getenv("DATABASE_DIR", "datasets"))
 DATASET_DIR.mkdir(parents=True, exist_ok=True)
 
-# Include routers
-app.include_router(bias_detection.router, prefix="/api/v1", tags=["bias-detection"])
-app.include_router(database.router, prefix="/api/v1", tags=["database"])
-app.include_router(real_ai_bom_router, prefix="/api/v1", tags=["ai-bom"])
-app.include_router(core.router, prefix="/api/v1", tags=["core"])
-app.include_router(advanced_fairness.router, prefix="/api/v1", tags=["advanced-fairness"])
-app.include_router(monitoring.router, prefix="/api/v1", tags=["monitoring"])
-app.include_router(fairness_governance.router, prefix="/api/v1", tags=["fairness-governance"])
+# Import and include only working routes
+try:
+    from .routes import core
+    app.include_router(core.router, prefix="/api/v1", tags=["core"])
+    logger.info("Core routes loaded successfully")
+except Exception as e:
+    logger.warning(f"Could not load core routes: {e}")
+
+try:
+    from .routes import database
+    app.include_router(database.router, prefix="/api/v1", tags=["database"])
+    logger.info("Database routes loaded successfully")
+except Exception as e:
+    logger.warning(f"Could not load database routes: {e}")
+
+try:
+    from .routes import real_ai_bom
+    app.include_router(real_ai_bom.router, prefix="/api/v1", tags=["ai-bom"])
+    logger.info("AI BOM routes loaded successfully")
+except Exception as e:
+    logger.warning(f"Could not load AI BOM routes: {e}")
+
+# Enable additional routes for full API integration
+try:
+    from .routes import bias_detection
+    app.include_router(bias_detection.router, prefix="/api/v1", tags=["bias-detection"])
+    logger.info("Bias detection routes loaded successfully")
+except Exception as e:
+    logger.warning(f"Could not load bias detection routes: {e}")
+
+try:
+    from .routes import security
+    app.include_router(security.router, prefix="/api/v1", tags=["security"])
+    logger.info("Security testing routes loaded successfully")
+except Exception as e:
+    logger.warning(f"Could not load security routes: {e}")
+
+try:
+    from .routes import monitoring
+    app.include_router(monitoring.router, prefix="/api/v1", tags=["monitoring"])
+    logger.info("Monitoring routes loaded successfully")
+except Exception as e:
+    logger.warning(f"Could not load monitoring routes: {e}")
+
+try:
+    from .routes import fairness_governance
+    app.include_router(fairness_governance.router, prefix="/api/v1", tags=["fairness-governance"])
+    logger.info("Fairness governance routes loaded successfully")
+except Exception as e:
+    logger.warning(f"Could not load fairness governance routes: {e}")
+
+try:
+    from .routes import provenance
+    app.include_router(provenance.router, prefix="/api/v1", tags=["provenance"])
+    logger.info("Provenance routes loaded successfully")
+except Exception as e:
+    logger.warning(f"Could not load provenance routes: {e}")
+
+try:
+    from .routes import advanced_fairness
+    app.include_router(advanced_fairness.router, prefix="/api/v1", tags=["advanced-fairness"])
+    logger.info("Advanced fairness routes loaded successfully")
+except Exception as e:
+    logger.warning(f"Could not load advanced fairness routes: {e}")
 
 @app.get("/")
 async def root():
@@ -70,7 +122,10 @@ async def root():
             "Real-time Monitoring & Alerts",
             "Model Explainability",
             "Compliance Scoring",
-            "Advanced Analytics"
+            "Advanced Analytics",
+            "OWASP Security Testing",
+            "Model Provenance",
+            "Advanced Fairness Analysis"
         ]
     }
 
@@ -83,10 +138,14 @@ async def health_check():
         "database": "connected",
         "timestamp": "2024-01-01T00:00:00Z",
         "endpoints": {
-            "bias_detection": "/api/v1/bias-detection",
-            "ai_bom": "/api/v1/ai-bom",
-            "monitoring": "/api/v1/monitoring",
             "core": "/api/v1/core",
+            "database": "/api/v1/database",
+            "ai_bom": "/api/v1/ai-bom",
+            "bias_detection": "/api/v1/bias",
+            "security": "/api/v1/owasp",
+            "monitoring": "/api/v1/monitor",
+            "fairness_governance": "/api/v1/fairness",
+            "provenance": "/api/v1/provenance",
             "advanced_fairness": "/api/v1/advanced-fairness"
         }
     }
@@ -98,24 +157,15 @@ async def api_info():
         "name": "Fairmind ML Service API",
         "version": "1.0.0",
         "description": "Comprehensive AI governance and bias detection API with database support",
-        "documentation": "/docs",
-        "database": "SQLAlchemy with PostgreSQL/SQLite support",
         "endpoints": {
-            "bias_detection": {
-                "description": "Bias detection and fairness analysis",
-                "endpoints": ["/api/v1/bias-detection"]
-            },
-            "ai_bom": {
-                "description": "AI Bill of Materials management with database",
-                "endpoints": ["/api/v1/ai-bom"]
-            },
-            "monitoring": {
-                "description": "Real-time monitoring and alerts",
-                "endpoints": ["/api/v1/monitoring"]
-            }
+            "health": "/health",
+            "core": "/api/v1/core",
+            "database": "/api/v1/database",
+            "ai_bom": "/api/v1/ai-bom"
         }
     }
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)

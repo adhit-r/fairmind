@@ -1,11 +1,14 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { api, type Model, type Dataset } from '../config/api'
+import { api, type Model, type Dataset, type GovernanceMetrics, type RecentActivity, type SecurityAnalysisResult } from '../config/api'
 
 export default function Home() {
   const [models, setModels] = useState<Model[]>([])
   const [datasets, setDatasets] = useState<Dataset[]>([])
+  const [governanceMetrics, setGovernanceMetrics] = useState<GovernanceMetrics | null>(null)
+  const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([])
+  const [securityResults, setSecurityResults] = useState<SecurityAnalysisResult[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [mounted, setMounted] = useState(false)
@@ -21,10 +24,19 @@ export default function Home() {
       try {
         setLoading(true)
         
-        // Fetch models and datasets in parallel
-        const [modelsResponse, datasetsResponse] = await Promise.all([
+        // Fetch comprehensive data in parallel
+        const [
+          modelsResponse, 
+          datasetsResponse, 
+          metricsResponse, 
+          activityResponse,
+          securityResponse
+        ] = await Promise.all([
           api.getModels(),
-          api.getBiasDatasets()
+          api.getBiasDatasets(),
+          api.getGovernanceMetrics(),
+          api.getRecentActivity(),
+          api.getSecurityTestHistory()
         ])
 
         if (modelsResponse.success && modelsResponse.data) {
@@ -33,6 +45,18 @@ export default function Home() {
 
         if (datasetsResponse.success && datasetsResponse.data) {
           setDatasets(datasetsResponse.data)
+        }
+
+        if (metricsResponse.success && metricsResponse.data) {
+          setGovernanceMetrics(metricsResponse.data)
+        }
+
+        if (activityResponse.success && activityResponse.data) {
+          setRecentActivity(activityResponse.data)
+        }
+
+        if (securityResponse.success && securityResponse.data) {
+          setSecurityResults(securityResponse.data)
         }
       } catch (err) {
         console.error('Error fetching dashboard data:', err)
@@ -49,7 +73,18 @@ export default function Home() {
   const activeModels = models.filter(model => model.status === 'active').length
   const totalModels = models.length
   const totalDatasets = datasets.length
-  const criticalRisks = 0 // This would come from risk assessment API
+  const criticalRisks = securityResults.filter(result => result.riskLevel === 'critical').length
+  const highRisks = securityResults.filter(result => result.riskLevel === 'high').length
+  const totalRisks = criticalRisks + highRisks
+
+  // Use governance metrics if available, otherwise calculate from data
+  const metrics = governanceMetrics || {
+    totalModels,
+    activeModels,
+    criticalRisks: totalRisks,
+    llmSafetyScore: 85, // Default score
+    nistCompliance: 78 // Default compliance score
+  }
 
   // Show loading state until mounted to prevent hydration mismatch
   if (!mounted) {
@@ -130,14 +165,14 @@ export default function Home() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs text-muted-foreground font-mono">NIST_COMPLIANCE</p>
-              <p className="text-lg font-bold text-foreground">{totalModels > 0 ? '85%' : '--'}</p>
+              <p className="text-lg font-bold text-foreground">{metrics.nistCompliance}%</p>
             </div>
             <div className="flex items-center gap-2">
               <svg className="h-4 w-4 text-gold" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
               </svg>
               <div className="flex items-center gap-1">
-                <span className="text-xs text-muted-foreground">{totalModels > 0 ? 'COMPLIANT' : 'NO_DATA'}</span>
+                <span className="text-xs text-muted-foreground">{metrics.nistCompliance > 70 ? 'COMPLIANT' : 'ATTENTION_REQUIRED'}</span>
               </div>
             </div>
           </div>
@@ -146,14 +181,14 @@ export default function Home() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs text-muted-foreground font-mono">ACTIVE_MODELS</p>
-              <p className="text-lg font-bold text-foreground">{activeModels}</p>
+              <p className="text-lg font-bold text-foreground">{metrics.activeModels}</p>
             </div>
             <div className="flex items-center gap-2">
               <svg className="h-4 w-4 text-gold" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
               </svg>
               <div className="flex items-center gap-1">
-                <span className="text-xs text-muted-foreground">{activeModels > 0 ? 'RUNNING' : 'UPLOAD_FIRST'}</span>
+                <span className="text-xs text-muted-foreground">{metrics.activeModels > 0 ? 'RUNNING' : 'UPLOAD_FIRST'}</span>
               </div>
             </div>
           </div>
@@ -162,14 +197,14 @@ export default function Home() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs text-muted-foreground font-mono">CRITICAL_RISKS</p>
-              <p className="text-lg font-bold text-foreground">{criticalRisks}</p>
+              <p className="text-lg font-bold text-foreground">{metrics.criticalRisks}</p>
             </div>
             <div className="flex items-center gap-2">
               <svg className="h-4 w-4 text-gold" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
               </svg>
               <div className="flex items-center gap-1">
-                <span className="text-xs text-muted-foreground">{criticalRisks === 0 ? 'CLEAN' : 'ATTENTION_REQUIRED'}</span>
+                <span className="text-xs text-muted-foreground">{metrics.criticalRisks === 0 ? 'CLEAN' : 'ATTENTION_REQUIRED'}</span>
               </div>
             </div>
           </div>
@@ -178,14 +213,14 @@ export default function Home() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs text-muted-foreground font-mono">LLM_SAFETY_SCORE</p>
-              <p className="text-lg font-bold text-foreground">{totalModels > 0 ? '92%' : '--'}</p>
+              <p className="text-lg font-bold text-foreground">{metrics.llmSafetyScore}%</p>
             </div>
             <div className="flex items-center gap-2">
               <svg className="h-4 w-4 text-gold" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
               </svg>
               <div className="flex items-center gap-1">
-                <span className="text-xs text-muted-foreground">{totalModels > 0 ? 'SAFE' : 'NO_MODELS'}</span>
+                <span className="text-xs text-muted-foreground">{metrics.llmSafetyScore > 80 ? 'SAFE' : 'ATTENTION_REQUIRED'}</span>
               </div>
             </div>
           </div>

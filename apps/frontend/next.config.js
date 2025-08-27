@@ -56,57 +56,6 @@ const nextConfig = {
   // Compression
   compress: true,
 
-  // Headers for performance
-  async headers() {
-    return [
-      {
-        source: '/(.*)',
-        headers: [
-          {
-            key: 'X-Content-Type-Options',
-            value: 'nosniff',
-          },
-          {
-            key: 'X-Frame-Options',
-            value: 'DENY',
-          },
-          {
-            key: 'X-XSS-Protection',
-            value: '1; mode=block',
-          },
-          {
-            key: 'Referrer-Policy',
-            value: 'strict-origin-when-cross-origin',
-          },
-          {
-            key: 'Cache-Control',
-            value: 'public, max-age=31536000, immutable',
-          },
-        ],
-      },
-      {
-        source: '/api/(.*)',
-        headers: [
-          {
-            key: 'Cache-Control',
-            value: 'no-cache, no-store, must-revalidate',
-          },
-        ],
-      },
-    ]
-  },
-
-  // Redirects for better UX
-  async redirects() {
-    return [
-      {
-        source: '/dashboard',
-        destination: '/',
-        permanent: true,
-      },
-    ]
-  },
-
   // Environment variables
   env: {
     CUSTOM_KEY: process.env.CUSTOM_KEY,
@@ -119,15 +68,15 @@ const nextConfig = {
     ignoreBuildErrors: true,
   },
 
-  // ESLint
+  // ESLint - temporarily disabled to fix build issues
   eslint: {
     // Warning: This allows production builds to successfully complete even if
     // your project has ESLint errors.
     ignoreDuringBuilds: true,
   },
 
-  // Output configuration
-  output: 'standalone',
+  // Output configuration for static export
+  output: 'export',
 
   // Trailing slash
   trailingSlash: false,
