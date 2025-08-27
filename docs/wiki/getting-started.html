@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Getting Started - FairMind Wiki</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #f59e0b;
+            --primary-dark: #d97706;
+            --secondary: #1f2937;
+            --accent: #3b82f6;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --error: #ef4444;
+            --background: #ffffff;
+            --surface: #f9fafb;
+            --border: #e5e7eb;
+            --text: #111827;
+            --text-muted: #6b7280;
+        }
+
+        .dark {
+            --background: #111827;
+            --surface: #1f2937;
+            --border: #374151;
+            --text: #f9fafb;
+            --text-muted: #9ca3af;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--background);
+            color: var(--text);
+            line-height: 1.6;
+        }
+
+        .mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .gradient-bg {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+        }
+
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        }
+
+        .code-block {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            overflow-x: auto;
+            position: relative;
+        }
+
+        .code-block::before {
+            content: attr(data-language);
+            position: absolute;
+            top: 8px;
+            right: 12px;
+            font-size: 12px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            font-weight: 500;
+        }
+
+        .step-card {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .step-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--primary) 0%, var(--accent) 100%);
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .badge-primary {
+            background: rgba(245, 158, 11, 0.1);
+            color: var(--primary);
+        }
+
+        .badge-success {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success);
+        }
+
+        .badge-warning {
+            background: rgba(245, 158, 11, 0.1);
+            color: var(--warning);
+        }
+
+        .sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 100vh;
+            width: 280px;
+            background: var(--surface);
+            border-right: 1px solid var(--border);
+            overflow-y: auto;
+            z-index: 50;
+        }
+
+        .main-content {
+            margin-left: 280px;
+        }
+
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .slide-in {
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(-20px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        .checklist-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .checklist-item:hover {
+            background: var(--surface);
+        }
+
+        .checklist-item.completed {
+            background: rgba(16, 185, 129, 0.05);
+        }
+
+        .checklist-item.completed .check-icon {
+            background: var(--success);
+            color: white;
+        }
+
+        .check-icon {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .prerequisites-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 16px;
+        }
+
+        .terminal-output {
+            background: #1a1a1a;
+            color: #00ff00;
+            border-radius: 8px;
+            padding: 16px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            overflow-x: auto;
+        }
+
+        .terminal-output .command {
+            color: #ffff00;
+        }
+
+        .terminal-output .output {
+            color: #00ff00;
+        }
+
+        .terminal-output .error {
+            color: #ff0000;
+        }
+    </style>
+</head>
+<body class="antialiased">
+    <!-- Sidebar -->
+    <nav class="sidebar">
+        <div class="p-6 border-b border-border">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 gradient-bg rounded-lg flex items-center justify-center">
+                    <span class="text-white font-bold text-lg">FM</span>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold text-text">FairMind</h1>
+                    <p class="text-sm text-text-muted">AI Governance Wiki</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="p-4">
+            <div class="space-y-2">
+                <h3 class="text-xs font-semibold text-text-muted uppercase tracking-wider mb-3">Getting Started</h3>
+                <a href="index.html" class="block p-3 text-sm font-medium text-text-muted hover:bg-primary hover:text-white rounded-lg transition-colors">Overview</a>
+                <a href="getting-started.html" class="block p-3 text-sm font-medium bg-primary text-white rounded-lg">Installation</a>
+                <a href="#quick-start" class="block p-3 text-sm font-medium text-text-muted hover:bg-primary hover:text-white rounded-lg transition-colors">Quick Start</a>
+                
+                <h3 class="text-xs font-semibold text-text-muted uppercase tracking-wider mb-3 mt-6">Core Features</h3>
+                <a href="#bias-detection" class="block p-3 text-sm font-medium text-text-muted hover:bg-primary hover:text-white rounded-lg transition-colors">Bias Detection</a>
+                <a href="#security-testing" class="block p-3 text-sm font-medium text-text-muted hover:bg-primary hover:text-white rounded-lg transition-colors">Security Testing</a>
+                <a href="#compliance" class="block p-3 text-sm font-medium text-text-muted hover:bg-primary hover:text-white rounded-lg transition-colors">Compliance</a>
+                <a href="#monitoring" class="block p-3 text-sm font-medium text-text-muted hover:bg-primary hover:text-white rounded-lg transition-colors">Monitoring</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Header -->
+        <header class="bg-surface border-b border-border p-6">
+            <div class="flex items-center gap-4">
+                <a href="index.html" class="text-text-muted hover:text-text transition-colors">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                    </svg>
+                </a>
+                <div>
+                    <h1 class="text-2xl font-bold text-text">Getting Started</h1>
+                    <p class="text-text-muted">Install and configure FairMind for AI governance</p>
+                </div>
+            </div>
+        </header>
+
+        <!-- Content -->
+        <div class="p-6 max-w-4xl mx-auto">
+            <!-- Prerequisites -->
+            <section class="mb-12 fade-in">
+                <h2 class="text-3xl font-bold text-text mb-6">Prerequisites</h2>
+                <div class="prerequisites-grid">
+                    <div class="card p-6">
+                        <div class="flex items-center gap-3 mb-4">
+                            <div class="w-8 h-8 bg-accent/10 rounded-lg flex items-center justify-center">
+                                <svg class="w-5 h-5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path>
+                                </svg>
+                            </div>
+                            <h3 class="text-lg font-semibold text-text">Node.js 18+</h3>
+                        </div>
+                        <p class="text-text-muted mb-4">Required for running the frontend and development tools</p>
+                        <div class="code-block" data-language="bash">
+                            <code>node --version</code>
+                        </div>
+                    </div>
+
+                    <div class="card p-6">
+                        <div class="flex items-center gap-3 mb-4">
+                            <div class="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
+                                <svg class="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                                </svg>
+                            </div>
+                            <h3 class="text-lg font-semibold text-text">Bun Package Manager</h3>
+                        </div>
+                        <p class="text-text-muted mb-4">Fast JavaScript runtime and package manager</p>
+                        <div class="code-block" data-language="bash">
+                            <code>curl -fsSL https://bun.sh/install | bash</code>
+                        </div>
+                    </div>
+
+                    <div class="card p-6">
+                        <div class="flex items-center gap-3 mb-4">
+                            <div class="w-8 h-8 bg-success/10 rounded-lg flex items-center justify-center">
+                                <svg class="w-5 h-5 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                                </svg>
+                            </div>
+                            <h3 class="text-lg font-semibold text-text">Python 3.9+</h3>
+                        </div>
+                        <p class="text-text-muted mb-4">Required for backend services and ML components</p>
+                        <div class="code-block" data-language="bash">
+                            <code>python --version</code>
+                        </div>
+                    </div>
+
+                    <div class="card p-6">
+                        <div class="flex items-center gap-3 mb-4">
+                            <div class="w-8 h-8 bg-warning/10 rounded-lg flex items-center justify-center">
+                                <svg class="w-5 h-5 text-warning" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"></path>
+                                </svg>
+                            </div>
+                            <h3 class="text-lg font-semibold text-text">Git</h3>
+                        </div>
+                        <p class="text-text-muted mb-4">Version control for collaborative development</p>
+                        <div class="code-block" data-language="bash">
+                            <code>git --version</code>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Installation Steps -->
+            <section class="mb-12 slide-in">
+                <h2 class="text-3xl font-bold text-text mb-6">Installation Guide</h2>
+                
+                <div class="space-y-6">
+                    <!-- Step 1 -->
+                    <div class="step-card card p-6">
+                        <div class="flex items-start gap-4">
+                            <div class="w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">1</div>
+                            <div class="flex-1">
+                                <h3 class="text-xl font-semibold text-text mb-3">Clone the Repository</h3>
+                                <p class="text-text-muted mb-4">
+                                    Start by cloning the FairMind repository to your local machine
+                                </p>
+                                <div class="code-block" data-language="bash">
+                                    <code>git clone https://github.com/fairmind/ethical-sandbox<br>
+cd fairmind-ethical-sandbox</code>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 2 -->
+                    <div class="step-card card p-6">
+                        <div class="flex items-start gap-4">
+                            <div class="w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">2</div>
+                            <div class="flex-1">
+                                <h3 class="text-xl font-semibold text-text mb-3">Install Dependencies</h3>
+                                <p class="text-text-muted mb-4">
+                                    Install all required dependencies for both frontend and backend
+                                </p>
+                                <div class="grid md:grid-cols-2 gap-4">
+                                    <div>
+                                        <h4 class="font-semibold text-text mb-2">Frontend Dependencies</h4>
+                                        <div class="code-block" data-language="bash">
+                                            <code>bun install</code>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <h4 class="font-semibold text-text mb-2">Backend Dependencies</h4>
+                                        <div class="code-block" data-language="bash">
+                                            <code>cd apps/backend<br>
+uv sync</code>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 3 -->
+                    <div class="step-card card p-6">
+                        <div class="flex items-start gap-4">
+                            <div class="w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">3</div>
+                            <div class="flex-1">
+                                <h3 class="text-xl font-semibold text-text mb-3">Configure Environment</h3>
+                                <p class="text-text-muted mb-4">
+                                    Set up environment variables and configuration files
+                                </p>
+                                <div class="code-block" data-language="bash">
+                                    <code>cp .env.example .env<br>
+# Edit .env with your configuration</code>
+                                </div>
+                                <div class="mt-4 p-4 bg-warning/10 border border-warning/20 rounded-lg">
+                                    <h4 class="font-semibold text-warning mb-2">Important Configuration</h4>
+                                    <ul class="text-sm text-text-muted space-y-1">
+                                        <li>• Set API keys for external services</li>
+                                        <li>• Configure database connections</li>
+                                        <li>• Set up authentication providers</li>
+                                        <li>• Configure monitoring endpoints</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 4 -->
+                    <div class="step-card card p-6">
+                        <div class="flex items-start gap-4">
+                            <div class="w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">4</div>
+                            <div class="flex-1">
+                                <h3 class="text-xl font-semibold text-text mb-3">Start Services</h3>
+                                <p class="text-text-muted mb-4">
+                                    Launch the development servers for both frontend and backend
+                                </p>
+                                <div class="code-block" data-language="bash">
+                                    <code># Start all services<br>
+bun run dev<br><br>
+# Or start individually<br>
+bun run dev:frontend<br>
+bun run dev:backend</code>
+                                </div>
+                                <div class="mt-4 grid md:grid-cols-2 gap-4">
+                                    <div class="p-4 bg-success/10 border border-success/20 rounded-lg">
+                                        <h4 class="font-semibold text-success mb-2">Frontend</h4>
+                                        <p class="text-sm text-text-muted">http://localhost:3000</p>
+                                    </div>
+                                    <div class="p-4 bg-accent/10 border border-accent/20 rounded-lg">
+                                        <h4 class="font-semibold text-accent mb-2">Backend API</h4>
+                                        <p class="text-sm text-text-muted">http://localhost:8001</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Verification -->
+            <section class="mb-12 slide-in">
+                <h2 class="text-3xl font-bold text-text mb-6">Verification</h2>
+                <div class="card p-6">
+                    <h3 class="text-xl font-semibold text-text mb-4">Check Installation</h3>
+                    <p class="text-text-muted mb-6">
+                        Verify that all services are running correctly by checking the following endpoints
+                    </p>
+                    
+                    <div class="space-y-4">
+                        <div class="checklist-item" id="check-frontend">
+                            <div class="check-icon">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                </svg>
+                            </div>
+                            <div class="flex-1">
+                                <h4 class="font-semibold text-text">Frontend Dashboard</h4>
+                                <p class="text-sm text-text-muted">http://localhost:3000</p>
+                            </div>
+                            <button onclick="checkEndpoint('frontend')" class="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark transition-colors">
+                                Check
+                            </button>
+                        </div>
+
+                        <div class="checklist-item" id="check-backend">
+                            <div class="check-icon">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                </svg>
+                            </div>
+                            <div class="flex-1">
+                                <h4 class="font-semibold text-text">Backend API Health</h4>
+                                <p class="text-sm text-text-muted">http://localhost:8001/health</p>
+                            </div>
+                            <button onclick="checkEndpoint('backend')" class="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark transition-colors">
+                                Check
+                            </button>
+                        </div>
+
+                        <div class="checklist-item" id="check-api">
+                            <div class="check-icon">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                </svg>
+                            </div>
+                            <div class="flex-1">
+                                <h4 class="font-semibold text-text">Governance API</h4>
+                                <p class="text-sm text-text-muted">http://localhost:8001/api/v1/governance/metrics</p>
+                            </div>
+                            <button onclick="checkEndpoint('api')" class="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark transition-colors">
+                                Check
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Next Steps -->
+            <section class="mb-12 slide-in">
+                <h2 class="text-3xl font-bold text-text mb-6">Next Steps</h2>
+                <div class="grid md:grid-cols-2 gap-6">
+                    <div class="card p-6">
+                        <h3 class="text-xl font-semibold text-text mb-4">Upload Your First Model</h3>
+                        <p class="text-text-muted mb-4">
+                            Start by uploading an AI model to the registry for analysis
+                        </p>
+                        <a href="#" class="inline-flex items-center gap-2 text-primary hover:text-primary-dark font-medium">
+                            Model Registry Guide
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                            </svg>
+                        </a>
+                    </div>
+
+                    <div class="card p-6">
+                        <h3 class="text-xl font-semibold text-text mb-4">Run Bias Analysis</h3>
+                        <p class="text-text-muted mb-4">
+                            Learn how to detect and mitigate bias in your AI models
+                        </p>
+                        <a href="#" class="inline-flex items-center gap-2 text-primary hover:text-primary-dark font-medium">
+                            Bias Detection Guide
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                            </svg>
+                        </a>
+                    </div>
+
+                    <div class="card p-6">
+                        <h3 class="text-xl font-semibold text-text mb-4">Security Testing</h3>
+                        <p class="text-text-muted mb-4">
+                            Perform comprehensive security testing using OWASP guidelines
+                        </p>
+                        <a href="#" class="inline-flex items-center gap-2 text-primary hover:text-primary-dark font-medium">
+                            Security Guide
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                            </svg>
+                        </a>
+                    </div>
+
+                    <div class="card p-6">
+                        <h3 class="text-xl font-semibold text-text mb-4">Compliance Monitoring</h3>
+                        <p class="text-text-muted mb-4">
+                            Set up automated compliance monitoring for regulatory requirements
+                        </p>
+                        <a href="#" class="inline-flex items-center gap-2 text-primary hover:text-primary-dark font-medium">
+                            Compliance Guide
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                            </svg>
+                        </a>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <script>
+        function checkEndpoint(type) {
+            const item = document.getElementById(`check-${type}`);
+            const icon = item.querySelector('.check-icon');
+            const button = item.querySelector('button');
+            
+            // Simulate API check
+            button.textContent = 'Checking...';
+            button.disabled = true;
+            
+            setTimeout(() => {
+                const success = Math.random() > 0.3; // 70% success rate for demo
+                
+                if (success) {
+                    item.classList.add('completed');
+                    icon.innerHTML = `
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                    `;
+                    button.textContent = 'Success';
+                    button.classList.remove('bg-primary', 'hover:bg-primary-dark');
+                    button.classList.add('bg-success', 'hover:bg-success');
+                } else {
+                    button.textContent = 'Failed';
+                    button.classList.remove('bg-primary', 'hover:bg-primary-dark');
+                    button.classList.add('bg-error', 'hover:bg-error');
+                }
+            }, 2000);
+        }
+
+        // Add smooth scrolling for anchor links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+    </script>
+</body>
+</html>
