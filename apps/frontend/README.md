@@ -1,280 +1,432 @@
-# FairMind Frontend
+# 🎨 FairMind Frontend
 
-A modern, enterprise-grade AI governance and bias detection platform built with Next.js, React, and TypeScript.
+> **Next.js frontend for ethical AI governance with modern tooling (Bun) and terminal-inspired design**
 
-## Overview
+[![Next.js](https://img.shields.io/badge/Next.js-14.2+-black)](https://nextjs.org/)
+[![React](https://img.shields.io/badge/React-18.3+-blue)](https://reactjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.9+-blue)](https://www.typescriptlang.org/)
+[![Bun](https://img.shields.io/badge/Package%20Manager-Bun-orange)](https://bun.sh/)
+[![Tailwind](https://img.shields.io/badge/Styling-Tailwind%20CSS-38B2AC)](https://tailwindcss.com/)
 
-The FairMind frontend provides a sophisticated user interface for AI model governance, bias detection, security testing, and compliance monitoring. Built with a terminal-inspired design system featuring high contrast and accessibility-first principles.
+## 🎯 **Overview**
 
-## Features
+FairMind Frontend is a modern Next.js application featuring a **terminal-inspired design** with gold accents, providing an intuitive interface for ethical AI governance, bias detection, and model monitoring.
 
-### Core Functionality
-- **AI Model Governance Dashboard** - Comprehensive monitoring and metrics
-- **Bias Detection & Analysis** - Advanced fairness testing with multiple algorithms
-- **Security Testing** - OWASP AI/LLM security assessment
-- **Model Lifecycle Management** - Upload, test, monitor, and govern AI models
-- **Compliance Monitoring** - NIST, GDPR, and regulatory adherence tracking
+### **🏆 Recent Achievements**
+- ✅ **Production Deployed**: Netlify deployment at app-demo.fairmind.xyz
+- ✅ **Modern UI/UX**: Terminal-inspired design with high accessibility
+- ✅ **Modern Tooling**: Bun package manager for fast development
+- ✅ **Real Data Integration**: All API endpoints connected with real data
 
-### Technical Features
-- **Modern UI/UX** - Terminal-inspired design with gold accents
-- **High Accessibility** - WCAG 2.1 AA compliant with excellent contrast ratios
-- **Real-time Data** - Live integration with backend APIs
-- **Responsive Design** - Optimized for desktop and mobile devices
-- **Type Safety** - Full TypeScript implementation
+## 🚀 **Quick Start**
 
-## Technology Stack
+### **Prerequisites**
+```bash
+# Install Bun (modern JavaScript runtime)
+curl -fsSL https://bun.sh/install | bash
 
-### Core Framework
-- **Next.js 14** - React framework with App Router
-- **React 18** - UI library with hooks and concurrent features
-- **TypeScript** - Type-safe JavaScript development
+# Verify installation
+bun --version
+```
 
-### Styling & UI
-- **Tailwind CSS** - Utility-first CSS framework
-- **Radix UI** - Accessible component primitives
-- **Lucide React** - Modern icon library
-- **JetBrains Mono** - Terminal-style typography
+### **Installation & Setup**
+```bash
+cd apps/frontend
 
-### State Management & Data
-- **Zustand** - Lightweight state management
-- **React Hook Form** - Form handling and validation
-- **Recharts** - Data visualization library
-- **Chart.js** - Additional charting capabilities
+# Install dependencies with Bun
+bun install
 
-### Development Tools
-- **ESLint** - Code linting and quality
-- **PostCSS** - CSS processing
-- **Autoprefixer** - CSS vendor prefixing
+# Start development server
+bun run dev
+```
 
-## Getting Started
+### **Production Build**
+```bash
+# Build for production
+bun run build
 
-### Prerequisites
-- Node.js 18+ 
-- Bun (recommended) or npm
-- Git
+# Start production server
+bun run start
 
-### Installation
+# Export static site
+bun run export
+```
 
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd fairmind-ethical-sandbox/apps/frontend
-   ```
+## 🎨 **Design System**
 
-2. **Install dependencies**
-   ```bash
-   bun install
-   # or
-   npm install
-   ```
+### **Terminal-Inspired Theme**
+- **Color Scheme**: Black/White with gold accents
+- **Typography**: JetBrains Mono for code-like appearance
+- **Layout**: Sidebar navigation with categorized sections
+- **Accessibility**: High contrast ratios and keyboard navigation
 
-3. **Set up environment variables**
-   ```bash
-   cp .env.example .env.local
-   ```
-   
-   Configure the following variables:
-   ```env
-   NEXT_PUBLIC_API_URL=https://api.fairmind.xyz
-   NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-   ```
+### **Color Palette**
+```css
+/* Primary Colors */
+--background: #000000
+--foreground: #ffffff
+--gold: #FFD700
+--gold-foreground: #000000
 
-4. **Start development server**
-   ```bash
-   bun dev
-   # or
-   npm run dev
-   ```
+/* Semantic Colors */
+--muted: #1a1a1a
+--muted-foreground: #a3a3a3
+--border: #262626
+--input: #1a1a1a
+```
 
-5. **Open your browser**
-   Navigate to [http://localhost:3000](http://localhost:3000)
+### **Typography**
+- **Primary Font**: JetBrains Mono (monospace)
+- **Font Weights**: 400 (regular), 500 (medium), 600 (semibold)
+- **Line Heights**: Optimized for readability
+- **Font Sizes**: Responsive scaling
 
-## Project Structure
+## 🏗️ **Architecture**
 
 ```
 apps/frontend/
-├── public/                 # Static assets
 ├── src/
-│   ├── app/               # Next.js App Router pages
-│   │   ├── (auth)/        # Authentication pages
-│   │   ├── bias-detection/ # Bias analysis interface
-│   │   ├── model-upload/   # Model upload workflow
-│   │   ├── security-testing/ # Security testing interface
-│   │   ├── globals.css    # Global styles
-│   │   ├── layout.tsx     # Root layout
-│   │   └── page.tsx       # Dashboard page
-│   ├── components/        # Reusable UI components
-│   │   ├── core/          # Core UI components
-│   │   ├── forms/         # Form components
-│   │   ├── charts/        # Data visualization
-│   │   └── ui/            # UI primitives
-│   ├── config/            # Configuration files
-│   │   └── api.ts         # API client configuration
-│   ├── hooks/             # Custom React hooks
-│   ├── lib/               # Utility libraries
-│   ├── stores/            # Zustand state stores
-│   └── types/             # TypeScript type definitions
-├── tailwind.config.ts     # Tailwind CSS configuration
-├── tsconfig.json          # TypeScript configuration
-└── package.json           # Dependencies and scripts
+│   ├── app/                 # Next.js App Router
+│   │   ├── layout.tsx       # Root layout with sidebar
+│   │   ├── page.tsx         # Dashboard page
+│   │   ├── bias-detection/  # Bias detection feature
+│   │   ├── security-testing/# Security testing feature
+│   │   └── model-upload/    # Model upload feature
+│   ├── components/          # Reusable UI components
+│   │   ├── ui/              # Base UI components
+│   │   └── common/          # Common components
+│   ├── config/              # Configuration files
+│   │   └── api.ts           # API client configuration
+│   └── styles/              # Global styles
+├── public/                  # Static assets
+├── tailwind.config.ts       # Tailwind configuration
+├── package.json             # Dependencies and scripts
+└── README.md                # This file
 ```
 
-## Design System
+## 🛠️ **Technology Stack**
 
-### Color Palette
-- **Background**: Dark terminal theme (#141414)
-- **Foreground**: High contrast white (#F2F2F2)
-- **Accent**: Gold (#FFD700) for primary actions
-- **Muted**: Gray tones for secondary information
+### **Core Framework**
+- **Next.js 14**: React framework with App Router
+- **React 18**: Modern React with concurrent features
+- **TypeScript**: Type-safe JavaScript development
 
-### Typography
-- **Primary Font**: JetBrains Mono (monospace)
-- **Font Weights**: 400 (normal), 600 (semibold), 700 (bold)
-- **Line Heights**: Optimized for readability
+### **Styling & UI**
+- **Tailwind CSS**: Utility-first CSS framework
+- **Radix UI**: Accessible component primitives
+- **Lucide React**: Beautiful icon library
+- **Custom Theme**: Terminal-inspired design system
 
-### Components
-- **Cards**: Elevated containers with borders
-- **Buttons**: High contrast with hover states
-- **Tables**: Clean, readable data presentation
-- **Charts**: Monochrome with gold accents
+### **State Management**
+- **Zustand**: Lightweight state management
+- **React Hook Form**: Form handling and validation
+- **React Query**: Server state management
 
-## API Integration
+### **Development Tools**
+- **Bun**: Fast JavaScript runtime and package manager
+- **ESLint**: Code linting and quality
+- **TypeScript**: Static type checking
+- **Tailwind CSS**: Utility-first styling
 
-The frontend integrates with the FairMind backend API for:
+## 🎪 **Features**
 
-### Core Endpoints
-- `GET /api/models` - Model registry
-- `GET /api/datasets` - Dataset management
-- `GET /api/governance/metrics` - Governance metrics
-- `GET /api/activity/recent` - Recent activity
+### **Core Pages**
+| Page | Description | Status |
+|------|-------------|--------|
+| **Dashboard** | Main overview with metrics and activity | ✅ |
+| **Bias Detection** | Comprehensive bias analysis interface | ✅ |
+| **Security Testing** | OWASP AI security assessment | ✅ |
+| **Model Upload** | Model registration and management | ✅ |
+| **AI DNA Profiling** | Model signatures and lineage | ✅ |
+| **AI Time Travel** | Historical and future analysis | ✅ |
+| **AI Circus** | Comprehensive testing suite | ✅ |
+| **Ethics Observatory** | Ethics framework evaluation | ✅ |
 
-### Bias Detection
-- `POST /api/bias/analyze` - Bias analysis
-- `GET /api/bias/history` - Analysis history
-- `GET /api/bias/datasets` - Available datasets
+### **Navigation Structure**
+```
+DISCOVER
+├── Dashboard
+└── Model Registry
 
-### Security Testing
-- `POST /api/security/test` - Security assessment
-- `GET /api/security/history` - Test history
-- `GET /api/security/owasp` - OWASP categories
+UPLOAD
+├── Model Upload
+└── Dataset Management
 
-## Development Workflow
+TEST
+├── Bias Detection
+├── Security Testing
+└── AI Circus
 
-### Code Quality
-```bash
-# Lint code
-bun lint
+MONITOR
+├── AI DNA Profiling
+├── AI Time Travel
+└── Performance Metrics
 
-# Type checking
-bun type-check
+GOVERN
+├── Ethics Observatory
+├── Compliance Monitoring
+└── Policy Management
 
-# Build for production
-bun build
+ANALYZE
+├── Reports
+├── Analytics
+└── Insights
 ```
 
-### Testing
+## 📊 **API Integration**
+
+### **API Client**
+```typescript
+// src/config/api.ts
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001';
+
+export const apiClient = {
+  // Dashboard endpoints
+  getDashboardMetrics: () => fetch(`${API_BASE_URL}/api/dashboard/metrics`),
+  getRecentActivity: () => fetch(`${API_BASE_URL}/api/dashboard/activity`),
+  
+  // Bias detection endpoints
+  analyzeBias: (data) => fetch(`${API_BASE_URL}/api/bias-detection/analyze`, {
+    method: 'POST',
+    body: JSON.stringify(data)
+  }),
+  
+  // Security testing endpoints
+  runSecurityTest: (data) => fetch(`${API_BASE_URL}/api/security/analyze`, {
+    method: 'POST',
+    body: JSON.stringify(data)
+  })
+};
+```
+
+### **Real Data Integration**
+- **Dashboard Metrics**: Real-time governance metrics
+- **Bias Analysis**: Live bias detection results
+- **Security Results**: OWASP AI security assessments
+- **Model Registry**: Actual model data and metadata
+
+## 🎨 **UI Components**
+
+### **Base Components**
+```typescript
+// Reusable UI components
+- Button: Primary, secondary, and ghost variants
+- Card: Content containers with terminal styling
+- Input: Form inputs with consistent styling
+- Badge: Status indicators and labels
+- Modal: Overlay dialogs and forms
+- Table: Data display with sorting and pagination
+```
+
+### **Feature Components**
+```typescript
+// Feature-specific components
+- BiasAnalysisCard: Bias detection results display
+- SecurityTestPanel: Security assessment interface
+- ModelUploadForm: Model registration form
+- MetricsDashboard: Real-time metrics display
+- ActivityFeed: Recent activity timeline
+```
+
+## 🔧 **Configuration**
+
+### **Environment Variables**
 ```bash
-# Run tests
-bun test
+# API Configuration
+NEXT_PUBLIC_API_URL=http://localhost:8001
+NEXT_PUBLIC_API_BASE_URL=https://api.fairmind.xyz
+
+# Feature Flags
+NEXT_PUBLIC_ENABLE_ANALYTICS=true
+NEXT_PUBLIC_ENABLE_REAL_TIME=true
+
+# External Services
+NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-key
+```
+
+### **Tailwind Configuration**
+```typescript
+// tailwind.config.ts
+export default {
+  content: ['./src/**/*.{js,ts,jsx,tsx}'],
+  theme: {
+    extend: {
+      colors: {
+        gold: {
+          DEFAULT: 'hsl(var(--gold))',
+          foreground: 'hsl(var(--gold-foreground))',
+        },
+      },
+      fontFamily: {
+        mono: ['var(--font-jetbrains)', 'monospace'],
+      },
+    },
+  },
+  plugins: [require('tailwindcss-animate')],
+};
+```
+
+## 🧪 **Testing**
+
+### **Running Tests**
+```bash
+# Install test dependencies
+bun install
+
+# Run all tests
+bun run test
 
 # Run tests in watch mode
-bun test:watch
+bun run test:watch
+
+# Run tests with coverage
+bun run test:coverage
+
+# Run specific test file
+bun test src/components/Button.test.tsx
 ```
 
-### Deployment
+### **Test Coverage**
+- **Component Testing**: All UI components tested
+- **Integration Testing**: API integration tested
+- **Accessibility Testing**: WCAG compliance verified
+- **Performance Testing**: Core Web Vitals optimized
+
+## 🚀 **Deployment**
+
+### **Netlify Deployment**
+```bash
+# Deploy to Netlify (already configured)
+netlify deploy --prod
+
+# Check deployment status
+netlify status
+
+# View deployment logs
+netlify logs
+```
+
+### **Manual Deployment**
 ```bash
 # Build for production
-bun build
+bun run build
 
-# Start production server
-bun start
+# Export static site
+bun run export
+
+# Deploy to any static hosting
+# (Netlify, Vercel, GitHub Pages, etc.)
 ```
 
-## Accessibility
+### **Docker Deployment**
+```dockerfile
+FROM node:18-alpine
 
-### WCAG 2.1 AA Compliance
-- **Color Contrast**: Minimum 4.5:1 ratio for normal text
-- **Keyboard Navigation**: Full keyboard accessibility
-- **Screen Reader Support**: Semantic HTML and ARIA labels
-- **Focus Management**: Visible focus indicators
+# Install Bun
+RUN npm install -g bun
 
-### Best Practices
-- Semantic HTML structure
-- Proper heading hierarchy
-- Alt text for images
-- Form labels and error messages
-- Skip navigation links
+# Copy project files
+COPY . /app
+WORKDIR /app
 
-## Performance
+# Install dependencies
+RUN bun install
 
-### Optimization Strategies
+# Build application
+RUN bun run build
+
+# Start application
+CMD ["bun", "start"]
+```
+
+## 📈 **Performance**
+
+### **Core Web Vitals**
+- **Largest Contentful Paint (LCP)**: <2.5s
+- **First Input Delay (FID)**: <100ms
+- **Cumulative Layout Shift (CLS)**: <0.1
+
+### **Optimizations**
 - **Code Splitting**: Automatic route-based splitting
 - **Image Optimization**: Next.js Image component
+- **Font Optimization**: JetBrains Mono with display swap
 - **Bundle Analysis**: Regular bundle size monitoring
-- **Caching**: Static generation and ISR
 
-### Metrics
-- **First Contentful Paint**: < 1.5s
-- **Largest Contentful Paint**: < 2.5s
-- **Cumulative Layout Shift**: < 0.1
-- **First Input Delay**: < 100ms
+## 🔒 **Security**
 
-## Browser Support
+### **Implemented Security**
+- **Content Security Policy**: CSP headers configured
+- **XSS Protection**: Input sanitization and validation
+- **CSRF Protection**: API request validation
+- **HTTPS Enforcement**: Secure communication
 
-- **Chrome**: 90+
-- **Firefox**: 88+
-- **Safari**: 14+
-- **Edge**: 90+
-
-## Contributing
-
-### Development Guidelines
-1. Follow TypeScript best practices
-2. Use semantic commit messages
-3. Write self-documenting code
-4. Maintain accessibility standards
-5. Test across different screen sizes
-
-### Code Style
-- Use Prettier for formatting
-- Follow ESLint rules
-- Use meaningful variable names
-- Add JSDoc comments for complex functions
-
-## Troubleshooting
-
-### Common Issues
-
-**Build Errors**
-```bash
-# Clear Next.js cache
-rm -rf .next
-bun build
+### **Security Headers**
+```typescript
+// next.config.js
+const securityHeaders = [
+  {
+    key: 'X-DNS-Prefetch-Control',
+    value: 'on'
+  },
+  {
+    key: 'Strict-Transport-Security',
+    value: 'max-age=63072000; includeSubDomains; preload'
+  },
+  {
+    key: 'X-Frame-Options',
+    value: 'DENY'
+  }
+];
 ```
 
-**TypeScript Errors**
-```bash
-# Check types
-bun type-check
-```
+## 📚 **Documentation**
 
-**API Connection Issues**
-- Verify environment variables
-- Check backend server status
-- Review network connectivity
+### **Component Documentation**
+- **Storybook**: Interactive component documentation
+- **TypeScript**: Full type definitions
+- **JSDoc**: Comprehensive function documentation
+- **Examples**: Code examples and usage patterns
 
-## License
+### **API Documentation**
+- **OpenAPI**: Machine-readable API schema
+- **Swagger UI**: Interactive API documentation
+- **Type Definitions**: TypeScript API types
 
-This project is part of the FairMind Ethical Sandbox platform. See the main repository for licensing information.
+## 🤝 **Contributing**
 
-## Support
+### **Development Workflow**
+1. **Fork** the repository
+2. **Create** feature branch (`git checkout -b feature/amazing-feature`)
+3. **Install** dependencies (`bun install`)
+4. **Make** changes and add tests
+5. **Run** tests (`bun test`)
+6. **Commit** changes (`git commit -m 'Add amazing feature'`)
+7. **Push** to branch (`git push origin feature/amazing-feature`)
+8. **Create** Pull Request
 
-For technical support or questions:
-- Create an issue in the repository
-- Check the documentation
-- Review the troubleshooting guide
+### **Code Standards**
+- **Formatting**: Prettier code formatting
+- **Linting**: ESLint with TypeScript rules
+- **Type Checking**: Strict TypeScript configuration
+- **Testing**: Jest with React Testing Library
+
+## 🆘 **Support**
+
+### **Getting Help**
+- **Documentation**: [Component Docs](./docs/)
+- **Issues**: [GitHub Issues](https://github.com/your-org/fairmind-ethical-sandbox/issues)
+- **Testing**: [Test Results](../test_results/)
+- **Deployment**: [Netlify Dashboard](https://app.netlify.com/)
+
+### **Common Issues**
+- **Build Errors**: Check TypeScript errors and dependencies
+- **Styling Issues**: Verify Tailwind configuration
+- **API Errors**: Check API endpoint availability
+- **Performance Issues**: Run bundle analysis and optimize
 
 ---
 
-**Built with ❤️ for responsible AI development**
+**🎉 FairMind Frontend is production-ready with modern UI/UX!**
+
+*Built with Next.js and Bun for the future of ethical AI governance interfaces.*
