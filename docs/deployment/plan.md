@@ -3,7 +3,7 @@
 ## Notes
 - The project is a platform for evaluating, monitoring, and improving the ethical aspects of AI/ML systems.
 - Features include simulations, dashboards, and tools for fairness, bias, explainability, compliance, and robustness.
-- The codebase uses a monorepo structure with separate web (Next.js) and API (NestJS) apps.
+- The codebase uses separate applications with Next.js frontend and FastAPI backend.
 - The main web app entry point is `app/page.tsx`, which renders the `SandboxHome` component.
 - The `SandboxHome` component aggregates charts and dashboards for AI governance, risk, fairness, and more.
 - UI components are imported from a local `@fairmind/ui` package.
@@ -49,17 +49,17 @@
 - Encountered npm workspace protocol error when installing type definitions; need to resolve this and ensure all @types packages are installed for React, Node, React Aria, and next-themes.
 - Next step is to systematically resolve these TypeScript errors before continuing with React Aria migration.
 - Ready to begin systematic migration of all remaining legacy UI components to React Aria, starting with identifying which components still use the old framework.
-- Monorepo structure confirmed as appropriate for this project due to multiple apps (web, api), shared code, and future scalability. Turborepo and Bun will be standardized for package management and builds.
-- Action items added: clean up lock files, standardize on Bun, move shared types to /packages/types, create shared UI in /packages/ui, document structure, optimize Turborepo caching and scripts.
+- Application structure confirmed as appropriate for this project due to separate concerns (frontend, backend), shared code, and future scalability. Bun and UV will be standardized for package management and builds.
+- Action items added: clean up lock files, standardize on Bun, move shared types to /packages/types, create shared UI in /packages/ui, document structure, optimize build caching and scripts.
 - Removed unused lock files (package-lock.json, pnpm-lock.yaml) to standardize on Bun for package management.
 - Updated root package.json with improved scripts, Bun version, and workspace configuration.
-- Enhanced Turborepo configuration for caching, task dependencies, and environment variables.
+- Enhanced build configuration for caching, task dependencies, and environment variables.
 - Created /packages/types directory and initialized shared types package (package.json, tsconfig.json).
-- Created /packages/types/src with index.ts, user.ts, auth.ts, api.ts, and common.ts for shared types across the monorepo.
+- Created /packages/types/src with index.ts, user.ts, auth.ts, api.ts, and common.ts for shared types across the applications.
 - Defined core types for user, authentication, API responses, and common utilities in the shared types package.
 - Cleaned up all lock files except bun.lock to standardize on Bun.
 - Cleaned and deduplicated root package.json scripts and dependencies for maintainability and performance.
-- Optimized Turborepo configuration (turbo.json) for better caching, task dependencies, and inputs/outputs.
+- Optimized build configuration for better caching, task dependencies, and inputs/outputs.
 - Verified /packages/ui exists and prepared for shared UI components.
 - Set up AuthZed RBAC server using Docker Compose and schema file.
 - Created AuthZed schema initialization script and added scripts to package.json for starting, stopping, and initializing AuthZed.
@@ -130,11 +130,11 @@
 - [x] Fix Supabase client import path in `auth-context.tsx`
 - The dev server starts cleanly (no startup errors), but `curl` to `localhost:3000` returns connection refused and `lsof` shows nothing is listening on port 3000. Need to diagnose why Next.js is not listening or accessible on this port.
 - `.env.local` with correct Supabase configuration has been created in `/apps/web` and the dev server is now picking up environment variables from the correct location.
-- Dependencies were successfully installed using Bun, confirming Bun is the correct package manager for this monorepo.
+- Dependencies were successfully installed using Bun, confirming Bun is the correct package manager for this project.
 - The dev server starts cleanly with Bun (`bun run dev`), and debug output shows no startup errors, but the server is still not listening on port 3000. This narrows the issue to a Next.js runtime problem or misconfiguration, not a dependency issue.
 - Checked `next.config.js` and root `package.json` for misconfiguration; both appear correct and no blocking issues were found, but the cause of the server not listening on port 3000 remains unresolved.
-- Turborepo is used to run dev servers in parallel via the root `dev` script (`bun run dev`).
-- Running the root dev script does not result in any web server listening on expected ports (3000-3010), suggesting an issue in how Turborepo or the web app's dev script is launching Next.js.
+- Bun is used to run dev servers in parallel via the root `dev` script (`bun run dev`).
+- Running the root dev script does not result in any web server listening on expected ports (3000-3010), suggesting an issue in how the web app's dev script is launching Next.js.
 - Next step: further diagnose why the Next.js server is not binding to port 3000 or responding to requests, despite a clean startup log.
 - Next step: verify if the dashboard loads and ModelDriftMonitor renders.
 - [x] Verify dashboard loads and test ModelDriftMonitor
@@ -282,8 +282,8 @@
    - Ensure all environment variables are correctly set for Supabase cloud integration.
    - Verify connectivity between frontend, backend, and Supabase services.
 
-2. **Monorepo Structure**:
-   - Finalize the monorepo structure for seamless collaboration between frontend, backend, and ML service.
+2. **Application Structure**:
+   - Finalize the application structure for seamless collaboration between frontend, backend, and ML service.
 
 ---
 

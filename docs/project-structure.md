@@ -13,7 +13,7 @@ Fairmind is a platform for AI governance, providing tools for real-time bias mon
     -   `web/`: The main web interface, built with Next.js.
 -   **`backend/`**: Houses the backend services.
     -   `api/`: A NestJS API that connects the frontend to the ML service and the database.
--   **`packages/`**: Shared packages used across the monorepo.
+-   **`apps/`**: Separate applications (backend, frontend, website).
     -   `ui/`: A shared library of UI components.
 -   **`supabase/`**: Configuration for the Supabase backend-as-a-service, including database migrations and serverless functions.
 -   **`docs/`**: Project documentation.
@@ -30,4 +30,4 @@ Fairmind is a platform for AI governance, providing tools for real-time bias mon
 -   **Backend**: NestJS, TypeScript
 -   **ML Service**: Python, Flask/FastAPI (TBD), SHAP, LIME, Fairlearn
 -   **Database**: Supabase (PostgreSQL)
--   **Monorepo Management**: Turborepo
+-   **Package Management**: Bun (JavaScript) + UV (Python)

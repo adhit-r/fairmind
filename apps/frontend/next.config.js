@@ -8,14 +8,6 @@ const nextConfig = {
     // Enable server components
     serverComponentsExternalPackages: ['@prisma/client'],
     // Enable modern image optimization
-    turbo: {
-      rules: {
-        '*.svg': {
-          loaders: ['@svgr/webpack'],
-          as: '*.js',
-        },
-      },
-    },
   },
 
   // Image optimization

@@ -4,7 +4,7 @@
 
 ```
 fairmind-ethical-sandbox/
-├── apps/                    # 🎯 MONOREPO APPLICATIONS
+├── apps/                    # 🎯 SEPARATE APPLICATIONS
 │   ├── web/                # Next.js frontend application
 │   │   ├── src/
 │   │   │   ├── app/        # Next.js app router pages
@@ -49,7 +49,7 @@ fairmind-ethical-sandbox/
 - `unified-frontend/` → `archive/old-frontends/unified-frontend/`
 - `apps/orginal-ui-reference/` → `archive/old-frontends/orginal-ui-reference/`
 
-### ✅ Proper Monorepo Structure
+### ✅ Proper Application Structure
 - **`apps/web/`** - Main active frontend (Next.js)
 - **`apps/api/`** - Main active backend (FastAPI)
 - **`packages/`** - Shared packages and UI components
@@ -59,7 +59,7 @@ fairmind-ethical-sandbox/
 - Removed duplicate and nested directories
 - Removed duplicate `.DS_Store` files
 - Fixed TypeScript errors in moved components
-- Updated build configuration for monorepo
+- Updated build configuration for separate applications
 
 ## 🎯 Active Development Folders
 
@@ -88,7 +88,7 @@ Contains all previous frontend versions that are no longer active:
 
 ## 🚀 Development Workflow
 
-### Monorepo Development
+### Application Development
 ```bash
 # Start all services
 bun run dev
@@ -117,7 +117,7 @@ uvicorn main:app --reload
 2. **`apps/api/`** is the main active backend - all new backend development should happen here
 3. **`packages/`** contains shared packages that can be used across apps
 4. **`archive/`** contains old code for reference - not for active development
-5. The structure now follows proper monorepo conventions with Turborepo
+5. The structure now follows proper application separation with Bun + UV
 
 ## 🔍 Finding Code
 
@@ -128,7 +128,7 @@ uvicorn main:app --reload
 - **Documentation**: `docs/`
 - **Shared Utilities**: `shared/`
 
-## 🏗️ Monorepo Benefits
+## 🏗️ Application Separation Benefits
 
 1. **Unified Development**: All apps in one repository
 2. **Shared Dependencies**: Common packages and utilities

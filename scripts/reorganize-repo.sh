@@ -16,9 +16,9 @@ mkdir -p apps/backend
 mkdir -p apps/website
 
 # Create packages directory
-mkdir -p packages/ui
-mkdir -p packages/types
-mkdir -p packages/utils
+mkdir -p shared/ui
+mkdir -p shared/types
+mkdir -p shared/utils
 
 # Create infrastructure directory
 mkdir -p infrastructure/docker
@@ -101,21 +101,21 @@ cat > package.json << 'EOF'
   "private": true,
   "workspaces": [
     "apps/*",
-    "packages/*"
+    "shared/*"
   ],
   "scripts": {
-    "dev": "turbo run dev",
-    "build": "turbo run build",
-    "test": "turbo run test",
-    "lint": "turbo run lint",
-    "clean": "turbo run clean",
+      "dev": "bun run --cwd apps/frontend dev & bun run --cwd apps/backend dev",
+  "build": "bun run --cwd apps/frontend build && bun run --cwd apps/backend build",
+  "test": "bun run --cwd apps/frontend test && bun run --cwd apps/backend test",
+  "lint": "bun run --cwd apps/frontend lint && bun run --cwd apps/backend lint",
+  "clean": "bun run --cwd apps/frontend clean && bun run --cwd apps/backend clean",
     "docker:build": "docker-compose build",
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",
     "setup": "npm install && npm run build"
   },
   "devDependencies": {
-    "turbo": "^1.10.0"
+
   },
   "engines": {
     "node": ">=18.0.0",
@@ -232,37 +232,8 @@ EOF
 
 echo "✅ Environment template created"
 
-# Create Turbo configuration
-echo "⚡ Creating Turbo configuration..."
-
-cat > turbo.json << 'EOF'
-{
-  "$schema": "https://turbo.build/schema.json",
-  "globalDependencies": ["**/.env.*local"],
-  "pipeline": {
-    "build": {
-      "dependsOn": ["^build"],
-      "outputs": [".next/**", "!.next/cache/**", "dist/**"]
-    },
-    "lint": {
-      "dependsOn": ["^lint"]
-    },
-    "dev": {
-      "cache": false,
-      "persistent": true
-    },
-    "test": {
-      "dependsOn": ["^build"],
-      "outputs": ["coverage/**"]
-    },
-    "clean": {
-      "cache": false
-    }
-  }
-}
-EOF
-
-echo "✅ Turbo configuration created"
+# Build configuration updated for separate apps
+echo "⚡ Build configuration updated for separate applications"
 
 # Create GitHub Actions workflow
 echo "🔧 Creating GitHub Actions workflow..."
@@ -489,7 +460,7 @@ fairmind-ethical-sandbox/
 │   ├── frontend/           # Next.js frontend
 │   ├── backend/            # FastAPI backend
 │   └── website/            # Astro marketing site
-├── packages/               # Shared packages
+├── shared/               # Shared packages
 │   ├── ui/                # UI components
 │   ├── types/             # TypeScript types
 │   └── utils/             # Utilities
