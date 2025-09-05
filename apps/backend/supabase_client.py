@@ -1,215 +1,272 @@
 """
-Supabase client for FairMind backend
+Supabase client for backend operations
 """
 
 import os
-from typing import Dict, Any, List, Optional
-try:
-    from supabase import create_client, Client
-except ImportError:
-    # Fallback if supabase package is not installed
-    create_client = None
-    Client = None
-from dotenv import load_dotenv
 import logging
-
-# Load environment variables
-load_dotenv()
+from typing import Optional, Dict, Any, List
+from supabase import create_client, Client
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
 class SupabaseService:
+    """Service for interacting with Supabase database"""
+    
     def __init__(self):
-        self.supabase_url = os.getenv("SUPABASE_URL")
-        self.supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+        self.url = os.getenv("SUPABASE_URL")
+        self.service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
         
-        if not self.supabase_url or not self.supabase_key or create_client is None:
-            logger.info("Supabase credentials not found. Using mock data for development.")
+        if not self.url or not self.service_key:
+            logger.warning("Supabase credentials not found. Using mock data.")
             self.client = None
-        else:
+            return
+            
             try:
-                self.client = create_client(self.supabase_url, self.supabase_key)
+            self.client: Client = create_client(self.url, self.service_key)
                 logger.info("Supabase client initialized successfully")
             except Exception as e:
-                logger.info(f"Failed to initialize Supabase client: {e}. Using mock data for development.")
+            logger.error(f"Failed to initialize Supabase client: {e}")
                 self.client = None
     
     def is_connected(self) -> bool:
         """Check if Supabase client is connected"""
         return self.client is not None
     
-    async def insert_geographic_bias_analysis(self, analysis_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Insert a new geographic bias analysis"""
+    # Models operations
+    async def get_models(self, limit: int = 10, offset: int = 0) -> List[Dict[str, Any]]:
+        """Get models from database"""
         if not self.is_connected():
-            logger.warning("Supabase not connected. Skipping database insert.")
+            return self._get_mock_models()
+        
+        try:
+            response = self.client.table("models").select("*").range(offset, offset + limit - 1).execute()
+            return response.data
+        except Exception as e:
+            logger.error(f"Error fetching models: {e}")
+            return self._get_mock_models()
+    
+    async def create_model(self, model_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a new model"""
+        if not self.is_connected():
+            return {**model_data, "id": f"mock-{datetime.now().timestamp()}"}
+        
+        try:
+            model_data["created_at"] = datetime.now(timezone.utc).isoformat()
+            response = self.client.table("models").insert(model_data).execute()
+            return response.data[0] if response.data else model_data
+        except Exception as e:
+            logger.error(f"Error creating model: {e}")
+            raise
+    
+    async def get_model(self, model_id: str) -> Optional[Dict[str, Any]]:
+        """Get a specific model by ID"""
+        if not self.is_connected():
+            return self._get_mock_model(model_id)
+        
+        try:
+            response = self.client.table("models").select("*").eq("id", model_id).execute()
+            return response.data[0] if response.data else None
+        except Exception as e:
+            logger.error(f"Error fetching model {model_id}: {e}")
             return None
-        
-        try:
-            # Prepare data for insertion
-            insert_data = {
-                "model_id": analysis_data["model_id"],
-                "source_country": analysis_data["source_country"],
-                "target_country": analysis_data["target_country"],
-                "bias_detected": analysis_data["bias_detected"],
-                "bias_score": analysis_data["bias_score"],
-                "performance_drop": analysis_data["performance_drop"],
-                "risk_level": analysis_data["risk_level"],
-                "affected_metrics": analysis_data["affected_metrics"],
-                "recommendations": analysis_data["recommendations"],
-                "cultural_factors": analysis_data["cultural_factors"],
-                "compliance_issues": analysis_data["compliance_issues"],
-                "model_performance_data": analysis_data.get("model_performance_data", {}),
-                "demographic_data": analysis_data.get("demographic_data", {}),
-                "created_by": analysis_data.get("created_by"),
-                "organization_id": analysis_data.get("organization_id")
-            }
-            
-            result = self.client.table("geographic_bias_analyses").insert(insert_data).execute()
-            
-            if result.data:
-                logger.info(f"Geographic bias analysis saved to database: {result.data[0]['id']}")
-                return result.data[0]
-            else:
-                logger.error("Failed to insert geographic bias analysis")
-                return None
-                
-        except Exception as e:
-            logger.error(f"Error inserting geographic bias analysis: {e}")
-            return None
     
-    async def get_geographic_bias_analyses(self, limit: int = 10, offset: int = 0) -> List[Dict[str, Any]]:
-        """Get recent geographic bias analyses"""
+    # Datasets operations
+    async def get_datasets(self, limit: int = 10, offset: int = 0) -> List[Dict[str, Any]]:
+        """Get datasets from database"""
         if not self.is_connected():
-            logger.warning("Supabase not connected. Returning mock data.")
-            return []
+            return self._get_mock_datasets()
         
         try:
-            result = self.client.table("geographic_bias_analyses")\
-                .select("*")\
-                .order("created_at", desc=True)\
-                .limit(limit)\
-                .offset(offset)\
-                .execute()
-            
-            return result.data if result.data else []
-            
+            response = self.client.table("datasets").select("*").range(offset, offset + limit - 1).execute()
+            return response.data
         except Exception as e:
-            logger.error(f"Error fetching geographic bias analyses: {e}")
-            return []
+            logger.error(f"Error fetching datasets: {e}")
+            return self._get_mock_datasets()
     
-    async def get_country_performance_metrics(self) -> List[Dict[str, Any]]:
-        """Get country performance metrics"""
+    async def create_dataset(self, dataset_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a new dataset"""
         if not self.is_connected():
-            logger.warning("Supabase not connected. Returning mock data.")
-            return []
+            return {**dataset_data, "id": f"mock-dataset-{datetime.now().timestamp()}"}
         
         try:
-            result = self.client.table("country_performance_metrics")\
-                .select("*")\
-                .order("last_updated", desc=True)\
-                .execute()
-            
-            return result.data if result.data else []
-            
+            dataset_data["created_at"] = datetime.now(timezone.utc).isoformat()
+            response = self.client.table("datasets").insert(dataset_data).execute()
+            return response.data[0] if response.data else dataset_data
         except Exception as e:
-            logger.error(f"Error fetching country performance metrics: {e}")
-            return []
+            logger.error(f"Error creating dataset: {e}")
+            raise
     
-    async def get_geographic_bias_dashboard_data(self) -> Dict[str, Any]:
-        """Get comprehensive dashboard data for geographic bias"""
+    # Simulation runs operations
+    async def get_simulation_runs(self, limit: int = 10, offset: int = 0) -> List[Dict[str, Any]]:
+        """Get simulation runs from database"""
         if not self.is_connected():
-            logger.warning("Supabase not connected. Returning mock data.")
-            return self._get_mock_dashboard_data()
+            return self._get_mock_simulation_runs()
         
         try:
-            # Get total counts
-            total_analyses = self.client.table("geographic_bias_analyses").select("id", count="exact").execute()
-            biased_analyses = self.client.table("geographic_bias_analyses")\
-                .select("id", count="exact")\
-                .gte("bias_score", 0.3)\
-                .execute()
-            high_risk_analyses = self.client.table("geographic_bias_analyses")\
-                .select("id", count="exact")\
-                .in_("risk_level", ["HIGH", "CRITICAL"])\
-                .execute()
-            
-            # Get recent analyses
-            recent_analyses = self.client.table("geographic_bias_analyses")\
-                .select("model_id, source_country, target_country, bias_score, risk_level, created_at")\
-                .order("created_at", desc=True)\
-                .limit(3)\
-                .execute()
-            
-            # Get country performance
-            country_performance = self.client.table("country_performance_metrics")\
-                .select("*")\
-                .execute()
+            response = self.client.table("simulation_runs").select("*").range(offset, offset + limit - 1).execute()
+            return response.data
+        except Exception as e:
+            logger.error(f"Error fetching simulation runs: {e}")
+            return self._get_mock_simulation_runs()
+    
+    async def create_simulation_run(self, run_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a new simulation run"""
+        if not self.is_connected():
+            return {**run_data, "id": f"mock-run-{datetime.now().timestamp()}"}
+        
+        try:
+            run_data["started_at"] = datetime.now(timezone.utc).isoformat()
+            response = self.client.table("simulation_runs").insert(run_data).execute()
+            return response.data[0] if response.data else run_data
+        except Exception as e:
+            logger.error(f"Error creating simulation run: {e}")
+            raise
+    
+    async def update_simulation_run(self, run_id: str, updates: Dict[str, Any]) -> Dict[str, Any]:
+        """Update a simulation run"""
+        if not self.is_connected():
+            return {**updates, "id": run_id}
+        
+        try:
+            updates["updated_at"] = datetime.now(timezone.utc).isoformat()
+            response = self.client.table("simulation_runs").update(updates).eq("id", run_id).execute()
+            return response.data[0] if response.data else updates
+        except Exception as e:
+            logger.error(f"Error updating simulation run {run_id}: {e}")
+            raise
+    
+    # Dashboard metrics
+    async def get_dashboard_metrics(self) -> Dict[str, Any]:
+        """Get dashboard metrics from database"""
+        if not self.is_connected():
+            return self._get_mock_dashboard_metrics()
+        
+        try:
+            # Get counts from different tables
+            models_response = self.client.table("models").select("id", count="exact").execute()
+            datasets_response = self.client.table("datasets").select("id", count="exact").execute()
+            runs_response = self.client.table("simulation_runs").select("id", count="exact").execute()
             
             return {
-                "total_models": total_analyses.count if total_analyses.count else 0,
-                "models_with_geographic_bias": biased_analyses.count if biased_analyses.count else 0,
-                "high_risk_deployments": high_risk_analyses.count if high_risk_analyses.count else 0,
-                "countries_analyzed": len(country_performance.data) if country_performance.data else 0,
-                "recent_analyses": recent_analyses.data if recent_analyses.data else [],
-                "country_performance": {
-                    item["country_code"]: {
-                        "models_deployed": item["models_deployed"],
-                        "avg_bias_score": item["avg_bias_score"],
-                        "compliance_status": item["compliance_status"]
-                    } for item in (country_performance.data or [])
-                }
+                "total_models": models_response.count or 0,
+                "total_datasets": datasets_response.count or 0,
+                "total_simulations": runs_response.count or 0,
+                "active_models": models_response.count or 0,  # Simplified for now
+                "bias_alerts": 3,  # This would come from a bias_alerts table
+                "fairness_score": 87,  # This would be calculated from recent runs
             }
-            
         except Exception as e:
-            logger.error(f"Error fetching dashboard data: {e}")
-            return self._get_mock_dashboard_data()
+            logger.error(f"Error fetching dashboard metrics: {e}")
+            return self._get_mock_dashboard_metrics()
     
-    def _get_mock_dashboard_data(self) -> Dict[str, Any]:
-        """Return mock dashboard data when database is not available"""
-        from datetime import datetime, timedelta
-        import random
-        
-        countries = ["USA", "UK", "Germany", "France", "Japan", "India", "Brazil", "Australia"]
-        
-        return {
-            "total_models": 47,
-            "models_with_geographic_bias": 12,
-            "high_risk_deployments": 5,
-            "countries_analyzed": len(countries),
-            "recent_analyses": [
-                {
-                    "model_id": "credit-scoring-v1",
-                    "source_country": "USA",
-                    "target_country": "India",
-                    "bias_score": 0.72,
-                    "risk_level": "HIGH",
-                    "created_at": datetime.now().isoformat()
-                },
-                {
-                    "model_id": "fraud-detection-v2",
-                    "source_country": "UK",
-                    "target_country": "Brazil",
-                    "bias_score": 0.45,
-                    "risk_level": "MEDIUM",
-                    "created_at": (datetime.now() - timedelta(hours=2)).isoformat()
-                },
-                {
-                    "model_id": "recommendation-engine-v1",
-                    "source_country": "USA",
-                    "target_country": "Japan",
-                    "bias_score": 0.89,
-                    "risk_level": "CRITICAL",
-                    "created_at": (datetime.now() - timedelta(hours=4)).isoformat()
-                }
-            ],
-            "country_performance": {
-                country: {
-                    "models_deployed": random.randint(5, 15),
-                    "avg_bias_score": round(random.uniform(0.1, 0.8), 2),
-                    "compliance_status": random.choice(["COMPLIANT", "WARNING", "NON_COMPLIANT"])
-                } for country in countries
+    # Mock data fallbacks
+    def _get_mock_models(self) -> List[Dict[str, Any]]:
+        """Mock models data"""
+        return [
+            {
+                "id": "model-1",
+                "name": "Credit Risk Model",
+                "description": "ML model for credit risk assessment",
+                "model_type": "classification",
+                "version": "1.0.0",
+                "created_at": "2024-01-15T10:00:00Z",
+                "file_path": "/uploads/credit_risk_model.pkl",
+                "file_size": 1024000,
+                "tags": ["finance", "risk", "classification"],
+                "metadata": {"accuracy": 0.85, "precision": 0.82},
+                "status": "active"
+            },
+            {
+                "id": "model-2", 
+                "name": "Fraud Detection Model",
+                "description": "AI model for detecting fraudulent transactions",
+                "model_type": "classification",
+                "version": "2.1.0",
+                "created_at": "2024-01-16T14:30:00Z",
+                "file_path": "/uploads/fraud_detection_model.pkl",
+                "file_size": 2048000,
+                "tags": ["security", "fraud", "classification"],
+                "metadata": {"accuracy": 0.92, "recall": 0.89},
+                "status": "active"
             }
+        ]
+    
+    def _get_mock_model(self, model_id: str) -> Optional[Dict[str, Any]]:
+        """Mock single model data"""
+        models = self._get_mock_models()
+        return next((m for m in models if m["id"] == model_id), None)
+    
+    def _get_mock_datasets(self) -> List[Dict[str, Any]]:
+        """Mock datasets data"""
+        return [
+            {
+                "id": "dataset-1",
+                "name": "Adult Income Dataset",
+                "description": "Census income dataset for bias analysis",
+                "file_path": "/datasets/adult_income.csv",
+                "file_size": 2048000,
+                "file_type": "csv",
+                "row_count": 48842,
+                "column_count": 15,
+                "created_at": "2024-01-10T09:00:00Z",
+                "schema_json": {
+                    "columns": ["age", "workclass", "fnlwgt", "education", "education-num", "marital-status", "occupation", "relationship", "race", "sex", "capital-gain", "capital-loss", "hours-per-week", "native-country", "income"]
+                }
+            },
+            {
+                "id": "dataset-2",
+                "name": "German Credit Dataset",
+                "description": "Credit scoring dataset for fairness analysis",
+                "file_path": "/datasets/german_credit.csv",
+                "file_size": 512000,
+                "file_type": "csv",
+                "row_count": 1000,
+                "column_count": 21,
+                "created_at": "2024-01-12T11:30:00Z",
+                "schema_json": {
+                    "columns": ["checking_status", "duration", "credit_history", "purpose", "credit_amount", "savings_status", "employment", "installment_commitment", "personal_status", "other_parties", "residence_since", "property_magnitude", "age", "other_payment_plans", "housing", "existing_credits", "job", "num_dependents", "own_telephone", "foreign_worker", "class"]
+                }
+            }
+        ]
+    
+    def _get_mock_simulation_runs(self) -> List[Dict[str, Any]]:
+        """Mock simulation runs data"""
+        return [
+            {
+                "id": "run-1",
+                "name": "Credit Risk Bias Analysis",
+                "description": "Comprehensive bias analysis on credit risk model",
+                "model_id": "model-1",
+                "dataset_id": "dataset-1",
+                "status": "completed",
+                "started_at": "2024-01-20T10:00:00Z",
+                "completed_at": "2024-01-20T10:15:00Z",
+                "execution_time_ms": 900000,
+                "config_json": {
+                    "bias_metrics": ["demographic_parity", "equalized_odds", "calibration"],
+                    "protected_attributes": ["race", "sex"],
+                    "threshold": 0.8
+                },
+                "results_json": {
+                    "demographic_parity": 0.85,
+                    "equalized_odds": 0.78,
+                    "calibration": 0.92,
+                    "overall_fairness_score": 0.85
+                }
+            }
+        ]
+    
+    def _get_mock_dashboard_metrics(self) -> Dict[str, Any]:
+        """Mock dashboard metrics"""
+        return {
+            "total_models": 24,
+            "total_datasets": 8,
+            "total_simulations": 156,
+            "active_models": 18,
+            "bias_alerts": 3,
+            "fairness_score": 87
         }
 
-# Create global instance
+# Global instance
 supabase_service = SupabaseService() 

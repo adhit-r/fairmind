@@ -1,5 +1,5 @@
 // API Configuration - Real data integration for FairMind
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 // API Response Types
 interface ApiResponse<T> {

@@ -8,7 +8,7 @@ const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
   title: 'FairMind - Ethical AI Governance Platform',
-  description: 'Comprehensive ethical AI testing and governance platform with modern tooling',
+  description: 'AI governance, bias detection, and compliance platform for responsible AI development',
   keywords: 'AI governance, ethical AI, bias detection, fairness, machine learning',
   authors: [{ name: 'FairMind Team' }],
 };

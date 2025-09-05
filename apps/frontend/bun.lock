@@ -5,6 +5,7 @@
       "name": "fairmind-frontend",
       "dependencies": {
         "@mantine/carousel": "^8.2.8",
+        "@mantine/charts": "^8.2.8",
         "@mantine/code-highlight": "^8.2.8",
         "@mantine/core": "^8.2.8",
         "@mantine/dates": "^8.2.8",
@@ -30,7 +31,7 @@
         "react-dom": "^18.3.0",
         "react-dropzone": "^14.3.8",
         "react-hook-form": "^7.62.0",
-        "recharts": "^3.1.0",
+        "recharts": "^3.1.2",
         "sonner": "^2.0.7",
         "zustand": "^5.0.7",
       },
@@ -96,6 +97,8 @@
     "@kurkle/color": ["@kurkle/color@0.3.4", "", {}, "sha512-M5UknZPHRu3DEDWoipU6sE8PdkZ6Z/S+v4dD+Ke8IaNlpdSQah50lz1KtcFBa2vsdOnwbbnxJwVM4wty6udA5w=="],
 
     "@mantine/carousel": ["@mantine/carousel@8.2.8", "", { "peerDependencies": { "@mantine/core": "8.2.8", "@mantine/hooks": "8.2.8", "embla-carousel": ">=8.0.0", "embla-carousel-react": ">=8.0.0", "react": "^18.x || ^19.x", "react-dom": "^18.x || ^19.x" } }, "sha512-FypLthS9y6Ta0ifQYt7oFdnxbOcJBvr2s0ilfmCSPIiEnY0WuRmXJYuVnWtJ1sW1HfayBMxjTO6iLR6UIUysjw=="],
+
+    "@mantine/charts": ["@mantine/charts@8.2.8", "", { "peerDependencies": { "@mantine/core": "8.2.8", "@mantine/hooks": "8.2.8", "react": "^18.x || ^19.x", "react-dom": "^18.x || ^19.x", "recharts": ">=2.13.3" } }, "sha512-946gThrgoFOPl5sNOjQ7ILriGIsP/B24PQGt9GY0fL9Fg0B7Nmuhzn7lxZscBW5//NHgZTE7ul5zdU+Z00ST2Q=="],
 
     "@mantine/code-highlight": ["@mantine/code-highlight@8.2.8", "", { "dependencies": { "clsx": "^2.1.1", "highlight.js": "^11.10.0" }, "peerDependencies": { "@mantine/core": "8.2.8", "@mantine/hooks": "8.2.8", "react": "^18.x || ^19.x", "react-dom": "^18.x || ^19.x" } }, "sha512-FaFMLsLbJ65EHtaP0j4Py7tGWZjOfkskyptP59I2d1V/0rYWLp15HfLjJnR3JmFe6G0LQA7YyrERUh1UVmID9g=="],
 

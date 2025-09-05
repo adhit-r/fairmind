@@ -13,6 +13,7 @@ from pydantic import BaseModel
 # Import services
 from ..services.simulation_service import simulation_service, SimulationConfig
 from ..services.dataset_service import dataset_service
+from ...supabase_client import supabase_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/simulations", tags=["simulations"])
@@ -111,7 +112,8 @@ async def list_simulations(
     - Includes basic metadata
     """
     try:
-        simulations = await simulation_service.list_simulations(limit=limit)
+        # Get simulations from Supabase
+        simulations = await supabase_service.get_simulation_runs(limit=limit)
         
         # Apply status filter if specified
         if status:

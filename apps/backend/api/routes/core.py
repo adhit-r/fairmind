@@ -2,12 +2,14 @@
 Core API Routes - Dashboard, Models, Datasets
 """
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
-from typing import List, Dict, Any
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Query
+from typing import List, Dict, Any, Optional
 import logging
 from datetime import datetime
 import uuid
 import json
+
+from ...supabase_client import supabase_service
 
 router = APIRouter(tags=["core"])
 
@@ -112,20 +114,38 @@ async def health_check():
     }
 
 @router.get("/models")
-async def get_models():
-    """Get all models"""
-    return {
-        "success": True,
-        "data": MOCK_MODELS
-    }
+async def get_models(
+    limit: int = Query(10, ge=1, le=100, description="Number of models to return"),
+    offset: int = Query(0, ge=0, description="Number of models to skip")
+):
+    """Get all models from database"""
+    try:
+        models = await supabase_service.get_models(limit=limit, offset=offset)
+        return {
+            "success": True,
+            "data": models,
+            "count": len(models)
+        }
+    except Exception as e:
+        logger.error(f"Error fetching models: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/datasets")
-async def get_datasets():
-    """Get all datasets"""
-    return {
-        "success": True,
-        "data": MOCK_DATASETS
-    }
+async def get_datasets(
+    limit: int = Query(10, ge=1, le=100, description="Number of datasets to return"),
+    offset: int = Query(0, ge=0, description="Number of datasets to skip")
+):
+    """Get all datasets from database"""
+    try:
+        datasets = await supabase_service.get_datasets(limit=limit, offset=offset)
+        return {
+            "success": True,
+            "data": datasets,
+            "count": len(datasets)
+        }
+    except Exception as e:
+        logger.error(f"Error fetching datasets: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/activity/recent")
 async def get_recent_activity():
@@ -137,31 +157,112 @@ async def get_recent_activity():
 
 @router.get("/governance/metrics")
 async def get_governance_metrics():
-    """Get governance metrics"""
-    return {
-        "success": True,
-        "data": {
-            "totalModels": len(MOCK_MODELS),
-            "activeModels": len([m for m in MOCK_MODELS if m["status"] == "active"]),
-            "criticalRisks": 2,
-            "llmSafetyScore": 85,
-            "nistCompliance": 78
+    """Get governance metrics from database"""
+    try:
+        metrics = await supabase_service.get_dashboard_metrics()
+        return {
+            "success": True,
+            "data": {
+                "totalModels": metrics["total_models"],
+                "activeModels": metrics["active_models"],
+                "criticalRisks": 2,  # This would come from a risks table
+                "llmSafetyScore": 85,  # This would be calculated from recent runs
+                "nistCompliance": 78,  # This would come from compliance checks
+                "biasAlerts": metrics["bias_alerts"],
+                "fairnessScore": metrics["fairness_score"],
+                "lastUpdated": datetime.now().isoformat()
+            }
         }
-    }
+    except Exception as e:
+        logger.error(f"Error fetching governance metrics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/metrics/summary")
 async def get_metrics_summary():
-    """Get metrics summary"""
-    return {
-        "success": True,
-        "data": {
-            "total_models": len(MOCK_MODELS),
-            "total_datasets": len(MOCK_DATASETS),
-            "active_analyses": 3,
-            "security_score": 85.0,
-            "compliance_score": 78.0,
-            "bias_score": 92.0,
-            "last_updated": datetime.now().isoformat()
+    """Get metrics summary from database"""
+    try:
+        metrics = await supabase_service.get_dashboard_metrics()
+        return {
+            "success": True,
+            "data": {
+                "total_models": metrics["total_models"],
+                "total_datasets": metrics["total_datasets"],
+                "total_simulations": metrics["total_simulations"],
+                "active_analyses": 3,  # This would come from active simulation runs
+                "security_score": 85.0,  # This would be calculated from security scans
+                "compliance_score": 78.0,  # This would come from compliance checks
+                "bias_score": metrics["fairness_score"],
+                "last_updated": datetime.now().isoformat()
+            }
         }
-    }
+    except Exception as e:
+        logger.error(f"Error fetching metrics summary: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/models")
+async def create_model(
+    name: str = Form(...),
+    description: str = Form(...),
+    model_type: str = Form(...),
+    version: str = Form("1.0.0"),
+    file: UploadFile = File(...)
+):
+    """Create a new model"""
+    try:
+        # Save file (in a real implementation, this would go to Supabase Storage)
+        file_path = f"/uploads/{file.filename}"
+        
+        model_data = {
+            "name": name,
+            "description": description,
+            "model_type": model_type,
+            "version": version,
+            "file_path": file_path,
+            "file_size": file.size,
+            "status": "active",
+            "tags": [],
+            "metadata": {}
+        }
+        
+        model = await supabase_service.create_model(model_data)
+        return {
+            "success": True,
+            "data": model,
+            "message": "Model created successfully"
+        }
+    except Exception as e:
+        logger.error(f"Error creating model: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/datasets")
+async def create_dataset(
+    name: str = Form(...),
+    description: str = Form(...),
+    file: UploadFile = File(...)
+):
+    """Create a new dataset"""
+    try:
+        # Save file (in a real implementation, this would go to Supabase Storage)
+        file_path = f"/datasets/{file.filename}"
+        
+        dataset_data = {
+            "name": name,
+            "description": description,
+            "file_path": file_path,
+            "file_size": file.size,
+            "file_type": file.filename.split('.')[-1],
+            "row_count": 0,  # Would be calculated after processing
+            "column_count": 0,  # Would be calculated after processing
+            "schema_json": {}
+        }
+        
+        dataset = await supabase_service.create_dataset(dataset_data)
+        return {
+            "success": True,
+            "data": dataset,
+            "message": "Dataset created successfully"
+        }
+    except Exception as e:
+        logger.error(f"Error creating dataset: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 

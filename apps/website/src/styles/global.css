@@ -11,7 +11,7 @@
   }
 
   body {
-    @apply bg-white text-gray-900 antialiased;
+    @apply bg-black text-yellow-400 antialiased;
     font-family: 'Inter', system-ui, sans-serif;
   }
 
@@ -21,7 +21,7 @@
   h4,
   h5,
   h6 {
-    @apply font-bold text-gray-900;
+    @apply font-black text-yellow-400;
   }
 
   h1 {
@@ -37,38 +37,64 @@
   }
 
   p {
-    @apply text-base sm:text-lg text-gray-700 leading-relaxed mb-4;
+    @apply text-base sm:text-lg text-yellow-400 leading-relaxed mb-4 font-bold;
   }
 
   a {
-    @apply text-blue-600 hover:text-blue-700 transition-colors duration-300;
+    @apply text-yellow-400 hover:text-yellow-300 transition-colors duration-300 font-bold;
   }
 
-  /* Improve text contrast for better readability */
-  .text-gray-600 {
-    @apply text-gray-700 !important;
+  /* Neobrutalism text colors */
+  .text-yellow-400 {
+    color: #EAB308 !important;
+  }
+  
+  .text-black {
+    color: #000000 !important;
+  }
+  
+  .bg-black {
+    background-color: #000000 !important;
+  }
+  
+  .bg-yellow-400 {
+    background-color: #EAB308 !important;
   }
 }
 
 @layer components {
   .btn {
-    @apply inline-flex items-center justify-center rounded-lg px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base font-semibold transition-all duration-300;
+    @apply inline-flex items-center justify-center rounded-none px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base font-black transition-all duration-300 border-2 border-black;
   }
 
   .btn-primary {
-    @apply text-white bg-gradient-to-r from-blue-600 to-purple-600 hover:shadow-lg transform hover:-translate-y-1;
+    @apply text-black bg-yellow-400 hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transform hover:-translate-y-1 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)];
   }
 
   .btn-outline {
-    @apply text-gray-700 bg-white border-2 border-gray-300 hover:bg-gray-50;
+    @apply text-yellow-400 bg-black border-yellow-400 hover:bg-yellow-400 hover:text-black;
   }
 
   .btn-outline-light {
-    @apply text-white border-2 border-white/20 hover:border-white/40 hover:bg-white/5;
+    @apply text-yellow-400 border-yellow-400 hover:bg-yellow-400 hover:text-black;
   }
 
   .btn:hover {
-    @apply transform -translate-y-0.5;
+    @apply transform -translate-y-1;
+  }
+
+  /* Neobrutalism Card */
+  .neo-card {
+    @apply bg-black border-2 border-yellow-400 rounded-none p-6 shadow-[6px_6px_0px_0px_rgba(255,255,0,1)] transform hover:-translate-y-2 transition-all duration-300;
+  }
+
+  .neo-card:hover {
+    @apply shadow-[8px_8px_0px_0px_rgba(255,255,0,1)];
+  }
+
+  /* Neobrutalism Button */
+  .neo-button {
+    @apply bg-yellow-400 text-black font-black px-6 py-3 border-2 border-black rounded-none shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transform hover:-translate-y-1 transition-all duration-200;
   }
 
   /* Mobile-specific button styles */
@@ -81,5 +107,64 @@
       @apply flex-col space-y-3;
     }
   }
+}
+
+/* Neobrutalism Design System */
+:root {
+  --neo-primary: #EAB308;
+  --neo-secondary: #000000;
+  --neo-shadow-sm: 2px 2px 0px rgba(0,0,0,1);
+  --neo-shadow-md: 4px 4px 0px rgba(0,0,0,1);
+  --neo-shadow-lg: 6px 6px 0px rgba(0,0,0,1);
+  --neo-shadow-xl: 8px 8px 0px rgba(255,255,0,1);
+  --neo-border-sm: 2px solid #000000;
+  --neo-border-md: 3px solid #000000;
+  --neo-border-lg: 4px solid #000000;
+  --neo-border-xl: 6px solid #000000;
+}
+
+/* Neobrutalism shadows for yellow elements */
+.shadow-yellow {
+  box-shadow: var(--neo-shadow-xl);
+}
+
+.shadow-black {
+  box-shadow: var(--neo-shadow-md);
+}
+
+/* Neobrutalism borders */
+.border-neo {
+  border: var(--neo-border-md);
+}
+
+.border-neo-lg {
+  border: var(--neo-border-lg);
+}
+
+/* Neobrutalism animations */
+@keyframes neo-bounce {
+  0%, 100% {
+    transform: translateY(-2px);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+.neo-bounce {
+  animation: neo-bounce 2s ease-in-out infinite;
+}
+
+@keyframes neo-pulse {
+  0%, 100% {
+    box-shadow: var(--neo-shadow-md);
+  }
+  50% {
+    box-shadow: var(--neo-shadow-lg);
+  }
+}
+
+.neo-pulse {
+  animation: neo-pulse 2s ease-in-out infinite;
 }
 

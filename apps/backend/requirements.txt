@@ -1,48 +1,27 @@
+# Core FastAPI dependencies
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
 pydantic==2.5.0
 python-multipart==0.0.6
+python-dotenv==1.0.0
+
+# Authentication & Security
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
-python-dotenv==1.0.0
+
+# WebSocket support
 websockets==12.0
+
+# Data processing
 pandas==2.1.4
 numpy==1.24.3
+scikit-learn>=1.1.0
+joblib>=1.3.0
+
+# Database & Storage
 supabase==2.3.4
 psycopg2-binary==2.9.9
 sqlalchemy==2.0.23
+
+# HTTP requests
 requests==2.31.0
-
-# Data analysis and machine learning
-scikit-learn>=1.1.0
-scipy>=1.9.0
-
-# Cryptography for digital signing
-cryptography>=3.4.0
-
-# OpenAI API for LLM integration
-openai>=1.0.0
-
-# Modern Responsible AI Tools Integration
-# Fairness and Bias Detection
-fairlearn>=0.8.0
-aif360>=0.5.0
-
-# Explainability and Transparency (Both Classic and Modern)
-# Classic/Established Tools (for basic bias detection)
-shap>=0.41.0
-lime>=0.2.0
-dalex>=1.4.0
-
-# Modern Explainability and Transparency
-interpret>=0.4.0  # Microsoft's modern explainability library
-alibi>=0.7.0      # Seldon's production-ready explainability
-eli5>=0.13.0      # Modern LIME alternative
-
-# Modern ML libraries
-xgboost>=1.7.0
-lightgbm>=4.0.0
-joblib>=1.3.0
-
-# Database dependencies
-alembic>=1.12.0

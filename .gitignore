@@ -139,7 +139,7 @@ venv.bak/
 
 # mkdocs documentation
 /site
-
+/WORKSPACE_CLEANUP_SUMMARY.md
 # mypy
 .mypy_cache/
 .dmypy.json

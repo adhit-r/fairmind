@@ -1,0 +1,34 @@
+# Core ML Dependencies
+mlflow>=2.8.0
+dvc>=3.0.0
+scikit-learn>=1.3.0
+pandas>=2.0.0
+numpy>=1.24.0
+joblib>=1.3.0
+
+# Bias Detection and Fairness
+fairlearn>=0.8.0
+aif360>=0.5.0
+
+# Explainability
+shap>=0.42.0
+lime>=0.2.0
+dalex>=1.4.0
+
+# Advanced ML
+xgboost>=1.7.0
+lightgbm>=4.0.0
+
+# Data Processing
+scipy>=1.10.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# Model Serving
+fastapi>=0.104.0
+uvicorn>=0.24.0
+pydantic>=2.5.0
+
+# Monitoring
+prometheus-client>=0.17.0
+psutil>=5.9.0
