@@ -2,727 +2,457 @@
 
 import {
   Container,
-  Grid,
-  Card,
+  Title,
   Text,
+  Button,
+  Card,
   Group,
+  Stack,
+  SimpleGrid,
   Badge,
   Progress,
-  Stack,
-  Button,
   ThemeIcon,
-  Title,
-  SimpleGrid,
-  RingProgress,
-  Alert,
-  Timeline,
-  Avatar,
   ActionIcon,
-  Menu,
   Tabs,
-  Table,
-  ScrollArea,
-  Box,
-  Divider,
-  useMantineColorScheme,
-  Center,
-  Loader,
-  Paper,
-  Flex,
-  rem,
-  UnstyledButton,
-  HoverCard,
-  Indicator,
-  NumberFormatter,
-  Tooltip,
-  Skeleton,
+  Alert,
   List,
-  Anchor,
 } from '@mantine/core';
 import {
-  IconWorld,
   IconShield,
-  IconAlertTriangle,
   IconCheck,
+  IconAlertTriangle,
   IconX,
-  IconTrendingUp,
-  IconTrendingDown,
-  IconRobot,
-  IconDatabase,
-  IconTarget,
-  IconChartBar,
-  IconRefresh,
-  IconPlus,
-  IconEye,
-  IconTestPipe,
-  IconSettings,
-  IconClock,
-  IconDots,
   IconFileText,
-  IconLock,
-  IconActivity,
-  IconMapPin,
-  IconFlag,
-  IconScale,
+  IconDownload,
+  IconEye,
+  IconRefresh,
   IconGavel,
-  IconBuilding,
   IconUsers,
   IconCalendar,
+  IconTarget,
 } from '@tabler/icons-react';
-import { useState, useEffect } from 'react';
+import { useApi } from '@/hooks/useApi';
 
-// AI Laws and Regulations by Country
-const aiLawsData = {
-  'EU': {
-    name: 'European Union',
-    flag: '🇪🇺',
-    status: 'active',
-    laws: [
-      { name: 'EU AI Act', status: 'enacted', effectiveDate: '2024-12-01', riskLevel: 'high' },
-      { name: 'GDPR', status: 'enforced', effectiveDate: '2018-05-25', riskLevel: 'high' },
-      { name: 'Digital Services Act', status: 'enacted', effectiveDate: '2024-02-17', riskLevel: 'medium' }
-    ],
-    complianceScore: 85,
-    lastUpdated: '2024-01-15'
+const neo = {
+  card: {
+    background: 'rgba(255, 255, 255, 0.9)',
+    backdropFilter: 'blur(20px)',
+    border: '1px solid rgba(255, 255, 255, 0.2)',
+    borderRadius: '20px',
+    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
   },
-  'US': {
-    name: 'United States',
-    flag: '🇺🇸',
-    status: 'developing',
-    laws: [
-      { name: 'Executive Order 14110', status: 'enacted', effectiveDate: '2023-10-30', riskLevel: 'medium' },
-      { name: 'NIST AI RMF', status: 'guidance', effectiveDate: '2023-01-26', riskLevel: 'low' },
-      { name: 'State AI Laws (CA, NY, IL)', status: 'pending', effectiveDate: '2024-12-01', riskLevel: 'high' }
-    ],
-    complianceScore: 72,
-    lastUpdated: '2024-01-10'
-  },
-  'CN': {
-    name: 'China',
-    flag: '🇨🇳',
-    status: 'active',
-    laws: [
-      { name: 'Algorithmic Recommendation Provisions', status: 'enforced', effectiveDate: '2022-03-01', riskLevel: 'high' },
-      { name: 'Deep Synthesis Provisions', status: 'enforced', effectiveDate: '2023-01-10', riskLevel: 'high' },
-      { name: 'Generative AI Measures', status: 'enforced', effectiveDate: '2023-08-15', riskLevel: 'high' }
-    ],
-    complianceScore: 95,
-    lastUpdated: '2024-01-12'
-  },
-  'UK': {
-    name: 'United Kingdom',
-    flag: '🇬🇧',
-    status: 'developing',
-    laws: [
-      { name: 'AI White Paper', status: 'consultation', effectiveDate: '2024-06-01', riskLevel: 'medium' },
-      { name: 'Data Protection Act 2018', status: 'enforced', effectiveDate: '2018-05-25', riskLevel: 'high' }
-    ],
-    complianceScore: 68,
-    lastUpdated: '2024-01-08'
-  },
-  'CA': {
-    name: 'Canada',
-    flag: '🇨🇦',
-    status: 'developing',
-    laws: [
-      { name: 'AIDA (Bill C-27)', status: 'pending', effectiveDate: '2024-12-01', riskLevel: 'high' },
-      { name: 'PIPEDA', status: 'enforced', effectiveDate: '2000-04-13', riskLevel: 'medium' }
-    ],
-    complianceScore: 58,
-    lastUpdated: '2024-01-05'
-  },
-  'JP': {
-    name: 'Japan',
-    flag: '🇯🇵',
-    status: 'developing',
-    laws: [
-      { name: 'AI Strategy 2022', status: 'guidance', effectiveDate: '2022-12-01', riskLevel: 'low' },
-      { name: 'Personal Information Protection Act', status: 'enforced', effectiveDate: '2003-05-30', riskLevel: 'medium' }
-    ],
-    complianceScore: 62,
-    lastUpdated: '2024-01-03'
-  },
-  'AU': {
-    name: 'Australia',
-    flag: '🇦🇺',
-    status: 'developing',
-    laws: [
-      { name: 'AI Action Plan', status: 'guidance', effectiveDate: '2021-06-01', riskLevel: 'low' },
-      { name: 'Privacy Act 1988', status: 'enforced', effectiveDate: '1988-12-21', riskLevel: 'medium' }
-    ],
-    complianceScore: 55,
-    lastUpdated: '2024-01-01'
-  },
-  'IN': {
-    name: 'India',
-    flag: '🇮🇳',
-    status: 'developing',
-    laws: [
-      { name: 'Digital India Act', status: 'draft', effectiveDate: '2024-12-01', riskLevel: 'high' },
-      { name: 'Personal Data Protection Bill', status: 'pending', effectiveDate: '2024-06-01', riskLevel: 'high' }
-    ],
-    complianceScore: 45,
-    lastUpdated: '2023-12-28'
-  }
 };
 
-// Compliance requirements by AI use case
-const complianceRequirements = [
+const complianceFrameworks = [
   {
-    useCase: 'High-Risk AI Systems',
-    requirements: [
-      'Risk management system',
-      'Data governance',
-      'Technical documentation',
-      'Record keeping',
-      'Transparency and provision of information',
-      'Human oversight',
-      'Accuracy, robustness and cybersecurity'
-    ],
-    applicableLaws: ['EU AI Act', 'AIDA (Canada)', 'State AI Laws (US)'],
-    riskLevel: 'critical'
+    id: 1,
+    name: 'GDPR Compliance',
+    description: 'General Data Protection Regulation compliance for EU operations',
+    status: 'compliant',
+    score: 94,
+    lastAudit: '2024-01-15',
+    requirements: 12,
+    completed: 11,
+    violations: 0,
+    category: 'Privacy',
   },
   {
-    useCase: 'Generative AI',
-    requirements: [
-      'Content labeling and disclosure',
-      'Copyright compliance',
-      'Bias and discrimination prevention',
-      'Data protection compliance',
-      'Transparency reporting'
-    ],
-    applicableLaws: ['EU AI Act', 'Deep Synthesis Provisions (China)', 'Executive Order 14110 (US)'],
-    riskLevel: 'high'
+    id: 2,
+    name: 'ISO 27001',
+    description: 'Information Security Management System standards',
+    status: 'compliant',
+    score: 88,
+    lastAudit: '2024-01-10',
+    requirements: 15,
+    completed: 13,
+    violations: 0,
+    category: 'Security',
   },
   {
-    useCase: 'Automated Decision Making',
-    requirements: [
-      'Explainability and interpretability',
-      'Human review rights',
-      'Bias testing and monitoring',
-      'Data minimization',
-      'Consent management'
-    ],
-    applicableLaws: ['GDPR', 'Algorithmic Recommendation Provisions (China)', 'PIPEDA (Canada)'],
-    riskLevel: 'high'
+    id: 3,
+    name: 'SOX Compliance',
+    description: 'Sarbanes-Oxley Act financial reporting compliance',
+    status: 'partial',
+    score: 76,
+    lastAudit: '2024-01-20',
+    requirements: 8,
+    completed: 6,
+    violations: 1,
+    category: 'Financial',
   },
   {
-    useCase: 'AI in Healthcare',
-    requirements: [
-      'Medical device certification',
-      'Clinical validation',
-      'Patient safety monitoring',
-      'Data privacy protection',
-      'Professional oversight'
-    ],
-    applicableLaws: ['EU AI Act', 'FDA Guidelines (US)', 'Health Canada Regulations'],
-    riskLevel: 'critical'
-  }
+    id: 4,
+    name: 'AI Ethics Guidelines',
+    description: 'Internal AI ethics and responsible AI development standards',
+    status: 'review',
+    score: 82,
+    lastAudit: '2024-01-18',
+    requirements: 20,
+    completed: 16,
+    violations: 2,
+    category: 'Ethics',
+  },
 ];
 
-export default function ComplianceDashboard() {
-  const { colorScheme } = useMantineColorScheme();
-  const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState('overview');
-  const [isLoading, setIsLoading] = useState(true);
+const complianceStats = [
+  {
+    title: 'Frameworks Tracked',
+    value: '12',
+    icon: IconShield,
+    color: 'blue',
+  },
+  {
+    title: 'Overall Compliance',
+    value: '85%',
+    icon: IconCheck,
+    color: 'green',
+  },
+  {
+    title: 'Active Violations',
+    value: '3',
+    icon: IconAlertTriangle,
+    color: 'red',
+  },
+  {
+    title: 'Last Audit',
+    value: '2 days ago',
+    icon: IconCalendar,
+    color: 'violet',
+  },
+];
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, 1500);
-    return () => clearTimeout(timer);
-  }, []);
+const upcomingRequirements = [
+  {
+    framework: 'GDPR',
+    requirement: 'Data Processing Impact Assessment Update',
+    dueDate: '2024-02-15',
+    priority: 'high',
+  },
+  {
+    framework: 'ISO 27001',
+    requirement: 'Security Control Review',
+    dueDate: '2024-02-20',
+    priority: 'medium',
+  },
+  {
+    framework: 'AI Ethics',
+    requirement: 'Bias Testing Report',
+    dueDate: '2024-02-25',
+    priority: 'high',
+  },
+];
 
-  if (isLoading) {
-    return (
-      <Center style={{ height: '100vh' }}>
-        <Stack align="center" gap="xl">
-          <ThemeIcon size="xl" radius="md" color="blue" variant="light">
-            <IconScale size="2rem" />
-          </ThemeIcon>
-          <Text size="xl" fw={600}>
-            Loading Compliance Dashboard...
-          </Text>
-          <Loader size="lg" />
-        </Stack>
-      </Center>
-    );
+function getStatusColor(status: string) {
+  switch (status) {
+    case 'compliant':
+      return 'green';
+    case 'partial':
+      return 'yellow';
+    case 'review':
+      return 'blue';
+    case 'violation':
+      return 'red';
+    default:
+      return 'gray';
   }
+}
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'enforced': return 'red';
-      case 'enacted': return 'orange';
-      case 'pending': return 'yellow';
-      case 'guidance': return 'blue';
-      case 'consultation': return 'grape';
-      case 'draft': return 'gray';
-      default: return 'gray';
-    }
-  };
+function getStatusIcon(status: string) {
+  switch (status) {
+    case 'compliant':
+      return <IconCheck size={16} />;
+    case 'partial':
+      return <IconAlertTriangle size={16} />;
+    case 'review':
+      return <IconEye size={16} />;
+    case 'violation':
+      return <IconX size={16} />;
+    default:
+      return <IconShield size={16} />;
+  }
+}
 
-  const getRiskColor = (riskLevel: string) => {
-    switch (riskLevel) {
-      case 'critical': return 'red';
-      case 'high': return 'orange';
-      case 'medium': return 'yellow';
-      case 'low': return 'green';
-      default: return 'gray';
-    }
-  };
+function getScoreColor(score: number) {
+  if (score >= 90) return 'green';
+  if (score >= 80) return 'blue';
+  if (score >= 70) return 'yellow';
+  return 'red';
+}
+
+function getPriorityColor(priority: string) {
+  switch (priority) {
+    case 'high':
+      return 'red';
+    case 'medium':
+      return 'yellow';
+    case 'low':
+      return 'green';
+    default:
+      return 'gray';
+  }
+}
+
+export default function CompliancePage() {
+  const { data: complianceData, loading, error } = useApi('/api/v1/compliance');
 
   return (
-    <Box
-      style={{
-        background: colorScheme === 'dark' 
-          ? 'linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%)'
-          : 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #cbd5e1 100%)',
-        minHeight: '100vh',
-        position: 'relative',
-      }}
-    >
-      <Container size="xl" py="xl" style={{ position: 'relative', zIndex: 1 }}>
+    <Container size="xl" py="xl">
+      <Stack gap="xl">
         {/* Header */}
-        <Paper 
-          p="xl" 
-          mb="xl" 
-          style={{
-            background: colorScheme === 'dark' 
-              ? 'rgba(30, 30, 30, 0.8)' 
-              : 'rgba(255, 255, 255, 0.8)',
-            backdropFilter: 'blur(20px)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            borderRadius: '24px',
-            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
-          }}
-        >
-          <Group justify="space-between" mb="md">
+        <Card style={neo.card} p="xl">
+          <Group justify="space-between" align="center">
             <div>
-              <Title 
-                order={1} 
-                mb="xs"
-                style={{
-                  background: colorScheme === 'dark' 
-                    ? 'linear-gradient(135deg, #60a5fa, #a78bfa, #34d399)'
-                    : 'linear-gradient(135deg, #1e40af, #7c3aed, #059669)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  fontSize: '2.5rem',
-                  fontWeight: 800,
-                }}
-              >
-                AI Compliance Center
+              <Title order={1} size="2rem" fw={700} c="#1e293b" mb="xs">
+                Compliance Frameworks
               </Title>
-              <Text c="dimmed" size="lg" fw={500}>
-                Global AI Laws, Regulations & Compliance Tracking
+              <Text c="dimmed" size="lg">
+                Monitor regulatory compliance and framework adherence
               </Text>
             </div>
-            <Group>
-              <Button
+            <Group gap="sm">
+              <ActionIcon
+                size="lg"
+                radius="xl"
                 variant="light"
-                leftSection={<IconRefresh size="1rem" />}
-                size="lg"
+                color="blue"
                 style={{
-                  borderRadius: '16px',
                   background: 'rgba(59, 130, 246, 0.1)',
-                  border: '1px solid rgba(59, 130, 246, 0.2)',
+                  boxShadow: '4px 4px 8px rgba(59, 130, 246, 0.2), -4px -4px 8px rgba(255, 255, 255, 0.8)',
                 }}
               >
-                Update Laws
-              </Button>
+                <IconRefresh size={20} />
+              </ActionIcon>
               <Button
-                variant="filled"
-                leftSection={<IconPlus size="1rem" />}
-                size="lg"
+                leftSection={<IconDownload size={16} />}
+                radius="xl"
                 style={{
-                  borderRadius: '16px',
-                  background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
-                  border: 'none',
+                  background: 'linear-gradient(145deg, #dc2626, #b91c1c)',
+                  boxShadow: '6px 6px 12px rgba(220, 38, 38, 0.4), -4px -4px 8px rgba(248, 113, 113, 0.4)',
                 }}
               >
-                Add Assessment
+                Export Report
               </Button>
             </Group>
           </Group>
-
-          {/* Global Compliance Overview */}
-          <SimpleGrid cols={{ base: 2, sm: 4 }} mt="xl">
-            {[
-              { 
-                label: 'Countries Monitored', 
-                value: Object.keys(aiLawsData).length, 
-                color: 'blue', 
-                icon: IconWorld 
-              },
-              { 
-                label: 'Active Laws', 
-                value: Object.values(aiLawsData).flatMap(c => c.laws).filter(l => l.status === 'enforced' || l.status === 'enacted').length, 
-                color: 'red', 
-                icon: IconGavel 
-              },
-              { 
-                label: 'Avg Compliance Score', 
-                value: `${Math.round(Object.values(aiLawsData).reduce((acc, c) => acc + c.complianceScore, 0) / Object.keys(aiLawsData).length)}%`, 
-                color: 'green', 
-                icon: IconTarget 
-              },
-              { 
-                label: 'Pending Regulations', 
-                value: Object.values(aiLawsData).flatMap(c => c.laws).filter(l => l.status === 'pending' || l.status === 'draft').length, 
-                color: 'orange', 
-                icon: IconClock 
-              },
-            ].map((metric, index) => (
-              <Card
-                key={index}
-                p="lg"
-                style={{
-                  background: colorScheme === 'dark' 
-                    ? 'rgba(20, 20, 20, 0.6)' 
-                    : 'rgba(255, 255, 255, 0.6)',
-                  backdropFilter: 'blur(16px)',
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
-                  borderRadius: '20px',
-                  boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)',
-                  transform: 'perspective(1000px) rotateX(5deg)',
-                  transition: 'all 0.3s ease',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'perspective(1000px) rotateX(0deg) translateY(-8px)';
-                  e.currentTarget.style.boxShadow = '0 12px 40px rgba(0, 0, 0, 0.2)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'perspective(1000px) rotateX(5deg)';
-                  e.currentTarget.style.boxShadow = '0 4px 20px rgba(0, 0, 0, 0.1)';
-                }}
-              >
-                <Group justify="space-between" mb="md">
-                  <ThemeIcon
-                    size="xl"
-                    radius="xl"
-                    color={metric.color}
-                    variant="light"
-                    style={{
-                      background: `rgba(${metric.color === 'blue' ? '59, 130, 246' : 
-                        metric.color === 'red' ? '239, 68, 68' : 
-                        metric.color === 'green' ? '34, 197, 94' : '245, 158, 11'}, 0.1)`,
-                      border: `1px solid rgba(${metric.color === 'blue' ? '59, 130, 246' : 
-                        metric.color === 'red' ? '239, 68, 68' : 
-                        metric.color === 'green' ? '34, 197, 94' : '245, 158, 11'}, 0.2)`,
-                    }}
-                  >
-                    <metric.icon size="1.5rem" />
-                  </ThemeIcon>
-                </Group>
-                <Text size="sm" c="dimmed" mb="xs" fw={500}>
-                  {metric.label}
-                </Text>
-                <Text 
-                  size="2.5rem" 
-                  fw={800}
-                  style={{
-                    color: metric.color === 'blue' ? '#3b82f6' : 
-                           metric.color === 'red' ? '#ef4444' : 
-                           metric.color === 'green' ? '#22c55e' : '#f59e0b',
-                    textShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-                  }}
-                >
-                  {metric.value}
-                </Text>
-              </Card>
-            ))}
-          </SimpleGrid>
-        </Paper>
-
-        <Grid>
-          {/* World Map and Country Laws */}
-          <Grid.Col span={{ base: 12, md: 8 }}>
-            <Card
-              p="xl"
-              mb="md"
-              style={{
-                background: colorScheme === 'dark' 
-                  ? 'rgba(20, 20, 20, 0.6)' 
-                  : 'rgba(255, 255, 255, 0.6)',
-                backdropFilter: 'blur(20px)',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
-                borderRadius: '24px',
-                boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
-                transform: 'perspective(1000px) rotateY(-2deg)',
-                transition: 'all 0.3s ease',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'perspective(1000px) rotateY(0deg) translateY(-4px)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'perspective(1000px) rotateY(-2deg)';
-              }}
-            >
-              <Title order={3} mb="xl" style={{ 
-                background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                fontSize: '1.8rem',
-                fontWeight: 700,
-              }}>
-                Global AI Laws & Regulations
-              </Title>
-              
-              {/* Interactive World Map Representation */}
-              <Box
-                style={{
-                  background: 'linear-gradient(135deg, #1e3a8a, #3730a3)',
-                  borderRadius: '20px',
-                  padding: '2rem',
-                  position: 'relative',
-                  overflow: 'hidden',
-                  minHeight: '400px',
-                }}
-              >
-                {/* Simplified World Map Grid */}
-                <SimpleGrid cols={4} spacing="md">
-                  {Object.entries(aiLawsData).map(([code, country]) => (
-                    <Card
-                      key={code}
-                      p="md"
-                      style={{
-                        background: selectedCountry === code 
-                          ? 'rgba(59, 130, 246, 0.2)' 
-                          : 'rgba(255, 255, 255, 0.1)',
-                        border: selectedCountry === code 
-                          ? '2px solid #3b82f6' 
-                          : '1px solid rgba(255, 255, 255, 0.2)',
-                        borderRadius: '16px',
-                        cursor: 'pointer',
-                        transition: 'all 0.3s ease',
-                        transform: selectedCountry === code ? 'scale(1.05)' : 'scale(1)',
-                      }}
-                      onClick={() => setSelectedCountry(selectedCountry === code ? null : code)}
-                    >
-                      <Stack align="center" gap="sm">
-                        <Text size="2rem">{country.flag}</Text>
-                        <Text fw={600} size="sm" ta="center">{country.name}</Text>
-                        <Badge
-                          color={getStatusColor(country.status)}
-                          variant="light"
-                          size="sm"
-                          style={{ borderRadius: '12px' }}
-                        >
-                          {country.status}
-                        </Badge>
-                        <RingProgress
-                          size={60}
-                          thickness={6}
-                          sections={[{ value: country.complianceScore, color: '#3b82f6' }]}
-                          label={
-                            <Text ta="center" size="xs" fw={600}>
-                              {country.complianceScore}%
-                            </Text>
-                          }
-                        />
-                        <Text size="xs" c="dimmed" ta="center">
-                          {country.laws.length} laws
-                        </Text>
-                      </Stack>
-                    </Card>
-                  ))}
-                </SimpleGrid>
-              </Box>
-            </Card>
-          </Grid.Col>
-
-          {/* Country Details Panel */}
-          <Grid.Col span={{ base: 12, md: 4 }}>
-            <Card
-              p="xl"
-              mb="md"
-              style={{
-                background: colorScheme === 'dark' 
-                  ? 'rgba(20, 20, 20, 0.6)' 
-                  : 'rgba(255, 255, 255, 0.6)',
-                backdropFilter: 'blur(20px)',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
-                borderRadius: '24px',
-                boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
-                transform: 'perspective(1000px) rotateY(2deg)',
-                transition: 'all 0.3s ease',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'perspective(1000px) rotateY(0deg) translateY(-4px)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'perspective(1000px) rotateY(2deg)';
-              }}
-            >
-              <Title order={3} mb="xl" style={{ 
-                background: 'linear-gradient(135deg, #8b5cf6, #ec4899)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                fontSize: '1.8rem',
-                fontWeight: 700,
-              }}>
-                {selectedCountry ? `${aiLawsData[selectedCountry as keyof typeof aiLawsData]?.name} Laws` : 'Select a Country'}
-              </Title>
-              
-              {selectedCountry ? (
-                <Stack gap="md">
-                  {aiLawsData[selectedCountry as keyof typeof aiLawsData]?.laws.map((law, index) => (
-                    <Card
-                      key={index}
-                      p="md"
-                      style={{
-                        background: 'rgba(255, 255, 255, 0.05)',
-                        border: '1px solid rgba(255, 255, 255, 0.1)',
-                        borderRadius: '12px',
-                      }}
-                    >
-                      <Group justify="space-between" mb="xs">
-                        <Text fw={600} size="sm">{law.name}</Text>
-                        <Badge
-                          color={getStatusColor(law.status)}
-                          variant="light"
-                          size="xs"
-                        >
-                          {law.status}
-                        </Badge>
-                      </Group>
-                      <Group justify="space-between" mb="xs">
-                        <Text size="xs" c="dimmed">Effective Date</Text>
-                        <Text size="xs" fw={500}>{law.effectiveDate}</Text>
-                      </Group>
-                      <Group justify="space-between">
-                        <Text size="xs" c="dimmed">Risk Level</Text>
-                        <Badge
-                          color={getRiskColor(law.riskLevel)}
-                          variant="light"
-                          size="xs"
-                        >
-                          {law.riskLevel}
-                        </Badge>
-                      </Group>
-                    </Card>
-                  ))}
-                  
-                  <Divider />
-                  
-                  <Group justify="space-between">
-                    <Text size="sm" c="dimmed">Overall Compliance</Text>
-                    <Text size="lg" fw={700} c="blue">
-                      {aiLawsData[selectedCountry as keyof typeof aiLawsData]?.complianceScore}%
-                    </Text>
-                  </Group>
-                  
-                  <Progress
-                    value={aiLawsData[selectedCountry as keyof typeof aiLawsData]?.complianceScore}
-                    color="blue"
-                    size="lg"
-                    radius="xl"
-                  />
-                </Stack>
-              ) : (
-                <Center style={{ height: '300px' }}>
-                  <Stack align="center" gap="md">
-                    <ThemeIcon size="xl" radius="xl" color="gray" variant="light">
-                      <IconMapPin size="2rem" />
-                    </ThemeIcon>
-                    <Text c="dimmed" ta="center">
-                      Click on a country to view<br />its AI laws and regulations
-                    </Text>
-                  </Stack>
-                </Center>
-              )}
-            </Card>
-          </Grid.Col>
-        </Grid>
-
-        {/* Compliance Requirements by Use Case */}
-        <Card
-          p="xl"
-          mb="xl"
-          style={{
-            background: colorScheme === 'dark' 
-              ? 'rgba(20, 20, 20, 0.6)' 
-              : 'rgba(255, 255, 255, 0.6)',
-            backdropFilter: 'blur(20px)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            borderRadius: '24px',
-            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
-            transform: 'perspective(1000px) rotateX(1deg)',
-            transition: 'all 0.3s ease',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.transform = 'perspective(1000px) rotateX(0deg) translateY(-4px)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.transform = 'perspective(1000px) rotateX(1deg)';
-          }}
-        >
-          <Title order={3} mb="xl" style={{ 
-            background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            fontSize: '1.8rem',
-            fontWeight: 700,
-          }}>
-            Compliance Requirements by AI Use Case
-          </Title>
-          
-          <SimpleGrid cols={{ base: 1, md: 2 }} gap="xl">
-            {complianceRequirements.map((requirement, index) => (
-              <Card
-                key={index}
-                p="lg"
-                style={{
-                  background: 'rgba(255, 255, 255, 0.05)',
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
-                  borderRadius: '16px',
-                }}
-              >
-                <Group justify="space-between" mb="md">
-                  <Text fw={600} size="lg">{requirement.useCase}</Text>
-                  <Badge
-                    color={getRiskColor(requirement.riskLevel)}
-                    variant="light"
-                    size="lg"
-                    style={{ borderRadius: '12px' }}
-                  >
-                    {requirement.riskLevel}
-                  </Badge>
-                </Group>
-                
-                <Stack gap="sm" mb="md">
-                  <Text size="sm" fw={500} c="dimmed">Key Requirements:</Text>
-                  <List size="sm" spacing="xs">
-                    {requirement.requirements.map((req, reqIndex) => (
-                      <List.Item key={reqIndex}>
-                        <Text size="sm">{req}</Text>
-                      </List.Item>
-                    ))}
-                  </List>
-                </Stack>
-                
-                <Divider mb="md" />
-                
-                <Stack gap="xs">
-                  <Text size="sm" fw={500} c="dimmed">Applicable Laws:</Text>
-                  <Group gap="xs">
-                    {requirement.applicableLaws.map((law, lawIndex) => (
-                      <Badge
-                        key={lawIndex}
-                        variant="outline"
-                        size="sm"
-                        style={{ borderRadius: '8px' }}
-                      >
-                        {law}
-                      </Badge>
-                    ))}
-                  </Group>
-                </Stack>
-              </Card>
-            ))}
-          </SimpleGrid>
         </Card>
-      </Container>
-    </Box>
+
+        {/* Statistics */}
+        <SimpleGrid cols={{ base: 2, md: 4 }} spacing="lg">
+          {complianceStats.map((stat) => (
+            <Card
+              key={stat.title}
+              style={{
+                ...neo.card,
+                transition: 'all 0.3s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+              p="lg"
+            >
+              <Stack gap="sm">
+                <ThemeIcon
+                  size="lg"
+                  radius="xl"
+                  color={stat.color}
+                  variant="light"
+                >
+                  <stat.icon size={20} />
+                </ThemeIcon>
+                
+                <div>
+                  <Text size="2xl" fw={700} c="#1e293b">
+                    {stat.value}
+                  </Text>
+                  <Text size="sm" c="dimmed">
+                    {stat.title}
+                  </Text>
+                </div>
+              </Stack>
+            </Card>
+          ))}
+        </SimpleGrid>
+
+        {/* Compliance Overview */}
+        <Tabs defaultValue="frameworks" radius="lg">
+          <Tabs.List>
+            <Tabs.Tab value="frameworks">Compliance Frameworks</Tabs.Tab>
+            <Tabs.Tab value="requirements">Upcoming Requirements</Tabs.Tab>
+            <Tabs.Tab value="violations">Violations & Issues</Tabs.Tab>
+            <Tabs.Tab value="reports">Audit Reports</Tabs.Tab>
+          </Tabs.List>
+
+          <Tabs.Panel value="frameworks" pt="xl">
+            <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
+              {complianceFrameworks.map((framework) => (
+                <Card
+                  key={framework.id}
+                  style={{
+                    ...neo.card,
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                  }}
+                  p="xl"
+                >
+                  <Stack gap="md">
+                    <Group justify="space-between">
+                      <Group gap="sm">
+                        <ThemeIcon
+                          size="lg"
+                          radius="xl"
+                          color={getStatusColor(framework.status)}
+                          variant="light"
+                        >
+                          <IconShield size={20} />
+                        </ThemeIcon>
+                        <div>
+                          <Title order={3} size="lg" fw={600}>
+                            {framework.name}
+                          </Title>
+                          <Text size="sm" c="dimmed">
+                            {framework.description}
+                          </Text>
+                        </div>
+                      </Group>
+                      <Badge
+                        color={getStatusColor(framework.status)}
+                        variant="light"
+                        radius="xl"
+                        leftSection={getStatusIcon(framework.status)}
+                      >
+                        {framework.status}
+                      </Badge>
+                    </Group>
+
+                    <div>
+                      <Group justify="space-between" mb="xs">
+                        <Text size="sm" fw={500}>Compliance Score</Text>
+                        <Text size="sm" fw={700} c={getScoreColor(framework.score)}>
+                          {framework.score}%
+                        </Text>
+                      </Group>
+                      <Progress
+                        value={framework.score}
+                        size="md"
+                        radius="xl"
+                        color={getScoreColor(framework.score)}
+                      />
+                    </div>
+
+                    <Group justify="space-between">
+                      <div>
+                        <Text size="xs" c="dimmed">Requirements</Text>
+                        <Text size="sm" fw={600}>
+                          {framework.completed}/{framework.requirements}
+                        </Text>
+                      </div>
+                      <div>
+                        <Text size="xs" c="dimmed">Violations</Text>
+                        <Text size="sm" fw={600} c={framework.violations > 0 ? 'red' : 'green'}>
+                          {framework.violations}
+                        </Text>
+                      </div>
+                      <div>
+                        <Text size="xs" c="dimmed">Last Audit</Text>
+                        <Text size="sm" fw={500}>
+                          {new Date(framework.lastAudit).toLocaleDateString()}
+                        </Text>
+                      </div>
+                    </Group>
+
+                    <Badge size="sm" variant="light" color="gray">
+                      {framework.category}
+                    </Badge>
+                  </Stack>
+                </Card>
+              ))}
+            </SimpleGrid>
+          </Tabs.Panel>
+
+          <Tabs.Panel value="requirements" pt="xl">
+            <Card style={neo.card} p="xl">
+              <Title order={3} size="lg" fw={600} mb="lg">
+                Upcoming Compliance Requirements
+              </Title>
+              <Stack gap="md">
+                {upcomingRequirements.map((req, index) => (
+                  <Card
+                    key={index}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.6)',
+                      border: '1px solid rgba(255, 255, 255, 0.2)',
+                      borderRadius: '12px',
+                    }}
+                    p="md"
+                  >
+                    <Group justify="space-between" align="center">
+                      <div>
+                        <Text fw={600} size="sm">
+                          {req.requirement}
+                        </Text>
+                        <Text size="xs" c="dimmed">
+                          {req.framework} Framework
+                        </Text>
+                      </div>
+                      <Group gap="sm">
+                        <Badge
+                          size="sm"
+                          color={getPriorityColor(req.priority)}
+                          variant="light"
+                        >
+                          {req.priority} priority
+                        </Badge>
+                        <Text size="xs" c="dimmed">
+                          Due: {new Date(req.dueDate).toLocaleDateString()}
+                        </Text>
+                      </Group>
+                    </Group>
+                  </Card>
+                ))}
+              </Stack>
+            </Card>
+          </Tabs.Panel>
+
+          <Tabs.Panel value="violations" pt="xl">
+            <Card style={neo.card} p="xl">
+              <Stack align="center" gap="md" py="xl">
+                <IconAlertTriangle size={64} color="#f59e0b" />
+                <Title order={3} c="dimmed">Active Compliance Issues</Title>
+                <Text c="dimmed" ta="center">
+                  Monitor and resolve compliance violations and policy breaches
+                </Text>
+                <Button leftSection={<IconEye size={16} />}>
+                  View Issues
+                </Button>
+              </Stack>
+            </Card>
+          </Tabs.Panel>
+
+          <Tabs.Panel value="reports" pt="xl">
+            <Card style={neo.card} p="xl">
+              <Stack align="center" gap="md" py="xl">
+                <IconFileText size={64} color="#cbd5e1" />
+                <Title order={3} c="dimmed">Compliance Audit Reports</Title>
+                <Text c="dimmed" ta="center">
+                  Generate comprehensive compliance reports for stakeholders
+                </Text>
+                <Button leftSection={<IconDownload size={16} />}>
+                  Generate Report
+                </Button>
+              </Stack>
+            </Card>
+          </Tabs.Panel>
+        </Tabs>
+      </Stack>
+    </Container>
   );
 }

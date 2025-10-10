@@ -1,0 +1,189 @@
+:root {
+  /* Colors - Primary */
+  --color-black: #000000;
+  --color-white: #ffffff;
+
+  /* Colors - Accent */
+  --color-orange: #ff6b35;
+  --color-orange-dark: #e55a2b;
+  --color-orange-light: #ff8c69;
+
+  /* Colors - Gray Scale */
+  --color-gray-100: #f5f5f5;
+  --color-gray-200: #e5e5e5;
+  --color-gray-300: #d4d4d4;
+  --color-gray-400: #a3a3a3;
+  --color-gray-500: #737373;
+  --color-gray-600: #525252;
+  --color-gray-700: #404040;
+  --color-gray-800: #262626;
+  --color-gray-900: #171717;
+
+  /* Colors - Semantic */
+  --color-success: #22c55e;
+  --color-success-light: #dcfce7;
+  --color-success-dark: #16a34a;
+  --color-warning: #f59e0b;
+  --color-warning-light: #fef3c7;
+  --color-warning-dark: #d97706;
+  --color-error: #ef4444;
+  --color-error-light: #fee2e2;
+  --color-error-dark: #dc2626;
+  --color-info: #3b82f6;
+
+  /* Typography - Font Families */
+  --font-family-primary: "Inter", -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-family-display: "Space Grotesk", Inter, sans-serif;
+  --font-family-mono: "JetBrains Mono", 'Fira Code', 'Monaco', monospace;
+
+  /* Typography - Font Weights */
+  --font-weight-light: 300;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-weight-black: 900;
+
+  /* Typography - Font Sizes */
+  --font-size-xs: 0.75rem;    /* 12px */
+  --font-size-sm: 0.875rem;   /* 14px */
+  --font-size-base: 1rem;     /* 16px */
+  --font-size-lg: 1.125rem;   /* 18px */
+  --font-size-xl: 1.25rem;    /* 20px */
+  --font-size-2xl: 1.5rem;    /* 24px */
+  --font-size-3xl: 1.875rem;  /* 30px */
+  --font-size-4xl: 2.25rem;   /* 36px */
+  --font-size-5xl: 3rem;      /* 48px */
+  --font-size-6xl: 3.75rem;   /* 60px */
+  --font-size-7xl: 4.5rem;    /* 72px */
+
+  /* Typography - Line Heights */
+  --line-height-tight: 1.1;
+  --line-height-snug: 1.2;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.6;
+
+  /* Typography - Letter Spacing */
+  --letter-spacing-tight: -0.02em;
+  --letter-spacing-normal: 0;
+  --letter-spacing-wide: 0.05em;
+
+  /* Spacing - Brutalist Grid System (Base unit: 0.25rem = 4px) */
+  --spacing-1: 0.25rem;   /* 4px */
+  --spacing-2: 0.5rem;    /* 8px */
+  --spacing-3: 0.75rem;   /* 12px */
+  --spacing-4: 1rem;      /* 16px */
+  --spacing-5: 1.25rem;   /* 20px */
+  --spacing-6: 1.5rem;    /* 24px */
+  --spacing-8: 2rem;      /* 32px */
+  --spacing-10: 2.5rem;   /* 40px */
+  --spacing-12: 3rem;     /* 48px */
+  --spacing-16: 4rem;     /* 64px */
+  --spacing-20: 5rem;     /* 80px */
+  --spacing-24: 6rem;     /* 96px */
+  --spacing-32: 8rem;     /* 128px */
+
+  /* Border Radius - Minimal for brutalist design */
+  --border-radius-none: 0;
+  --border-radius-sm: 0.125rem;  /* 2px */
+  --border-radius-base: 0.25rem; /* 4px */
+  --border-radius-md: 0.375rem;  /* 6px */
+  --border-radius-lg: 0.5rem;    /* 8px */
+  --border-radius-xl: 0.75rem;   /* 12px */
+
+  /* Shadows - Brutalist with hard edges */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-base: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --shadow-brutal: 4px 4px 0px 0px #000000;
+  --shadow-brutal-lg: 8px 8px 0px 0px #000000;
+  --shadow-brutal-sm: 2px 2px 0px 0px #000000;
+
+  /* Transitions */
+  --transition-duration-fast: 150ms;
+  --transition-duration-base: 250ms;
+  --transition-duration-slow: 350ms;
+  --transition-easing-ease-in-out: ease-in-out;
+  --transition-easing-ease-out: ease-out;
+  --transition-easing-ease-in: ease-in;
+
+  /* Z-Index Scale */
+  --z-index-dropdown: 1000;
+  --z-index-sticky: 1020;
+  --z-index-fixed: 1030;
+  --z-index-modal-backdrop: 1040;
+  --z-index-modal: 1050;
+  --z-index-popover: 1060;
+  --z-index-tooltip: 1070;
+  --z-index-toast: 1080;
+
+  /* Breakpoints */
+  --breakpoint-sm: 640px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 1024px;
+  --breakpoint-xl: 1280px;
+  --breakpoint-2xl: 1536px;
+
+  /* Accessibility */
+  --accessibility-focus-outline: 2px solid #ff6b35;
+  --accessibility-focus-outline-offset: 2px;
+  --accessibility-contrast-ratio-normal: 4.5;
+  --accessibility-contrast-ratio-large: 3;
+}
+
+/* Dark mode overrides */
+[data-mantine-color-scheme="dark"] {
+  /* In dark mode, we might want to adjust some colors for better contrast */
+  /* But for brutalist design, we'll keep the high contrast as specified */
+}
+
+/* Utility classes for brutalist design */
+.brutalist-card {
+  background: var(--color-white);
+  border: 2px solid var(--color-black);
+  border-radius: var(--border-radius-base);
+  box-shadow: var(--shadow-brutal);
+  transition: transform var(--transition-duration-fast) ease, box-shadow var(--transition-duration-fast) ease;
+}
+
+.brutalist-card:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: var(--shadow-brutal-lg);
+}
+
+.brutalist-button {
+  background: var(--color-black);
+  color: var(--color-white);
+  border: 2px solid var(--color-black);
+  border-radius: var(--border-radius-base);
+  box-shadow: var(--shadow-brutal);
+  font-weight: var(--font-weight-bold);
+  transition: transform var(--transition-duration-fast) ease, box-shadow var(--transition-duration-fast) ease;
+}
+
+.brutalist-button:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: var(--shadow-brutal-lg);
+}
+
+.brutalist-input {
+  background: var(--color-white);
+  border: 2px solid var(--color-black);
+  border-radius: var(--border-radius-base);
+  padding: 0.75rem 1rem;
+  font-size: var(--font-size-base);
+}
+
+.brutalist-input:focus {
+  border-color: var(--color-orange);
+  box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.1);
+  outline: var(--accessibility-focus-outline);
+  outline-offset: var(--accessibility-focus-outline-offset);
+}
+
+/* Focus styles for accessibility */
+.brutalist-focus {
+  outline: var(--accessibility-focus-outline);
+  outline-offset: var(--accessibility-focus-outline-offset);
+}

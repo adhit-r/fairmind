@@ -1,49 +1,151 @@
 """
-Fairmind ML Service - AI Governance and Bias Detection API
+FairMind AI Governance Platform - Production-Ready Backend API
 
-This service provides ML capabilities specifically for:
-- Bias detection and fairness analysis
-- Model explainability (SHAP, LIME, DALEX)
-- Compliance scoring and reporting
-- Real-time monitoring and alerts
+This service provides comprehensive AI governance capabilities including:
+- Advanced bias detection and fairness analysis
+- Model explainability and interpretability
+- Compliance scoring and regulatory reporting
+- Real-time monitoring and alerting
+- Modern LLM bias detection
+- Multimodal bias analysis
 """
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from contextlib import asynccontextmanager
 import logging
-import os
 from pathlib import Path
-from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
+# Import production-ready configuration
+from config.settings import settings
+from config.logging import get_logger
+from config.database import init_database, close_database
+from config.cache import init_cache, close_cache
+from middleware.security import (
+    SecurityHeadersMiddleware,
+    RateLimitMiddleware,
+    RequestLoggingMiddleware,
+    ErrorHandlingMiddleware,
+)
+from services.health import health_service
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Get logger
+logger = get_logger("main")
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan events."""
+    # Startup
+    logger.info(f"Starting FairMind API in {settings.environment} mode")
+    
+    # Initialize database connections
+    try:
+        await init_database()
+        logger.info("Database connections initialized")
+    except Exception as e:
+        logger.error(f"Failed to initialize database: {e}")
+        raise
+    
+    # Initialize cache connections
+    try:
+        await init_cache()
+        logger.info("Cache connections initialized")
+    except Exception as e:
+        logger.warning(f"Failed to initialize cache: {e}")
+        # Cache is optional, continue without it
+    
+    # Ensure required directories exist
+    Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
+    Path(settings.database_dir).mkdir(parents=True, exist_ok=True)
+    Path(settings.model_cache_dir).mkdir(parents=True, exist_ok=True)
+    
+    logger.info("Application startup complete")
+    
+    yield
+    
+    # Shutdown
+    logger.info("Starting application shutdown")
+    
+    # Close database connections
+    try:
+        await close_database()
+        logger.info("Database connections closed")
+    except Exception as e:
+        logger.error(f"Error closing database: {e}")
+    
+    # Close cache connections
+    try:
+        await close_cache()
+        logger.info("Cache connections closed")
+    except Exception as e:
+        logger.error(f"Error closing cache: {e}")
+    
+    logger.info("Application shutdown complete")
+
+
+# Create FastAPI application with production configuration
 app = FastAPI(
-    title="Fairmind ML Service",
-    description="AI Governance and Bias Detection ML Service",
-    version="1.0.0"
+    title=settings.api_title,
+    description=settings.api_description,
+    version=settings.api_version,
+    debug=settings.debug,
+    lifespan=lifespan,
+    docs_url="/docs" if not settings.is_production else None,
+    redoc_url="/redoc" if not settings.is_production else None,
 )
 
-# Add CORS middleware - FIXED: Use environment variables
+# Add production-ready middleware (order matters!)
+app.add_middleware(ErrorHandlingMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RequestLoggingMiddleware)
+
+# Add response compression middleware
+app.add_middleware(
+    GZipMiddleware,
+    minimum_size=1000,  # Only compress responses larger than 1KB
+    compresslevel=6     # Balance between compression ratio and speed
+)
+
+# Add rate limiting middleware
+app.add_middleware(
+    RateLimitMiddleware,
+    requests_per_minute=settings.rate_limit_requests
+)
+
+# Add CORS middleware with production configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3002,http://127.0.0.1:3000,http://127.0.0.1:3002,https://app-demo.fairmind.xyz,https://fairmind.xyz").split(","),
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
+    **settings.cors_config
 )
 
-# Ensure uploads directory exists
-UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "uploads"))
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-DATASET_DIR = Path(os.getenv("DATABASE_DIR", "datasets"))
-DATASET_DIR.mkdir(parents=True, exist_ok=True)
 
-# Import and include only working routes
+# Custom exception handlers
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Handle validation errors."""
+    logger.warning(f"Validation error: {exc.errors()}")
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={
+            "error": "Validation error",
+            "message": "Invalid request data",
+            "details": exc.errors() if settings.debug else None,
+        }
+    )
+
+# Import and include authentication routes first
+try:
+    from .routes import auth
+    app.include_router(auth.router, prefix="/api/v1", tags=["authentication"])
+    logger.info("Authentication routes loaded successfully")
+except Exception as e:
+    logger.warning(f"Could not load authentication routes: {e}")
+
+# Import and include core routes
 try:
     from .routes import core
     app.include_router(core.router, prefix="/api/v1", tags=["core"])
@@ -52,8 +154,9 @@ except Exception as e:
     logger.warning(f"Could not load core routes: {e}")
 
 try:
-    from .routes import database
+    from api.routes import database
     app.include_router(database.router, prefix="/api/v1", tags=["database"])
+    app.include_router(database.main_router, prefix="/api/v1", tags=["main-api"])
     logger.info("Database routes loaded successfully")
 except Exception as e:
     logger.warning(f"Could not load database routes: {e}")
@@ -108,45 +211,109 @@ try:
 except Exception as e:
     logger.warning(f"Could not load advanced fairness routes: {e}")
 
-@app.get("/")
-async def root():
-    """Root endpoint"""
-    return {
-        "message": "Fairmind ML Service - AI Governance and Bias Detection",
-        "version": "1.0.0",
-        "status": "running",
-        "database": "connected",
-        "features": [
-            "Bias Detection & Fairness Analysis",
-            "AI BOM Management (Database)",
-            "Real-time Monitoring & Alerts",
-            "Model Explainability",
-            "Compliance Scoring",
-            "Advanced Analytics",
-            "OWASP Security Testing",
-            "Model Provenance",
-            "Advanced Fairness Analysis"
-        ]
-    }
+# Modern bias detection and explainability routes
+try:
+    from .routes import modern_bias_detection
+    app.include_router(modern_bias_detection.router, prefix="/api/v1", tags=["modern-bias-detection"])
+    logger.info("Modern bias detection routes loaded successfully")
+except Exception as e:
+    logger.warning(f"Could not load modern bias detection routes: {e}")
 
+try:
+    from .routes import modern_tools_integration
+    app.include_router(modern_tools_integration.router, prefix="/api/v1", tags=["modern-tools-integration"])
+    logger.info("Modern tools integration routes loaded successfully")
+except Exception as e:
+    logger.warning(f"Could not load modern tools integration routes: {e}")
+
+try:
+    from .routes import comprehensive_bias_evaluation
+    app.include_router(comprehensive_bias_evaluation.router, prefix="/api/v1", tags=["comprehensive-bias-evaluation"])
+    logger.info("Comprehensive bias evaluation routes loaded successfully")
+except Exception as e:
+    logger.warning(f"Could not load comprehensive bias evaluation routes: {e}")
+
+try:
+    from .routes import multimodal_bias_detection
+    app.include_router(multimodal_bias_detection.router, prefix="/api/v1", tags=["multimodal-bias-detection"])
+    logger.info("Multimodal bias detection routes loaded successfully")
+except Exception as e:
+    logger.warning(f"Could not load multimodal bias detection routes: {e}")
+
+# Advanced bias detection routes
+try:
+    from .routes import advanced_bias_detection
+    app.include_router(advanced_bias_detection.router, prefix="/api/v1", tags=["advanced-bias-detection"])
+    logger.info("Advanced bias detection routes loaded successfully")
+except Exception as e:
+    logger.warning(f"Could not load advanced bias detection routes: {e}")
+
+# Real-time model integration routes
+try:
+    from .routes import realtime_model_integration
+    app.include_router(realtime_model_integration.router, prefix="/api/v1", tags=["realtime-model-integration"])
+    logger.info("Real-time model integration routes loaded successfully")
+except Exception as e:
+    logger.warning(f"Could not load real-time model integration routes: {e}")
+
+# Benchmark suite routes
+try:
+    from .routes import benchmark_suite
+    app.include_router(benchmark_suite.router, prefix="/api/v1", tags=["benchmark-suite"])
+    logger.info("Benchmark suite routes loaded successfully")
+except Exception as e:
+    logger.warning(f"Could not load benchmark suite routes: {e}")
+
+# Production-ready health check endpoints
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
+    """Comprehensive health check endpoint."""
+    return await health_service.get_health_status()
+
+
+@app.get("/health/ready")
+async def readiness_check():
+    """Kubernetes readiness probe endpoint."""
+    return await health_service.get_readiness_status()
+
+
+@app.get("/health/live")
+async def liveness_check():
+    """Kubernetes liveness probe endpoint."""
+    return await health_service.get_liveness_status()
+
+
+@app.get("/")
+async def root():
+    """Root endpoint with API information."""
     return {
-        "status": "healthy",
-        "service": "Fairmind ML Service",
-        "database": "connected",
-        "timestamp": "2024-01-01T00:00:00Z",
+        "name": settings.api_title,
+        "version": settings.api_version,
+        "environment": settings.environment,
+        "status": "running",
+        "description": settings.api_description,
+        "features": [
+            "Advanced Bias Detection & Fairness Analysis",
+            "Modern LLM Bias Detection (WEAT, SEAT, Minimal Pairs)",
+            "Multimodal Bias Detection (Image, Audio, Video)",
+            "AI BOM Management & Compliance Tracking",
+            "Real-time Monitoring & Alerting",
+            "Model Explainability & Interpretability",
+            "OWASP AI Security Testing",
+            "Model Provenance & Lineage Tracking",
+            "Comprehensive Evaluation Pipeline",
+            "Production-Ready API with Security",
+            "Rate Limiting & Request Monitoring",
+            "Health Checks & System Monitoring",
+            "Error Tracking & Logging",
+            "Automated Testing & Quality Assurance"
+        ],
         "endpoints": {
-            "core": "/api/v1/core",
-            "database": "/api/v1/database",
-            "ai_bom": "/api/v1/ai-bom",
-            "bias_detection": "/api/v1/bias",
-            "security": "/api/v1/owasp",
-            "monitoring": "/api/v1/monitor",
-            "fairness_governance": "/api/v1/fairness",
-            "provenance": "/api/v1/provenance",
-            "advanced_fairness": "/api/v1/advanced-fairness"
+            "health": "/health",
+            "readiness": "/health/ready",
+            "liveness": "/health/live",
+            "api_info": "/api",
+            "documentation": "/docs" if settings.debug else "disabled_in_production"
         }
     }
 

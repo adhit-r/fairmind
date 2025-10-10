@@ -22,12 +22,12 @@ class SupabaseService:
             self.client = None
             return
             
-            try:
+        try:
             self.client: Client = create_client(self.url, self.service_key)
-                logger.info("Supabase client initialized successfully")
-            except Exception as e:
+            logger.info("Supabase client initialized successfully")
+        except Exception as e:
             logger.error(f"Failed to initialize Supabase client: {e}")
-                self.client = None
+            self.client = None
     
     def is_connected(self) -> bool:
         """Check if Supabase client is connected"""
@@ -269,4 +269,4 @@ class SupabaseService:
         }
 
 # Global instance
-supabase_service = SupabaseService() 
+supabase_service = SupabaseService()

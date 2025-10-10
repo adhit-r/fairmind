@@ -1,20 +1,6 @@
-@import '@mantine/core/styles.css';
-@import '@mantine/notifications/styles.css';
-@import '@mantine/spotlight/styles.css';
-@import '@mantine/nprogress/styles.css';
+@import '../styles/design-system.css';
 
-:root {
-  --mantine-color-brand-0: #f0f9ff;
-  --mantine-color-brand-1: #e0f2fe;
-  --mantine-color-brand-2: #bae6fd;
-  --mantine-color-brand-3: #7dd3fc;
-  --mantine-color-brand-4: #38bdf8;
-  --mantine-color-brand-5: #0ea5e9;
-  --mantine-color-brand-6: #0284c7;
-  --mantine-color-brand-7: #0369a1;
-  --mantine-color-brand-8: #075985;
-  --mantine-color-brand-9: #0c4a6e;
-}
+/* Global styles for Fairmind - Responsible AI Platform */
 
 * {
   box-sizing: border-box;
@@ -26,61 +12,172 @@ html,
 body {
   max-width: 100vw;
   overflow-x: hidden;
-  height: 100%;
+  font-family: var(--font-family-primary);
 }
 
 body {
-  color: var(--mantine-color-text);
-  background: var(--mantine-color-body);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  line-height: 1.6;
+  background: var(--color-white);
+  color: var(--color-black);
+  transition: background 250ms ease, color 250ms ease;
 }
 
-a {
-  color: inherit;
-  text-decoration: none;
+/* Dark mode styles */
+[data-mantine-color-scheme="dark"] body {
+  background: var(--color-black);
+  color: var(--color-white);
 }
 
-#__next {
-  height: 100%;
+/* Ensure proper contrast for text */
+[data-mantine-color-scheme="light"] {
+  --mantine-color-text: var(--color-black);
+  --mantine-color-dimmed: var(--color-gray-600);
 }
 
-/* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 8px;
+[data-mantine-color-scheme="dark"] {
+  --mantine-color-text: var(--color-white);
+  --mantine-color-dimmed: var(--color-gray-400);
 }
 
-::-webkit-scrollbar-track {
-  background: var(--mantine-color-gray-1);
+/* Fix navbar and sidebar visibility */
+[data-mantine-color-scheme="dark"] .mantine-AppShell-navbar {
+  background: var(--color-black);
+  border-color: var(--color-black);
 }
 
-::-webkit-scrollbar-thumb {
-  background: var(--mantine-color-gray-4);
-  border-radius: 4px;
+[data-mantine-color-scheme="light"] .mantine-AppShell-navbar {
+  background: var(--color-white);
+  border-color: var(--color-black);
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: var(--mantine-color-gray-5);
+[data-mantine-color-scheme="dark"] .mantine-AppShell-header {
+  background: var(--color-black);
+  border-color: var(--color-black);
+  border-bottom: 2px solid var(--color-black);
 }
 
-/* Focus styles */
-*:focus-visible {
-  outline: 2px solid var(--mantine-color-brand-6);
-  outline-offset: 2px;
+[data-mantine-color-scheme="light"] .mantine-AppShell-header {
+  background: var(--color-white);
+  border-color: var(--color-black);
+  border-bottom: 2px solid var(--color-black);
 }
 
-/* Selection styles */
-::selection {
-  background: var(--mantine-color-brand-1);
-  color: var(--mantine-color-brand-9);
+/* Ensure proper text contrast in cards */
+[data-mantine-color-scheme="dark"] .mantine-Paper-root {
+  background: var(--color-gray-900);
+  color: var(--color-white);
+  border: 2px solid var(--color-black);
 }
 
-/* Print styles */
-@media print {
-  * {
-    background: transparent !important;
-    color: black !important;
-    box-shadow: none !important;
-    text-shadow: none !important;
-  }
+[data-mantine-color-scheme="light"] .mantine-Paper-root {
+  background: var(--color-white);
+  color: var(--color-black);
+  border: 2px solid var(--color-black);
+}
+
+/* Brutalist card styles */
+.mantine-Card-root {
+  border: 2px solid var(--color-black);
+  border-radius: var(--border-radius-base);
+  box-shadow: var(--shadow-brutal);
+  transition: transform var(--transition-duration-fast) ease, box-shadow var(--transition-duration-fast) ease;
+}
+
+.mantine-Card-root:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: var(--shadow-brutal-lg);
+}
+
+/* Brutalist button styles */
+.mantine-Button-root {
+  border: 2px solid var(--color-black);
+  border-radius: var(--border-radius-base);
+  box-shadow: var(--shadow-brutal);
+  font-weight: var(--font-weight-bold);
+  transition: transform var(--transition-duration-fast) ease, box-shadow var(--transition-duration-fast) ease;
+}
+
+.mantine-Button-root:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: var(--shadow-brutal-lg);
+}
+
+/* Primary button */
+.mantine-Button-root[data-variant="filled"] {
+  background: var(--color-black);
+  color: var(--color-white);
+}
+
+/* Secondary button */
+.mantine-Button-root[data-variant="outline"] {
+  background: var(--color-white);
+  color: var(--color-black);
+}
+
+/* Accent button */
+.mantine-Button-root[data-color="orange"] {
+  background: var(--color-orange);
+  color: var(--color-white);
+  border-color: var(--color-orange);
+}
+
+.mantine-Button-root[data-color="orange"]:hover {
+  background: var(--color-orange-dark);
+}
+
+/* Navigation button styles */
+.mantine-Button-root[data-variant="default"] {
+  background: transparent;
+  color: var(--color-black);
+  border: 2px solid var(--color-black);
+  box-shadow: var(--shadow-brutal);
+}
+
+[data-mantine-color-scheme="dark"] .mantine-Button-root[data-variant="default"] {
+  color: var(--color-white);
+}
+
+.mantine-Button-root[data-variant="default"]:hover {
+  background: var(--color-orange);
+  color: var(--color-white);
+  transform: translate(-2px, -2px);
+  box-shadow: var(--shadow-brutal-lg);
+}
+
+/* Fix for Group elements */
+.mantine-Group-root {
+  display: flex;
+  align-items: center;
+}
+
+/* Fix for NavLink chevron */
+.mantine-NavLink-chevron {
+  display: none !important;
+}
+
+/* Brutalist input styles */
+.mantine-Input-input {
+  border: 2px solid var(--color-black);
+  border-radius: var(--border-radius-base);
+  padding: 0.75rem 1rem;
+  font-size: var(--font-size-base);
+}
+
+.mantine-Input-input:focus {
+  border-color: var(--color-orange);
+  box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.1);
+  outline: var(--accessibility-focus-outline);
+  outline-offset: var(--accessibility-focus-outline-offset);
+}
+
+/* Focus styles for accessibility */
+.brutalist-focus {
+  outline: var(--accessibility-focus-outline);
+  outline-offset: var(--accessibility-focus-outline-offset);
+}
+
+/* SVG Logo styles */
+.mantine-Svg-root {
+  border: 2px solid var(--color-black);
+  border-radius: var(--border-radius-none);
+  box-shadow: var(--shadow-brutal);
 }

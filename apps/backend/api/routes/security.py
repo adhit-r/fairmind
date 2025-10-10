@@ -163,7 +163,7 @@ async def generate_security_report(request: SecurityReportRequest):
         # For now, we'll create a mock report
         mock_scan_results = [
             {
-                "success": True,
+            "success": True,
                 "security_score": 85,
                 "vulnerabilities": [],
                 "security_issues": []

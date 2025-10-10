@@ -302,3 +302,10 @@ apps/website/src/content/docs/installation.mdx
 
 # Local Netlify folder
 .netlify
+
+# Archive directory
+archive/
+
+.qoder/
+
+
