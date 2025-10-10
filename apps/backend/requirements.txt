@@ -9,7 +9,7 @@ python-dotenv==1.0.0
 gunicorn==21.2.0
 
 # Authentication & Security
-python-jose[cryptography]==3.3.0
+PyJWT==2.10.1
 passlib[bcrypt]==1.7.4
 
 # WebSocket support
@@ -43,7 +43,6 @@ asyncpg==0.29.0
 databases[postgresql]==0.8.0
 
 # JWT Authentication
-python-jose[cryptography]==3.3.0
 bcrypt==4.1.2
 
 # API Response Compression

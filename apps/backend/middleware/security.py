@@ -314,12 +314,165 @@ class ErrorHandlingMiddleware(BaseHTTPMiddleware):
         return request.client.host if request.client else "unknown"
 
 
+# JWT Authentication Middleware
+class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
+    """JWT authentication middleware using new secure JWT infrastructure."""
+    
+    def __init__(self, app):
+        super().__init__(app)
+        # Import here to avoid circular imports
+        from config.auth import auth_manager
+        from config.jwt_exceptions import (
+            TokenExpiredException,
+            InvalidTokenException,
+            TokenMissingException,
+            log_jwt_security_event
+        )
+        self.auth_manager = auth_manager
+        self.TokenExpiredException = TokenExpiredException
+        self.InvalidTokenException = InvalidTokenException
+        self.TokenMissingException = TokenMissingException
+        self.log_jwt_security_event = log_jwt_security_event
+    
+    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        # Skip authentication for public endpoints
+        public_paths = [
+            "/health", "/", "/docs", "/redoc", "/openapi.json",
+            "/auth/login", "/auth/refresh", "/auth/health"
+        ]
+        
+        if request.url.path in public_paths or request.method == "OPTIONS":
+            return await call_next(request)
+        
+        # Extract JWT token from Authorization header
+        auth_header = request.headers.get("Authorization")
+        
+        if not auth_header or not auth_header.startswith("Bearer "):
+            # Log security event
+            self.log_jwt_security_event(
+                "missing_token",
+                {
+                    "path": request.url.path,
+                    "method": request.method,
+                    "ip": self.get_client_ip(request)
+                }
+            )
+            
+            return JSONResponse(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                content={
+                    "error": "Authentication required",
+                    "message": "Please provide a valid JWT token"
+                },
+                headers={"WWW-Authenticate": "Bearer"}
+            )
+        
+        token = auth_header.split(" ")[1]
+        
+        try:
+            # Verify token using new JWT infrastructure
+            token_data = await self.auth_manager.verify_token(token)
+            
+            # Add user information to request state
+            request.state.user = token_data
+            request.state.authenticated = True
+            
+            # Log successful authentication
+            logger.debug(f"User authenticated: {token_data.email}")
+            
+            response = await call_next(request)
+            return response
+            
+        except self.TokenExpiredException:
+            self.log_jwt_security_event(
+                "token_expired",
+                {
+                    "path": request.url.path,
+                    "method": request.method,
+                    "ip": self.get_client_ip(request)
+                }
+            )
+            
+            return JSONResponse(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                content={
+                    "error": "Token expired",
+                    "message": "Your session has expired. Please login again."
+                },
+                headers={"WWW-Authenticate": "Bearer"}
+            )
+            
+        except self.InvalidTokenException:
+            self.log_jwt_security_event(
+                "invalid_token",
+                {
+                    "path": request.url.path,
+                    "method": request.method,
+                    "ip": self.get_client_ip(request),
+                    "token_preview": token[:20] + "..." if len(token) > 20 else token
+                }
+            )
+            
+            return JSONResponse(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                content={
+                    "error": "Invalid token",
+                    "message": "The provided token is invalid. Please login again."
+                },
+                headers={"WWW-Authenticate": "Bearer"}
+            )
+            
+        except Exception as e:
+            logger.error(f"JWT authentication error: {str(e)}")
+            self.log_jwt_security_event(
+                "auth_error",
+                {
+                    "path": request.url.path,
+                    "method": request.method,
+                    "ip": self.get_client_ip(request),
+                    "error": str(e)
+                }
+            )
+            
+            return JSONResponse(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                content={
+                    "error": "Authentication service error",
+                    "message": "Unable to verify authentication. Please try again."
+                }
+            )
+    
+    def get_client_ip(self, request: Request) -> str:
+        """Get client IP address."""
+        forwarded_for = request.headers.get("X-Forwarded-For")
+        if forwarded_for:
+            return forwarded_for.split(",")[0].strip()
+        
+        real_ip = request.headers.get("X-Real-IP")
+        if real_ip:
+            return real_ip
+        
+        return request.client.host if request.client else "unknown"
+
+
 # Security utilities
 security = HTTPBearer()
 
 
-async def get_current_user(credentials: HTTPAuthorizationCredentials = security):
-    """Get current user from JWT token."""
-    # TODO: Implement JWT token validation
-    # This is a placeholder for authentication
-    return {"user_id": "anonymous", "role": "user"}
+async def get_current_user_from_request(request: Request):
+    """Get current user from request state (set by JWT middleware)."""
+    if hasattr(request.state, 'user') and request.state.authenticated:
+        return request.state.user
+    
+    # Fallback to manual token verification if middleware wasn't used
+    from config.auth import auth_manager
+    
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required"
+        )
+    
+    token = auth_header.split(" ")[1]
+    return await auth_manager.verify_token(token)

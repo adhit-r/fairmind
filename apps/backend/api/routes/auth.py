@@ -3,7 +3,7 @@ Authentication routes for JWT-based security.
 """
 
 from fastapi import APIRouter, HTTPException, status, Depends
-from fastapi.security import HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 from datetime import datetime, timedelta
@@ -19,6 +19,17 @@ from ...config.auth import (
     require_admin
 )
 from ...config.cache import cache_manager
+from ...config.jwt_exceptions import (
+    TokenExpiredException,
+    InvalidTokenException,
+    TokenMissingException,
+    handle_jwt_exception
+)
+from ...config.jwt_models import (
+    LoginRequest as JWTLoginRequest,
+    LoginResponse as JWTLoginResponse,
+    TokenResponse as JWTTokenResponse
+)
 
 logger = logging.getLogger("fairmind.auth")
 
@@ -80,7 +91,7 @@ class UserResponse(BaseModel):
 
 @router.post("/login", response_model=LoginResponse)
 async def login(login_data: LoginRequest):
-    """Authenticate user and return JWT tokens."""
+    """Authenticate user and return JWT tokens using new JWT infrastructure."""
     try:
         # In production, verify credentials against database
         # This is a simplified example
@@ -114,7 +125,7 @@ async def login(login_data: LoginRequest):
                 detail="Invalid email or password"
             )
         
-        # Create tokens
+        # Create tokens using new JWT infrastructure
         access_token = auth_manager.create_access_token(user)
         refresh_token = auth_manager.create_refresh_token(user)
         
@@ -131,7 +142,7 @@ async def login(login_data: LoginRequest):
             ttl=86400  # 24 hours
         )
         
-        logger.info(f"User logged in: {user.email}")
+        logger.info(f"User logged in successfully: {user.email}")
         
         return LoginResponse(
             access_token=access_token,
@@ -147,6 +158,9 @@ async def login(login_data: LoginRequest):
         
     except HTTPException:
         raise
+    except (TokenExpiredException, InvalidTokenException, TokenMissingException) as e:
+        logger.warning(f"JWT error during login: {str(e)}")
+        raise handle_jwt_exception(e)
     except Exception as e:
         logger.error(f"Login error: {e}")
         raise HTTPException(
@@ -157,7 +171,7 @@ async def login(login_data: LoginRequest):
 
 @router.post("/refresh", response_model=RefreshResponse)
 async def refresh_token(refresh_data: RefreshRequest):
-    """Refresh access token using refresh token."""
+    """Refresh access token using refresh token with new JWT infrastructure."""
     try:
         access_token = await auth_manager.refresh_access_token(refresh_data.refresh_token)
         
@@ -166,6 +180,9 @@ async def refresh_token(refresh_data: RefreshRequest):
             expires_in=auth_manager.access_token_expire_minutes * 60
         )
         
+    except (TokenExpiredException, InvalidTokenException, TokenMissingException) as e:
+        logger.warning(f"JWT error during token refresh: {str(e)}")
+        raise handle_jwt_exception(e)
     except HTTPException:
         raise
     except Exception as e:
@@ -177,17 +194,28 @@ async def refresh_token(refresh_data: RefreshRequest):
 
 
 @router.post("/logout")
-async def logout(current_user: TokenData = Depends(get_current_active_user)):
-    """Logout user and revoke tokens."""
+async def logout(
+    current_user: TokenData = Depends(get_current_active_user),
+    credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer())
+):
+    """Logout user and revoke tokens using new JWT infrastructure."""
     try:
+        # Revoke the current token
+        if credentials and credentials.credentials:
+            await auth_manager.revoke_token(credentials.credentials)
+        
         # Remove user session from cache
         session_key = f"session:{current_user.user_id}"
         await cache_manager.delete(session_key)
         
-        logger.info(f"User logged out: {current_user.email}")
+        logger.info(f"User logged out successfully: {current_user.email}")
         
         return {"message": "Successfully logged out"}
         
+    except (TokenExpiredException, InvalidTokenException, TokenMissingException) as e:
+        logger.warning(f"JWT error during logout: {str(e)}")
+        # Still allow logout even if token is invalid
+        return {"message": "Logged out (token was already invalid)"}
     except Exception as e:
         logger.error(f"Logout error: {e}")
         raise HTTPException(

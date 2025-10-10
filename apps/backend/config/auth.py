@@ -1,8 +1,8 @@
 """
 JWT Authentication configuration for production security.
+Updated to use the new secure JWT infrastructure.
 """
 
-import jwt
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List
 from fastapi import HTTPException, status, Depends
@@ -14,6 +14,20 @@ from pydantic import BaseModel
 
 from .settings import settings
 from .cache import cache_manager
+from .jwt_config import get_jwt_manager, init_jwt_manager
+from .jwt_exceptions import (
+    TokenExpiredException, 
+    InvalidTokenException, 
+    TokenMissingException,
+    handle_jwt_exception
+)
+from .jwt_models import (
+    JWTPayload, 
+    TokenRequest, 
+    TokenResponse, 
+    UserRole, 
+    TokenType
+)
 
 logger = logging.getLogger("fairmind.auth")
 
@@ -63,7 +77,7 @@ class TokenData(BaseModel):
 
 
 class AuthManager:
-    """JWT Authentication manager."""
+    """JWT Authentication manager using new secure JWT infrastructure."""
     
     def __init__(self):
         self.secret_key = settings.jwt_secret
@@ -71,6 +85,10 @@ class AuthManager:
         self.access_token_expire_minutes = settings.jwt_expire_minutes
         self.refresh_token_expire_days = 30
         self.api_key_expire_days = 365
+        
+        # Initialize the JWT manager
+        self.jwt_manager = init_jwt_manager(self.secret_key, self.algorithm)
+        logger.info("AuthManager initialized with new JWT infrastructure")
     
     def verify_password(self, plain_password: str, hashed_password: str) -> bool:
         """Verify a password against its hash."""
@@ -85,157 +103,145 @@ class AuthManager:
         user: User, 
         expires_delta: Optional[timedelta] = None
     ) -> str:
-        """Create an access token."""
-        if expires_delta:
-            expire = datetime.now(timezone.utc) + expires_delta
-        else:
-            expire = datetime.now(timezone.utc) + timedelta(
-                minutes=self.access_token_expire_minutes
-            )
+        """Create an access token using new JWT infrastructure."""
+        if not expires_delta:
+            expires_delta = timedelta(minutes=self.access_token_expire_minutes)
         
-        to_encode = {
-            "user_id": user.id,
+        payload = {
+            "sub": user.email,  # Standard JWT subject claim
+            "user_id": int(user.id) if user.id.isdigit() else hash(user.id) % 2147483647,
             "email": user.email,
-            "role": user.role.value,
-            "token_type": TokenType.ACCESS.value,
-            "exp": expire,
-            "iat": datetime.now(timezone.utc),
+            "roles": [user.role.value],
             "permissions": user.permissions,
+            "token_type": TokenType.ACCESS.value,
         }
         
-        encoded_jwt = jwt.encode(to_encode, self.secret_key, algorithm=self.algorithm)
-        return encoded_jwt
+        return self.jwt_manager.create_token(payload, expires_delta)
     
     def create_refresh_token(self, user: User) -> str:
-        """Create a refresh token."""
-        expire = datetime.now(timezone.utc) + timedelta(days=self.refresh_token_expire_days)
+        """Create a refresh token using new JWT infrastructure."""
+        expires_delta = timedelta(days=self.refresh_token_expire_days)
         
-        to_encode = {
-            "user_id": user.id,
+        payload = {
+            "sub": user.email,
+            "user_id": int(user.id) if user.id.isdigit() else hash(user.id) % 2147483647,
             "email": user.email,
-            "role": user.role.value,
+            "roles": [user.role.value],
             "token_type": TokenType.REFRESH.value,
-            "exp": expire,
-            "iat": datetime.now(timezone.utc),
         }
         
-        encoded_jwt = jwt.encode(to_encode, self.secret_key, algorithm=self.algorithm)
-        return encoded_jwt
+        return self.jwt_manager.create_token(payload, expires_delta)
     
     def create_api_key(self, user: User, name: str) -> str:
-        """Create an API key."""
-        expire = datetime.now(timezone.utc) + timedelta(days=self.api_key_expire_days)
+        """Create an API key using new JWT infrastructure."""
+        expires_delta = timedelta(days=self.api_key_expire_days)
         
-        to_encode = {
-            "user_id": user.id,
+        payload = {
+            "sub": user.email,
+            "user_id": int(user.id) if user.id.isdigit() else hash(user.id) % 2147483647,
             "email": user.email,
-            "role": user.role.value,
+            "roles": [user.role.value],
+            "permissions": user.permissions,
             "token_type": TokenType.API_KEY.value,
             "key_name": name,
-            "exp": expire,
-            "iat": datetime.now(timezone.utc),
-            "permissions": user.permissions,
         }
         
-        encoded_jwt = jwt.encode(to_encode, self.secret_key, algorithm=self.algorithm)
-        return encoded_jwt
+        return self.jwt_manager.create_token(payload, expires_delta)
     
     async def verify_token(self, token: str) -> TokenData:
-        """Verify and decode a JWT token."""
+        """Verify and decode a JWT token using new JWT infrastructure."""
         try:
             # Check if token is blacklisted
             blacklist_key = f"blacklist:{token}"
             if await cache_manager.exists(blacklist_key):
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Token has been revoked",
-                    headers={"WWW-Authenticate": "Bearer"},
-                )
+                raise TokenExpiredException("Token has been revoked")
             
-            payload = jwt.decode(token, self.secret_key, algorithms=[self.algorithm])
+            # Use new JWT manager for verification
+            payload = self.jwt_manager.verify_token(token)
             
-            user_id: str = payload.get("user_id")
-            email: str = payload.get("email")
-            role: str = payload.get("role")
-            token_type: str = payload.get("token_type")
-            exp: int = payload.get("exp")
-            iat: int = payload.get("iat")
-            permissions: List[str] = payload.get("permissions", [])
+            if payload is None:
+                raise InvalidTokenException("Token verification failed")
+            
+            # Extract data from payload
+            user_id = payload.get("user_id")
+            email = payload.get("email") or payload.get("sub")
+            roles = payload.get("roles", [])
+            token_type = payload.get("token_type", TokenType.ACCESS.value)
+            exp = payload.get("exp")
+            iat = payload.get("iat")
+            permissions = payload.get("permissions", [])
             
             if user_id is None or email is None:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid token payload",
-                    headers={"WWW-Authenticate": "Bearer"},
-                )
+                raise InvalidTokenException("Invalid token payload")
             
-            # Check if token is expired
-            if datetime.fromtimestamp(exp, tz=timezone.utc) < datetime.now(timezone.utc):
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Token has expired",
-                    headers={"WWW-Authenticate": "Bearer"},
-                )
+            # Convert timestamps if they're datetime objects
+            if isinstance(exp, datetime):
+                exp_dt = exp
+            else:
+                exp_dt = datetime.fromtimestamp(exp, tz=timezone.utc)
+            
+            if isinstance(iat, datetime):
+                iat_dt = iat
+            else:
+                iat_dt = datetime.fromtimestamp(iat, tz=timezone.utc)
+            
+            # Get primary role
+            primary_role = roles[0] if roles else UserRole.VIEWER.value
             
             return TokenData(
-                user_id=user_id,
+                user_id=str(user_id),
                 email=email,
-                role=UserRole(role),
+                role=UserRole(primary_role),
                 token_type=TokenType(token_type),
-                exp=datetime.fromtimestamp(exp, tz=timezone.utc),
-                iat=datetime.fromtimestamp(iat, tz=timezone.utc),
+                exp=exp_dt,
+                iat=iat_dt,
                 permissions=permissions,
             )
             
-        except jwt.ExpiredSignatureError:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token has expired",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        except jwt.JWTError:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Could not validate credentials",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+        except (TokenExpiredException, InvalidTokenException):
+            raise
+        except Exception as e:
+            logger.error(f"Token verification error: {str(e)}")
+            raise InvalidTokenException("Could not validate credentials")
     
     async def refresh_access_token(self, refresh_token: str) -> str:
-        """Create a new access token from a refresh token."""
-        token_data = await self.verify_token(refresh_token)
-        
-        if token_data.token_type != TokenType.REFRESH:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token type for refresh",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        
-        # Get user data (in production, this would come from database)
-        user = await self.get_user_by_id(token_data.user_id)
-        if not user or not user.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="User not found or inactive",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        
-        return self.create_access_token(user)
+        """Create a new access token from a refresh token using new JWT infrastructure."""
+        try:
+            token_data = await self.verify_token(refresh_token)
+            
+            if token_data.token_type != TokenType.REFRESH:
+                raise InvalidTokenException("Invalid token type for refresh")
+            
+            # Get user data (in production, this would come from database)
+            user = await self.get_user_by_id(token_data.user_id)
+            if not user or not user.is_active:
+                raise InvalidTokenException("User not found or inactive")
+            
+            return self.create_access_token(user)
+            
+        except (TokenExpiredException, InvalidTokenException):
+            raise
+        except Exception as e:
+            logger.error(f"Token refresh error: {str(e)}")
+            raise InvalidTokenException("Token refresh failed")
     
     async def revoke_token(self, token: str):
-        """Revoke a token by adding it to blacklist."""
+        """Revoke a token by adding it to blacklist using new JWT infrastructure."""
         try:
-            token_data = await self.verify_token(token)
-            blacklist_key = f"blacklist:{token}"
+            # Use JWT manager to get token expiry without full verification
+            expiry = self.jwt_manager.get_token_expiry(token)
+            if expiry:
+                blacklist_key = f"blacklist:{token}"
+                
+                # Calculate TTL based on token expiration
+                ttl = int((expiry - datetime.utcnow()).total_seconds())
+                if ttl > 0:
+                    await cache_manager.set(blacklist_key, True, ttl=ttl)
+                    logger.info("Token revoked and added to blacklist")
             
-            # Calculate TTL based on token expiration
-            ttl = int((token_data.exp - datetime.now(timezone.utc)).total_seconds())
-            if ttl > 0:
-                await cache_manager.set(blacklist_key, True, ttl=ttl)
-            
-        except HTTPException:
+        except Exception as e:
+            logger.warning(f"Token revocation warning: {str(e)}")
             # Token is already invalid, no need to blacklist
-            pass
     
     async def get_user_by_id(self, user_id: str) -> Optional[User]:
         """Get user by ID (placeholder - implement with your user storage)."""
@@ -276,9 +282,21 @@ auth_manager = AuthManager()
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ) -> TokenData:
-    """Get current authenticated user."""
+    """Get current authenticated user using new JWT infrastructure."""
+    if not credentials:
+        raise TokenMissingException("Authentication credentials required")
+    
     token = credentials.credentials
-    return await auth_manager.verify_token(token)
+    if not token:
+        raise TokenMissingException("Token missing from credentials")
+    
+    try:
+        return await auth_manager.verify_token(token)
+    except (TokenExpiredException, InvalidTokenException, TokenMissingException):
+        raise
+    except Exception as e:
+        logger.error(f"Authentication error: {str(e)}")
+        raise InvalidTokenException("Authentication failed")
 
 
 async def get_current_active_user(
@@ -290,27 +308,37 @@ async def get_current_active_user(
 
 
 def require_role(allowed_roles: List[UserRole]):
-    """Dependency to require specific roles."""
+    """Dependency to require specific roles with new JWT infrastructure."""
     def role_checker(current_user: TokenData = Depends(get_current_active_user)):
-        if not auth_manager.check_role(current_user, allowed_roles):
+        try:
+            if not auth_manager.check_role(current_user, allowed_roles):
+                from .jwt_exceptions import InsufficientPermissionsException
+                raise InsufficientPermissionsException("Insufficient role permissions")
+            return current_user
+        except Exception as e:
+            logger.error(f"Role check error: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient permissions"
+                detail="Access denied"
             )
-        return current_user
     
     return role_checker
 
 
 def require_permission(required_permission: str):
-    """Dependency to require specific permission."""
+    """Dependency to require specific permission with new JWT infrastructure."""
     def permission_checker(current_user: TokenData = Depends(get_current_active_user)):
-        if not auth_manager.check_permission(current_user, required_permission):
+        try:
+            if not auth_manager.check_permission(current_user, required_permission):
+                from .jwt_exceptions import InsufficientPermissionsException
+                raise InsufficientPermissionsException(f"Permission required: {required_permission}")
+            return current_user
+        except Exception as e:
+            logger.error(f"Permission check error: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Permission required: {required_permission}"
+                detail="Access denied"
             )
-        return current_user
     
     return permission_checker
 

@@ -29,6 +29,7 @@ from middleware.security import (
     RateLimitMiddleware,
     RequestLoggingMiddleware,
     ErrorHandlingMiddleware,
+    JWTAuthenticationMiddleware,
 )
 from services.health import health_service
 
@@ -101,6 +102,7 @@ app = FastAPI(
 # Add production-ready middleware (order matters!)
 app.add_middleware(ErrorHandlingMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(JWTAuthenticationMiddleware)  # JWT auth middleware
 app.add_middleware(RequestLoggingMiddleware)
 
 # Add response compression middleware
@@ -136,6 +138,27 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             "details": exc.errors() if settings.debug else None,
         }
     )
+
+
+# JWT exception handlers
+try:
+    from config.jwt_exceptions import (
+        TokenExpiredException,
+        InvalidTokenException,
+        TokenMissingException,
+        TokenCreationException,
+        InsufficientPermissionsException,
+        JWT_EXCEPTION_HANDLERS
+    )
+    
+    # Register JWT exception handlers
+    for exception_class, handler in JWT_EXCEPTION_HANDLERS.items():
+        app.add_exception_handler(exception_class, handler)
+    
+    logger.info("JWT exception handlers registered successfully")
+    
+except Exception as e:
+    logger.warning(f"Could not register JWT exception handlers: {e}")
 
 # Import and include authentication routes first
 try:
