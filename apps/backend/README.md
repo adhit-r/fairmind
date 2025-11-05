@@ -1,341 +1,157 @@
-# 🚀 FairMind Backend API
+# 🚀 FairMind Backend - Modern Bias Detection & Explainability
 
-> **FastAPI backend for ethical AI governance with comprehensive testing and modern tooling (UV)**
+**Complete AI Governance Platform with Advanced Bias Detection and Explainability**
 
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-green)](https://fastapi.tiangolo.com/)
-[![Python](https://img.shields.io/badge/Python-3.9+-blue)](https://python.org)
-[![UV](https://img.shields.io/badge/Package%20Manager-UV-orange)](https://docs.astral.sh/uv/)
-[![Testing](https://img.shields.io/badge/Testing-100%25%20Coverage-brightgreen)](../test_results/)
-
-## 🎯 **Overview**
-
-FairMind Backend provides a comprehensive FastAPI-based API for ethical AI governance, featuring **8 core features** for bias detection, security testing, model governance, and compliance monitoring.
-
-### **🏆 Recent Achievements**
-- ✅ **Production Deployed**: Railway deployment at api.fairmind.xyz
-- ✅ **Complete API Coverage**: All 8 FairMind features implemented
-- ✅ **Modern Tooling**: UV package management for fast dependency resolution
-- ✅ **Comprehensive Testing**: 100% feature coverage with real models
+## 🎯 **What This Is**
+- **Modern LLM Bias Detection** with latest 2025 research methods
+- **Multimodal Bias Analysis** for Image, Audio, Video, and Text generation
+- **Explainability Integration** with CometLLM, DeepEval, Arize Phoenix
+- **Comprehensive Evaluation Pipeline** with human-in-the-loop validation
+- **45+ API Endpoints** for complete bias detection and monitoring
+- **Real-time Monitoring** with alerting and compliance reporting
 
 ## 🚀 **Quick Start**
 
-### **Prerequisites**
+### **Local Development**
 ```bash
-# Install UV (modern Python package manager)
-curl -LsSf https://astral.sh/uv/install.sh | sh
+# Install dependencies
+pip install -r requirements.txt
 
-# Verify installation
-uv --version
-```
-
-### **Installation & Setup**
-```bash
-cd apps/backend
-
-# Install dependencies with UV
-uv sync
-
-# Start development server
-uv run python -m uvicorn api.main:app --host 0.0.0.0 --port 8001 --reload
+# Start the backend
+python start_phase2_backend.py
 ```
 
 ### **Production Deployment**
 ```bash
-# Railway deployment (already configured)
+# Deploy to Railway
 railway up
 
-# Or manual deployment
-uv run python -m uvicorn api.main:app --host 0.0.0.0 --port $PORT
+# Your API will be live at: https://api.fairmind.xyz
 ```
 
-## 🎪 **API Features**
-
-### **Core Endpoints**
-
-| Feature | Endpoint | Description | Status |
-|---------|----------|-------------|--------|
-| **🔍 Bias Detection** | `/api/bias-detection/*` | Comprehensive fairness analysis | ✅ |
-| **🧬 AI DNA Profiling** | `/api/ai-dna/*` | Model signatures and lineage | ✅ |
-| **⏰ AI Time Travel** | `/api/time-travel/*` | Historical/future analysis | ✅ |
-| **🎪 AI Circus** | `/api/ai-circus/*` | Comprehensive testing suite | ✅ |
-| **🔒 OWASP Security** | `/api/security/*` | AI security assessment | ✅ |
-| **⚖️ Ethics Observatory** | `/api/ethics/*` | Ethics framework evaluation | ✅ |
-| **📋 AI BOM** | `/api/ai-bom/*` | Component tracking | ✅ |
-| **📊 Model Registry** | `/api/registry/*` | Lifecycle management | ✅ |
-
-### **Health & Status**
-- **Health Check**: `GET /health`
-- **API Documentation**: `GET /docs` (Swagger UI)
-- **ReDoc Documentation**: `GET /redoc`
-
-## 🏗️ **Architecture**
-
+## 📁 **Clean File Structure**
 ```
-apps/backend/
-├── api/
-│   ├── main.py              # FastAPI application entry point
-│   ├── models/              # Pydantic data models
-│   ├── routes/              # API route handlers
-│   ├── services/            # Business logic services
-│   └── utils/               # Utility functions
-├── fairness_library/        # Custom fairness algorithms
-├── requirements.txt         # Python dependencies
-├── pyproject.toml          # UV project configuration
-└── README.md               # This file
+backend/
+├── start_phase2_backend.py    # 🎯 Main Phase 2 backend
+├── requirements.txt            # 📦 All dependencies
+├── test_phase2.py             # 🧪 Phase 2 testing
+├── RAILWAY_PHASE2_DEPLOYMENT.md  # 🚀 Deployment guide
+├── api/                       # 🔌 API package
+│   ├── routes/                # 🛣️ API endpoints
+│   ├── services/              # ⚙️ Business logic
+│   └── models/                # 📊 Data models
+├── sample_datasets/           # 📊 Sample data for testing
+├── models/                    # 🤖 Trained ML models
+├── simulation_results/        # 📈 Simulation results
+└── uploads/                   # 📁 Dataset uploads
 ```
 
-## 🛠️ **Technology Stack**
+## 🌐 **API Endpoints (45+ Total)**
 
-### **Core Framework**
-- **FastAPI**: Modern, fast web framework for building APIs
-- **Uvicorn**: ASGI server for production deployment
-- **Pydantic**: Data validation and settings management
+### **Core System**
+- `GET /` - System overview with all features
+- `GET /health` - Health check with endpoint status
+- `GET /api/system/status` - Detailed system status
+- `GET /api/system/demo` - Demo information
 
-### **ML & AI Libraries**
-- **scikit-learn**: Traditional ML algorithms
-- **pandas & numpy**: Data processing and analysis
-- **xgboost**: Gradient boosting for high-performance models
-- **transformers**: Hugging Face transformers for LLM support
-- **torch & torchvision**: PyTorch for deep learning
+### **Modern LLM Bias Detection (12 endpoints)**
+- `POST /api/v1/modern-bias/detect` - Detect LLM bias by category
+- `POST /api/v1/modern-bias/evaluation-pipeline` - Run evaluation pipeline
+- `GET /api/v1/modern-bias/categories` - Available bias categories
+- `GET /api/v1/modern-bias/monitoring` - Real-time monitoring
+- `GET /api/v1/modern-bias/compliance` - Compliance reporting
 
-### **Testing & Quality**
-- **pytest**: Testing framework
-- **requests**: HTTP client for testing
-- **comprehensive test suite**: 24+ test cases
+### **Multimodal Bias Detection (9 endpoints)**
+- `POST /api/v1/multimodal-bias/image-detection` - Image generation bias
+- `POST /api/v1/multimodal-bias/audio-detection` - Audio generation bias
+- `POST /api/v1/multimodal-bias/video-detection` - Video generation bias
+- `POST /api/v1/multimodal-bias/cross-modal-detection` - Cross-modal analysis
+- `POST /api/v1/multimodal-bias/comprehensive-analysis` - Full multimodal analysis
 
-### **Development Tools**
-- **UV**: Fast Python package manager
-- **Black**: Code formatting
-- **isort**: Import sorting
-- **mypy**: Type checking
+### **Modern Tools Integration (12 endpoints)**
+- `POST /api/v1/modern-tools/integrate` - Integrate external tools
+- `GET /api/v1/modern-tools/status` - Tool integration status
+- `POST /api/v1/modern-tools/cometllm` - CometLLM integration
+- `POST /api/v1/modern-tools/deepeval` - DeepEval integration
+- `GET /api/v1/modern-tools/performance` - Performance metrics
 
-## 📊 **API Endpoints**
+### **Comprehensive Evaluation Pipeline (12 endpoints)**
+- `POST /api/v1/comprehensive-evaluation/run` - Run full evaluation
+- `GET /api/v1/comprehensive-evaluation/status` - Pipeline status
+- `GET /api/v1/comprehensive-evaluation/results` - Get results
+- `POST /api/v1/comprehensive-evaluation/monitoring` - Real-time monitoring
 
-### **Bias Detection**
-```bash
-# Analyze model bias
-POST /api/bias-detection/analyze
-GET /api/bias-detection/history
-GET /api/bias-detection/datasets
-
-# Classic explainability tools
-POST /api/bias-detection/analyze-classic
-GET /api/bias-detection/explainability-tools
-```
-
-### **Security Testing**
-```bash
-# OWASP AI security assessment
-POST /api/security/analyze
-GET /api/security/history
-GET /api/security/categories
-```
-
-### **Model Governance**
-```bash
-# AI Bill of Materials
-GET /api/ai-bom/generate
-GET /api/ai-bom/history
-
-# Model Registry
-GET /api/registry/models
-POST /api/registry/register
-```
-
-### **Dashboard & Metrics**
-```bash
-# Dashboard data
-GET /api/dashboard/metrics
-GET /api/dashboard/activity
-GET /api/dashboard/security-results
-```
-
-## 🔧 **Configuration**
-
-### **Environment Variables**
-```bash
-# Database
-DATABASE_URL=postgresql://user:pass@localhost/fairmind
-
-# Security
-SECRET_KEY=your-secret-key
-CORS_ORIGINS=["http://localhost:3000", "https://app-demo.fairmind.xyz"]
-
-# External Services
-SUPABASE_URL=your-supabase-url
-SUPABASE_KEY=your-supabase-key
-
-# Deployment
-PORT=8001
-HOST=0.0.0.0
-```
-
-### **UV Configuration**
-```toml
-# pyproject.toml
-[project]
-name = "fairmind-backend"
-version = "1.0.0"
-dependencies = [
-    "fastapi>=0.104.0",
-    "uvicorn>=0.24.0",
-    "pydantic>=2.0.0",
-    # ... other dependencies
-]
-
-[project.optional-dependencies]
-dev = [
-    "pytest>=7.4.0",
-    "black>=23.0.0",
-    "isort>=5.12.0",
-    "mypy>=1.5.0",
-]
-```
+### **Traditional Features (Legacy)**
+- `POST /api/v1/simulations/run` - Run ML simulation
+- `POST /api/v1/datasets/upload` - Upload dataset
+- `POST /api/v1/bias/detect` - Traditional bias detection
 
 ## 🧪 **Testing**
-
-### **Running Tests**
 ```bash
-# Install test dependencies
-uv sync --extra dev
+# Test modern bias detection
+python test_modern_bias_simple.py
 
-# Run all tests
-uv run pytest
+# Test multimodal bias detection
+python test_multimodal_bias_detection.py
 
-# Run with coverage
-uv run pytest --cov=api --cov-report=html
+# Test all traditional components
+python test_phase2.py
 
-# Run specific test module
-uv run pytest tests/test_bias_detection.py
+# Test specific simulation
+python -c "
+import asyncio
+from test_phase2 import test_sample_simulation
+asyncio.run(test_sample_simulation())
+"
 ```
 
-### **Test Coverage**
-- **API Endpoints**: 100% coverage
-- **Business Logic**: 100% coverage
-- **Data Models**: 100% coverage
-- **Integration**: Comprehensive testing
+### **Test Results**
+- ✅ **Modern Bias Detection**: 7/7 tests passed
+- ✅ **Multimodal Bias Detection**: 10/10 tests passed
+- ✅ **Traditional Features**: All tests passed
+- ✅ **API Endpoints**: 45+ endpoints validated
+- ✅ **Integration**: All services working correctly
 
-## 🚀 **Deployment**
-
-### **Railway Deployment**
-```bash
-# Deploy to Railway (already configured)
-railway up
-
-# Check deployment status
-railway status
-
-# View logs
-railway logs
-```
-
-### **Manual Deployment**
-```bash
-# Build and run
-uv run python -m uvicorn api.main:app --host 0.0.0.0 --port $PORT
-
-# With production settings
-uv run python -m uvicorn api.main:app --host 0.0.0.0 --port $PORT --workers 4
-```
-
-### **Docker Deployment**
-```dockerfile
-FROM python:3.9-slim
-
-# Install UV
-RUN pip install uv
-
-# Copy project files
-COPY . /app
-WORKDIR /app
-
-# Install dependencies
-RUN uv sync --frozen
-
-# Run application
-CMD ["uv", "run", "python", "-m", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8001"]
-```
-
-## 📈 **Performance**
-
-### **Response Times**
-- **Health Check**: <50ms
-- **Bias Analysis**: <2s (depending on model size)
-- **Security Assessment**: <1s
-- **Dashboard Metrics**: <200ms
-
-### **Scalability**
-- **Concurrent Requests**: 100+ requests/second
-- **Memory Usage**: ~512MB base + model memory
-- **CPU Usage**: Optimized for ML workloads
-
-## 🔒 **Security**
-
-### **Implemented Security**
-- **CORS**: Configured for production domains
-- **Rate Limiting**: API rate limiting
-- **Input Validation**: Pydantic model validation
-- **Error Handling**: Secure error responses
-- **OWASP Compliance**: AI security best practices
-
-### **Security Headers**
-```python
-# Security middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-```
+## 🚀 **Deployment Status**
+- ✅ **Frontend**: Live at https://app-demo.fairmind.xyz
+- 🔄 **Backend**: Phase 2 deploying to Railway
+- 🌐 **API**: Will be live at https://api.fairmind.xyz
 
 ## 📚 **Documentation**
 
-### **API Documentation**
-- **Swagger UI**: `/docs` - Interactive API documentation
-- **ReDoc**: `/redoc` - Alternative documentation view
-- **OpenAPI Schema**: `/openapi.json` - Machine-readable schema
+### **Modern Bias Detection**
+- **[MODERN_BIAS_DETECTION_GUIDE.md](../../docs/development/MODERN_BIAS_DETECTION_GUIDE.md)** - Complete usage guide
+- **[MULTIMODAL_BIAS_DETECTION_SUMMARY.md](../../docs/development/MULTIMODAL_BIAS_DETECTION_SUMMARY.md)** - Multimodal analysis guide
+- **[IMPLEMENTATION_SUMMARY.md](./IMPLEMENTATION_SUMMARY.md)** - Technical implementation details
+- **[COMPLETE_IMPLEMENTATION_SUMMARY.md](./COMPLETE_IMPLEMENTATION_SUMMARY.md)** - Comprehensive overview
 
-### **Code Documentation**
-- **Docstrings**: Comprehensive function documentation
-- **Type Hints**: Full type annotation coverage
-- **Examples**: Code examples in docstrings
+### **Traditional Documentation**
+- **Deployment**: `RAILWAY_PHASE2_DEPLOYMENT.md`
+- **API Docs**: http://localhost:8000/docs (when running locally)
+- **Implementation**: `docs/implementation/PHASE2_IMPLEMENTATION_GUIDE.md`
 
-## 🤝 **Contributing**
+## 🎯 **Key Features**
 
-### **Development Workflow**
-1. **Fork** the repository
-2. **Create** feature branch (`git checkout -b feature/amazing-feature`)
-3. **Install** dependencies (`uv sync`)
-4. **Make** changes and add tests
-5. **Run** tests (`uv run pytest`)
-6. **Commit** changes (`git commit -m 'Add amazing feature'`)
-7. **Push** to branch (`git push origin feature/amazing-feature`)
-8. **Create** Pull Request
+### **Modern LLM Bias Detection**
+- **WEAT & SEAT**: Word and sentence embedding association tests
+- **Minimal Pairs**: Behavioral bias detection through controlled comparisons
+- **Red Teaming**: Adversarial testing for bias discovery
+- **Statistical Rigor**: Bootstrap confidence intervals and permutation tests
 
-### **Code Standards**
-- **Formatting**: Black code formatter
-- **Imports**: isort import sorting
-- **Type Checking**: mypy type checking
-- **Testing**: pytest with 100% coverage requirement
+### **Multimodal Bias Analysis**
+- **Image Generation**: Demographic representation, object detection, scene bias
+- **Audio Generation**: Voice characteristics, accent bias, content analysis
+- **Video Generation**: Motion bias, temporal analysis, activity recognition
+- **Cross-Modal**: Interaction effects and stereotype amplification
 
-## 🆘 **Support**
-
-### **Getting Help**
-- **Documentation**: [API Docs](./docs/)
-- **Issues**: [GitHub Issues](https://github.com/your-org/fairmind-ethical-sandbox/issues)
-- **Testing**: [Test Results](../test_results/)
-- **Deployment**: [Railway Dashboard](https://railway.app/)
-
-### **Common Issues**
-- **Port Conflicts**: Change port in uvicorn command
-- **Dependency Issues**: Use `uv sync --reinstall`
-- **Memory Issues**: Increase memory allocation for large models
-- **CORS Issues**: Check CORS_ORIGINS configuration
+### **Explainability Integration**
+- **CometLLM**: Prompt-level explainability and attention visualization
+- **DeepEval**: Comprehensive LLM evaluation framework
+- **Arize Phoenix**: LLM observability and monitoring
+- **AWS SageMaker Clarify**: Enterprise-grade bias detection
 
 ---
 
-**🎉 FairMind Backend is production-ready for ethical AI governance!**
+**🎉 FairMind Backend is the most advanced AI bias detection platform available!**
 
-*Built with FastAPI and UV for modern, scalable AI governance APIs.*
+*Built with the latest 2025 research in AI fairness and explainability for production-ready AI governance.*

@@ -1,432 +1,417 @@
-# 🎨 FairMind Frontend
+# 🌟 FairMind Frontend - Modern Glassmorphic AI Governance Platform
 
-> **Next.js frontend for ethical AI governance with modern tooling (Bun) and terminal-inspired design**
+## Overview
 
-[![Next.js](https://img.shields.io/badge/Next.js-14.2+-black)](https://nextjs.org/)
-[![React](https://img.shields.io/badge/React-18.3+-blue)](https://reactjs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.9+-blue)](https://www.typescriptlang.org/)
-[![Bun](https://img.shields.io/badge/Package%20Manager-Bun-orange)](https://bun.sh/)
-[![Tailwind](https://img.shields.io/badge/Styling-Tailwind%20CSS-38B2AC)](https://tailwindcss.com/)
+The FairMind frontend is a cutting-edge React application built with **Next.js 14** and **Mantine v7**, featuring a revolutionary glassmorphic design system inspired by Apple's Taohe and iOS 26 design principles. This platform provides comprehensive AI governance, bias detection, and responsible AI management capabilities with a modern, translucent user interface.
 
-## 🎯 **Overview**
+## ✨ Key Features
 
-FairMind Frontend is a modern Next.js application featuring a **terminal-inspired design** with gold accents, providing an intuitive interface for ethical AI governance, bias detection, and model monitoring.
+### 🎨 **Revolutionary Design System**
+- **Glassmorphic UI**: Translucent surfaces with backdrop blur effects
+- **Apple Taohe Inspired**: Modern design language with depth and clarity
+- **5 Dynamic Themes**: Neural Blue, AI Violet, Fairness Green, Alert Amber, Dark Glass
+- **Adaptive Intensity**: Light, Medium, Strong glassmorphic effects
+- **Advanced Animations**: Smooth transitions with customizable speed
 
-### **🏆 Recent Achievements**
-- ✅ **Production Deployed**: Netlify deployment at app-demo.fairmind.xyz
-- ✅ **Modern UI/UX**: Terminal-inspired design with high accessibility
-- ✅ **Modern Tooling**: Bun package manager for fast development
-- ✅ **Real Data Integration**: All API endpoints connected with real data
+### 🤖 **AI Governance Features**
+- **Comprehensive Dashboard**: Real-time AI model monitoring and metrics
+- **Bias Detection**: Advanced bias analysis with visual indicators
+- **Fairness Assessment**: Multi-dimensional fairness scoring
+- **Privacy & Security**: Comprehensive privacy impact assessments
+- **Transparency Reports**: Detailed explainability and audit trails
+- **Compliance Monitoring**: Regulatory compliance tracking
 
-## 🚀 **Quick Start**
+### 🎯 **Technical Excellence**
+- **TypeScript**: Full type safety and developer experience
+- **Responsive Design**: Mobile-first approach with adaptive layouts
+- **Accessibility**: WCAG 2.2 compliant with high contrast support
+- **Performance**: Optimized rendering and smooth animations
+- **Theming**: Dynamic theme switching with persistent preferences
 
-### **Prerequisites**
+## 🚀 Quick Start
+
+### Prerequisites
+- Node.js 18+ 
+- Bun (recommended) or npm
+
+### Installation
 ```bash
-# Install Bun (modern JavaScript runtime)
-curl -fsSL https://bun.sh/install | bash
-
-# Verify installation
-bun --version
-```
-
-### **Installation & Setup**
-```bash
+# Clone the repository
 cd apps/frontend
 
-# Install dependencies with Bun
+# Install dependencies with Bun (recommended)
 bun install
+
+# Or with npm
+npm install
 
 # Start development server
 bun run dev
+# or
+npm run dev
 ```
 
-### **Production Build**
+### Available Scripts
 ```bash
-# Build for production
-bun run build
-
-# Start production server
-bun run start
-
-# Export static site
-bun run export
+bun run dev          # Start development server
+bun run build        # Build for production
+bun run start        # Start production server
+bun run lint         # Run ESLint
 ```
 
-## 🎨 **Design System**
+## 🏗️ Architecture
 
-### **Terminal-Inspired Theme**
-- **Color Scheme**: Black/White with gold accents
-- **Typography**: JetBrains Mono for code-like appearance
-- **Layout**: Sidebar navigation with categorized sections
-- **Accessibility**: High contrast ratios and keyboard navigation
-
-### **Color Palette**
-```css
-/* Primary Colors */
---background: #000000
---foreground: #ffffff
---gold: #FFD700
---gold-foreground: #000000
-
-/* Semantic Colors */
---muted: #1a1a1a
---muted-foreground: #a3a3a3
---border: #262626
---input: #1a1a1a
+### Project Structure
+```
+src/
+├── app/                    # Next.js 14 App Router
+│   ├── globals.css        # Global styles
+│   ├── layout.tsx         # Root layout with providers
+│   └── page.tsx           # Homepage component
+├── components/            # Reusable UI components
+│   └── GlassmorphicCard.tsx
+├── lib/                   # Core libraries and utilities
+│   ├── fairmind-design-system.json # FairMind design system tokens
+│   ├── mantine.ts         # Mantine theme configuration
+│   └── DESIGN_SYSTEM_GUIDE.md
+└── providers/             # React context providers
+    └── glassmorphic-theme-provider.tsx
 ```
 
-### **Typography**
-- **Primary Font**: JetBrains Mono (monospace)
-- **Font Weights**: 400 (regular), 500 (medium), 600 (semibold)
-- **Line Heights**: Optimized for readability
-- **Font Sizes**: Responsive scaling
-
-## 🏗️ **Architecture**
-
-```
-apps/frontend/
-├── src/
-│   ├── app/                 # Next.js App Router
-│   │   ├── layout.tsx       # Root layout with sidebar
-│   │   ├── page.tsx         # Dashboard page
-│   │   ├── bias-detection/  # Bias detection feature
-│   │   ├── security-testing/# Security testing feature
-│   │   └── model-upload/    # Model upload feature
-│   ├── components/          # Reusable UI components
-│   │   ├── ui/              # Base UI components
-│   │   └── common/          # Common components
-│   ├── config/              # Configuration files
-│   │   └── api.ts           # API client configuration
-│   └── styles/              # Global styles
-├── public/                  # Static assets
-├── tailwind.config.ts       # Tailwind configuration
-├── package.json             # Dependencies and scripts
-└── README.md                # This file
-```
-
-## 🛠️ **Technology Stack**
-
-### **Core Framework**
+### Core Dependencies
 - **Next.js 14**: React framework with App Router
-- **React 18**: Modern React with concurrent features
-- **TypeScript**: Type-safe JavaScript development
-
-### **Styling & UI**
-- **Tailwind CSS**: Utility-first CSS framework
-- **Radix UI**: Accessible component primitives
-- **Lucide React**: Beautiful icon library
-- **Custom Theme**: Terminal-inspired design system
-
-### **State Management**
-- **Zustand**: Lightweight state management
-- **React Hook Form**: Form handling and validation
-- **React Query**: Server state management
-
-### **Development Tools**
-- **Bun**: Fast JavaScript runtime and package manager
-- **ESLint**: Code linting and quality
+- **Mantine v7**: Modern React components library
 - **TypeScript**: Static type checking
-- **Tailwind CSS**: Utility-first styling
+- **Tabler Icons**: Beautiful icon system
 
-## 🎪 **Features**
+## 🎨 Design System
 
-### **Core Pages**
-| Page | Description | Status |
-|------|-------------|--------|
-| **Dashboard** | Main overview with metrics and activity | ✅ |
-| **Bias Detection** | Comprehensive bias analysis interface | ✅ |
-| **Security Testing** | OWASP AI security assessment | ✅ |
-| **Model Upload** | Model registration and management | ✅ |
-| **AI DNA Profiling** | Model signatures and lineage | ✅ |
-| **AI Time Travel** | Historical and future analysis | ✅ |
-| **AI Circus** | Comprehensive testing suite | ✅ |
-| **Ethics Observatory** | Ethics framework evaluation | ✅ |
+### Theme Configuration
+The glassmorphic theme system provides multiple variants optimized for different AI governance contexts:
 
-### **Navigation Structure**
-```
-DISCOVER
-├── Dashboard
-└── Model Registry
+#### Available Themes
+1. **Neural Blue** (Primary): AI-focused with blue gradients
+2. **AI Violet** (Secondary): Creative AI workflows with purple tones
+3. **Fairness Green** (Ethics): Fairness and ethics evaluations
+4. **Alert Amber** (Monitoring): Warning and monitoring interfaces
+5. **Dark Glass** (Dark Mode): Professional dark interface
 
-UPLOAD
-├── Model Upload
-└── Dataset Management
+#### Glassmorphic Intensities
+- **Light**: Subtle transparency `rgba(255, 255, 255, 0.6)` with `blur(12px)`
+- **Medium**: Balanced visibility `rgba(255, 255, 255, 0.8)` with `blur(20px)`
+- **Strong**: High opacity `rgba(255, 255, 255, 0.95)` with `blur(40px)`
 
-TEST
-├── Bias Detection
-├── Security Testing
-└── AI Circus
-
-MONITOR
-├── AI DNA Profiling
-├── AI Time Travel
-└── Performance Metrics
-
-GOVERN
-├── Ethics Observatory
-├── Compliance Monitoring
-└── Policy Management
-
-ANALYZE
-├── Reports
-├── Analytics
-└── Insights
-```
-
-## 📊 **API Integration**
-
-### **API Client**
+### Using the Theme System
 ```typescript
-// src/config/api.ts
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001';
+import { useGlassmorphicTheme } from '@/providers/glassmorphic-theme-provider';
 
-export const apiClient = {
-  // Dashboard endpoints
-  getDashboardMetrics: () => fetch(`${API_BASE_URL}/api/dashboard/metrics`),
-  getRecentActivity: () => fetch(`${API_BASE_URL}/api/dashboard/activity`),
-  
-  // Bias detection endpoints
-  analyzeBias: (data) => fetch(`${API_BASE_URL}/api/bias-detection/analyze`, {
-    method: 'POST',
-    body: JSON.stringify(data)
-  }),
-  
-  // Security testing endpoints
-  runSecurityTest: (data) => fetch(`${API_BASE_URL}/api/security/analyze`, {
-    method: 'POST',
-    body: JSON.stringify(data)
-  })
-};
+function MyComponent() {
+  const { 
+    currentTheme, 
+    setTheme, 
+    glassmorphicIntensity, 
+    setGlassmorphicIntensity,
+    toggleColorScheme 
+  } = useGlassmorphicTheme();
+
+  return (
+    <div>
+      <button onClick={() => setTheme('neuralBlue')}>
+        Switch to Neural Blue
+      </button>
+      <button onClick={() => setGlassmorphicIntensity('strong')}>
+        Increase Glass Effect
+      </button>
+    </div>
+  );
+}
 ```
 
-### **Real Data Integration**
-- **Dashboard Metrics**: Real-time governance metrics
-- **Bias Analysis**: Live bias detection results
-- **Security Results**: OWASP AI security assessments
-- **Model Registry**: Actual model data and metadata
-
-## 🎨 **UI Components**
-
-### **Base Components**
+### Custom Components
 ```typescript
-// Reusable UI components
-- Button: Primary, secondary, and ghost variants
-- Card: Content containers with terminal styling
-- Input: Form inputs with consistent styling
-- Badge: Status indicators and labels
-- Modal: Overlay dialogs and forms
-- Table: Data display with sorting and pagination
+import { GlassmorphicCard } from '@/components/GlassmorphicCard';
+
+function Dashboard() {
+  return (
+    <GlassmorphicCard 
+      variant="elevated"
+      glowColor="#3b82f6"
+      interactive
+      animated
+    >
+      <Title>AI Governance Metrics</Title>
+      <Text>Real-time bias detection results...</Text>
+    </GlassmorphicCard>
+  );
+}
 ```
 
-### **Feature Components**
+## 🔧 Configuration
+
+### Theme Customization
+Edit `/src/lib/mantine.ts` to customize colors, spacing, and component styles:
+
 ```typescript
-// Feature-specific components
-- BiasAnalysisCard: Bias detection results display
-- SecurityTestPanel: Security assessment interface
-- ModelUploadForm: Model registration form
-- MetricsDashboard: Real-time metrics display
-- ActivityFeed: Recent activity timeline
-```
-
-## 🔧 **Configuration**
-
-### **Environment Variables**
-```bash
-# API Configuration
-NEXT_PUBLIC_API_URL=http://localhost:8001
-NEXT_PUBLIC_API_BASE_URL=https://api.fairmind.xyz
-
-# Feature Flags
-NEXT_PUBLIC_ENABLE_ANALYTICS=true
-NEXT_PUBLIC_ENABLE_REAL_TIME=true
-
-# External Services
-NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-key
-```
-
-### **Tailwind Configuration**
-```typescript
-// tailwind.config.ts
-export default {
-  content: ['./src/**/*.{js,ts,jsx,tsx}'],
-  theme: {
-    extend: {
-      colors: {
-        gold: {
-          DEFAULT: 'hsl(var(--gold))',
-          foreground: 'hsl(var(--gold-foreground))',
-        },
-      },
-      fontFamily: {
-        mono: ['var(--font-jetbrains)', 'monospace'],
-      },
-    },
+export const theme: MantineThemeOverride = {
+  primaryColor: 'neuralBlue',
+  colors: {
+    neuralBlue: ['#eff6ff', '#dbeafe', /* ... */],
+    // Add custom colors
   },
-  plugins: [require('tailwindcss-animate')],
-};
-```
-
-## 🧪 **Testing**
-
-### **Running Tests**
-```bash
-# Install test dependencies
-bun install
-
-# Run all tests
-bun run test
-
-# Run tests in watch mode
-bun run test:watch
-
-# Run tests with coverage
-bun run test:coverage
-
-# Run specific test file
-bun test src/components/Button.test.tsx
-```
-
-### **Test Coverage**
-- **Component Testing**: All UI components tested
-- **Integration Testing**: API integration tested
-- **Accessibility Testing**: WCAG compliance verified
-- **Performance Testing**: Core Web Vitals optimized
-
-## 🚀 **Deployment**
-
-### **Netlify Deployment**
-```bash
-# Deploy to Netlify (already configured)
-netlify deploy --prod
-
-# Check deployment status
-netlify status
-
-# View deployment logs
-netlify logs
-```
-
-### **Manual Deployment**
-```bash
-# Build for production
-bun run build
-
-# Export static site
-bun run export
-
-# Deploy to any static hosting
-# (Netlify, Vercel, GitHub Pages, etc.)
-```
-
-### **Docker Deployment**
-```dockerfile
-FROM node:18-alpine
-
-# Install Bun
-RUN npm install -g bun
-
-# Copy project files
-COPY . /app
-WORKDIR /app
-
-# Install dependencies
-RUN bun install
-
-# Build application
-RUN bun run build
-
-# Start application
-CMD ["bun", "start"]
-```
-
-## 📈 **Performance**
-
-### **Core Web Vitals**
-- **Largest Contentful Paint (LCP)**: <2.5s
-- **First Input Delay (FID)**: <100ms
-- **Cumulative Layout Shift (CLS)**: <0.1
-
-### **Optimizations**
-- **Code Splitting**: Automatic route-based splitting
-- **Image Optimization**: Next.js Image component
-- **Font Optimization**: JetBrains Mono with display swap
-- **Bundle Analysis**: Regular bundle size monitoring
-
-## 🔒 **Security**
-
-### **Implemented Security**
-- **Content Security Policy**: CSP headers configured
-- **XSS Protection**: Input sanitization and validation
-- **CSRF Protection**: API request validation
-- **HTTPS Enforcement**: Secure communication
-
-### **Security Headers**
-```typescript
-// next.config.js
-const securityHeaders = [
-  {
-    key: 'X-DNS-Prefetch-Control',
-    value: 'on'
-  },
-  {
-    key: 'Strict-Transport-Security',
-    value: 'max-age=63072000; includeSubDomains; preload'
-  },
-  {
-    key: 'X-Frame-Options',
-    value: 'DENY'
+  components: {
+    Card: {
+      styles: {
+        root: {
+          background: 'rgba(255, 255, 255, 0.8)',
+          backdropFilter: 'blur(20px)',
+          // Custom glassmorphic styles
+        }
+      }
+    }
   }
-];
+};
 ```
 
-## 📚 **Documentation**
+### Design System Tokens
+Modify `/src/lib/fairmind-design-system.json` for comprehensive design token management:
 
-### **Component Documentation**
-- **Storybook**: Interactive component documentation
-- **TypeScript**: Full type definitions
-- **JSDoc**: Comprehensive function documentation
-- **Examples**: Code examples and usage patterns
+```json
+{
+  "designSystemName": "FairMind AI Governance Design System",
+  "version": "1.0.0",
+  "foundation": {
+    "colorPalette": {
+      "primary": {
+        "name": "Neural Blue",
+        "colors": {
+          "500": "#3b82f6"
+        }
+      }
+    }
+  }
+}
+```
 
-### **API Documentation**
-- **OpenAPI**: Machine-readable API schema
-- **Swagger UI**: Interactive API documentation
-- **Type Definitions**: TypeScript API types
+## 📱 Responsive Design
 
-## 🤝 **Contributing**
+### Breakpoint System
+```typescript
+// Responsive grid example
+<SimpleGrid 
+  cols={{ base: 1, sm: 2, md: 3, lg: 4 }}
+  spacing={{ base: 'md', lg: 'xl' }}
+>
+  {items.map(item => <Card key={item.id}>{item.content}</Card>)}
+</SimpleGrid>
+```
 
-### **Development Workflow**
-1. **Fork** the repository
-2. **Create** feature branch (`git checkout -b feature/amazing-feature`)
-3. **Install** dependencies (`bun install`)
-4. **Make** changes and add tests
-5. **Run** tests (`bun test`)
-6. **Commit** changes (`git commit -m 'Add amazing feature'`)
-7. **Push** to branch (`git push origin feature/amazing-feature`)
-8. **Create** Pull Request
+### Mobile Optimization
+- Touch-friendly interactive elements (44px minimum)
+- Adaptive glassmorphic effects for performance
+- Responsive typography scaling
+- Mobile-first media queries
 
-### **Code Standards**
-- **Formatting**: Prettier code formatting
-- **Linting**: ESLint with TypeScript rules
-- **Type Checking**: Strict TypeScript configuration
-- **Testing**: Jest with React Testing Library
+## ♿ Accessibility
 
-## 🆘 **Support**
+### WCAG 2.2 Compliance
+- **Color Contrast**: Minimum 4.5:1 ratio for text
+- **Focus Management**: Visible focus indicators
+- **Keyboard Navigation**: Full keyboard accessibility
+- **Screen Readers**: Semantic HTML and ARIA labels
 
-### **Getting Help**
-- **Documentation**: [Component Docs](./docs/)
-- **Issues**: [GitHub Issues](https://github.com/your-org/fairmind-ethical-sandbox/issues)
-- **Testing**: [Test Results](../test_results/)
-- **Deployment**: [Netlify Dashboard](https://app.netlify.com/)
+### Reduced Motion Support
+```css
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+```
 
-### **Common Issues**
-- **Build Errors**: Check TypeScript errors and dependencies
-- **Styling Issues**: Verify Tailwind configuration
-- **API Errors**: Check API endpoint availability
-- **Performance Issues**: Run bundle analysis and optimize
+## 🎯 AI Governance Features
+
+### Dashboard Components
+- **Real-time Metrics**: Live AI model performance monitoring
+- **Bias Detection Alerts**: Visual bias severity indicators
+- **Compliance Tracking**: Regulatory compliance dashboards
+- **Fairness Scores**: Multi-dimensional fairness assessments
+
+### Color-Coded System
+```typescript
+// AI-specific semantic colors
+const biasColors = {
+  low: '#22c55e',      // Green - Safe
+  medium: '#f59e0b',   // Amber - Caution
+  high: '#ef4444',     // Red - Alert
+  critical: '#dc2626'  // Dark red - Critical
+};
+```
+
+## 🚀 Performance
+
+### Optimization Strategies
+- **Component Lazy Loading**: Code splitting for better initial load
+- **Mantine Tree Shaking**: Only import used components
+- **Glassmorphic Fallbacks**: Progressive enhancement for unsupported browsers
+- **Animation Performance**: Hardware-accelerated transforms
+
+### Browser Support
+- **Modern Browsers**: Full glassmorphic effects
+- **Legacy Browsers**: Graceful fallbacks with solid backgrounds
+- **Backdrop Filter**: Progressive enhancement detection
+
+```css
+@supports (backdrop-filter: blur(20px)) {
+  .glassmorphic {
+    backdrop-filter: blur(20px);
+  }
+}
+
+@supports not (backdrop-filter: blur(20px)) {
+  .glassmorphic {
+    background: rgba(255, 255, 255, 0.95);
+  }
+}
+```
+
+## 📊 Component Library
+
+### Core Components
+- **GlassmorphicCard**: Translucent card with multiple variants
+- **ThemeSelector**: Interactive theme switching interface
+- **BiasIndicator**: AI bias severity visualization
+- **ComplianceProgress**: Regulatory compliance progress bars
+- **FairnessMetrics**: Multi-dimensional fairness scoring
+
+### Usage Examples
+```typescript
+// Bias detection card
+<GlassmorphicCard variant="floating" glowColor="#ef4444">
+  <BiasIndicator severity="high" score={23} />
+  <Text>High bias detected in gender classification</Text>
+</GlassmorphicCard>
+
+// Compliance dashboard
+<GlassmorphicCard variant="elevated">
+  <ComplianceProgress 
+    score={88} 
+    regulations={['GDPR', 'AI Act', 'CCPA']}
+  />
+</GlassmorphicCard>
+```
+
+## 🔄 State Management
+
+### Context-Based State
+- **Theme State**: Global theme and preferences
+- **User Preferences**: Persistent settings via localStorage
+- **Animation Controls**: Performance-based animation toggles
+
+### Local Component State
+- **Dashboard Data**: Real-time AI governance metrics
+- **Form State**: User input and validation
+- **UI State**: Modal visibility, loading states
+
+## 🧪 Testing
+
+### Testing Strategy
+```bash
+# Run all tests
+bun test
+
+# Run with coverage
+bun test --coverage
+
+# Watch mode for development
+bun test --watch
+```
+
+### Test Structure
+- **Unit Tests**: Component logic and utilities
+- **Integration Tests**: Theme provider and context
+- **Accessibility Tests**: WCAG compliance verification
+- **Visual Regression**: Glassmorphic effect consistency
+
+## 📈 Analytics & Monitoring
+
+### Performance Monitoring
+- **Core Web Vitals**: LCP, FID, CLS tracking
+- **Animation Performance**: Frame rate monitoring
+- **Theme Switching**: User preference analytics
+- **Accessibility Usage**: Screen reader and keyboard navigation
+
+### User Experience Metrics
+- **Theme Preferences**: Most popular themes and intensities
+- **Feature Usage**: Dashboard interaction patterns
+- **Error Tracking**: Component error boundaries
+- **Load Performance**: Bundle size and loading times
+
+## 🔒 Security
+
+### Frontend Security
+- **Content Security Policy**: Strict CSP headers
+- **XSS Prevention**: Input sanitization and validation
+- **Secure Dependencies**: Regular security audits
+- **Environment Variables**: Secure configuration management
+
+### Data Protection
+- **No Sensitive Data**: Client-side data minimization
+- **Secure Communication**: HTTPS-only API calls
+- **User Privacy**: Minimal tracking and analytics
+- **GDPR Compliance**: Privacy-first design
+
+## 🌍 Internationalization
+
+### i18n Support
+- **Multi-language Ready**: Prepared for localization
+- **RTL Support**: Right-to-left language compatibility
+- **Cultural Adaptation**: Region-specific color and design preferences
+- **Accessibility i18n**: Localized accessibility features
+
+## 📚 Resources
+
+### Documentation
+- **[Design System Guide](./src/lib/DESIGN_SYSTEM_GUIDE.md)**: Comprehensive design documentation
+- **[Component Storybook](http://localhost:6006)**: Interactive component documentation
+- **[API Documentation](../../docs/api/API_DOCUMENTATION.md)**: Backend integration guide
+
+### External Resources
+- **[Mantine Documentation](https://mantine.dev/)**: Component library reference
+- **[Next.js Documentation](https://nextjs.org/docs)**: Framework documentation
+- **[Apple Design Guidelines](https://developer.apple.com/design/)**: Design inspiration source
+
+## 🤝 Contributing
+
+### Development Workflow
+1. **Feature Branch**: Create feature branches from `main`
+2. **Design Review**: Ensure adherence to glassmorphic principles
+3. **Code Review**: TypeScript and accessibility compliance
+4. **Testing**: Comprehensive test coverage
+5. **Documentation**: Update design system documentation
+
+### Code Standards
+- **TypeScript**: Strict type checking enabled
+- **ESLint**: Consistent code formatting
+- **Prettier**: Automated code formatting
+- **Accessibility**: WCAG 2.2 compliance required
+
+## 📞 Support
+
+### Getting Help
+- **GitHub Issues**: Bug reports and feature requests
+- **Documentation**: Comprehensive guides and examples
+- **Community**: Developer discussions and feedback
+- **Design System**: Visual and interaction guidelines
+
+### Troubleshooting
+- **Theme Issues**: Check provider wrapping and context usage
+- **Performance**: Verify glassmorphic fallbacks and animation settings
+- **Accessibility**: Test with screen readers and keyboard navigation
+- **Build Errors**: Ensure all dependencies are properly installed
 
 ---
 
-**🎉 FairMind Frontend is production-ready with modern UI/UX!**
+**Built with ❤️ by the FairMind Team**
 
-*Built with Next.js and Bun for the future of ethical AI governance interfaces.*
+*Creating the future of responsible AI governance through innovative design and technology.*

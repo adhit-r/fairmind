@@ -1,0 +1,295 @@
+---
+import Layout from '../../layouts/Layout.astro';
+
+const securityTools = [
+  {
+    name: 'GRYPE',
+    category: 'Container Security',
+    description: 'CONTAINER VULNERABILITY SCANNER FOR DOCKER IMAGES AND CONTAINERS',
+    features: [
+      'CVE DATABASE INTEGRATION',
+      'CONTAINER IMAGE SCANNING',
+      'VULNERABILITY SEVERITY SCORING',
+      'SBOM GENERATION',
+      'CONTINUOUS SECURITY MONITORING'
+    ],
+    integration: 'DIRECT INTEGRATION WITH FAIRMIND DEPLOYMENT PIPELINES',
+    benefits: 'IDENTIFY SECURITY VULNERABILITIES BEFORE PRODUCTION DEPLOYMENT'
+  },
+  {
+    name: 'GARAK',
+    category: 'LLM Security',
+    description: 'COMPREHENSIVE LLM SECURITY TESTING FRAMEWORK',
+    features: [
+      'PROMPT INJECTION TESTING',
+      'JAILBREAK ATTEMPT DETECTION',
+      'DATA EXFILTRATION PREVENTION',
+      'MODEL BEHAVIOR VALIDATION',
+      'SECURITY COMPLIANCE TESTING'
+    ],
+    integration: 'AUTOMATED SECURITY TESTING IN MODEL VALIDATION WORKFLOWS',
+    benefits: 'ENSURE LLM MODELS ARE SECURE AGAINST ADVERSARIAL ATTACKS'
+  },
+  {
+    name: 'NEMO',
+    category: 'AI Safety',
+    description: 'AI SAFETY GUARDRAILS AND CONSTRAINTS FRAMEWORK',
+    features: [
+      'SAFETY CONSTRAINTS DEFINITION',
+      'BEHAVIOR BOUNDARY ENFORCEMENT',
+      'ETHICAL AI GUIDELINES',
+      'SAFETY MONITORING AND ALERTS',
+      'COMPLIANCE WITH AI SAFETY STANDARDS'
+    ],
+    integration: 'REAL-TIME SAFETY MONITORING AND CONSTRAINT ENFORCEMENT',
+    benefits: 'PREVENT AI SYSTEMS FROM EXHIBITING UNSAFE OR UNETHICAL BEHAVIOR'
+  }
+];
+
+const securityFeatures = [
+  {
+    title: 'ADVERSARIAL ROBUSTNESS TESTING',
+    description: 'TEST AI MODELS AGAINST ADVERSARIAL ATTACKS AND PERTURBATIONS',
+    capabilities: [
+      'ADVERSARIAL EXAMPLE GENERATION',
+      'MODEL ROBUSTNESS EVALUATION',
+      'ATTACK VECTOR IDENTIFICATION',
+      'DEFENSE MECHANISM TESTING',
+      'ROBUSTNESS METRICS CALCULATION'
+    ]
+  },
+  {
+    title: 'AI SYSTEM VULNERABILITY ASSESSMENT',
+    description: 'COMPREHENSIVE SECURITY ASSESSMENT OF ENTIRE AI SYSTEMS',
+    capabilities: [
+      'THREAT MODELING AND ANALYSIS',
+      'SECURITY ARCHITECTURE REVIEW',
+      'VULNERABILITY SCANNING',
+      'PENETRATION TESTING',
+      'SECURITY COMPLIANCE AUDITING'
+    ]
+  },
+  {
+    title: 'SECURITY COMPLIANCE SCORING (OWASP AI)',
+    description: 'ALIGN WITH OWASP AI SECURITY AND PRIVACY GUIDELINES',
+    capabilities: [
+      'OWASP AI TOP 10 COMPLIANCE',
+      'SECURITY BEST PRACTICES VALIDATION',
+      'COMPLIANCE SCORING AND REPORTING',
+      'REMEDIATION RECOMMENDATIONS',
+      'CONTINUOUS COMPLIANCE MONITORING'
+    ]
+  },
+  {
+    title: 'THREAT MODELING FOR AI SYSTEMS',
+    description: 'SYSTEMATIC IDENTIFICATION AND MITIGATION OF AI SECURITY THREATS',
+    capabilities: [
+      'THREAT IDENTIFICATION FRAMEWORK',
+      'RISK ASSESSMENT METHODOLOGY',
+      'MITIGATION STRATEGY PLANNING',
+      'SECURITY CONTROLS DESIGN',
+      'THREAT INTELLIGENCE INTEGRATION'
+    ]
+  },
+  {
+    title: 'SECURE MODEL DEPLOYMENT PIPELINES',
+    description: 'SECURE CI/CD PIPELINES FOR AI MODEL DEPLOYMENT',
+    capabilities: [
+      'SECURITY GATE VALIDATION',
+      'CONTAINER SECURITY SCANNING',
+      'MODEL INTEGRITY VERIFICATION',
+      'ACCESS CONTROL ENFORCEMENT',
+      'SECURE CONFIGURATION MANAGEMENT'
+    ]
+  }
+];
+
+const structuredData = {
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "name": "AI Security & Guardrails - Fairmind Documentation",
+  "description": "Comprehensive guide to AI security tools including Grype, Garak, Nemo, and advanced guardrails for enterprise AI governance.",
+  "url": "https://fairmind.xyz/docs/security-guardrails"
+};
+---
+
+<Layout 
+  title="AI Security & Guardrails - Fairmind Documentation | Enterprise AI Security"
+  description="Comprehensive guide to AI security tools including Grype container scanning, Garak LLM security testing, Nemo AI safety guardrails, and advanced security features for enterprise AI governance."
+  structuredData={structuredData}
+>
+  <!-- Hero Section -->
+  <section class="bg-black text-yellow-400 py-24 border-b-2 border-yellow-400">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+      <h1 class="text-5xl md:text-6xl font-black mb-6">
+        <span class="block">AI SECURITY & GUARDRAILS</span>
+        <span class="text-yellow-400 bg-black px-4 py-2 transform rotate-1 inline-block shadow-[6px_6px_0px_0px_rgba(255,255,0,1)]">ENTERPRISE SECURITY</span>
+      </h1>
+      
+      <p class="text-xl md:text-2xl text-yellow-400 max-w-4xl mx-auto font-bold">
+        COMPREHENSIVE AI SECURITY TOOLS INCLUDING GRYPE, GARAK, NEMO, AND ADVANCED GUARDRAILS FOR ENTERPRISE AI GOVERNANCE.
+      </p>
+    </div>
+  </section>
+
+  <!-- Security Tools Overview -->
+  <section class="py-20 bg-black">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="text-center mb-16">
+        <h2 class="text-4xl font-black text-yellow-400 mb-6">CORE SECURITY TOOLS</h2>
+        <p class="text-xl text-yellow-400 font-bold">
+          INTEGRATED SECURITY FRAMEWORKS FOR COMPREHENSIVE AI SYSTEM PROTECTION
+        </p>
+      </div>
+      
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {securityTools.map((tool) => (
+          <div class="bg-black p-8 rounded-none border-2 border-yellow-400 shadow-[6px_6px_0px_0px_rgba(255,255,0,1)] hover:shadow-[8px_8px_0px_0px_rgba(255,255,0,1)] transform hover:-translate-y-2 transition-all">
+            <div class="w-16 h-16 bg-yellow-400 rounded-none border-2 border-black flex items-center justify-center mb-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+              <svg class="w-8 h-8 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+              </svg>
+            </div>
+            
+            <div class="mb-4">
+              <span class="inline-flex items-center px-3 py-1 bg-yellow-400 text-black font-black rounded-none border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-sm">
+                {tool.category}
+              </span>
+            </div>
+            
+            <h3 class="text-2xl font-black text-yellow-400 mb-4">{tool.name}</h3>
+            <p class="text-yellow-400 mb-6 font-bold">{tool.description}</p>
+            
+            <div class="mb-6">
+              <h4 class="text-lg font-black text-yellow-400 mb-3">KEY FEATURES</h4>
+              <ul class="space-y-2">
+                {tool.features.map((feature) => (
+                  <li class="flex items-center space-x-2">
+                    <svg class="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                    <span class="text-yellow-400 font-bold text-sm">{feature}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            
+            <div class="mb-6">
+              <h4 class="text-lg font-black text-yellow-400 mb-3">INTEGRATION</h4>
+              <p class="text-yellow-400 font-bold text-sm">{tool.integration}</p>
+            </div>
+            
+            <div class="mb-6">
+              <h4 class="text-lg font-black text-yellow-400 mb-3">BENEFITS</h4>
+              <p class="text-yellow-400 font-bold text-sm">{tool.benefits}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <!-- Advanced Security Features -->
+  <section class="py-20 bg-black border-t-2 border-yellow-400">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="text-center mb-16">
+        <h2 class="text-4xl font-black text-yellow-400 mb-6">ADVANCED SECURITY FEATURES</h2>
+        <p class="text-xl text-yellow-400 font-bold">
+          COMPREHENSIVE SECURITY CAPABILITIES FOR ENTERPRISE AI GOVERNANCE
+        </p>
+      </div>
+      
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {securityFeatures.map((feature) => (
+          <div class="bg-black p-8 rounded-none border-2 border-yellow-400 shadow-[4px_4px_0px_0px_rgba(255,255,0,1)]">
+            <h3 class="text-xl font-black text-yellow-400 mb-4">{feature.title}</h3>
+            <p class="text-yellow-400 mb-6 font-bold">{feature.description}</p>
+            
+            <h4 class="text-lg font-black text-yellow-400 mb-3">CAPABILITIES</h4>
+            <ul class="space-y-2">
+              {feature.capabilities.map((capability) => (
+                <li class="flex items-center space-x-2">
+                  <svg class="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
+                  </svg>
+                  <span class="text-yellow-400 font-bold text-sm">{capability}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <!-- Implementation Roadmap -->
+  <section class="py-20 bg-black border-t-2 border-yellow-400">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="text-center mb-16">
+        <h2 class="text-4xl font-black text-yellow-400 mb-6">IMPLEMENTATION ROADMAP</h2>
+        <p class="text-xl text-yellow-400 font-bold">
+          PHASED APPROACH TO INTEGRATING COMPREHENSIVE AI SECURITY
+        </p>
+      </div>
+      
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+        <div class="bg-black p-6 rounded-none border-2 border-yellow-400 shadow-[4px_4px_0px_0px_rgba(255,255,0,1)]">
+          <div class="w-12 h-12 bg-yellow-400 rounded-none border-2 border-black flex items-center justify-center mb-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+            <span class="text-black font-black text-lg">1</span>
+          </div>
+          <h3 class="text-lg font-black text-yellow-400 mb-3">FOUNDATION</h3>
+          <p class="text-yellow-400 font-bold text-sm">GRYPE INTEGRATION AND BASIC CONTAINER SECURITY</p>
+        </div>
+        
+        <div class="bg-black p-6 rounded-none border-2 border-yellow-400 shadow-[4px_4px_0px_0px_rgba(255,255,0,1)]">
+          <div class="w-12 h-12 bg-yellow-400 rounded-none border-2 border-black flex items-center justify-center mb-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+            <span class="text-black font-black text-lg">2</span>
+          </div>
+          <h3 class="text-lg font-black text-yellow-400 mb-3">LLM SECURITY</h3>
+          <p class="text-yellow-400 font-bold text-sm">GARAK INTEGRATION FOR LLM SECURITY TESTING</p>
+        </div>
+        
+        <div class="bg-black p-6 rounded-none border-2 border-yellow-400 shadow-[4px_4px_0px_0px_rgba(255,255,0,1)]">
+          <div class="w-12 h-12 bg-yellow-400 rounded-none border-2 border-black flex items-center justify-center mb-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+            <span class="text-black font-black text-lg">3</span>
+          </div>
+          <h3 class="text-lg font-black text-yellow-400 mb-3">AI SAFETY</h3>
+          <p class="text-yellow-400 font-bold text-sm">NEMO INTEGRATION FOR AI SAFETY GUARDRAILS</p>
+        </div>
+        
+        <div class="bg-black p-6 rounded-none border-2 border-yellow-400 shadow-[4px_4px_0px_0px_rgba(255,255,0,1)]">
+          <div class="w-12 h-12 bg-yellow-400 rounded-none border-2 border-black flex items-center justify-center mb-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+            <span class="text-black font-black text-lg">4</span>
+          </div>
+          <h3 class="text-lg font-black text-yellow-400 mb-3">ADVANCED</h3>
+          <p class="text-yellow-400 font-bold text-sm">ADVERSARIAL TESTING AND THREAT MODELING</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA Section -->
+  <section class="py-20 bg-black border-t-2 border-yellow-400">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+      <h2 class="text-4xl font-black text-yellow-400 mb-6">READY TO SECURE YOUR AI SYSTEMS?</h2>
+      <p class="text-xl text-yellow-400 mb-8 font-bold">
+        IMPLEMENT ENTERPRISE-GRADE AI SECURITY WITH COMPREHENSIVE GUARDRAILS AND MONITORING.
+      </p>
+      
+      <div class="flex flex-col sm:flex-row gap-6 justify-center">
+        <a href="/demo" class="inline-flex items-center px-8 py-4 bg-yellow-400 text-black font-black rounded-none border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transform hover:-translate-y-2 transition-all">
+          <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+          </svg>
+          TRY DEMO
+        </a>
+        <a href="/contact" class="inline-flex items-center px-8 py-4 border-2 border-yellow-400 text-yellow-400 font-black rounded-none hover:bg-yellow-400 hover:text-black transition-all shadow-[4px_4px_0px_0px_rgba(255,255,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(255,255,0,1)]">
+          <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+          </svg>
+          CONTACT US
+        </a>
+      </div>
+    </div>
+  </section>
+</Layout>

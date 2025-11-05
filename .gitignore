@@ -139,7 +139,7 @@ venv.bak/
 
 # mkdocs documentation
 /site
-
+/WORKSPACE_CLEANUP_SUMMARY.md
 # mypy
 .mypy_cache/
 .dmypy.json
@@ -302,3 +302,10 @@ apps/website/src/content/docs/installation.mdx
 
 # Local Netlify folder
 .netlify
+
+# Archive directory
+archive/
+
+.qoder/
+
+

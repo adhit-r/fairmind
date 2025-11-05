@@ -1,113 +1,99 @@
-
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Performance optimizations
-  experimental: {
-    // Enable modern React features
-    optimizePackageImports: ['@heroicons/react', 'lucide-react'],
-    // Enable server components
-    serverComponentsExternalPackages: ['@prisma/client'],
-    // Enable modern image optimization
-    turbo: {
-      rules: {
-        '*.svg': {
-          loaders: ['@svgr/webpack'],
-          as: '*.js',
-        },
+  // React configuration
+  reactStrictMode: true,
+  swcMinify: true,
+  
+  // Production optimizations
+  compress: true,
+  poweredByHeader: false,
+  generateEtags: true,
+  
+  // API rewrites for development
+  async rewrites() {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+    return [
+      {
+        source: '/api/:path*',
+        destination: `${apiUrl}/api/:path*`,
       },
-    },
+    ];
   },
-
+  
+  // Security headers
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          {
+            key: 'X-Content-Type-Options',
+            value: 'nosniff',
+          },
+          {
+            key: 'X-Frame-Options',
+            value: 'DENY',
+          },
+          {
+            key: 'X-XSS-Protection',
+            value: '1; mode=block',
+          },
+          {
+            key: 'Referrer-Policy',
+            value: 'strict-origin-when-cross-origin',
+          },
+          {
+            key: 'Permissions-Policy',
+            value: 'geolocation=(), microphone=(), camera=()',
+          },
+          // Add HSTS in production
+          ...(process.env.NODE_ENV === 'production' ? [
+            {
+              key: 'Strict-Transport-Security',
+              value: 'max-age=31536000; includeSubDomains',
+            },
+          ] : []),
+        ],
+      },
+    ];
+  },
+  
   // Image optimization
   images: {
+    domains: ['localhost', 'api.fairmind.xyz', 'cdn.fairmind.xyz'],
     formats: ['image/webp', 'image/avif'],
-    deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
-    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
-    minimumCacheTTL: 60,
-    dangerouslyAllowSVG: true,
-    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
-
-  // Webpack optimizations
-  webpack: (config, { dev, isServer }) => {
-    // Optimize bundle size
-    if (!dev && !isServer) {
-      config.optimization.splitChunks = {
-        chunks: 'all',
-        cacheGroups: {
-          vendor: {
-            test: /[\\/]node_modules[\\/]/,
-            name: 'vendors',
-            chunks: 'all',
-          },
-          common: {
-            name: 'common',
-            minChunks: 2,
-            chunks: 'all',
-            enforce: true,
-          },
-        },
+  
+  // Bundle analyzer (only when ANALYZE=true)
+  ...(process.env.ANALYZE === 'true' && {
+    webpack: (config, { buildId, dev, isServer, defaultLoaders, webpack }) => {
+      if (!dev && !isServer) {
+        const { BundleAnalyzerPlugin } = require('@next/bundle-analyzer')();
+        config.plugins.push(
+          new BundleAnalyzerPlugin({
+            analyzerMode: 'static',
+            openAnalyzer: false,
+          })
+        );
       }
-    }
-
-    return config
-  },
-
-  // Compression
-  compress: true,
-
-  // Environment variables
-  env: {
-    CUSTOM_KEY: process.env.CUSTOM_KEY,
-  },
-
-  // TypeScript
-  typescript: {
-    // Dangerously allow production builds to successfully complete even if
-    // your project has type errors.
-    ignoreBuildErrors: true,
-  },
-
-  // ESLint - temporarily disabled to fix build issues
-  eslint: {
-    // Warning: This allows production builds to successfully complete even if
-    // your project has ESLint errors.
-    ignoreDuringBuilds: true,
-  },
-
-  // Output configuration for static export
-  output: 'export',
-
-  // Trailing slash
-  trailingSlash: false,
-
-  // Base path
-  basePath: '',
-
-  // Asset prefix
-  assetPrefix: '',
-
-  // Powered by header
-  poweredByHeader: false,
-
-  // React strict mode
-  reactStrictMode: true,
-
-  // Swc minify
-  swcMinify: true,
-
-  // Modularize imports
-  modularizeImports: {
-    '@heroicons/react/24/outline': {
-      transform: '@heroicons/react/24/outline/{{member}}',
+      return config;
     },
-    '@heroicons/react/24/solid': {
-      transform: '@heroicons/react/24/solid/{{member}}',
-    },
-    'lucide-react': {
-      transform: 'lucide-react/dist/esm/icons/{{member}}',
-    },
+  }),
+  
+  // Experimental features
+  experimental: {
+    optimizeCss: true,
+    scrollRestoration: true,
   },
-}
+  
+  // Output configuration for static export (if needed)
+  ...(process.env.EXPORT === 'true' && {
+    output: 'export',
+    trailingSlash: true,
+    images: {
+      unoptimized: true,
+    },
+  }),
+};
 
-module.exports = nextConfig
+module.exports = nextConfig;
