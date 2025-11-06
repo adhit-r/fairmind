@@ -73,18 +73,18 @@ export default function Dashboard() {
 
   return (
     <ErrorBoundary context="Dashboard">
-    <Flex w="100%" direction="column" align="start" gap={30}>
-      {/* Header Section */}
-      <Paper
-        p="xl"
-        style={{
-          background: 'rgba(255, 255, 255, 0.95)',
-          backdropFilter: 'blur(20px)',
-          border: '1px solid rgba(255, 255, 255, 0.1)',
-          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)',
-        }}
-      >
-        <Group justify="space-between" align="center" mb="md">
+      <Flex w="100%" direction="column" align="start" gap="xl">
+        {/* Header Section */}
+        <Paper
+          p="xl"
+          style={{
+            background: 'rgba(255, 255, 255, 0.95)',
+            backdropFilter: 'blur(20px)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)',
+          }}
+        >
+          <Group justify="space-between" align="center" mb="md">
           <Stack gap="xs">
             <Title order={1} fw={700} style={{
               background: 'linear-gradient(45deg, #3b82f6, #8b5cf6)',
@@ -115,30 +115,30 @@ export default function Dashboard() {
               <IconDownload size={20} />
             </ActionIcon>
           </Group>
-        </Group>
-      </Paper>
+          </Group>
+        </Paper>
 
-      {/* Date Picker */}
-      <Flex w="100%" align="center" justify="space-between">
-        <Text fz={{ base: 18, md: 22, lg: 22 }} fw={600}>
-          AI Governance Analytics
-        </Text>
-        <DatePickerInput
-          type="range"
-          size="xs"
-          leftSection={<IconCalendar size={20} />}
-          placeholder="Pick a date"
-          value={value}
-          classNames={{
-            input: dateStyleClasses.date_input,
-            placeholder: dateStyleClasses.date_input_placeholder,
-          }}
-          onChange={setValue}
-        />
-      </Flex>
+        {/* Date Picker */}
+        <Flex w="100%" align="center" justify="space-between">
+          <Text fz={{ base: 18, md: 22, lg: 22 }} fw={600}>
+            AI Governance Analytics
+          </Text>
+          <DatePickerInput
+            type="range"
+            size="xs"
+            leftSection={<IconCalendar size={20} />}
+            placeholder="Pick a date"
+            value={value}
+            classNames={{
+              input: dateStyleClasses.date_input,
+              placeholder: dateStyleClasses.date_input_placeholder,
+            }}
+            onChange={setValue}
+          />
+        </Flex>
 
-      {/* Key Metrics Cards */}
-      <Grid columns={12} w="100%">
+        {/* Key Metrics Cards */}
+        <Grid columns={12} w="100%">
         <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
           <Paper p="md" style={{ background: 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(10px)' }}>
             <Group>
@@ -190,51 +190,51 @@ export default function Dashboard() {
               </div>
             </Group>
           </Paper>
-        </Grid.Col>
-      </Grid>
+          </Grid.Col>
+        </Grid>
 
-            {/* Modern Bias Detection Section */}
-            <div>
-              <Text fz={{ base: 18, md: 22, lg: 22 }} fw={600} mb="md">
-                Modern Bias Detection & Explainability
-              </Text>
-              <Grid columns={12} w="100%">
-                <Grid.Col span={{ base: 12, md: 6 }}>
-                  <ModernBiasDetectionChart />
-                </Grid.Col>
-                <Grid.Col span={{ base: 12, md: 6 }}>
-                  <ComprehensiveEvaluationChart />
-                </Grid.Col>
-              </Grid>
-            </div>
+        {/* Modern Bias Detection Section */}
+        <Stack w="100%" gap="md">
+          <Text fz={{ base: 18, md: 22, lg: 22 }} fw={600}>
+            Modern Bias Detection & Explainability
+          </Text>
+          <Grid columns={12} w="100%">
+            <Grid.Col span={{ base: 12, md: 6 }}>
+              <ModernBiasDetectionChart />
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, md: 6 }}>
+              <ComprehensiveEvaluationChart />
+            </Grid.Col>
+          </Grid>
+        </Stack>
 
-            {/* Multimodal Bias Detection Section */}
-            <div>
-              <Text fz={{ base: 18, md: 22, lg: 22 }} fw={600} mb="md">
-                Multimodal Bias Detection
-              </Text>
-              <Grid columns={12} w="100%">
-                <Grid.Col span={{ base: 12 }}>
-                  <MultimodalBiasDetectionChart />
-                </Grid.Col>
-              </Grid>
-            </div>
+        {/* Multimodal Bias Detection Section */}
+        <Stack w="100%" gap="md">
+          <Text fz={{ base: 18, md: 22, lg: 22 }} fw={600}>
+            Multimodal Bias Detection
+          </Text>
+          <Grid columns={12} w="100%">
+            <Grid.Col span={{ base: 12 }}>
+              <MultimodalBiasDetectionChart />
+            </Grid.Col>
+          </Grid>
+        </Stack>
 
-            {/* Advanced Bias Visualization Section */}
-            <div>
-              <Text fz={{ base: 18, md: 22, lg: 22 }} fw={600} mb="md">
-                Advanced Bias Visualization
-              </Text>
-              <Grid columns={12} w="100%">
-                <Grid.Col span={{ base: 12 }}>
-                  <AdvancedBiasVisualization />
-                </Grid.Col>
-              </Grid>
-            </div>
+        {/* Advanced Bias Visualization Section */}
+        <Stack w="100%" gap="md">
+          <Text fz={{ base: 18, md: 22, lg: 22 }} fw={600}>
+            Advanced Bias Visualization
+          </Text>
+          <Grid columns={12} w="100%">
+            <Grid.Col span={{ base: 12 }}>
+              <AdvancedBiasVisualization />
+            </Grid.Col>
+          </Grid>
+        </Stack>
 
         {/* Real-time Monitoring Section */}
-        <div>
-          <Text fz={{ base: 18, md: 22, lg: 22 }} fw={600} mb="md">
+        <Stack w="100%" gap="md">
+          <Text fz={{ base: 18, md: 22, lg: 22 }} fw={600}>
             Real-time Monitoring
           </Text>
           <Grid columns={12} w="100%">
@@ -242,11 +242,11 @@ export default function Dashboard() {
               <RealTimeMonitoring />
             </Grid.Col>
           </Grid>
-        </div>
+        </Stack>
 
         {/* Bias Testing Simulator Section */}
-        <div>
-          <Text fz={{ base: 18, md: 22, lg: 22 }} fw={600} mb="md">
+        <Stack w="100%" gap="md">
+          <Text fz={{ base: 18, md: 22, lg: 22 }} fw={600}>
             Interactive Bias Testing
           </Text>
           <Grid columns={12} w="100%">
@@ -254,14 +254,14 @@ export default function Dashboard() {
               <BiasTestingSimulator />
             </Grid.Col>
           </Grid>
-        </div>
+        </Stack>
 
-      {/* Charts Section */}
-      <Stack w="100%" align="stretch" justify="center">
-        <Text fz={{ base: 18, md: 22, lg: 22 }} fw={600} mb="md">
-          AI Governance Analytics
-        </Text>
-        <Grid columns={10} w="100%">
+        {/* Charts Section */}
+        <Stack w="100%" align="stretch" justify="center" gap="md">
+          <Text fz={{ base: 18, md: 22, lg: 22 }} fw={600}>
+            AI Governance Analytics
+          </Text>
+          <Grid columns={10} w="100%">
           <Grid.Col h={400} span={{ base: 10, md: 7, lg: 7 }}>
             <ReportSnapshot />
           </Grid.Col>
@@ -278,10 +278,10 @@ export default function Dashboard() {
 
           <Grid.Col h={350} span={{ base: 10, md: 5, lg: 3 }}>
             <DeviceBreakdownChart />
-          </Grid.Col>
-        </Grid>
-      </Stack>
-    </Flex>
+            </Grid.Col>
+          </Grid>
+        </Stack>
+      </Flex>
     </ErrorBoundary>
   )
 }

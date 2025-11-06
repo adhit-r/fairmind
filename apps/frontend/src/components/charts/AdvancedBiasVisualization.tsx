@@ -34,6 +34,7 @@ import {
   IconCheck,
   IconX
 } from '@tabler/icons-react';
+import ErrorBoundary from '../ErrorBoundary';
 
 interface BiasDataPoint {
   x: number;
@@ -390,32 +391,33 @@ const AdvancedBiasVisualization: React.FC<AdvancedBiasVisualizationProps> = ({
   };
 
   return (
-    <Stack>
-      <Paper p="md">
-        <Group justify="space-between" mb="md">
-          <Title order={3}>
-            <Group gap="sm">
-              <Icon3dCubeSphere size={24} />
-              Advanced Bias Visualization
+    <ErrorBoundary context="AdvancedBiasVisualization">
+      <Stack>
+        <Paper p="md">
+          <Group justify="space-between" mb="md">
+            <Title order={3}>
+              <Group gap="sm">
+                <Icon3dCubeSphere size={24} />
+                Advanced Bias Visualization
+              </Group>
+            </Title>
+            <Group>
+              <Button
+                leftSection={<IconRefresh size={16} />}
+                onClick={handleRunAnalysis}
+                loading={isAnalyzing}
+                variant="light"
+              >
+                Run Analysis
+              </Button>
+              <Button
+                leftSection={<IconDownload size={16} />}
+                variant="outline"
+              >
+                Export
+              </Button>
             </Group>
-          </Title>
-          <Group>
-            <Button
-              leftSection={<IconRefresh size={16} />}
-              onClick={handleRunAnalysis}
-              loading={isAnalyzing}
-              variant="light"
-            >
-              Run Analysis
-            </Button>
-            <Button
-              leftSection={<IconDownload size={16} />}
-              variant="outline"
-            >
-              Export
-            </Button>
           </Group>
-        </Group>
 
         <Tabs value={selectedView} onChange={(value) => setSelectedView(value as any)}>
           <Tabs.List>
@@ -513,8 +515,9 @@ const AdvancedBiasVisualization: React.FC<AdvancedBiasVisualizationProps> = ({
         </Group>
       </Paper>
 
-      {analysisResults && renderAnalysisResults()}
-    </Stack>
+        {analysisResults && renderAnalysisResults()}
+      </Stack>
+    </ErrorBoundary>
   );
 };
 

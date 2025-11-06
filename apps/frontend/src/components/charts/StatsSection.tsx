@@ -8,13 +8,15 @@ import {
 } from "@mantine/core"
 import { IconTrendingDown, IconTrendingUp } from "@tabler/icons-react"
 import { ClipboardTick, Eye, Folder2, ShoppingCart } from "iconsax-react"
+import ErrorBoundary from "../ErrorBoundary"
 
 export default function StatsSection() {
   const { colorScheme } = useMantineColorScheme()
 
   return (
-    <Flex w="100%" h="100%" align="center" gap={10}>
-      <SimpleGrid w="100%" h="100%" cols={2}>
+    <ErrorBoundary context="StatsSection">
+      <Flex w="100%" h="100%" align="center" gap={10}>
+        <SimpleGrid w="100%" h="100%" cols={2}>
         <StatsCard
           title="Sessions"
           badge={
@@ -127,8 +129,9 @@ export default function StatsSection() {
           rate={30}
           type="down"
         />
-      </SimpleGrid>
-    </Flex>
+        </SimpleGrid>
+      </Flex>
+    </ErrorBoundary>
   )
 }
 

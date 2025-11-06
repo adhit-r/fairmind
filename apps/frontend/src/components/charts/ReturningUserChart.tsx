@@ -1,9 +1,11 @@
 import { DonutChart } from "@mantine/charts"
 import { Card, Text } from "@mantine/core"
+import ErrorBoundary from "../ErrorBoundary"
 
 export default function ReturningUserChart() {
   return (
-    <Card w="100%" h="100%" shadow="sm" p="xl" radius={6}>
+    <ErrorBoundary context="ReturningUserChart">
+      <Card w="100%" h="100%" shadow="sm" p="xl" radius={6}>
       <Card.Section>
         <Text fz={16} fw={600}>
           New vs Returning Visitors
@@ -31,6 +33,7 @@ export default function ReturningUserChart() {
           ]}
         />
       </Card.Section>
-    </Card>
+      </Card>
+    </ErrorBoundary>
   )
 }

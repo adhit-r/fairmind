@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { 
   Paper, 
   Text, 
@@ -20,7 +20,8 @@ import {
   Divider,
   Tabs,
   RingProgress,
-  Center
+  Center,
+  Loader
 } from "@mantine/core"
 import { 
   IconBrain, 
@@ -37,8 +38,11 @@ import {
   IconPhoto,
   IconMicrophone,
   IconVideo,
-  IconArrowsMaximize
+  IconArrowsMaximize,
+  IconRefresh
 } from "@tabler/icons-react"
+import { useApi } from "../../hooks/useApi"
+import ErrorBoundary from "../ErrorBoundary"
 
 interface MultimodalBiasResult {
   modality: string
@@ -65,15 +69,8 @@ interface MultimodalBiasData {
   recommendations: string[]
 }
 
-export default function MultimodalBiasDetectionChart() {
-  const [data, setData] = useState<MultimodalBiasData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<string | null>("overview")
-
-  // Mock data for demonstration
-  useEffect(() => {
-    const mockData: MultimodalBiasData = {
+// Fallback mock data if API fails
+const fallbackMockData: MultimodalBiasData = {
       timestamp: "2025-01-01T12:00:00Z",
       modalities: ["text", "image", "audio", "video"],
       individual_modality_results: {
@@ -177,11 +174,25 @@ export default function MultimodalBiasDetectionChart() {
       ]
     }
 
-    setTimeout(() => {
-      setData(mockData)
-      setLoading(false)
-    }, 1000)
-  }, [])
+    }
+
+export default function MultimodalBiasDetectionChart() {
+  const [activeTab, setActiveTab] = useState<string | null>("overview")
+
+  // Note: Multimodal bias detection requires POST requests with model outputs
+  // For dashboard display, we use fallback data. In production, this would
+  // fetch from a results endpoint or use cached results from previous analyses
+  const { data: apiData, loading, error, retry } = useApi<MultimodalBiasData>(
+    null, // No GET endpoint available - requires POST with model outputs
+    {
+      fallbackData: fallbackMockData,
+      enableRetry: false, // Can't retry without endpoint
+      cacheKey: 'multimodal-bias-results'
+    }
+  )
+
+  // Use API data if available, otherwise use fallback
+  const data = apiData || fallbackMockData
 
   const getRiskColor = (risk: string) => {
     switch (risk) {
@@ -219,28 +230,63 @@ export default function MultimodalBiasDetectionChart() {
     return <IconMinus size={16} color="orange" />
   }
 
+  // Show loading state
   if (loading) {
     return (
-      <Paper p="md" style={{ background: 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(10px)' }}>
-        <Text>Loading multimodal bias detection analysis...</Text>
-      </Paper>
+      <ErrorBoundary context="MultimodalBiasDetectionChart">
+        <Paper p="xl" style={{ background: 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(10px)' }}>
+          <Center>
+            <Stack align="center" gap="md">
+              <Loader size="lg" />
+              <Text c="dimmed">Loading multimodal bias detection analysis...</Text>
+            </Stack>
+          </Center>
+        </Paper>
+      </ErrorBoundary>
     )
   }
 
-  if (error) {
+  // Show error state with retry option (if endpoint available)
+  if (error && !data) {
     return (
-      <Paper p="md" style={{ background: 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(10px)' }}>
-        <Alert color="red" title="Error">
-          {error}
-        </Alert>
-      </Paper>
+      <ErrorBoundary context="MultimodalBiasDetectionChart">
+        <Paper p="xl" style={{ background: 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(10px)' }}>
+          <Stack align="center" gap="md">
+            <Alert icon={<IconAlertTriangle size={16} />} title="Failed to load multimodal data" color="red">
+              {error.message || 'Unable to fetch multimodal bias detection data. Using fallback data.'}
+            </Alert>
+            {retry && (
+              <Button onClick={retry} leftSection={<IconRefresh size={16} />} variant="light" color="blue">
+                Retry
+              </Button>
+            )}
+          </Stack>
+        </Paper>
+      </ErrorBoundary>
     )
   }
 
-  if (!data) return null
+  // Note: Multimodal bias detection requires POST requests with model outputs
+  // For dashboard display, we show fallback data. In production, this would
+  // fetch from a results endpoint or use cached results from previous analyses
+  if (!data) {
+    return (
+      <ErrorBoundary context="MultimodalBiasDetectionChart">
+        <Paper p="md" style={{ background: 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(10px)' }}>
+          <Alert color="blue" title="No Data Available">
+            <Text size="sm">
+              Multimodal bias detection requires running an analysis first. 
+              Use the analysis tools to generate results.
+            </Text>
+          </Alert>
+        </Paper>
+      </ErrorBoundary>
+    )
+  }
 
   return (
-    <Paper p="md" style={{ background: 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(10px)' }}>
+    <ErrorBoundary context="MultimodalBiasDetectionChart">
+      <Paper p="md" style={{ background: 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(10px)' }}>
       <Stack gap="md">
         {/* Header */}
         <Group justify="space-between" align="center">
@@ -486,5 +532,6 @@ export default function MultimodalBiasDetectionChart() {
         </Group>
       </Stack>
     </Paper>
+    </ErrorBoundary>
   )
 }

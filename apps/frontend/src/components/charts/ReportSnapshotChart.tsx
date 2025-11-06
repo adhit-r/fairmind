@@ -10,25 +10,27 @@ import {
 } from "@mantine/core"
 import { DatePickerInput } from "@mantine/dates"
 import SnapshotFilter from "../SnapShotFilter"
+import ErrorBoundary from "../ErrorBoundary"
 
 export default function ReportSnapshotChart() {
   const { colorScheme } = useMantineColorScheme()
   return (
-    <Card
-      w="100%"
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "center",
-        alignItems: "start",
-        gap: rem(30),
-      }}
-      h="100%"
-      shadow="sm"
-      px={0}
-      py="md"
-      radius={6}
-    >
+    <ErrorBoundary context="ReportSnapshotChart">
+      <Card
+        w="100%"
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+          alignItems: "start",
+          gap: rem(30),
+        }}
+        h="100%"
+        shadow="sm"
+        px={0}
+        py="md"
+        radius={6}
+      >
       <Flex w="100%" direction="column" align="start" gap={20}>
         <Group px="md" w="100%" justify="space-between">
           <Flex direction="column" gap={4} align="start">
@@ -103,7 +105,8 @@ export default function ReportSnapshotChart() {
           },
         ]}
       />
-    </Card>
+      </Card>
+    </ErrorBoundary>
   )
 }
 

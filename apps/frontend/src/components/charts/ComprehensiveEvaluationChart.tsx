@@ -19,7 +19,9 @@ import {
   Title,
   Divider,
   Timeline,
-  Stepper
+  Stepper,
+  Loader,
+  Center
 } from "@mantine/core"
 import { 
   IconBrain, 
@@ -39,6 +41,8 @@ import {
   IconChartBar,
   IconRefresh
 } from "@tabler/icons-react"
+import { useApi } from "../../hooks/useApi"
+import ErrorBoundary from "../ErrorBoundary"
 
 interface EvaluationPhase {
   phase: string
@@ -66,15 +70,8 @@ interface ComprehensiveEvaluationData {
   results: Record<string, EvaluationPhase>
 }
 
-export default function ComprehensiveEvaluationChart() {
-  const [data, setData] = useState<ComprehensiveEvaluationData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [activePhase, setActivePhase] = useState(0)
-
-  // Mock data for demonstration
-  useEffect(() => {
-    const mockData: ComprehensiveEvaluationData = {
+// Fallback mock data if API fails
+const fallbackMockData: ComprehensiveEvaluationData = {
       evaluation_id: "eval_model_123_20250101_120000",
       model_id: "model_123",
       model_type: "llm",
@@ -226,11 +223,36 @@ export default function ComprehensiveEvaluationChart() {
       }
     }
 
-    setTimeout(() => {
-      setData(mockData)
-      setLoading(false)
-    }, 1000)
-  }, [])
+export default function ComprehensiveEvaluationChart() {
+  const [activePhase, setActivePhase] = useState(0)
+
+  // Fetch latest evaluation from API
+  const { data: historyData, loading: historyLoading } = useApi<{evaluations: Array<{evaluation_id: string}>}>(
+    "/api/v1/comprehensive-evaluation/evaluation-history?limit=1",
+    {
+      fallbackData: { evaluations: [] },
+      enableRetry: true,
+      cacheKey: 'evaluation-history'
+    }
+  )
+
+  // Get the latest evaluation ID if available
+  const latestEvaluationId = historyData?.evaluations?.[0]?.evaluation_id
+
+  // Fetch full evaluation details
+  const { data, loading, error, retry } = useApi<ComprehensiveEvaluationData>(
+    latestEvaluationId 
+      ? `/api/v1/comprehensive-evaluation/evaluation/${latestEvaluationId}`
+      : null, // Don't fetch if no evaluation ID
+    {
+      fallbackData: fallbackMockData,
+      enableRetry: true,
+      cacheKey: `evaluation-${latestEvaluationId || 'latest'}`
+    }
+  )
+
+  // Use fallback data if no API data available
+  const evaluationData = data || fallbackMockData
 
   const getRiskColor = (risk: string) => {
     switch (risk) {
@@ -274,28 +296,43 @@ export default function ComprehensiveEvaluationChart() {
     }
   }
 
-  if (loading) {
+  // Show loading state
+  if (loading || historyLoading) {
     return (
-      <Paper p="md" style={{ background: 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(10px)' }}>
-        <Text>Loading comprehensive evaluation analysis...</Text>
-      </Paper>
+      <ErrorBoundary context="ComprehensiveEvaluationChart">
+        <Paper p="xl" style={{ background: 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(10px)' }}>
+          <Center>
+            <Stack align="center" gap="md">
+              <Loader size="lg" />
+              <Text c="dimmed">Loading comprehensive evaluation analysis...</Text>
+            </Stack>
+          </Center>
+        </Paper>
+      </ErrorBoundary>
     )
   }
 
-  if (error) {
+  // Show error state with retry option
+  if (error && !evaluationData) {
     return (
-      <Paper p="md" style={{ background: 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(10px)' }}>
-        <Alert color="red" title="Error">
-          {error}
-        </Alert>
-      </Paper>
+      <ErrorBoundary context="ComprehensiveEvaluationChart">
+        <Paper p="xl" style={{ background: 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(10px)' }}>
+          <Stack align="center" gap="md">
+            <Alert icon={<IconAlertTriangle size={16} />} title="Failed to load evaluation data" color="red">
+              {error.message || 'Unable to fetch comprehensive evaluation data. Using fallback data.'}
+            </Alert>
+            <Button onClick={retry} leftSection={<IconRefresh size={16} />} variant="light" color="blue">
+              Retry
+            </Button>
+          </Stack>
+        </Paper>
+      </ErrorBoundary>
     )
   }
-
-  if (!data) return null
 
   return (
-    <Paper p="md" style={{ background: 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(10px)' }}>
+    <ErrorBoundary context="ComprehensiveEvaluationChart">
+      <Paper p="md" style={{ background: 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(10px)' }}>
       <Stack gap="md">
         {/* Header */}
         <Group justify="space-between" align="center">
@@ -310,11 +347,11 @@ export default function ComprehensiveEvaluationChart() {
           </Group>
           <Group>
             <Badge 
-              color={getRiskColor(data.overall_risk)} 
+              color={getRiskColor(evaluationData.overall_risk)} 
               variant="light"
-              leftSection={getRiskIcon(data.overall_risk)}
+              leftSection={getRiskIcon(evaluationData.overall_risk)}
             >
-              {data.overall_risk.toUpperCase()} RISK
+              {evaluationData.overall_risk.toUpperCase()} RISK
             </Badge>
             <ActionIcon variant="light" color="blue">
               <IconSettings size={16} />
@@ -329,19 +366,19 @@ export default function ComprehensiveEvaluationChart() {
           <Grid.Col span={6}>
             <Card p="sm" style={{ background: 'rgba(255, 255, 255, 0.5)' }}>
               <Text size="xs" c="dimmed">Evaluation ID</Text>
-              <Text fw={500} size="sm" truncate>{data.evaluation_id}</Text>
+              <Text fw={500} size="sm" truncate>{evaluationData.evaluation_id}</Text>
             </Card>
           </Grid.Col>
           <Grid.Col span={3}>
             <Card p="sm" style={{ background: 'rgba(255, 255, 255, 0.5)' }}>
               <Text size="xs" c="dimmed">Model Type</Text>
-              <Text fw={500} size="sm">{data.model_type.toUpperCase()}</Text>
+              <Text fw={500} size="sm">{evaluationData.model_type.toUpperCase()}</Text>
             </Card>
           </Grid.Col>
           <Grid.Col span={3}>
             <Card p="sm" style={{ background: 'rgba(255, 255, 255, 0.5)' }}>
               <Text size="xs" c="dimmed">Phases</Text>
-              <Text fw={500} size="sm">{data.phases_completed.length}/5</Text>
+              <Text fw={500} size="sm">{evaluationData.phases_completed.length}/5</Text>
             </Card>
           </Grid.Col>
         </Grid>
@@ -349,9 +386,9 @@ export default function ComprehensiveEvaluationChart() {
         {/* Evaluation Timeline */}
         <div>
           <Title order={4} mb="sm">Evaluation Timeline</Title>
-          <Timeline active={data.phases_completed.length - 1} bulletSize={24} lineWidth={2}>
-            {data.phases_completed.map((phase, index) => {
-              const phaseData = data.results[phase]
+          <Timeline active={evaluationData.phases_completed.length - 1} bulletSize={24} lineWidth={2}>
+            {evaluationData.phases_completed.map((phase, index) => {
+              const phaseData = evaluationData.results[phase]
               return (
                 <Timeline.Item
                   key={phase}
@@ -408,7 +445,7 @@ export default function ComprehensiveEvaluationChart() {
               <Card p="sm" style={{ background: 'rgba(255, 255, 255, 0.5)' }}>
                 <Text size="xs" c="dimmed">Phases with Bias</Text>
                 <Text fw={500} size="sm" c="red">
-                  {data.bias_summary.phases_with_bias.length}
+                  {evaluationData.bias_summary.phases_with_bias.length}
                 </Text>
               </Card>
             </Grid.Col>
@@ -416,7 +453,7 @@ export default function ComprehensiveEvaluationChart() {
               <Card p="sm" style={{ background: 'rgba(255, 255, 255, 0.5)' }}>
                 <Text size="xs" c="dimmed">Total Alerts</Text>
                 <Text fw={500} size="sm" c="orange">
-                  {data.bias_summary.total_alerts}
+                  {evaluationData.bias_summary.total_alerts}
                 </Text>
               </Card>
             </Grid.Col>
@@ -427,7 +464,7 @@ export default function ComprehensiveEvaluationChart() {
         <div>
           <Title order={4} mb="sm">Risk Distribution by Phase</Title>
           <Stack gap="xs">
-            {Object.entries(data.bias_summary.risk_distribution).map(([phase, risk]) => (
+            {Object.entries(evaluationData.bias_summary.risk_distribution).map(([phase, risk]) => (
               <Group key={phase} justify="space-between" align="center">
                 <Group>
                   <ThemeIcon size="sm" variant="light" color={getRiskColor(risk as string)}>
@@ -451,7 +488,7 @@ export default function ComprehensiveEvaluationChart() {
         <div>
           <Title order={4} mb="sm">Compliance Status</Title>
           <Group gap="sm">
-            {Object.entries(data.compliance_status).map(([framework, status]) => (
+            {Object.entries(evaluationData.compliance_status).map(([framework, status]) => (
               <Badge 
                 key={framework}
                 color={status.compliant ? "green" : "red"}
@@ -467,8 +504,8 @@ export default function ComprehensiveEvaluationChart() {
         {/* Next Evaluation */}
         <Alert color="blue" title="Next Evaluation Due">
           <Text size="sm">
-            {new Date(data.next_evaluation_due).toLocaleDateString()} at{" "}
-            {new Date(data.next_evaluation_due).toLocaleTimeString()}
+            {new Date(evaluationData.next_evaluation_due).toLocaleDateString()} at{" "}
+            {new Date(evaluationData.next_evaluation_due).toLocaleTimeString()}
           </Text>
         </Alert>
 
@@ -483,6 +520,7 @@ export default function ComprehensiveEvaluationChart() {
         </Group>
       </Stack>
     </Paper>
+    </ErrorBoundary>
   )
 }
 

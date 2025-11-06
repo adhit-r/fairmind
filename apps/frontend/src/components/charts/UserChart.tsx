@@ -8,11 +8,13 @@ import {
   useMantineColorScheme,
 } from "@mantine/core"
 import { IconTrendingUp } from "@tabler/icons-react"
+import ErrorBoundary from "../ErrorBoundary"
 
 export default function UserChart() {
   const { colorScheme } = useMantineColorScheme()
   return (
-    <Card w="100%" h="100%" shadow="sm" p="xl" radius={6}>
+    <ErrorBoundary context="UserChart">
+      <Card w="100%" h="100%" shadow="sm" p="xl" radius={6}>
       <Card.Section>
         <Group justify="space-between">
           <Flex direction="column" align="start" gap={4}>
@@ -93,6 +95,7 @@ export default function UserChart() {
           </Table.Tbody>
         </Table>
       </Card.Section>
-    </Card>
+      </Card>
+    </ErrorBoundary>
   )
 }
