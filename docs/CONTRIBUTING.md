@@ -51,84 +51,80 @@ git checkout -b feature/your-feature-name
 |--------|-------|------------|------|
 | ✅ **Completed** | 20+ | ~30% | [View Closed Issues](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aclosed) |
 | 🔄 **In Progress** | 5+ | ~8% | [View In Progress](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3A%22in+progress%22) |
-| 📝 **Open** | 65+ | ~62% | [View Open Issues](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen) |
-| 🎯 **Good First Issues** | 15+ | ~23% | [View Good First Issues](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) |
+| **Open** | 52 | ~65% | [View Open Issues](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen) |
+| **Good First Issues** | 15+ | ~23% | [View Good First Issues](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) |
 
-### 📈 Progress Overview
+### Progress Overview
 
 ```
-Total Issues: ~90+
-├── ✅ Completed: ████████████░░░░░░░░░░░░░░░░░ 30%
-├── 🔄 In Progress: ██░░░░░░░░░░░░░░░░░░░░░░░░░░ 8%
-└── 📝 Open: █████████████████████░░░░░░░░░░░░░░ 62%
+Total Issues: ~80+
+├── Completed: ████████████░░░░░░░░░░░░░░░░░ 35%
+├── In Progress: ██░░░░░░░░░░░░░░░░░░░░░░░░░░ 5%
+└── Open: █████████████████████░░░░░░░░░░░░░░ 65%
 ```
 
 ### 🎯 Issue Categories
 
-#### 🌟 **Good First Issues** (Perfect for New Contributors)
+#### **Good First Issues** (Perfect for New Contributors)
 
 | # | Issue | Status | Labels | Effort |
 |---|-------|--------|--------|--------|
-| [#97](https://github.com/adhit-r/fairmind/issues/97) | 📝 Create Interactive API Documentation | 🔵 Open | `documentation`, `api`, `enhancement` | Small |
-| [#98](https://github.com/adhit-r/fairmind/issues/98) | 🧪 Add E2E Tests with Playwright | 🔵 Open | `testing`, `frontend`, `enhancement` | Medium |
-| [#99](https://github.com/adhit-r/fairmind/issues/99) | ✨ Add Loading States & Skeleton Screens | 🔵 Open | `ui/ux`, `frontend`, `enhancement` | Small |
-| [#100](https://github.com/adhit-r/fairmind/issues/100) | 🔒 Add Rate Limiting & API Throttling | 🔵 Open | `security`, `backend`, `enhancement` | Medium |
-| [#101](https://github.com/adhit-r/fairmind/issues/101) | 🎯 Optimize Bundle Size & Loading Speed | 🔵 Open | `performance`, `frontend`, `enhancement` | Medium |
-| [#102](https://github.com/adhit-r/fairmind/issues/102) | 🤖 Add Model Performance Benchmarking | 🔵 Open | `ai/ml`, `backend`, `enhancement` | Medium |
-| [#103](https://github.com/adhit-r/fairmind/issues/103) | 🎨 Improve Accessibility & Keyboard Navigation | 🔵 Open | `frontend`, `enhancement` | Small |
-| [#104](https://github.com/adhit-r/fairmind/issues/104) | 🌐 Add Multi-language Support (i18n) | 🔵 Open | `frontend`, `enhancement` | Medium |
-| [#105](https://github.com/adhit-r/fairmind/issues/105) | 📊 Add User Analytics Dashboard | 🔵 Open | `frontend`, `enhancement` | Medium |
-| [#106](https://github.com/adhit-r/fairmind/issues/106) | 📱 Improve Mobile Responsiveness | 🔵 Open | `ui/ux`, `frontend`, `enhancement` | Medium |
-| [#63](https://github.com/adhit-r/fairmind/issues/63) | 📊 Dataset Preprocessing & Feature Engineering | 🔵 Open | `ai/ml`, `enhancement` | Medium |
-| [#64](https://github.com/adhit-r/fairmind/issues/64) | 🤖 Model Training & Evaluation Pipeline | 🔵 Open | `ai/ml`, `enhancement` | Medium |
-| [#65](https://github.com/adhit-r/fairmind/issues/65) | 📈 Data Visualization & Analytics Dashboard | 🔵 Open | `ui/ux`, `ai/ml`, `enhancement` | Medium |
-| [#66](https://github.com/adhit-r/fairmind/issues/66) | 🧪 Testing & Quality Assurance | 🔵 Open | `testing`, `ai/ml`, `enhancement` | Medium |
-| [#26](https://github.com/adhit-r/fairmind/issues/26) | 🔄 CI/CD Pipeline Setup | 🔵 Open | `devops`, `enhancement` | Medium |
+| [#97](https://github.com/adhit-r/fairmind/issues/97) | Create Interactive API Documentation | Open | `documentation`, `api`, `enhancement`, `help wanted` | Small |
+| [#98](https://github.com/adhit-r/fairmind/issues/98) | Add E2E Tests with Playwright | Open | `testing`, `frontend`, `enhancement`, `help wanted` | Medium |
+| [#99](https://github.com/adhit-r/fairmind/issues/99) | Add Loading States & Skeleton Screens | Open | `ui/ux`, `frontend`, `enhancement`, `help wanted` | Small |
+| [#100](https://github.com/adhit-r/fairmind/issues/100) | Add Rate Limiting & API Throttling | Open | `security`, `backend`, `enhancement`, `help wanted` | Medium |
+| [#101](https://github.com/adhit-r/fairmind/issues/101) | Optimize Bundle Size & Loading Speed | Open | `performance`, `frontend`, `enhancement`, `help wanted` | Medium |
+| [#102](https://github.com/adhit-r/fairmind/issues/102) | Add Model Performance Benchmarking | Open | `ai/ml`, `backend`, `enhancement`, `help wanted` | Medium |
+| [#103](https://github.com/adhit-r/fairmind/issues/103) | Improve Accessibility & Keyboard Navigation | Open | `frontend`, `enhancement`, `help wanted` | Small |
+| [#104](https://github.com/adhit-r/fairmind/issues/104) | Add Multi-language Support (i18n) | Open | `frontend`, `enhancement`, `help wanted` | Medium |
+| [#105](https://github.com/adhit-r/fairmind/issues/105) | Add User Analytics Dashboard | Open | `frontend`, `enhancement`, `help wanted` | Medium |
+| [#106](https://github.com/adhit-r/fairmind/issues/106) | Improve Mobile Responsiveness | Open | `ui/ux`, `frontend`, `enhancement`, `help wanted` | Medium |
+| [#63](https://github.com/adhit-r/fairmind/issues/63) | Dataset Preprocessing & Feature Engineering | Open | `ai/ml`, `enhancement`, `help wanted` | Medium |
+| [#64](https://github.com/adhit-r/fairmind/issues/64) | Model Training & Evaluation Pipeline | Open | `ai/ml`, `enhancement`, `help wanted` | Medium |
+| [#65](https://github.com/adhit-r/fairmind/issues/65) | Data Visualization & Analytics Dashboard | Open | `ui/ux`, `ai/ml`, `enhancement`, `help wanted` | Medium |
+| [#66](https://github.com/adhit-r/fairmind/issues/66) | Testing & Quality Assurance | Open | `testing`, `ai/ml`, `enhancement`, `help wanted` | Medium |
+| [#26](https://github.com/adhit-r/fairmind/issues/26) | CI/CD Pipeline Setup | Open | `devops`, `enhancement`, `help wanted` | Medium |
 
-#### 🎨 **Frontend Issues**
-
-| # | Issue | Status | Labels | Priority |
-|---|-------|--------|--------|----------|
-| [#27](https://github.com/adhit-r/fairmind/issues/27) | Frontend: Authentication and User Management | 🔵 Open | `frontend`, `security` | High |
-| [#29](https://github.com/adhit-r/fairmind/issues/29) | Frontend: Real-time Notifications | 🔵 Open | `frontend`, `ui/ux` | Medium |
-| [#55](https://github.com/adhit-r/fairmind/issues/55) | 🚀 Production Deployment & Infrastructure Setup | 🔵 Open | `frontend`, `devops` | High |
-| [#56](https://github.com/adhit-r/fairmind/issues/56) | 📊 User Analytics & Performance Monitoring | 🔵 Open | `ui/ux`, `performance` | Medium |
-| [#78](https://github.com/adhit-r/fairmind/issues/78) | 📊 AI Risk Assessment Dashboard Implementation | 🔵 Open | `frontend`, `ai/ml`, `security` | High |
-| [#91](https://github.com/adhit-r/fairmind/issues/91) | 📊 Compliance Reporting & Executive Dashboards | 🔵 Open | `frontend`, `ui/ux` | Medium |
-| [#88](https://github.com/adhit-r/fairmind/issues/88) | 🗺️ Regulatory Mapping & Visual Compliance | 🔵 Open | `frontend`, `ui/ux` | Medium |
-
-#### ⚙️ **Backend Issues**
+#### **Frontend Issues**
 
 | # | Issue | Status | Labels | Priority |
 |---|-------|--------|--------|----------|
-| [#28](https://github.com/adhit-r/fairmind/issues/28) | Backend: Model Registry System | 🔵 Open | `backend`, `ai/ml`, `database` | High |
-| [#30](https://github.com/adhit-r/fairmind/issues/30) | Backend: Advanced Analytics Dashboard | 🔵 Open | `backend`, `performance`, `api` | Medium |
-| [#72](https://github.com/adhit-r/fairmind/issues/72) | 🔧 OECD Framework: API Integration & Backend Services | 🔵 Open | `backend`, `ai/ml`, `security` | High |
-| [#75](https://github.com/adhit-r/fairmind/issues/75) | 🔐 Security: Advanced Access Control & Permissions | 🔵 Open | `backend`, `security` | High |
-| [#77](https://github.com/adhit-r/fairmind/issues/77) | 🔄 Integration: Third-party Compliance Tools | 🔵 Open | `backend`, `security`, `api` | Medium |
+| [#27](https://github.com/adhit-r/fairmind/issues/27) | Frontend: Authentication and User Management | Open | `frontend`, `security`, `help wanted` | High |
+| [#29](https://github.com/adhit-r/fairmind/issues/29) | Frontend: Real-time Notifications | Open | `frontend`, `ui/ux`, `help wanted` | Medium |
+| [#78](https://github.com/adhit-r/fairmind/issues/78) | AI Risk Assessment Dashboard Implementation | Open | `frontend`, `ai/ml`, `security`, `help wanted` | High |
+| [#91](https://github.com/adhit-r/fairmind/issues/91) | Compliance Reporting & Executive Dashboards | Open | `frontend`, `ui/ux`, `help wanted` | Medium |
+| [#88](https://github.com/adhit-r/fairmind/issues/88) | Regulatory Mapping & Visual Compliance | Open | `frontend`, `ui/ux`, `help wanted` | Medium |
 
-#### 🤖 **AI/ML Issues**
-
-| # | Issue | Status | Labels | Priority |
-|---|-------|--------|--------|----------|
-| 48 | 🎯 FairMind Development Project: Core ML Infrastructure | 🔵 Open | `ai/ml`, `enhancement` | High |
-| 57 | 🔬 Advanced ML Research & Model Development | 🔵 Open | `ai/ml`, `enhancement` | High |
-| 58 | 🤖 ML Pipeline Optimization & Advanced Features | 🔵 Open | `ai/ml`, `enhancement` | Medium |
-| 59 | 🤖 Advanced LLM Model Integration & Research | 🔵 Open | `ai/ml`, `enhancement` | High |
-| 60 | ⚖️ Advanced Bias Detection & Fairness Research | 🔵 Open | `ai/ml`, `enhancement` | High |
-| 67 | 🔒 Risk Management System Implementation | 🔵 Open | `ai/ml`, `security` | High |
-| 68 | 🔍 OECD Framework: Risk Register Implementation | 🔵 Open | `ai/ml`, `security` | High |
-| 69 | 🤖 OECD Framework: Automated Risk Analysis (AI-based) | 🔵 Open | `ai/ml`, `security` | High |
-
-#### 🔒 **Security Issues**
+#### **Backend Issues**
 
 | # | Issue | Status | Labels | Priority |
 |---|-------|--------|--------|----------|
-| [#96](https://github.com/adhit-r/fairmind/issues/96) | 🔴 TODO: Address Security Vulnerabilities in Dependencies | 🔵 Open | `security` | **Critical** |
-| [#83](https://github.com/adhit-r/fairmind/issues/83) | 🏢 Enhanced Vendor Risk Assessment & Supply Chain Security | 🔵 Open | `security` | High |
-| [#84](https://github.com/adhit-r/fairmind/issues/84) | 🔍 Risk & Compliance Obligation Mapping | 🔵 Open | `security` | High |
-| [#89](https://github.com/adhit-r/fairmind/issues/89) | 🔧 Automated Control Assessment & Testing | 🔵 Open | `security` | High |
-| [#90](https://github.com/adhit-r/fairmind/issues/90) | 📋 Attestation Management & Evidence Tracking | 🔵 Open | `security` | High |
+| [#28](https://github.com/adhit-r/fairmind/issues/28) | Backend: Model Registry System | Open | `backend`, `ai/ml`, `database`, `help wanted` | High |
+| [#30](https://github.com/adhit-r/fairmind/issues/30) | Backend: Advanced Analytics Dashboard | Open | `backend`, `performance`, `api`, `help wanted` | Medium |
+| [#72](https://github.com/adhit-r/fairmind/issues/72) | OECD Framework: API Integration & Backend Services | Open | `backend`, `ai/ml`, `security`, `help wanted` | High |
+| [#75](https://github.com/adhit-r/fairmind/issues/75) | Security: Advanced Access Control & Permissions | Open | `backend`, `security`, `help wanted` | High |
+| [#77](https://github.com/adhit-r/fairmind/issues/77) | Integration: Third-party Compliance Tools | Open | `backend`, `security`, `api`, `help wanted` | Medium |
+
+#### **AI/ML Issues**
+
+| # | Issue | Status | Labels | Priority |
+|---|-------|--------|--------|----------|
+| [#48](https://github.com/adhit-r/fairmind/issues/48) | FairMind Development Project: Core ML Infrastructure | Open | `ai/ml`, `enhancement` | High |
+| [#59](https://github.com/adhit-r/fairmind/issues/59) | Advanced LLM Model Integration & Research | Open | `ai/ml`, `enhancement` | High |
+| [#60](https://github.com/adhit-r/fairmind/issues/60) | Advanced Bias Detection & Fairness Research | Open | `ai/ml`, `enhancement` | High |
+| [#67](https://github.com/adhit-r/fairmind/issues/67) | Risk Management System Implementation | Open | `ai/ml`, `security`, `help wanted` | High |
+| [#68](https://github.com/adhit-r/fairmind/issues/68) | OECD Framework: Risk Register Implementation | Open | `ai/ml`, `security`, `help wanted` | High |
+| [#69](https://github.com/adhit-r/fairmind/issues/69) | OECD Framework: Automated Risk Analysis (AI-based) | Open | `ai/ml`, `security`, `help wanted` | High |
+
+#### **Security Issues**
+
+| # | Issue | Status | Labels | Priority |
+|---|-------|--------|--------|----------|
+| [#96](https://github.com/adhit-r/fairmind/issues/96) | TODO: Address Security Vulnerabilities in Dependencies | Open | `security` | **Critical** |
+| [#83](https://github.com/adhit-r/fairmind/issues/83) | Enhanced Vendor Risk Assessment & Supply Chain Security | Open | `security`, `help wanted` | High |
+| [#84](https://github.com/adhit-r/fairmind/issues/84) | Risk & Compliance Obligation Mapping | Open | `security`, `help wanted` | High |
+| [#89](https://github.com/adhit-r/fairmind/issues/89) | Automated Control Assessment & Testing | Open | `security`, `help wanted` | High |
+| [#90](https://github.com/adhit-r/fairmind/issues/90) | Attestation Management & Evidence Tracking | Open | `security`, `help wanted` | High |
 
 #### ✅ **Recently Completed**
 
