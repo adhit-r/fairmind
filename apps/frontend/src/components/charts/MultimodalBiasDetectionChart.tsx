@@ -21,7 +21,8 @@ import {
   Tabs,
   RingProgress,
   Center,
-  Loader
+  Loader,
+  useMantineColorScheme
 } from "@mantine/core"
 import { 
   IconBrain, 
@@ -43,6 +44,7 @@ import {
 } from "@tabler/icons-react"
 import { useApi } from "../../hooks/useApi"
 import ErrorBoundary from "../ErrorBoundary"
+import { ChartSkeleton } from "../LoadingSkeleton"
 
 interface MultimodalBiasResult {
   modality: string
@@ -69,8 +71,8 @@ interface MultimodalBiasData {
   recommendations: string[]
 }
 
-// Fallback mock data if API fails
-const fallbackMockData: MultimodalBiasData = {
+// Empty data structure for when API returns no data
+const emptyMultimodalData: MultimodalBiasData = {
       timestamp: "2025-01-01T12:00:00Z",
       modalities: ["text", "image", "audio", "video"],
       individual_modality_results: {
@@ -172,9 +174,7 @@ const fallbackMockData: MultimodalBiasData = {
         "Implement cross-modal consistency monitoring",
         "Use interaction effect analysis"
       ]
-    }
-
-    }
+}
 
 export default function MultimodalBiasDetectionChart() {
   const [activeTab, setActiveTab] = useState<string | null>("overview")
@@ -183,16 +183,15 @@ export default function MultimodalBiasDetectionChart() {
   // For dashboard display, we use fallback data. In production, this would
   // fetch from a results endpoint or use cached results from previous analyses
   const { data: apiData, loading, error, retry } = useApi<MultimodalBiasData>(
-    null, // No GET endpoint available - requires POST with model outputs
+    '', // No GET endpoint available - requires POST with model outputs
     {
-      fallbackData: fallbackMockData,
       enableRetry: false, // Can't retry without endpoint
       cacheKey: 'multimodal-bias-results'
     }
   )
 
   // Use API data if available, otherwise use fallback
-  const data = apiData || fallbackMockData
+  const data = apiData || emptyMultimodalData
 
   const getRiskColor = (risk: string) => {
     switch (risk) {
@@ -230,18 +229,20 @@ export default function MultimodalBiasDetectionChart() {
     return <IconMinus size={16} color="orange" />
   }
 
-  // Show loading state
+  const { colorScheme } = useMantineColorScheme();
+  const brutalistCardStyle = {
+    background: colorScheme === 'dark' ? 'var(--color-black)' : 'var(--color-white)',
+    border: '2px solid var(--color-black)',
+    borderRadius: 'var(--border-radius-base)',
+    boxShadow: 'var(--shadow-brutal)',
+    transition: 'all var(--transition-duration-fast) ease',
+  };
+
+  // Show loading state with skeleton screen
   if (loading) {
     return (
       <ErrorBoundary context="MultimodalBiasDetectionChart">
-        <Paper p="xl" style={{ background: 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(10px)' }}>
-          <Center>
-            <Stack align="center" gap="md">
-              <Loader size="lg" />
-              <Text c="dimmed">Loading multimodal bias detection analysis...</Text>
-            </Stack>
-          </Center>
-        </Paper>
+        <ChartSkeleton />
       </ErrorBoundary>
     )
   }
@@ -250,13 +251,25 @@ export default function MultimodalBiasDetectionChart() {
   if (error && !data) {
     return (
       <ErrorBoundary context="MultimodalBiasDetectionChart">
-        <Paper p="xl" style={{ background: 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(10px)' }}>
+        <Paper p="xl" style={{
+          ...brutalistCardStyle,
+          border: '2px solid rgba(239, 68, 68, 0.8)',
+        }}>
           <Stack align="center" gap="md">
             <Alert icon={<IconAlertTriangle size={16} />} title="Failed to load multimodal data" color="red">
               {error.message || 'Unable to fetch multimodal bias detection data. Using fallback data.'}
             </Alert>
             {retry && (
-              <Button onClick={retry} leftSection={<IconRefresh size={16} />} variant="light" color="blue">
+              <Button 
+                onClick={retry} 
+                leftSection={<IconRefresh size={16} />} 
+                variant="light" 
+                color="blue"
+                style={{
+                  border: '2px solid var(--color-black)',
+                  boxShadow: 'var(--shadow-brutal)',
+                }}
+              >
                 Retry
               </Button>
             )}
@@ -272,7 +285,7 @@ export default function MultimodalBiasDetectionChart() {
   if (!data) {
     return (
       <ErrorBoundary context="MultimodalBiasDetectionChart">
-        <Paper p="md" style={{ background: 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(10px)' }}>
+        <Paper p="md" style={brutalistCardStyle}>
           <Alert color="blue" title="No Data Available">
             <Text size="sm">
               Multimodal bias detection requires running an analysis first. 
@@ -286,7 +299,7 @@ export default function MultimodalBiasDetectionChart() {
 
   return (
     <ErrorBoundary context="MultimodalBiasDetectionChart">
-      <Paper p="md" style={{ background: 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(10px)' }}>
+      <Paper p="md" style={brutalistCardStyle}>
       <Stack gap="md">
         {/* Header */}
         <Group justify="space-between" align="center">
@@ -318,25 +331,25 @@ export default function MultimodalBiasDetectionChart() {
         {/* Overview Stats */}
         <Grid>
           <Grid.Col span={3}>
-            <Card p="sm" style={{ background: 'rgba(255, 255, 255, 0.5)' }}>
+            <Card p="sm" style={brutalistCardStyle}>
               <Text size="xs" c="dimmed">Modalities</Text>
               <Text fw={700} size="lg">{data.modalities.length}</Text>
             </Card>
           </Grid.Col>
           <Grid.Col span={3}>
-            <Card p="sm" style={{ background: 'rgba(255, 255, 255, 0.5)' }}>
+            <Card p="sm" style={brutalistCardStyle}>
               <Text size="xs" c="dimmed">Biased Modalities</Text>
               <Text fw={700} size="lg" c="red">{data.overall_assessment.biased_modalities.length}</Text>
             </Card>
           </Grid.Col>
           <Grid.Col span={3}>
-            <Card p="sm" style={{ background: 'rgba(255, 255, 255, 0.5)' }}>
+            <Card p="sm" style={brutalistCardStyle}>
               <Text size="xs" c="dimmed">Overall Bias</Text>
               <Text fw={700} size="lg">{(data.overall_assessment.overall_bias_score * 100).toFixed(1)}%</Text>
             </Card>
           </Grid.Col>
           <Grid.Col span={3}>
-            <Card p="sm" style={{ background: 'rgba(255, 255, 255, 0.5)' }}>
+            <Card p="sm" style={brutalistCardStyle}>
               <Text size="xs" c="dimmed">Cross-Modal</Text>
               <Text fw={700} size="lg" c={data.overall_assessment.cross_modal_bias_detected ? "red" : "green"}>
                 {data.overall_assessment.cross_modal_bias_detected ? "Yes" : "No"}
@@ -357,7 +370,7 @@ export default function MultimodalBiasDetectionChart() {
           <Tabs.Panel value="overview" pt="md">
             <Grid>
               <Grid.Col span={6}>
-                <Card p="md" style={{ background: 'rgba(255, 255, 255, 0.5)' }}>
+                <Card p="md" style={brutalistCardStyle}>
                   <Text fw={500} mb="sm">Overall Bias Score</Text>
                   <Center>
                     <RingProgress
@@ -376,7 +389,7 @@ export default function MultimodalBiasDetectionChart() {
                 </Card>
               </Grid.Col>
               <Grid.Col span={6}>
-                <Card p="md" style={{ background: 'rgba(255, 255, 255, 0.5)' }}>
+                <Card p="md" style={brutalistCardStyle}>
                   <Text fw={500} mb="sm">Modality Risk Distribution</Text>
                   <Stack gap="xs">
                     {data.modalities.map((modality) => {
@@ -408,7 +421,7 @@ export default function MultimodalBiasDetectionChart() {
           <Tabs.Panel value="modalities" pt="md">
             <Stack gap="md">
               {Object.entries(data.individual_modality_results).map(([modality, results]) => (
-                <Card key={modality} p="md" style={{ background: 'rgba(255, 255, 255, 0.5)' }}>
+                <Card key={modality} p="md" style={brutalistCardStyle}>
                   <Group mb="sm">
                     <ThemeIcon size="md" variant="light" color="blue">
                       {getModalityIcon(modality)}
@@ -418,7 +431,7 @@ export default function MultimodalBiasDetectionChart() {
                   
                   <Stack gap="xs">
                     {results.map((result, index) => (
-                      <Card key={index} p="sm" style={{ background: 'rgba(255, 255, 255, 0.3)' }}>
+                      <Card key={index} p="sm" style={brutalistCardStyle}>
                         <Group justify="space-between" align="center">
                           <Group>
                             <ThemeIcon 
@@ -460,7 +473,7 @@ export default function MultimodalBiasDetectionChart() {
           <Tabs.Panel value="cross-modal" pt="md">
             <Stack gap="md">
               {data.cross_modal_results.map((result, index) => (
-                <Card key={index} p="md" style={{ background: 'rgba(255, 255, 255, 0.5)' }}>
+                <Card key={index} p="md" style={brutalistCardStyle}>
                   <Group mb="sm">
                     <ThemeIcon size="md" variant="light" color="purple">
                       <IconArrowsMaximize size={16} />
@@ -508,7 +521,7 @@ export default function MultimodalBiasDetectionChart() {
           </Tabs.Panel>
 
           <Tabs.Panel value="recommendations" pt="md">
-            <Card p="md" style={{ background: 'rgba(255, 255, 255, 0.5)' }}>
+            <Card p="md" style={brutalistCardStyle}>
               <Text fw={600} size="lg" mb="md">Recommendations</Text>
               <List size="sm">
                 {data.recommendations.map((recommendation, index) => (

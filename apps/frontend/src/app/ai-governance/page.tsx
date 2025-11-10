@@ -221,7 +221,7 @@ export default function AIGovernancePage() {
             title="Connection Error"
             style={neo.card}
           >
-            Unable to connect to governance service: {error}
+            Unable to connect to governance service: {error?.message || 'Unknown error'}
           </Alert>
         )}
 

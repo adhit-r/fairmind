@@ -14,11 +14,20 @@ import ErrorBoundary from "../ErrorBoundary"
 
 export default function ReportSnapshotChart() {
   const { colorScheme } = useMantineColorScheme()
+  const brutalistCardStyle = {
+    background: colorScheme === 'dark' ? 'var(--color-black)' : 'var(--color-white)',
+    border: '2px solid var(--color-black)',
+    borderRadius: 'var(--border-radius-base)',
+    boxShadow: 'var(--shadow-brutal)',
+    transition: 'all var(--transition-duration-fast) ease',
+  };
+
   return (
     <ErrorBoundary context="ReportSnapshotChart">
       <Card
         w="100%"
         style={{
+          ...brutalistCardStyle,
           display: "flex",
           flexDirection: "column",
           justifyContent: "center",
@@ -26,10 +35,8 @@ export default function ReportSnapshotChart() {
           gap: rem(30),
         }}
         h="100%"
-        shadow="sm"
         px={0}
         py="md"
-        radius={6}
       >
       <Flex w="100%" direction="column" align="start" gap={20}>
         <Group px="md" w="100%" justify="space-between">

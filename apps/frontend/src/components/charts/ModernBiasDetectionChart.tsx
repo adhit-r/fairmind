@@ -18,7 +18,8 @@ import {
   Card,
   Title,
   Divider,
-  Loader
+  Loader,
+  useMantineColorScheme
 } from "@mantine/core"
 import { 
   IconBrain, 
@@ -31,10 +32,11 @@ import {
   IconTrendingUp,
   IconTrendingDown,
   IconMinus,
-  IconInfoCircle
+  IconInfoCircle,
+  IconRefresh
 } from "@tabler/icons-react"
 import { useApi } from "../../hooks/useApi"
-import { mockBiasDetectionData } from "../../lib/mockData"
+import { ChartSkeleton } from "../LoadingSkeleton"
 
 interface BiasTestResult {
   test_name: string
@@ -68,9 +70,9 @@ export default function ModernBiasDetectionChart() {
   const { data, loading, error, retry } = useApi<ModernBiasDetectionData>(
     "/api/v1/modern-bias/detection-results",
     {
-      fallbackData: mockBiasDetectionData,
       enableRetry: true,
-      cacheKey: 'modern-bias-detection'
+      cacheKey: 'modern-bias-detection',
+      refreshInterval: 60000 // Refresh every minute
     }
   )
 
@@ -100,37 +102,58 @@ export default function ModernBiasDetectionChart() {
     return <IconMinus size={16} color="orange" />
   }
 
+  const { colorScheme } = useMantineColorScheme();
+  const brutalistCardStyle = {
+    background: colorScheme === 'dark' ? 'var(--color-black)' : 'var(--color-white)',
+    border: '2px solid var(--color-black)',
+    borderRadius: 'var(--border-radius-base)',
+    boxShadow: 'var(--shadow-brutal)',
+    transition: 'all var(--transition-duration-fast) ease',
+  };
+
   if (loading) {
-    return (
-      <Paper p="md" style={{ background: 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(10px)' }}>
-        <Group justify="center">
-          <Loader size="sm" />
-          <Text>Loading modern bias detection analysis...</Text>
-        </Group>
-      </Paper>
-    )
+    return <ChartSkeleton />
   }
 
   if (error) {
     return (
-      <Paper p="md" style={{ background: 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(10px)' }}>
-        <Alert color="red" title="Error">
-          {error}
-        </Alert>
+      <Paper p="md" style={{
+        ...brutalistCardStyle,
+        border: '2px solid rgba(239, 68, 68, 0.8)',
+      }}>
+        <Stack align="center" gap="md">
+          <Alert icon={<IconAlertTriangle size={16} />} color="red" title="Error">
+            {error?.message || 'Unknown error'}
+          </Alert>
+          {retry && (
+            <Button 
+              onClick={retry} 
+              leftSection={<IconRefresh size={16} />} 
+              variant="light" 
+              color="blue"
+              style={{
+                border: '2px solid var(--color-black)',
+                boxShadow: 'var(--shadow-brutal)',
+              }}
+            >
+              Retry
+            </Button>
+          )}
+        </Stack>
       </Paper>
     )
   }
 
   if (!data) {
     return (
-      <Paper p="md" style={{ background: 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(10px)' }}>
+      <Paper p="md" style={brutalistCardStyle}>
         <Text>No data available</Text>
       </Paper>
     )
   }
 
   return (
-    <Paper p="md" style={{ background: 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(10px)' }}>
+    <Paper p="md" style={brutalistCardStyle}>
       <Stack gap="md">
         {/* Header */}
         <Group justify="space-between" align="center">
@@ -162,20 +185,20 @@ export default function ModernBiasDetectionChart() {
         {/* Summary Stats */}
         <Grid>
           <Grid.Col span={4}>
-            <Card p="sm" style={{ background: 'rgba(255, 255, 255, 0.5)' }}>
-              <Text size="xs" c="dimmed">Tests Run</Text>
+            <Card p="sm" style={brutalistCardStyle}>
+              <Text size="xs" c="dimmed" fw={600}>Tests Run</Text>
               <Text fw={700} size="lg">{data.evaluation_summary.total_tests_run}</Text>
             </Card>
           </Grid.Col>
           <Grid.Col span={4}>
-            <Card p="sm" style={{ background: 'rgba(255, 255, 255, 0.5)' }}>
-              <Text size="xs" c="dimmed">Bias Detected</Text>
+            <Card p="sm" style={brutalistCardStyle}>
+              <Text size="xs" c="dimmed" fw={600}>Bias Detected</Text>
               <Text fw={700} size="lg" c="red">{data.evaluation_summary.biased_tests}</Text>
             </Card>
           </Grid.Col>
           <Grid.Col span={4}>
-            <Card p="sm" style={{ background: 'rgba(255, 255, 255, 0.5)' }}>
-              <Text size="xs" c="dimmed">Bias Rate</Text>
+            <Card p="sm" style={brutalistCardStyle}>
+              <Text size="xs" c="dimmed" fw={600}>Bias Rate</Text>
               <Text fw={700} size="lg">{(data.evaluation_summary.bias_rate * 100).toFixed(0)}%</Text>
             </Card>
           </Grid.Col>
@@ -186,7 +209,7 @@ export default function ModernBiasDetectionChart() {
           <Title order={4} mb="sm">Bias Test Results</Title>
           <Stack gap="xs">
             {data.bias_tests.map((test, index) => (
-              <Card key={index} p="sm" style={{ background: 'rgba(255, 255, 255, 0.5)' }}>
+              <Card key={index} p="sm" style={brutalistCardStyle}>
                 <Group justify="space-between" align="center">
                   <Group>
                     <ThemeIcon 
@@ -227,7 +250,7 @@ export default function ModernBiasDetectionChart() {
           <Title order={4} mb="sm">Explainability Insights</Title>
           <Stack gap="xs">
             {data.explainability_analysis.map((analysis, index) => (
-              <Card key={index} p="sm" style={{ background: 'rgba(255, 255, 255, 0.5)' }}>
+              <Card key={index} p="sm" style={brutalistCardStyle}>
                 <Group justify="space-between" align="flex-start">
                   <div style={{ flex: 1 }}>
                     <Text fw={500} size="sm">{analysis.method}</Text>

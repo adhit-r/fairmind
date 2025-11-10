@@ -19,7 +19,8 @@ import {
   Card,
   ActionIcon,
   Tooltip,
-  Alert
+  Alert,
+  useMantineColorScheme
 } from '@mantine/core';
 import { 
   IconBrain, 
@@ -116,8 +117,17 @@ const AdvancedBiasVisualization: React.FC<AdvancedBiasVisualizationProps> = ({
     }
   };
 
+  const { colorScheme } = useMantineColorScheme();
+  const brutalistCardStyle = {
+    background: colorScheme === 'dark' ? 'var(--color-black)' : 'var(--color-white)',
+    border: '2px solid var(--color-black)',
+    borderRadius: 'var(--border-radius-base)',
+    boxShadow: 'var(--shadow-brutal)',
+    transition: 'all var(--transition-duration-fast) ease',
+  };
+
   const render3DVisualization = () => (
-    <Paper p="md" style={{ height: '400px', position: 'relative' }}>
+    <Paper p="md" style={{ ...brutalistCardStyle, height: '400px', position: 'relative' }}>
       <Title order={4} mb="md">3D Bias Landscape</Title>
       <div style={{ 
         width: '100%', 
@@ -178,7 +188,7 @@ const AdvancedBiasVisualization: React.FC<AdvancedBiasVisualizationProps> = ({
   );
 
   const renderHeatmap = () => (
-    <Paper p="md" style={{ height: '400px' }}>
+    <Paper p="md" style={{ ...brutalistCardStyle, height: '400px' }}>
       <Title order={4} mb="md">Bias Heatmap</Title>
       <div style={{ 
         display: 'grid', 
@@ -213,7 +223,7 @@ const AdvancedBiasVisualization: React.FC<AdvancedBiasVisualizationProps> = ({
   );
 
   const renderTimeline = () => (
-    <Paper p="md" style={{ height: '400px' }}>
+    <Paper p="md" style={{ ...brutalistCardStyle, height: '400px' }}>
       <Title order={4} mb="md">Temporal Bias Analysis</Title>
       <div style={{ height: '300px', position: 'relative' }}>
         {availableGroups.map((group, groupIndex) => {
@@ -256,7 +266,7 @@ const AdvancedBiasVisualization: React.FC<AdvancedBiasVisualizationProps> = ({
   );
 
   const renderNetwork = () => (
-    <Paper p="md" style={{ height: '400px' }}>
+    <Paper p="md" style={{ ...brutalistCardStyle, height: '400px' }}>
       <Title order={4} mb="md">Bias Network Analysis</Title>
       <div style={{ 
         height: '300px', 
@@ -348,11 +358,11 @@ const AdvancedBiasVisualization: React.FC<AdvancedBiasVisualizationProps> = ({
     if (!analysisResults) return null;
 
     return (
-      <Paper p="md" mt="md">
+      <Paper p="md" mt="md" style={brutalistCardStyle}>
         <Title order={4} mb="md">Analysis Results</Title>
         <Grid>
           <Grid.Col span={6}>
-            <Card>
+            <Card style={brutalistCardStyle}>
               <Group justify="space-between" mb="sm">
                 <Text fw="bold">Overall Bias Score</Text>
                 <Badge 
@@ -373,7 +383,7 @@ const AdvancedBiasVisualization: React.FC<AdvancedBiasVisualizationProps> = ({
             </Card>
           </Grid.Col>
           <Grid.Col span={6}>
-            <Card>
+            <Card style={brutalistCardStyle}>
               <Text fw="bold" mb="sm">Recommendations</Text>
               <Stack gap="xs">
                 {analysisResults.recommendations.map((rec: string, index: number) => (
@@ -393,7 +403,7 @@ const AdvancedBiasVisualization: React.FC<AdvancedBiasVisualizationProps> = ({
   return (
     <ErrorBoundary context="AdvancedBiasVisualization">
       <Stack>
-        <Paper p="md">
+        <Paper p="md" style={brutalistCardStyle}>
           <Group justify="space-between" mb="md">
             <Title order={3}>
               <Group gap="sm">
@@ -453,7 +463,7 @@ const AdvancedBiasVisualization: React.FC<AdvancedBiasVisualizationProps> = ({
         </Tabs>
       </Paper>
 
-      <Paper p="md">
+      <Paper p="md" style={brutalistCardStyle}>
         <Title order={4} mb="md">Analysis Controls</Title>
         <Grid>
           <Grid.Col span={4}>

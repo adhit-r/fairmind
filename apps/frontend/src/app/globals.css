@@ -1,4 +1,5 @@
 @import '../styles/design-system.css';
+@import '../styles/neobrutal.css';
 
 /* Global styles for Fairmind - Responsible AI Platform */
 
@@ -36,29 +37,6 @@ body {
 [data-mantine-color-scheme="dark"] {
   --mantine-color-text: var(--color-white);
   --mantine-color-dimmed: var(--color-gray-400);
-}
-
-/* Fix navbar and sidebar visibility */
-[data-mantine-color-scheme="dark"] .mantine-AppShell-navbar {
-  background: var(--color-black);
-  border-color: var(--color-black);
-}
-
-[data-mantine-color-scheme="light"] .mantine-AppShell-navbar {
-  background: var(--color-white);
-  border-color: var(--color-black);
-}
-
-[data-mantine-color-scheme="dark"] .mantine-AppShell-header {
-  background: var(--color-black);
-  border-color: var(--color-black);
-  border-bottom: 2px solid var(--color-black);
-}
-
-[data-mantine-color-scheme="light"] .mantine-AppShell-header {
-  background: var(--color-white);
-  border-color: var(--color-black);
-  border-bottom: 2px solid var(--color-black);
 }
 
 /* Ensure proper text contrast in cards */

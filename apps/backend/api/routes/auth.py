@@ -40,6 +40,14 @@ router = APIRouter(prefix="/auth", tags=["authentication"])
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "email": "user@example.com",
+                "password": "securepassword123"
+            }
+        }
 
 
 class LoginResponse(BaseModel):
@@ -48,6 +56,22 @@ class LoginResponse(BaseModel):
     token_type: str = "bearer"
     expires_in: int
     user: dict
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                "token_type": "bearer",
+                "expires_in": 1800,
+                "user": {
+                    "id": "user-123",
+                    "email": "user@example.com",
+                    "username": "johndoe",
+                    "role": "admin"
+                }
+            }
+        }
 
 
 class RefreshRequest(BaseModel):
@@ -91,7 +115,39 @@ class UserResponse(BaseModel):
 
 @router.post("/login", response_model=LoginResponse)
 async def login(login_data: LoginRequest):
-    """Authenticate user and return JWT tokens using new JWT infrastructure."""
+    """
+    Authenticate user and return JWT tokens using new JWT infrastructure.
+    
+    **Example Request:**
+    ```json
+    {
+      "email": "user@example.com",
+      "password": "securepassword123"
+    }
+    ```
+    
+    **Example Response:**
+    ```json
+    {
+      "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+      "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+      "token_type": "bearer",
+      "expires_in": 1800,
+      "user": {
+        "id": "user-123",
+        "email": "user@example.com",
+        "username": "johndoe",
+        "role": "admin"
+      }
+    }
+    ```
+    
+    **Error Responses:**
+    - `401 Unauthorized`: Invalid email or password
+    - `422 Unprocessable Entity`: Validation error (invalid email format, missing fields)
+    - `429 Too Many Requests`: Rate limit exceeded
+    - `500 Internal Server Error`: Server error during authentication
+    """
     try:
         # In production, verify credentials against database
         # This is a simplified example

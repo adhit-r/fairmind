@@ -173,7 +173,7 @@ export default function FairnessPage() {
             title="Connection Error"
             style={neo.card}
           >
-            Unable to connect to fairness service: {error}
+            Unable to connect to fairness service: {error?.message || 'Unknown error'}
           </Alert>
         )}
 

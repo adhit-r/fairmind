@@ -36,6 +36,8 @@ import {
 } from '@tabler/icons-react';
 import { useState } from 'react';
 import { useGlassmorphicTheme } from '@/providers/glassmorphic-theme-provider';
+import { OrangeLogo } from '@/components/OrangeLogo';
+import layoutClasses from '@/styles/layout.module.css';
 
 const navigationData = [
   {
@@ -110,7 +112,8 @@ const navigationData = [
     label: 'Benchmarking',
     icon: IconTrendingUp,
     links: [
-      { label: 'Benchmark Suite', href: '/benchmarks' },
+      { label: 'Model Performance', href: '/benchmarks' },
+      { label: 'Benchmark Suite', href: '/benchmark-suite' },
       { label: 'Performance Tests', href: '/benchmarks/performance' },
     ],
   },
@@ -149,31 +152,41 @@ export function Navigation({ children }: NavigationProps) {
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const { colorScheme } = useGlassmorphicTheme();
 
-  // Brutalist styles for navbar
+  // Pure neobrutal styles for navbar - thicker borders, zero radius, proper alignment
   const navbarBrutalistStyle = {
     background: colorScheme === 'dark' ? 'var(--color-black)' : 'var(--color-white)',
-    border: '2px solid var(--color-black)',
-    borderRadius: 'var(--border-radius-none)',
+    border: '4px solid var(--color-black)',
+    borderRight: '4px solid var(--color-black)',
+    borderRadius: '0',
     boxShadow: 'var(--shadow-brutal)',
+    position: 'relative',
+    zIndex: 100,
   };
 
-  // Brutalist styles for header
+  // Pure neobrutal styles for header - proper alignment
   const headerBrutalistStyle = {
     background: colorScheme === 'dark' ? 'var(--color-black)' : 'var(--color-white)',
-    border: '2px solid var(--color-black)',
-    borderBottom: '2px solid var(--color-black)',
+    border: '4px solid var(--color-black)',
+    borderBottom: '4px solid var(--color-black)',
+    borderRadius: '0',
     boxShadow: 'var(--shadow-brutal)',
+    position: 'relative',
+    zIndex: 200,
+    height: '100%',
   };
 
-  // Styles for the "New Assessment" button
+  // Styles for the "New Assessment" button - pure neobrutal
   const newAssessmentButtonStyle = {
     background: 'var(--color-orange)',
     color: 'var(--color-white)',
-    border: '2px solid var(--color-black)',
-    borderRadius: 'var(--border-radius-none)',
-    padding: `${rem(8)} ${rem(12)}`,
-    margin: `0 0 ${rem(8)} 0`,
-    fontWeight: 'var(--font-weight-bold)',
+    border: '4px solid var(--color-black)',
+    borderRadius: '0',
+    padding: `${rem(12)} ${rem(16)}`,
+    margin: `0 0 ${rem(12)} 0`,
+    fontWeight: 'var(--font-weight-black)',
+    fontSize: 'var(--font-size-base)',
+    letterSpacing: 'var(--letter-spacing-wide)',
+    textTransform: 'uppercase',
     boxShadow: 'var(--shadow-brutal)',
     width: '100%',
     justifyContent: 'flex-start',
@@ -183,19 +196,22 @@ export function Navigation({ children }: NavigationProps) {
   const newAssessmentButtonHoverStyle = {
     background: 'var(--color-orange-dark)',
     color: 'var(--color-white)',
-    transform: 'translate(-2px, -2px)',
+    transform: 'translate(-4px, -4px)',
     boxShadow: 'var(--shadow-brutal-lg)',
   };
 
-  // Styles for navigation items - brutalist design with orange accent
+  // Styles for navigation items - pure neobrutal design
   const navItemStyle = {
     background: 'transparent',
-    border: '2px solid var(--color-black)',
-    borderRadius: 'var(--border-radius-none)',
-    padding: `${rem(8)} ${rem(12)}`,
-    marginBottom: rem(2),
+    border: '4px solid var(--color-black)',
+    borderRadius: '0',
+    padding: `${rem(12)} ${rem(16)}`,
+    marginBottom: rem(4),
     transition: 'all var(--transition-duration-fast) ease',
-    fontWeight: 'var(--font-weight-bold)',
+    fontWeight: 'var(--font-weight-black)',
+    fontSize: 'var(--font-size-sm)',
+    letterSpacing: 'var(--letter-spacing-wide)',
+    textTransform: 'uppercase',
     color: colorScheme === 'dark' ? 'var(--color-white)' : 'var(--color-black)',
     boxShadow: 'var(--shadow-brutal)',
     width: '100%',
@@ -203,31 +219,37 @@ export function Navigation({ children }: NavigationProps) {
   };
 
   const navItemHoverStyle = {
-    background: 'var(--color-orange)', // Orange accent on hover
+    background: 'var(--color-orange)',
     color: 'var(--color-white)',
-    transform: 'translate(-2px, -2px)',
+    transform: 'translate(-4px, -4px)',
     boxShadow: 'var(--shadow-brutal-lg)',
   };
 
   const activeNavItemStyle = {
-    background: 'var(--color-orange)', // Orange accent for active items
+    background: 'var(--color-orange)',
     color: 'var(--color-white)',
-    border: '2px solid var(--color-black)',
-    borderRadius: 'var(--border-radius-none)',
-    padding: `${rem(8)} ${rem(12)}`,
-    marginBottom: rem(2),
-    fontWeight: 'var(--font-weight-bold)',
+    border: '4px solid var(--color-black)',
+    borderRadius: '0',
+    padding: `${rem(12)} ${rem(16)}`,
+    marginBottom: rem(4),
+    fontWeight: 'var(--font-weight-black)',
+    fontSize: 'var(--font-size-sm)',
+    letterSpacing: 'var(--letter-spacing-wide)',
+    textTransform: 'uppercase',
     boxShadow: 'var(--shadow-brutal-lg)',
-    transform: 'translate(-2px, -2px)',
+    transform: 'translate(-4px, -4px)',
   };
 
   const subNavItemStyle = {
     background: 'transparent',
-    border: '2px solid var(--color-black)',
-    borderRadius: 'var(--border-radius-none)',
-    padding: `${rem(6)} ${rem(16)}`,
-    margin: `${rem(2)} 0`,
+    border: '3px solid var(--color-black)',
+    borderRadius: '0',
+    padding: `${rem(10)} ${rem(20)}`,
+    margin: `${rem(4)} 0`,
     transition: 'all var(--transition-duration-fast) ease',
+    fontWeight: 'var(--font-weight-bold)',
+    fontSize: 'var(--font-size-xs)',
+    letterSpacing: 'var(--letter-spacing-normal)',
     color: colorScheme === 'dark' ? 'var(--color-gray-300)' : 'var(--color-gray-700)',
     boxShadow: 'var(--shadow-brutal-sm)',
     width: '100%',
@@ -235,41 +257,65 @@ export function Navigation({ children }: NavigationProps) {
   };
 
   const subNavItemHoverStyle = {
-    background: 'var(--color-orange-light)', // Light orange on hover
+    background: 'var(--color-orange-light)',
     color: 'var(--color-white)',
-    transform: 'translate(-2px, -2px)',
+    transform: 'translate(-3px, -3px)',
     boxShadow: 'var(--shadow-brutal)',
   };
 
   return (
     <AppShell
+      layout="alt"
+      classNames={{
+        root: layoutClasses.appShell,
+        header: layoutClasses.header,
+        navbar: layoutClasses.navbar,
+        main: layoutClasses.main,
+      }}
       navbar={{
-        width: 260,
+        width: 280,
         breakpoint: 'sm',
         collapsed: { mobile: !opened },
       }}
-      header={{ height: 60 }}
-      padding="md"
+      header={{ height: 72 }}
+      padding={0}
     >
-      <AppShell.Header style={headerBrutalistStyle}>
-        <Group h="100%" px="md" justify="space-between">
-          <Group gap="xs">
+      <AppShell.Header>
+        <Group w="100%" h="100%" justify="space-between" align="center" gap="md">
+          <Group gap="md" align="center">
             <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
             <OrangeLogo size="sm" />
           </Group>
 
-          <Group gap="xs">
+          <Group gap="md" align="center">
             <ActionIcon
               variant="filled"
               size="lg"
-              radius="xs"
+              radius={0}
               color="orange"
+              aria-label="Search"
+              tabIndex={0}
               style={{
-                border: '2px solid var(--color-black)',
+                border: '4px solid var(--color-black)',
                 boxShadow: 'var(--shadow-brutal)',
                 background: 'var(--color-orange)',
+                borderRadius: '0',
                 transform: 'translate(0, 0)',
                 transition: 'transform var(--transition-duration-fast) ease, box-shadow var(--transition-duration-fast) ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translate(-4px, -4px)';
+                e.currentTarget.style.boxShadow = 'var(--shadow-brutal-lg)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translate(0, 0)';
+                e.currentTarget.style.boxShadow = 'var(--shadow-brutal)';
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  // Handle search action
+                }
               }}
             >
               <IconSearch size={18} />
@@ -277,14 +323,31 @@ export function Navigation({ children }: NavigationProps) {
             <ActionIcon
               variant="filled"
               size="lg"
-              radius="xs"
+              radius={0}
               color="orange"
+              aria-label="Notifications"
+              tabIndex={0}
               style={{
-                border: '2px solid var(--color-black)',
+                border: '4px solid var(--color-black)',
                 boxShadow: 'var(--shadow-brutal)',
                 background: 'var(--color-orange)',
+                borderRadius: '0',
                 transform: 'translate(0, 0)',
                 transition: 'transform var(--transition-duration-fast) ease, box-shadow var(--transition-duration-fast) ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translate(-4px, -4px)';
+                e.currentTarget.style.boxShadow = 'var(--shadow-brutal-lg)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translate(0, 0)';
+                e.currentTarget.style.boxShadow = 'var(--shadow-brutal)';
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  // Handle notifications action
+                }
               }}
             >
               <IconBell size={18} />
@@ -292,14 +355,31 @@ export function Navigation({ children }: NavigationProps) {
             <ActionIcon
               variant="filled"
               size="lg"
-              radius="xs"
+              radius={0}
               color="orange"
+              aria-label="Settings"
+              tabIndex={0}
               style={{
-                border: '2px solid var(--color-black)',
+                border: '4px solid var(--color-black)',
                 boxShadow: 'var(--shadow-brutal)',
                 background: 'var(--color-orange)',
+                borderRadius: '0',
                 transform: 'translate(0, 0)',
                 transition: 'transform var(--transition-duration-fast) ease, box-shadow var(--transition-duration-fast) ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translate(-4px, -4px)';
+                e.currentTarget.style.boxShadow = 'var(--shadow-brutal-lg)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translate(0, 0)';
+                e.currentTarget.style.boxShadow = 'var(--shadow-brutal)';
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  // Handle settings action
+                }
               }}
             >
               <IconSettings size={18} />
@@ -308,13 +388,20 @@ export function Navigation({ children }: NavigationProps) {
         </Group>
       </AppShell.Header>
 
-      <AppShell.Navbar p="md" style={navbarBrutalistStyle}>
-        <AppShell.Section grow component={ScrollArea}>
+      <AppShell.Navbar>
+        <AppShell.Section grow component={ScrollArea} style={{ 
+          display: 'flex', 
+          flexDirection: 'column',
+          width: '100%',
+        }}>
           {/* New Assessment Button */}
           <Button
             variant="filled"
             color="orange"
-            style={newAssessmentButtonStyle}
+            style={{
+              ...newAssessmentButtonStyle,
+              marginBottom: rem(16),
+            }}
             onMouseEnter={(e) => {
               Object.assign(e.currentTarget.style, newAssessmentButtonHoverStyle);
             }}
@@ -322,7 +409,7 @@ export function Navigation({ children }: NavigationProps) {
               Object.assign(e.currentTarget.style, newAssessmentButtonStyle);
             }}
           >
-            <Group gap="sm" wrap="nowrap">
+            <Group gap="sm" wrap="nowrap" justify="flex-start" w="100%">
               <IconPlus size={18} color="var(--color-white)" stroke={2} />
               <Text 
                 size="sm" 
@@ -337,14 +424,22 @@ export function Navigation({ children }: NavigationProps) {
             </Group>
           </Button>
           
-          <Stack gap={2}>
+          <Stack gap={4} style={{ width: '100%' }}>
             {navigationData.map((section) => (
               <div key={section.label}>
                 <Button
                   variant="default"
+                  aria-label={`${section.label} navigation section`}
+                  aria-expanded={activeSection === section.label}
                   onClick={() =>
                     setActiveSection(activeSection === section.label ? null : section.label)
                   }
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setActiveSection(activeSection === section.label ? null : section.label);
+                    }
+                  }}
                   style={activeSection === section.label ? activeNavItemStyle : navItemStyle}
                   onMouseEnter={(e) => {
                     if (activeSection !== section.label) {
@@ -395,6 +490,7 @@ export function Navigation({ children }: NavigationProps) {
                         key={link.href}
                         component="a"
                         href={link.href}
+                        aria-label={`Navigate to ${link.label}`}
                         variant="default"
                         style={subNavItemStyle}
                         onMouseEnter={(e) => {
@@ -442,7 +538,9 @@ export function Navigation({ children }: NavigationProps) {
         </AppShell.Section>
       </AppShell.Navbar>
 
-      <AppShell.Main>{children}</AppShell.Main>
+      <AppShell.Main>
+        {children}
+      </AppShell.Main>
     </AppShell>
   );
 }

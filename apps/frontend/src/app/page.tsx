@@ -14,7 +14,7 @@ export default function HomePage() {
 
   return (
     <Container size="lg" py="xl">
-      <Stack align="center" spacing="xl">
+      <Stack align="center" gap="xl">
         <Loader size="xl" />
         <Text>Redirecting to FairMind dashboard...</Text>
       </Stack>

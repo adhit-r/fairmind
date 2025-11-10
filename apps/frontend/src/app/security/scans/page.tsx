@@ -21,6 +21,7 @@ import {
   Tabs,
   RingProgress,
 } from '@mantine/core';
+import { CardSkeleton } from '@/components/LoadingSkeleton';
 import {
   IconShield,
   IconScan,
@@ -176,7 +177,7 @@ export default function SecurityScansPage() {
   if (loading) {
     return (
       <Container size="xl" py="xl">
-        <Text>Loading Security Vulnerability Scans...</Text>
+        <CardSkeleton count={3} />
       </Container>
     );
   }

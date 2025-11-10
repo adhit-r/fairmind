@@ -117,7 +117,7 @@ export default function SecurityPage() {
             title="Connection Error"
             style={neo.card}
           >
-            Unable to connect to security service: {error}
+            Unable to connect to security service: {error?.message || 'Unknown error'}
           </Alert>
         )}
 

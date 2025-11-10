@@ -16,6 +16,10 @@ on:
       - 'README.md'
       - 'BRANCH_STRATEGY.md'
 
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -26,38 +30,32 @@ jobs:
       with:
         fetch-depth: 1
     
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
+    - name: Set up Bun
+      uses: oven-sh/setup-bun@v1
       with:
-        node-version: '18'
-        cache: 'npm'
-        cache-dependency-path: frontend/package-lock.json
+        bun-version: "1.1.0"
     
     - name: Install dependencies
-      run: |
-        cd frontend
-        npm ci --prefer-offline --no-audit
+      working-directory: apps/frontend
+      run: bun install --frozen-lockfile
       env:
         NODE_ENV: development
     
     - name: Run linting
-      run: |
-        cd frontend
-        npm run lint
+      working-directory: apps/frontend
+      run: bun run lint
       env:
         NODE_ENV: development
     
     - name: Type check
-      run: |
-        cd frontend
-        npx tsc --noEmit
+      working-directory: apps/frontend
+      run: bunx tsc --noEmit
       env:
         NODE_ENV: development
     
     - name: Build check
-      run: |
-        cd frontend
-        npm run build
+      working-directory: apps/frontend
+      run: bun run build
       env:
         NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
         NODE_ENV: development

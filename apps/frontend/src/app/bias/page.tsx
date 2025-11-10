@@ -122,7 +122,7 @@ export default function BiasPage() {
             title="Connection Error"
             style={neo.card}
           >
-            Unable to connect to bias detection service: {error}
+            Unable to connect to bias detection service: {error?.message || 'Unknown error'}
           </Alert>
         )}
 

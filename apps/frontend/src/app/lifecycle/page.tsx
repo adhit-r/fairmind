@@ -24,6 +24,7 @@ import {
   Stepper,
   RingProgress,
 } from '@mantine/core';
+import { CardSkeleton } from '@/components/LoadingSkeleton';
 import {
   IconGitBranch,
   IconPlayerPlay,
@@ -266,7 +267,7 @@ export default function LifecyclePage() {
   if (loading) {
     return (
       <Container size="xl" py="xl">
-        <Text>Loading ML Lifecycle Management...</Text>
+        <CardSkeleton count={3} />
       </Container>
     );
   }

@@ -2,13 +2,12 @@ import React from 'react';
 import { Card, CardProps } from '@mantine/core';
 import { glassmorphicUtils } from '../lib/mantine';
 
-interface GlassmorphicCardProps extends Omit<CardProps, 'style'> {
+interface GlassmorphicCardProps extends CardProps {
   variant?: 'elevated' | 'floating' | 'subtle' | 'interactive';
   intensity?: 'light' | 'medium' | 'strong';
   glowColor?: string;
   interactive?: boolean;
   animated?: boolean;
-  style?: React.CSSProperties;
 }
 
 export const GlassmorphicCard: React.FC<GlassmorphicCardProps> = ({
@@ -18,14 +17,21 @@ export const GlassmorphicCard: React.FC<GlassmorphicCardProps> = ({
   interactive = false,
   animated = true,
   children,
-  style = {},
+  style,
   ...props
 }) => {
-  const getVariantStyles = () => {
-    const baseStyle = glassmorphicUtils.createGlassmorphicStyle(intensity, {
-      interactive,
-      borderRadius: '16px'
-    });
+  const getVariantStyles = (): React.CSSProperties => {
+    const baseStyle: React.CSSProperties = {
+      background: glassmorphicUtils.getBackground(intensity),
+      backdropFilter: glassmorphicUtils.getBlur(intensity),
+      border: glassmorphicUtils.getBorder(intensity),
+      boxShadow: glassmorphicUtils.getShadow(intensity),
+      borderRadius: '16px',
+      transition: glassmorphicUtils.getTransition('smooth'),
+      ...(interactive && {
+        cursor: 'pointer',
+      }),
+    };
 
     switch (variant) {
       case 'floating':
@@ -36,17 +42,23 @@ export const GlassmorphicCard: React.FC<GlassmorphicCardProps> = ({
         };
 
       case 'subtle':
-        return glassmorphicUtils.createGlassmorphicStyle('light', {
-          interactive,
-          borderRadius: '12px'
-        });
+        return {
+          background: glassmorphicUtils.getBackground('light'),
+          backdropFilter: glassmorphicUtils.getBlur('light'),
+          border: glassmorphicUtils.getBorder('light'),
+          boxShadow: glassmorphicUtils.getShadow('light'),
+          borderRadius: '12px',
+          transition: glassmorphicUtils.getTransition('smooth'),
+          ...(interactive && {
+            cursor: 'pointer',
+          }),
+        };
 
       case 'interactive':
-        return glassmorphicUtils.createGlassmorphicStyle(intensity, {
-          interactive: true,
-          hover: true,
-          borderRadius: '16px'
-        });
+        return {
+          ...baseStyle,
+          cursor: 'pointer',
+        };
 
       case 'elevated':
       default:
@@ -54,34 +66,35 @@ export const GlassmorphicCard: React.FC<GlassmorphicCardProps> = ({
     }
   };
 
-  const getGlowStyles = () => {
-    if (!glowColor) return {};
-    
-    return {
-      '&:hover': {
-        boxShadow: `0 0 20px ${glowColor}40, ${glassmorphicUtils.getShadow('strong')}`,
-      },
-    };
-  };
-
-  const getAnimationStyles = () => {
-    if (!animated) return {};
-    
-    return {
-      transition: glassmorphicUtils.getTransition('smooth'),
-    };
-  };
-
-  const combinedStyles = {
-    ...getVariantStyles(),
-    ...getGlowStyles(),
-    ...getAnimationStyles(),
-    ...style,
-  };
+  const baseStyles = getVariantStyles();
 
   return (
     <Card
-      style={combinedStyles}
+      style={{
+        ...baseStyles,
+        ...style,
+      }}
+      onMouseEnter={interactive ? (e) => {
+        const target = e.currentTarget;
+        target.style.background = glassmorphicUtils.getBackground('strong');
+        target.style.boxShadow = glassmorphicUtils.getShadow('strong');
+        target.style.transform = 'translateY(-2px)';
+        if (glowColor) {
+          target.style.boxShadow = `0 0 20px ${glowColor}40, ${glassmorphicUtils.getShadow('strong')}`;
+        }
+      } : undefined}
+      onMouseLeave={interactive ? (e) => {
+        const target = e.currentTarget;
+        target.style.background = baseStyles.background as string;
+        target.style.boxShadow = baseStyles.boxShadow as string;
+        target.style.transform = variant === 'floating' ? 'translateY(-4px)' : 'translateY(0)';
+      } : undefined}
+      onMouseDown={interactive ? (e) => {
+        e.currentTarget.style.transform = 'translateY(0)';
+      } : undefined}
+      onMouseUp={interactive ? (e) => {
+        e.currentTarget.style.transform = 'translateY(-2px)';
+      } : undefined}
       radius="md"
       p="lg"
       {...props}

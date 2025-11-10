@@ -29,7 +29,8 @@ import {
   Stepper,
   Timeline,
   RingProgress,
-  Accordion
+  Accordion,
+  useMantineColorScheme
 } from '@mantine/core';
 import { 
   IconBrain, 
@@ -105,6 +106,15 @@ interface TestResult {
 }
 
 const BiasTestingSimulator: React.FC = () => {
+  const { colorScheme } = useMantineColorScheme();
+  const brutalistCardStyle = {
+    background: colorScheme === 'dark' ? 'var(--color-black)' : 'var(--color-white)',
+    border: '2px solid var(--color-black)',
+    borderRadius: 'var(--border-radius-base)',
+    boxShadow: 'var(--shadow-brutal)',
+    transition: 'all var(--transition-duration-fast) ease',
+  };
+
   const [activeTest, setActiveTest] = useState<string>('');
   const [testResults, setTestResults] = useState<TestResult[]>([]);
   const [isRunning, setIsRunning] = useState(false);
@@ -315,7 +325,7 @@ const BiasTestingSimulator: React.FC = () => {
   };
 
   const renderTestCard = (test: BiasTestScenario) => (
-    <Card key={test.id} p="md" style={{ height: '100%' }}>
+    <Card key={test.id} p="md" style={{ ...brutalistCardStyle, height: '100%' }}>
       <Group justify="space-between" mb="sm">
         <Group gap="sm">
           <ThemeIcon size="md" variant="light" color="blue">
@@ -384,7 +394,7 @@ const BiasTestingSimulator: React.FC = () => {
     ];
 
     return (
-      <Paper p="md" mb="md">
+      <Paper p="md" mb="md" style={brutalistCardStyle}>
         <Title order={4} mb="md">
           <Group gap="sm">
             <IconTestPipe size={24} />
@@ -430,7 +440,7 @@ const BiasTestingSimulator: React.FC = () => {
     const latestResult = testResults[0];
 
     return (
-      <Paper p="md" mb="md">
+      <Paper p="md" mb="md" style={brutalistCardStyle}>
         <Title order={4} mb="md">
           <Group gap="sm">
             <IconReport size={24} />
@@ -440,7 +450,7 @@ const BiasTestingSimulator: React.FC = () => {
         
         <Grid>
           <Grid.Col span={6}>
-            <Card p="md">
+            <Card p="md" style={brutalistCardStyle}>
               <Group justify="space-between" mb="sm">
                 <Text fw="bold">Bias Score</Text>
                 <Badge 
@@ -463,7 +473,7 @@ const BiasTestingSimulator: React.FC = () => {
           </Grid.Col>
           
           <Grid.Col span={6}>
-            <Card p="md">
+            <Card p="md" style={brutalistCardStyle}>
               <Text fw="bold" mb="sm">Confidence Level</Text>
               <RingProgress
                 size={80}
@@ -532,7 +542,7 @@ const BiasTestingSimulator: React.FC = () => {
   };
 
   const renderCustomTest = () => (
-    <Paper p="md">
+    <Paper p="md" style={brutalistCardStyle}>
       <Title order={4} mb="md">
         <Group gap="sm">
           <IconSettings size={24} />
@@ -620,7 +630,7 @@ const BiasTestingSimulator: React.FC = () => {
 
   return (
     <Stack>
-      <Paper p="xl">
+      <Paper p="xl" style={brutalistCardStyle}>
         <Group justify="space-between" mb="xl">
           <div>
             <Title order={1} mb="sm">
@@ -667,7 +677,7 @@ const BiasTestingSimulator: React.FC = () => {
 
       <Grid>
         <Grid.Col span={8}>
-          <Paper p="md">
+          <Paper p="md" style={brutalistCardStyle}>
             <Group justify="space-between" mb="md">
               <Title order={3}>
                 <Group gap="sm">
@@ -700,7 +710,7 @@ const BiasTestingSimulator: React.FC = () => {
           <Stack>
             {renderCustomTest()}
             
-            <Paper p="md">
+            <Paper p="md" style={brutalistCardStyle}>
               <Title order={4} mb="md">
                 <Group gap="sm">
                   <IconChartBar size={20} />
@@ -747,7 +757,7 @@ const BiasTestingSimulator: React.FC = () => {
               </Stack>
             </Paper>
 
-            <Paper p="md">
+            <Paper p="md" style={brutalistCardStyle}>
               <Title order={4} mb="md">
                 <Group gap="sm">
                   <IconAward size={20} />

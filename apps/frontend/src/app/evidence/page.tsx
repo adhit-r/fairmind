@@ -26,6 +26,7 @@ import {
   Menu,
   Divider,
 } from '@mantine/core';
+import { CardSkeleton } from '@/components/LoadingSkeleton';
 import {
   IconShield,
   IconFileText,
@@ -274,7 +275,7 @@ export default function EvidencePage() {
   if (loading) {
     return (
       <Container size="xl" py="xl">
-        <Text>Loading Evidence Collection...</Text>
+        <CardSkeleton count={3} />
       </Container>
     );
   }

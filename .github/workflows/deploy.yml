@@ -9,6 +9,10 @@ on:
       - 'README.md'
       - 'BRANCH_STRATEGY.md'
 
+permissions:
+  contents: read
+  deployments: write
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -19,24 +23,20 @@ jobs:
       with:
         fetch-depth: 1
     
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
+    - name: Set up Bun
+      uses: oven-sh/setup-bun@v1
       with:
-        node-version: '18'
-        cache: 'npm'
-        cache-dependency-path: frontend/package-lock.json
+        bun-version: "1.1.0"
     
     - name: Install dependencies
-      run: |
-        cd frontend
-        npm ci --prefer-offline --no-audit
+      working-directory: apps/frontend
+      run: bun install --frozen-lockfile --production=false
       env:
         NODE_ENV: production
     
     - name: Build frontend
-      run: |
-        cd frontend
-        npm run build
+      working-directory: apps/frontend
+      run: bun run build
       env:
         NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
         NODE_ENV: production
@@ -44,7 +44,7 @@ jobs:
     - name: Deploy to Netlify
       uses: nwtgck/actions-netlify@v2.0
       with:
-        publish-dir: './frontend/.next'
+        publish-dir: './apps/frontend/.next'
         production-branch: main
         github-token: ${{ secrets.GITHUB_TOKEN }}
         deploy-message: "Deploy from GitHub Actions"

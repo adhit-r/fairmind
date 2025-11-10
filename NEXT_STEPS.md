@@ -16,19 +16,21 @@
 **Estimated Time**: 2-4 hours
 
 ### 2. Enable GitHub Discussions
-**Status**: Ready to enable
+**Status**: Completed - Discussions are enabled
 
 **Action Items**:
-- [ ] Go to repository settings → Features → Enable Discussions
-- [ ] Create discussion categories:
-  - 💬 General Discussion
-  - ❓ Q&A
-  - 💡 Ideas
-  - 🎉 Show & Tell
-  - 📢 Announcements
-- [ ] Create welcome post
+- [x] Go to repository settings → Features → Enable Discussions
+- [x] Create discussion categories (to be created via web UI):
+  - General Discussion
+  - Q&A
+  - Ideas
+  - Show & Tell
+  - Announcements
+- [x] Create welcome post template (`.github/discussions-welcome.md`)
 
 **Estimated Time**: 15 minutes
+
+**Note**: Discussion categories need to be created via the GitHub web UI at: https://github.com/adhit-r/fairmind/discussions/categories
 
 ---
 

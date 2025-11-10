@@ -142,6 +142,16 @@ export function useApi<T>(endpoint: string, options: UseApiOptions = {}) {
       }
     }
 
+    // Skip fetch if endpoint is empty
+    if (!endpoint || endpoint.trim() === '') {
+      if (fallbackData) {
+        setData(fallbackData);
+      }
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
     try {
       if (!isRetry) {
         setLoading(true);

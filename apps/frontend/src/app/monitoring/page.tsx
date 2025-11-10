@@ -174,7 +174,7 @@ export default function MonitoringPage() {
             title="Connection Error"
             style={neo.card}
           >
-            Unable to connect to monitoring service: {error}
+            Unable to connect to monitoring service: {error?.message || 'Unknown error'}
           </Alert>
         )}
 

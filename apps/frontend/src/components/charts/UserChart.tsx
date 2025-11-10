@@ -12,9 +12,17 @@ import ErrorBoundary from "../ErrorBoundary"
 
 export default function UserChart() {
   const { colorScheme } = useMantineColorScheme()
+  const brutalistCardStyle = {
+    background: colorScheme === 'dark' ? 'var(--color-black)' : 'var(--color-white)',
+    border: '2px solid var(--color-black)',
+    borderRadius: 'var(--border-radius-base)',
+    boxShadow: 'var(--shadow-brutal)',
+    transition: 'all var(--transition-duration-fast) ease',
+  };
+
   return (
     <ErrorBoundary context="UserChart">
-      <Card w="100%" h="100%" shadow="sm" p="xl" radius={6}>
+      <Card w="100%" h="100%" p="xl" style={brutalistCardStyle}>
       <Card.Section>
         <Group justify="space-between">
           <Flex direction="column" align="start" gap={4}>

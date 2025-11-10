@@ -88,15 +88,107 @@ async def lifespan(app: FastAPI):
     logger.info("Application shutdown complete")
 
 
+# Enhanced OpenAPI schema configuration
+openapi_tags = [
+    {
+        "name": "authentication",
+        "description": "JWT-based authentication and authorization endpoints",
+    },
+    {
+        "name": "core",
+        "description": "Core API endpoints for dashboard, models, and datasets",
+    },
+    {
+        "name": "database",
+        "description": "Database operations and queries",
+    },
+    {
+        "name": "bias-detection",
+        "description": "Comprehensive bias detection for text and image models",
+    },
+    {
+        "name": "modern-bias-detection",
+        "description": "Modern LLM bias detection using WEAT, SEAT, and Minimal Pairs",
+    },
+    {
+        "name": "multimodal-bias-detection",
+        "description": "Multimodal bias detection for image, audio, video, and cross-modal analysis",
+    },
+    {
+        "name": "ai-bom",
+        "description": "AI Bill of Materials management and compliance tracking",
+    },
+    {
+        "name": "security",
+        "description": "OWASP AI security testing and vulnerability scanning",
+    },
+    {
+        "name": "monitoring",
+        "description": "Real-time monitoring and alerting",
+    },
+    {
+        "name": "fairness-governance",
+        "description": "Fairness governance and policy management",
+    },
+    {
+        "name": "provenance",
+        "description": "Model provenance and lineage tracking",
+    },
+    {
+        "name": "advanced-fairness",
+        "description": "Advanced fairness analysis and evaluation",
+    },
+    {
+        "name": "model-performance-benchmarking",
+        "description": "Model performance benchmarking and comparison across multiple models",
+    },
+    {
+        "name": "benchmark-suite",
+        "description": "Bias detection benchmark suite and evaluation frameworks",
+    },
+]
+
 # Create FastAPI application with production configuration
 app = FastAPI(
     title=settings.api_title,
-    description=settings.api_description,
+    description=f"""
+{settings.api_description}
+
+## Features
+
+- **Advanced Bias Detection**: Comprehensive bias detection for text and image models
+- **Modern LLM Bias Detection**: WEAT, SEAT, and Minimal Pairs testing
+- **Multimodal Bias Detection**: Image, audio, video, and cross-modal analysis
+- **AI BOM Management**: Bill of Materials tracking and compliance
+- **Security Testing**: OWASP AI security testing
+- **Real-time Monitoring**: Live monitoring and alerting
+- **Fairness Governance**: Policy management and compliance
+
+## Authentication
+
+Most endpoints require JWT authentication. Use the `/api/v1/auth/login` endpoint to obtain an access token.
+
+## Rate Limiting
+
+API requests are rate-limited to 100 requests per minute per IP address. Rate limit headers are included in all responses.
+
+## Code Examples
+
+See the request/response examples in each endpoint for code samples in Python, JavaScript, and cURL.
+    """,
     version=settings.api_version,
     debug=settings.debug,
     lifespan=lifespan,
     docs_url="/docs" if not settings.is_production else None,
     redoc_url="/redoc" if not settings.is_production else None,
+    openapi_tags=openapi_tags,
+    openapi_url="/openapi.json" if not settings.is_production else None,
+    servers=[
+        {"url": "http://localhost:8000", "description": "Development server"},
+        {"url": "https://api.fairmind.ai", "description": "Production server"},
+    ] if not settings.is_production else [
+        {"url": "https://api.fairmind.ai", "description": "Production server"},
+    ],
 )
 
 # Add production-ready middleware (order matters!)
@@ -286,6 +378,13 @@ try:
     logger.info("Benchmark suite routes loaded successfully")
 except Exception as e:
     logger.warning(f"Could not load benchmark suite routes: {e}")
+
+try:
+    from .routes import model_performance_benchmarking
+    app.include_router(model_performance_benchmarking.router, tags=["model-performance-benchmarking"])
+    logger.info("Model performance benchmarking routes loaded successfully")
+except Exception as e:
+    logger.warning(f"Could not load model performance benchmarking routes: {e}")
 
 # Production-ready health check endpoints
 @app.get("/health")

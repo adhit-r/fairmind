@@ -1,7 +1,6 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { Card, Text, Button, Stack, Alert, Group } from '@mantine/core';
 import { IconAlertTriangle, IconRefresh } from '@tabler/icons-react';
-import { glassmorphicUtils } from '../lib/mantine';
 
 interface Props {
   children: ReactNode;
@@ -51,14 +50,18 @@ class ErrorBoundary extends Component<Props, State> {
         return this.props.fallback;
       }
 
-      // Default error UI with glassmorphic styling
+      // Default error UI with brutalist styling
+      const brutalistErrorStyle = {
+        background: 'var(--color-white)',
+        border: '2px solid var(--color-black)',
+        borderRadius: 'var(--border-radius-base)',
+        boxShadow: 'var(--shadow-brutal)',
+        borderColor: 'rgba(239, 68, 68, 0.8)',
+      };
+
       return (
         <Card
-          style={{
-            ...glassmorphicUtils.createGlassmorphicStyle('medium'),
-            border: '1px solid rgba(239, 68, 68, 0.2)',
-            boxShadow: '0 8px 32px rgba(239, 68, 68, 0.1)',
-          }}
+          style={brutalistErrorStyle}
           p="xl"
         >
           <Stack gap="md">

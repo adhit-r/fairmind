@@ -1,6 +1,5 @@
 import React from 'react';
-import { Skeleton, Card, Stack, Group, Grid } from '@mantine/core';
-import { glassmorphicUtils } from '../lib/mantine';
+import { Skeleton, Card, Stack, Group, Grid, useMantineColorScheme } from '@mantine/core';
 
 interface LoadingSkeletonProps {
   variant?: 'card' | 'table' | 'chart' | 'dashboard' | 'list';
@@ -13,9 +12,14 @@ export const LoadingSkeleton: React.FC<LoadingSkeletonProps> = ({
   count = 1,
   height = 200
 }) => {
-  const glassmorphicCardStyle = glassmorphicUtils.createGlassmorphicStyle('light', {
-    borderRadius: '16px'
-  });
+  const { colorScheme } = useMantineColorScheme();
+  const brutalistCardStyle = {
+    background: colorScheme === 'dark' ? 'var(--color-black)' : 'var(--color-white)',
+    border: '2px solid var(--color-black)',
+    borderRadius: 'var(--border-radius-base)',
+    boxShadow: 'var(--shadow-brutal)',
+    transition: 'all var(--transition-duration-fast) ease',
+  };
 
   const renderSkeleton = () => {
     switch (variant) {
@@ -24,7 +28,7 @@ export const LoadingSkeleton: React.FC<LoadingSkeletonProps> = ({
           <Grid>
             {Array.from({ length: 4 }).map((_, index) => (
               <Grid.Col key={index} span={{ base: 12, sm: 6, lg: 3 }}>
-                <Card style={glassmorphicCardStyle} p="lg">
+                <Card style={brutalistCardStyle} p="lg">
                   <Stack gap="sm">
                     <Group justify="space-between">
                       <Skeleton height={20} width="60%" />
@@ -41,7 +45,7 @@ export const LoadingSkeleton: React.FC<LoadingSkeletonProps> = ({
 
       case 'chart':
         return (
-          <Card style={glassmorphicCardStyle} p="lg">
+          <Card style={brutalistCardStyle} p="lg">
             <Stack gap="md">
               <Group justify="space-between">
                 <Skeleton height={24} width="30%" />
@@ -59,7 +63,7 @@ export const LoadingSkeleton: React.FC<LoadingSkeletonProps> = ({
 
       case 'table':
         return (
-          <Card style={glassmorphicCardStyle} p="lg">
+          <Card style={brutalistCardStyle} p="lg">
             <Stack gap="md">
               <Group justify="space-between">
                 <Skeleton height={24} width="30%" />
@@ -81,7 +85,7 @@ export const LoadingSkeleton: React.FC<LoadingSkeletonProps> = ({
         return (
           <Stack gap="md">
             {Array.from({ length: count }).map((_, index) => (
-              <Card key={index} style={glassmorphicCardStyle} p="md">
+              <Card key={index} style={brutalistCardStyle} p="md">
                 <Group>
                   <Skeleton height={40} width={40} circle />
                   <Stack gap="xs" style={{ flex: 1 }}>
@@ -100,7 +104,7 @@ export const LoadingSkeleton: React.FC<LoadingSkeletonProps> = ({
         return (
           <Stack gap="md">
             {Array.from({ length: count }).map((_, index) => (
-              <Card key={index} style={glassmorphicCardStyle} p="lg">
+              <Card key={index} style={brutalistCardStyle} p="lg">
                 <Stack gap="md">
                   <Group justify="space-between">
                     <Skeleton height={24} width="40%" />

@@ -8,6 +8,11 @@ on:
   schedule:
     - cron: '30 1 * * 0'
 
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+
 jobs:
   analyze:
     name: Analyze
@@ -33,6 +38,8 @@ jobs:
 
     - name: Autobuild
       uses: github/codeql-action/autobuild@v3
+      # CodeQL autobuild will automatically detect the build system
+      # For monorepo, it will scan both apps/backend and apps/frontend
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v3

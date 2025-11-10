@@ -21,7 +21,8 @@ import {
   Switch,
   Select,
   Loader,
-  Center
+  Center,
+  useMantineColorScheme
 } from '@mantine/core';
 import { 
   IconBrain,
@@ -248,7 +249,6 @@ const RealTimeMonitoring: React.FC<RealTimeMonitoringProps> = ({
   const { data: apiData, loading, error, retry, refresh } = useApi<MonitoringMetricsData>(
     '/api/v1/database/monitoring-metrics',
     {
-      fallbackData: { summary: {}, metrics: [] },
       enableRetry: true,
       cacheKey: 'monitoring-metrics',
       refreshInterval: autoRefresh && isMonitoring ? 5000 : undefined
@@ -261,8 +261,8 @@ const RealTimeMonitoring: React.FC<RealTimeMonitoringProps> = ({
       const convertedMetrics = convertApiDataToMetrics(apiData);
       setMetrics(convertedMetrics);
     } else if (!loading && !apiData) {
-      // Use fallback if no data available
-      setMetrics(fallbackMetrics);
+      // No data available - show empty state
+      setMetrics([]);
     }
   }, [apiData, loading]);
 
@@ -383,8 +383,17 @@ const RealTimeMonitoring: React.FC<RealTimeMonitoringProps> = ({
     }
   };
 
+  const { colorScheme } = useMantineColorScheme();
+  const brutalistCardStyle = {
+    background: colorScheme === 'dark' ? 'var(--color-black)' : 'var(--color-white)',
+    border: '2px solid var(--color-black)',
+    borderRadius: 'var(--border-radius-base)',
+    boxShadow: 'var(--shadow-brutal)',
+    transition: 'all var(--transition-duration-fast) ease',
+  };
+
   const renderMetricCard = (metric: MonitoringMetric) => (
-    <Card key={metric.id} p="md" style={{ height: '100%' }}>
+    <Card key={metric.id} p="md" style={{ ...brutalistCardStyle, height: '100%' }}>
       <Group justify="space-between" mb="sm">
         <Text fw="bold" size="sm">{metric.name}</Text>
         <Group gap="xs">
@@ -485,7 +494,7 @@ const RealTimeMonitoring: React.FC<RealTimeMonitoringProps> = ({
     const healthPercentage = (healthyMetrics / totalMetrics) * 100;
 
     return (
-      <Card p="md">
+      <Card p="md" style={brutalistCardStyle}>
         <Group justify="space-between" mb="md">
           <Title order={4}>Overall System Health</Title>
           <Badge 
@@ -520,7 +529,7 @@ const RealTimeMonitoring: React.FC<RealTimeMonitoringProps> = ({
   if (loading && metrics.length === 0) {
     return (
       <ErrorBoundary context="RealTimeMonitoring">
-        <Card p="xl">
+        <Card p="xl" style={brutalistCardStyle}>
           <Center>
             <Stack align="center" gap="md">
               <Loader size="lg" />
@@ -537,9 +546,8 @@ const RealTimeMonitoring: React.FC<RealTimeMonitoringProps> = ({
     return (
       <ErrorBoundary context="RealTimeMonitoring">
         <Card p="xl" style={{ 
-          background: 'rgba(255, 255, 255, 0.8)',
-          backdropFilter: 'blur(20px)',
-          border: '1px solid rgba(239, 68, 68, 0.2)',
+          ...brutalistCardStyle,
+          border: '2px solid rgba(239, 68, 68, 0.5)',
         }}>
           <Stack align="center" gap="md">
             <Alert icon={<IconAlertTriangle size={16} />} title="Failed to load monitoring data" color="red">
@@ -557,7 +565,7 @@ const RealTimeMonitoring: React.FC<RealTimeMonitoringProps> = ({
   return (
     <ErrorBoundary context="RealTimeMonitoring">
       <Stack>
-        <Paper p="md">
+        <Paper p="md" style={brutalistCardStyle}>
           <Group justify="space-between" mb="md">
             <Title order={3}>
               <Group gap="sm">
@@ -631,7 +639,7 @@ const RealTimeMonitoring: React.FC<RealTimeMonitoringProps> = ({
           )}
           <Button
             leftSection={<IconRefresh size={16} />}
-            onClick={updateMetrics}
+            onClick={() => refresh()}
             variant="light"
           >
             Refresh Now
@@ -653,7 +661,7 @@ const RealTimeMonitoring: React.FC<RealTimeMonitoringProps> = ({
 
       <Grid>
         <Grid.Col span={8}>
-          <Paper p="md">
+          <Paper p="md" style={brutalistCardStyle}>
             <Title order={4} mb="md">Key Metrics</Title>
             <Grid>
               {metrics.map(metric => (
@@ -669,7 +677,7 @@ const RealTimeMonitoring: React.FC<RealTimeMonitoringProps> = ({
           <Stack>
             {renderOverallHealth()}
             
-            <Paper p="md">
+            <Paper p="md" style={brutalistCardStyle}>
               <Group justify="space-between" mb="md">
                 <Title order={4}>Recent Alerts</Title>
                 <Badge color="red" variant="light">
@@ -691,6 +699,7 @@ const RealTimeMonitoring: React.FC<RealTimeMonitoringProps> = ({
         </Grid.Col>
       </Grid>
     </Stack>
+    </ErrorBoundary>
   );
 };
 

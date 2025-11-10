@@ -5,9 +5,12 @@ on:
   push:
     branches: [ main, dev ]
     paths:
-      - 'frontend/src/**'
-      - 'frontend/package.json'
-      - 'frontend/package-lock.json'
+      - 'apps/frontend/src/**'
+      - 'apps/frontend/package.json'
+      - 'apps/frontend/bun.lock'
+
+permissions:
+  contents: read
 
 jobs:
   quick-check:
@@ -19,23 +22,19 @@ jobs:
       with:
         fetch-depth: 1
     
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
+    - name: Set up Bun
+      uses: oven-sh/setup-bun@v1
       with:
-        node-version: '18'
-        cache: 'npm'
-        cache-dependency-path: frontend/package-lock.json
+        bun-version: "1.1.0"
     
     - name: Quick install
-      run: |
-        cd frontend
-        npm ci --prefer-offline --no-audit --production=false
+      working-directory: apps/frontend
+      run: bun install --frozen-lockfile
       env:
         NODE_ENV: development
     
     - name: Type check only
-      run: |
-        cd frontend
-        npx tsc --noEmit
+      working-directory: apps/frontend
+      run: bunx tsc --noEmit
       env:
         NODE_ENV: development
