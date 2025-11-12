@@ -17,7 +17,9 @@ class DashboardPage(BasePage):
             base_url: Base URL of the application
         """
         super().__init__(page, base_url)
-        self.dashboard_container = '[data-testid="dashboard"], .dashboard, main'
+        self.dashboard_container = '[data-testid="dashboard"]'
+        self.dashboard_loading = '[data-testid="dashboard-loading"]'
+        self.dashboard_error = '[data-testid="dashboard-error"]'
         self.bias_detection_card = '[data-testid="bias-detection"], .bias-detection-card'
         self.monitoring_card = '[data-testid="monitoring"], .monitoring-card'
         self.navigation_menu = 'nav, [role="navigation"], .navigation'
@@ -33,6 +35,14 @@ class DashboardPage(BasePage):
             True if dashboard is loaded, False otherwise
         """
         return self.is_visible(self.dashboard_container)
+    
+    def is_dashboard_loading(self) -> bool:
+            """Dashboard is in loading (skeleton) state."""
+            return self.is_visible(self.dashboard_loading)
+    
+    def is_dashboard_error(self) -> bool:
+            """Dashboard is in error state."""
+            return self.is_visible(self.dashboard_error)        
 
     def click_bias_detection(self) -> None:
         """Click on bias detection card or link."""
