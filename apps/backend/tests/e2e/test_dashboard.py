@@ -26,6 +26,7 @@ def test_dashboard_loads(page: Page, base_url: str):
     
     # Verify dashboard is loaded
     assert dashboard_page.is_dashboard_loaded(), "Dashboard should be loaded"
+    assert not dashboard_page.is_dashboard_error(), "Dashboard should not show error"
 
 
 @pytest.mark.e2e

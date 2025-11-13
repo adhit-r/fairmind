@@ -44,7 +44,9 @@ export default function Dashboard() {
 
   // Show loading skeleton while data is loading
   if (loading && !stats) {
-    return <DashboardSkeleton />;
+    return <div data-testid="dashboard-loading">
+    <DashboardSkeleton />
+    </div>;
   }
 
   // Show error state with retry option
@@ -66,6 +68,7 @@ export default function Dashboard() {
 
   if (error && !stats) {
     return (
+     <div data-testid="dashboard-error">
       <Stack 
         gap="xl" 
         style={{ 
@@ -138,11 +141,14 @@ export default function Dashboard() {
           </Stack>
         </Card>
       </Stack>
+     </div>
     );
   }
 
   return (
     <ErrorBoundary context="Dashboard">
+      <div data-testid="dashboard">
+
       <Stack 
         gap="xl" 
         style={{ 
@@ -537,6 +543,7 @@ export default function Dashboard() {
           </Grid>
         </Paper>
         </Stack>
+      </div>
     </ErrorBoundary>
   )
 }
