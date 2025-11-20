@@ -49,6 +49,7 @@ dependencies = [
     "boto3>=1.40.69",
     "httpx>=0.28.1",
     "gunicorn>=23.0.0",
+    "aiosqlite>=0.21.0",
 ]
 
 [project.optional-dependencies]
