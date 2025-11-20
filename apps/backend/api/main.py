@@ -192,11 +192,19 @@ See the request/response examples in each endpoint for code samples in Python, J
 )
 
 # Add production-ready middleware (order matters!)
-app.add_middleware(ErrorHandlingMiddleware)
+# Add CORS middleware with production configuration
+app.add_middleware(
+    CORSMiddleware,
+    **settings.cors_config
+)
 app.add_middleware(SecurityHeadersMiddleware)
-app.add_middleware(JWTAuthenticationMiddleware)  # JWT auth middleware
 app.add_middleware(RequestLoggingMiddleware)
-
+app.add_middleware(JWTAuthenticationMiddleware)  # JWT auth middleware
+# Add rate limiting middleware
+app.add_middleware(
+    RateLimitMiddleware,
+    requests_per_minute=settings.rate_limit_requests
+)
 # Add response compression middleware
 app.add_middleware(
     GZipMiddleware,
@@ -204,18 +212,7 @@ app.add_middleware(
     compresslevel=6     # Balance between compression ratio and speed
 )
 
-# Add rate limiting middleware
-app.add_middleware(
-    RateLimitMiddleware,
-    requests_per_minute=settings.rate_limit_requests
-)
-
-# Add CORS middleware with production configuration
-app.add_middleware(
-    CORSMiddleware,
-    **settings.cors_config
-)
-
+app.add_middleware(ErrorHandlingMiddleware)
 
 # Custom exception handlers
 @app.exception_handler(RequestValidationError)
