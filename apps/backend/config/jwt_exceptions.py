@@ -106,8 +106,7 @@ def handle_token_missing_exception(exc: TokenMissingException) -> HTTPException:
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-de
-f handle_token_creation_exception(exc: TokenCreationException) -> HTTPException:
+def handle_token_creation_exception(exc: TokenCreationException) -> HTTPException:
     """Handle token creation exception with specific messaging."""
     logger.error("JWT token creation failed")
     return HTTPException(
