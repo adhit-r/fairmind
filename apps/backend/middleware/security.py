@@ -338,7 +338,7 @@ class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
         # Skip authentication for public endpoints
         public_paths = [
             "/health", "/", "/docs", "/redoc", "/openapi.json",
-            "/auth/login", "/auth/refresh", "/auth/health"
+            "/auth/login", "/auth/refresh", "/auth/health", "/api/v1/health", "/api/v1/auth/login"
         ]
         
         if request.url.path in public_paths or request.method == "OPTIONS":
