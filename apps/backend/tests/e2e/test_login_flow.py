@@ -63,3 +63,4 @@ def test_login_invalid_credentials(page: Page, base_url: str):
     error_message = login_page.get_error_message()
     assert error_message != "", "Error message should be displayed for invalid credentials"
 
+

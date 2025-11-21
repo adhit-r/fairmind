@@ -70,6 +70,11 @@ class JWTManager:
             
             # Create token
             token = jwt.encode(to_encode, self.secret_key, algorithm=self.algorithm)
+            
+            # Ensure token is string (PyJWT < 2.0 returns bytes)
+            if isinstance(token, bytes):
+                token = token.decode('utf-8')
+                
             logger.debug(f"JWT token created for subject: {payload.get('sub', 'unknown')}")
             
             return token

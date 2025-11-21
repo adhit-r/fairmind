@@ -13,7 +13,7 @@ from config.database import get_database, get_db_connection
 from config.cache import cache_manager, cached, cache_key_for_model, cache_key_for_dataset
 from config.auth import get_current_active_user, require_permission, TokenData, Permissions
 
-router = APIRouter(tags=["core"])
+router = APIRouter(prefix="/core", tags=["core"])
 
 logger = logging.getLogger(__name__)
 

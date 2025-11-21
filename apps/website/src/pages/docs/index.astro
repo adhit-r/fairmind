@@ -4,212 +4,185 @@ import Layout from '../../layouts/Layout.astro';
 const structuredData = {
   "@context": "https://schema.org",
   "@type": "WebPage",
-  "name": "Fairmind Documentation",
-  "description": "Comprehensive documentation for the Fairmind AI Governance Platform",
+  "name": "FairMind Documentation",
+  "description": "Comprehensive documentation for the FairMind AI Governance Platform",
   "url": "https://fairmind.xyz/docs"
 };
 ---
 
 <Layout 
-  title="Documentation - Fairmind AI Governance Platform | Comprehensive Guides & API Reference"
-  description="Comprehensive guides, tutorials, and API documentation to help you build responsible AI systems with Fairmind. Learn bias detection, model governance, and compliance."
+  title="Documentation - FairMind AI Governance Platform"
+  description="Comprehensive guides and API documentation to help you build responsible AI systems with FairMind."
   structuredData={structuredData}
 >
   <!-- Hero Section -->
-  <section class="bg-black text-yellow-400 py-24 border-b-2 border-yellow-400">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-      <h1 class="text-5xl md:text-6xl font-black mb-6">
-        FAIRMIND DOCUMENTATION
-          </h1>
-      <p class="text-xl md:text-2xl text-yellow-400 max-w-4xl mx-auto font-bold">
-        COMPREHENSIVE GUIDES, TUTORIALS, AND API DOCUMENTATION TO HELP YOU BUILD RESPONSIBLE AI SYSTEMS WITH FAIRMIND.
-          </p>
+  <section class="bg-white py-16 border-b border-gray-200">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+      <h1 class="text-4xl font-bold text-gray-900 mb-4">
+        Documentation
+      </h1>
+      <p class="text-lg text-gray-600">
+        Comprehensive guides and API documentation to help you build responsible AI systems with FairMind.
+      </p>
     </div>
   </section>
 
   <!-- Main Content -->
-  <section class="py-20 bg-black">
+  <section class="py-16 bg-white">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-12">
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         
         <!-- Getting Started -->
-        <div class="bg-black p-8 rounded-none border-2 border-yellow-400 shadow-[6px_6px_0px_0px_rgba(255,255,0,1)] hover:shadow-[8px_8px_0px_0px_rgba(255,255,0,1)] transform hover:-translate-y-2 transition-all">
-          <div class="w-16 h-16 bg-yellow-400 rounded-none border-2 border-black flex items-center justify-center mb-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-            <svg class="w-8 h-8 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+        <div class="bg-white p-8 border border-gray-200 hover:border-gray-300 transition-colors">
+          <div class="w-12 h-12 bg-gray-900 flex items-center justify-center mb-6">
+            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
             </svg>
           </div>
-          <h3 class="text-2xl font-black text-yellow-400 mb-4">GETTING STARTED</h3>
-          <p class="text-yellow-400 mb-6 font-bold">
-            QUICK START GUIDES AND INSTALLATION INSTRUCTIONS TO GET YOU UP AND RUNNING WITH FAIRMIND IN MINUTES.
+          <h3 class="text-xl font-bold text-gray-900 mb-3">Getting Started</h3>
+          <p class="text-gray-600 mb-6">
+            Quick start guides and installation instructions to get you up and running.
           </p>
-          <ul class="space-y-3 mb-6">
-            <li class="flex items-center space-x-2">
-              <svg class="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
-              </svg>
-              <span class="text-yellow-400 font-bold">QUICK START GUIDE</span>
-              </li>
-            <li class="flex items-center space-x-2">
-              <svg class="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
-              </svg>
-              <span class="text-yellow-400 font-bold">INSTALLATION GUIDE</span>
-              </li>
-            <li class="flex items-center space-x-2">
-              <svg class="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
-              </svg>
-              <span class="text-yellow-400 font-bold">FIRST PROJECT SETUP</span>
-              </li>
-            </ul>
-          <a href="/docs/getting-started" class="inline-flex items-center px-6 py-3 bg-yellow-400 text-black font-black rounded-none border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transform hover:-translate-y-1 transition-all">
-            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                  </svg>
-            GET STARTED
-                </a>
-              </div>
-              
-        <!-- User Guides -->
-        <div class="bg-black p-8 rounded-none border-2 border-yellow-400 shadow-[6px_6px_0px_0px_rgba(255,255,0,1)] hover:shadow-[8px_8px_0px_0px_rgba(255,255,0,1)] transform hover:-translate-y-2 transition-all">
-          <div class="w-16 h-16 bg-yellow-400 rounded-none border-2 border-black flex items-center justify-center mb-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-            <svg class="w-8 h-8 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
-                  </svg>
-                </div>
-          <h3 class="text-2xl font-black text-yellow-400 mb-4">USER GUIDES</h3>
-          <p class="text-yellow-400 mb-6 font-bold">
-            COMPREHENSIVE GUIDES FOR BIAS DETECTION, MODEL MONITORING, AND COMPLIANCE TRACKING.
-          </p>
-          <ul class="space-y-3 mb-6">
-            <li class="flex items-center space-x-2">
-              <svg class="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
-              </svg>
-              <span class="text-yellow-400 font-bold">BIAS DETECTION GUIDE</span>
+          <ul class="space-y-2 mb-6 text-sm text-gray-600">
+            <li class="flex items-start">
+              <span class="mr-2">•</span>
+              <span>Quick Start Guide</span>
             </li>
-            <li class="flex items-center space-x-2">
-              <svg class="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
-              </svg>
-              <span class="text-yellow-400 font-bold">MODEL MONITORING</span>
+            <li class="flex items-start">
+              <span class="mr-2">•</span>
+              <span>Installation Guide</span>
             </li>
-            <li class="flex items-center space-x-2">
-              <svg class="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
-              </svg>
-              <span class="text-yellow-400 font-bold">COMPLIANCE TRACKING</span>
-            </li>
-            <li class="flex items-center space-x-2">
-              <svg class="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
-              </svg>
-              <span class="text-yellow-400 font-bold">SECURITY & GUARDRAILS</span>
+            <li class="flex items-start">
+              <span class="mr-2">•</span>
+              <span>First Project Setup</span>
             </li>
           </ul>
-          <a href="/docs/dashboard" class="inline-flex items-center px-6 py-3 bg-yellow-400 text-black font-black rounded-none border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transform hover:-translate-y-1 transition-all">
-            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+          <a href="/docs/getting-started" class="inline-flex items-center text-gray-900 font-medium hover:text-gray-700">
+            Get Started
+            <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
             </svg>
-            VIEW GUIDES
-                </a>
-              </div>
-              
-        <!-- API Reference -->
-        <div class="bg-black p-8 rounded-none border-2 border-yellow-400 shadow-[6px_6px_0px_0px_rgba(255,255,0,1)] hover:shadow-[8px_8px_0px_0px_rgba(255,255,0,1)] transform hover:-translate-y-2 transition-all">
-          <div class="w-16 h-16 bg-yellow-400 rounded-none border-2 border-black flex items-center justify-center mb-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-            <svg class="w-8 h-8 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path>
-                  </svg>
-                </div>
-          <h3 class="text-2xl font-black text-yellow-400 mb-4">API REFERENCE</h3>
-          <p class="text-yellow-400 mb-6 font-bold">
-            COMPLETE API DOCUMENTATION FOR INTEGRATING FAIRMIND INTO YOUR APPLICATIONS AND WORKFLOWS.
+          </a>
+        </div>
+        
+        <!-- User Guides -->
+        <div class="bg-white p-8 border border-gray-200 hover:border-gray-300 transition-colors">
+          <div class="w-12 h-12 bg-gray-900 flex items-center justify-center mb-6">
+            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
+            </svg>
+          </div>
+          <h3 class="text-xl font-bold text-gray-900 mb-3">User Guides</h3>
+          <p class="text-gray-600 mb-6">
+            Comprehensive guides for bias detection, model monitoring, and compliance.
           </p>
-          <ul class="space-y-3 mb-6">
-            <li class="flex items-center space-x-2">
-              <svg class="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
-              </svg>
-              <span class="text-yellow-400 font-bold">REST API ENDPOINTS</span>
+          <ul class="space-y-2 mb-6 text-sm text-gray-600">
+            <li class="flex items-start">
+              <span class="mr-2">•</span>
+              <span>Bias Detection Guide</span>
             </li>
-            <li class="flex items-center space-x-2">
-              <svg class="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
-                  </svg>
-              <span class="text-yellow-400 font-bold">AUTHENTICATION</span>
+            <li class="flex items-start">
+              <span class="mr-2">•</span>
+              <span>Model Monitoring</span>
             </li>
-            <li class="flex items-center space-x-2">
-              <svg class="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
-                  </svg>
-              <span class="text-yellow-400 font-bold">SDK DOCUMENTATION</span>
+            <li class="flex items-start">
+              <span class="mr-2">•</span>
+              <span>Security & Guardrails</span>
             </li>
           </ul>
-          <a href="/docs/technical" class="inline-flex items-center px-6 py-3 bg-yellow-400 text-black font-black rounded-none border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transform hover:-translate-y-1 transition-all">
-            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                  </svg>
-            VIEW API
-                </a>
-              </div>
-            </div>
+          <a href="/docs/bias-detection" class="inline-flex items-center text-gray-900 font-medium hover:text-gray-700">
+            View Guides
+            <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+            </svg>
+          </a>
+        </div>
+        
+        <!-- API Reference -->
+        <div class="bg-white p-8 border border-gray-200 hover:border-gray-300 transition-colors">
+          <div class="w-12 h-12 bg-gray-900 flex items-center justify-center mb-6">
+            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path>
+            </svg>
+          </div>
+          <h3 class="text-xl font-bold text-gray-900 mb-3">API Reference</h3>
+          <p class="text-gray-600 mb-6">
+            Complete API documentation for integrating FairMind into your applications.
+          </p>
+          <ul class="space-y-2 mb-6 text-sm text-gray-600">
+            <li class="flex items-start">
+              <span class="mr-2">•</span>
+              <span>REST API Endpoints</span>
+            </li>
+            <li class="flex items-start">
+              <span class="mr-2">•</span>
+              <span>Authentication</span>
+            </li>
+            <li class="flex items-start">
+              <span class="mr-2">•</span>
+              <span>Python SDK</span>
+            </li>
+          </ul>
+          <a href="/docs/technical" class="inline-flex items-center text-gray-900 font-medium hover:text-gray-700">
+            View API Docs
+            <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+            </svg>
+          </a>
+        </div>
+      </div>
 
       <!-- Additional Resources -->
       <div class="mt-20">
-        <div class="text-center mb-16">
-          <h2 class="text-4xl font-black text-yellow-400 mb-6">ADDITIONAL RESOURCES</h2>
-          <p class="text-xl text-yellow-400 font-bold">
-            TUTORIALS, EXAMPLES, AND DEVELOPER RESOURCES TO HELP YOU BUILD RESPONSIBLE AI SYSTEMS.
+        <div class="mb-12">
+          <h2 class="text-3xl font-bold text-gray-900 mb-4">Additional Resources</h2>
+          <p class="text-lg text-gray-600">
+            Examples and developer resources to help you build responsible AI systems.
           </p>
-                </div>
-                
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-          <div class="bg-black p-6 rounded-none border-2 border-yellow-400 shadow-[4px_4px_0px_0px_rgba(255,255,0,1)]">
-            <h3 class="text-lg font-black text-yellow-400 mb-3">TUTORIALS</h3>
-            <p class="text-yellow-400 font-bold">STEP-BY-STEP GUIDES FOR COMMON USE CASES</p>
-                </div>
-                
-          <div class="bg-black p-6 rounded-none border-2 border-yellow-400 shadow-[4px_4px_0px_0px_rgba(255,255,0,1)]">
-            <h3 class="text-lg font-black text-yellow-400 mb-3">EXAMPLES</h3>
-            <p class="text-yellow-400 font-bold">REAL-WORLD IMPLEMENTATION EXAMPLES</p>
-              </div>
-              
-          <div class="bg-black p-6 rounded-none border-2 border-yellow-400 shadow-[4px_4px_0px_0px_rgba(255,255,0,1)]">
-            <h3 class="text-lg font-black text-yellow-400 mb-3">BEST PRACTICES</h3>
-            <p class="text-yellow-400 font-bold">INDUSTRY STANDARDS AND RECOMMENDATIONS</p>
-              </div>
-              
-          <div class="bg-black p-6 rounded-none border-2 border-yellow-400 shadow-[4px_4px_0px_0px_rgba(255,255,0,1)]">
-            <h3 class="text-lg font-black text-yellow-400 mb-3">TROUBLESHOOTING</h3>
-            <p class="text-yellow-400 font-bold">COMMON ISSUES AND SOLUTIONS</p>
-              </div>
-            </div>
-              </div>
-            </div>
-          </section>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div class="p-6 bg-gray-50 border border-gray-200">
+            <h3 class="text-base font-semibold text-gray-900 mb-2">Examples</h3>
+            <p class="text-sm text-gray-600">Real-world implementation examples</p>
+          </div>
+          
+          <div class="p-6 bg-gray-50 border border-gray-200">
+            <h3 class="text-base font-semibold text-gray-900 mb-2">Best Practices</h3>
+            <p class="text-sm text-gray-600">Industry standards and recommendations</p>
+          </div>
+          
+          <div class="p-6 bg-gray-50 border border-gray-200">
+            <h3 class="text-base font-semibold text-gray-900 mb-2">GitHub</h3>
+            <p class="text-sm text-gray-600">Browse the source code and examples</p>
+          </div>
+          
+          <div class="p-6 bg-gray-50 border border-gray-200">
+            <h3 class="text-base font-semibold text-gray-900 mb-2">Community</h3>
+            <p class="text-sm text-gray-600">Join discussions and get help</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
 
   <!-- CTA Section -->
-  <section class="py-20 bg-black border-t-2 border-yellow-400">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-      <h2 class="text-4xl font-black text-yellow-400 mb-6">READY TO BUILD RESPONSIBLE AI?</h2>
-      <p class="text-xl text-yellow-400 mb-8 font-bold">
-        START BUILDING FAIR, TRANSPARENT, AND COMPLIANT AI SYSTEMS WITH FAIRMIND TODAY.
+  <section class="py-16 bg-gray-50 border-t border-gray-200">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+      <h2 class="text-3xl font-bold text-gray-900 mb-4">Ready to Build Responsible AI?</h2>
+      <p class="text-lg text-gray-600 mb-8">
+        Start building fair, transparent, and compliant AI systems with FairMind today.
       </p>
       
-      <div class="flex flex-col sm:flex-row gap-6 justify-center">
-        <a href="/demo" class="inline-flex items-center px-8 py-4 bg-yellow-400 text-black font-black rounded-none border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transform hover:-translate-y-2 transition-all">
-          <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+      <div class="flex flex-col sm:flex-row gap-4 justify-center">
+        <a href="https://github.com/adhit-r/fairmind" target="_blank" class="inline-flex items-center justify-center px-6 py-3 bg-gray-900 text-white font-medium hover:bg-gray-800 transition-colors">
+          <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
           </svg>
-          TRY DEMO
+          Get Started on GitHub
         </a>
-        <a href="/contact" class="inline-flex items-center px-8 py-4 border-2 border-yellow-400 text-yellow-400 font-black rounded-none hover:bg-yellow-400 hover:text-black transition-all shadow-[4px_4px_0px_0px_rgba(255,255,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(255,255,0,1)]">
-          <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
-                  </svg>
-          CONTACT US
+        <a href="/contact" class="inline-flex items-center justify-center px-6 py-3 border border-gray-300 text-gray-700 font-medium hover:border-gray-400 hover:bg-gray-50 transition-colors">
+          Contact Us
         </a>
       </div>
     </div>

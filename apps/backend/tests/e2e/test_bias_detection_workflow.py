@@ -33,3 +33,4 @@ def test_bias_detection_workflow(page: Page, base_url: str):
     # Placeholder assertion
     assert "/bias" in page.url, "Should be on bias detection page"
 
+

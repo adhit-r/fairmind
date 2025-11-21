@@ -9,7 +9,7 @@ from typing import Optional
 from datetime import datetime, timedelta
 import logging
 
-from ...config.auth import (
+from config.auth import (
     auth_manager, 
     get_current_user, 
     get_current_active_user,
@@ -18,14 +18,14 @@ from ...config.auth import (
     TokenData,
     require_admin
 )
-from ...config.cache import cache_manager
-from ...config.jwt_exceptions import (
+from config.cache import cache_manager
+from config.jwt_exceptions import (
     TokenExpiredException,
     InvalidTokenException,
     TokenMissingException,
     handle_jwt_exception
 )
-from ...config.jwt_models import (
+from config.jwt_models import (
     LoginRequest as JWTLoginRequest,
     LoginResponse as JWTLoginResponse,
     TokenResponse as JWTTokenResponse
@@ -113,8 +113,10 @@ class UserResponse(BaseModel):
     last_login: Optional[datetime]
 
 
+
 @router.post("/login", response_model=LoginResponse)
 async def login(login_data: LoginRequest):
+    logger.info(f"Login attempt for: {login_data.email}")
     """
     Authenticate user and return JWT tokens using new JWT infrastructure.
     
@@ -182,8 +184,14 @@ async def login(login_data: LoginRequest):
             )
         
         # Create tokens using new JWT infrastructure
-        access_token = auth_manager.create_access_token(user)
-        refresh_token = auth_manager.create_refresh_token(user)
+        access_token = str(auth_manager.create_access_token(user))
+        refresh_token = str(auth_manager.create_refresh_token(user))
+        
+        # Ensure they are not byte string representations like "b'...'"
+        if access_token.startswith("b'") and access_token.endswith("'"):
+             access_token = access_token[2:-1]
+        if refresh_token.startswith("b'") and refresh_token.endswith("'"):
+             refresh_token = refresh_token[2:-1]
         
         # Cache user session
         session_key = f"session:{user.id}"
@@ -200,17 +208,26 @@ async def login(login_data: LoginRequest):
         
         logger.info(f"User logged in successfully: {user.email}")
         
-        return LoginResponse(
-            access_token=access_token,
-            refresh_token=refresh_token,
-            expires_in=auth_manager.access_token_expire_minutes * 60,
-            user={
+        response_data = {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "expires_in": auth_manager.access_token_expire_minutes * 60,
+            "user": {
                 "id": user.id,
                 "email": user.email,
                 "username": user.username,
                 "role": user.role.value,
             }
-        )
+        }
+        logger.info(f"Login Response Data Types: access_token={type(access_token)}, refresh_token={type(refresh_token)}")
+        import json
+        try:
+            json.dumps(response_data)
+            logger.info("Login Response is JSON serializable")
+        except Exception as e:
+            logger.error(f"Login Response JSON serialization failed: {e}")
+
+        return LoginResponse(**response_data)
         
     except HTTPException:
         raise

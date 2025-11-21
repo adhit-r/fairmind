@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import {
   AppShell,
   NavLink,
@@ -174,23 +175,17 @@ export function Navigation({ children }: NavigationProps) {
     zIndex: 200,
     height: '100%',
   };
-
+  
   // Styles for the "New Assessment" button - pure neobrutal
-  const newAssessmentButtonStyle = {
+  const newAssessmentButtonStyle: React.CSSProperties = {
     background: 'var(--color-orange)',
     color: 'var(--color-white)',
     border: '4px solid var(--color-black)',
     borderRadius: '0',
     padding: `${rem(12)} ${rem(16)}`,
     margin: `0 0 ${rem(12)} 0`,
-    fontWeight: 'var(--font-weight-black)',
-    fontSize: 'var(--font-size-base)',
-    letterSpacing: 'var(--letter-spacing-wide)',
-    textTransform: 'uppercase',
     boxShadow: 'var(--shadow-brutal)',
     width: '100%',
-    justifyContent: 'flex-start',
-    fontFamily: 'var(--font-family-display)',
   };
 
   const newAssessmentButtonHoverStyle = {
@@ -201,21 +196,16 @@ export function Navigation({ children }: NavigationProps) {
   };
 
   // Styles for navigation items - pure neobrutal design
-  const navItemStyle = {
+  const navItemStyle: React.CSSProperties = {
     background: 'transparent',
     border: '4px solid var(--color-black)',
     borderRadius: '0',
     padding: `${rem(12)} ${rem(16)}`,
     marginBottom: rem(4),
     transition: 'all var(--transition-duration-fast) ease',
-    fontWeight: 'var(--font-weight-black)',
-    fontSize: 'var(--font-size-sm)',
-    letterSpacing: 'var(--letter-spacing-wide)',
-    textTransform: 'uppercase',
     color: colorScheme === 'dark' ? 'var(--color-white)' : 'var(--color-black)',
     boxShadow: 'var(--shadow-brutal)',
     width: '100%',
-    justifyContent: 'flex-start',
   };
 
   const navItemHoverStyle = {
@@ -225,17 +215,13 @@ export function Navigation({ children }: NavigationProps) {
     boxShadow: 'var(--shadow-brutal-lg)',
   };
 
-  const activeNavItemStyle = {
+  const activeNavItemStyle: React.CSSProperties = {
     background: 'var(--color-orange)',
     color: 'var(--color-white)',
     border: '4px solid var(--color-black)',
     borderRadius: '0',
     padding: `${rem(12)} ${rem(16)}`,
     marginBottom: rem(4),
-    fontWeight: 'var(--font-weight-black)',
-    fontSize: 'var(--font-size-sm)',
-    letterSpacing: 'var(--letter-spacing-wide)',
-    textTransform: 'uppercase',
     boxShadow: 'var(--shadow-brutal-lg)',
     transform: 'translate(-4px, -4px)',
   };
@@ -284,128 +270,128 @@ export function Navigation({ children }: NavigationProps) {
         <Group w="100%" h="100%" justify="space-between" align="center" gap="md">
           <Group gap="md" align="center">
             <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
-            <OrangeLogo size="sm" />
-          </Group>
+          <OrangeLogo size="sm" />
+        </Group>
 
           <Group gap="md" align="center">
-            <ActionIcon
-              variant="filled"
-              size="lg"
-              radius={0}
-              color="orange"
-              aria-label="Search"
+          <ActionIcon
+            variant="filled"
+            size="lg"
+            radius={0}
+            color="orange"
+            aria-label="Search"
               tabIndex={0}
-              style={{
-                border: '4px solid var(--color-black)',
-                boxShadow: 'var(--shadow-brutal)',
-                background: 'var(--color-orange)',
-                borderRadius: '0',
+            style={{
+              border: '4px solid var(--color-black)',
+              boxShadow: 'var(--shadow-brutal)',
+              background: 'var(--color-orange)',
+              borderRadius: '0',
                 transform: 'translate(0, 0)',
                 transition: 'transform var(--transition-duration-fast) ease, box-shadow var(--transition-duration-fast) ease',
-              }}
-              onMouseEnter={(e) => {
+            }}
+            onMouseEnter={(e) => {
                 e.currentTarget.style.transform = 'translate(-4px, -4px)';
-                e.currentTarget.style.boxShadow = 'var(--shadow-brutal-lg)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translate(0, 0)';
-                e.currentTarget.style.boxShadow = 'var(--shadow-brutal)';
-              }}
+              e.currentTarget.style.boxShadow = 'var(--shadow-brutal-lg)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translate(0, 0)';
+              e.currentTarget.style.boxShadow = 'var(--shadow-brutal)';
+            }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault();
                   // Handle search action
                 }
-              }}
-            >
-              <IconSearch size={18} />
-            </ActionIcon>
-            <ActionIcon
-              variant="filled"
-              size="lg"
-              radius={0}
-              color="orange"
-              aria-label="Notifications"
+            }}
+          >
+            <IconSearch size={18} />
+          </ActionIcon>
+          <ActionIcon
+            variant="filled"
+            size="lg"
+            radius={0}
+            color="orange"
+            aria-label="Notifications"
               tabIndex={0}
-              style={{
-                border: '4px solid var(--color-black)',
-                boxShadow: 'var(--shadow-brutal)',
-                background: 'var(--color-orange)',
-                borderRadius: '0',
+            style={{
+              border: '4px solid var(--color-black)',
+              boxShadow: 'var(--shadow-brutal)',
+              background: 'var(--color-orange)',
+              borderRadius: '0',
                 transform: 'translate(0, 0)',
                 transition: 'transform var(--transition-duration-fast) ease, box-shadow var(--transition-duration-fast) ease',
-              }}
-              onMouseEnter={(e) => {
+            }}
+            onMouseEnter={(e) => {
                 e.currentTarget.style.transform = 'translate(-4px, -4px)';
-                e.currentTarget.style.boxShadow = 'var(--shadow-brutal-lg)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translate(0, 0)';
-                e.currentTarget.style.boxShadow = 'var(--shadow-brutal)';
-              }}
+              e.currentTarget.style.boxShadow = 'var(--shadow-brutal-lg)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translate(0, 0)';
+              e.currentTarget.style.boxShadow = 'var(--shadow-brutal)';
+            }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault();
                   // Handle notifications action
                 }
-              }}
-            >
-              <IconBell size={18} />
-            </ActionIcon>
-            <ActionIcon
-              variant="filled"
-              size="lg"
-              radius={0}
-              color="orange"
-              aria-label="Settings"
+            }}
+          >
+            <IconBell size={18} />
+          </ActionIcon>
+          <ActionIcon
+            variant="filled"
+            size="lg"
+            radius={0}
+            color="orange"
+            aria-label="Settings"
               tabIndex={0}
-              style={{
-                border: '4px solid var(--color-black)',
-                boxShadow: 'var(--shadow-brutal)',
-                background: 'var(--color-orange)',
-                borderRadius: '0',
+            style={{
+              border: '4px solid var(--color-black)',
+              boxShadow: 'var(--shadow-brutal)',
+              background: 'var(--color-orange)',
+              borderRadius: '0',
                 transform: 'translate(0, 0)',
                 transition: 'transform var(--transition-duration-fast) ease, box-shadow var(--transition-duration-fast) ease',
-              }}
-              onMouseEnter={(e) => {
+            }}
+            onMouseEnter={(e) => {
                 e.currentTarget.style.transform = 'translate(-4px, -4px)';
-                e.currentTarget.style.boxShadow = 'var(--shadow-brutal-lg)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translate(0, 0)';
-                e.currentTarget.style.boxShadow = 'var(--shadow-brutal)';
-              }}
+              e.currentTarget.style.boxShadow = 'var(--shadow-brutal-lg)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translate(0, 0)';
+              e.currentTarget.style.boxShadow = 'var(--shadow-brutal)';
+            }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault();
                   // Handle settings action
                 }
-              }}
-            >
-              <IconSettings size={18} />
-            </ActionIcon>
+            }}
+          >
+            <IconSettings size={18} />
+          </ActionIcon>
           </Group>
         </Group>
       </AppShell.Header>
 
       <AppShell.Navbar>
         <AppShell.Section grow component={ScrollArea} style={{ 
-          display: 'flex', 
+          display: 'flex',
           flexDirection: 'column',
           width: '100%',
         }}>
-          {/* New Assessment Button */}
-          <Button
-            variant="filled"
-            color="orange"
-            style={{
+            {/* New Assessment Button */}
+            <Button
+              variant="filled"
+              color="orange"
+              style={{
               ...newAssessmentButtonStyle,
               marginBottom: rem(16),
-            }}
-            onMouseEnter={(e) => {
+            } as React.CSSProperties}
+              onMouseEnter={(e) => {
               Object.assign(e.currentTarget.style, newAssessmentButtonHoverStyle);
-            }}
-            onMouseLeave={(e) => {
+              }}
+              onMouseLeave={(e) => {
               Object.assign(e.currentTarget.style, newAssessmentButtonStyle);
             }}
           >
@@ -417,13 +403,13 @@ export function Navigation({ children }: NavigationProps) {
                 c="white"
                 style={{ 
                   fontFamily: 'var(--font-family-display)',
-                }}
-              >
-                New Assessment
+              }}
+            >
+              New Assessment
               </Text>
             </Group>
-          </Button>
-          
+            </Button>
+
           <Stack gap={4} style={{ width: '100%' }}>
             {navigationData.map((section) => (
               <div key={section.label}>
@@ -439,14 +425,14 @@ export function Navigation({ children }: NavigationProps) {
                       e.preventDefault();
                       setActiveSection(activeSection === section.label ? null : section.label);
                     }
-                  }}
-                  style={activeSection === section.label ? activeNavItemStyle : navItemStyle}
-                  onMouseEnter={(e) => {
+                    }}
+                  style={(activeSection === section.label ? activeNavItemStyle : navItemStyle) as React.CSSProperties}
+                    onMouseEnter={(e) => {
                     if (activeSection !== section.label) {
                       Object.assign(e.currentTarget.style, navItemHoverStyle);
-                    }
-                  }}
-                  onMouseLeave={(e) => {
+                      }
+                    }}
+                    onMouseLeave={(e) => {
                     if (activeSection !== section.label) {
                       Object.assign(e.currentTarget.style, navItemStyle);
                     }
@@ -514,7 +500,7 @@ export function Navigation({ children }: NavigationProps) {
                         </Text>
                       </Button>
                     ))}
-                  </Stack>
+            </Stack>
                 )}
               </div>
             ))}
@@ -524,22 +510,22 @@ export function Navigation({ children }: NavigationProps) {
         <AppShell.Section>
           <Divider my="sm" color="var(--color-black)" />
           <Group justify="center" p="md">
-            <Text 
-              size="xs" 
-              fw={700}
-              c={colorScheme === 'dark' ? 'var(--color-white)' : 'var(--color-black)'}
-              style={{ 
-                fontFamily: 'var(--font-family-display)',
-              }}
-            >
-              FairMind AI Platform
-            </Text>
+          <Text
+            size="xs"
+            fw={700}
+            c={colorScheme === 'dark' ? 'var(--color-white)' : 'var(--color-black)'}
+            style={{
+              fontFamily: 'var(--font-family-display)',
+            }}
+          >
+            FairMind AI Platform
+          </Text>
           </Group>
         </AppShell.Section>
       </AppShell.Navbar>
 
       <AppShell.Main>
-        {children}
+          {children}
       </AppShell.Main>
     </AppShell>
   );

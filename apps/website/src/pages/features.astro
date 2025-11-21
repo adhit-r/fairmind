@@ -3,105 +3,69 @@ import Layout from '../layouts/Layout.astro';
 
 const features = [
   {
-    id: 'bias-monitoring',
-    title: 'REAL-TIME BIAS DETECTION',
-    description: 'GO BEYOND SIMPLE POST-DEPLOYMENT CHECKS. FAIRMIND INTEGRATES DIRECTLY INTO YOUR DATA PIPELINES TO ANALYZE MODEL BEHAVIOR IN REAL-TIME. OUR SYSTEM DETECTS SUBTLE AND EMERGENT BIASES ACROSS MULTIPLE PROTECTED ATTRIBUTES (E.G., RACE, GENDER, AGE) USING A SUITE OF ADVANCED STATISTICAL TESTS. RECEIVE INSTANT, ACTIONABLE ALERTS WITH ROOT-CAUSE ANALYSIS, ALLOWING YOU TO MITIGATE FAIRNESS ISSUES BEFORE THEY IMPACT USERS OR LEAD TO REGULATORY PENALTIES.',
-    icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>',
+    id: 'bias-detection',
+    title: 'Real-time Bias Detection',
+    description: 'Comprehensive bias analysis using statistical methods, custom rules, and LLM-powered insights to identify fairness issues across multiple protected attributes.',
     highlights: [
-      'REAL-TIME STREAM PROCESSING FOR IMMEDIATE FEEDBACK',
-      'SUPPORT FOR 20+ FAIRNESS METRICS INCLUDING DISPARATE IMPACT AND EQUALIZED ODDS',
-      'AUTOMATED AUDIT TRAILS AND ONE-CLICK COMPLIANCE REPORTS (GDPR, AI ACT, ETC.)',
-      'SLICE-BASED ANALYSIS TO IDENTIFY BIAS IN SPECIFIC DATA SEGMENTS'
-    ],
-    color: 'yellow',
-    screenshots: [
-      { src: '/screenshots/app-bias-detection.png', alt: 'Bias detection alert' },
-      { src: '/screenshots/app-dashboard.png', alt: 'Detailed fairness report' }
+      'Multiple fairness metrics (WEAT, SEAT, BBQ)',
+      'Real-time stream processing',
+      'Automated audit trails',
+      'Slice-based analysis'
     ]
   },
   {
     id: 'explainability',
-    title: 'ADVANCED EXPLAINABILITY (XAI)',
-    description: 'TURN YOUR AI\'S BLACK BOX INTO A TRANSPARENT GLASS BOX. FAIRMIND PROVIDES A POWERFUL, INTERACTIVE SUITE OF EXPLAINABLE AI (XAI) TOOLS. WE GO BEYOND BASIC FEATURE IMPORTANCE BY OFFERING LOCAL (PER-PREDICTION) AND GLOBAL (WHOLE-MODEL) EXPLANATIONS THROUGH TECHNIQUES LIKE SHAP, LIME, AND INTEGRATED GRADIENTS. THE INTERACTIVE DASHBOARDS ALLOW BOTH TECHNICAL AND NON-TECHNICAL USERS TO EXPLORE \'WHAT-IF\' SCENARIOS, UNDERSTAND DECISION DRIVERS, AND BUILD GENUINE TRUST IN YOUR AI SYSTEMS.',
-    icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg>',
+    title: 'Advanced Explainability',
+    description: 'Understand model decisions with SHAP, LIME, and integrated gradients. Interactive dashboards for both technical and non-technical users.',
     highlights: [
-      'NATIVE SUPPORT FOR SHAP, LIME, AND INTEGRATED GRADIENTS',
-      'INTERACTIVE \'WHAT-IF\' ANALYSIS AND COUNTERFACTUAL EXPLANATIONS',
-      'ONE-CLICK EXPORT OF VISUAL AND TEXT-BASED EXPLANATION REPORTS',
-      'MODEL-AGNOSTIC ARCHITECTURE FOR ANY FRAMEWORK (TENSORFLOW, PYTORCH, ETC.)'
-    ],
-    color: 'yellow',
-    screenshots: [
-      { src: '/screenshots/app-dashboard.png', alt: 'Feature importance visualization' },
-      { src: '/screenshots/app-models.png', alt: 'Model decision explanations' }
+      'SHAP, LIME, and integrated gradients',
+      'Interactive what-if analysis',
+      'Visual and text-based reports',
+      'Model-agnostic architecture'
     ]
   },
   {
-    id: 'continuous-monitoring',
-    title: 'CONTINUOUS MONITORING & DRIFT DETECTION',
-    description: 'A MODEL\'S PERFORMANCE ON DAY ONE IS NOT GUARANTEED ON DAY 100. FAIRMIND OFFERS ROBUST, CONTINUOUS MONITORING TO ENSURE YOUR MODELS REMAIN ACCURATE, FAIR, AND RELIABLE IN THE WILD. WE AUTOMATICALLY TRACK A FULL SPECTRUM OF METRICS, INCLUDING DATA DRIFT (CHANGES IN INPUT DATA DISTRIBUTION), CONCEPT DRIFT (CHANGES IN RELATIONSHIPS BETWEEN INPUTS AND OUTPUTS), AND OPERATIONAL HEALTH. PROACTIVE ALERTS GIVE YOU A HEADS-UP ON PERFORMANCE DEGRADATION, ALLOWING FOR TIMELY RETRAINING AND PREVENTING SILENT MODEL FAILURE.',
-    icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M11 11V7a4 4 0 10-8 0v4H2a2 2 0 00-2 2v5a2 2 0 002 2h8a2 2 0 002-2v-5a2 2 0 00-2-2H3m8 0h-2"></path></svg>',
+    id: 'monitoring',
+    title: 'Continuous Monitoring',
+    description: 'Track model performance, data drift, and concept drift in real-time. Proactive alerts for performance degradation and retraining needs.',
     highlights: [
-      'HOLISTIC PERFORMANCE MONITORING (ACCURACY, PRECISION, RECALL, F1, AUC)',
-      'ADVANCED STATISTICAL METHODS (E.G., KOLMOGOROV-SMIRNOV, PSI) FOR DRIFT DETECTION',
-      'CUSTOMIZABLE ALERT CHANNELS (SLACK, EMAIL, WEBHOOKS) AND RETRAINING TRIGGERS',
-      'COMPARISON DASHBOARDS TO TRACK MODEL PERFORMANCE ACROSS VERSIONS'
-    ],
-    color: 'yellow',
-    screenshots: [
-      { src: '/screenshots/app-monitoring.png', alt: 'Performance monitoring dashboard' },
-      { src: '/screenshots/app-dashboard.png', alt: 'Drift detection metrics' }
+      'Performance monitoring (accuracy, precision, recall)',
+      'Advanced drift detection (KS, PSI)',
+      'Customizable alert channels',
+      'Version comparison dashboards'
     ]
   },
   {
-    id: 'model-provenance',
-    title: 'MODEL PROVENANCE & LINEAGE',
-    description: 'TRACK THE COMPLETE LIFECYCLE OF YOUR AI MODELS FROM DATA SOURCE TO DEPLOYMENT. FAIRMIND PROVIDES COMPREHENSIVE MODEL PROVENANCE CAPABILITIES INCLUDING DIGITAL SIGNATURES, AUDIT TRAILS, AND COMPLETE LINEAGE TRACKING. THIS ENSURES TRANSPARENCY, ACCOUNTABILITY, AND COMPLIANCE WITH REGULATORY REQUIREMENTS WHILE ENABLING YOU TO TRACE ANY MODEL DECISION BACK TO ITS TRAINING DATA AND CONFIGURATION.',
-    icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>',
+    id: 'provenance',
+    title: 'Model Provenance & Lineage',
+    description: 'Track the complete lifecycle of your AI models from data source to deployment with digital signatures and audit trails.',
     highlights: [
-      'DIGITAL SIGNATURES FOR MODEL AUTHENTICITY AND INTEGRITY',
-      'COMPLETE DATA LINEAGE FROM SOURCE TO MODEL',
-      'AUTOMATED MODEL CARDS AND DOCUMENTATION',
-      'COMPLIANCE-READY AUDIT TRAILS FOR GDPR AND AI ACT'
-    ],
-    color: 'yellow',
-    screenshots: [
-      { src: '/screenshots/app-provenance.png', alt: 'Model lineage visualization' },
-      { src: '/screenshots/app-dashboard.png', alt: 'Digital signature verification' }
+      'Digital signatures for authenticity',
+      'Complete data lineage tracking',
+      'Automated model cards',
+      'Compliance-ready audit trails'
     ]
   },
   {
-    id: 'security-compliance',
-    title: 'SECURITY & COMPLIANCE',
-    description: 'BUILT WITH ENTERPRISE-GRADE SECURITY AND COMPREHENSIVE COMPLIANCE FEATURES. FAIRMIND IMPLEMENTS OWASP AI/LLM SECURITY TOP 10 PROTECTIONS, PROVIDES GDPR AND AI ACT COMPLIANCE TOOLS, AND OFFERS ADVANCED SECURITY FEATURES LIKE ROLE-BASED ACCESS CONTROL, AUDIT LOGGING, AND DATA ENCRYPTION. OUR PLATFORM HELPS YOU MEET REGULATORY REQUIREMENTS WHILE MAINTAINING THE HIGHEST SECURITY STANDARDS.',
-    icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>',
+    id: 'security',
+    title: 'Security & Compliance',
+    description: 'Enterprise-grade security with OWASP AI/LLM protections, GDPR and AI Act compliance tools, and comprehensive audit logging.',
     highlights: [
-      'OWASP AI/LLM SECURITY TOP 10 IMPLEMENTATION',
-      'GDPR AND AI ACT COMPLIANCE AUTOMATION',
-      'ENTERPRISE-GRADE SECURITY WITH SSO AND RBAC',
-      'COMPREHENSIVE AUDIT LOGGING AND REPORTING'
-    ],
-    color: 'yellow',
-    screenshots: [
-      { src: '/screenshots/app-monitoring.png', alt: 'Security dashboard' },
-      { src: '/screenshots/app-dashboard.png', alt: 'Compliance reporting' }
+      'OWASP AI/LLM security implementation',
+      'GDPR and AI Act compliance',
+      'Role-based access control',
+      'Comprehensive audit logging'
     ]
   },
   {
-    id: 'simulation-testing',
-    title: 'SIMULATION & TESTING',
-    description: 'TEST YOUR AI MODELS IN VIRTUAL ENVIRONMENTS BEFORE REAL-WORLD DEPLOYMENT. FAIRMIND PROVIDES COMPREHENSIVE SIMULATION CAPABILITIES INCLUDING BIAS SIMULATION, ADVERSARIAL TESTING, STRESS TESTING, AND SCENARIO MODELING. THIS ALLOWS YOU TO IDENTIFY POTENTIAL ISSUES, VALIDATE MODEL BEHAVIOR UNDER DIFFERENT CONDITIONS, AND ENSURE YOUR AI SYSTEMS ARE ROBUST AND RELIABLE.',
-    icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg>',
+    id: 'simulation',
+    title: 'Simulation & Testing',
+    description: 'Test AI models in virtual environments before deployment. Includes bias simulation, adversarial testing, and scenario modeling.',
     highlights: [
-      'COMPREHENSIVE BIAS SIMULATION AND ADVERSARIAL TESTING',
-      'STRESS TESTING AND SCENARIO MODELING',
-      'VIRTUAL ENVIRONMENT TESTING BEFORE DEPLOYMENT',
-      'ROBUSTNESS VALIDATION UNDER DIFFERENT CONDITIONS'
-    ],
-    color: 'yellow',
-    screenshots: [
-      { src: '/screenshots/app-simulation.png', alt: 'Simulation dashboard' },
-      { src: '/screenshots/app-testing.png', alt: 'Testing results' }
+      'Bias simulation and adversarial testing',
+      'Stress testing capabilities',
+      'Virtual environment testing',
+      'Robustness validation'
     ]
   }
 ];
@@ -109,95 +73,78 @@ const features = [
 const structuredData = {
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
-  "name": "Fairmind AI Governance Platform",
+  "name": "FairMind AI Governance Platform",
   "description": "Comprehensive AI governance platform with bias detection, explainability, monitoring, and compliance features",
   "applicationCategory": "BusinessApplication",
   "operatingSystem": "Web",
-  "url": "https://fairmind.xyz/features",
-  "offers": {
-    "@type": "Offer",
-    "price": "0",
-    "priceCurrency": "USD"
-  }
+  "url": "https://fairmind.xyz/features"
 };
 ---
 
 <Layout 
-  title="Features - Fairmind AI Governance Platform | Bias Detection & Compliance"
-  description="Discover Fairmind's comprehensive AI governance features including real-time bias detection, explainable AI, continuous monitoring, model provenance, security compliance, and simulation testing."
+  title="Features - FairMind AI Governance Platform"
+  description="Discover FairMind's comprehensive AI governance features including real-time bias detection, explainable AI, continuous monitoring, and compliance tools."
   structuredData={structuredData}
 >
-  <div class="min-h-screen bg-black">
-    <!-- Hero Section -->
-    <section class="bg-black text-yellow-400 py-24 border-b-2 border-yellow-400">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-        <h1 class="text-5xl md:text-6xl font-black mb-6">
-          COMPREHENSIVE AI GOVERNANCE FEATURES
-        </h1>
-        <p class="text-xl md:text-2xl text-yellow-400 max-w-4xl mx-auto font-bold">
-          EVERYTHING YOU NEED TO BUILD, DEPLOY, AND MONITOR RESPONSIBLE AI SYSTEMS WITH CONFIDENCE
-        </p>
-      </div>
-    </section>
+  <!-- Hero Section -->
+  <section class="bg-white py-16 border-b border-gray-200">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+      <h1 class="text-4xl font-bold text-gray-900 mb-4">
+        Comprehensive AI Governance Features
+      </h1>
+      <p class="text-lg text-gray-600">
+        Everything you need to build, deploy, and monitor responsible AI systems with confidence.
+      </p>
+    </div>
+  </section>
 
-    <!-- Features Grid -->
-    <section class="py-20 bg-black">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-12">
-          {features.map((feature) => (
-            <div class="bg-black p-8 rounded-none border-2 border-yellow-400 shadow-[6px_6px_0px_0px_rgba(255,255,0,1)] hover:shadow-[8px_8px_0px_0px_rgba(255,255,0,1)] transform hover:-translate-y-2 transition-all duration-300">
-              <div class="flex items-center mb-6">
-                <div class="w-12 h-12 bg-yellow-400 rounded-none border-2 border-black flex items-center justify-center mr-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
-                  <Fragment set:html={feature.icon} />
-                </div>
-                <h3 class="text-2xl font-black text-yellow-400">{feature.title}</h3>
-              </div>
-              
-              <p class="text-yellow-400 mb-6 font-bold leading-relaxed">
-                {feature.description}
-              </p>
-              
-              <div class="space-y-3">
-                <h4 class="text-lg font-black text-yellow-400 mb-4">KEY HIGHLIGHTS:</h4>
+  <!-- Features Grid -->
+  <section class="py-16 bg-white">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+        {features.map((feature) => (
+          <div class="bg-white p-8 border border-gray-200 hover:border-gray-300 transition-colors">
+            <h3 class="text-2xl font-bold text-gray-900 mb-4">{feature.title}</h3>
+            
+            <p class="text-gray-600 mb-6 leading-relaxed">
+              {feature.description}
+            </p>
+            
+            <div class="space-y-2">
+              <h4 class="text-sm font-semibold text-gray-900 mb-3">Key Highlights:</h4>
               <ul class="space-y-2">
-                  {feature.highlights.map((highlight) => (
-                    <li class="flex items-start space-x-3">
-                      <svg class="w-5 h-5 text-yellow-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
-                      </svg>
-                      <span class="text-yellow-400 font-bold">{highlight}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+                {feature.highlights.map((highlight) => (
+                  <li class="flex items-start text-sm text-gray-600">
+                    <span class="mr-2">•</span>
+                    <span>{highlight}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
       </div>
-    </section>
+    </div>
+  </section>
 
-    <!-- CTA Section -->
-    <section class="py-20 bg-black text-yellow-400 border-t-2 border-yellow-400">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-        <h2 class="text-4xl font-black mb-6">READY TO EXPERIENCE THESE FEATURES?</h2>
-        <p class="text-xl text-yellow-400 mb-8 max-w-3xl mx-auto font-bold">
-          TRY OUR PLATFORM TODAY AND SEE HOW COMPREHENSIVE AI GOVERNANCE CAN TRANSFORM YOUR ORGANIZATION
-        </p>
-        <div class="flex flex-col sm:flex-row gap-6 justify-center">
-          <a href="/demo" class="inline-flex items-center px-8 py-4 bg-yellow-400 text-black font-black rounded-none border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transform hover:-translate-y-2 transition-all">
-            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-            </svg>
-            TRY DEMO
-          </a>
-          <a href="/contact" class="inline-flex items-center px-8 py-4 border-2 border-yellow-400 text-yellow-400 font-black rounded-none hover:bg-yellow-400 hover:text-black transition-all shadow-[4px_4px_0px_0px_rgba(255,255,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(255,255,0,1)]">
-            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
-            </svg>
-            CONTACT US
-          </a>
-        </div>
+  <!-- CTA Section -->
+  <section class="py-16 bg-gray-50 border-t border-gray-200">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+      <h2 class="text-3xl font-bold text-gray-900 mb-4">Ready to Experience These Features?</h2>
+      <p class="text-lg text-gray-600 mb-8">
+        Try our platform today and see how comprehensive AI governance can transform your organization.
+      </p>
+      <div class="flex flex-col sm:flex-row gap-4 justify-center">
+        <a href="https://github.com/adhit-r/fairmind" target="_blank" class="inline-flex items-center justify-center px-6 py-3 bg-gray-900 text-white font-medium hover:bg-gray-800 transition-colors">
+          <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+          </svg>
+          Get Started on GitHub
+        </a>
+        <a href="/contact" class="inline-flex items-center justify-center px-6 py-3 border border-gray-300 text-gray-700 font-medium hover:border-gray-400 hover:bg-gray-50 transition-colors">
+          Contact Us
+        </a>
       </div>
-    </section>
-  </div>
+    </div>
+  </section>
 </Layout>

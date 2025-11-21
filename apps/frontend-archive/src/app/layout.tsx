@@ -8,7 +8,7 @@ import '@mantine/nprogress/styles.css'
 import '@mantine/charts/styles.css'
 import '../styles/brutalist.css'
 import { GlassmorphicThemeProvider } from '@/providers/glassmorphic-theme-provider'
-import { Navigation } from '@/components/Navigation'
+import { Navigation } from '@/components/navigation/Navigation'
 
 const inter = Inter({ subsets: ['latin'] })
 

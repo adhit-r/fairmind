@@ -97,3 +97,4 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "smoke: marks tests as smoke tests")
     config.addinivalue_line("markers", "critical: marks tests as critical path tests")
 
+

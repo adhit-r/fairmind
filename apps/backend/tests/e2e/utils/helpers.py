@@ -80,3 +80,4 @@ def take_screenshot_on_failure(page: Page, test_name: str) -> None:
     screenshot_path = f"tests/e2e/screenshots/failure_{test_name}_{int(time.time())}.png"
     page.screenshot(path=screenshot_path, full_page=True)
 
+

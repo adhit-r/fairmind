@@ -1,13 +1,10 @@
 'use client'
-
-import App from '../../components/layouts/App'
 import { Container, Box, Title, Text, Paper, Grid, Card, Group, ActionIcon } from '@mantine/core'
 import { IconChartBar, IconTrendingUp, IconUsers, IconActivity } from '@tabler/icons-react'
 
 export default function AnalyticsPage() {
   return (
-    <App>
-      <Container size="xl" p="md">
+    <Container size="xl" p="md">
         <Box>
           {/* Header Section */}
           <Paper
@@ -99,7 +96,6 @@ export default function AnalyticsPage() {
           </Grid>
         </Box>
       </Container>
-    </App>
   )
 }
 

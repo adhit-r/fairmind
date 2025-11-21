@@ -17,7 +17,7 @@ from ..services.modern_llm_bias_service import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/modern-bias", tags=["Modern Bias Detection"])
+router = APIRouter(prefix="/modern-bias", tags=["Modern Bias Detection"])
 
 # Initialize the modern bias detection service
 bias_service = ModernLLMBiasService()

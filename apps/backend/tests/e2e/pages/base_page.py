@@ -111,3 +111,4 @@ class BasePage:
         """
         return self.page.locator(selector).is_visible()
 
+

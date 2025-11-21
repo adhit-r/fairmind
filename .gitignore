@@ -327,6 +327,7 @@ test-results/
 .temp-docs/
 
 # Frontend archive (preserved for reference)
+apps/frontend-archive/
 apps/frontend-archive/node_modules/
 apps/frontend-archive/.next/
 apps/frontend-archive/out/
