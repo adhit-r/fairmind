@@ -302,12 +302,13 @@ class HealthCheckService:
     async def _get_system_info(self) -> Dict[str, Any]:
         """Get system information."""
         try:
+            import sys
             return {
-                "platform": psutil.LINUX if hasattr(psutil, 'LINUX') else "unknown",
-                "python_version": f"{psutil.version_info.major}.{psutil.version_info.minor}",
-                "process_id": psutil.Process().pid,
-                "threads": psutil.Process().num_threads(),
-                "file_descriptors": psutil.Process().num_fds() if hasattr(psutil.Process(), 'num_fds') else None,
+                "platform": "unknown",
+                "python_version": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+                "process_id": psutil.Process().pid if psutil else None,
+                "threads": psutil.Process().num_threads() if psutil else None,
+                "file_descriptors": psutil.Process().num_fds() if psutil and hasattr(psutil.Process(), 'num_fds') else None,
             }
         except Exception as e:
             logger.warning(f"Could not get system info: {e}")

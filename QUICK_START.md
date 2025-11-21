@@ -1,56 +1,57 @@
-# ⚡ FairMind Quick Start
+# Quick Start Guide
 
-**Get up and running in 2 minutes!**
-
-## 🚀 Fastest Setup
+## Start Backend Server
 
 ```bash
-# 1. Clone
-git clone https://github.com/adhit-r/fairmind.git && cd fairmind
-
-# 2. Backend (Terminal 1)
-cd apps/backend && uv sync && uv run python -m uvicorn api.main:app --reload
-
-# 3. Frontend (Terminal 2)
-cd apps/frontend && bun install && bun run dev
+cd apps/backend
+uv run uvicorn api.main:app --reload --port 8000
 ```
 
-**✅ Done!** Visit `http://localhost:3000`
+The backend will be available at: **http://localhost:8000**
 
-## 📋 Requirements
+## Start Frontend Server
 
-- Python 3.9+ → [Install](https://www.python.org/downloads/)
-- Node.js 18+ → [Install](https://nodejs.org/)
-- UV (optional) → `curl -LsSf https://astral.sh/uv/install.sh | sh`
-- Bun (optional) → `curl -fsSL https://bun.sh/install | bash`
+In a **new terminal**:
 
-## 🔧 Troubleshooting
-
-**Port in use?**
 ```bash
-# Backend: Change port
-uv run python -m uvicorn api.main:app --port 8002
-
-# Frontend: Change port
-PORT=3001 bun run dev
+cd apps/frontend-new
+bun run dev
 ```
 
-**Module not found?**
-```bash
-# Backend
-cd apps/backend && uv sync
+The frontend will be available at: **http://localhost:1111**
 
-# Frontend
-cd apps/frontend && bun install
-```
+## Verify Setup
 
-## 📚 Next Steps
+1. **Backend Health Check**:
+   ```bash
+   curl http://localhost:8000/health
+   ```
 
-- **Full Setup Guide**: [SETUP.md](SETUP.md)
-- **Contributing**: [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)
-- **Documentation**: [docs/](docs/)
+2. **Check Database Models**:
+   ```bash
+   cd apps/backend
+   python3 -c "import sqlite3; conn = sqlite3.connect('fairmind.db'); cursor = conn.cursor(); cursor.execute('SELECT COUNT(*) FROM models'); print(f'Models: {cursor.fetchone()[0]}')"
+   ```
 
----
+3. **Frontend**:
+   - Open http://localhost:1111
+   - Should see dashboard with real data
 
-**Need help?** [Open an issue](https://github.com/adhit-r/fairmind/issues/new) or [join discussions](https://github.com/adhit-r/fairmind/discussions)
+## Troubleshooting
 
+### Backend won't start
+- Check if port 8000 is already in use: `lsof -i :8000`
+- Kill existing process: `kill -9 $(lsof -t -i:8000)`
+- Check Python/uv is installed: `uv --version`
+
+### Frontend won't start
+- Check if port 1111 is already in use: `lsof -i :1111`
+- Kill existing process: `kill -9 $(lsof -t -i:1111)`
+- Check bun is installed: `bun --version`
+
+### No models showing
+- Seed database: `cd apps/backend && python3 scripts/seed_models_realistic.py`
+
+### API errors
+- Verify backend is running: `curl http://localhost:8000/health`
+- Check `.env.local` has: `NEXT_PUBLIC_API_URL=http://localhost:8000`

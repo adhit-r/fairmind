@@ -38,15 +38,17 @@ class DatabaseManager:
             )
             logger.info("Connected to PostgreSQL database")
         else:
-            # SQLite for development
-            sqlite_url = database_url or "sqlite:///./fairmind.db"
+            # SQLite for development - use absolute path
+            import pathlib
+            db_path = pathlib.Path(__file__).parent.parent / "fairmind.db"
+            sqlite_url = database_url or f"sqlite:///{db_path}"
             self.engine = create_engine(
                 sqlite_url,
                 connect_args={"check_same_thread": False},
                 poolclass=StaticPool,
                 echo=os.getenv("DEBUG", "false").lower() == "true"
             )
-            logger.info("Connected to SQLite database")
+            logger.info(f"Connected to SQLite database: {db_path}")
         
         self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
     

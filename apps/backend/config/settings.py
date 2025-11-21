@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     jwt_expire_minutes: int = 30
     
     # CORS
-    allowed_origins: str = "http://localhost:3000"
+    allowed_origins: str = "http://localhost:3000,http://localhost:1111"
     allowed_methods: List[str] = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
     allowed_headers: List[str] = ["*"]
     allow_credentials: bool = True

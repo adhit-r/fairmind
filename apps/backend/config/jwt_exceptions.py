@@ -5,7 +5,8 @@ Custom exceptions and error handlers for JWT operations.
 Provides clear error messages and proper HTTP status codes.
 """
 
-from fastapi import HTTPException, status
+from fastapi import HTTPException, status, Request
+from fastapi.responses import JSONResponse
 from typing import Optional
 import logging
 
@@ -56,72 +57,66 @@ class InsufficientPermissionsException(JWTException):
         super().__init__(message, status.HTTP_403_FORBIDDEN)
 
 
-def handle_jwt_exception(exc: JWTException) -> HTTPException:
+def handle_jwt_exception(request: Request, exc: JWTException) -> JSONResponse:
     """
-    Convert JWT exception to FastAPI HTTPException.
-    
-    Args:
-        exc: JWT exception to convert
-        
-    Returns:
-        HTTPException with appropriate status code and headers
+    Convert JWT exception to FastAPI JSONResponse.
     """
     logger.warning(f"JWT Exception: {exc.message}")
     
     headers = {"WWW-Authenticate": "Bearer"}
     
-    return HTTPException(
+    return JSONResponse(
         status_code=exc.status_code,
-        detail=exc.message,
+        content={"detail": exc.message},
         headers=headers if exc.status_code == status.HTTP_401_UNAUTHORIZED else None
     )
 
 
-def handle_token_expired_exception(exc: TokenExpiredException) -> HTTPException:
+def handle_token_expired_exception(request: Request, exc: TokenExpiredException) -> JSONResponse:
     """Handle expired token exception with specific messaging."""
     logger.warning("JWT token expired")
-    return HTTPException(
+    return JSONResponse(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Token has expired. Please login again.",
+        content={"detail": "Token has expired. Please login again."},
         headers={"WWW-Authenticate": "Bearer"},
     )
 
 
-def handle_invalid_token_exception(exc: InvalidTokenException) -> HTTPException:
+def handle_invalid_token_exception(request: Request, exc: InvalidTokenException) -> JSONResponse:
     """Handle invalid token exception with specific messaging."""
     logger.warning("Invalid JWT token provided")
-    return HTTPException(
+    return JSONResponse(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid token. Please login again.",
+        content={"detail": "Invalid token. Please login again."},
         headers={"WWW-Authenticate": "Bearer"},
     )
 
 
-def handle_token_missing_exception(exc: TokenMissingException) -> HTTPException:
+def handle_token_missing_exception(request: Request, exc: TokenMissingException) -> JSONResponse:
     """Handle missing token exception with specific messaging."""
     logger.warning("JWT token missing from request")
-    return HTTPException(
+    return JSONResponse(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Authentication required. Please provide a valid token.",
+        content={"detail": "Authentication required. Please provide a valid token."},
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-de
-f handle_token_creation_exception(exc: TokenCreationException) -> HTTPException:
+
+def handle_token_creation_exception(request: Request, exc: TokenCreationException) -> JSONResponse:
     """Handle token creation exception with specific messaging."""
     logger.error("JWT token creation failed")
-    return HTTPException(
+    return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        detail="Authentication service temporarily unavailable. Please try again later.",
+        content={"detail": "Authentication service temporarily unavailable. Please try again later."},
     )
 
 
-def handle_insufficient_permissions_exception(exc: InsufficientPermissionsException) -> HTTPException:
+def handle_insufficient_permissions_exception(request: Request, exc: InsufficientPermissionsException) -> JSONResponse:
     """Handle insufficient permissions exception with specific messaging."""
     logger.warning("User lacks required permissions")
-    return HTTPException(
+    return JSONResponse(
         status_code=status.HTTP_403_FORBIDDEN,
-        detail="You do not have permission to access this resource.",
+        content={"detail": "You do not have permission to access this resource."},
     )
 
 

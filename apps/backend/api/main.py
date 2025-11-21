@@ -13,11 +13,12 @@ This service provides comprehensive AI governance capabilities including:
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.exceptions import RequestValidationError
 from contextlib import asynccontextmanager
 import logging
 from pathlib import Path
+from datetime import datetime, timezone
 
 # Import production-ready configuration
 from config.settings import settings
@@ -65,6 +66,11 @@ async def lifespan(app: FastAPI):
     Path(settings.model_cache_dir).mkdir(parents=True, exist_ok=True)
     
     logger.info("Application startup complete")
+    
+    # Log all registered routes
+    for route in app.routes:
+        if hasattr(route, "methods"):
+            logger.info(f"Route: {route.path} Methods: {route.methods}")
     
     yield
     
@@ -191,6 +197,22 @@ See the request/response examples in each endpoint for code samples in Python, J
     ],
 )
 
+# Add CORS middleware FIRST (order matters!)
+# CORS must be before other middleware to handle preflight OPTIONS requests
+# In development, allow all localhost origins
+cors_origins = settings.get_allowed_origins()
+if settings.is_development:
+    cors_origins = ["http://localhost:1111", "http://localhost:3000", "http://127.0.0.1:1111", "http://127.0.0.1:3000"]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allow_headers=["*"],
+    expose_headers=["*"],
+)
+
 # Add production-ready middleware (order matters!)
 app.add_middleware(ErrorHandlingMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
@@ -204,18 +226,36 @@ app.add_middleware(
     compresslevel=6     # Balance between compression ratio and speed
 )
 
-# Add rate limiting middleware
+# Add rate limiting middleware with custom configuration
 app.add_middleware(
     RateLimitMiddleware,
     requests_per_minute=settings.rate_limit_requests
 )
-
-# Add CORS middleware with production configuration
-app.add_middleware(
-    CORSMiddleware,
-    **settings.cors_config
-)
-
+@app.options("/{full_path:path}")
+async def options_handler(request: Request):
+    """Handle OPTIONS preflight requests."""
+    origin = request.headers.get("origin")
+    allowed_origins = settings.get_allowed_origins()
+    
+    # Check if origin is allowed
+    if origin and origin in allowed_origins:
+        allow_origin = origin
+    elif settings.is_development:
+        # In development, allow localhost origins
+        allow_origin = origin if origin and "localhost" in origin else "*"
+    else:
+        allow_origin = "*"
+    
+    return Response(
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": allow_origin,
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Max-Age": "600",
+        }
+    )
 
 # Custom exception handlers
 @app.exception_handler(RequestValidationError)
@@ -283,13 +323,21 @@ try:
 except Exception as e:
     logger.warning(f"Could not load AI BOM routes: {e}")
 
-# Enable additional routes for full API integration
 try:
     from .routes import bias_detection
     app.include_router(bias_detection.router, prefix="/api/v1", tags=["bias-detection"])
     logger.info("Bias detection routes loaded successfully")
 except Exception as e:
     logger.warning(f"Could not load bias detection routes: {e}")
+
+# Production-ready bias detection with actual fairness calculations
+try:
+    from .routes import bias_detection_v2
+    app.include_router(bias_detection_v2.router, prefix="/api/v1", tags=["bias-detection-v2"])
+    logger.info("Bias detection v2 routes loaded successfully")
+except Exception as e:
+    logger.warning(f"Could not load bias detection v2 routes: {e}")
+
 
 try:
     from .routes import security
@@ -389,8 +437,23 @@ except Exception as e:
 # Production-ready health check endpoints
 @app.get("/health")
 async def health_check():
-    """Comprehensive health check endpoint."""
-    return await health_service.get_health_status()
+    """Simple health check endpoint."""
+    try:
+        return {
+            "status": "healthy",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "version": settings.api_version,
+            "environment": settings.environment,
+            "message": "API is running"
+        }
+    except Exception as e:
+        logger.error(f"Health check failed: {e}", exc_info=True)
+        return {
+            "status": "unhealthy",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "error": str(e),
+            "message": "Health check service error"
+        }
 
 
 @app.get("/health/ready")

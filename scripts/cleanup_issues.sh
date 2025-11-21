@@ -102,3 +102,4 @@ remove_emoji() {
 echo "This script will help you clean up issues. Run each command manually for safety."
 
 
+

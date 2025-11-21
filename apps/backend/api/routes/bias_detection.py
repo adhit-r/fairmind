@@ -16,7 +16,7 @@ from ..services.llm_bias_detection_service import llm_bias_service, BiasCategory
 from ..services.bias_testing_library import bias_testing_library, TestingLibrary
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/v1/bias", tags=["bias-detection"])
+router = APIRouter(prefix="/bias-detection", tags=["bias-detection"])
 
 # Pydantic Models
 class BiasTestRequest(BaseModel):

@@ -312,4 +312,26 @@ neura-dash-backup/
 
 .qoder/
 
+# Playwright test artifacts
+.playwright-mcp/
+playwright-report/
+test-results/
+
+# Screenshots and images (except logo and issue screenshots)
+*.png
+!**/public/logo.png
+!**/logo.png
+!docs/assets/issues/*.png
+
+# Temporary documentation files
+.temp-docs/
+
+# Frontend archive (preserved for reference)
+apps/frontend-archive/
+apps/frontend-archive/node_modules/
+apps/frontend-archive/.next/
+apps/frontend-archive/out/
+apps/frontend-archive/build/
+apps/frontend-archive/dist/
+
 

@@ -1,116 +1,168 @@
 ---
-// Neobrutal How It Works component explaining the platform workflow
+// Clean minimal how it works component
 ---
 
-<section class="py-24 bg-black">
+<section class="py-20 bg-white">
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
     <!-- Section Header -->
-    <div class="text-center mb-16">
-      <h2 class="text-4xl md:text-5xl font-black text-yellow-400 mb-6">
-        HOW FAIRMIND WORKS
-      </h2>
-      <p class="text-xl text-yellow-400 max-w-3xl mx-auto font-bold">
-        A COMPREHENSIVE 5-STEP PROCESS TO ENSURE YOUR AI SYSTEMS ARE FAIR, TRANSPARENT, AND COMPLIANT
+    <div class="max-w-3xl mb-16">
+      <h2 class="text-sm font-medium text-gray-500 uppercase tracking-wide mb-4">How It Works</h2>
+      <h3 class="text-4xl font-bold text-gray-900 mb-4">
+        A Comprehensive 5-Step Process
+      </h3>
+      <p class="text-lg text-gray-600">
+        Ensure your AI systems are fair, transparent, and compliant with our streamlined workflow.
       </p>
     </div>
 
     <!-- Process Steps -->
-    <div class="relative">
-      <!-- Connection Line -->
-      <div class="hidden lg:block absolute top-1/2 left-0 right-0 h-1 bg-yellow-400 transform -translate-y-1/2"></div>
+    <div class="space-y-12">
       
-      <div class="grid grid-cols-1 lg:grid-cols-5 gap-8 lg:gap-4">
-        
-        <!-- Step 1: Data Upload -->
-        <div class="relative">
-          <div class="bg-black p-8 rounded-none border-2 border-yellow-400 shadow-[4px_4px_0px_0px_rgba(255,255,0,1)] text-center lg:text-left">
-            <div class="w-16 h-16 bg-yellow-400 rounded-none border-2 border-black flex items-center justify-center mx-auto lg:mx-0 mb-6 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
-              <span class="text-black font-black text-xl">1</span>
-            </div>
-            <h3 class="text-xl font-black text-yellow-400 mb-4">UPLOAD & VALIDATE</h3>
-            <p class="text-yellow-400 mb-4 font-bold">
-              UPLOAD YOUR DATASETS AND MODELS. OUR SYSTEM AUTOMATICALLY VALIDATES DATA QUALITY, STRUCTURE, AND IDENTIFIES POTENTIAL BIAS SOURCES.
-            </p>
-            <ul class="text-sm text-yellow-400 space-y-1 font-bold">
-              <li>• DATA QUALITY ASSESSMENT</li>
-              <li>• SCHEMA VALIDATION</li>
-              <li>• BIAS SOURCE IDENTIFICATION</li>
-            </ul>
+      <!-- Step 1 -->
+      <div class="flex gap-8 items-start">
+        <div class="flex-shrink-0">
+          <div class="w-12 h-12 bg-gray-900 flex items-center justify-center">
+            <span class="text-white font-bold text-lg">1</span>
           </div>
         </div>
-
-        <!-- Step 2: Bias Analysis -->
-        <div class="relative">
-          <div class="bg-black p-8 rounded-none border-2 border-yellow-400 shadow-[4px_4px_0px_0px_rgba(255,255,0,1)] text-center lg:text-left">
-            <div class="w-16 h-16 bg-yellow-400 rounded-none border-2 border-black flex items-center justify-center mx-auto lg:mx-0 mb-6 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
-              <span class="text-black font-black text-xl">2</span>
-            </div>
-            <h3 class="text-xl font-black text-yellow-400 mb-4">BIAS DETECTION</h3>
-            <p class="text-yellow-400 mb-4 font-bold">
-              COMPREHENSIVE BIAS ANALYSIS USING STATISTICAL METHODS, CUSTOM RULES, AND LLM-POWERED INSIGHTS TO IDENTIFY FAIRNESS ISSUES.
-            </p>
-            <ul class="text-sm text-yellow-400 space-y-1 font-bold">
-              <li>• STATISTICAL PARITY ANALYSIS</li>
-              <li>• CUSTOM FAIRNESS RULES</li>
-              <li>• LLM-POWERED INSIGHTS</li>
-            </ul>
-          </div>
-        </div>
-
-        <!-- Step 3: Explainability -->
-        <div class="relative">
-          <div class="bg-black p-8 rounded-none border-2 border-yellow-400 shadow-[4px_4px_0px_0px_rgba(255,255,0,1)] text-center lg:text-left">
-            <div class="w-16 h-16 bg-yellow-400 rounded-none border-2 border-black flex items-center justify-center mx-auto lg:mx-0 mb-6 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
-              <span class="text-black font-black text-xl">3</span>
-            </div>
-            <h3 class="text-xl font-black text-yellow-400 mb-4">EXPLAINABILITY</h3>
-            <p class="text-yellow-400 mb-4 font-bold">
-              GENERATE TRANSPARENT EXPLANATIONS USING SHAP, DALEX, AND LIME TO UNDERSTAND MODEL DECISIONS AND FEATURE IMPORTANCE.
-            </p>
-            <ul class="text-sm text-yellow-400 space-y-1 font-bold">
-              <li>• SHAP ANALYSIS</li>
-              <li>• DALEX EXPLANATIONS</li>
-              <li>• FEATURE IMPORTANCE</li>
-            </ul>
-          </div>
-        </div>
-
-        <!-- Step 4: Simulation -->
-        <div class="relative">
-          <div class="bg-black p-8 rounded-none border-2 border-yellow-400 shadow-[4px_4px_0px_0px_rgba(255,255,0,1)] text-center lg:text-left">
-            <div class="w-16 h-16 bg-yellow-400 rounded-none border-2 border-black flex items-center justify-center mx-auto lg:mx-0 mb-6 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
-              <span class="text-black font-black text-xl">4</span>
-            </div>
-            <h3 class="text-xl font-black text-yellow-400 mb-4">SIMULATION & TESTING</h3>
-            <p class="text-yellow-400 mb-4 font-bold">
-              RUN BIAS SIMULATIONS TO TEST DIFFERENT SCENARIOS, DEMOGRAPHIC SHIFTS, AND DEPLOYMENT IMPACTS BEFORE GOING LIVE.
-            </p>
-            <ul class="text-sm text-yellow-400 space-y-1 font-bold">
-              <li>• SCENARIO MODELING</li>
-              <li>• IMPACT ASSESSMENT</li>
-              <li>• RISK MITIGATION</li>
-            </ul>
-          </div>
-        </div>
-
-        <!-- Step 5: Monitoring -->
-        <div class="relative">
-          <div class="bg-black p-8 rounded-none border-2 border-yellow-400 shadow-[4px_4px_0px_0px_rgba(255,255,0,1)] text-center lg:text-left">
-            <div class="w-16 h-16 bg-yellow-400 rounded-none border-2 border-black flex items-center justify-center mx-auto lg:mx-0 mb-6 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
-              <span class="text-black font-black text-xl">5</span>
-            </div>
-            <h3 class="text-xl font-black text-yellow-400 mb-4">MONITORING & COMPLIANCE</h3>
-            <p class="text-yellow-400 mb-4 font-bold">
-              CONTINUOUS MONITORING WITH REAL-TIME ALERTS, COMPLIANCE TRACKING, AND AUTOMATED REPORTING FOR REGULATORY REQUIREMENTS.
-            </p>
-            <ul class="text-sm text-yellow-400 space-y-1 font-bold">
-              <li>• REAL-TIME MONITORING</li>
-              <li>• COMPLIANCE TRACKING</li>
-              <li>• AUTOMATED REPORTING</li>
-            </ul>
-          </div>
+        <div class="flex-1">
+          <h4 class="text-xl font-bold text-gray-900 mb-2">Upload & Validate</h4>
+          <p class="text-gray-600 mb-4">
+            Upload your datasets and models. Our system automatically validates data quality, structure, and identifies potential bias sources.
+          </p>
+          <ul class="space-y-1 text-sm text-gray-600">
+            <li class="flex items-start">
+              <span class="mr-2">•</span>
+              <span>Data Quality Assessment</span>
+            </li>
+            <li class="flex items-start">
+              <span class="mr-2">•</span>
+              <span>Schema Validation</span>
+            </li>
+            <li class="flex items-start">
+              <span class="mr-2">•</span>
+              <span>Bias Source Identification</span>
+            </li>
+          </ul>
         </div>
       </div>
+
+      <!-- Step 2 -->
+      <div class="flex gap-8 items-start">
+        <div class="flex-shrink-0">
+          <div class="w-12 h-12 bg-gray-900 flex items-center justify-center">
+            <span class="text-white font-bold text-lg">2</span>
+          </div>
+        </div>
+        <div class="flex-1">
+          <h4 class="text-xl font-bold text-gray-900 mb-2">Bias Detection</h4>
+          <p class="text-gray-600 mb-4">
+            Comprehensive bias analysis using statistical methods, custom rules, and LLM-powered insights to identify fairness issues.
+          </p>
+          <ul class="space-y-1 text-sm text-gray-600">
+            <li class="flex items-start">
+              <span class="mr-2">•</span>
+              <span>Statistical Parity Analysis</span>
+            </li>
+            <li class="flex items-start">
+              <span class="mr-2">•</span>
+              <span>Custom Fairness Rules</span>
+            </li>
+            <li class="flex items-start">
+              <span class="mr-2">•</span>
+              <span>LLM-Powered Insights</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Step 3 -->
+      <div class="flex gap-8 items-start">
+        <div class="flex-shrink-0">
+          <div class="w-12 h-12 bg-gray-900 flex items-center justify-center">
+            <span class="text-white font-bold text-lg">3</span>
+          </div>
+        </div>
+        <div class="flex-1">
+          <h4 class="text-xl font-bold text-gray-900 mb-2">Explainability</h4>
+          <p class="text-gray-600 mb-4">
+            Generate transparent explanations using SHAP, DALEX, and LIME to understand model decisions and feature importance.
+          </p>
+          <ul class="space-y-1 text-sm text-gray-600">
+            <li class="flex items-start">
+              <span class="mr-2">•</span>
+              <span>SHAP Analysis</span>
+            </li>
+            <li class="flex items-start">
+              <span class="mr-2">•</span>
+              <span>DALEX Explanations</span>
+            </li>
+            <li class="flex items-start">
+              <span class="mr-2">•</span>
+              <span>Feature Importance</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Step 4 -->
+      <div class="flex gap-8 items-start">
+        <div class="flex-shrink-0">
+          <div class="w-12 h-12 bg-gray-900 flex items-center justify-center">
+            <span class="text-white font-bold text-lg">4</span>
+          </div>
+        </div>
+        <div class="flex-1">
+          <h4 class="text-xl font-bold text-gray-900 mb-2">Simulation & Testing</h4>
+          <p class="text-gray-600 mb-4">
+            Run bias simulations to test different scenarios, demographic shifts, and deployment impacts before going live.
+          </p>
+          <ul class="space-y-1 text-sm text-gray-600">
+            <li class="flex items-start">
+              <span class="mr-2">•</span>
+              <span>Scenario Modeling</span>
+            </li>
+            <li class="flex items-start">
+              <span class="mr-2">•</span>
+              <span>Impact Assessment</span>
+            </li>
+            <li class="flex items-start">
+              <span class="mr-2">•</span>
+              <span>Risk Mitigation</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Step 5 -->
+      <div class="flex gap-8 items-start">
+        <div class="flex-shrink-0">
+          <div class="w-12 h-12 bg-gray-900 flex items-center justify-center">
+            <span class="text-white font-bold text-lg">5</span>
+          </div>
+        </div>
+        <div class="flex-1">
+          <h4 class="text-xl font-bold text-gray-900 mb-2">Monitoring & Compliance</h4>
+          <p class="text-gray-600 mb-4">
+            Continuous monitoring with real-time alerts, compliance tracking, and automated reporting for regulatory requirements.
+          </p>
+          <ul class="space-y-1 text-sm text-gray-600">
+            <li class="flex items-start">
+              <span class="mr-2">•</span>
+              <span>Real-time Monitoring</span>
+            </li>
+            <li class="flex items-start">
+              <span class="mr-2">•</span>
+              <span>Compliance Tracking</span>
+            </li>
+            <li class="flex items-start">
+              <span class="mr-2">•</span>
+              <span>Automated Reporting</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+
     </div>
   </div>
 </section>

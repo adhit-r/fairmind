@@ -72,3 +72,4 @@ def test_navigate_to_monitoring(page: Page, base_url: str):
     # Verify we're on monitoring page
     assert "/monitoring" in page.url, "Should be on monitoring page"
 
+

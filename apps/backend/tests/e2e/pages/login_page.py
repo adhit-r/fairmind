@@ -76,3 +76,4 @@ class LoginPage(BasePage):
         """
         return "/login" in self.get_url() or self.is_visible(self.email_input)
 
+

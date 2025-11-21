@@ -1,8 +1,8 @@
-# 🤝 Contributing to FairMind
+# Contributing to FairMind
 
 Thank you for your interest in contributing to FairMind! We're excited to have you join our community of developers, researchers, and AI enthusiasts working to make AI more ethical and fair.
 
-## 🌟 Why Contribute?
+## Why Contribute?
 
 - **Make AI Better**: Help build tools that make AI systems more fair and transparent
 - **Learn & Grow**: Work with cutting-edge AI/ML technologies and ethical AI practices
@@ -10,7 +10,17 @@ Thank you for your interest in contributing to FairMind! We're excited to have y
 - **Join Community**: Connect with like-minded developers and researchers
 - **Real Impact**: Your contributions help organizations build responsible AI systems
 
-## 🚀 Quick Start
+## Contributors
+
+We are grateful to all contributors who help make FairMind better. See [CONTRIBUTORS.md](../CONTRIBUTORS.md) for the complete list of contributors and their contributions.
+
+**Recent Contributors:**
+- [solidcode79](https://github.com/solidcode79) - Improved E2E test stability (PR #108)
+- [adhit-r](https://github.com/adhit-r) - Platform architecture and core features
+
+Thank you to everyone who contributes code, documentation, bug reports, and feedback!
+
+## Quick Start
 
 ### 1. Fork & Clone
 ```bash
@@ -20,7 +30,7 @@ git clone https://github.com/YOUR_USERNAME/fairmind.git
 cd fairmind
 ```
 
-> **💡 Quick Setup**: See [SETUP.md](../../SETUP.md) for detailed installation instructions.
+**Quick Setup**: See [SETUP.md](../../SETUP.md) for detailed installation instructions.
 
 ### 2. Set Up Development Environment
 ```bash
@@ -43,14 +53,14 @@ npm install
 git checkout -b feature/your-feature-name
 ```
 
-## 📊 Visual Issue Navigator & Progress Tracker
+## Visual Issue Navigator & Progress Tracker
 
-### 🎯 Overall Statistics
+### Overall Statistics
 
 | Status | Count | Percentage | Link |
 |--------|-------|------------|------|
-| ✅ **Completed** | 20+ | ~30% | [View Closed Issues](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aclosed) |
-| 🔄 **In Progress** | 5+ | ~8% | [View In Progress](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3A%22in+progress%22) |
+| **Completed** | 20+ | ~30% | [View Closed Issues](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aclosed) |
+| **In Progress** | 5+ | ~8% | [View In Progress](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3A%22in+progress%22) |
 | **Open** | 52 | ~65% | [View Open Issues](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen) |
 | **Good First Issues** | 15+ | ~23% | [View Good First Issues](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) |
 
@@ -63,7 +73,7 @@ Total Issues: ~80+
 └── Open: █████████████████████░░░░░░░░░░░░░░ 65%
 ```
 
-### 🎯 Issue Categories
+### Issue Categories
 
 #### **Good First Issues** (Perfect for New Contributors)
 
@@ -126,52 +136,52 @@ Total Issues: ~80+
 | [#89](https://github.com/adhit-r/fairmind/issues/89) | Automated Control Assessment & Testing | Open | `security`, `help wanted` | High |
 | [#90](https://github.com/adhit-r/fairmind/issues/90) | Attestation Management & Evidence Tracking | Open | `security`, `help wanted` | High |
 
-#### ✅ **Recently Completed**
+#### **Recently Completed**
 
 | # | Issue | Status | Completed |
 |---|-------|--------|-----------|
-| [#94](https://github.com/adhit-r/fairmind/issues/94) | ✅ Comprehensive Feature Expansion - 20+ New Governance Pages | ✅ Closed | 2025 |
-| [#93](https://github.com/adhit-r/fairmind/issues/93) | ✅ Visually Stunning HTML Wiki with Modern Design | ✅ Closed | 2025 |
-| [#92](https://github.com/adhit-r/fairmind/issues/92) | ✅ Real Data Integration and API Connectivity | ✅ Closed | 2025 |
-| [#87](https://github.com/adhit-r/fairmind/issues/87) | ✅ AI Compliance Management System | ✅ Closed | 2025 |
-| [#86](https://github.com/adhit-r/fairmind/issues/86) | ✅ NIST AI Security Framework Integration | ✅ Closed | 2025 |
-| [#81](https://github.com/adhit-r/fairmind/issues/81) | ✅ OWASP Top 10 LLM Security Implementation | ✅ Closed | 2025 |
-| [#54](https://github.com/adhit-r/fairmind/issues/54) | ✅ Fix Frontend Build Issues & Next.js Compatibility | ✅ Closed | 2025 |
-| [#53](https://github.com/adhit-r/fairmind/issues/53) | ✅ Advanced Bias Detection Algorithms & Research | ✅ Closed | 2025 |
-| [#52](https://github.com/adhit-r/fairmind/issues/52) | ✅ Real Dataset Integration & Advanced Kaggle API Setup | ✅ Closed | 2025 |
-| [#51](https://github.com/adhit-r/fairmind/issues/51) | ✅ Advanced LLM Model Integration & Testing | ✅ Closed | 2025 |
-| [#50](https://github.com/adhit-r/fairmind/issues/50) | ✅ Production Deployment & Infrastructure | ✅ Closed | 2025 |
-| [#49](https://github.com/adhit-r/fairmind/issues/49) | ✅ ML Model Development & Research | ✅ Closed | 2025 |
+| [#94](https://github.com/adhit-r/fairmind/issues/94) | Comprehensive Feature Expansion - 20+ New Governance Pages | Closed | 2025 |
+| [#93](https://github.com/adhit-r/fairmind/issues/93) | Visually Stunning HTML Wiki with Modern Design | Closed | 2025 |
+| [#92](https://github.com/adhit-r/fairmind/issues/92) | Real Data Integration and API Connectivity | Closed | 2025 |
+| [#87](https://github.com/adhit-r/fairmind/issues/87) | AI Compliance Management System | Closed | 2025 |
+| [#86](https://github.com/adhit-r/fairmind/issues/86) | NIST AI Security Framework Integration | Closed | 2025 |
+| [#81](https://github.com/adhit-r/fairmind/issues/81) | OWASP Top 10 LLM Security Implementation | Closed | 2025 |
+| [#54](https://github.com/adhit-r/fairmind/issues/54) | Fix Frontend Build Issues & Next.js Compatibility | Closed | 2025 |
+| [#53](https://github.com/adhit-r/fairmind/issues/53) | Advanced Bias Detection Algorithms & Research | Closed | 2025 |
+| [#52](https://github.com/adhit-r/fairmind/issues/52) | Real Dataset Integration & Advanced Kaggle API Setup | Closed | 2025 |
+| [#51](https://github.com/adhit-r/fairmind/issues/51) | Advanced LLM Model Integration & Testing | Closed | 2025 |
+| [#50](https://github.com/adhit-r/fairmind/issues/50) | Production Deployment & Infrastructure | Closed | 2025 |
+| [#49](https://github.com/adhit-r/fairmind/issues/49) | ML Model Development & Research | Closed | 2025 |
 
-### 🔍 Quick Navigation
+### Quick Navigation
 
 #### By Status
-- [All Open Issues](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen) - 🔵 65+ open issues
-- [All Closed Issues](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aclosed) - ✅ 20+ completed issues
-- [In Progress](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3A%22in+progress%22) - 🔄 Active work
+- [All Open Issues](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen) - 65+ open issues
+- [All Closed Issues](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aclosed) - 20+ completed issues
+- [In Progress](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3A%22in+progress%22) - Active work
 
 #### By Category
-- [Frontend Issues](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3Afrontend) - 🎨 UI/UX, React, Next.js
-- [Backend Issues](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3Abackend) - ⚙️ API, Python, FastAPI
-- [AI/ML Issues](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3Aai%2Fml) - 🤖 Machine Learning, Bias Detection
-- [Security Issues](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3Asecurity) - 🔒 Security, Compliance
-- [Documentation Issues](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3Adocumentation) - 📚 Docs, Guides
-- [DevOps Issues](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3Adevops) - 🚀 CI/CD, Deployment
+- [Frontend Issues](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3Afrontend) - UI/UX, React, Next.js
+- [Backend Issues](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3Abackend) - API, Python, FastAPI
+- [AI/ML Issues](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3Aai%2Fml) - Machine Learning, Bias Detection
+- [Security Issues](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3Asecurity) - Security, Compliance
+- [Documentation Issues](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3Adocumentation) - Docs, Guides
+- [DevOps Issues](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3Adevops) - CI/CD, Deployment
 
 #### By Priority
-- [Critical Issues](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3Asecurity) - 🔴 Security vulnerabilities
-- [High Priority](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3Aenhancement) - 🟠 Core features
-- [Good First Issues](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) - 🟢 Perfect for newcomers
+- [Critical Issues](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3Asecurity) - Security vulnerabilities
+- [High Priority](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3Aenhancement) - Core features
+- [Good First Issues](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) - Perfect for newcomers
 
-### 📊 Progress Indicators
+### Progress Indicators
 
 **Legend:**
-- 🔵 Open - Ready to work on
-- 🔄 In Progress - Currently being worked on
-- ✅ Closed - Completed
-- 🔴 Critical - Needs immediate attention
-- 🟠 High Priority - Important feature
-- 🟢 Good First Issue - Perfect for newcomers
+- Open - Ready to work on
+- In Progress - Currently being worked on
+- Closed - Completed
+- Critical - Needs immediate attention
+- High Priority - Important feature
+- Good First Issue - Perfect for newcomers
 
 **Progress by Category:**
 - **Frontend**: 15+ open issues | 5+ completed

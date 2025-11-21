@@ -62,3 +62,4 @@ class DashboardPage(BasePage):
         """Navigate to monitoring page."""
         self.navigate("/monitoring")
 
+
