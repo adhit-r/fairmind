@@ -121,7 +121,8 @@ export function Header({ onMenuToggle }: HeaderProps) {
                   </Avatar>
                   <div className="flex-1">
                     <p className="text-xs font-black">User Name</p>
-                    <p className="text-[10px] text-gray-600">user@example.com</p>
+                    <p className="text-[10px] text-gray-600">user@example.com
+                    </p>
                   </div>
                 </div>
               </DropdownMenuLabel>
