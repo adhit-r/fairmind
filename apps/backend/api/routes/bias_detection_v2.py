@@ -15,6 +15,7 @@ import logging
 
 from services.fairness_metrics import FairnessCalculator, FairnessMetric
 from services.dataset_storage import dataset_storage
+from services.bias_test_results import bias_test_results
 from config.auth import require_permission, Permissions, TokenData
 
 logger = logging.getLogger(__name__)
@@ -251,22 +252,49 @@ async def detect_bias(
         summary = _generate_summary(metrics_passed, metrics_failed, overall_risk)
         
         # Generate test ID
-        test_id = f"bias-test-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        test_id = f"ml-test-{datetime.now().strftime('%Y%m%d%H%M%S')}"
         
-        return BiasDetectionResponse(
+        # Prepare response
+        response_data = {
+            "test_id": test_id,
+            "model_id": request.model_id,
+            "timestamp": datetime.now().isoformat(),
+            "overall_risk": overall_risk,
+            "metrics_passed": metrics_passed,
+            "metrics_failed": metrics_failed,
+            "results": results,
+            "summary": summary,
+            "recommendations": list(set(all_recommendations))  # Deduplicate
+        }
+        
+        # Save test result to storage
+        await bias_test_results.save_test_result(
             test_id=test_id,
+            user_id=current_user.user_id,
             model_id=request.model_id,
-            timestamp=datetime.now().isoformat(),
-            overall_risk=overall_risk,
-            metrics_passed=metrics_passed,
-            metrics_failed=metrics_failed,
-            results=results,
-            summary=summary,
-            recommendations=list(set(all_recommendations))  # Deduplicate
+            dataset_id=request.dataset_id,
+            test_type="ml_bias",
+            results=response_data,
+            metadata={
+                "protected_attribute": request.protected_attribute,
+                "prediction_column": request.prediction_column,
+                "ground_truth_column": request.ground_truth_column,
+                "fairness_threshold": request.fairness_threshold,
+                "metrics_requested": request.metrics,
+                "run_by": current_user.email
+            }
         )
         
+        logger.info(f"ML bias test completed and saved: {test_id}")
+        
+        return BiasDetectionResponse(**response_data)
+        
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Bias detection failed: {e}")
         raise HTTPException(status_code=500, detail=f"Bias detection failed: {str(e)}")
+
 
 
 # --- LLM Bias Detection ---
@@ -365,19 +393,41 @@ async def detect_llm_bias(
         summary = _generate_summary(metrics_passed, metrics_failed, overall_risk)
         test_id = f"llm-test-{datetime.now().strftime('%Y%m%d%H%M%S')}"
 
-        return BiasDetectionResponse(
+        # Prepare response
+        response_data = {
+            "test_id": test_id,
+            "model_id": request.model_id,
+            "timestamp": datetime.now().isoformat(),
+            "overall_risk": overall_risk,
+            "metrics_passed": metrics_passed,
+            "metrics_failed": metrics_failed,
+            "results": results,
+            "summary": summary,
+            "recommendations": list(set(all_recommendations))
+        }
+        
+        # Save test result to storage
+        await bias_test_results.save_test_result(
             test_id=test_id,
+            user_id=current_user.user_id,
             model_id=request.model_id,
-            timestamp=datetime.now().isoformat(),
-            overall_risk=overall_risk,
-            metrics_passed=metrics_passed,
-            metrics_failed=metrics_failed,
-            results=results,
-            summary=summary,
-            recommendations=list(set(all_recommendations))
+            dataset_id=None,  # LLM tests use sample data
+            test_type="llm_bias",
+            results=response_data,
+            metadata={
+                "metrics_requested": request.metrics,
+                "run_by": current_user.email
+            }
         )
+        
+        logger.info(f"LLM bias test completed and saved: {test_id}")
 
+        return BiasDetectionResponse(**response_data)
+
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"LLM analysis failed: {e}")
         raise HTTPException(status_code=500, detail=f"LLM analysis failed: {str(e)}")
 
 def _generate_sample_text_data() -> Tuple[List[str], List[str], List[str]]:
@@ -469,14 +519,34 @@ def _generate_summary(passed: int, failed: int, risk: str) -> str:
         )
 
 
-@router.get("/test/{test_id}")
+@router.get("/test/{test_id}", response_model=BiasDetectionResponse)
 async def get_test_results(
     test_id: str,
     current_user: TokenData = Depends(require_permission(Permissions.ANALYSIS_READ))
 ):
-    """Get results of a previous bias test"""
-    # TODO: Implement test result storage and retrieval
-    raise HTTPException(status_code=501, detail="Test result retrieval not yet implemented")
+    """
+    Get results of a previous bias test by test ID.
+    
+    **Path Parameters:**
+    - `test_id`: Unique test identifier (e.g., ml-test-20251122103045 or llm-test-20251122103045)
+    
+    **Returns:**
+    - Complete test results including all metrics, interpretations, and recommendations
+    """
+    try:
+        result = await bias_test_results.get_test_result(test_id, current_user.user_id)
+        
+        if not result:
+            raise HTTPException(status_code=404, detail=f"Test result not found: {test_id}")
+        
+        # Return the stored results
+        return BiasDetectionResponse(**result["results"])
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to retrieve test result: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve test result")
 
 
 # Dataset Management Endpoints
@@ -576,12 +646,78 @@ async def delete_dataset(
         raise HTTPException(status_code=500, detail="Failed to delete dataset")
 
 
-@router.get("/history")
+
+class TestHistoryResponse(BaseModel):
+    """Response for test history listing"""
+    tests: List[Dict[str, Any]]
+    total: int
+    limit: int
+    offset: int
+
+
+@router.get("/history", response_model=TestHistoryResponse)
 async def get_test_history(
     model_id: Optional[str] = None,
-    limit: int = 10,
+    test_type: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
     current_user: TokenData = Depends(require_permission(Permissions.ANALYSIS_READ))
 ):
-    """Get history of bias tests"""
-    # TODO: Implement test history storage and retrieval
-    raise HTTPException(status_code=501, detail="Test history not yet implemented")
+    """
+    Get history of bias tests with optional filtering.
+    
+    **Query Parameters:**
+    - `model_id`: Filter by model ID (optional)
+    - `test_type`: Filter by test type: ml_bias or llm_bias (optional)
+    - `limit`: Maximum number of results (default: 50)
+    - `offset`: Number of results to skip for pagination (default: 0)
+    
+    **Returns:**
+    - List of test summaries with basic info (use /test/{test_id} for full details)
+    """
+    try:
+        tests = await bias_test_results.list_test_results(
+            user_id=current_user.user_id,
+            model_id=model_id,
+            test_type=test_type,
+            limit=limit,
+            offset=offset
+        )
+        
+        return TestHistoryResponse(
+            tests=tests,
+            total=len(tests),
+            limit=limit,
+            offset=offset
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to retrieve test history: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve test history")
+
+
+@router.get("/statistics")
+async def get_test_statistics(
+    model_id: Optional[str] = None,
+    current_user: TokenData = Depends(require_permission(Permissions.ANALYSIS_READ))
+):
+    """
+    Get statistics about bias test results.
+    
+    **Query Parameters:**
+    - `model_id`: Filter statistics by model ID (optional)
+    
+    **Returns:**
+    - Aggregated statistics including total tests, pass rates, risk distribution
+    """
+    try:
+        stats = await bias_test_results.get_test_statistics(
+            user_id=current_user.user_id,
+            model_id=model_id
+        )
+        
+        return stats
+        
+    except Exception as e:
+        logger.error(f"Failed to retrieve statistics: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve statistics")
