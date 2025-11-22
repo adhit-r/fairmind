@@ -589,7 +589,7 @@ fairmind/
 │                                                                   │
 │  Project:                                                         │
 │  ┌─────────────────────────────────────────────────────────┐   │
-│  │  Contributors:          3                               │   │
+│  │  Contributors:          4                              │   │
 │  │  Total Commits:         84+                             │   │
 │  │  Open Issues:           65+                              │   │
 │  │  Good First Issues:     15+                              │   │
@@ -657,6 +657,9 @@ fairmind/
 | **[adhit-r](https://github.com/adhit-r)** | 81 commits | Core Developer | Platform architecture, core features, documentation |
 | **[solidcode79](https://github.com/solidcode79)** | 3 commits | Contributor | E2E testing, test stability (PR #108) |
 | **[resmasrirajendran-ui](https://github.com/resmasrirajendran-ui)** | Code Reviews | Code Reviewer | Frontend code review, UI/UX feedback |
+| **[kishore8220](https://github.com/kishore8220)** | Code Reviews | Code Reviewer/Repo Maintainer/Developer | Overall repo maintainer |
+
+kishore8220
 
 **Thank you** to all contributors who help make FairMind better. See [CONTRIBUTORS.md](./CONTRIBUTORS.md) for complete contributor details.
 
