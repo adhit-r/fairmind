@@ -157,6 +157,19 @@ export const API_ENDPOINTS = {
     delete: (datasetId: string) => `/api/v1/datasets/${datasetId}`,
   },
 
+  // Bias Detection V2 (Production API)
+  biasV2: {
+    uploadDataset: '/api/v1/bias-v2/upload-dataset',
+    detect: '/api/v1/bias-v2/detect',
+    detectLLM: '/api/v1/bias-v2/detect-llm',
+    getTest: (testId: string) => `/api/v1/bias-v2/test/${testId}`,
+    datasets: '/api/v1/bias-v2/datasets',
+    getDataset: (datasetId: string) => `/api/v1/bias-v2/datasets/${datasetId}`,
+    deleteDataset: (datasetId: string) => `/api/v1/bias-v2/datasets/${datasetId}`,
+    history: '/api/v1/bias-v2/history',
+    statistics: '/api/v1/bias-v2/statistics',
+  },
+
   // Monitoring
   monitoring: {
     metrics: '/api/v1/monitoring/metrics',
