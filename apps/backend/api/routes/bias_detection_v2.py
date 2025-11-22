@@ -11,9 +11,13 @@ import numpy as np
 from datetime import datetime
 import io
 import json
+import logging
 
 from services.fairness_metrics import FairnessCalculator, FairnessMetric
+from services.dataset_storage import dataset_storage
 from config.auth import require_permission, Permissions, TokenData
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/bias-v2", tags=["bias-detection-v2"])
 
@@ -62,7 +66,7 @@ async def upload_dataset(
 ):
 
     """
-    Upload a CSV dataset for bias analysis.
+    Upload a CSV dataset for bias analysis with persistent storage.
     
     **Required columns:**
     - Prediction column (model outputs)
@@ -76,28 +80,46 @@ async def upload_dataset(
     0,male,white,0
     1,female,black,0
     ```
+    
+    **Storage:**
+    - Datasets are stored persistently in Supabase Storage (cloud) or local file system
+    - Metadata is tracked in database for easy retrieval
+    - Each dataset gets a unique ID for later analysis
     """
     try:
-        # Read CSV
+        # Validate file type
+        if not file.filename.endswith('.csv'):
+            raise HTTPException(status_code=400, detail="Only CSV files are supported")
+        
+        # Read file content
         contents = await file.read()
-        df = pd.read_csv(io.BytesIO(contents))
         
-        # Generate dataset ID
-        dataset_id = f"dataset-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        # Upload to persistent storage
+        dataset_id, dataset_info = await dataset_storage.upload_dataset(
+            file_content=contents,
+            filename=file.filename,
+            user_id=current_user.user_id,
+            metadata={
+                "uploaded_by": current_user.email,
+                "upload_source": "api"
+            }
+        )
         
-        # Store dataset (in production, save to database or S3)
-        # For now, we'll cache it in memory or temp storage
-        # TODO: Implement proper storage
+        logger.info(f"Dataset uploaded by {current_user.email}: {dataset_id}")
         
         return CSVUploadResponse(
             dataset_id=dataset_id,
-            rows=len(df),
-            columns=df.columns.tolist(),
-            preview=df.head(5).to_dict('records')
+            rows=dataset_info["rows"],
+            columns=dataset_info["columns"],
+            preview=dataset_info["preview"][:5]  # Return first 5 rows
         )
         
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to parse CSV: {str(e)}")
+        logger.error(f"Dataset upload failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to upload dataset: {str(e)}")
+
 
 
 @router.post("/detect", response_model=BiasDetectionResponse)
@@ -110,15 +132,15 @@ async def detect_bias(
     Run bias detection analysis on model predictions.
     
     **Workflow:**
-    1. Upload dataset with predictions and demographics
-    2. Call this endpoint with dataset_id
+    1. Upload dataset with predictions and demographics using `/upload-dataset`
+    2. Call this endpoint with the returned dataset_id
     3. Get fairness metrics, interpretations, and recommendations
     
     **Example Request:**
     ```json
     {
       "model_id": "credit-model-v1",
-      "dataset_id": "dataset-20251120",
+      "dataset_id": "ds_20251122_abc123",
       "protected_attribute": "gender",
       "prediction_column": "approved",
       "ground_truth_column": "actual_approved",
@@ -129,9 +151,38 @@ async def detect_bias(
     ```
     """
     try:
-        # TODO: Load dataset from storage using dataset_id
-        # For now, generate sample data for demonstration
-        df = _generate_sample_data()
+        # Load dataset from storage
+        if request.dataset_id:
+            df = await dataset_storage.get_dataset(request.dataset_id, current_user.user_id)
+            if df is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Dataset not found: {request.dataset_id}. Please upload the dataset first."
+                )
+            logger.info(f"Loaded dataset {request.dataset_id} for analysis")
+        else:
+            # Fallback to sample data for testing
+            logger.warning("No dataset_id provided, using sample data")
+            df = _generate_sample_data()
+        
+        # Validate required columns exist
+        if request.prediction_column not in df.columns:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Prediction column '{request.prediction_column}' not found in dataset. Available columns: {df.columns.tolist()}"
+            )
+        
+        if request.protected_attribute not in df.columns:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Protected attribute '{request.protected_attribute}' not found in dataset. Available columns: {df.columns.tolist()}"
+            )
+        
+        if request.ground_truth_column and request.ground_truth_column not in df.columns:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Ground truth column '{request.ground_truth_column}' not found in dataset. Available columns: {df.columns.tolist()}"
+            )
         
         # Extract data
         predictions = df[request.prediction_column].values
@@ -426,6 +477,103 @@ async def get_test_results(
     """Get results of a previous bias test"""
     # TODO: Implement test result storage and retrieval
     raise HTTPException(status_code=501, detail="Test result retrieval not yet implemented")
+
+
+# Dataset Management Endpoints
+
+class DatasetListResponse(BaseModel):
+    """Response for listing datasets"""
+    datasets: List[Dict[str, Any]]
+    total: int
+    limit: int
+    offset: int
+
+
+class DatasetMetadataResponse(BaseModel):
+    """Response for dataset metadata"""
+    dataset_id: str
+    filename: str
+    user_id: str
+    rows: int
+    columns: List[str]
+    column_types: Dict[str, str]
+    file_size_bytes: int
+    uploaded_at: str
+    metadata: Dict[str, Any]
+    preview: List[Dict[str, Any]]
+
+
+@router.get("/datasets", response_model=DatasetListResponse)
+async def list_datasets(
+    limit: int = 50,
+    offset: int = 0,
+    current_user: TokenData = Depends(require_permission(Permissions.ANALYSIS_READ))
+):
+    """
+    List all datasets uploaded by the current user.
+    
+    **Query Parameters:**
+    - `limit`: Maximum number of datasets to return (default: 50)
+    - `offset`: Number of datasets to skip for pagination (default: 0)
+    """
+    try:
+        datasets = await dataset_storage.list_datasets(
+            user_id=current_user.user_id,
+            limit=limit,
+            offset=offset
+        )
+        
+        return DatasetListResponse(
+            datasets=datasets,
+            total=len(datasets),
+            limit=limit,
+            offset=offset
+        )
+    except Exception as e:
+        logger.error(f"Failed to list datasets: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve datasets")
+
+
+@router.get("/datasets/{dataset_id}", response_model=DatasetMetadataResponse)
+async def get_dataset_metadata(
+    dataset_id: str,
+    current_user: TokenData = Depends(require_permission(Permissions.ANALYSIS_READ))
+):
+    """Get metadata for a specific dataset without loading the full data."""
+    try:
+        metadata = await dataset_storage.get_dataset_metadata(dataset_id, current_user.user_id)
+        
+        if not metadata:
+            raise HTTPException(status_code=404, detail=f"Dataset not found: {dataset_id}")
+        
+        return DatasetMetadataResponse(**metadata)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get dataset metadata: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve dataset metadata")
+
+
+@router.delete("/datasets/{dataset_id}")
+async def delete_dataset(
+    dataset_id: str,
+    current_user: TokenData = Depends(require_permission(Permissions.ANALYSIS_RUN))
+):
+    """Delete a dataset and its metadata."""
+    try:
+        success = await dataset_storage.delete_dataset(dataset_id, current_user.user_id)
+        
+        if not success:
+            raise HTTPException(status_code=404, detail=f"Dataset not found: {dataset_id}")
+        
+        logger.info(f"Dataset deleted by {current_user.email}: {dataset_id}")
+        
+        return {"message": f"Dataset {dataset_id} deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete dataset: {e}")
+        raise HTTPException(status_code=500, detail="Failed to delete dataset")
 
 
 @router.get("/history")
