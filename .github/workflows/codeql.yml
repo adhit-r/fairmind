@@ -32,16 +32,16 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Initialize CodeQL
-      uses: github/codeql-action/init@v3
+      uses: github/codeql-action/init@v3.25.7
       with:
         languages: ${{ matrix.language }}
 
     - name: Autobuild
-      uses: github/codeql-action/autobuild@v3
+      uses: github/codeql-action/autobuild@v3.25.7
       # CodeQL autobuild will automatically detect the build system
-      # For monorepo, it will scan both apps/backend and apps/frontend
+      # For monorepo, it will scan both apps/backend and apps/frontend-new
 
     - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v3
+      uses: github/codeql-action/analyze@v3.25.7
       with:
         category: "/language:${{matrix.language}}"

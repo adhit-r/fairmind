@@ -17,6 +17,9 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      deployments: write
     
     steps:
     - uses: actions/checkout@v4
@@ -24,27 +27,27 @@ jobs:
         fetch-depth: 1
     
     - name: Set up Bun
-      uses: oven-sh/setup-bun@v1
+      uses: oven-sh/setup-bun@v1.1.2
       with:
         bun-version: "1.1.0"
     
     - name: Install dependencies
-      working-directory: apps/frontend
+      working-directory: apps/frontend-new
       run: bun install --frozen-lockfile --production=false
       env:
         NODE_ENV: production
     
     - name: Build frontend
-      working-directory: apps/frontend
+      working-directory: apps/frontend-new
       run: bun run build
       env:
         NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
         NODE_ENV: production
     
     - name: Deploy to Netlify
-      uses: nwtgck/actions-netlify@v2.0
+      uses: nwtgck/actions-netlify@v2.0.1
       with:
-        publish-dir: './apps/frontend/.next'
+        publish-dir: './apps/frontend-new/.next'
         production-branch: main
         github-token: ${{ secrets.GITHUB_TOKEN }}
         deploy-message: "Deploy from GitHub Actions"

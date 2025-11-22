@@ -1,0 +1,139 @@
+name: E2E Tests
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main, dev ]
+  workflow_dispatch:
+
+jobs:
+  e2e-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      checks: write
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5.1.0
+      with:
+        python-version: '3.11'
+    
+    - name: Set up uv
+      uses: astral-sh/setup-uv@v4.0.0
+      with:
+        version: "latest"
+    
+    - name: Install dependencies
+      working-directory: apps/backend
+      run: uv sync --frozen --extra test
+    
+    - name: Install Playwright browsers
+      working-directory: apps/backend
+      run: uv run playwright install --with-deps chromium
+    
+    - name: Start backend server
+      working-directory: apps/backend
+      run: |
+        uv run uvicorn api.main:app --host 0.0.0.0 --port 8000 &
+        sleep 5
+      env:
+        ENVIRONMENT: testing
+    
+    - name: Start frontend server
+      working-directory: apps/frontend-new
+      run: |
+        bun install --frozen-lockfile
+        bun run build
+        bun run start &
+        sleep 10
+      env:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+    
+    - name: Run E2E tests
+      working-directory: apps/backend
+      run: |
+        uv run pytest tests/e2e/ -m e2e --tb=short -v
+      env:
+        E2E_BASE_URL: http://localhost:1111
+        E2E_API_URL: http://localhost:8000
+        E2E_HEADLESS: "true"
+    
+    - name: Upload test artifacts
+      if: always()
+      uses: actions/upload-artifact@v4.4.0
+      with:
+        name: e2e-screenshots
+        path: apps/backend/tests/e2e/screenshots/
+        if-no-files-found: ignore
+    
+    - name: Upload test videos
+      if: always()
+      uses: actions/upload-artifact@v4.4.0
+      with:
+        name: e2e-videos
+        path: apps/backend/tests/e2e/videos/
+        if-no-files-found: ignore
+
+  e2e-smoke-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      checks: write
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5.1.0
+      with:
+        python-version: '3.11'
+    
+    - name: Set up uv
+      uses: astral-sh/setup-uv@v4.0.0
+      with:
+        version: "latest"
+    
+    - name: Install dependencies
+      working-directory: apps/backend
+      run: uv sync --frozen --extra test
+    
+    - name: Install Playwright browsers
+      working-directory: apps/backend
+      run: uv run playwright install --with-deps chromium
+    
+    - name: Start backend server
+      working-directory: apps/backend
+      run: |
+        uv run uvicorn api.main:app --host 0.0.0.0 --port 8000 &
+        sleep 5
+      env:
+        ENVIRONMENT: testing
+    
+    - name: Start frontend server
+      working-directory: apps/frontend-new
+      run: |
+        bun install --frozen-lockfile
+        bun run build
+        bun run start &
+        sleep 10
+      env:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+    
+    - name: Run smoke tests
+      working-directory: apps/backend
+      run: |
+        uv run pytest tests/e2e/ -m "e2e and smoke" --tb=short -v
+      env:
+        E2E_BASE_URL: http://localhost:1111
+        E2E_API_URL: http://localhost:8000
+        E2E_HEADLESS: "true"
+
+
+
+
