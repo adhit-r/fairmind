@@ -11,7 +11,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useToast } from '@/hooks/use-toast'
-import { IconSettings, IconUser, IconBell, IconShield, IconAlertTriangle } from '@tabler/icons-react'
+import { MlopsSettings } from '@/components/settings/MlopsSettings'
+import { IconSettings, IconUser, IconBell, IconShield, IconAlertTriangle, IconActivity } from '@tabler/icons-react'
 
 export default function SettingsPage() {
   const { toast } = useToast()
@@ -87,9 +88,13 @@ export default function SettingsPage() {
               <IconBell className="mr-2 h-4 w-4" />
               Notifications
             </TabsTrigger>
-            <TabsTrigger value="security">
+            <TabsTrigger value="security" className="border-r-2 border-black">
               <IconShield className="mr-2 h-4 w-4" />
               Security
+            </TabsTrigger>
+            <TabsTrigger value="mlops">
+              <IconActivity className="mr-2 h-4 w-4" />
+              MLOps
             </TabsTrigger>
           </TabsList>
 
@@ -205,6 +210,10 @@ export default function SettingsPage() {
                 </Button>
               </div>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="mlops">
+            <MlopsSettings />
           </TabsContent>
         </Tabs>
       )}

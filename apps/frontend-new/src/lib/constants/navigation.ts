@@ -21,6 +21,7 @@ import {
   IconFolder,
   IconCode,
   IconChecklist,
+  IconPlugConnected,
 } from '@tabler/icons-react'
 
 export interface NavItem {
@@ -67,6 +68,12 @@ export const navigationCategories: NavCategory[] = [
         href: '/models',
         icon: IconDatabase,
         description: 'Manage and register AI models',
+      },
+      {
+        title: 'Real-time Integration',
+        href: '/realtime',
+        icon: IconPlugConnected,
+        description: 'Connect and test live models',
       },
       {
         title: 'Model Provenance',

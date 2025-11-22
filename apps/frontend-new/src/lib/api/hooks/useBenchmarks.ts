@@ -25,9 +25,9 @@ export function useBenchmarks() {
       try {
         setLoading(true)
         const response: ApiResponse<Benchmark[]> = await apiClient.get(
-          '/api/v1/model-performance-benchmarking/benchmark-runs'
+          API_ENDPOINTS.modelPerformanceBenchmarking.benchmarkRuns
         )
-        
+
         if (response.success && response.data) {
           setData(response.data)
           setError(null)
@@ -49,7 +49,7 @@ export function useBenchmarks() {
     try {
       setLoading(true)
       const response: ApiResponse<Benchmark> = await apiClient.post(
-        '/api/v1/model-performance-benchmarking/run-benchmark',
+        API_ENDPOINTS.modelPerformanceBenchmarking.runBenchmark,
         params
       )
       if (response.success && response.data) return response.data

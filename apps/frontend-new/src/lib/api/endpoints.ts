@@ -226,11 +226,24 @@ export const API_ENDPOINTS = {
   },
 
   // Real-time Model Integration
+  // Real-time Model Integration
   realtimeModelIntegration: {
+    providers: '/api/v1/realtime-model-integration/providers',
+    biasTestTypes: '/api/v1/realtime-model-integration/bias-test-types',
+    configureModel: '/api/v1/realtime-model-integration/configure-model',
+    testConnection: '/api/v1/realtime-model-integration/test-connection',
+    performBiasTest: '/api/v1/realtime-model-integration/perform-bias-test',
+    comprehensiveAnalysis: '/api/v1/realtime-model-integration/comprehensive-analysis',
     connect: '/api/v1/realtime-model-integration/connect',
     disconnect: '/api/v1/realtime-model-integration/disconnect',
     status: '/api/v1/realtime-model-integration/status',
     health: '/api/v1/realtime-model-integration/health',
+  },
+
+  // Model Performance Benchmarking
+  modelPerformanceBenchmarking: {
+    benchmarkRuns: '/api/v1/model-performance-benchmarking/benchmark-runs',
+    runBenchmark: '/api/v1/model-performance-benchmarking/run-benchmark',
   },
 
   // Benchmark Suite
@@ -245,6 +258,25 @@ export const API_ENDPOINTS = {
   fairnessGovernance: {
     computeClassicMLFairness: '/api/v1/fairness-governance/compute-classic-ml-fairness',
     health: '/api/v1/fairness-governance/health',
+  },
+
+  // Compliance & Reporting
+  compliance: {
+    frameworks: '/api/v1/compliance/frameworks',
+    frameworkRequirements: (framework: string) => `/api/v1/compliance/frameworks/${framework}/requirements`,
+    check: '/api/v1/compliance/check',
+    auditReport: '/api/v1/compliance/audit-report',
+    fairnessDocumentation: '/api/v1/compliance/fairness-documentation',
+    stakeholderDashboard: '/api/v1/compliance/stakeholder-dashboard',
+    riskLevels: '/api/v1/compliance/risk-levels',
+    assessRisk: '/api/v1/compliance/assess-risk',
+    templates: '/api/v1/compliance/compliance-templates',
+  },
+  // MLOps Integration
+  mlops: {
+    status: '/api/v1/mlops/status',
+    logTest: '/api/v1/mlops/log-test',
+    runUrl: (provider: string, runId: string) => `/api/v1/mlops/run-url/${provider}/${runId}`,
   },
 } as const
 

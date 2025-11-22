@@ -12,6 +12,15 @@ from supabase import create_client, Client
 
 logger = logging.getLogger(__name__)
 
+# Import MLOps integration (lazy import to avoid circular dependencies)
+try:
+    from .mlops_integration import mlops_integration
+    MLOPS_AVAILABLE = True
+except ImportError:
+    MLOPS_AVAILABLE = False
+    logger.warning("MLOps integration not available")
+
+
 
 class BiasTestResultService:
     """Service for storing and retrieving bias test results"""
@@ -65,6 +74,29 @@ class BiasTestResultService:
             True if saved successfully
         """
         try:
+            # Log to MLOps platforms (W&B, MLflow)
+            mlops_metadata = {}
+            if MLOPS_AVAILABLE and mlops_integration.is_enabled():
+                try:
+                    mlops_status = mlops_integration.log_bias_test(
+                        test_id=test_id,
+                        model_id=model_id,
+                        test_type=test_type,
+                        results=results,
+                        metadata=metadata
+                    )
+                    logger.info(f"MLOps logging status: {mlops_status}")
+                    
+                    # Extract run IDs for metadata
+                    if mlops_status.get("wandb", {}).get("success"):
+                        mlops_metadata["wandb_run_id"] = mlops_status["wandb"].get("run_id")
+                    
+                    if mlops_status.get("mlflow", {}).get("success"):
+                        mlops_metadata["mlflow_run_id"] = mlops_status["mlflow"].get("run_id")
+                        
+                except Exception as e:
+                    logger.warning(f"MLOps logging failed (non-critical): {e}")
+
             test_record = {
                 "id": test_id,
                 "user_id": user_id,
@@ -78,7 +110,7 @@ class BiasTestResultService:
                 "results": results,
                 "summary": results.get("summary", ""),
                 "recommendations": results.get("recommendations", []),
-                "metadata": metadata or {},
+                "metadata": {**(metadata or {}), **mlops_metadata},
                 "created_at": datetime.now(timezone.utc).isoformat()
             }
             

@@ -152,6 +152,14 @@ openapi_tags = [
         "name": "benchmark-suite",
         "description": "Bias detection benchmark suite and evaluation frameworks",
     },
+    {
+        "name": "mlops",
+        "description": "MLOps integration with Weights & Biases and MLflow for experiment tracking",
+    },
+    {
+        "name": "Compliance & Reporting",
+        "description": "Regulatory compliance checks, audit reports, and fairness documentation",
+    },
 ]
 
 # Create FastAPI application with production configuration
@@ -433,6 +441,23 @@ try:
     logger.info("Model performance benchmarking routes loaded successfully")
 except Exception as e:
     logger.warning(f"Could not load model performance benchmarking routes: {e}")
+
+# MLOps integration routes (W&B, MLflow)
+try:
+    from .routes import mlops
+    app.include_router(mlops.router, prefix="/api/v1", tags=["mlops"])
+    logger.info("MLOps integration routes loaded successfully")
+except Exception as e:
+    logger.warning(f"Could not load MLOps integration routes: {e}")
+
+# Compliance & Reporting routes
+try:
+    from .routes import compliance_reporting
+    app.include_router(compliance_reporting.router, tags=["Compliance & Reporting"])
+    logger.info("Compliance & Reporting routes loaded successfully")
+except Exception as e:
+    logger.warning(f"Could not load Compliance & Reporting routes: {e}")
+
 
 # Production-ready health check endpoints
 @app.get("/health")

@@ -81,3 +81,4 @@ def take_screenshot_on_failure(page: Page, test_name: str) -> None:
     page.screenshot(path=screenshot_path, full_page=True)
 
 
+

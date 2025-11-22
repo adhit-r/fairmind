@@ -19,6 +19,7 @@ import {
     IconBulb
 } from '@tabler/icons-react'
 import Link from 'next/link'
+import { MlopsRunLinks } from '@/components/tests/MlopsRunLinks'
 
 interface PageProps {
     params: Promise<{ testId: string }>
@@ -106,6 +107,10 @@ export default function TestDetailPage({ params }: PageProps) {
 
     return (
         <div className="space-y-6">
+            import {MlopsRunLinks} from '@/components/tests/MlopsRunLinks'
+
+            // ...
+
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
@@ -117,9 +122,12 @@ export default function TestDetailPage({ params }: PageProps) {
                     </Link>
                     <div>
                         <h1 className="text-4xl font-bold">Test Results</h1>
-                        <p className="text-muted-foreground mt-1 font-mono text-sm">
-                            {testId}
-                        </p>
+                        <div className="flex items-center gap-3 mt-1">
+                            <p className="text-muted-foreground font-mono text-sm">
+                                {testId}
+                            </p>
+                            <MlopsRunLinks metadata={testDetail.metadata} />
+                        </div>
                     </div>
                 </div>
                 <Button
