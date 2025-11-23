@@ -12,7 +12,7 @@ export interface Props {
 
 const {
   title,
-  description = "COMPREHENSIVE AI GOVERNANCE, BIAS DETECTION, AND COMPLIANCE PLATFORM FOR RESPONSIBLE AI DEVELOPMENT. ENSURE FAIRNESS, TRANSPARENCY, AND ACCOUNTABILITY IN YOUR AI SYSTEMS.",
+  description = "FairMind is the leading AI Governance Platform for bias detection, regulatory compliance (EU AI Act, GDPR), and MLOps integration. Ensure your AI models are fair, transparent, and trustworthy.",
   image = "/og-image.png",
   canonical,
   noindex = false,
@@ -46,7 +46,7 @@ const canonicalURL = canonical || Astro.url.href;
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:image" content={new URL(image, Astro.url)} />
-    <meta property="og:site_name" content="Fairmind" />
+    <meta property="og:site_name" content="FairMind" />
     <meta property="og:locale" content="en_US" />
     
     <!-- Twitter -->
@@ -58,7 +58,7 @@ const canonicalURL = canonical || Astro.url.href;
     <meta property="twitter:creator" content="@fairmind_ai" />
     
     <!-- Additional Meta Tags -->
-    <meta name="keywords" content="AI governance, bias detection, machine learning fairness, responsible AI, AI ethics, model monitoring, AI compliance, fairness testing, AI transparency, model explainability" />
+    <meta name="keywords" content="AI governance, bias detection, machine learning fairness, responsible AI, AI ethics, model monitoring, AI compliance, fairness testing, AI transparency, model explainability, EU AI Act, GDPR compliance, MLOps, LLM bias" />
     <meta name="theme-color" content="#EAB308" />
     <meta name="msapplication-TileColor" content="#EAB308" />
     
@@ -112,9 +112,13 @@ const canonicalURL = canonical || Astro.url.href;
           <!-- Logo -->
           <div class="flex items-center">
             <a href="/" class="flex items-center space-x-2">
-              <div class="w-8 h-8 bg-gray-900 flex items-center justify-center">
-                <span class="text-white font-bold text-sm">FM</span>
-              </div>
+              <img 
+                src="/logo.png" 
+                alt="FairMind Logo" 
+                class="h-8 w-auto"
+                width="32"
+                height="32"
+              />
               <span class="text-lg font-bold text-gray-900">FairMind</span>
             </a>
           </div>

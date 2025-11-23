@@ -2,7 +2,7 @@ User-agent: *
 Allow: /
 
 # Sitemap
-Sitemap: https://fairmind.xyz/sitemap.xml
+Sitemap: https://fairmind.xyz/sitemap-index.xml
 
 # Disallow admin and private areas
 Disallow: /admin/
