@@ -17,21 +17,19 @@ export function OrangeLogo({ size = 'md', className = '', showText = false }: Or
 
   return (
     <div className={`flex items-center ${dimensions.gap} ${className}`}>
-      {/* Logo Icon - Simple and Clean */}
+      {/* Logo Image */}
       <div className="relative flex-shrink-0">
-        <div
-          className="bg-orange border-4 border-black shadow-brutal-lg flex items-center justify-center"
+        <img
+          src="/logo.png"
+          alt="FairMind Logo"
           style={{
-            width: `${dimensions.width}px`,
             height: `${dimensions.height}px`,
+            width: 'auto',
           }}
-        >
-          <span className="font-black text-black" style={{ fontSize: `${dimensions.width * 0.5}px` }}>
-            FM
-          </span>
-        </div>
+          className="object-contain"
+        />
       </div>
-      
+
       {/* Text Label */}
       {showText && (
         <span
