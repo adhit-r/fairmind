@@ -16,7 +16,7 @@ from ..services.llm_bias_detection_service import llm_bias_service, BiasCategory
 from ..services.bias_testing_library import bias_testing_library, TestingLibrary
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/v1/bias", tags=["bias-detection"])
+router = APIRouter(prefix="/bias-detection", tags=["bias-detection"])
 
 # Pydantic Models
 class BiasTestRequest(BaseModel):
@@ -26,6 +26,27 @@ class BiasTestRequest(BaseModel):
     custom_templates: Optional[List[Dict[str, Any]]] = None
     model_outputs: List[Dict[str, Any]]
     sensitive_attributes: Optional[List[str]] = None
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "model_type": "text_generation",
+                "test_category": "representational",
+                "sensitive_attributes": ["gender", "race"],
+                "model_outputs": [
+                    {
+                        "prompt": "The doctor was",
+                        "output": "The doctor was a skilled professional",
+                        "metadata": {"model_version": "1.0"}
+                    },
+                    {
+                        "prompt": "The nurse was",
+                        "output": "The nurse was caring and attentive",
+                        "metadata": {"model_version": "1.0"}
+                    }
+                ]
+            }
+        }
 
 class BiasTestResponse(BaseModel):
     """Response model for bias testing"""
@@ -37,6 +58,32 @@ class BiasTestResponse(BaseModel):
     test_results: List[Dict[str, Any]]
     confidence: float
     metadata: Dict[str, Any]
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "timestamp": "2024-01-20T10:30:00Z",
+                "model_type": "text_generation",
+                "overall_bias_score": 0.65,
+                "bias_breakdown": {
+                    "gender": 0.72,
+                    "race": 0.58
+                },
+                "recommendations": [
+                    "Consider using gender-neutral language in training data",
+                    "Review model outputs for racial bias patterns"
+                ],
+                "test_results": [
+                    {
+                        "test_name": "Gender Representation",
+                        "score": 0.72,
+                        "status": "biased"
+                    }
+                ],
+                "confidence": 0.85,
+                "metadata": {"test_version": "1.0"}
+            }
+        }
 
 class CustomTemplateRequest(BaseModel):
     """Request model for adding custom bias test templates"""
@@ -59,6 +106,60 @@ async def detect_bias(request: BiasTestRequest):
     - Image generation bias (hand preference, cultural representation)
     - Multimodal bias detection
     - Custom test templates
+    
+    **Example Request:**
+    ```json
+    {
+      "model_type": "text_generation",
+      "test_category": "representational",
+      "sensitive_attributes": ["gender", "race"],
+      "model_outputs": [
+        {
+          "prompt": "The doctor was",
+          "output": "The doctor was a skilled professional",
+          "metadata": {"model_version": "1.0"}
+        },
+        {
+          "prompt": "The nurse was",
+          "output": "The nurse was caring and attentive",
+          "metadata": {"model_version": "1.0"}
+        }
+      ]
+    }
+    ```
+    
+    **Example Response:**
+    ```json
+    {
+      "timestamp": "2024-01-20T10:30:00Z",
+      "model_type": "text_generation",
+      "overall_bias_score": 0.65,
+      "bias_breakdown": {
+        "gender": 0.72,
+        "race": 0.58
+      },
+      "recommendations": [
+        "Consider using gender-neutral language in training data",
+        "Review model outputs for racial bias patterns"
+      ],
+      "test_results": [
+        {
+          "test_name": "Gender Representation",
+          "score": 0.72,
+          "status": "biased"
+        }
+      ],
+      "confidence": 0.85,
+      "metadata": {"test_version": "1.0"}
+    }
+    ```
+    
+    **Error Responses:**
+    - `400 Bad Request`: Invalid model type or test category
+    - `401 Unauthorized`: Missing or invalid authentication token
+    - `422 Unprocessable Entity`: Validation error in request data
+    - `429 Too Many Requests`: Rate limit exceeded
+    - `500 Internal Server Error`: Server error during processing
     """
     try:
         # Map model type to bias category

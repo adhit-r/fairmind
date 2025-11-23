@@ -1,5 +1,5 @@
 # Multi-stage production-ready Dockerfile
-FROM python:3.11-slim as builder
+FROM python:3.11-slim@sha256:b596083aa14d47c78a652138aa9b98607585499d7c7ec343ae378f6c5770822d as builder
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
@@ -20,12 +20,12 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 # Copy and install Python dependencies
 COPY requirements.txt pyproject.toml ./
-RUN pip install --upgrade pip setuptools wheel && \
+RUN pip install --upgrade "pip==24.2" "setuptools==75.1.0" "wheel==0.44.0" && \
     pip install -r requirements.txt && \
     pip install python-json-logger psutil
 
 # Production stage
-FROM python:3.11-slim as production
+FROM python:3.11-slim@sha256:b596083aa14d47c78a652138aa9b98607585499d7c7ec343ae378f6c5770822d as production
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \

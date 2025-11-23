@@ -88,55 +88,65 @@ async def get_dashboard_stats():
 
 @router.get("/models")
 async def get_models():
-    """Get models for frontend display"""
+    """Get models for frontend display from database"""
     try:
-        # Mock data that matches frontend expectations
-        models = [
-            {
-                "id": "model-1",
-                "name": "Credit Risk Assessment",
-                "description": "ML model for evaluating credit risk in loan applications",
-                "type": "classification",
-                "version": "v2.1.0",
-                "status": "active",
-                "accuracy": 0.94,
-                "bias_score": 0.12,
-                "fairness_score": 0.88,
-                "created_at": "2024-01-15T10:30:00Z",
-                "updated_at": "2024-03-20T14:45:00Z"
-            },
-            {
-                "id": "model-2", 
-                "name": "HR Screening Model",
-                "description": "AI model for initial candidate screening and evaluation",
-                "type": "ranking",
-                "version": "v1.3.2",
-                "status": "active",
-                "accuracy": 0.89,
-                "bias_score": 0.23,
-                "fairness_score": 0.77,
-                "created_at": "2024-02-01T09:15:00Z",
-                "updated_at": "2024-03-18T11:20:00Z"
-            },
-            {
-                "id": "model-3",
-                "name": "Healthcare Diagnosis Assistant", 
-                "description": "Deep learning model for medical diagnosis support",
-                "type": "classification",
-                "version": "v3.0.1",
-                "status": "active",
-                "accuracy": 0.96,
-                "bias_score": 0.08,
-                "fairness_score": 0.92,
-                "created_at": "2024-01-10T16:00:00Z",
-                "updated_at": "2024-03-22T13:30:00Z"
-            }
-        ]
+        # Try to get models from database
+        models_data = []
+        
+        try:
+            from database.connection import db_manager
+            from sqlalchemy import text
+            import json
+            
+            with db_manager.get_session() as session:
+                result = session.execute(text("""
+                    SELECT id, name, description, model_type, version, status,
+                           tags, metadata, upload_date, updated_at
+                    FROM models
+                    WHERE status = 'active'
+                    ORDER BY upload_date DESC
+                """))
+                
+                for row in result:
+                    # Parse JSON fields
+                    tags = json.loads(row.tags) if row.tags else []
+                    metadata = json.loads(row.metadata) if row.metadata else {}
+                    
+                    # Extract accuracy from metadata if available
+                    accuracy = metadata.get("accuracy") or metadata.get("r2_score") or 0.85
+                    
+                    # Handle dates - could be datetime objects or strings
+                    def format_date(date_value):
+                        if date_value is None:
+                            return datetime.now().isoformat()
+                        if hasattr(date_value, 'isoformat'):
+                            return date_value.isoformat()
+                        return str(date_value)  # Already a string
+                    
+                    model_dict = {
+                        "id": row.id,
+                        "name": row.name,
+                        "description": row.description,
+                        "type": row.model_type,
+                        "version": row.version,
+                        "status": row.status,
+                        "accuracy": float(accuracy) if isinstance(accuracy, (int, float)) else 0.85,
+                        "bias_score": 0.15,  # Default, can be calculated from bias analyses
+                        "fairness_score": 0.88,  # Default, can be calculated
+                        "created_at": format_date(row.upload_date),
+                        "updated_at": format_date(row.updated_at),
+                        "tags": tags,
+                        "metadata": metadata
+                    }
+                    models_data.append(model_dict)
+        except Exception as db_error:
+            logger.warning(f"Database query failed, returning empty list: {db_error}")
+            models_data = []
         
         return {
             "success": True,
-            "data": models,
-            "count": len(models),
+            "data": models_data,
+            "count": len(models_data),
             "timestamp": datetime.now().isoformat()
         }
     except Exception as e:

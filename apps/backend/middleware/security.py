@@ -338,10 +338,28 @@ class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
         # Skip authentication for public endpoints
         public_paths = [
             "/health", "/", "/docs", "/redoc", "/openapi.json",
-            "/auth/login", "/auth/refresh", "/auth/health"
+            "/auth/login", "/auth/refresh", "/auth/health",
+            "/api/v1/health", "/api/v1/auth/login"
         ]
         
-        if request.url.path in public_paths or request.method == "OPTIONS":
+        # In development, allow database routes without auth
+        if settings.environment == "development":
+            public_paths.extend([
+                "/api/v1/database",
+                "/api/v1/core",
+                "/api/v1/bias-detection",
+                "/api/v1/modern-bias-detection",
+                "/api/v1/multimodal-bias-detection",
+                "/api/v1/ai-bom",
+                "/api/v1/ai-governance",
+            ])
+        
+        # Always allow OPTIONS requests (CORS preflight)
+        if request.method == "OPTIONS":
+            return await call_next(request)
+        
+        # Check if path starts with any public path
+        if any(request.url.path.startswith(path) for path in public_paths):
             return await call_next(request)
         
         # Extract JWT token from Authorization header

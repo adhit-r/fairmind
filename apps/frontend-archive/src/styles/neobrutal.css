@@ -1,0 +1,257 @@
+/* Pure Neobrutal Design System - Raw, Unpolished, Bold */
+
+:root {
+  /* Extreme Typography */
+  --neobrutal-font-size-hero: 8rem;
+  --neobrutal-font-size-display: 5rem;
+  --neobrutal-font-size-heading: 3rem;
+  --neobrutal-font-size-subheading: 2rem;
+  --neobrutal-font-size-body: 1.5rem;
+  
+  /* Extreme Spacing */
+  --neobrutal-spacing-xs: 0.5rem;
+  --neobrutal-spacing-sm: 1rem;
+  --neobrutal-spacing-md: 2rem;
+  --neobrutal-spacing-lg: 4rem;
+  --neobrutal-spacing-xl: 6rem;
+  --neobrutal-spacing-xxl: 8rem;
+  
+  /* Extreme Borders */
+  --neobrutal-border-thin: 3px;
+  --neobrutal-border-medium: 6px;
+  --neobrutal-border-thick: 10px;
+  --neobrutal-border-extreme: 15px;
+  
+  /* Extreme Shadows */
+  --neobrutal-shadow-sm: 4px 4px 0px 0px var(--color-black);
+  --neobrutal-shadow-md: 8px 8px 0px 0px var(--color-black);
+  --neobrutal-shadow-lg: 12px 12px 0px 0px var(--color-black);
+  --neobrutal-shadow-xl: 16px 16px 0px 0px var(--color-black);
+  --neobrutal-shadow-extreme: 20px 20px 0px 0px var(--color-black);
+  
+  /* Colors */
+  --neobrutal-bg-primary: var(--color-white);
+  --neobrutal-bg-secondary: var(--color-gray-100);
+  --neobrutal-bg-accent: var(--color-orange);
+  --neobrutal-text-primary: var(--color-black);
+  --neobrutal-text-secondary: var(--color-gray-700);
+  --neobrutal-border-color: var(--color-black);
+}
+
+/* Neobrutal Base Styles */
+.neobrutal-container {
+  padding: var(--neobrutal-spacing-lg);
+  max-width: 100%;
+  overflow-x: visible;
+}
+
+.neobrutal-hero {
+  font-size: var(--neobrutal-font-size-hero);
+  font-weight: 900;
+  line-height: 0.9;
+  letter-spacing: -0.05em;
+  text-transform: uppercase;
+  font-family: var(--font-family-display);
+  color: var(--neobrutal-text-primary);
+  margin: 0;
+  padding: 0;
+}
+
+.neobrutal-display {
+  font-size: var(--neobrutal-font-size-display);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  text-transform: uppercase;
+  font-family: var(--font-family-display);
+  color: var(--neobrutal-text-primary);
+}
+
+.neobrutal-heading {
+  font-size: var(--neobrutal-font-size-heading);
+  font-weight: 900;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+  font-family: var(--font-family-display);
+  color: var(--neobrutal-text-primary);
+}
+
+.neobrutal-subheading {
+  font-size: var(--neobrutal-font-size-subheading);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-family: var(--font-family-display);
+  color: var(--neobrutal-text-secondary);
+}
+
+.neobrutal-body {
+  font-size: var(--neobrutal-font-size-body);
+  font-weight: 400;
+  line-height: 1.5;
+  font-family: var(--font-family-primary);
+  color: var(--neobrutal-text-primary);
+}
+
+/* Neobrutal Blocks */
+.neobrutal-block {
+  background: var(--neobrutal-bg-primary);
+  border: var(--neobrutal-border-thick) solid var(--neobrutal-border-color);
+  box-shadow: var(--neobrutal-shadow-lg);
+  padding: var(--neobrutal-spacing-lg);
+  margin: var(--neobrutal-spacing-md) 0;
+  position: relative;
+  transform: rotate(-0.5deg);
+}
+
+.neobrutal-block-large {
+  background: var(--neobrutal-bg-primary);
+  border: var(--neobrutal-border-extreme) solid var(--neobrutal-border-color);
+  box-shadow: var(--neobrutal-shadow-xl);
+  padding: var(--neobrutal-spacing-xl);
+  margin: var(--neobrutal-spacing-lg) 0;
+  position: relative;
+  transform: rotate(0.3deg);
+}
+
+.neobrutal-block-accent {
+  background: var(--neobrutal-bg-accent);
+  border: var(--neobrutal-border-thick) solid var(--neobrutal-border-color);
+  box-shadow: var(--neobrutal-shadow-lg);
+  padding: var(--neobrutal-spacing-md);
+  margin: var(--neobrutal-spacing-md) 0;
+  position: relative;
+  transform: rotate(0.5deg);
+  color: var(--color-white);
+}
+
+/* Neobrutal Stats */
+.neobrutal-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: var(--neobrutal-spacing-md);
+  background: var(--neobrutal-bg-primary);
+  border: var(--neobrutal-border-medium) solid var(--neobrutal-border-color);
+  box-shadow: var(--neobrutal-shadow-md);
+  transform: rotate(-0.2deg);
+  position: relative;
+}
+
+.neobrutal-stat-value {
+  font-size: var(--neobrutal-font-size-display);
+  font-weight: 900;
+  line-height: 1;
+  color: var(--neobrutal-text-primary);
+  font-family: var(--font-family-display);
+}
+
+.neobrutal-stat-label {
+  font-size: var(--neobrutal-font-size-body);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--neobrutal-text-secondary);
+  margin-top: var(--neobrutal-spacing-xs);
+  font-family: var(--font-family-display);
+}
+
+/* Neobrutal Button */
+.neobrutal-button {
+  background: var(--neobrutal-bg-accent);
+  border: var(--neobrutal-border-thick) solid var(--neobrutal-border-color);
+  box-shadow: var(--neobrutal-shadow-md);
+  padding: var(--neobrutal-spacing-sm) var(--neobrutal-spacing-lg);
+  font-size: var(--neobrutal-font-size-body);
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--color-white);
+  font-family: var(--font-family-display);
+  cursor: pointer;
+  transition: all 0.1s ease;
+  transform: rotate(-0.5deg);
+  position: relative;
+}
+
+.neobrutal-button:hover {
+  transform: translate(-6px, -6px) rotate(-0.5deg);
+  box-shadow: var(--neobrutal-shadow-xl);
+}
+
+.neobrutal-button:active {
+  transform: translate(0, 0) rotate(-0.5deg);
+  box-shadow: var(--neobrutal-shadow-sm);
+}
+
+/* Neobrutal Grid - Asymmetric */
+.neobrutal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: var(--neobrutal-spacing-md);
+  margin: var(--neobrutal-spacing-lg) 0;
+}
+
+.neobrutal-grid-asymmetric {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1.5fr;
+  gap: var(--neobrutal-spacing-lg);
+  margin: var(--neobrutal-spacing-xl) 0;
+}
+
+/* Neobrutal Overlay */
+.neobrutal-overlay {
+  position: absolute;
+  background: var(--neobrutal-bg-accent);
+  border: var(--neobrutal-border-medium) solid var(--neobrutal-border-color);
+  box-shadow: var(--neobrutal-shadow-md);
+  padding: var(--neobrutal-spacing-sm);
+  transform: rotate(2deg);
+  z-index: 10;
+}
+
+/* Neobrutal Badge */
+.neobrutal-badge {
+  display: inline-block;
+  background: var(--neobrutal-bg-primary);
+  border: var(--neobrutal-border-thin) solid var(--neobrutal-border-color);
+  box-shadow: var(--neobrutal-shadow-sm);
+  padding: var(--neobrutal-spacing-xs) var(--neobrutal-spacing-sm);
+  font-size: var(--neobrutal-font-size-body);
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-family: var(--font-family-display);
+  transform: rotate(-1deg);
+}
+
+/* Neobrutal Divider */
+.neobrutal-divider {
+  height: var(--neobrutal-border-thick);
+  background: var(--neobrutal-border-color);
+  border: none;
+  margin: var(--neobrutal-spacing-lg) 0;
+  box-shadow: var(--neobrutal-shadow-sm);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .neobrutal-hero {
+    font-size: 4rem;
+  }
+  
+  .neobrutal-display {
+    font-size: 3rem;
+  }
+  
+  .neobrutal-heading {
+    font-size: 2rem;
+  }
+  
+  .neobrutal-grid-asymmetric {
+    grid-template-columns: 1fr;
+  }
+}
+

@@ -13,7 +13,7 @@ from config.database import get_database, get_db_connection
 from config.cache import cache_manager, cached, cache_key_for_model, cache_key_for_dataset
 from config.auth import get_current_active_user, require_permission, TokenData, Permissions
 
-router = APIRouter(tags=["core"])
+router = APIRouter(prefix="/core", tags=["core"])
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +121,40 @@ async def get_models(
     offset: int = Query(0, ge=0, description="Number of models to skip"),
     current_user: TokenData = Depends(require_permission(Permissions.MODEL_READ))
 ):
-    """Get all models from database with caching"""
+    """
+    Get all models from database with caching.
+    
+    **Example Request:**
+    ```
+    GET /api/v1/models?limit=10&offset=0
+    Authorization: Bearer YOUR_ACCESS_TOKEN
+    ```
+    
+    **Example Response:**
+    ```json
+    {
+      "success": true,
+      "data": [
+        {
+          "id": "model-1",
+          "name": "Credit Risk Model",
+          "description": "ML model for credit risk assessment",
+          "model_type": "classification",
+          "version": "1.0.0",
+          "upload_date": "2024-01-15T10:00:00Z",
+          "status": "active"
+        }
+      ],
+      "count": 1
+    }
+    ```
+    
+    **Error Responses:**
+    - `401 Unauthorized`: Missing or invalid authentication token
+    - `403 Forbidden`: Insufficient permissions
+    - `429 Too Many Requests`: Rate limit exceeded
+    - `500 Internal Server Error`: Server error during database query
+    """
     try:
         # Try cache first
         cache_key = f"models:list:{limit}:{offset}"

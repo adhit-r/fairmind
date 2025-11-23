@@ -17,7 +17,7 @@ from ..services.multimodal_bias_detection_service import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/multimodal-bias", tags=["Multimodal Bias Detection"])
+router = APIRouter(prefix="/multimodal-bias", tags=["Multimodal Bias Detection"])
 
 # Request/Response Models
 

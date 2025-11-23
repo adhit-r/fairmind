@@ -1,244 +1,194 @@
-# FairMind - Ethical AI Sandbox
-
-**Comprehensive ethical AI testing and governance platform with modern bias detection and explainability**
+# FairMind – Ethical AI Governance Platform
 
 [![Backend Status](https://img.shields.io/badge/Backend-FastAPI-green)](https://api.fairmind.xyz)
 [![Frontend Status](https://img.shields.io/badge/Frontend-Next.js-blue)](https://app-demo.fairmind.xyz)
-[![Testing Status](https://img.shields.io/badge/Testing-100%25%20Coverage-brightgreen)](./FINAL_TESTING_SUMMARY.md)
-[![Modern Bias Detection](https://img.shields.io/badge/Modern%20Bias%20Detection-2025%20Research-blue)](./docs/development/MODERN_BIAS_DETECTION_GUIDE.md)
-[![Multimodal Analysis](https://img.shields.io/badge/Multimodal%20Analysis-4%20Modalities-purple)](./docs/development/MULTIMODAL_BIAS_DETECTION_SUMMARY.md)
+[![Testing Coverage](https://img.shields.io/badge/Testing-100%25%20Coverage-brightgreen)](./FINAL_TESTING_SUMMARY.md)
+[![Contributors](https://img.shields.io/github/contributors/adhit-r/fairmind)](https://github.com/adhit-r/fairmind/graphs/contributors)
+[![Issues](https://img.shields.io/github/issues/adhit-r/fairmind/good%20first%20issue)](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3A%22good%20first%20issue%22)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+[![Stars](https://img.shields.io/github/stars/adhit-r/fairmind?style=social)](https://github.com/adhit-r/fairmind/stargazers)
 
-## Project Overview
+---
 
-FairMind is a comprehensive ethical AI sandbox that provides advanced bias detection, explainability, and governance capabilities for modern generative AI systems. Built with the latest 2025 research in AI fairness and explainability.
+## 📋 Table of Contents
 
-### 🚀 Latest Achievements (2025)
-- **Modern LLM Bias Detection**: Latest tools and frameworks (WEAT, SEAT, Minimal Pairs, Red Teaming)
-- **Multimodal Bias Analysis**: Image, Audio, Video, and Cross-Modal bias detection
-- **Explainability Integration**: CometLLM, DeepEval, Arize Phoenix, AWS Clarify
-- **Comprehensive Evaluation Pipeline**: Multi-layered bias assessment with human-in-the-loop
-- **45+ API Endpoints**: Complete REST API for all bias detection capabilities
-- **Production Ready**: Full deployment with real-time monitoring and alerting
+1. [What is FairMind?](#what-is-fairmind)
+2. [Key Features](#key-features)
+3. [Architecture & Workflows](#architecture--workflows)
+4. [Getting Started](#getting-started)
+5. [Feature Matrix](#feature-matrix)
+6. [API Reference](#api-reference)
+7. [Frontend Overview](#frontend-overview)
+8. [Technology Stack](#technology-stack)
+9. [Project Statistics](#project-statistics)
+10. [Documentation](#documentation)
+11. [License](#license)
 
-## Quick Start
+---
+
+## 🤖 What is FairMind?
+
+FairMind is a comprehensive **AI Governance & Bias Detection Platform** designed for the modern AI stack. It empowers organizations to:
+
+*   **Detect Bias**: Analyze Classic ML, LLMs, and Multimodal systems for fairness issues.
+*   **Remediate**: Automatically generate code to fix detected biases.
+*   **Govern**: Generate AI BOMs (Bill of Materials) and Compliance Reports (GDPR, EU AI Act).
+*   **Track**: Seamlessly log experiments to Weights & Biases and MLflow.
+
+Built with a **premium neobrutalist UI**, FairMind makes complex ethical AI metrics accessible and actionable.
+
+---
+
+## ✨ Key Features
+
+### 1. Advanced Bias Detection
+*   **Classic ML**: Demographic Parity, Equalized Odds, Disparate Impact.
+*   **LLMs**: WEAT, SEAT, Minimal Pairs testing.
+*   **Multimodal**: Bias detection in Image, Audio, and Video models.
+
+### 2. Automated Remediation
+*   **Strategies**: Reweighting, Resampling, Threshold Optimization.
+*   **Code Gen**: Get ready-to-run Python code to fix your model.
+
+### 3. MLOps Integration 🚀 *New*
+*   **Zero-Config Logging**: Automatically log bias tests to **Weights & Biases** and **MLflow**.
+*   **Deep Linking**: Jump directly from FairMind results to your experiment tracking dashboard.
+*   **Environment Toggles**: Enable/disable integrations via `.env`.
+
+### 4. Compliance & Governance 🛡️ *New*
+*   **AI BOM**: Generate standard Software Bill of Materials for your AI models.
+*   **Compliance Reports**: Automated assessment against EU AI Act and GDPR.
+*   **Risk Assessment**: High/Medium/Low risk categorization based on policy definitions.
+
+---
+
+## 🏗️ Architecture & Workflows
+
+### System Architecture
+FairMind uses a modern, decoupled architecture with a FastAPI backend and Next.js frontend, supported by robust services and storage.
+
+![System Architecture](docs/images/fairmind_system_architecture.png)
+
+### Bias Detection Pipeline
+From upload to remediation, the pipeline is designed for automation and transparency.
+
+![Bias Detection Pipeline](docs/images/bias_detection_pipeline.png)
+
+### Compliance Workflow
+Ensure your models meet regulatory standards with our automated governance flow.
+
+![Compliance Workflow](docs/images/compliance_governance_flow.png)
+
+---
+
+## 🚀 Getting Started
 
 ### Prerequisites
-```bash
-# Install modern tooling
-curl -LsSf https://astral.sh/uv/install.sh | sh  # UV for Python
-curl -fsSL https://bun.sh/install | bash         # Bun for JavaScript
-```
+*   **Python 3.9+** (Backend)
+*   **Node.js 18+** (Frontend)
+*   **UV** (Python package manager)
+*   **Bun** (JS runtime)
 
-### Backend Setup
+### Quick Start
+
 ```bash
+# 1. Clone the repository
+git clone https://github.com/adhit-r/fairmind.git
+cd fairmind
+
+# 2. Backend Setup
 cd apps/backend
-uv sync                    # Install Python dependencies
-uv run python -m uvicorn api.main:app --host 0.0.0.0 --port 8001 --reload
+uv sync
+cp .env.example .env  # Configure MLOps credentials here
+uv run python -m uvicorn api.main:app --reload
+
+# 3. Frontend Setup (New Terminal)
+cd ../frontend-new
+bun install
+bun run dev
 ```
 
-### Frontend Setup
-```bash
-cd apps/frontend
-bun install               # Install JavaScript dependencies
-bun run dev               # Start development server
-```
-
-### Testing Suite
-```bash
-# Run comprehensive testing
-cd test_scripts
-bun run setup             # Setup testing environment
-python comprehensive_fairmind_test.py  # Test traditional ML
-python llm_comprehensive_test.py       # Test LLM models
-```
-
-## Core Features
-
-### 🎯 Traditional AI Governance (8 Features)
-| Feature | Description | Status |
-|---------|-------------|--------|
-| **Bias Detection** | Comprehensive fairness analysis with 5 bias metrics | ✅ Tested |
-| **AI DNA Profiling** | Model signatures and lineage tracking | ✅ Tested |
-| **AI Time Travel** | Historical and future analysis capabilities | ✅ Tested |
-| **AI Circus** | Comprehensive testing suite | ✅ Tested |
-| **OWASP AI Security** | All 10 security categories | ✅ Tested |
-| **AI Ethics Observatory** | Ethics framework assessment | ✅ Tested |
-| **AI Bill of Materials** | Component tracking and compliance | ✅ Tested |
-| **Model Registry** | Lifecycle management and governance | ✅ Tested |
-
-### 🚀 Modern Bias Detection & Explainability (4 New Features)
-| Feature | Description | Status |
-|---------|-------------|--------|
-| **Modern LLM Bias Detection** | Latest 2025 bias detection methods (WEAT, SEAT, Minimal Pairs, Red Teaming) | ✅ Implemented |
-| **Multimodal Bias Detection** | Cross-modal analysis for Image, Audio, Video, and Text generation | ✅ Implemented |
-| **Explainability Integration** | CometLLM, DeepEval, Arize Phoenix, AWS Clarify integration | ✅ Implemented |
-| **Comprehensive Evaluation Pipeline** | Multi-layered bias assessment with human-in-the-loop | ✅ Implemented |
-
-## Testing Results
-
-### Models Tested: 11
-- **Traditional ML**: 3 models (Healthcare, HR Analytics, Credit Risk)
-- **LLM Models**: 8 models (GPT-2, BERT, DistilBERT, ResNet50/18, VGG16)
-- **Accuracy**: >88% across all traditional models
-- **Success Rate**: 100% for all downloads and tests
-
-### Test Coverage: 100%
-- **Traditional Features**: 24 test cases (8 features × 3 traditional models)
-- **Modern Bias Detection**: 17/17 tests passed (7 backend + 10 multimodal)
-- **LLM Testing**: Image classification bias analysis
-- **Security**: All 10 OWASP AI categories
-- **Compliance**: Complete AI BOM and governance testing
-- **API Endpoints**: 45+ endpoints fully tested and validated
-
-## Architecture
-
-```
-fairmind-ethical-sandbox/
-├── apps/
-│   ├── backend/           # FastAPI backend (Railway deployed)
-│   ├── frontend/          # Next.js frontend (Netlify deployed)
-│   └── website/           # Astro documentation site
-├── test_models/           # 11 trained/downloaded models
-├── test_scripts/          # Comprehensive testing suite
-├── test_results/          # Detailed test reports
-└── docs/                  # Complete documentation
-```
-
-## Technology Stack
-
-### Backend (Python + UV)
-- **Framework**: FastAPI with Uvicorn
-- **ML Libraries**: scikit-learn, pandas, numpy, xgboost
-- **LLM Libraries**: transformers, torch, torchvision
-- **Modern Bias Detection**: WEAT, SEAT, Minimal Pairs, Red Teaming
-- **Explainability Tools**: CometLLM, DeepEval, Arize Phoenix, AWS Clarify
-- **Multimodal Analysis**: Image, Audio, Video bias detection
-- **Testing**: pytest, requests, comprehensive test suite
-
-### Frontend (JavaScript + Bun)
-- **Framework**: Next.js 14 with React 18
-- **Styling**: Tailwind CSS with custom terminal theme
-- **UI Components**: Mantine UI with neobrutal design
-- **Visualization**: Interactive charts for bias detection results
-- **Testing**: Axios, Chalk, Ora for CLI testing
-- **Build**: Modern ES modules and async/await
-
-### Infrastructure
-- **Backend**: Railway deployment (api.fairmind.xyz)
-- **Frontend**: Netlify deployment (app-demo.fairmind.xyz)
-- **Testing**: Automated UV + Bun workflow
-- **Documentation**: GitHub Wiki and comprehensive docs
-
-## Performance Metrics
-
-| Metric | Target | Achieved | Status |
-|--------|--------|----------|--------|
-| **Traditional Bias Detection** | 100% | 100% | ✅ Complete |
-| **Modern LLM Bias Detection** | 100% | 100% | ✅ Complete |
-| **Multimodal Bias Detection** | 100% | 100% | ✅ Complete |
-| **Explainability Integration** | 100% | 100% | ✅ Complete |
-| **API Endpoints** | 45+ | 45+ | ✅ Complete |
-| **Security Coverage** | 100% | 100% | ✅ Complete |
-| **Model Performance** | >85% | >88% | ✅ Complete |
-| **Test Coverage** | 100% | 100% | ✅ Complete |
-| **LLM Download Success** | 100% | 100% | ✅ Complete |
-| **Documentation Quality** | Professional | Professional | ✅ Complete |
-
-## Deployment
-
-### Production URLs
-- **Backend API**: https://api.fairmind.xyz
-- **Frontend App**: https://app-demo.fairmind.xyz
-- **Documentation**: https://fairmind.xyz
-
-### Development
-```bash
-# Backend (Port 8001)
-cd apps/backend && uv run python -m uvicorn api.main:app --reload
-
-# Frontend (Port 3000)
-cd apps/frontend && bun run dev
-
-# Testing
-cd test_scripts && bun run setup
-```
-
-## Documentation
-
-### 📚 Core Documentation
-- **[FINAL_TESTING_SUMMARY.md](./FINAL_TESTING_SUMMARY.md)** - Complete testing achievements
-- **[TESTING_PLAN.md](./TESTING_PLAN.md)** - Comprehensive testing strategy
-- **[test_scripts/README.md](./test_scripts/README.md)** - Testing documentation
-- **[docs/](./docs/)** - Complete project documentation
-
-### 🚀 Modern Bias Detection Documentation
-- **[MODERN_BIAS_DETECTION_GUIDE.md](./docs/development/MODERN_BIAS_DETECTION_GUIDE.md)** - Complete usage guide for modern bias detection
-- **[MULTIMODAL_BIAS_DETECTION_SUMMARY.md](./docs/development/MULTIMODAL_BIAS_DETECTION_SUMMARY.md)** - Multimodal analysis guide
-- **[IMPLEMENTATION_SUMMARY.md](./apps/backend/IMPLEMENTATION_SUMMARY.md)** - Technical implementation details
-- **[COMPLETE_IMPLEMENTATION_SUMMARY.md](./apps/backend/COMPLETE_IMPLEMENTATION_SUMMARY.md)** - Comprehensive overview
-
-### 🔗 Additional Resources
-- **[GitHub Wiki](https://github.com/your-org/fairmind-ethical-sandbox/wiki)** - User guides and tutorials
-- **API Documentation**: http://localhost:8000/docs (when running locally)
-- **Frontend Demo**: https://app-demo.fairmind.xyz
-
-## Contributing
-
-### Development Workflow
-1. **Main Branch**: Production-ready code
-2. **Dev Branch**: Active development
-3. **Testing**: UV + Bun automated testing
-4. **Deployment**: Railway + Netlify CI/CD
-
-### Testing Requirements
-- All new features must pass comprehensive testing
-- Maintain >88% model accuracy
-- Ensure 100% security and bias detection coverage
-- Update documentation for all changes
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Support
-
-- **Documentation**: [GitHub Wiki](https://github.com/your-org/fairmind-ethical-sandbox/wiki)
-- **Issues**: [GitHub Issues](https://github.com/your-org/fairmind-ethical-sandbox/issues)
-- **Testing**: [Test Results](./test_results/)
-- **Deployment**: [Production URLs](#deployment)
+Visit **http://localhost:3000** to access the dashboard.
 
 ---
 
-## 🎉 What's New in 2025
+## 📊 Feature Matrix
 
-FairMind now includes cutting-edge bias detection and explainability capabilities based on the latest 2025 research:
-
-### 🔬 Modern LLM Bias Detection
-- **WEAT & SEAT**: Word and sentence embedding association tests
-- **Minimal Pairs**: Behavioral bias detection through controlled comparisons
-- **Red Teaming**: Adversarial testing for bias discovery
-- **Statistical Rigor**: Bootstrap confidence intervals and permutation tests
-
-### 🎭 Multimodal Bias Analysis
-- **Image Generation**: Demographic representation, object detection, scene bias
-- **Audio Generation**: Voice characteristics, accent bias, content analysis
-- **Video Generation**: Motion bias, temporal analysis, activity recognition
-- **Cross-Modal**: Interaction effects and stereotype amplification
-
-### 🛠️ Explainability Integration
-- **CometLLM**: Prompt-level explainability and attention visualization
-- **DeepEval**: Comprehensive LLM evaluation framework
-- **Arize Phoenix**: LLM observability and monitoring
-- **AWS SageMaker Clarify**: Enterprise-grade bias detection
-
-### 📊 Comprehensive Evaluation Pipeline
-- **Pre-deployment**: Comprehensive bias assessment and validation
-- **Real-time Monitoring**: Live bias detection and alerting
-- **Post-deployment**: Continuous auditing and evaluation
-- **Human-in-the-loop**: Expert review and validation integration
+| Feature Category | Traditional AI Platforms | FairMind (2025) |
+|------------------|--------------------------|-----------------|
+| **Bias Detection** | Tabular only | **LLM, Multimodal, Tabular** |
+| **Remediation** | Manual | **Automated Code Gen** |
+| **MLOps** | Hard-coded | **Plug-and-Play (W&B, MLflow)** |
+| **Governance** | Manual Docs | **Automated AI BOMs & Reports** |
+| **UI/UX** | Generic Admin | **Premium Neobrutal Design** |
+| **Deployment** | Complex | **Docker / Railway / Netlify** |
 
 ---
 
-**FairMind is the most advanced ethical AI testing platform available.**
+## 🔌 API Reference
 
-*Built with the latest 2025 research in AI fairness and explainability for the future of responsible AI governance.*
+Full documentation available at [api.fairmind.xyz/docs](https://api.fairmind.xyz/docs).
+
+| Scope | Endpoint | Method | Description |
+|-------|----------|--------|-------------|
+| **Bias** | `/api/v1/bias/detect` | POST | Run bias detection |
+| **Remediation** | `/api/v1/bias/remediate` | POST | Generate fix strategies |
+| **MLOps** | `/api/v1/mlops/status` | GET | Check integration status |
+| **MLOps** | `/api/v1/mlops/log-test` | POST | Manually log experiments |
+| **Compliance** | `/api/v1/compliance/report` | POST | Generate compliance report |
+| **AI BOM** | `/api/v1/aibom/generate` | POST | Create AI Bill of Materials |
+
+---
+
+## 🖥️ Frontend Overview
+
+| Page | Route | Features |
+|------|-------|----------|
+| **Dashboard** | `/dashboard` | System health, recent activity, quick actions |
+| **Bias Detection** | `/bias` | Upload datasets, configure tests, view metrics |
+| **Test Results** | `/tests/[id]` | Deep dive analysis, **W&B/MLflow links**, export JSON |
+| **Remediation** | `/remediation` | Strategy selection, code generation |
+| **Compliance** | `/compliance` | Policy management, report generation |
+| **Settings** | `/settings` | **MLOps configuration**, profile management |
+
+---
+
+## 🛠️ Technology Stack
+
+*   **Backend**: Python 3.9+, FastAPI, UV, scikit-learn, transformers, torch
+*   **Frontend**: TypeScript, Next.js 14, Mantine v7, Tailwind CSS
+*   **Storage**: Supabase (PostgreSQL), Local File System, Redis (Caching)
+*   **Integrations**: Weights & Biases, MLflow, OpenAI (optional)
+*   **DevOps**: Docker, GitHub Actions
+
+---
+
+## 📈 Project Statistics
+
+| Metric | Value |
+|--------|-------|
+| **Backend Endpoints** | 50+ |
+| **Test Coverage** | 100% |
+| **Frontend Components** | 60+ |
+| **Core Services** | 6 (Bias, Remediation, MLOps, Compliance, BOM, Storage) |
+| **Supported Models** | Sklearn, PyTorch, HuggingFace, OpenAI |
+
+---
+
+## 📚 Documentation
+
+*   **[Setup Guide](SETUP.md)** - Detailed installation instructions
+*   **[MLOps Integration](apps/backend/services/MLOPS_README.md)** - W&B and MLflow setup
+*   **[Compliance Guide](apps/backend/services/COMPLIANCE_REPORTING.md)** - Generating reports and BOMs
+*   **[Contributing](docs/CONTRIBUTING.md)** - How to contribute to FairMind
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License – see the `LICENSE` file for details.
+
+---
+
+*FairMind – Making AI fair, transparent, and accountable for everyone.*

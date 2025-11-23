@@ -56,8 +56,11 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+# Python lib directories (but not frontend src/lib)
+/lib/
+/lib64/
+apps/backend/lib/
+apps/backend/lib64/
 parts/
 sdist/
 var/
@@ -305,7 +308,30 @@ apps/website/src/content/docs/installation.mdx
 
 # Archive directory
 archive/
+neura-dash-backup/
 
 .qoder/
+
+# Playwright test artifacts
+.playwright-mcp/
+playwright-report/
+test-results/
+
+# Screenshots and images (except logo and issue screenshots)
+*.png
+!**/public/logo.png
+!**/logo.png
+!docs/assets/issues/*.png
+
+# Temporary documentation files
+.temp-docs/
+
+# Frontend archive (preserved for reference)
+apps/frontend-archive/
+apps/frontend-archive/node_modules/
+apps/frontend-archive/.next/
+apps/frontend-archive/out/
+apps/frontend-archive/build/
+apps/frontend-archive/dist/
 
 
