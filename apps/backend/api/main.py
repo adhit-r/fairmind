@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse, Response
 from fastapi.exceptions import RequestValidationError
 from contextlib import asynccontextmanager
 import logging
+import os
 from pathlib import Path
 from datetime import datetime, timezone
 
@@ -457,6 +458,70 @@ try:
     logger.info("Compliance & Reporting routes loaded successfully")
 except Exception as e:
     logger.warning(f"Could not load Compliance & Reporting routes: {e}")
+
+# Evidence-based Compliance Check routes
+try:
+    from .routes import compliance_check
+    app.include_router(compliance_check.router, tags=["compliance"])
+    logger.info("Evidence-based compliance check routes loaded successfully")
+except Exception as e:
+    logger.warning(f"Could not load compliance check routes: {e}")
+
+# AI Governance routes
+try:
+    from .routes import ai_governance
+    app.include_router(ai_governance.router, prefix="/api/v1/ai-governance", tags=["ai-governance"])
+    logger.info("AI Governance routes loaded successfully")
+except Exception as e:
+    logger.warning(f"Could not load AI Governance routes: {e}")
+
+# India Compliance routes
+try:
+    from .routes import india_compliance
+    app.include_router(india_compliance.router, tags=["india-compliance"])
+    logger.info("India compliance routes loaded successfully")
+except Exception as e:
+    logger.warning(f"Could not load India compliance routes: {e}")
+
+# India Compliance Integration routes
+try:
+    from .routes import india_compliance_integrations
+    app.include_router(india_compliance_integrations.router, tags=["india-compliance-integrations"])
+    logger.info("India compliance integration routes loaded successfully")
+except Exception as e:
+    logger.warning(f"Could not load India compliance integration routes: {e}")
+
+# India Compliance AI Automation routes
+try:
+    from .routes import india_compliance_ai
+    app.include_router(india_compliance_ai.router, tags=["india-compliance-ai"])
+    logger.info("India compliance AI automation routes loaded successfully")
+except Exception as e:
+    logger.warning(f"Could not load India compliance AI automation routes: {e}")
+
+# India Compliance Health Check routes
+try:
+    from .routes import india_compliance_health
+    app.include_router(india_compliance_health.router, tags=["india-compliance-health"])
+    logger.info("India compliance health check routes loaded successfully")
+except Exception as e:
+    logger.warning(f"Could not load India compliance health check routes: {e}")
+
+# India Compliance Metrics routes
+try:
+    from .routes import india_compliance_metrics
+    app.include_router(india_compliance_metrics.router, tags=["india-compliance-metrics"])
+    logger.info("India compliance metrics routes loaded successfully")
+except Exception as e:
+    logger.warning(f"Could not load India compliance metrics routes: {e}")
+
+# India Compliance Alerting routes
+try:
+    from .routes import india_compliance_alerting
+    app.include_router(india_compliance_alerting.router, tags=["india-compliance-alerting"])
+    logger.info("India compliance alerting routes loaded successfully")
+except Exception as e:
+    logger.warning(f"Could not load India compliance alerting routes: {e}")
 
 
 # Production-ready health check endpoints

@@ -114,7 +114,7 @@ export const navigationCategories: NavCategory[] = [
       },
       {
         title: 'Compliance',
-        href: '/compliance',
+        href: '/compliance-dashboard',
         icon: IconChecklist,
         description: 'Compliance frameworks and checks',
       },
@@ -154,6 +154,12 @@ export const navigationCategories: NavCategory[] = [
         href: '/multimodal-bias',
         icon: IconTarget,
         description: 'Image, audio, video, and cross-modal bias detection',
+      },
+      {
+        title: 'LLM Testing (SOTA)',
+        href: '/llm-testing',
+        icon: IconBrain,
+        description: '⭐ LLM-as-Judge, Counterfactual, Red Teaming & more SOTA methods',
       },
       {
         title: 'Fairness Analysis',

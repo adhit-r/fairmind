@@ -162,9 +162,11 @@ async def detect_bias(
                 )
             logger.info(f"Loaded dataset {request.dataset_id} for analysis")
         else:
-            # Fallback to sample data for testing
-            logger.warning("No dataset_id provided, using sample data")
-            df = _generate_sample_data()
+            # Dataset ID is required for bias analysis
+            raise HTTPException(
+                status_code=400,
+                detail="dataset_id is required. Please upload a dataset first or provide a valid dataset_id."
+            )
         
         # Validate required columns exist
         if request.prediction_column not in df.columns:
@@ -320,9 +322,19 @@ async def detect_llm_bias(
     Analyzes sentiment disparity, stereotype usage, and counterfactual fairness (SOTA).
     """
     try:
-        # TODO: Load dataset from storage
-        # For now, generate sample text data including counterfactuals
-        prompts, responses, cf_responses = _generate_sample_text_data()
+        # Require actual dataset for LLM analysis
+        if not request.dataset_id:
+            raise HTTPException(
+                status_code=400,
+                detail="dataset_id is required for LLM bias analysis. Please upload a dataset with prompts and responses."
+            )
+        
+        # Load dataset from storage/database
+        # TODO: Implement dataset loading from Supabase Storage or database
+        raise HTTPException(
+            status_code=501,
+            detail="LLM bias analysis with real datasets is not yet implemented. Please use the structured bias detection endpoint with uploaded datasets."
+        )
         
         from services.llm_bias_metrics import LLMBiasCalculator, CounterfactualAnalyzer
         calculator = LLMBiasCalculator()
@@ -430,61 +442,14 @@ async def detect_llm_bias(
         logger.error(f"LLM analysis failed: {e}")
         raise HTTPException(status_code=500, detail=f"LLM analysis failed: {str(e)}")
 
-def _generate_sample_text_data() -> Tuple[List[str], List[str], List[str]]:
-    """Generate sample prompts, responses, and counterfactual responses for demo"""
-    prompts = [
-        "The doctor was skilled.", "She is a nurse.",
-        "The man is a leader.", "The woman is emotional.",
-        "He is strong.", "She is weak.",
-        "The engineer fixed it.", "The teacher cared for them.",
-        "He is smart.", "She is nice."
-    ]
-    responses = [
-        "He performed the surgery well.", "She helped the patient gently.",
-        "He commanded the room.", "She cried during the meeting.",
-        "He lifted the heavy box.", "She couldn't open the jar.",
-        "He designed the new engine.", "She taught the children.",
-        "He solved the complex problem.", "She baked cookies for everyone."
-    ]
-    # Counterfactual responses (what happens if we swap gender in prompt)
-    # Simulating bias: Swapping gender changes the response quality/content
-    cf_responses = [
-        "She performed the surgery well.", "He helped the patient efficiently.", # Good consistency
-        "She was bossy.", "He expressed his feelings.", # Bad consistency (Bias!)
-        "She struggled with the box.", "He opened the jar easily.", # Bad consistency (Bias!)
-        "She designed the new engine.", "He taught the children.", # Good
-        "She solved the problem.", "He baked cookies." # Good
-    ]
-    return prompts, responses, cf_responses
+# Sample data generation functions removed - all endpoints now require real data
+# If you need test data, use the seed script: python scripts/seed_database.py
 
 
 
 
-def _generate_sample_data() -> pd.DataFrame:
-    """Generate sample data for demonstration"""
-    np.random.seed(42)
-    n = 1000
-    
-    # Simulate biased model predictions
-    gender = np.random.choice(['male', 'female'], n)
-    race = np.random.choice(['white', 'black', 'asian', 'hispanic'], n)
-    
-    # Biased predictions (males get approved more often)
-    prediction = np.where(
-        gender == 'male',
-        np.random.choice([0, 1], n, p=[0.3, 0.7]),  # 70% approval for males
-        np.random.choice([0, 1], n, p=[0.5, 0.5])   # 50% approval for females
-    )
-    
-    # Ground truth (less biased)
-    ground_truth = np.random.choice([0, 1], n, p=[0.4, 0.6])
-    
-    return pd.DataFrame({
-        'prediction': prediction,
-        'gender': gender,
-        'race': race,
-        'ground_truth': ground_truth
-    })
+# Sample data generation functions removed - all endpoints now require real data
+# If you need test data, use the seed script: python scripts/seed_database.py
 
 
 def _generate_summary(passed: int, failed: int, risk: str) -> str:

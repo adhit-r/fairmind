@@ -2,7 +2,7 @@
 Core API Routes - Dashboard, Models, Datasets
 """
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Query, Depends
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Query, Depends, Request
 from typing import List, Dict, Any, Optional
 import logging
 from datetime import datetime
@@ -11,91 +11,15 @@ import json
 
 from config.database import get_database, get_db_connection
 from config.cache import cache_manager, cached, cache_key_for_model, cache_key_for_dataset
-from config.auth import get_current_active_user, require_permission, TokenData, Permissions
+from config.auth import get_current_active_user, require_permission, TokenData, Permissions, auth_manager
+from config.settings import settings
+from typing import Optional
 
 router = APIRouter(prefix="/core", tags=["core"])
 
 logger = logging.getLogger(__name__)
 
-# Mock data for demonstration
-MOCK_MODELS = [
-    {
-        "id": "model-1",
-        "name": "Credit Risk Model",
-        "description": "ML model for credit risk assessment",
-        "model_type": "classification",
-        "version": "1.0.0",
-        "upload_date": "2024-01-15T10:00:00Z",
-        "file_path": "/uploads/credit_risk_model.pkl",
-        "file_size": 1024000,
-        "tags": ["finance", "risk", "classification"],
-        "metadata": {"accuracy": 0.85, "precision": 0.82},
-        "status": "active"
-    },
-    {
-        "id": "model-2", 
-        "name": "Fraud Detection Model",
-        "description": "AI model for detecting fraudulent transactions",
-        "model_type": "classification",
-        "version": "2.1.0",
-        "upload_date": "2024-01-16T14:30:00Z",
-        "file_path": "/uploads/fraud_detection_model.pkl",
-        "file_size": 2048000,
-        "tags": ["security", "fraud", "classification"],
-        "metadata": {"accuracy": 0.92, "recall": 0.89},
-        "status": "active"
-    }
-]
-
-MOCK_DATASETS = [
-    {
-        "id": "dataset-1",
-        "name": "Adult Income Dataset",
-        "description": "Census income dataset for bias analysis",
-        "source": "UCI Machine Learning Repository",
-        "size": 48842,
-        "columns": ["age", "workclass", "education", "sex", "income"],
-        "upload_date": "2024-01-10T09:00:00Z",
-        "tags": ["census", "income", "demographics"]
-    },
-    {
-        "id": "dataset-2",
-        "name": "COMPAS Dataset", 
-        "description": "Criminal justice dataset for fairness analysis",
-        "source": "ProPublica",
-        "size": 7214,
-        "columns": ["age", "race", "sex", "recidivism"],
-        "upload_date": "2024-01-12T11:00:00Z",
-        "tags": ["criminal-justice", "fairness", "recidivism"]
-    }
-]
-
-MOCK_ACTIVITY = [
-    {
-        "id": "activity-1",
-        "type": "bias_analysis",
-        "title": "Bias analysis completed for Credit Risk Model",
-        "description": "Statistical parity bias detected: 15% difference",
-        "timestamp": "2024-01-16T11:00:00Z",
-        "severity": "medium"
-    },
-    {
-        "id": "activity-2",
-        "type": "security_test",
-        "title": "Security test completed for Fraud Detection Model",
-        "description": "Potential prompt injection vulnerability found",
-        "timestamp": "2024-01-17T13:30:00Z",
-        "severity": "high"
-    },
-    {
-        "id": "activity-3",
-        "type": "compliance_check",
-        "title": "Compliance check completed for Customer Segmentation",
-        "description": "GDPR compliance gaps identified",
-        "timestamp": "2024-01-18T15:45:00Z",
-        "severity": "medium"
-    }
-]
+# No mock data - all endpoints return real data from database or proper errors
 
 @router.get("/")
 async def root():
@@ -117,9 +41,9 @@ async def health_check():
 
 @router.get("/models")
 async def get_models(
+    request: Request,
     limit: int = Query(10, ge=1, le=100, description="Number of models to return"),
     offset: int = Query(0, ge=0, description="Number of models to skip"),
-    current_user: TokenData = Depends(require_permission(Permissions.MODEL_READ))
 ):
     """
     Get all models from database with caching.
@@ -155,6 +79,19 @@ async def get_models(
     - `429 Too Many Requests`: Rate limit exceeded
     - `500 Internal Server Error`: Server error during database query
     """
+    # In production, require authentication
+    if not settings.is_development:
+        try:
+            current_user = getattr(request.state, 'user', None)
+            if not current_user:
+                raise HTTPException(status_code=401, detail="Authentication required")
+            if not auth_manager.check_permission(current_user, Permissions.MODEL_READ):
+                raise HTTPException(status_code=403, detail="Insufficient permissions")
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=401, detail="Authentication required")
+    
     try:
         # Try cache first
         cache_key = f"models:list:{limit}:{offset}"
@@ -179,10 +116,6 @@ async def get_models(
             # Convert to dict format
             models_data = [dict(model) for model in models]
         
-        # Fallback to mock data if no database results
-        if not models_data:
-            models_data = MOCK_MODELS[offset:offset + limit]
-        
         result = {
             "success": True,
             "data": models_data,
@@ -196,12 +129,7 @@ async def get_models(
         
     except Exception as e:
         logger.error(f"Error fetching models: {e}")
-        # Return mock data on error
-        return {
-            "success": True,
-            "data": MOCK_MODELS[offset:offset + limit],
-            "count": len(MOCK_MODELS[offset:offset + limit])
-        }
+        raise HTTPException(status_code=500, detail=f"Failed to fetch models: {str(e)}")
 
 @router.get("/datasets")
 async def get_datasets(
@@ -233,10 +161,6 @@ async def get_datasets(
             # Convert to dict format
             datasets_data = [dict(dataset) for dataset in datasets]
         
-        # Fallback to mock data if no database results
-        if not datasets_data:
-            datasets_data = MOCK_DATASETS[offset:offset + limit]
-        
         result = {
             "success": True,
             "data": datasets_data,
@@ -250,20 +174,43 @@ async def get_datasets(
         
     except Exception as e:
         logger.error(f"Error fetching datasets: {e}")
-        # Return mock data on error
-        return {
-            "success": True,
-            "data": MOCK_DATASETS[offset:offset + limit],
-            "count": len(MOCK_DATASETS[offset:offset + limit])
-        }
+        raise HTTPException(status_code=500, detail=f"Failed to fetch datasets: {str(e)}")
 
 @router.get("/activity/recent")
-async def get_recent_activity():
-    """Get recent activity"""
-    return {
-        "success": True,
-        "data": MOCK_ACTIVITY
-    }
+async def get_recent_activity(
+    limit: int = Query(10, ge=1, le=100, description="Number of activities to return"),
+    current_user: TokenData = Depends(require_permission(Permissions.SYSTEM_MONITOR))
+):
+    """Get recent activity from database"""
+    try:
+        async with get_db_connection() as conn:
+            query = """
+                SELECT id, action as type, resource_type, resource_id, 
+                       created_at as timestamp, user_id
+                FROM audit_logs 
+                ORDER BY created_at DESC 
+                LIMIT :limit
+            """
+            activities = await conn.fetch_all(query, {"limit": limit})
+            
+            activities_data = []
+            for activity in activities:
+                activities_data.append({
+                    "id": str(activity["id"]),
+                    "type": activity["type"] or "unknown",
+                    "title": f"{activity['type']} on {activity['resource_type']}" if activity.get("resource_type") else str(activity["type"]),
+                    "description": f"{activity['type']} performed on {activity['resource_type']}",
+                    "timestamp": activity["timestamp"].isoformat() if hasattr(activity["timestamp"], "isoformat") else str(activity["timestamp"]),
+                    "severity": "medium"  # Could be derived from action type
+                })
+            
+            return {
+                "success": True,
+                "data": activities_data
+            }
+    except Exception as e:
+        logger.error(f"Error fetching recent activity: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch recent activity: {str(e)}")
 
 @router.get("/governance/metrics")
 @cached(ttl=300)  # Cache for 5 minutes
@@ -287,9 +234,24 @@ async def get_governance_metrics(
             dataset_query = "SELECT COUNT(*) as total_datasets FROM datasets"
             dataset_metrics = await conn.fetch_one(dataset_query)
             
-            # Get recent bias alerts (mock for now)
-            bias_alerts = 3
-            fairness_score = 82.5
+            # Get recent bias alerts from database
+            bias_query = """
+                SELECT COUNT(*) as bias_count
+                FROM bias_test_results
+                WHERE is_biased = true
+                AND created_at > NOW() - INTERVAL '30 days'
+            """
+            bias_result = await conn.fetch_one(bias_query)
+            bias_alerts = bias_result["bias_count"] if bias_result else 0
+            
+            # Calculate fairness score from recent bias tests
+            fairness_query = """
+                SELECT AVG(1.0 - bias_score) * 100 as avg_fairness
+                FROM bias_test_results
+                WHERE created_at > NOW() - INTERVAL '30 days'
+            """
+            fairness_result = await conn.fetch_one(fairness_query)
+            fairness_score = float(fairness_result["avg_fairness"]) if fairness_result and fairness_result["avg_fairness"] else 0.0
             
             return {
                 "success": True,
@@ -308,21 +270,7 @@ async def get_governance_metrics(
             
     except Exception as e:
         logger.error(f"Error fetching governance metrics: {e}")
-        # Return mock data on error
-        return {
-            "success": True,
-            "data": {
-                "totalModels": 2,
-                "activeModels": 2,
-                "totalDatasets": 2,
-                "criticalRisks": 2,
-                "llmSafetyScore": 85,
-                "nistCompliance": 78,
-                "biasAlerts": 3,
-                "fairnessScore": 82.5,
-                "lastUpdated": datetime.now().isoformat()
-            }
-        }
+        raise HTTPException(status_code=500, detail=f"Failed to fetch governance metrics: {str(e)}")
 
 @router.get("/metrics/summary")
 async def get_metrics_summary():
@@ -388,12 +336,10 @@ async def create_model(
                 "upload_date": datetime.now()
             }
             
-            try:
-                model = await conn.fetch_one(query, model_data)
-                model_dict = dict(model) if model else model_data
-            except Exception as db_error:
-                logger.warning(f"Database insert failed, using mock data: {db_error}")
-                model_dict = {**model_data, "tags": [], "metadata": {}}
+            model = await conn.fetch_one(query, model_data)
+            if not model:
+                raise HTTPException(status_code=500, detail="Failed to create model in database")
+            model_dict = dict(model)
         
         # Invalidate cache
         await cache_manager.delete_pattern("models:list:*")

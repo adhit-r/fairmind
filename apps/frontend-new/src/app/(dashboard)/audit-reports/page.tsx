@@ -69,11 +69,13 @@ export default function AuditReportsPage() {
     const [loading, setLoading] = useState(false);
 
     const frameworks = [
-        { value: 'eu_ai_act', label: 'EU AI Act' },
-        { value: 'gdpr', label: 'GDPR' },
-        { value: 'iso_iec_42001', label: 'ISO/IEC 42001' },
-        { value: 'nist_ai_rmf', label: 'NIST AI RMF' },
-        { value: 'ieee_7000', label: 'IEEE 7000' },
+        { value: 'EU AI Act', label: 'EU AI Act' },
+        { value: 'GDPR', label: 'GDPR' },
+        { value: 'ISO 42001', label: 'ISO 42001' },
+        { value: 'NIST AI RMF', label: 'NIST AI RMF' },
+        { value: 'IEEE 7000', label: 'IEEE 7000' },
+        { value: 'DPDP Act', label: 'DPDP Act (India)' },
+        { value: 'India AI', label: 'India AI' },
     ];
 
     const riskLevels = [

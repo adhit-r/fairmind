@@ -97,6 +97,20 @@ async def list_frameworks():
             "region": "International",
             "status": "Active",
         },
+        {
+            "id": RegulatoryFramework.DPDP_ACT,
+            "name": "DPDP Act",
+            "description": "Digital Personal Data Protection Act (India, 2023)",
+            "region": "India",
+            "status": "Active",
+        },
+        {
+            "id": RegulatoryFramework.INDIA_AI_FRAMEWORK,
+            "name": "India AI Framework",
+            "description": "National AI Framework (NITI Aayog Guidelines)",
+            "region": "India",
+            "status": "Active",
+        },
     ]
     
     return {
@@ -117,10 +131,18 @@ async def get_framework_requirements(framework: RegulatoryFramework):
         List of requirements for the framework
     """
     try:
-        requirements = compliance_service.frameworks.get(framework, [])
+        # Convert the incoming string to the enum (case‑insensitive) so we can
+        # correctly look up the requirements dictionary.
+        try:
+            enum_framework = RegulatoryFramework(framework.lower())
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Unsupported framework")
+
+        # The dict is keyed by the enum members, not by raw strings.
+        requirements = compliance_service.frameworks.get(enum_framework, [])
         
         return {
-            "framework": framework,
+            "framework": enum_framework,
             "requirements": requirements,
             "total_requirements": len(requirements),
         }

@@ -11,12 +11,6 @@ interface ClientNavigationProps {
 }
 
 function MainContent({ children }: { children: React.ReactNode }) {
-  const { state } = useSidebar();
-  const isCollapsed = state === "collapsed";
-
-  // Sidebar width: 16rem when expanded, 3rem (48px) when collapsed
-  const sidebarWidth = isCollapsed ? "3rem" : "16rem";
-
   return (
     <>
       {/* Full width header at top - fixed position across entire viewport */}
@@ -28,7 +22,6 @@ function MainContent({ children }: { children: React.ReactNode }) {
       <div
         className="flex flex-col flex-1 min-w-0 transition-[margin-left] duration-200 ease-linear"
         style={{
-          marginLeft: sidebarWidth,
           marginTop: "68px", // Header height (64px h-16 + 4px border-bottom)
           paddingTop: 0,
         }}

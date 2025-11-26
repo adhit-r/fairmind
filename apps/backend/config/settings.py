@@ -7,7 +7,8 @@ import secrets
 from typing import List, Optional
 try:
     from pydantic_settings import BaseSettings
-    from pydantic import validator
+    from pydantic import field_validator
+    validator = field_validator  # Alias for compatibility
 except ImportError:
     from pydantic import BaseSettings, validator
 from functools import lru_cache
@@ -99,6 +100,19 @@ class Settings(BaseSettings):
     # Bias Detection Configuration
     bias_detection_timeout: int = 600
     max_dataset_size: int = 1000000  # 1M rows
+    
+    # Encryption Configuration
+    compliance_encryption_key: Optional[str] = None
+    encryption_algorithm: str = "AES-256"
+    
+    # RBAC Configuration
+    enable_rbac: bool = True
+    default_role: str = "compliance_viewer"
+    
+    # Audit Logging Configuration
+    enable_audit_logging: bool = True
+    audit_log_retention_days: int = 90
+    audit_log_file: Optional[str] = None
     
     class Config:
         env_file = ".env"

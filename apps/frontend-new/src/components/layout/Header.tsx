@@ -29,71 +29,77 @@ interface HeaderProps {
   onMenuToggle?: () => void
 }
 
+// Reusable "Brutal" Button Style
+const brutalBtnClass = "h-11 w-11 border-2 border-black bg-white text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none transition-all rounded-none"
+const brutalInputClass = "h-11 border-2 border-black bg-white text-black placeholder:text-gray-500 placeholder:font-bold shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] focus-visible:ring-0 focus-visible:translate-x-[2px] focus-visible:translate-y-[2px] focus-visible:shadow-none transition-all rounded-none text-sm font-bold"
+
 export function Header({ onMenuToggle }: HeaderProps) {
   const [isDark, setIsDark] = React.useState(false)
   const { toggleSidebar } = useSidebar()
 
   return (
-    <header className="sticky top-0 z-30 bg-white border-b-4 border-black shadow-brutal w-full">
-      <div className="h-16 flex items-center justify-between px-6 gap-6">
+    <header className="sticky top-0 z-30 bg-white border-b-4 border-black w-full py-3">
+      <div className="container mx-auto px-6 flex items-center justify-between gap-6">
         {/* Left: Sidebar Toggle + Logo */}
-        <div className="flex items-center gap-3 flex-shrink-0">
+        <div className="flex items-center gap-4 flex-shrink-0">
           <Button
-            variant="noShadow"
+            variant="ghost"
             size="icon"
             onClick={toggleSidebar}
-            className="border-2 border-black hover:bg-orange hover:shadow-brutal transition-all h-10 w-10"
+            className={brutalBtnClass}
             title="Toggle Sidebar"
           >
-            <IconMenu2 className="h-5 w-5" />
+            <IconMenu2 className="h-6 w-6" />
           </Button>
           <OrangeLogo size="md" showText={true} />
         </div>
 
         {/* Center: Search */}
-        <div className="hidden lg:flex items-center flex-1 max-w-xl">
-          <div className="relative w-full">
-            <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-600 pointer-events-none" />
+        <div className="hidden lg:flex items-center flex-1 max-w-2xl mx-auto">
+          <div className="relative w-full group">
+            <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none z-10">
+               <IconSearch className="h-5 w-5 text-black" />
+            </div>
             <Input
               type="search"
-              placeholder="Search..."
-              className="pl-10 h-10 border-4 border-black shadow-brutal focus:shadow-brutal-lg font-bold text-sm rounded-base"
+              placeholder="SEARCH..."
+              className={`${brutalInputClass} pl-10 w-full uppercase tracking-wider`}
             />
           </div>
         </div>
 
         {/* Right: Actions */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-4">
           {/* Mobile Search */}
           <Button
-            variant="noShadow"
+            variant="ghost"
             size="icon"
-            className="lg:hidden border-2 border-black h-10 w-10"
+            className={`lg:hidden ${brutalBtnClass}`}
             title="Search"
           >
-            <IconSearch className="h-4 w-4" />
+            <IconSearch className="h-5 w-5" />
           </Button>
 
           {/* Theme Toggle */}
           <Button
-            variant="noShadow"
+            variant="ghost"
             size="icon"
             onClick={() => setIsDark(!isDark)}
-            className="border-2 border-black h-10 w-10"
+            className={brutalBtnClass}
             title="Toggle Theme"
           >
-            {isDark ? <IconSun className="h-4 w-4" /> : <IconMoon className="h-4 w-4" />}
+            {isDark ? <IconSun className="h-5 w-5" /> : <IconMoon className="h-5 w-5" />}
           </Button>
 
           {/* Notifications */}
           <Button
-            variant="noShadow"
+            variant="ghost"
             size="icon"
-            className="border-2 border-black h-10 w-10 relative"
+            className={`${brutalBtnClass} relative`}
             title="Notifications"
           >
-            <IconBell className="h-4 w-4" />
-            <span className="absolute -top-1 -right-1 h-5 w-5 bg-orange border-2 border-black rounded-base flex items-center justify-center text-[10px] font-black shadow-brutal">
+            <IconBell className="h-5 w-5" />
+            <span className="absolute -top-2 -right-2 h-6 w-6 bg-orange border-2 border-black flex items-center justify-center text-xs font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
               3
             </span>
           </Button>
@@ -102,44 +108,36 @@ export function Header({ onMenuToggle }: HeaderProps) {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
-                variant="noShadow"
+                variant="ghost"
                 size="icon"
-                className="border-2 border-black h-10 w-10 p-0"
+                className={`${brutalBtnClass} p-0 overflow-hidden`}
               >
-                <Avatar className="h-10 w-10 border-2 border-black">
+                <Avatar className="h-full w-full rounded-none border-none">
                   <AvatarImage src="https://ui.shadcn.com/avatars/02.png" alt="User" />
                   <AvatarFallback className="bg-orange text-black font-black">U</AvatarFallback>
                 </Avatar>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56 border-4 border-black shadow-brutal-lg bg-white">
-              <DropdownMenuLabel className="px-3 py-2.5 font-black uppercase text-xs">
-                <div className="flex items-center gap-2">
-                  <Avatar className="h-8 w-8 border-2 border-black">
-                    <AvatarImage src="https://ui.shadcn.com/avatars/02.png" alt="User" />
-                    <AvatarFallback className="bg-orange text-black font-black">U</AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1">
-                    <p className="text-xs font-black">User Name</p>
-                    <p className="text-[10px] text-gray-600">user@example.com
-                    </p>
-                  </div>
-                </div>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator className="bg-black h-0.5 my-2" />
-              <DropdownMenuItem className="px-3 py-2.5 border-2 border-transparent hover:border-black hover:bg-orange hover:shadow-brutal transition-all font-black text-xs cursor-pointer">
-                <IconUser className="mr-2 h-4 w-4" />
-                Profile
-              </DropdownMenuItem>
-              <DropdownMenuItem className="px-3 py-2.5 border-2 border-transparent hover:border-black hover:bg-orange hover:shadow-brutal transition-all font-black text-xs cursor-pointer">
-                <IconSettings className="mr-2 h-4 w-4" />
-                Settings
-              </DropdownMenuItem>
-              <DropdownMenuSeparator className="bg-black h-0.5 my-2" />
-              <DropdownMenuItem className="px-3 py-2.5 border-2 border-transparent hover:border-red-500 hover:bg-red-50 hover:shadow-brutal transition-all font-black text-xs text-red-600 cursor-pointer">
-                <IconLogout className="mr-2 h-4 w-4" />
-                Logout
-              </DropdownMenuItem>
+            <DropdownMenuContent align="end" className="w-64 border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] bg-white rounded-none p-0 mt-2">
+              <div className="px-5 py-4 bg-orange border-b-2 border-black">
+                <p className="text-base font-black text-black uppercase tracking-tight">User Name</p>
+                <p className="text-xs text-black font-bold opacity-80">user@example.com</p>
+              </div>
+              <div className="p-2 space-y-1">
+                <DropdownMenuItem className="h-10 px-4 border-2 border-transparent focus:border-black focus:bg-gray-100 focus:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer font-bold text-sm rounded-none">
+                  <IconUser className="mr-3 h-5 w-5" />
+                  PROFILE
+                </DropdownMenuItem>
+                <DropdownMenuItem className="h-10 px-4 border-2 border-transparent focus:border-black focus:bg-gray-100 focus:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer font-bold text-sm rounded-none">
+                  <IconSettings className="mr-3 h-5 w-5" />
+                  SETTINGS
+                </DropdownMenuItem>
+                <DropdownMenuSeparator className="bg-black h-0.5 my-2" />
+                <DropdownMenuItem className="h-10 px-4 border-2 border-transparent text-red-600 focus:text-red-600 focus:border-black focus:bg-red-50 focus:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer font-bold text-sm rounded-none">
+                  <IconLogout className="mr-3 h-5 w-5" />
+                  LOGOUT
+                </DropdownMenuItem>
+              </div>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

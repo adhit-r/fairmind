@@ -90,6 +90,11 @@ FairMind helps organizations:
 
 FairMind generates production-ready Python code to fix detected biases:
 
+<div align="center">
+  <img src="assets/diagrams/remediation_flow.png" alt="FairMind Remediation Flow" width="700">
+</div>
+
+
 - **Reweighting Strategies**: Adjusts sample weights to balance protected groups
 - **Resampling Techniques**: Oversampling/undersampling to address class imbalance
 - **Threshold Optimization**: Finds optimal decision thresholds for fairness
@@ -100,6 +105,11 @@ FairMind generates production-ready Python code to fix detected biases:
 ### 3. MLOps Integration
 
 Seamless integration with experiment tracking platforms:
+
+<div align="center">
+  <img src="assets/diagrams/mlops_integration.png" alt="FairMind MLOps Integration" width="700">
+</div>
+
 
 - **Weights & Biases Integration**
   - Automatic logging of bias test results
@@ -127,8 +137,15 @@ Seamless integration with experiment tracking platforms:
 - Training data documentation
 
 **Regulatory Compliance**
+
+<div align="center">
+  <img src="assets/diagrams/compliance_workflow.png" alt="FairMind Compliance Workflow" width="700">
+</div>
+
 - **EU AI Act Assessment**: Automated compliance checking against EU AI Act requirements
 - **GDPR Compliance**: Data protection and privacy compliance reporting
+- **DPDP Act (India)**: Digital Personal Data Protection Act compliance
+- **India AI Framework**: NITI Aayog Responsible AI Guidelines compliance
 - **ISO/IEC 42001**: AI Management System Standard compliance
 - **NIST AI RMF**: Risk Management Framework alignment
 - **IEEE 7000**: Ethical concerns process compliance
@@ -156,6 +173,11 @@ Seamless integration with experiment tracking platforms:
 
 ### 6. Real-Time Monitoring
 
+<div align="center">
+  <img src="assets/diagrams/realtime_monitoring.png" alt="FairMind Real-time Monitoring" width="700">
+</div>
+
+
 - Live bias metrics monitoring
 - Performance tracking
 - Alert system for threshold violations
@@ -168,67 +190,40 @@ Seamless integration with experiment tracking platforms:
 
 ### System Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        FairMind Platform                        │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  ┌──────────────────────┐         ┌──────────────────────┐   │
-│  │   Frontend (Next.js)  │         │   Backend (FastAPI)   │   │
-│  │                       │         │                       │   │
-│  │  • React Components   │◄────────┤  • API Routes (50+)  │   │
-│  │  • TypeScript         │         │  • Service Modules   │   │
-│  │  • Neobrutal UI       │         │  • Business Logic    │   │
-│  │  • 30+ Pages         │         │  • Authentication    │   │
-│  │  • 60+ Components    │         │  • Authorization     │   │
-│  └──────────────────────┘         └──────────────────────┘   │
-│           │                                │                   │
-│           │                                │                   │
-│           └────────────┬───────────────────┘                   │
-│                        │                                       │
-│           ┌────────────▼────────────┐                          │
-│           │   Data Layer           │                          │
-│           │                        │                          │
-│           │  • Supabase (PostgreSQL)│                          │
-│           │  • Redis (Cache)       │                          │
-│           │  • File Storage        │                          │
-│           └────────────────────────┘                          │
-│                                                                 │
-│  External Integrations:                                        │
-│  • Weights & Biases  • MLflow  • OpenAI (optional)             │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
+<div align="center">
+  <img src="assets/diagrams/fairmind_system_architecture.png" alt="FairMind System Architecture" width="800">
+</div>
 
 ### Component Breakdown
 
-**Backend Services (27 API Route Modules)**
-- Authentication and authorization
-- Bias detection (Classic, Modern, Multimodal)
-- Remediation code generation
-- Compliance reporting
-- AI BOM generation
-- MLOps integration
-- Model registry and management
-- Real-time monitoring
-- Database operations
-- File upload and storage
+**Backend Services (40+ API Route Modules)**
+- **Core Governance**: Authentication, Authorization, Policy Management
+- **Bias Detection Engine**:
+  - Classic ML (Demographic Parity, Equalized Odds)
+  - Modern LLM (WEAT, SEAT, Minimal Pairs)
+  - Multimodal (Image, Audio, Video)
+- **Compliance Engine**:
+  - **India Stack**: DPDP Act 2023, NITI Aayog Framework, Digital India Act
+  - **Global**: EU AI Act, GDPR, NIST AI RMF
+  - **RAG System**: Semantic search for regulatory documents
+- **FairMind Monitor**:
+  - Real-time token analysis
+  - Live bias metric tracking
+  - Threshold-based alerting
+- **Automated Remediation**: Code generation for bias mitigation
+- **MLOps Integration**: Seamless connection with W&B and MLflow
 
-**Frontend Application (30+ Pages, 60+ Components)**
-- Dashboard and analytics
-- Bias detection interfaces
-- Test results visualization
-- Remediation workflow
-- Compliance dashboards
-- Model management
-- Settings and configuration
-- User authentication
+**Frontend Application (40+ Pages, 80+ Components)**
+- **Dashboards**: Main, Compliance, Real-time Monitoring
+- **Interactive Tools**: Bias Testing, Remediation Generator, Policy Editor
+- **Visualizations**: Real-time charts, Bias metric heatmaps, Compliance scorecards
+- **Evidence Management**: Automated collection and reporting UI
 
 **Data Layer**
-- Supabase PostgreSQL (production database)
-- SQLite (local development)
-- Redis (optional caching)
-- File-based storage (uploads, artifacts)
+- **Supabase PostgreSQL**: Primary relational storage for models, results, and users
+- **Redis**: High-performance caching for real-time metrics
+- **Vector Store**: Embeddings for regulatory RAG system
+- **File Storage**: Artifacts, reports, and evidence documents
 
 ---
 
@@ -298,6 +293,7 @@ For comprehensive setup instructions, see:
 - [Setup Guide](SETUP.md) - Complete installation and configuration
 - [Quick Start Guide](QUICK_START.md) - 5-minute setup
 - [Model Registration Guide](docs/MODEL_REGISTRATION_GUIDE.md) - Register and manage models
+- [India Compliance Guide](INDIA_COMPLIANCE_GUIDE.md) - DPDP Act and India AI Framework compliance
 
 ---
 
@@ -737,8 +733,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **Contact**
 - Repository: [github.com/adhit-r/fairmind](https://github.com/adhit-r/fairmind)
-- Security: security@fairmind.xyz
-
+- support email : adhi.r@fairmind.xyz 
 ---
 
 **FairMind - Making AI fair, transparent, and accountable for everyone.**

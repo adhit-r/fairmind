@@ -1,0 +1,367 @@
+# Implementation Plan
+
+- [x] 1. Set up India compliance data models and database schema - supabase
+  - Create database migration for india_compliance_evidence table
+  - Create database migration for india_compliance_results table
+  - Create database migration for india_bias_test_results table
+  - Create database migration for india_compliance_reports table
+  - Create database migration for integration_credentials table
+  - Create Pydantic models for IndiaFramework, ComplianceResult, ComplianceGap, BiasResult, FairnessMetrics
+  - _Requirements: 1.1, 1.2, 2.1, 3.1, 4.1, 6.1, 7.1_
+
+- [x] 2. Implement India-specific regulatory framework definitions
+  - [x] 2.1 Create DPDP Act 2023 requirements definition with all 14 requirements
+    - Define requirements for consent management, data localization, cross-border transfer, data principal rights
+    - Include legal citations (sections) for each requirement
+    - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9_
+  - [x] 2.2 Create NITI Aayog AI principles requirements definition with all 12 principles
+    - Define requirements for safety, equality, inclusivity, privacy, transparency, accountability
+    - Include principle references for each requirement
+    - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7_
+  - [x] 2.3 Create MeitY guidelines requirements definition
+    - Define requirements for responsible AI, algorithmic accountability, ethical deployment
+    - Include guideline references
+    - _Requirements: 1.5, 1.6_
+  - [x] 2.4 Create Digital India Act requirements definition (emerging framework)
+    - Define preliminary requirements based on draft legislation
+    - Mark as evolving framework
+    - _Requirements: 1.1_
+
+- [x] 3. Implement IndiaComplianceService core functionality
+  - [x] 3.1 Create IndiaComplianceService class extending ComplianceReportingService
+    - Implement check_dpdp_compliance() method
+    - Implement check_niti_aayog_compliance() method
+    - Implement check_meity_compliance() method
+    - Implement check_digital_india_compliance() method
+    - _Requirements: 1.1, 1.2, 1.3, 2.1, 3.1_
+  - [x] 3.2 Implement compliance assessment logic
+    - Create _assess_india_requirement() method for evaluating evidence against requirements
+    - Create _calculate_india_compliance_score() method
+    - Create _identify_india_gaps() method with India-specific remediation guidance
+    - _Requirements: 1.6, 1.7, 2.7, 3.6_
+  - [x] 3.3 Implement India compliance report generation
+    - Create generate_india_compliance_report() method
+    - Include executive summary with legal citations
+    - Generate remediation recommendations with Indian legal references
+    - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6_
+  - [x] 3.4 Implement compliance trend tracking
+    - Create get_compliance_trends() method
+    - Calculate historical compliance scores
+    - Identify improvement or degradation patterns
+    - _Requirements: 7.7_
+
+- [x] 4. Implement IndiaEvidenceCollectionService for automated evidence gathering
+  - [x] 4.1 Create IndiaEvidenceCollectionService class
+    - Implement collect_data_localization_evidence() method
+    - Implement collect_consent_management_evidence() method
+    - Implement collect_language_support_evidence() method
+    - Implement collect_cross_border_transfer_evidence() method
+    - Implement collect_grievance_mechanism_evidence() method
+    - Implement collect_security_controls_evidence() method
+    - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9_
+  - [x] 4.2 Implement technical control execution
+    - Create execute_control() method that runs specific technical control
+    - Implement control registry with INDIA_TECHNICAL_CONTROLS dictionary
+    - Generate evidence with SHA-256 hash for integrity
+    - Store evidence in india_compliance_evidence table
+    - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9_
+  - [x] 4.3 Implement data localization verification (DL_001 control)
+    - Check database storage location using cloud provider APIs
+    - Verify sensitive personal data is stored in India
+    - Generate geographic evidence with timestamps
+    - _Requirements: 2.4, 4.1_
+  - [x] 4.4 Implement consent management verification (CM_001 control)
+    - Validate consent record format and completeness
+    - Check for timestamp, purpose specification, withdrawal mechanism
+    - Verify consent storage and retrieval mechanisms
+    - _Requirements: 2.1, 2.2, 4.2_
+  - [x] 4.5 Implement language support verification (LS_001 control)
+    - Check AI system support for Hindi, English, and regional languages
+    - Verify language detection and processing capabilities
+    - Test multilingual input/output handling
+    - _Requirements: 3.3, 4.3_
+  - [x] 4.6 Implement cross-border transfer verification (CBT_001 control)
+    - Identify data flows outside India using network monitoring
+    - Verify approved country compliance per DPDP Act Section 16
+    - Check for data transfer agreements
+    - _Requirements: 2.3, 4.5_
+  - [x] 4.7 Implement grievance mechanism verification (GM_001 control)
+    - Verify existence of complaint handling system
+    - Check response time tracking and escalation procedures
+    - Validate grievance resolution workflow
+    - _Requirements: 3.7, 4.6_
+
+- [x] 5. Implement IndiaBiasDetectionService for demographic fairness testing
+  - [x] 5.1 Create IndiaBiasDetectionService class
+    - Implement detect_caste_bias() method for SC/ST/OBC/General categories
+    - Implement detect_religious_bias() method for major religions
+    - Implement detect_linguistic_bias() method for scheduled languages
+    - Implement detect_regional_bias() method for geographic regions
+    - Implement detect_intersectional_bias() method for combined attributes
+    - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.7_
+  - [x] 5.2 Implement India-specific fairness metrics calculation
+    - Create calculate_india_fairness_metrics() method
+    - Compute demographic parity for Indian protected characteristics
+    - Compute equal opportunity and equalized odds
+    - Calculate disparate impact ratios
+    - _Requirements: 6.9, 3.2, 3.7_
+  - [x] 5.3 Implement bias severity assessment
+    - Create _assess_bias_severity() method
+    - Classify bias as critical, high, medium, or low
+    - Identify most affected demographic groups
+    - _Requirements: 6.8_
+  - [x] 5.4 Implement bias mitigation recommendations
+    - Generate India-specific mitigation strategies
+    - Suggest data rebalancing for underrepresented groups
+    - Recommend algorithmic debiasing techniques
+    - _Requirements: 6.8_
+  - [x] 5.5 Store bias test results in database
+    - Save results to india_bias_test_results table
+    - Include all fairness metrics and affected groups
+    - Link to compliance evidence
+    - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5_
+
+- [x] 6. Implement ComplianceIntegrationService for external tool connectivity
+  - [x] 6.1 Create ComplianceIntegrationService class with integration management
+    - Implement integrate_onetrust() method
+    - Implement integrate_securiti() method
+    - Implement integrate_sprinto() method
+    - Implement integrate_custom_api() method
+    - Store encrypted credentials in integration_credentials table
+    - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.6_
+  - [x] 6.2 Implement OneTrustConnector for consent and privacy data
+    - Create OneTrustConnector class
+    - Implement get_consent_records() method
+    - Implement get_privacy_assessments() method
+    - Implement get_data_mapping() method
+    - _Requirements: 5.1_
+  - [x] 6.3 Implement SecuritiConnector for data discovery
+    - Create SecuritiConnector class
+    - Implement get_data_discovery_results() method
+    - Implement get_classification_tags() method
+    - Implement get_privacy_automation_evidence() method
+    - _Requirements: 5.3_
+  - [x] 6.4 Implement SprintoConnector for security controls
+    - Create SprintoConnector class
+    - Implement get_security_controls() method
+    - Implement get_audit_evidence() method
+    - Implement get_compliance_status() method
+    - _Requirements: 5.4_
+  - [x] 6.5 Implement MLflow integration for model metadata
+    - Create MLflowConnector class
+    - Implement get_model_lineage() method
+    - Implement get_model_versioning() method
+    - Implement get_performance_metrics() method
+    - _Requirements: 5.7_
+  - [x] 6.6 Implement cloud provider integration for data residency
+    - Create AWSConnector, AzureConnector, GCPConnector classes
+    - Implement get_data_residency_evidence() method
+    - Verify storage location and region
+    - _Requirements: 5.8_
+  - [x] 6.7 Implement error handling and retry logic
+    - Add exponential backoff for transient failures
+    - Implement circuit breaker pattern for failing integrations
+    - Log integration errors with context
+    - _Requirements: 5.9_
+
+- [x] 7. Implement AIComplianceAutomationService for intelligent automation
+  - [x] 7.1 Create AIComplianceAutomationService class
+    - Implement analyze_gaps_with_llm() method using GPT-4
+    - Implement generate_remediation_plan() method
+    - Implement generate_privacy_policy() method for DPDP compliance
+    - Implement answer_compliance_question() method using RAG
+    - _Requirements: 8.1, 8.2, 8.3, 8.5_
+  - [x] 7.2 Implement IndiaComplianceRAG for regulatory Q&A
+    - Create IndiaComplianceRAG class
+    - Implement index_regulatory_documents() method
+    - Load and embed DPDP Act, NITI Aayog principles, MeitY guidelines
+    - Implement query() method with context retrieval
+    - _Requirements: 8.5_
+  - [x] 7.3 Implement LLM-based gap analysis
+    - Create prompt templates for gap analysis
+    - Analyze compliance gaps with legal context
+    - Generate India-specific remediation steps with legal citations
+    - _Requirements: 8.1, 8.2_
+  - [x] 7.4 Implement automated policy generation
+    - Create templates for privacy policies, consent forms, data processing agreements
+    - Generate DPDP-compliant documents using LLM
+    - Include required legal clauses and disclosures
+    - _Requirements: 8.3_
+  - [x] 7.5 Implement compliance risk prediction
+    - Create predict_compliance_risk() method
+    - Analyze system changes and historical compliance data
+    - Forecast potential compliance issues
+    - _Requirements: 8.6_
+  - [x] 7.6 Implement regulatory monitoring
+    - Create monitor_regulatory_updates() method
+    - Track changes to Indian AI regulations
+    - Alert on new requirements or amendments
+    - _Requirements: 8.8_
+
+- [x] 8. Create API routes for India compliance endpoints
+  - [x] 8.1 Create india_compliance_routes.py with route definitions
+    - Implement POST /api/v1/compliance/india/check endpoint
+    - Implement GET /api/v1/compliance/india/frameworks endpoint
+    - Implement GET /api/v1/compliance/india/evidence/{evidence_id} endpoint
+    - Implement POST /api/v1/compliance/india/bias-detection endpoint
+    - Implement POST /api/v1/compliance/india/report endpoint
+    - Implement GET /api/v1/compliance/india/trends endpoint
+    - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7_
+  - [x] 8.2 Implement integration management endpoints
+    - Implement POST /api/v1/compliance/india/integrations endpoint
+    - Implement GET /api/v1/compliance/india/integrations endpoint
+    - Implement DELETE /api/v1/compliance/india/integrations/{integration_id} endpoint
+    - Implement POST /api/v1/compliance/india/integrations/{integration_id}/sync endpoint
+    - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9_
+  - [x] 8.3 Implement AI automation endpoints
+    - Implement POST /api/v1/compliance/india/ai/gap-analysis endpoint
+    - Implement POST /api/v1/compliance/india/ai/remediation-plan endpoint
+    - Implement POST /api/v1/compliance/india/ai/generate-policy endpoint
+    - Implement POST /api/v1/compliance/india/ai/ask endpoint for Q&A
+    - _Requirements: 8.1, 8.2, 8.3, 8.5_
+  - [x] 8.4 Add request validation and error handling
+    - Validate request payloads using Pydantic models
+    - Return appropriate HTTP status codes
+    - Provide detailed error messages
+    - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7_
+  - [x] 8.5 Add authentication and authorization
+    - Require JWT authentication for all endpoints
+    - Implement RBAC for compliance features
+    - Log all API access for audit trail
+    - _Requirements: 7.8_
+
+- [x] 9. Create frontend India Compliance Dashboard component
+  - [x] 9.1 Create IndiaComplianceDashboard.tsx component
+    - Implement framework selection dropdown
+    - Display overall compliance score with visual indicator
+    - Show requirement-by-requirement status table
+    - Display evidence count and collection timestamps
+    - _Requirements: 7.1, 7.2, 7.3_
+  - [x] 9.2 Implement compliance gap visualization
+    - Create GapAnalysisPanel component
+    - Display gaps with severity indicators
+    - Show remediation recommendations
+    - Link to evidence details
+    - _Requirements: 7.4_
+  - [x] 9.3 Implement compliance trend charts
+    - Create ComplianceTrendChart component using Chart.js or Recharts
+    - Display historical compliance scores
+    - Show improvement/degradation trends
+    - _Requirements: 7.7_
+  - [x] 9.4 Implement report export functionality
+    - Create ExportReportButton component
+    - Generate PDF reports with Indian legal citations
+    - Include executive summary and detailed findings
+    - _Requirements: 7.6_
+  - [x] 9.5 Implement integration management UI
+    - Create IntegrationManagementPanel component
+    - Display connected integrations with status
+    - Provide connect/disconnect functionality
+    - Show last sync timestamp
+    - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6_
+  - [x] 9.6 Implement AI-powered features UI
+    - Create AIComplianceAssistant component
+    - Provide Q&A interface for compliance questions
+    - Display gap analysis results
+    - Show generated remediation plans
+    - _Requirements: 8.1, 8.2, 8.5_
+
+- [x] 10. Implement database migrations and setup
+  - [x] 10.1 Create Alembic migration for India compliance tables
+    - Write migration script for all 5 tables
+    - Add indexes on system_id, user_id, timestamp columns
+    - Add foreign key constraints
+    - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7_
+  - [x] 10.2 Set up Supabase vector extension for RAG
+    - Enable pgvector extension
+    - Create embeddings table for regulatory documents
+    - Create similarity search function
+    - _Requirements: 8.5_
+  - [x] 10.3 Create database seeding script
+    - Seed sample India compliance data for testing
+    - Create sample evidence records
+    - Generate sample compliance results
+    - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7_
+
+- [x] 11. Implement security and encryption
+  - [x] 11.1 Implement credential encryption
+    - Create encryption utility using AES-256
+    - Encrypt integration credentials before storage
+    - Decrypt credentials when needed for API calls
+    - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6_
+  - [x] 11.2 Implement RBAC for compliance features
+    - Define compliance_admin, compliance_viewer roles
+    - Restrict evidence access based on user role
+    - Implement row-level security in Supabase
+    - _Requirements: 7.8_
+  - [x] 11.3 Implement audit logging
+    - Log all compliance checks with user context
+    - Log evidence access and modifications
+    - Log integration credential access
+    - _Requirements: 7.8_
+
+- [x] 12. Create comprehensive documentation
+  - [x] 12.1 Write API documentation
+    - Document all India compliance endpoints
+    - Provide request/response examples
+    - Include authentication requirements
+    - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7_
+  - [x] 12.2 Write integration setup guides
+    - Document OneTrust integration setup
+    - Document Securiti.ai integration setup
+    - Document Sprinto integration setup
+    - Document custom API integration
+    - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.6_
+  - [x] 12.3 Write user guide for India compliance features
+    - Explain DPDP Act compliance checking
+    - Explain NITI Aayog principles evaluation
+    - Explain bias detection for Indian demographics
+    - Explain AI-powered automation features
+    - _Requirements: 1.1, 1.2, 1.3, 2.1, 3.1, 6.1, 8.1_
+  - [x] 12.4 Create regulatory reference documentation
+    - Summarize DPDP Act 2023 requirements
+    - Summarize NITI Aayog AI principles
+    - Summarize MeitY guidelines
+    - Include legal citations and references
+    - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7_
+
+- [x] 13. Implement monitoring and observability
+  - [x] 13.1 Add health check endpoints
+    - Implement /health/india-compliance endpoint
+    - Check database connectivity
+    - Check integration connectivity
+    - Check vector store availability
+    - _Requirements: 5.9_
+  - [x] 13.2 Implement metrics collection
+    - Track compliance check latency
+    - Track integration success/failure rates
+    - Track AI automation usage
+    - Track evidence collection counts
+    - _Requirements: 7.7, 8.6_
+  - [x] 13.3 Set up alerting
+    - Alert on compliance status changes
+    - Alert on integration failures
+    - Alert on regulatory updates
+    - _Requirements: 7.8, 8.8_
+
+- [ ] 14. Deploy and configure production environment
+  - [ ] 14.1 Configure environment variables
+    - Set up API keys for integrations
+    - Configure database connection strings
+    - Set up OpenAI API key for AI features
+    - Configure encryption keys
+    - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 8.1, 8.2, 8.3, 8.5_
+  - [ ] 14.2 Run database migrations
+    - Execute Alembic migrations in production
+    - Verify table creation and indexes
+    - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7_
+  - [ ] 14.3 Index regulatory documents
+    - Run document indexing script
+    - Verify embeddings are created
+    - Test RAG query functionality
+    - _Requirements: 8.5_
+  - [ ] 14.4 Configure monitoring and logging
+    - Set up log aggregation
+    - Configure metrics dashboards
+    - Set up alerting rules
+    - _Requirements: 7.7, 7.8, 8.6, 8.8_

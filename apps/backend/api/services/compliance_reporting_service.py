@@ -25,6 +25,9 @@ class RegulatoryFramework(str, Enum):
     ISO_IEC_42001 = "iso_iec_42001"
     NIST_AI_RMF = "nist_ai_rmf"
     IEEE_7000 = "ieee_7000"
+    # India-specific frameworks
+    DPDP_ACT = "dpdp_act"
+    INDIA_AI_FRAMEWORK = "india_ai_framework"
 
 
 class RiskLevel(str, Enum):
@@ -53,6 +56,9 @@ class ComplianceReportingService:
             RegulatoryFramework.ISO_IEC_42001: self._get_iso_requirements(),
             RegulatoryFramework.NIST_AI_RMF: self._get_nist_requirements(),
             RegulatoryFramework.IEEE_7000: self._get_ieee_requirements(),
+            # India-specific frameworks
+            RegulatoryFramework.DPDP_ACT: self._get_dpdp_requirements(),
+            RegulatoryFramework.INDIA_AI_FRAMEWORK: self._get_india_ai_requirements(),
         }
 
     def _get_eu_ai_act_requirements(self) -> List[Dict[str, Any]]:
@@ -244,6 +250,224 @@ class ComplianceReportingService:
                 "requirement": "Implement value-based design",
                 "description": "Design systems aligned with human values",
                 "standard": "IEEE 7000",
+                "mandatory": True,
+            },
+        ]
+
+    def _get_dpdp_requirements(self) -> List[Dict[str, Any]]:
+        """Get Digital Personal Data Protection Act (India, 2023) requirements"""
+        return [
+            {
+                "id": "DPDP-1",
+                "category": "Lawful Processing",
+                "requirement": "Obtain valid consent for data processing",
+                "description": "Process personal data only with valid consent or for legitimate use",
+                "section": "Section 6",
+                "mandatory": True,
+            },
+            {
+                "id": "DPDP-2",
+                "category": "Purpose Limitation",
+                "requirement": "Process data only for specified purpose",
+                "description": "Personal data must be processed only for the purpose for which consent was obtained",
+                "section": "Section 4",
+                "mandatory": True,
+            },
+            {
+                "id": "DPDP-3",
+                "category": "Data Minimization",
+                "requirement": "Collect only necessary data",
+                "description": "Collect only such personal data as is necessary for the specified purpose",
+                "section": "Section 4",
+                "mandatory": True,
+            },
+            {
+                "id": "DPDP-4",
+                "category": "Data Accuracy",
+                "requirement": "Ensure data accuracy",
+                "description": "Take reasonable steps to ensure personal data is complete, accurate, and consistent",
+                "section": "Section 4",
+                "mandatory": True,
+            },
+            {
+                "id": "DPDP-5",
+                "category": "Data Retention",
+                "requirement": "Limit data retention period",
+                "description": "Retain data only as long as necessary for the specified purpose",
+                "section": "Section 4",
+                "mandatory": True,
+            },
+            {
+                "id": "DPDP-6",
+                "category": "Data Security",
+                "requirement": "Implement reasonable security safeguards",
+                "description": "Implement appropriate technical and organizational measures to protect personal data",
+                "section": "Section 8",
+                "mandatory": True,
+            },
+            {
+                "id": "DPDP-7",
+                "category": "Data Breach Notification",
+                "requirement": "Notify data breaches",
+                "description": "Notify Data Protection Board and affected individuals of data breaches",
+                "section": "Section 8",
+                "mandatory": True,
+            },
+            {
+                "id": "DPDP-8",
+                "category": "Right to Access",
+                "requirement": "Provide data access to individuals",
+                "description": "Enable individuals to obtain information about their personal data",
+                "section": "Section 11",
+                "mandatory": True,
+            },
+            {
+                "id": "DPDP-9",
+                "category": "Right to Correction",
+                "requirement": "Enable data correction",
+                "description": "Allow individuals to correct, complete, or update their personal data",
+                "section": "Section 11",
+                "mandatory": True,
+            },
+            {
+                "id": "DPDP-10",
+                "category": "Right to Erasure",
+                "requirement": "Enable data erasure",
+                "description": "Allow individuals to erase their personal data (with exceptions)",
+                "section": "Section 11",
+                "mandatory": True,
+            },
+            {
+                "id": "DPDP-11",
+                "category": "Consent Management",
+                "requirement": "Implement consent management",
+                "description": "Provide mechanism for individuals to give, manage, review, and withdraw consent",
+                "section": "Section 6",
+                "mandatory": True,
+            },
+            {
+                "id": "DPDP-12",
+                "category": "Cross-Border Data Transfer",
+                "requirement": "Comply with cross-border transfer rules",
+                "description": "Transfer data outside India only to notified countries/territories",
+                "section": "Section 16",
+                "mandatory": True,
+            },
+            {
+                "id": "DPDP-13",
+                "category": "Children's Data Protection",
+                "requirement": "Obtain verifiable parental consent for children",
+                "description": "Process children's data only with verifiable consent of parent/guardian",
+                "section": "Section 9",
+                "mandatory": True,
+            },
+            {
+                "id": "DPDP-14",
+                "category": "Data Protection Officer",
+                "requirement": "Appoint Data Protection Officer (if applicable)",
+                "description": "Significant data fiduciaries must appoint a Data Protection Officer",
+                "section": "Section 10",
+                "mandatory": False,
+            },
+        ]
+
+    def _get_india_ai_requirements(self) -> List[Dict[str, Any]]:
+        """Get India National AI Framework requirements (based on NITI Aayog guidelines)"""
+        return [
+            {
+                "id": "INDIA-AI-1",
+                "category": "Safety and Reliability",
+                "requirement": "Ensure AI system safety",
+                "description": "AI systems must be safe, secure, and reliable throughout their lifecycle",
+                "principle": "Safety and Reliability",
+                "mandatory": True,
+            },
+            {
+                "id": "INDIA-AI-2",
+                "category": "Equality and Inclusiveness",
+                "requirement": "Prevent discrimination and bias",
+                "description": "AI systems must not discriminate and should be inclusive of all sections of society",
+                "principle": "Equality",
+                "mandatory": True,
+            },
+            {
+                "id": "INDIA-AI-3",
+                "category": "Privacy and Security",
+                "requirement": "Protect privacy and ensure data security",
+                "description": "Implement robust privacy protection and data security measures",
+                "principle": "Privacy and Security",
+                "mandatory": True,
+            },
+            {
+                "id": "INDIA-AI-4",
+                "category": "Transparency and Explainability",
+                "requirement": "Ensure AI transparency",
+                "description": "AI systems should be transparent and provide explanations for decisions",
+                "principle": "Transparency",
+                "mandatory": True,
+            },
+            {
+                "id": "INDIA-AI-5",
+                "category": "Accountability",
+                "requirement": "Establish clear accountability",
+                "description": "Clear accountability mechanisms must be in place for AI systems",
+                "principle": "Accountability",
+                "mandatory": True,
+            },
+            {
+                "id": "INDIA-AI-6",
+                "category": "Human Oversight",
+                "requirement": "Maintain human control",
+                "description": "Ensure meaningful human oversight and control over AI systems",
+                "principle": "Human-Centered Design",
+                "mandatory": True,
+            },
+            {
+                "id": "INDIA-AI-7",
+                "category": "Fairness Testing",
+                "requirement": "Conduct regular fairness audits",
+                "description": "Regularly test and audit AI systems for fairness and bias",
+                "principle": "Equality",
+                "mandatory": True,
+            },
+            {
+                "id": "INDIA-AI-8",
+                "category": "Data Quality",
+                "requirement": "Ensure training data quality",
+                "description": "Training data must be representative, accurate, and of high quality",
+                "principle": "Safety and Reliability",
+                "mandatory": True,
+            },
+            {
+                "id": "INDIA-AI-9",
+                "category": "Impact Assessment",
+                "requirement": "Conduct AI impact assessments",
+                "description": "Assess potential societal and individual impacts of AI systems",
+                "principle": "Accountability",
+                "mandatory": True,
+            },
+            {
+                "id": "INDIA-AI-10",
+                "category": "Redressal Mechanism",
+                "requirement": "Provide grievance redressal",
+                "description": "Establish mechanisms for users to raise concerns and seek redressal",
+                "principle": "Accountability",
+                "mandatory": True,
+            },
+            {
+                "id": "INDIA-AI-11",
+                "category": "Environmental Sustainability",
+                "requirement": "Consider environmental impact",
+                "description": "AI systems should be developed with consideration for environmental sustainability",
+                "principle": "Sustainability",
+                "mandatory": False,
+            },
+            {
+                "id": "INDIA-AI-12",
+                "category": "Local Context",
+                "requirement": "Adapt to Indian context",
+                "description": "AI systems should be designed considering Indian languages, culture, and diversity",
+                "principle": "Inclusiveness",
                 "mandatory": True,
             },
         ]

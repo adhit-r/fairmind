@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
@@ -34,11 +34,30 @@ interface AppSidebarProps {
   className?: string
 }
 
+// Reusable styles
+const itemBaseClass = "flex items-center gap-3 px-3 py-3 w-full border-2 border-transparent transition-all duration-200 ease-in-out rounded-none font-bold text-sm uppercase tracking-tight"
+const itemHoverClass = "hover:border-black hover:bg-orange hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-[2px] hover:-translate-x-[2px]"
+const itemActiveClass = "bg-black text-white border-black shadow-[4px_4px_0px_0px_rgba(255,107,53,1)] translate-x-[0px] translate-y-[0px]" // Orange shadow for active black item
+
 export function AppSidebar({ className }: AppSidebarProps) {
   const pathname = usePathname()
   const { state } = useSidebar()
   const [expandedCategories, setExpandedCategories] = useState<string[]>(['overview'])
   const isCollapsed = state === 'collapsed'
+
+  // Automatically expand categories that contain the active pathname
+  useEffect(() => {
+    const activeCategoryIds = navigationCategories
+      .filter((category) => category.items.some((item) => pathname === item.href))
+      .map((category) => category.id)
+
+    if (activeCategoryIds.length > 0) {
+      setExpandedCategories((prev) => {
+        const newExpanded = [...new Set([...prev, ...activeCategoryIds])]
+        return newExpanded
+      })
+    }
+  }, [pathname])
 
   const toggleCategory = (categoryId: string) => {
     setExpandedCategories((prev) =>
@@ -52,11 +71,11 @@ export function AppSidebar({ className }: AppSidebarProps) {
     <Sidebar 
       variant="sidebar"
       collapsible="icon"
-      className={cn('border-r-4 border-black bg-white', className)}
+      className={cn('!border-r-[4px] border-black bg-white', className)}
     >
       <SidebarContent className="flex flex-col h-full p-0 overflow-hidden">
-        {/* Navigation - no top padding needed since sidebar starts below header */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 space-y-1">
+        {/* Navigation */}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-4">
           {navigationCategories.map((category) => {
             const CategoryIcon = category.icon
             const isExpanded = expandedCategories.includes(category.id)
@@ -65,7 +84,7 @@ export function AppSidebar({ className }: AppSidebarProps) {
             // When collapsed, show all items as icons directly (no categories)
             if (isCollapsed) {
               return (
-                <div key={category.id} className="space-y-1">
+                <div key={category.id} className="space-y-2">
                   {category.items.map((item) => {
                     const ItemIcon = item.icon
                     const isActive = pathname === item.href
@@ -73,22 +92,20 @@ export function AppSidebar({ className }: AppSidebarProps) {
                       <TooltipProvider key={item.href}>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <Button
-                              variant="noShadow"
-                              size="icon"
-                              asChild
+                            <Link
+                              href={item.href}
                               className={cn(
-                                'w-10 h-10 border-2 border-transparent hover:border-black transition-all rounded-base',
-                                isActive && 'border-black shadow-brutal bg-orange'
+                                "flex items-center justify-center w-10 h-10 border-2 transition-all rounded-none",
+                                isActive 
+                                  ? "bg-black text-white border-black shadow-[2px_2px_0px_0px_#FF6B35]" 
+                                  : "bg-white text-black border-transparent hover:border-black hover:bg-orange hover:shadow-[2px_2px_0px_0px_#000]"
                               )}
                             >
-                              <Link href={item.href}>
-                                <ItemIcon className="h-5 w-5" />
-                              </Link>
-                            </Button>
+                              <ItemIcon className="h-5 w-5" />
+                            </Link>
                           </TooltipTrigger>
-                          <TooltipContent side="right" className="border-2 border-black shadow-brutal bg-white">
-                            <p className="font-black text-xs">{item.title}</p>
+                          <TooltipContent side="right" className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] bg-white rounded-none">
+                            <p className="font-black text-xs uppercase">{item.title}</p>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -99,30 +116,43 @@ export function AppSidebar({ className }: AppSidebarProps) {
             }
 
             // Expanded state - show full menu
+            // Force open if category has active item
+            const shouldBeOpen = isExpanded || hasActiveItem
+            
             return (
-              <Collapsible key={category.id} open={isExpanded} onOpenChange={() => toggleCategory(category.id)}>
+              <Collapsible 
+                key={category.id} 
+                open={shouldBeOpen} 
+                onOpenChange={(open) => {
+                  // Prevent collapsing if there's an active item in this category
+                  if (hasActiveItem && !open) {
+                    return // Don't allow collapse when active item is present
+                  }
+                  toggleCategory(category.id)
+                }}
+              >
                 <CollapsibleTrigger asChild>
                   <button
                     className={cn(
-                      'w-full flex items-center justify-between px-3 py-2.5 border-2 border-transparent hover:border-black transition-all rounded-base',
-                      'font-black uppercase text-xs',
-                      hasActiveItem && 'border-black bg-orange shadow-brutal',
-                      !hasActiveItem && 'hover:bg-orange hover:shadow-brutal'
+                      itemBaseClass,
+                      "justify-between group mb-1",
+                      hasActiveItem ? "border-black bg-white" : "hover:bg-transparent", // Category header style
+                      !hasActiveItem && "hover:border-black hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
                     )}
                   >
-                    <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                      <CategoryIcon className="h-4 w-4 flex-shrink-0" />
-                      <span className="truncate">{category.title}</span>
+                    <div className="flex items-center gap-3">
+                      <CategoryIcon className="h-5 w-5" />
+                      <span>{category.title}</span>
                     </div>
                     <IconChevronRight
                       className={cn(
-                        'h-4 w-4 flex-shrink-0 transition-transform',
-                        isExpanded && 'rotate-90'
+                        'h-4 w-4 transition-transform duration-200 border-2 border-transparent rounded-full',
+                        shouldBeOpen && 'rotate-90 bg-orange border-black'
                       )}
                     />
                   </button>
                 </CollapsibleTrigger>
-                <CollapsibleContent className="pt-1 pl-2 space-y-0.5">
+                <CollapsibleContent className="pl-4 space-y-1 border-l-2 border-black ml-4 my-1">
                   <SidebarMenu>
                     {category.items.map((item) => {
                       const ItemIcon = item.icon
@@ -132,16 +162,23 @@ export function AppSidebar({ className }: AppSidebarProps) {
                         <SidebarMenuItem key={item.href}>
                           <SidebarMenuButton
                             asChild
-                            isActive={isActive}
                             className={cn(
-                              'px-3 py-2 border-2 border-transparent transition-all rounded-base font-bold text-xs',
-                              isActive && 'border-black shadow-brutal bg-orange',
-                              !isActive && 'hover:border-black hover:shadow-brutal hover:bg-orange'
+                              "h-auto py-2.5 px-3 w-full border-2 transition-all rounded-none font-bold text-xs uppercase tracking-wide",
+                              isActive 
+                                ? "bg-black text-white border-black shadow-[3px_3px_0px_0px_#FF6B35] hover:bg-black hover:text-white" 
+                                : "bg-transparent border-transparent hover:bg-orange hover:border-black hover:shadow-[3px_3px_0px_0px_#000] hover:-translate-y-0.5"
                             )}
                           >
-                            <Link href={item.href} className="flex items-center gap-2 min-w-0">
-                              <ItemIcon className="h-3.5 w-3.5 flex-shrink-0" />
-                              <span className="truncate">{item.title}</span>
+                            <Link 
+                              href={item.href} 
+                              className="flex items-center gap-3"
+                              onClick={(e) => {
+                                // Prevent event bubbling that might trigger collapse
+                                e.stopPropagation()
+                              }}
+                            >
+                              <ItemIcon className={cn("h-4 w-4", isActive ? "text-orange" : "text-current")} />
+                              <span>{item.title}</span>
                             </Link>
                           </SidebarMenuButton>
                         </SidebarMenuItem>
@@ -156,90 +193,72 @@ export function AppSidebar({ className }: AppSidebarProps) {
 
         {/* Bottom: Settings & User */}
         <div className={cn(
-          "border-t-4 border-black p-3 space-y-3 bg-gray-50",
-          isCollapsed && "p-2 space-y-2"
+          "border-t-4 border-black p-4 bg-white",
+          isCollapsed && "p-2"
         )}>
           {/* Settings Button */}
           {isCollapsed ? (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button
-                    variant="default"
-                    size="icon"
-                    className="w-10 h-10 border-2 border-black shadow-brutal hover:shadow-brutal-lg font-black rounded-base"
-                    asChild
+                  <Link
+                    href="/settings"
+                    className="flex items-center justify-center w-10 h-10 border-2 border-black bg-white hover:bg-orange hover:shadow-[2px_2px_0px_0px_#000] transition-all rounded-none mb-3 mx-auto"
                   >
-                    <Link href="/settings">
-                      <IconSettings className="h-5 w-5" />
-                    </Link>
-                  </Button>
+                    <IconSettings className="h-5 w-5" />
+                  </Link>
                 </TooltipTrigger>
-                <TooltipContent side="right" className="border-2 border-black shadow-brutal">
-                  <p className="font-black text-xs">Settings</p>
+                <TooltipContent side="right" className="border-2 border-black shadow-brutal bg-white rounded-none">
+                  <p className="font-black text-xs uppercase">Settings</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
           ) : (
-            <Button
-              variant="default"
-              className="w-full justify-start border-2 border-black shadow-brutal hover:shadow-brutal-lg font-black text-xs uppercase h-9 rounded-base"
-              asChild
+            <Link
+              href="/settings"
+              className="flex items-center gap-3 w-full px-3 py-3 border-2 border-black bg-white hover:bg-orange hover:shadow-[4px_4px_0px_0px_#000] hover:-translate-y-0.5 transition-all rounded-none mb-4 font-black text-sm uppercase"
             >
-              <Link href="/settings" className="flex items-center gap-2">
-                <IconSettings className="h-3.5 w-3.5" />
-                Settings
-              </Link>
-            </Button>
+              <IconSettings className="h-5 w-5" />
+              Settings
+            </Link>
           )}
-
-          {!isCollapsed && <Separator className="bg-black h-0.5" />}
 
           {/* User Profile Card */}
           {isCollapsed ? (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Avatar className="h-10 w-10 border-4 border-black shadow-brutal mx-auto cursor-pointer">
-                    <AvatarImage src="https://ui.shadcn.com/avatars/02.png" alt="User" />
-                    <AvatarFallback className="bg-orange text-black font-black text-sm">U</AvatarFallback>
-                  </Avatar>
-                </TooltipTrigger>
-                <TooltipContent side="right" className="border-2 border-black shadow-brutal">
-                  <div>
-                    <p className="font-black text-xs">User Name</p>
-                    <p className="text-[10px] text-gray-600">user@example.com</p>
-                  </div>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+             <TooltipProvider>
+             <Tooltip>
+               <TooltipTrigger asChild>
+                 <div className="w-10 h-10 mx-auto border-2 border-black cursor-pointer hover:bg-orange transition-colors">
+                   <Avatar className="h-full w-full rounded-none">
+                     <AvatarImage src="https://ui.shadcn.com/avatars/02.png" alt="User" />
+                     <AvatarFallback className="bg-orange text-black font-black">U</AvatarFallback>
+                   </Avatar>
+                 </div>
+               </TooltipTrigger>
+               <TooltipContent side="right" className="border-2 border-black shadow-brutal bg-white rounded-none">
+                 <p className="font-black text-xs">User Name</p>
+               </TooltipContent>
+             </Tooltip>
+           </TooltipProvider>
           ) : (
-            <>
-              <div className="p-2.5 border-4 border-black bg-white shadow-brutal">
-                <div className="flex items-start gap-2.5">
-                  <Avatar className="h-10 w-10 border-4 border-black shadow-brutal flex-shrink-0">
-                    <AvatarImage src="https://ui.shadcn.com/avatars/02.png" alt="User" />
-                    <AvatarFallback className="bg-orange text-black font-black text-sm">U</AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-black uppercase truncate">User Name</p>
-                    <p className="text-[10px] text-gray-600 truncate">user@example.com</p>
-                    <Badge className="mt-1.5 border-2 border-black bg-orange text-black text-[10px] font-black px-1.5 py-0 h-4 leading-none">
-                      Admin
-                    </Badge>
-                  </div>
+            <div className="border-2 border-black p-3 bg-orange shadow-[4px_4px_0px_0px_#000]">
+              <div className="flex items-center gap-3 mb-3">
+                <Avatar className="h-10 w-10 border-2 border-black rounded-none bg-white">
+                  <AvatarImage src="https://ui.shadcn.com/avatars/02.png" alt="User" />
+                  <AvatarFallback className="bg-black text-white font-black">U</AvatarFallback>
+                </Avatar>
+                <div className="min-w-0">
+                  <p className="text-sm font-black uppercase truncate">User Name</p>
+                  <p className="text-[10px] font-bold truncate opacity-80">user@example.com</p>
                 </div>
               </div>
-
-              {/* Logout Button */}
               <Button
-                variant="noShadow"
-                className="w-full justify-start border-2 border-red-600 hover:bg-red-50 hover:shadow-brutal transition-all font-black text-xs uppercase h-9 text-red-600 rounded-base"
+                className="w-full h-8 border-2 border-black bg-white text-black hover:bg-red-500 hover:text-white hover:border-black transition-all rounded-none font-black text-xs uppercase shadow-[2px_2px_0px_0px_#000] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px]"
               >
-                <IconLogout className="h-3.5 w-3.5" />
+                <IconLogout className="h-3 w-3 mr-2" />
                 Logout
               </Button>
-            </>
+            </div>
           )}
         </div>
       </SidebarContent>
