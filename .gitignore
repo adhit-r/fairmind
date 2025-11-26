@@ -323,6 +323,7 @@ test-results/
 !**/logo.png
 !docs/assets/issues/*.png
 !assets/logo/*.png
+!assets/diagrams/*.png
 
 # Temporary documentation files
 .temp-docs/
