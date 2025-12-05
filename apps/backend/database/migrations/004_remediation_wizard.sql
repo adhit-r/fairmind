@@ -134,8 +134,14 @@ BEGIN
         SET 
             total_applications = total_applications + 1,
             successful_applications = successful_applications + 1,
-            avg_improvement = COALESCE((avg_improvement * successful_applications + NEW.improvement) / (successful_applications + 1), NEW.improvement),
-            avg_execution_time_seconds = COALESCE((avg_execution_time_seconds * successful_applications + NEW.execution_time_seconds) / (successful_applications + 1), NEW.execution_time_seconds),
+            avg_improvement = CASE 
+                WHEN successful_applications = 0 THEN NEW.improvement
+                ELSE (avg_improvement * successful_applications + NEW.improvement) / (successful_applications + 1)
+            END,
+            avg_execution_time_seconds = CASE 
+                WHEN successful_applications = 0 THEN NEW.execution_time_seconds
+                ELSE (avg_execution_time_seconds * successful_applications + NEW.execution_time_seconds) / (successful_applications + 1)
+            END,
             last_used_at = CURRENT_TIMESTAMP,
             updated_at = CURRENT_TIMESTAMP
         WHERE strategy = NEW.strategy;

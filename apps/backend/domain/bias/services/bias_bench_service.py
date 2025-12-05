@@ -24,11 +24,15 @@ class BiasBenchService:
     def __init__(self):
         self.supported_benchmarks = ["stereoset", "crows", "seat"]
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.dependencies_loaded = 'StereoSetRunner' in globals()
 
     async def evaluate_model(self, model_name_or_path: str, benchmark_name: str) -> Dict[str, Any]:
         """
         Evaluate a model using a specific benchmark from bias-bench.
         """
+        if not self.dependencies_loaded:
+            raise ImportError("Bias bench dependencies (StereoSetRunner, etc.) failed to import. Cannot run evaluation.")
+
         benchmark_name = benchmark_name.lower()
         if benchmark_name not in self.supported_benchmarks:
             raise ValueError(f"Unsupported benchmark: {benchmark_name}. Supported: {self.supported_benchmarks}")
