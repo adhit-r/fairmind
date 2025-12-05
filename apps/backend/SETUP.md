@@ -34,10 +34,10 @@
 
 ## Current Database Status
 
-- ✅ **ml_models**: 7 active models
-- ✅ **audit_logs**: 5+ activity logs
-- ✅ **datasets**: Table created, ready for uploads
-- ✅ **geographic_bias_analyses**: 6 active scans
+-  **ml_models**: 7 active models
+-  **audit_logs**: 5+ activity logs
+-  **datasets**: Table created, ready for uploads
+-  **geographic_bias_analyses**: 6 active scans
 
 All tables are properly connected and ready to use!
 

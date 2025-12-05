@@ -21,7 +21,14 @@ import os
 import re
 from enum import Enum
 
-from openai import AsyncOpenAI, OpenAIError
+try:
+    from openai import AsyncOpenAI, OpenAIError
+    OPENAI_AVAILABLE = True
+except ImportError:
+    OPENAI_AVAILABLE = False
+    class AsyncOpenAI: pass
+    class OpenAIError(Exception): pass
+
 from pydantic import BaseModel
 
 from ..schemas.india_compliance import (
@@ -39,29 +46,39 @@ logger = logging.getLogger(__name__)
 # LLM Configuration
 # ============================================================================
 
+import httpx
+from config.settings import settings
+
 class LLMProvider(str, Enum):
     """Supported LLM providers"""
     OPENAI = "openai"
     ANTHROPIC = "anthropic"
+    GEMINI = "gemini"
 
 
 class AIComplianceAutomationService:
     """Service for AI-powered compliance automation"""
 
-    def __init__(self, api_key: Optional[str] = None, provider: LLMProvider = LLMProvider.OPENAI):
+    def __init__(self, api_key: Optional[str] = None, provider: LLMProvider = LLMProvider.GEMINI):
         """
         Initialize AI compliance automation service.
 
         Args:
             api_key: API key for LLM provider (defaults to environment variable)
-            provider: LLM provider to use (default: OpenAI)
+            provider: LLM provider to use (default: Gemini)
         """
         self.provider = provider
-        self.api_key = api_key
+        self.api_key = api_key or settings.google_api_key
         
         if provider == LLMProvider.OPENAI:
-            self.client = AsyncOpenAI(api_key=api_key)
+            if not OPENAI_AVAILABLE:
+                raise ImportError("OpenAI provider selected but 'openai' package is not installed.")
+            self.client = AsyncOpenAI(api_key=api_key or settings.openai_api_key)
             self.model = "gpt-4"
+        elif provider == LLMProvider.GEMINI:
+            self.client = httpx.AsyncClient()
+            self.model = settings.llm_model or "gemini-1.5-flash"
+            self.api_key = api_key or settings.google_api_key
         else:
             raise ValueError(f"Unsupported LLM provider: {provider}")
         
@@ -69,6 +86,45 @@ class AIComplianceAutomationService:
         self.rag = IndiaComplianceRAG()
         
         logger.info(f"Initialized AIComplianceAutomationService with {provider.value}")
+
+    async def _call_llm(self, system_prompt: str, user_prompt: str, max_tokens: int = 2000) -> str:
+        """Abstract LLM call for multiple providers"""
+        if self.provider == LLMProvider.OPENAI:
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=0.7,
+                max_tokens=max_tokens,
+            )
+            return response.choices[0].message.content
+            
+        elif self.provider == LLMProvider.GEMINI:
+            if not self.api_key:
+                logger.warning("Google API key not found. Returning mock response.")
+                return "Mock response: Google API key missing."
+
+            full_prompt = f"{system_prompt}\n\n{user_prompt}"
+            try:
+                response = await self.client.post(
+                    f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent?key={self.api_key}",
+                    headers={"Content-Type": "application/json"},
+                    json={
+                        "contents": [{"parts": [{"text": full_prompt}]}],
+                        "generationConfig": {"maxOutputTokens": max_tokens}
+                    },
+                    timeout=60.0
+                )
+                response.raise_for_status()
+                result = response.json()
+                return result["candidates"][0]["content"]["parts"][0]["text"]
+            except Exception as e:
+                logger.error(f"Gemini API call failed: {e}")
+                raise
+
+        return "Unsupported provider"
 
     # ========================================================================
     # Gap Analysis with LLM (Task 7.1, 7.3)
@@ -121,23 +177,11 @@ class AIComplianceAutomationService:
 
         try:
             # Call LLM for analysis
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are an expert in Indian AI compliance and data protection law. Provide detailed, actionable analysis of compliance gaps with specific legal references.",
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt,
-                    }
-                ],
-                temperature=0.7,
-                max_tokens=2000,
+            analysis_text = await self._call_llm(
+                system_prompt="You are an expert in Indian AI compliance and data protection law. Provide detailed, actionable analysis of compliance gaps with specific legal references.",
+                user_prompt=prompt,
+                max_tokens=2000
             )
-
-            analysis_text = response.choices[0].message.content
 
             # Parse LLM response
             analysis = self._parse_gap_analysis_response(analysis_text)
@@ -156,7 +200,7 @@ class AIComplianceAutomationService:
                 "generated_at": datetime.utcnow().isoformat(),
             }
 
-        except OpenAIError as e:
+        except Exception as e:
             logger.error(f"LLM gap analysis failed: {str(e)}")
             raise
 
@@ -213,23 +257,11 @@ class AIComplianceAutomationService:
 
         try:
             # Call LLM for remediation planning
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are an expert in implementing Indian AI compliance requirements. Create detailed, step-by-step remediation plans with realistic timelines and effort estimates.",
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt,
-                    }
-                ],
-                temperature=0.7,
-                max_tokens=2500,
+            plan_text = await self._call_llm(
+                system_prompt="You are an expert in implementing Indian AI compliance requirements. Create detailed, step-by-step remediation plans with realistic timelines and effort estimates.",
+                user_prompt=prompt,
+                max_tokens=2500
             )
-
-            plan_text = response.choices[0].message.content
 
             # Parse remediation plan
             plan = self._parse_remediation_plan_response(plan_text, sorted_gaps)
@@ -247,7 +279,7 @@ class AIComplianceAutomationService:
                 "generated_at": datetime.utcnow().isoformat(),
             }
 
-        except OpenAIError as e:
+        except Exception as e:
             logger.error(f"Remediation plan generation failed: {str(e)}")
             raise
 
@@ -295,23 +327,11 @@ class AIComplianceAutomationService:
 
         try:
             # Call LLM for policy generation
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are an expert in Indian data protection law and DPDP Act 2023. Generate comprehensive, legally compliant privacy policies that include all required clauses and disclosures.",
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt,
-                    }
-                ],
-                temperature=0.5,
-                max_tokens=3000,
+            policy_text = await self._call_llm(
+                system_prompt="You are an expert in Indian data protection law and DPDP Act 2023. Generate comprehensive, legally compliant privacy policies that include all required clauses and disclosures.",
+                user_prompt=prompt,
+                max_tokens=3000
             )
-
-            policy_text = response.choices[0].message.content
 
             logger.info(f"Generated privacy policy for system: {system_name}")
 
@@ -326,7 +346,7 @@ class AIComplianceAutomationService:
                 "compliance_checklist": self._generate_policy_compliance_checklist(framework),
             }
 
-        except OpenAIError as e:
+        except Exception as e:
             logger.error(f"Privacy policy generation failed: {str(e)}")
             raise
 
@@ -367,23 +387,11 @@ class AIComplianceAutomationService:
             prompt = self._create_qa_prompt(question, relevant_docs, system_context)
 
             # Call LLM for answer generation
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are an expert in Indian AI compliance and data protection law. Answer questions accurately with specific legal citations from Indian regulations.",
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt,
-                    }
-                ],
-                temperature=0.5,
-                max_tokens=1500,
+            answer_text = await self._call_llm(
+                system_prompt="You are an expert in Indian AI compliance and data protection law. Answer questions accurately with specific legal citations from Indian regulations.",
+                user_prompt=prompt,
+                max_tokens=1500
             )
-
-            answer_text = response.choices[0].message.content
 
             logger.info(f"Answered compliance question: {question[:50]}...")
 
@@ -438,23 +446,11 @@ class AIComplianceAutomationService:
 
         try:
             # Call LLM for risk prediction
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are an expert in AI compliance risk assessment. Analyze system changes and predict potential compliance risks with specific recommendations.",
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt,
-                    }
-                ],
-                temperature=0.7,
-                max_tokens=1500,
+            risk_assessment = await self._call_llm(
+                system_prompt="You are an expert in AI compliance risk assessment. Analyze system changes and predict potential compliance risks with specific recommendations.",
+                user_prompt=prompt,
+                max_tokens=1500
             )
-
-            risk_assessment = response.choices[0].message.content
 
             # Parse risk assessment
             parsed_risk = self._parse_risk_assessment(risk_assessment)
@@ -472,7 +468,7 @@ class AIComplianceAutomationService:
                 "generated_at": datetime.utcnow().isoformat(),
             }
 
-        except OpenAIError as e:
+        except Exception as e:
             logger.error(f"Risk prediction failed: {str(e)}")
             raise
 
@@ -511,34 +507,20 @@ class AIComplianceAutomationService:
 
         try:
             # Call LLM for regulatory monitoring
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are an expert in Indian AI regulations and compliance. Identify recent or upcoming regulatory changes that may affect AI compliance.",
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt,
-                    }
-                ],
-                temperature=0.5,
-                max_tokens=1500,
+            monitoring_report = await self._call_llm(
+                system_prompt="You are an expert in Indian AI regulations and compliance. Identify recent or upcoming regulatory changes that may affect AI compliance.",
+                user_prompt=prompt,
+                max_tokens=1500
             )
-
-            monitoring_report = response.choices[0].message.content
 
             # Parse monitoring report
             parsed_updates = self._parse_regulatory_updates(monitoring_report)
 
             logger.info(f"Completed regulatory monitoring for {len(frameworks)} frameworks")
-
-            parsed_updates = self._parse_regulatory_updates(monitoring_report)
             
             return parsed_updates.get("updates", [])
 
-        except OpenAIError as e:
+        except Exception as e:
             logger.error(f"Regulatory monitoring failed: {str(e)}")
             raise
 

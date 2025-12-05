@@ -26,11 +26,11 @@ from config.settings import settings
 from config.logging import get_logger
 from config.database import init_database, close_database
 from config.cache import init_cache, close_cache
+from core.middleware.auth import SupabaseAuthMiddleware
+from core.middleware import ErrorHandlingMiddleware, RequestLoggingMiddleware
 from middleware.security import (
     SecurityHeadersMiddleware,
     RateLimitMiddleware,
-    RequestLoggingMiddleware,
-    ErrorHandlingMiddleware,
     JWTAuthenticationMiddleware,
 )
 from services.health import health_service
@@ -226,7 +226,7 @@ app.add_middleware(
 app.add_middleware(ErrorHandlingMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(JWTAuthenticationMiddleware)  # JWT auth middleware
-app.add_middleware(RequestLoggingMiddleware)
+app.add_middleware(SupabaseAuthMiddleware)  # Supabase JWT verification middleware
 
 # Add response compression middleware
 app.add_middleware(
@@ -240,6 +240,30 @@ app.add_middleware(
     RateLimitMiddleware,
     requests_per_minute=settings.rate_limit_requests
 )
+
+# API Versioning Middleware
+try:
+    from api.versioning import get_version_registry, add_version_headers
+    
+    @app.middleware("http")
+    async def version_header_middleware(request: Request, call_next):
+        """Add API version headers to all responses."""
+        response = await call_next(request)
+        
+        try:
+            registry = get_version_registry()
+            # For now, we default to the latest stable version for all responses
+            # In the future, this could be determined by the URL path (e.g., /api/v1/...)
+            latest_version = registry.get_latest_stable()
+            if latest_version:
+                add_version_headers(response, latest_version)
+        except Exception as e:
+            # Don't fail the request if versioning fails
+            logger.warning(f"Failed to add version headers: {e}")
+            
+        return response
+except Exception as e:
+    logger.warning(f"Could not load versioning middleware: {e}")
 @app.options("/{full_path:path}")
 async def options_handler(request: Request):
     """Handle OPTIONS preflight requests."""
@@ -301,21 +325,105 @@ try:
 except Exception as e:
     logger.warning(f"Could not register JWT exception handlers: {e}")
 
-# Import and include authentication routes first
+# Initialize Route Registry
+try:
+    from api.registry import get_registry
+    
+    # Get registry instance
+    registry = get_registry(app)
+    
+    # Discover routes from domain directory
+    # This automatically finds and registers routes from:
+    # - domain/bias_detection
+    # - domain/compliance
+    # - domain/monitoring
+    # - domain/mlops
+    # - domain/dataset (if migrated)
+    base_path = Path(__file__).parent.parent
+    registry.discover_routes(base_path, fail_fast=False)
+    
+    # Log discovery results
+    routes = registry.get_route_listing()
+    logger.info(f"Discovered {len(routes)} routes from domains")
+    
+except Exception as e:
+    logger.error(f"Route discovery failed: {e}", exc_info=True)
+
+# Import and include legacy/core routes
+# These will be migrated to domains in future phases
 try:
     from .routes import auth
-    app.include_router(auth.router, prefix="/api/v1", tags=["authentication"])
+    # app.include_router(auth.router, prefix="/api/v1", tags=["authentication"]) # Legacy
+    
+    # New Local Auth
+    from domain.auth.routes import auth_routes
+    app.include_router(auth_routes.router, prefix="/api/v1")
+    
     logger.info("Authentication routes loaded successfully")
 except Exception as e:
     logger.warning(f"Could not load authentication routes: {e}")
 
-# Import and include core routes
 try:
     from .routes import core
     app.include_router(core.router, prefix="/api/v1", tags=["core"])
     logger.info("Core routes loaded successfully")
 except Exception as e:
     logger.warning(f"Could not load core routes: {e}")
+
+# Model Upload Routes
+try:
+    from domain.models.routes.model_upload_routes import router as model_upload_router
+    app.include_router(model_upload_router, prefix="/api/v1", tags=["model-upload"])
+    logger.info("Model upload routes loaded successfully")
+except Exception as e:
+    logger.warning(f"Could not load model upload routes: {e}")
+
+# Model Test Routes
+try:
+    from domain.models.routes.model_test_routes import router as model_test_router
+    app.include_router(model_test_router, prefix="/api/v1", tags=["model-test"])
+    logger.info("Model test routes loaded successfully")
+except Exception as e:
+    logger.warning(f"Could not load model test routes: {e}")
+
+# New imports and router inclusions
+try:
+    from apps.backend.domain.remediation.routes.remediation_routes import router as remediation_router
+    from apps.backend.domain.analytics.routes.analytics_routes import router as analytics_router
+    from apps.backend.domain.compliance.routes.compliance_routes import router as compliance_router
+    from apps.backend.domain.marketplace.routes.marketplace_routes import router as marketplace_router
+    from apps.backend.domain.reports.routes.reports_routes import router as reports_router
+    from apps.backend.domain.settings.routes.settings_routes import router as settings_router
+
+    # Include routers
+    app.include_router(
+        health_service.router,
+        prefix="/health",
+        tags=["Health"]
+    )
+
+    app.include_router(
+        remediation_router,
+        prefix="/api/v1/remediation",
+        tags=["Bias Remediation"]
+    )
+
+    app.include_router(
+        analytics_router,
+        prefix="/api/v1/analytics",
+        tags=["Advanced Analytics"]
+    )
+
+    app.include_router(
+        compliance_router,
+        prefix="/api/v1/compliance",
+        tags=["Compliance Automation"]
+    )
+    logger.info("Remediation, Analytics, and Compliance routes loaded successfully")
+except Exception as e:
+    logger.warning(f"Could not load remediation, analytics, or compliance routes: {e}")
+# Register routers
+# Routers are already included in the try-except blocks above
 
 try:
     from api.routes import database
@@ -333,34 +441,11 @@ except Exception as e:
     logger.warning(f"Could not load AI BOM routes: {e}")
 
 try:
-    from .routes import bias_detection
-    app.include_router(bias_detection.router, prefix="/api/v1", tags=["bias-detection"])
-    logger.info("Bias detection routes loaded successfully")
-except Exception as e:
-    logger.warning(f"Could not load bias detection routes: {e}")
-
-# Production-ready bias detection with actual fairness calculations
-try:
-    from .routes import bias_detection_v2
-    app.include_router(bias_detection_v2.router, prefix="/api/v1", tags=["bias-detection-v2"])
-    logger.info("Bias detection v2 routes loaded successfully")
-except Exception as e:
-    logger.warning(f"Could not load bias detection v2 routes: {e}")
-
-
-try:
     from .routes import security
     app.include_router(security.router, prefix="/api/v1", tags=["security"])
     logger.info("Security testing routes loaded successfully")
 except Exception as e:
     logger.warning(f"Could not load security routes: {e}")
-
-try:
-    from .routes import monitoring
-    app.include_router(monitoring.router, prefix="/api/v1", tags=["monitoring"])
-    logger.info("Monitoring routes loaded successfully")
-except Exception as e:
-    logger.warning(f"Could not load monitoring routes: {e}")
 
 try:
     from .routes import fairness_governance
@@ -371,7 +456,7 @@ except Exception as e:
 
 try:
     from .routes import provenance
-    app.include_router(provenance.router, prefix="/api/v1", tags=["provenance"])
+    app.include_router(provenance.router, prefix="/api/v1/provenance", tags=["provenance"])
     logger.info("Provenance routes loaded successfully")
 except Exception as e:
     logger.warning(f"Could not load provenance routes: {e}")
@@ -383,21 +468,6 @@ try:
 except Exception as e:
     logger.warning(f"Could not load advanced fairness routes: {e}")
 
-# Modern bias detection and explainability routes
-try:
-    from .routes import modern_bias_detection
-    app.include_router(modern_bias_detection.router, prefix="/api/v1", tags=["modern-bias-detection"])
-    logger.info("Modern bias detection routes loaded successfully")
-except Exception as e:
-    logger.warning(f"Could not load modern bias detection routes: {e}")
-
-try:
-    from .routes import modern_tools_integration
-    app.include_router(modern_tools_integration.router, prefix="/api/v1", tags=["modern-tools-integration"])
-    logger.info("Modern tools integration routes loaded successfully")
-except Exception as e:
-    logger.warning(f"Could not load modern tools integration routes: {e}")
-
 try:
     from .routes import comprehensive_bias_evaluation
     app.include_router(comprehensive_bias_evaluation.router, prefix="/api/v1", tags=["comprehensive-bias-evaluation"])
@@ -406,29 +476,12 @@ except Exception as e:
     logger.warning(f"Could not load comprehensive bias evaluation routes: {e}")
 
 try:
-    from .routes import multimodal_bias_detection
-    app.include_router(multimodal_bias_detection.router, prefix="/api/v1", tags=["multimodal-bias-detection"])
-    logger.info("Multimodal bias detection routes loaded successfully")
-except Exception as e:
-    logger.warning(f"Could not load multimodal bias detection routes: {e}")
-
-# Advanced bias detection routes
-try:
-    from .routes import advanced_bias_detection
-    app.include_router(advanced_bias_detection.router, prefix="/api/v1", tags=["advanced-bias-detection"])
-    logger.info("Advanced bias detection routes loaded successfully")
-except Exception as e:
-    logger.warning(f"Could not load advanced bias detection routes: {e}")
-
-# Real-time model integration routes
-try:
     from .routes import realtime_model_integration
     app.include_router(realtime_model_integration.router, prefix="/api/v1", tags=["realtime-model-integration"])
     logger.info("Real-time model integration routes loaded successfully")
 except Exception as e:
     logger.warning(f"Could not load real-time model integration routes: {e}")
 
-# Benchmark suite routes
 try:
     from .routes import benchmark_suite
     app.include_router(benchmark_suite.router, prefix="/api/v1", tags=["benchmark-suite"])
@@ -443,85 +496,12 @@ try:
 except Exception as e:
     logger.warning(f"Could not load model performance benchmarking routes: {e}")
 
-# MLOps integration routes (W&B, MLflow)
-try:
-    from .routes import mlops
-    app.include_router(mlops.router, prefix="/api/v1", tags=["mlops"])
-    logger.info("MLOps integration routes loaded successfully")
-except Exception as e:
-    logger.warning(f"Could not load MLOps integration routes: {e}")
-
-# Compliance & Reporting routes
-try:
-    from .routes import compliance_reporting
-    app.include_router(compliance_reporting.router, tags=["Compliance & Reporting"])
-    logger.info("Compliance & Reporting routes loaded successfully")
-except Exception as e:
-    logger.warning(f"Could not load Compliance & Reporting routes: {e}")
-
-# Evidence-based Compliance Check routes
-try:
-    from .routes import compliance_check
-    app.include_router(compliance_check.router, tags=["compliance"])
-    logger.info("Evidence-based compliance check routes loaded successfully")
-except Exception as e:
-    logger.warning(f"Could not load compliance check routes: {e}")
-
-# AI Governance routes
 try:
     from .routes import ai_governance
     app.include_router(ai_governance.router, prefix="/api/v1/ai-governance", tags=["ai-governance"])
     logger.info("AI Governance routes loaded successfully")
 except Exception as e:
     logger.warning(f"Could not load AI Governance routes: {e}")
-
-# India Compliance routes
-try:
-    from .routes import india_compliance
-    app.include_router(india_compliance.router, tags=["india-compliance"])
-    logger.info("India compliance routes loaded successfully")
-except Exception as e:
-    logger.warning(f"Could not load India compliance routes: {e}")
-
-# India Compliance Integration routes
-try:
-    from .routes import india_compliance_integrations
-    app.include_router(india_compliance_integrations.router, tags=["india-compliance-integrations"])
-    logger.info("India compliance integration routes loaded successfully")
-except Exception as e:
-    logger.warning(f"Could not load India compliance integration routes: {e}")
-
-# India Compliance AI Automation routes
-try:
-    from .routes import india_compliance_ai
-    app.include_router(india_compliance_ai.router, tags=["india-compliance-ai"])
-    logger.info("India compliance AI automation routes loaded successfully")
-except Exception as e:
-    logger.warning(f"Could not load India compliance AI automation routes: {e}")
-
-# India Compliance Health Check routes
-try:
-    from .routes import india_compliance_health
-    app.include_router(india_compliance_health.router, tags=["india-compliance-health"])
-    logger.info("India compliance health check routes loaded successfully")
-except Exception as e:
-    logger.warning(f"Could not load India compliance health check routes: {e}")
-
-# India Compliance Metrics routes
-try:
-    from .routes import india_compliance_metrics
-    app.include_router(india_compliance_metrics.router, tags=["india-compliance-metrics"])
-    logger.info("India compliance metrics routes loaded successfully")
-except Exception as e:
-    logger.warning(f"Could not load India compliance metrics routes: {e}")
-
-# India Compliance Alerting routes
-try:
-    from .routes import india_compliance_alerting
-    app.include_router(india_compliance_alerting.router, tags=["india-compliance-alerting"])
-    logger.info("India compliance alerting routes loaded successfully")
-except Exception as e:
-    logger.warning(f"Could not load India compliance alerting routes: {e}")
 
 
 # Production-ready health check endpoints

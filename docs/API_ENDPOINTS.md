@@ -54,82 +54,42 @@ Kubernetes liveness probe endpoint.
 
 **Base Path**: `/api/v1/auth`
 
-### POST `/api/v1/auth/login`
-User login endpoint.
+### POST `/api/v1/auth/register`
+Register a new user.
 
 **Request Body**:
 ```json
 {
-  "username": "string",
-  "password": "string"
+  "email": "user@example.com",
+  "password": "securepassword",
+  "full_name": "John Doe"
 }
 ```
 
-**Response**: `LoginResponse` with access token and refresh token
+**Response**: `User` object
 
-### POST `/api/v1/auth/refresh`
-Refresh access token.
+### POST `/api/v1/auth/token`
+Login to get access token (OAuth2 compatible).
 
-**Request Body**:
+**Request Body** (Form Data):
+- `username`: Email address
+- `password`: Password
+
+**Response**:
 ```json
 {
-  "refresh_token": "string"
+  "access_token": "jwt_token_string",
+  "token_type": "bearer"
 }
 ```
-
-**Response**: `RefreshResponse` with new access token
-
-### POST `/api/v1/auth/logout`
-Logout user.
-
-**Response**: Success message
 
 ### GET `/api/v1/auth/me`
 Get current user information.
 
-**Response**: `UserResponse` with user details
+**Headers**:
+- `Authorization`: `Bearer <access_token>`
 
-### POST `/api/v1/auth/api-keys`
-Create new API key.
-
-**Request Body**:
-```json
-{
-  "name": "string",
-  "permissions": ["string"]
-}
-```
-
-**Response**: `APIKeyResponse` with API key
-
-### GET `/api/v1/auth/api-keys`
-List all API keys for current user.
-
-**Response**: Array of API keys
-
-### DELETE `/api/v1/auth/api-keys/{key_name}`
-Delete API key by name.
-
-**Response**: Success message
-
-### POST `/api/v1/auth/users`
-Create new user.
-
-**Request Body**:
-```json
-{
-  "username": "string",
-  "email": "string",
-  "password": "string"
-}
-```
-
-**Response**: `UserResponse`
-
-### GET `/api/v1/auth/health`
-Health check for auth service.
-
-**Response**: Health status
+**Response**: `User` object
 
 ---
 

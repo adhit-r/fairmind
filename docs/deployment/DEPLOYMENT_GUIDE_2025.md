@@ -14,7 +14,6 @@ This guide covers the complete deployment of FairMind's modern bias detection an
 - **Network**: Stable internet connection for external tool integrations
 
 ### Required Accounts
-- **Railway**: For backend deployment
 - **Netlify**: For frontend deployment
 - **Supabase**: For database (optional)
 - **External Tools**: CometLLM, DeepEval, Arize Phoenix (optional)
@@ -42,50 +41,9 @@ python scripts/init_database.py
 python -m uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-### 2. Production Deployment (Railway)
+### 2. Production Deployment
+*Backend deployment instructions pending.*
 
-#### Step 1: Prepare for Deployment
-```bash
-# Ensure all tests pass
-python test_modern_bias_simple.py
-python test_multimodal_bias_detection.py
-python test_phase2.py
-
-# Check for linting errors
-python -m flake8 api/
-python -m black --check api/
-```
-
-#### Step 2: Deploy to Railway
-```bash
-# Install Railway CLI
-npm install -g @railway/cli
-
-# Login to Railway
-railway login
-
-# Deploy
-railway up
-
-# Set environment variables
-railway variables set DATABASE_URL=your_database_url
-railway variables set SECRET_KEY=your_secret_key
-railway variables set COMETLLM_API_KEY=your_cometllm_key
-railway variables set DEEPEVAL_API_KEY=your_deepeval_key
-```
-
-#### Step 3: Verify Deployment
-```bash
-# Check deployment status
-railway status
-
-# View logs
-railway logs
-
-# Test endpoints
-curl https://api.fairmind.xyz/health
-curl https://api.fairmind.xyz/api/v1/modern-bias/categories
-```
 
 ### 3. Environment Configuration
 
@@ -202,7 +160,16 @@ NEXT_PUBLIC_ENABLE_COMPREHENSIVE_EVALUATION=true
 
 ## Database Setup
 
-### Option 1: Supabase (Recommended)
+### Option 1: SQLite (Local/Dev - Default)
+
+Zero-configuration setup. The application uses `fairmind.db` (SQLite) by default if `DATABASE_URL` is not set or set to a sqlite path.
+
+```bash
+# No setup required.
+# Database is automatically initialized on first run.
+```
+
+### Option 2: Supabase (Production Recommended)
 
 ```bash
 # Install Supabase CLI
@@ -221,7 +188,7 @@ supabase db push
 python scripts/setup_supabase_storage.py
 ```
 
-### Option 2: PostgreSQL
+### Option 3: PostgreSQL
 
 ```bash
 # Install PostgreSQL
@@ -354,7 +321,6 @@ export JWT_SECRET=your-jwt-secret
 chmod 600 .env
 
 # Use secrets management
-railway variables set --secret SECRET_KEY=your-secret-key
 netlify env:set --secret API_SECRET=your-api-secret
 ```
 
@@ -399,15 +365,6 @@ curl https://app-demo.fairmind.xyz/dashboard
 #### 1. Backend Deployment Issues
 
 ```bash
-# Check logs
-railway logs
-
-# Restart service
-railway restart
-
-# Check environment variables
-railway variables
-
 # Test locally
 python -m uvicorn api.main:app --host 0.0.0.0 --port 8000
 ```
@@ -496,7 +453,6 @@ psql fairmind < backup_20250101_120000.sql
 
 ```bash
 # Backup environment variables
-railway variables > railway_vars_backup.txt
 netlify env:list > netlify_vars_backup.txt
 
 # Backup configuration files
@@ -508,9 +464,6 @@ tar -czf config_backup.tar.gz config/ .env
 ### 1. Horizontal Scaling
 
 ```bash
-# Scale Railway service
-railway scale --replicas 3
-
 # Scale Netlify functions
 netlify functions:scale --concurrency 100
 ```
@@ -518,9 +471,6 @@ netlify functions:scale --concurrency 100
 ### 2. Vertical Scaling
 
 ```bash
-# Increase Railway resources
-railway scale --memory 2GB --cpu 2
-
 # Optimize database
 supabase db optimize
 ```
@@ -549,7 +499,6 @@ curl https://api.fairmind.xyz/health
 curl https://api.fairmind.xyz/api/v1/system/status
 
 # Check logs
-railway logs --tail
 netlify logs --tail
 ```
 

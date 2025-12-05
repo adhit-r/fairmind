@@ -398,15 +398,52 @@ class RealTimeModelIntegrationService:
             raise
     
     async def _call_google(self, config: ModelConfig, prompt: str) -> Dict[str, Any]:
-        """Call Google API (simulated)"""
-        # Simulate Google API call
-        await asyncio.sleep(0.1)  # Simulate network delay
+        """Call Google API (Gemini)"""
+        if not config.api_key:
+            raise ValueError("Google API key is required")
+
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{config.model_name}:generateContent?key={config.api_key}"
         
-        return {
-            "text": f"Google API response to: {prompt[:50]}...",
-            "tokens_used": len(prompt.split()) + 20,
-            "metadata": {"provider": "google", "model": config.model_name}
+        payload = {
+            "contents": [{
+                "parts": [{"text": prompt}]
+            }],
+            "generationConfig": {
+                "maxOutputTokens": config.max_tokens,
+                "temperature": config.temperature,
+                "topP": config.top_p,
+            }
         }
+        
+        try:
+            if self.session:
+                async with self.session.post(url, json=payload) as response:
+                    response.raise_for_status()
+                    result = await response.json()
+            else:
+                # Fallback if session not initialized
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(url, json=payload) as response:
+                        response.raise_for_status()
+                        result = await response.json()
+            
+            text_response = result["candidates"][0]["content"]["parts"][0]["text"]
+            
+            # Estimate tokens (rough approximation)
+            tokens_used = len(prompt.split()) + len(text_response.split())
+            
+            return {
+                "text": text_response,
+                "tokens_used": tokens_used,
+                "metadata": {
+                    "provider": "google", 
+                    "model": config.model_name,
+                    "finish_reason": result["candidates"][0].get("finishReason", "unknown")
+                }
+            }
+        except Exception as e:
+            self.logger.error(f"Google API error: {str(e)}")
+            raise
     
     async def _call_cohere(self, config: ModelConfig, prompt: str) -> Dict[str, Any]:
         """Call Cohere API (simulated)"""
@@ -750,7 +787,7 @@ class RealTimeModelIntegrationService:
         model_mapping = {
             ModelProvider.OPENAI: ["gpt-4", "gpt-4-turbo", "gpt-3.5-turbo", "gpt-3.5-turbo-instruct"],
             ModelProvider.ANTHROPIC: ["claude-3-opus", "claude-3-sonnet", "claude-3-haiku"],
-            ModelProvider.GOOGLE: ["gemini-pro", "gemini-pro-vision", "palm-2"],
+            ModelProvider.GOOGLE: ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-pro", "gemini-pro-vision"],
             ModelProvider.COHERE: ["command", "command-light", "command-nightly"],
             ModelProvider.HUGGINGFACE: ["meta-llama/Llama-2-7b-chat-hf", "microsoft/DialoGPT-medium"],
             ModelProvider.LOCAL: ["local-llm", "custom-model"]

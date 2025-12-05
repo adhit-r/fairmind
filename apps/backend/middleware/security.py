@@ -339,7 +339,7 @@ class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
         public_paths = [
             "/health", "/", "/docs", "/redoc", "/openapi.json",
             "/auth/login", "/auth/refresh", "/auth/health",
-            "/api/v1/health", "/api/v1/auth/login"
+            "/api/v1/auth/login", "/api/v1/auth/register"
         ]
         
         # In development, allow database routes without auth
@@ -352,6 +352,15 @@ class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
                 "/api/v1/multimodal-bias-detection",
                 "/api/v1/ai-bom",
                 "/api/v1/ai-governance",
+                "/api/v1/analytics",
+                "/api/v1/remediation",
+                "/api/v1/compliance",
+                "/api/v1/marketplace",
+                "/api/v1/reports",
+                "/api/v1/settings",
+                "/api/v1/datasets",
+                "/api/v1/monitoring",
+                "/api/v1/mlops"
             ])
         
         # Always allow OPTIONS requests (CORS preflight)
@@ -389,6 +398,8 @@ class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
         
         try:
             # Verify token using new JWT infrastructure
+            # In Supabase, we might want to verify against Supabase's JWT secret
+            # For now, we'll use our internal auth manager which should be configured with the same secret
             token_data = await self.auth_manager.verify_token(token)
             
             # Add user information to request state
