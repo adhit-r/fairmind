@@ -352,7 +352,7 @@ def seed_database():
         for model in FACTUAL_MODELS:
             try:
                 # Check if model already exists
-                check_query = text("SELECT id FROM ml_models WHERE id = :id")
+                check_query = text("SELECT id FROM models WHERE id = :id")
                 result = session.execute(check_query, {"id": model["id"]}).fetchone()
                 
                 if result:
@@ -365,31 +365,26 @@ def seed_database():
                     "id": model["id"],
                     "name": model["name"],
                     "description": model["description"],
-                    "type": model["model_type"],  # Supabase uses 'type' not 'model_type'
+                    "model_type": model["model_type"],
                     "version": model["version"],
-                    "is_active": model.get("is_active", True),
+                    "status": "active" if model.get("is_active", True) else "inactive",
                     "tags": json.dumps(model.get("tags", [])),
                     "metadata": json.dumps(model.get("metadata", {})),
-                    "path": f"/models/{model['id']}.pkl",  # Supabase uses 'path' not 'file_path'
+                    "file_path": f"/models/{model['id']}.pkl",
                     "file_size": 50000000,  # 50MB placeholder
                     "created_by": None,
-                    "created_at": now,
-                    "updated_at": now,
-                    "framework": model.get("metadata", {}).get("framework", "Unknown"),
-                    "risk_level": "medium",  # Default risk level
-                    "deployment_environment": "production" if model.get("status") == "active" else "development"
+                    "upload_date": now,
+                    "updated_at": now
                 }
                 
                 # Insert model - match actual Supabase schema
                 insert_query = text("""
-                    INSERT INTO ml_models (
-                        id, name, description, type, version, is_active,
-                        tags, metadata, path, file_size, created_by, created_at, updated_at,
-                        framework, risk_level, deployment_environment
+                    INSERT INTO models (
+                        id, name, description, model_type, version, status,
+                        tags, metadata, file_path, file_size, created_by, upload_date, updated_at
                     ) VALUES (
-                        :id, :name, :description, :type, :version, :is_active,
-                        :tags, :metadata, :path, :file_size, :created_by, :created_at, :updated_at,
-                        :framework, :risk_level, :deployment_environment
+                        :id, :name, :description, :model_type, :version, :status,
+                        :tags, :metadata, :file_path, :file_size, :created_by, :upload_date, :updated_at
                     )
                 """)
                 session.execute(insert_query, model_data)
@@ -408,6 +403,24 @@ def seed_database():
         print("Seeding Datasets...")
         for dataset in FACTUAL_DATASETS:
             try:
+                # Prepare dataset data
+                now = datetime.now(timezone.utc)
+                dataset_data = {
+                    "id": dataset["id"],
+                    "created_by": None,
+                    "name": dataset["name"],
+                    "description": dataset["description"],
+                    "source": dataset["source"],
+                    "file_path": f"/datasets/{dataset['id']}.csv",
+                    "file_type": "csv",
+                    "row_count": dataset["size"],
+                    "columns": json.dumps(dataset["columns"]),
+                    "file_size": dataset["size"] * 100,  # Estimate
+                    "upload_date": now,
+                    "tags": json.dumps(dataset.get("tags", [])),
+                    "updated_at": now
+                }
+
                 # Check if dataset already exists
                 check_query = text("SELECT id FROM datasets WHERE id = :id")
                 result = session.execute(check_query, {"id": dataset["id"]}).fetchone()
@@ -416,35 +429,14 @@ def seed_database():
                     print(f"  ⊘ Skipped: {dataset['name']} (already exists)")
                     continue
                 
-                # Prepare dataset data
-                now = datetime.now(timezone.utc)
-                dataset_data = {
-                    "id": dataset["id"],
-                    "user_id": "00000000-0000-0000-0000-000000000000",
-                    "filename": f"{dataset['name'].lower().replace(' ', '_')}.csv",
-                    "file_path": f"/datasets/{dataset['id']}.csv",
-                    "file_hash": str(uuid.uuid4()),  # Placeholder hash
-                    "rows": dataset["size"],
-                    "columns": json.dumps(dataset["columns"]),
-                    "column_types": json.dumps({col: "string" for col in dataset["columns"]}),
-                    "file_size_bytes": dataset["size"] * 100,  # Estimate
-                    "uploaded_at": now,
-                    "metadata": json.dumps(dataset.get("metadata", {})),
-                    "preview": json.dumps([]),
-                    "created_at": now,
-                    "updated_at": now
-                }
-                
                 # Insert dataset
                 insert_query = text("""
                     INSERT INTO datasets (
-                        id, user_id, filename, file_path, file_hash, rows, columns,
-                        column_types, file_size_bytes, uploaded_at, metadata, preview,
-                        created_at, updated_at
+                        id, created_by, name, description, source, file_path, file_type, row_count, columns,
+                        file_size, upload_date, tags, updated_at
                     ) VALUES (
-                        :id, :user_id, :filename, :file_path, :file_hash, :rows, :columns,
-                        :column_types, :file_size_bytes, :uploaded_at, :metadata, :preview,
-                        :created_at, :updated_at
+                        :id, :created_by, :name, :description, :source, :file_path, :file_type, :row_count, :columns,
+                        :file_size, :upload_date, :tags, :updated_at
                     )
                 """)
                 session.execute(insert_query, dataset_data)
@@ -454,9 +446,176 @@ def seed_database():
                 inserted_datasets += 1
             except Exception as e:
                 print(f"  ✗ Error inserting {dataset['name']}: {e}")
+                # Try to create table if it doesn't exist (fallback for SQLite)
+                if "no such table: datasets" in str(e):
+                    print("  ! Attempting to create datasets table...")
+                    try:
+                        create_table_sql = text("""
+                            CREATE TABLE IF NOT EXISTS datasets (
+                                id VARCHAR(255) PRIMARY KEY,
+                                name VARCHAR(255) NOT NULL,
+                                description TEXT,
+                                source VARCHAR(255),
+                                file_path VARCHAR(500),
+                                file_type VARCHAR(50),
+                                file_size BIGINT,
+                                row_count INTEGER DEFAULT 0,
+                                column_count INTEGER DEFAULT 0,
+                                columns TEXT DEFAULT '[]',
+                                schema_json TEXT DEFAULT '{}',
+                                tags TEXT DEFAULT '[]',
+                                created_by VARCHAR(255),
+                                upload_date TIMESTAMP,
+                                updated_at TIMESTAMP,
+                                FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+                            )
+                        """)
+                        session.execute(create_table_sql)
+                        session.commit()
+                        print("  ✓ Created datasets table. Retrying insert...")
+                        session.execute(insert_query, dataset_data)
+                        session.commit()
+                        print(f"  ✓ Inserted: {dataset['name']}")
+                        inserted_datasets += 1
+                    except Exception as create_e:
+                        print(f"  ✗ Failed to create table/retry: {create_e}")
+                
                 session.rollback()
         
         print(f"  Total datasets inserted: {inserted_datasets}/{len(FACTUAL_DATASETS)}")
+        print()
+
+        # ============================================================================
+        # SEED BIAS ANALYSES
+        # ============================================================================
+        print("Seeding Bias Analyses...")
+        
+        # Generate some analyses based on models
+        FACTUAL_BIAS_ANALYSES = []
+        
+        # 1. COMPAS - High Racial Bias
+        compas_model = next((m for m in FACTUAL_MODELS if "COMPAS" in m["name"]), None)
+        adult_dataset = next((d for d in FACTUAL_DATASETS if "Adult" in d["name"]), None)
+        
+        if compas_model and adult_dataset:
+            # Generate a history of analyses
+            for i in range(5):
+                date = datetime.now(timezone.utc) - timedelta(days=30 - i*7)
+                FACTUAL_BIAS_ANALYSES.append({
+                    "id": str(uuid.uuid4()),
+                    "model_id": compas_model["id"],
+                    "dataset_id": adult_dataset["id"],
+                    "analysis_type": "demographic_parity",
+                    "status": "completed",
+                    "results": {
+                        "passed": False,
+                        "risk_level": "high",
+                        "details": "Significant disparity detected in false positive rates between racial groups."
+                    },
+                    "metrics": {
+                        "demographic_parity_diff": 0.25 - (i * 0.01), # Improving slightly
+                        "equal_opportunity_diff": 0.18 - (i * 0.005),
+                        "disparate_impact": 0.65 + (i * 0.02),
+                        "overall_score": 0.60 + (i * 0.01)
+                    },
+                    "created_at": date,
+                    "completed_at": date + timedelta(minutes=15)
+                })
+
+        # 2. GPT-4 - Low Bias
+        gpt4_model = next((m for m in FACTUAL_MODELS if "GPT-4" in m["name"]), None)
+        if gpt4_model:
+             for i in range(3):
+                date = datetime.now(timezone.utc) - timedelta(days=15 - i*5)
+                FACTUAL_BIAS_ANALYSES.append({
+                    "id": str(uuid.uuid4()),
+                    "model_id": gpt4_model["id"],
+                    "dataset_id": None, # LLM often tested without specific dataset ID in this context
+                    "analysis_type": "stereotypes",
+                    "status": "completed",
+                    "results": {
+                        "passed": True,
+                        "risk_level": "low",
+                        "details": "Minimal stereotypical associations found."
+                    },
+                    "metrics": {
+                        "stereotype_score": 0.05 - (i * 0.005),
+                        "gender_bias": 0.02,
+                        "overall_score": 0.95 + (i * 0.005)
+                    },
+                    "created_at": date,
+                    "completed_at": date + timedelta(minutes=45)
+                })
+
+        inserted_analyses = 0
+        for analysis in FACTUAL_BIAS_ANALYSES:
+            try:
+                analysis_data = {
+                    "id": analysis["id"],
+                    "model_id": analysis["model_id"],
+                    "dataset_id": analysis["dataset_id"],
+                    "analysis_type": analysis["analysis_type"],
+                    "status": analysis["status"],
+                    "results": json.dumps(analysis["results"]),
+                    "metrics": json.dumps(analysis["metrics"]),
+                    "created_by": None,
+                    "created_at": analysis["created_at"],
+                    "completed_at": analysis["completed_at"]
+                }
+
+                # Check if exists
+                check_query = text("SELECT id FROM bias_analyses WHERE id = :id")
+                result = session.execute(check_query, {"id": analysis["id"]}).fetchone()
+                
+                if result:
+                    continue
+                
+                insert_query = text("""
+                    INSERT INTO bias_analyses (
+                        id, model_id, dataset_id, analysis_type, status, results, metrics, 
+                        created_by, created_at, completed_at
+                    ) VALUES (
+                        :id, :model_id, :dataset_id, :analysis_type, :status, :results, :metrics,
+                        :created_by, :created_at, :completed_at
+                    )
+                """)
+                session.execute(insert_query, analysis_data)
+                session.commit()
+                inserted_analyses += 1
+            except Exception as e:
+                print(f"  ✗ Error inserting analysis: {e}")
+                # Try to create table if needed
+                if "no such table: bias_analyses" in str(e):
+                    print("  ! Attempting to create bias_analyses table...")
+                    try:
+                        create_table_sql = text("""
+                            CREATE TABLE IF NOT EXISTS bias_analyses (
+                                id VARCHAR(255) PRIMARY KEY,
+                                model_id VARCHAR(255) NOT NULL,
+                                dataset_id VARCHAR(255),
+                                analysis_type VARCHAR(100) NOT NULL,
+                                status VARCHAR(50) DEFAULT 'pending',
+                                results TEXT DEFAULT '{}',
+                                metrics TEXT DEFAULT '{}',
+                                created_by VARCHAR(255),
+                                created_at TIMESTAMP,
+                                completed_at TIMESTAMP,
+                                FOREIGN KEY (model_id) REFERENCES models(id) ON DELETE CASCADE,
+                                FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE SET NULL,
+                                FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+                            )
+                        """)
+                        session.execute(create_table_sql)
+                        session.commit()
+                        print("  ✓ Created bias_analyses table. Retrying insert...")
+                        session.execute(insert_query, analysis_data)
+                        session.commit()
+                        inserted_analyses += 1
+                    except Exception as create_e:
+                        print(f"  ✗ Failed to create table/retry: {create_e}")
+                session.rollback()
+
+        print(f"  Total bias analyses inserted: {inserted_analyses}/{len(FACTUAL_BIAS_ANALYSES)}")
         print()
         
         # Seed Audit Logs
@@ -464,22 +623,26 @@ def seed_database():
         audit_logs = generate_factual_audit_logs()
         for log in audit_logs:
             try:
-                log_id = str(uuid.uuid4())
+                log_details = log.get("details", {})
+                ip_address = log_details.pop("ip_address", None)
+                user_agent = log_details.pop("user_agent", None)
+                
                 log_data = {
-                    "id": log_id,
                     "action": log["action"],
                     "resource_type": log["resource_type"],
                     "resource_id": log.get("resource_id"),
-                    "user_id": log["user_id"],
-                    "details": json.dumps(log.get("details", {})),
+                    "user_id": None, # Use None for system logs or find a valid user ID
+                    "details": json.dumps(log_details),
+                    "ip_address": ip_address,
+                    "user_agent": user_agent,
                     "created_at": log["created_at"]
                 }
                 
                 insert_query = text("""
                     INSERT INTO audit_logs (
-                        id, action, resource_type, resource_id, user_id, details, created_at
+                        action, resource_type, resource_id, user_id, details, ip_address, user_agent, created_at
                     ) VALUES (
-                        :id, :action, :resource_type, :resource_id, :user_id, :details, :created_at
+                        :action, :resource_type, :resource_id, :user_id, :details, :ip_address, :user_agent, :created_at
                     )
                 """)
                 session.execute(insert_query, log_data)
@@ -488,6 +651,32 @@ def seed_database():
                 inserted_logs += 1
             except Exception as e:
                 print(f"  ✗ Error inserting audit log: {e}")
+                # Try to create table if it doesn't exist (fallback for SQLite)
+                if "no such table: audit_logs" in str(e):
+                    print("  ! Attempting to create audit_logs table...")
+                    try:
+                        create_table_sql = text("""
+                            CREATE TABLE IF NOT EXISTS audit_logs (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                user_id VARCHAR(255),
+                                action VARCHAR(255) NOT NULL,
+                                resource_type VARCHAR(100),
+                                resource_id VARCHAR(255),
+                                details TEXT DEFAULT '{}',
+                                ip_address TEXT,
+                                user_agent TEXT,
+                                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+                            )
+                        """)
+                        session.execute(create_table_sql)
+                        session.commit()
+                        print("  ✓ Created audit_logs table. Retrying insert...")
+                        session.execute(insert_query, log_data)
+                        session.commit()
+                        inserted_logs += 1
+                    except Exception as create_e:
+                        print(f"  ✗ Failed to create table/retry: {create_e}")
                 session.rollback()
         
         print(f"  Total audit logs inserted: {inserted_logs}/{len(audit_logs)}")

@@ -1,8 +1,8 @@
-# 🚀 FairMind Setup Guide
+#  FairMind Setup Guide
 
 **Complete setup guide for FairMind - Get up and running in 5 minutes!**
 
-## 📋 Prerequisites Checklist
+##  Prerequisites Checklist
 
 Before you begin, ensure you have:
 
@@ -16,7 +16,7 @@ Before you begin, ensure you have:
 - [ ] **UV** - Modern Python package manager ([Install](https://github.com/astral-sh/uv))
 - [ ] **Bun** - Fast JavaScript runtime ([Install](https://bun.sh/))
 
-## 🎯 Quick Installation (5 Minutes)
+##  Quick Installation (5 Minutes)
 
 ### Step 1: Clone the Repository
 
@@ -37,8 +37,11 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 # Install dependencies
 uv sync
 
+# Create developer account (dev@fairmind.ai / dev)
+uv run python scripts/create_dev_user.py
+
 # Start the server
-uv run python -m uvicorn api.main:app --host 0.0.0.0 --port 8001 --reload
+uv run python -m uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 **Option B: Using pip (Traditional)**
@@ -53,11 +56,11 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
 # Start the server
-python -m uvicorn api.main:app --host 0.0.0.0 --port 8001 --reload
+python -m uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-✅ Backend should now be running at `http://localhost:8001`  
-✅ API docs available at `http://localhost:8001/docs`
+ Backend should now be running at `http://localhost:8000`  
+ API docs available at `http://localhost:8000/docs`
 
 ### Step 3: Frontend Setup
 
@@ -88,15 +91,15 @@ npm install
 npm run dev
 ```
 
-✅ Frontend should now be running at `http://localhost:3000`
+ Frontend should now be running at `http://localhost:3000`
 
 ### Step 4: Verify Installation
 
-1. **Check Backend**: Visit `http://localhost:8001/docs` - You should see the API documentation
+1. **Check Backend**: Visit `http://localhost:8000/docs` - You should see the API documentation
 2. **Check Frontend**: Visit `http://localhost:3000` - You should see the FairMind dashboard
-3. **Test API**: Try accessing `http://localhost:8001/api/v1/health` - Should return `{"status": "healthy"}`
+3. **Test API**: Try accessing `http://localhost:8000/api/v1/health` - Should return `{"status": "healthy"}`
 
-## 🔧 Troubleshooting
+##  Troubleshooting
 
 ### Common Issues
 
@@ -109,7 +112,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 # Restart terminal or run: source ~/.bashrc
 ```
 
-**Problem**: `Port 8001 already in use`
+**Problem**: `Port 8000 already in use`
 ```bash
 # Use a different port
 uv run python -m uvicorn api.main:app --host 0.0.0.0 --port 8002 --reload
@@ -174,7 +177,7 @@ node --version  # Should be v18 or higher
 # Windows: Download from nodejs.org
 ```
 
-## 📚 Next Steps
+##  Next Steps
 
 ### Running Tests
 
@@ -215,14 +218,14 @@ DEEPEVAL_API_KEY=your_key_here
 
 **Frontend**: Create `.env.local` file in `apps/frontend/`
 ```bash
-NEXT_PUBLIC_API_URL=http://localhost:8001
+NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
 
-## 🎓 Learning Resources
+##  Learning Resources
 
 - **Getting Started**: [README.md](README.md)
 - **Contributing**: [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)
-- **API Documentation**: [http://localhost:8001/docs](http://localhost:8001/docs)
+- **API Documentation**: [http://localhost:8000/docs](http://localhost:8000/docs)
 - **Modern Bias Detection**: [docs/development/MODERN_BIAS_DETECTION_GUIDE.md](docs/development/MODERN_BIAS_DETECTION_GUIDE.md)
 
 ## 🆘 Still Having Issues?

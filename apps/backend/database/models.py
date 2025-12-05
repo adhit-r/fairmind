@@ -2,7 +2,7 @@
 Database models for AI BOM system
 """
 
-from sqlalchemy import Column, String, Integer, Float, DateTime, Text, JSON, ForeignKey, Enum
+from sqlalchemy import Column, String, Integer, Float, DateTime, Text, JSON, ForeignKey, Enum, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from datetime import datetime
@@ -103,3 +103,42 @@ class AIBOMAnalysis(Base):
     
     # Relationships
     document = relationship("AIBOMDocument", back_populates="analyses")
+
+class AnalyticsSnapshot(Base):
+    """Analytics Snapshot model for time-series data"""
+    __tablename__ = "analytics_snapshots"
+
+    id = Column(String, primary_key=True, index=True)
+    snapshot_date = Column(DateTime, nullable=False, index=True)
+    metric_type = Column(String, nullable=False)  # e.g., "bias_score", "compliance_score"
+    metric_value = Column(JSON, nullable=False)   # Stores the actual value/distribution
+    model_id = Column(String, nullable=True, index=True) # Optional link to specific model
+    created_at = Column(DateTime, default=func.now())
+
+class ComplianceSchedule(Base):
+    """Compliance Report Schedule model"""
+    __tablename__ = "compliance_schedules"
+
+    id = Column(String, primary_key=True, index=True)
+    framework = Column(String, nullable=False) # e.g., "EU_AI_ACT", "GDPR"
+    frequency = Column(String, nullable=False) # "daily", "weekly", "monthly"
+    recipients = Column(JSON, nullable=False)  # List of email strings
+    filters = Column(JSON, default=dict)       # Filtering criteria for the report
+    last_run = Column(DateTime, nullable=True)
+    next_run = Column(DateTime, nullable=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=func.now())
+
+class ComplianceViolation(Base):
+    """Compliance Violation model"""
+    __tablename__ = "compliance_violations"
+
+    id = Column(String, primary_key=True, index=True)
+    model_id = Column(String, nullable=True, index=True)
+    framework = Column(String, nullable=False)
+    violation_type = Column(String, nullable=False)
+    severity = Column(String, nullable=False) # "low", "medium", "high", "critical"
+    description = Column(Text, nullable=True)
+    detected_at = Column(DateTime, default=func.now())
+    resolved = Column(Boolean, default=False)
+    resolved_at = Column(DateTime, nullable=True)

@@ -21,7 +21,7 @@ if __name__ == "__main__":
     import uvicorn
     
     # Get port from environment or default to 8001
-    port = int(os.getenv("PORT", 8001))
+    port = int(os.getenv("PORT", 8000))
     host = os.getenv("HOST", "0.0.0.0")
     
     print(f"Starting FairMind Backend on {host}:{port}")

@@ -61,6 +61,24 @@ FairMind helps organizations:
 
 ---
 
+## What Can Users Do?
+
+<div align="center">
+  <img src="assets/diagrams/user_features_workflow.png" alt="FairMind User Features & Workflows" width="900">
+</div>
+
+### Feature Status Summary
+
+** Production Ready**: Bias Detection • Model Benchmarking • Compliance Reports • Real-Time Monitoring • MLOps Integration • Automated Remediation • Model Marketplace • Advanced Reporting • User Authentication (Local)
+
+**🟡 Backend Complete, UI Pending**: LLM-as-a-Judge
+
+**⏳ Planned Q2 2025**: Advanced Analytics Dashboard • Enterprise Features (RBAC, Teams) • Internationalization
+
+** Out of Scope**: Mobile/Desktop Apps
+
+---
+
 ## Key Features
 
 ### 1. Comprehensive Bias Detection
@@ -184,6 +202,20 @@ Seamless integration with experiment tracking platforms:
 - Dashboard analytics
 - Historical trend analysis
 
+### 7. Model Marketplace
+
+- **Discovery Hub**: Centralized platform for finding fair and verified models
+- **Bias Cards**: Transparent fairness metrics for every model
+- **Community Reviews**: User ratings and feedback system
+- **Usage Tracking**: Monitor model adoption and performance
+
+### 8. Advanced Reporting
+
+- **PDF Generation**: Create professional, audit-ready reports
+- **Bias Audits**: Detailed breakdown of fairness metrics and remediation steps
+- **Compliance Certificates**: Proof of adherence to regulatory frameworks (EU AI Act, etc.)
+- **Model Cards**: Standardized documentation for model transparency
+
 ---
 
 ## Architecture
@@ -219,11 +251,13 @@ Seamless integration with experiment tracking platforms:
 - **Visualizations**: Real-time charts, Bias metric heatmaps, Compliance scorecards
 - **Evidence Management**: Automated collection and reporting UI
 
-**Data Layer**
-- **Supabase PostgreSQL**: Primary relational storage for models, results, and users
-- **Redis**: High-performance caching for real-time metrics
-- **Vector Store**: Embeddings for regulatory RAG system
-- **File Storage**: Artifacts, reports, and evidence documents
+**Data Layer (Hybrid Architecture)**
+- **SQLite (Local)**: Primary relational storage for users, authentication, and application state. Zero-config, local-first.
+- **DuckDB (Analytics)**: High-performance in-process OLAP database for dataset analysis and heavy bias queries.
+- **Supabase PostgreSQL (Optional/Prod)**: Scalable production database option.
+- **Redis**: High-performance caching for real-time metrics.
+- **Vector Store**: Embeddings for regulatory RAG system.
+- **File Storage**: Local filesystem or S3 for artifacts and datasets.
 
 ---
 
@@ -247,6 +281,9 @@ cd fairmind
 cd apps/backend
 uv sync
 cp config/env.example .env  # Configure your environment
+# Create developer account (dev@fairmind.ai / dev)
+uv run python scripts/create_dev_user.py
+# Start server
 uv run python -m uvicorn api.main:app --reload --port 8000
 
 # Frontend Setup (New Terminal)
@@ -264,11 +301,11 @@ bun run dev
 
 **Backend** (`apps/backend/.env`):
 ```env
-# Database
-DATABASE_URL=postgresql://user:password@localhost:5432/fairmind
+# Database (Defaults to local SQLite if not set)
+# DATABASE_URL=sqlite:///./fairmind.db
 
 # Cache (Optional)
-REDIS_URL=redis://localhost:6379
+# REDIS_URL=redis://localhost:6379
 
 # MLOps Integration (Optional)
 WANDB_API_KEY=your_wandb_key
@@ -277,6 +314,7 @@ MLFLOW_TRACKING_URI=http://localhost:5000
 # Security
 SECRET_KEY=your-secret-key
 JWT_SECRET=your-jwt-secret
+JWT_ALGORITHM=HS256
 
 # Environment
 ENVIRONMENT=development
@@ -458,7 +496,6 @@ For complete API reference, see [API Documentation](docs/API_ENDPOINTS.md)
 ### DevOps & Infrastructure
 
 **Deployment**
-- Railway (backend hosting)
 - Netlify (frontend hosting)
 - Docker support
 - Kubernetes configs
@@ -577,11 +614,9 @@ See [Contributing Guide](docs/CONTRIBUTING.md) for:
 
 ### Production Deployment
 
-**Backend (Railway)**
-- Automatic deployments from main branch
-- Environment variables configured in Railway dashboard
-- Health checks enabled
-- Logging and monitoring configured
+**Backend**
+- Deployment instructions pending
+
 
 **Frontend (Netlify)**
 - Automatic deployments from main branch

@@ -529,3 +529,329 @@ class ModelProvenanceService:
                 'has_scan_results': model_id in self.scan_results_db
             })
         return models
+    
+    def generate_model_dna(self, model_id: str) -> Dict[str, Any]:
+        """
+        Generate unique DNA fingerprint for a model
+        
+        DNA includes:
+        - Architecture signature (layer types, sizes, activations)
+        - Data lineage hash (training datasets)
+        - Training signature (hyperparameters)
+        - Bias profile
+        - Performance fingerprint
+        """
+        if model_id not in self.provenance_db:
+            raise ValueError(f"Model {model_id} not found in provenance database")
+        
+        provenance = self.provenance_db[model_id]
+        
+        # Architecture signature - hash of architecture details
+        arch_content = json.dumps({
+            'architecture': provenance.architecture,
+            'framework': provenance.framework
+        }, sort_keys=True).encode('utf-8')
+        architecture_genes = hashlib.sha256(arch_content).hexdigest()[:16]
+        
+        # Data lineage hash - hash of all training datasets
+        data_content = ''.join([
+            f"{ds.name}{ds.version}{ds.checksum}"
+            for ds in provenance.training_datasets
+        ]).encode('utf-8')
+        data_genes = hashlib.sha256(data_content).hexdigest()[:16]
+        
+        # Training signature - hash of hyperparameters
+        training_content = json.dumps(
+            provenance.training_parameters,
+            sort_keys=True
+        ).encode('utf-8')
+        training_genes = hashlib.sha256(training_content).hexdigest()[:16]
+        
+        # Bias profile - extract key bias metrics
+        bias_profile = {}
+        if provenance.bias_analysis:
+            bias_profile = {
+                'overall_bias_score': provenance.bias_analysis.get('overall_bias_score', 0),
+                'detected_biases': provenance.bias_analysis.get('detected_biases', []),
+                'fairness_metrics': provenance.bias_analysis.get('fairness_metrics', {})
+            }
+        
+        # Performance fingerprint
+        performance_fingerprint = {
+            metric: value
+            for metric, value in provenance.performance_metrics.items()
+        }
+        
+        # Generate complete DNA ID
+        dna_id = f"{architecture_genes}-{data_genes}-{training_genes}"
+        
+        # Calculate generation (how many parent models)
+        generation = self._calculate_generation(model_id)
+        
+        # Get ancestors
+        ancestors = self._get_ancestors(model_id)
+        
+        return {
+            "model_id": model_id,
+            "dna_id": dna_id,
+            "architecture_genes": architecture_genes,
+            "data_genes": data_genes,
+            "training_genes": training_genes,
+            "bias_profile": bias_profile,
+            "performance_fingerprint": performance_fingerprint,
+            "generation": generation,
+            "ancestors": ancestors,
+            "created_at": datetime.now().isoformat()
+        }
+    
+    def _calculate_generation(self, model_id: str) -> int:
+        """Calculate model generation (depth in lineage tree)"""
+        if model_id not in self.provenance_db:
+            return 0
+        
+        provenance = self.provenance_db[model_id]
+        if not provenance.lineage:
+            return 0
+        
+        # Generation is 1 + max generation of parents
+        max_parent_gen = 0
+        for lineage_item in provenance.lineage:
+            if lineage_item.get('type') == 'parent_model':
+                parent_id = lineage_item.get('model_id')
+                if parent_id and parent_id in self.provenance_db:
+                    parent_gen = self._calculate_generation(parent_id)
+                    max_parent_gen = max(max_parent_gen, parent_gen)
+        
+        return max_parent_gen + 1
+    
+    def _get_ancestors(self, model_id: str) -> List[str]:
+        """Get all ancestor model IDs"""
+        if model_id not in self.provenance_db:
+            return []
+        
+        provenance = self.provenance_db[model_id]
+        ancestors = []
+        
+        for lineage_item in provenance.lineage:
+            if lineage_item.get('type') == 'parent_model':
+                parent_id = lineage_item.get('model_id')
+                if parent_id:
+                    ancestors.append(parent_id)
+                    # Recursively get parent's ancestors
+                    ancestors.extend(self._get_ancestors(parent_id))
+        
+        return list(set(ancestors))  # Remove duplicates
+    
+    def compare_model_dna(self, model_id1: str, model_id2: str) -> Dict[str, Any]:
+        """
+        Compare DNA of two models and calculate similarity
+        
+        Returns:
+        - Similarity scores for each gene type
+        - Overall similarity percentage
+        - Common ancestors
+        - Divergence points
+        """
+        dna1 = self.generate_model_dna(model_id1)
+        dna2 = self.generate_model_dna(model_id2)
+        
+        # Calculate similarity for each gene type
+        arch_similarity = 1.0 if dna1['architecture_genes'] == dna2['architecture_genes'] else 0.0
+        data_similarity = 1.0 if dna1['data_genes'] == dna2['data_genes'] else 0.0
+        training_similarity = 1.0 if dna1['training_genes'] == dna2['training_genes'] else 0.0
+        
+        # Calculate bias profile similarity (cosine similarity of bias scores)
+        bias_similarity = self._calculate_bias_similarity(
+            dna1['bias_profile'],
+            dna2['bias_profile']
+        )
+        
+        # Calculate performance similarity
+        performance_similarity = self._calculate_performance_similarity(
+            dna1['performance_fingerprint'],
+            dna2['performance_fingerprint']
+        )
+        
+        # Overall similarity (weighted average)
+        overall_similarity = (
+            0.3 * arch_similarity +
+            0.2 * data_similarity +
+            0.2 * training_similarity +
+            0.15 * bias_similarity +
+            0.15 * performance_similarity
+        )
+        
+        # Find common ancestors
+        ancestors1 = set(dna1['ancestors'])
+        ancestors2 = set(dna2['ancestors'])
+        common_ancestors = list(ancestors1 & ancestors2)
+        
+        # Identify divergence points
+        divergence_points = []
+        if arch_similarity < 1.0:
+            divergence_points.append("architecture")
+        if data_similarity < 1.0:
+            divergence_points.append("training_data")
+        if training_similarity < 1.0:
+            divergence_points.append("hyperparameters")
+        
+        return {
+            "model_1": {
+                "id": model_id1,
+                "dna_id": dna1['dna_id']
+            },
+            "model_2": {
+                "id": model_id2,
+                "dna_id": dna2['dna_id']
+            },
+            "similarity_scores": {
+                "architecture": arch_similarity,
+                "data": data_similarity,
+                "training": training_similarity,
+                "bias_profile": bias_similarity,
+                "performance": performance_similarity,
+                "overall": overall_similarity
+            },
+            "common_ancestors": common_ancestors,
+            "divergence_points": divergence_points,
+            "relationship": self._determine_relationship(dna1, dna2, common_ancestors)
+        }
+    
+    def _calculate_bias_similarity(self, bias1: Dict, bias2: Dict) -> float:
+        """Calculate similarity between two bias profiles"""
+        if not bias1 or not bias2:
+            return 0.0
+        
+        score1 = bias1.get('overall_bias_score', 0)
+        score2 = bias2.get('overall_bias_score', 0)
+        
+        # Similarity based on how close the bias scores are
+        diff = abs(score1 - score2)
+        return max(0.0, 1.0 - diff)
+    
+    def _calculate_performance_similarity(self, perf1: Dict, perf2: Dict) -> float:
+        """Calculate similarity between two performance fingerprints"""
+        if not perf1 or not perf2:
+            return 0.0
+        
+        # Get common metrics
+        common_metrics = set(perf1.keys()) & set(perf2.keys())
+        if not common_metrics:
+            return 0.0
+        
+        # Calculate average relative difference
+        similarities = []
+        for metric in common_metrics:
+            v1 = perf1[metric]
+            v2 = perf2[metric]
+            if isinstance(v1, (int, float)) and isinstance(v2, (int, float)):
+                # Avoid division by zero
+                max_val = max(abs(v1), abs(v2), 1e-10)
+                similarity = 1.0 - (abs(v1 - v2) / max_val)
+                similarities.append(max(0.0, similarity))
+        
+        return sum(similarities) / len(similarities) if similarities else 0.0
+    
+    def _determine_relationship(self, dna1: Dict, dna2: Dict, common_ancestors: List[str]) -> str:
+        """Determine relationship between two models"""
+        model_id1 = dna1['model_id']
+        model_id2 = dna2['model_id']
+        
+        # Check if one is ancestor of the other
+        if model_id1 in dna2['ancestors']:
+            return "parent-child"
+        if model_id2 in dna1['ancestors']:
+            return "child-parent"
+        
+        # Check if they share common ancestors (siblings)
+        if common_ancestors:
+            return "siblings"
+        
+        # Check if they're very similar (clones/variants)
+        if dna1['dna_id'] == dna2['dna_id']:
+            return "identical_twins"
+        if dna1['architecture_genes'] == dna2['architecture_genes'] and \
+           dna1['training_genes'] == dna2['training_genes']:
+            return "variants"
+        
+        return "unrelated"
+    
+    def get_model_lineage_tree(self, model_id: str) -> Dict[str, Any]:
+        """
+        Get complete lineage tree for visualization
+        
+        Returns tree structure with:
+        - nodes (models and datasets)
+        - edges (relationships)
+        - metadata for each node
+        """
+        if model_id not in self.provenance_db:
+            raise ValueError(f"Model {model_id} not found")
+        
+        nodes = []
+        edges = []
+        visited = set()
+        
+        def traverse(mid: str, depth: int = 0):
+            if mid in visited or mid not in self.provenance_db:
+                return
+            
+            visited.add(mid)
+            provenance = self.provenance_db[mid]
+            
+            # Add model node
+            nodes.append({
+                'id': mid,
+                'type': 'model',
+                'name': provenance.name,
+                'version': provenance.version,
+                'framework': provenance.framework,
+                'depth': depth,
+                'bias_score': provenance.bias_analysis.get('overall_bias_score', 0) if provenance.bias_analysis else 0,
+                'performance': provenance.performance_metrics
+            })
+            
+            # Add dataset nodes and edges
+            for dataset in provenance.training_datasets:
+                dataset_id = f"dataset_{dataset.checksum[:8]}"
+                if dataset_id not in visited:
+                    nodes.append({
+                        'id': dataset_id,
+                        'type': 'dataset',
+                        'name': dataset.name,
+                        'version': dataset.version,
+                        'source': dataset.source,
+                        'depth': depth + 1
+                    })
+                    visited.add(dataset_id)
+                
+                edges.append({
+                    'source': dataset_id,
+                    'target': mid,
+                    'type': 'trained_on',
+                    'label': 'trained on'
+                })
+            
+            # Traverse parent models
+            for lineage_item in provenance.lineage:
+                if lineage_item.get('type') == 'parent_model':
+                    parent_id = lineage_item.get('model_id')
+                    if parent_id:
+                        edges.append({
+                            'source': parent_id,
+                            'target': mid,
+                            'type': 'derived_from',
+                            'label': lineage_item.get('relationship', 'derived from')
+                        })
+                        traverse(parent_id, depth + 1)
+        
+        traverse(model_id)
+        
+        return {
+            'root_model_id': model_id,
+            'nodes': nodes,
+            'edges': edges,
+            'total_nodes': len(nodes),
+            'total_edges': len(edges),
+            'max_depth': max([n['depth'] for n in nodes]) if nodes else 0
+        }

@@ -4,6 +4,8 @@
 
 ```bash
 cd apps/backend
+# Create developer account (dev@fairmind.ai / dev)
+uv run python scripts/create_dev_user.py
 uv run uvicorn api.main:app --reload --port 8000
 ```
 

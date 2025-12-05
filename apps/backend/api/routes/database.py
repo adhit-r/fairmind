@@ -174,7 +174,7 @@ async def get_dashboard_stats():
         with db_manager.get_session() as session:
             # Count models
             try:
-                result = session.execute(text("SELECT COUNT(*) FROM ml_models WHERE is_active = true"))
+                result = session.execute(text("SELECT COUNT(*) FROM models WHERE status = 'active'"))
                 stats["totalModels"] = result.scalar() or 0
             except Exception as e:
                 logger.warning(f"Error counting models: {e}")
@@ -239,11 +239,11 @@ async def get_models():
         
         with db_manager.get_session() as session:
             result = session.execute(text("""
-                SELECT id, name, description, type as model_type, version, is_active as status,
-                       tags, metadata, created_at as upload_date, updated_at
-                FROM ml_models
-                WHERE is_active = true
-                ORDER BY created_at DESC
+                SELECT id, name, description, model_type, version, status,
+                       tags, metadata, upload_date, updated_at
+                FROM models
+                WHERE status = 'active'
+                ORDER BY upload_date DESC
             """))
             
             for row in result:

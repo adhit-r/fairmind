@@ -101,6 +101,10 @@ class Settings(BaseSettings):
     bias_detection_timeout: int = 600
     max_dataset_size: int = 1000000  # 1M rows
     
+    # LLM Configuration
+    google_api_key: Optional[str] = None
+    llm_model: str = "gemini-1.5-flash"
+    
     # Encryption Configuration
     compliance_encryption_key: Optional[str] = None
     encryption_algorithm: str = "AES-256"
@@ -120,7 +124,7 @@ class Settings(BaseSettings):
         extra = "ignore"
     
     def get_allowed_origins(self) -> List[str]:
-        """Parse allowed origins from string."""
+        """Get allowed origins as a list."""
         if isinstance(self.allowed_origins, str):
             return [origin.strip() for origin in self.allowed_origins.split(",")]
         return self.allowed_origins
