@@ -12,6 +12,12 @@ export const metadata: Metadata = {
   description: "Next-generation AI governance, bias detection, and ethical AI compliance platform. Detect bias in ML models, LLMs, and multimodal systems.",
   keywords: ["AI governance", "bias detection", "ethical AI", "AI compliance", "fairness", "MLOps"],
   authors: [{ name: "FairMind Team" }],
+  viewport: {
+    width: "device-width",
+    initialScale: 1,
+    maximumScale: 5,
+    userScalable: true,
+  },
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "32x32", type: "image/png" },

@@ -69,27 +69,27 @@ export default function MarketplacePage() {
     };
 
     return (
-        <div className="space-y-6 p-6">
+        <div className="space-y-4 sm:space-y-6 p-3 sm:p-4 md:p-6">
             <div className="flex flex-col space-y-2">
-                <h1 className="text-3xl font-bold tracking-tight">Model Marketplace</h1>
-                <p className="text-muted-foreground">
+                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Model Marketplace</h1>
+                <p className="text-sm sm:text-base text-muted-foreground">
                     Discover, share, and evaluate models with verified fairness metrics.
                 </p>
             </div>
 
             {/* Search and Filters */}
-            <div className="flex flex-col md:flex-row gap-4">
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                 <div className="relative flex-1">
                     <IconSearch className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                     <Input
                         placeholder="Search models, authors, or descriptions..."
-                        className="pl-9"
+                        className="pl-9 h-11"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                     />
                 </div>
                 <Select value={selectedFramework} onValueChange={setSelectedFramework}>
-                    <SelectTrigger className="w-[180px]">
+                    <SelectTrigger className="w-full sm:w-[180px] h-11">
                         <SelectValue placeholder="Framework" />
                     </SelectTrigger>
                     <SelectContent>
@@ -100,7 +100,7 @@ export default function MarketplacePage() {
                     </SelectContent>
                 </Select>
                 <Select value={selectedTask} onValueChange={setSelectedTask}>
-                    <SelectTrigger className="w-[180px]">
+                    <SelectTrigger className="w-full sm:w-[180px] h-11">
                         <SelectValue placeholder="Task" />
                     </SelectTrigger>
                     <SelectContent>

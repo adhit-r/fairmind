@@ -24,9 +24,9 @@ export function Navigation({ children }: NavigationProps) {
     <SidebarProvider>
       <div className="flex min-h-screen w-full">
         <AppSidebar />
-        <div className="flex flex-1 flex-col">
+        <div className="flex flex-1 flex-col min-w-0">
           <Header onMenuToggle={() => setMobileMenuOpen(!mobileMenuOpen)} />
-          <main className="flex-1 p-6 bg-gray-50">
+          <main className="flex-1 p-3 sm:p-4 md:p-6 bg-gray-50 overflow-x-hidden">
             {children}
           </main>
         </div>
