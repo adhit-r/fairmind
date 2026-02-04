@@ -77,24 +77,25 @@ const ComparisonTable = () => {
   }
 
   return (
-    <Card className="w-full max-w-5xl mx-auto my-12">
+    <Card className="w-full max-w-5xl mx-auto my-6 sm:my-8 md:my-12">
       <CardHeader>
-        <CardTitle className="text-3xl text-center">FairMind vs. The Competition</CardTitle>
-        <CardDescription className="text-center text-lg mt-2">
+        <CardTitle className="text-xl sm:text-2xl md:text-3xl text-center">FairMind vs. The Competition</CardTitle>
+        <CardDescription className="text-center text-sm sm:text-base md:text-lg mt-2">
           See how FairMind stacks up against other AI fairness and monitoring tools.
         </CardDescription>
       </CardHeader>
-      <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[200px] font-bold text-lg">Feature</TableHead>
-              <TableHead className="font-bold text-lg bg-orange-50 text-orange-900 border-l-2 border-r-2 border-orange-200">FairMind (Current)</TableHead>
-              <TableHead className="font-bold text-lg">IBM AIF360</TableHead>
-              <TableHead className="font-bold text-lg">AWS Clarify</TableHead>
-              <TableHead className="font-bold text-lg">Arize AI</TableHead>
-            </TableRow>
-          </TableHeader>
+      <CardContent className="overflow-x-auto">
+        <div className="min-w-[640px]">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[120px] sm:w-[150px] md:w-[200px] font-bold text-sm sm:text-base md:text-lg whitespace-nowrap">Feature</TableHead>
+                <TableHead className="font-bold text-sm sm:text-base md:text-lg bg-orange-50 text-orange-900 border-l-2 border-r-2 border-orange-200 whitespace-nowrap">FairMind</TableHead>
+                <TableHead className="font-bold text-sm sm:text-base md:text-lg whitespace-nowrap">IBM AIF360</TableHead>
+                <TableHead className="font-bold text-sm sm:text-base md:text-lg whitespace-nowrap">AWS Clarify</TableHead>
+                <TableHead className="font-bold text-sm sm:text-base md:text-lg whitespace-nowrap">Arize AI</TableHead>
+              </TableRow>
+            </TableHeader>
           <TableBody>
             {data.map((row, index) => (
               <TableRow key={index}>
@@ -127,6 +128,7 @@ const ComparisonTable = () => {
             ))}
           </TableBody>
         </Table>
+        </div>
       </CardContent>
     </Card>
   )

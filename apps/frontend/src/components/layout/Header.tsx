@@ -38,10 +38,10 @@ export function Header({ onMenuToggle }: HeaderProps) {
   const { toggleSidebar } = useSidebar()
 
   return (
-    <header className="sticky top-0 z-30 bg-white border-b-4 border-black w-full py-3">
-      <div className="container mx-auto px-6 flex items-center justify-between gap-6">
+    <header className="sticky top-0 z-30 bg-white border-b-4 border-black w-full py-2 sm:py-3">
+      <div className="container mx-auto px-3 sm:px-4 md:px-6 flex items-center justify-between gap-2 sm:gap-4 md:gap-6">
         {/* Left: Sidebar Toggle + Logo */}
-        <div className="flex items-center gap-4 flex-shrink-0">
+        <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
           <Button
             variant="ghost"
             size="icon"
@@ -49,9 +49,14 @@ export function Header({ onMenuToggle }: HeaderProps) {
             className={brutalBtnClass}
             title="Toggle Sidebar"
           >
-            <IconMenu2 className="h-6 w-6" />
+            <IconMenu2 className="h-5 w-5 sm:h-6 sm:w-6" />
           </Button>
-          <OrangeLogo size="md" showText={true} />
+          <div className="hidden sm:block">
+            <OrangeLogo size="md" showText={true} />
+          </div>
+          <div className="block sm:hidden">
+            <OrangeLogo size="sm" showText={false} />
+          </div>
         </div>
 
         {/* Center: Search */}
@@ -69,7 +74,7 @@ export function Header({ onMenuToggle }: HeaderProps) {
         </div>
 
         {/* Right: Actions */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 sm:gap-3 md:gap-4">
           {/* Mobile Search */}
           <Button
             variant="ghost"
@@ -77,7 +82,7 @@ export function Header({ onMenuToggle }: HeaderProps) {
             className={`lg:hidden ${brutalBtnClass}`}
             title="Search"
           >
-            <IconSearch className="h-5 w-5" />
+            <IconSearch className="h-4 w-4 sm:h-5 sm:w-5" />
           </Button>
 
           {/* Theme Toggle */}
@@ -88,7 +93,7 @@ export function Header({ onMenuToggle }: HeaderProps) {
             className={brutalBtnClass}
             title="Toggle Theme"
           >
-            {isDark ? <IconSun className="h-5 w-5" /> : <IconMoon className="h-5 w-5" />}
+            {isDark ? <IconSun className="h-4 w-4 sm:h-5 sm:w-5" /> : <IconMoon className="h-4 w-4 sm:h-5 sm:w-5" />}
           </Button>
 
           {/* Notifications */}

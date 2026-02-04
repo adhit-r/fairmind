@@ -19,10 +19,10 @@ const buttonVariants = cva(
           "text-main-foreground bg-main border-2 border-border hover:translate-x-reverseBoxShadowX hover:translate-y-reverseBoxShadowY hover:shadow-shadow",
       },
       size: {
-        default: "h-10 px-4 py-2",
-        sm: "h-9 px-3",
-        lg: "h-11 px-8",
-        icon: "size-10",
+        default: "h-11 px-4 py-2 min-h-[44px]",
+        sm: "h-10 px-3 min-h-[40px]",
+        lg: "h-12 px-8 min-h-[48px]",
+        icon: "size-11 min-h-[44px] min-w-[44px]",
       },
     },
     defaultVariants: {
