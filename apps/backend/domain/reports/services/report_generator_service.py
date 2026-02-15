@@ -19,6 +19,9 @@ from reportlab.lib.units import inch
 
 logger = logging.getLogger(__name__)
 
+from core.container import service, ServiceLifetime
+
+@service(lifetime=ServiceLifetime.SINGLETON)
 class ReportGeneratorService:
     """
     Service for generating PDF reports.

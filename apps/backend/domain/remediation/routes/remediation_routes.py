@@ -22,7 +22,8 @@ from domain.remediation.services.remediation_wizard_service import (
     RemediationStrategy
 )
 
-router = APIRouter(prefix="/remediation", tags=["remediation-wizard"])
+router = APIRouter(tags=["remediation-wizard"])
+
 logger = logging.getLogger(__name__)
 
 

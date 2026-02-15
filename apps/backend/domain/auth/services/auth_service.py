@@ -79,8 +79,12 @@ class AuthService(BaseService):
         encoded_jwt = jwt.encode(to_encode, self.secret_key, algorithm=self.algorithm)
         return encoded_jwt
 
-    async def register_user(self, email: str, password: str, full_name: str = None) -> User:
+    async def register_user(self, email: str, password: str, full_name: str = None, role: str = "user") -> User:
         """Register a new user."""
+        valid_roles = ["user", "admin", "auditor"]
+        if role not in valid_roles:
+            raise ValueError(f"Invalid role. Must be one of: {', '.join(valid_roles)}")
+
         hashed_pw = self.get_password_hash(password)
         
         with db_manager.get_session() as session:
@@ -99,16 +103,17 @@ class AuthService(BaseService):
             session.execute(
                 text("""
                     INSERT INTO users (id, email, hashed_password, full_name, role, is_active, created_at, updated_at)
-                    VALUES (:id, :email, :pwd, :name, 'user', true, :now, :now)
+                    VALUES (:id, :email, :pwd, :name, :role, true, :now, :now)
                 """),
                 {
                     "id": user_id,
                     "email": email,
                     "pwd": hashed_pw,
                     "name": full_name,
+                    "role": role,
                     "now": datetime.now(timezone.utc)
                 }
             )
             session.commit()
             
-            return User(id=user_id, email=email, full_name=full_name, role="user", is_active=True)
+            return User(id=user_id, email=email, full_name=full_name, role=role, is_active=True)

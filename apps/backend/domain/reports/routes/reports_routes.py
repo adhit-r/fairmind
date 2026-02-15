@@ -17,7 +17,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from domain.reports.services.report_generator_service import report_generator_service
 
-router = APIRouter(prefix="/reports", tags=["reports"])
+router = APIRouter(tags=["reports"])
 logger = logging.getLogger(__name__)
 
 class ReportRequest(BaseModel):

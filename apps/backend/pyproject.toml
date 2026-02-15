@@ -19,6 +19,20 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
 ]
+keywords = [
+    "ai-fairness",
+    "ai-bias",
+    "bias-detection",
+    "ai-governance",
+    "responsible-ai",
+    "eu-ai-act",
+    "india-ai",
+    "dpdp-act",
+    "machine-learning-fairness",
+    "ethical-ai",
+    "mlops",
+    "llm-bias"
+]
 dependencies = [
     "fastapi>=0.121.1",
     "uvicorn[standard]>=0.38.0",
@@ -55,6 +69,7 @@ dependencies = [
     "aif360>=0.6.1",
     "tensorflow>=2.15.0",
     "duckdb>=0.10.0",
+    "apscheduler>=3.10.4",
 ]
 
 [project.optional-dependencies]

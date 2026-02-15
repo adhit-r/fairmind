@@ -6,10 +6,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 
-from core.container import inject
+from core.container import inject, provide
 from domain.settings.services.settings_service import SettingsService
 
-router = APIRouter(prefix="/api/v1/settings", tags=["settings"])
+router = APIRouter(tags=["settings"])
 
 class SettingsUpdate(BaseModel):
     email: Optional[str] = None
@@ -20,7 +20,7 @@ class SettingsUpdate(BaseModel):
 
 @router.get("/")
 async def get_settings(
-    service: SettingsService = Depends(inject(SettingsService))
+    service: SettingsService = Depends(provide(SettingsService))
 ):
     """Get current user settings."""
     return await service.get_settings()
@@ -28,7 +28,7 @@ async def get_settings(
 @router.put("/")
 async def update_settings(
     settings: SettingsUpdate,
-    service: SettingsService = Depends(inject(SettingsService))
+    service: SettingsService = Depends(provide(SettingsService))
 ):
     """Update user settings."""
     return await service.update_settings(settings.model_dump(exclude_unset=True))

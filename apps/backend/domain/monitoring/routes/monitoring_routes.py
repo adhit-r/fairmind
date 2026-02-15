@@ -12,12 +12,12 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException, De
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from core.container import inject
+from core.container import inject, provide, provide
 from domain.monitoring.services.monitoring_service import MonitoringService
 from domain.monitoring.services.alert_service import AlertService
 
 
-router = APIRouter(prefix="/api/v1/monitoring", tags=["monitoring"])
+router = APIRouter(tags=["monitoring"])
 
 
 # WebSocket Manager
@@ -93,22 +93,22 @@ class ModelMetrics(BaseModel):
 @router.post("/config")
 async def create_config(
     config: MonitoringConfig,
-    service: MonitoringService = Depends(inject(MonitoringService))
+    service: MonitoringService = Depends(provide(MonitoringService))
 ):
     return await service.create_config(config.model_dump())
 
 @router.get("/config/{model_id}")
 async def get_config(
     model_id: str,
-    service: MonitoringService = Depends(inject(MonitoringService))
+    service: MonitoringService = Depends(provide(MonitoringService))
 ):
     return await service.get_config(model_id)
 
 @router.post("/metrics")
 async def record_metrics(
     metrics: ModelMetrics,
-    monitor_service: MonitoringService = Depends(inject(MonitoringService)),
-    alert_service: AlertService = Depends(inject(AlertService))
+    monitor_service: MonitoringService = Depends(provide(MonitoringService)),
+    alert_service: AlertService = Depends(provide(AlertService))
 ):
     # Record metrics
     result = await monitor_service.record_metrics(metrics.model_dump())
@@ -130,13 +130,13 @@ async def record_metrics(
 async def get_metrics(
     model_id: str,
     limit: int = 100,
-    service: MonitoringService = Depends(inject(MonitoringService))
+    service: MonitoringService = Depends(provide(MonitoringService))
 ):
     return await service.get_metrics(model_id, limit=limit)
 
 @router.get("/health")
 async def get_system_health(
-    service: MonitoringService = Depends(inject(MonitoringService))
+    service: MonitoringService = Depends(provide(MonitoringService))
 ):
     return await service.get_system_health()
 
@@ -145,7 +145,7 @@ async def get_system_health(
 @router.post("/alerts/rules")
 async def create_alert_rule(
     rule: AlertRuleCreate,
-    service: AlertService = Depends(inject(AlertService))
+    service: AlertService = Depends(provide(AlertService))
 ):
     return await service.create_rule(rule.model_dump())
 
@@ -154,7 +154,7 @@ async def list_alerts(
     model_id: Optional[str] = None,
     severity: Optional[str] = None,
     acknowledged: Optional[bool] = None,
-    service: AlertService = Depends(inject(AlertService))
+    service: AlertService = Depends(provide(AlertService))
 ):
     return await service.list_alerts(model_id, severity, acknowledged)
 
@@ -162,7 +162,7 @@ async def list_alerts(
 async def acknowledge_alert(
     alert_id: str,
     user_id: str,
-    service: AlertService = Depends(inject(AlertService))
+    service: AlertService = Depends(provide(AlertService))
 ):
     return await service.acknowledge_alert(alert_id, user_id)
 
@@ -190,8 +190,8 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
 @router.get("/events/{model_id}")
 async def model_events(
     model_id: str,
-    monitor_service: MonitoringService = Depends(inject(MonitoringService)),
-    alert_service: AlertService = Depends(inject(AlertService))
+    monitor_service: MonitoringService = Depends(provide(MonitoringService)),
+    alert_service: AlertService = Depends(provide(AlertService))
 ):
     async def event_generator():
         while True:

@@ -409,11 +409,11 @@ print("Remediation complete!")
                                         </pre>
 
                                         <div className="flex space-x-4">
-                                            <Button onClick={handleDownloadCode} className="flex-1">
+                                            <Button onClick={downloadCode} className="flex-1">
                                                 <Download className="mr-2 h-4 w-4" />
                                                 Download Python Script
                                             </Button>
-                                            <Button variant="outline" onClick={() => {
+                                            <Button variant="neutral" onClick={() => {
                                                 const blob = new Blob([generatedCode], { type: 'application/json' });
                                                 const url = URL.createObjectURL(blob);
                                                 const a = document.createElement('a');
@@ -424,7 +424,7 @@ print("Remediation complete!")
                                                 document.body.removeChild(a);
                                                 URL.revokeObjectURL(url);
                                             }} className="flex-1">
-                                                <IconNotebook className="mr-2 h-4 w-4" />
+                                                <Download className="mr-2 h-4 w-4" />
                                                 Download Notebook
                                             </Button>
                                         </div>
@@ -476,7 +476,7 @@ print("Remediation complete!")
             {/* Navigation */}
             <div className="flex justify-between">
                 <Button
-                    variant="outline"
+                    variant="neutral"
                     onClick={handleBack}
                     disabled={currentStep === 1}
                 >

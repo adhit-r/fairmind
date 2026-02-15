@@ -214,7 +214,7 @@ export default function ComplianceDashboardPage() {
                     </p>
                 </div>
                 <div className="flex gap-2">
-                    <Button variant="outline" onClick={fetchFrameworks}>
+                    <Button variant="neutral" onClick={fetchFrameworks}>
                         <IconRefresh className="mr-2 h-4 w-4" />
                         Refresh
                     </Button>
@@ -241,7 +241,7 @@ export default function ComplianceDashboardPage() {
                                     {useAutomated ? ' Automated Evidence Collection Enabled' : ' Manual Evidence Mode'}
                                 </span>
                                 <Button
-                                    variant="outline"
+                                    variant="neutral"
                                     size="sm"
                                     onClick={() => setUseAutomated(!useAutomated)}
                                     className="ml-4"

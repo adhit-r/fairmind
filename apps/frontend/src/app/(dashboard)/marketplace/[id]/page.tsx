@@ -61,7 +61,7 @@ export default function ModelDetailsPage() {
         <div className="space-y-6 p-6 max-w-7xl mx-auto">
             {/* Header */}
             <div className="flex items-center space-x-4">
-                <Button variant="ghost" size="icon" onClick={() => router.back()}>
+                <Button variant="neutral" size="icon" onClick={() => router.back()}>
                     <IconArrowLeft className="h-5 w-5" />
                 </Button>
                 <div className="flex-1">
@@ -81,7 +81,7 @@ export default function ModelDetailsPage() {
                     </div>
                 </div>
                 <div className="flex space-x-2">
-                    <Button variant="outline">
+                    <Button variant="neutral">
                         <IconShare className="mr-2 h-4 w-4" />
                         Share
                     </Button>
@@ -259,7 +259,7 @@ outputs = model(**inputs)
                                     </div>
                                 ))
                             )}
-                            <Button variant="outline" className="w-full mt-2">Write a Review</Button>
+                            <Button variant="neutral" className="w-full mt-2">Write a Review</Button>
                         </CardContent>
                     </Card>
                 </div>

@@ -8,14 +8,14 @@ from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, HTTPException, Depends, Body
 from pydantic import BaseModel
 
-from core.container import inject
+from core.container import inject, provide
 from core.exceptions import AppException
 from domain.bias_detection.services.bias_detection_service import BiasDetectionService
 from domain.bias_detection.services.llm_bias_service import LLMBiasDetectionService, BiasCategory
 from domain.bias_detection.services.multimodal_bias_service import MultimodalBiasDetectionService, ModalityType
 
 
-router = APIRouter(prefix="/api/v1/bias", tags=["bias-detection"])
+router = APIRouter(tags=["bias-detection"])
 
 
 # Request Models

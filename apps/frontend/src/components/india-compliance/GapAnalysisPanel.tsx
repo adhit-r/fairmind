@@ -197,9 +197,8 @@ export const GapAnalysisPanel: React.FC<GapAnalysisPanelProps> = ({
                             <p className="text-sm opacity-75 mt-1">{gap.category}</p>
                           </div>
                           <ChevronDown
-                            className={`h-5 w-5 transition-transform ${
-                              expandedGaps.has(gap.control_id) ? 'rotate-180' : ''
-                            }`}
+                            className={`h-5 w-5 transition-transform ${expandedGaps.has(gap.control_id) ? 'rotate-180' : ''
+                              }`}
                           />
                         </div>
                       </button>
@@ -259,7 +258,7 @@ export const GapAnalysisPanel: React.FC<GapAnalysisPanelProps> = ({
                       {gap.evidence_id && (
                         <div className="pt-2 border-t border-gray-300">
                           <Button
-                            variant="outline"
+                            variant="neutral"
                             size="sm"
                             onClick={() => onViewEvidence?.(gap.evidence_id!)}
                             className="w-full"

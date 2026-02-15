@@ -72,17 +72,17 @@ IDENTIFIED GAPS
 Total Gaps: ${data.gaps.length}
 
 ${data.gaps
-  .map(
-    gap => `
+      .map(
+        gap => `
 Control: ${gap.control_name}
 Severity: ${gap.severity.toUpperCase()}
 Category: ${gap.category}
 Legal Citation: ${gap.legal_citation}
 Failed Checks:
-${gap.failed_checks.map(check => `  - ${check}`).join('\n')}
+${gap.failed_checks.map((check: string) => `  - ${check}`).join('\n')}
 `
-  )
-  .join('\n')}
+      )
+      .join('\n')}
 
 LEGAL CITATIONS
 ===============

@@ -8,13 +8,13 @@ from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 
-from core.container import inject
+from core.container import inject, provide, provide
 from domain.mlops.services.tool_integration_service import ToolIntegrationService
 from domain.mlops.services.model_training_service import ModelTrainingService
 from domain.mlops.services.mlops_service import MLOpsService
 
 
-router = APIRouter(prefix="/api/v1/mlops", tags=["mlops"])
+router = APIRouter(tags=["mlops"])
 
 
 # Request Models
@@ -39,7 +39,7 @@ class ExperimentLogRequest(BaseModel):
 
 @router.get("/tools")
 async def list_tools(
-    service: ToolIntegrationService = Depends(inject(ToolIntegrationService))
+    service: ToolIntegrationService = Depends(provide(ToolIntegrationService))
 ):
     """List available MLOps tools."""
     return await service.get_available_tools()
@@ -47,7 +47,7 @@ async def list_tools(
 @router.post("/tools/integrate")
 async def run_integration(
     request: IntegrationRequest,
-    service: ToolIntegrationService = Depends(inject(ToolIntegrationService))
+    service: ToolIntegrationService = Depends(provide(ToolIntegrationService))
 ):
     """Run integration with an external tool."""
     return await service.run_integration(request.tool_name, request.data)
@@ -55,7 +55,7 @@ async def run_integration(
 @router.post("/train")
 async def train_model(
     request: TrainingRequest,
-    service: ModelTrainingService = Depends(inject(ModelTrainingService))
+    service: ModelTrainingService = Depends(provide(ModelTrainingService))
 ):
     """Train a model."""
     return await service.train_model(
@@ -68,7 +68,7 @@ async def train_model(
 @router.post("/log")
 async def log_experiment(
     request: ExperimentLogRequest,
-    service: MLOpsService = Depends(inject(MLOpsService))
+    service: MLOpsService = Depends(provide(MLOpsService))
 ):
     """Log experiment to MLOps platform."""
     return await service.log_experiment(

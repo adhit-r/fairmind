@@ -81,4 +81,28 @@ class SupabaseAuthMiddleware(BaseHTTPMiddleware):
             "/",
             "/api"
         ]
+        
+        # In development, also allow API access without auth for testing
+        if settings.is_development:
+            if any(path.startswith(p) for p in [
+                "/api/v1/database",
+                "/api/v1/core",
+                "/api/v1/bias-detection",
+                "/api/v1/modern-bias-detection",
+                "/api/v1/multimodal-bias-detection",
+                "/api/v1/ai-bom",
+                "/api/v1/ai-governance",
+                "/api/v1/analytics",
+                "/api/v1/remediation",
+                "/api/v1/compliance",
+                "/api/v1/marketplace",
+                "/api/v1/reports",
+                "/api/v1/settings",
+                "/api/v1/datasets",
+                "/api/v1/monitoring",
+                "/api/v1/mlops"
+            ]):
+                return True
+                
         return path in public_paths or path.startswith("/static")
+

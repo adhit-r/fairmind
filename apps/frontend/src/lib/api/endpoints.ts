@@ -32,8 +32,8 @@ export const API_ENDPOINTS = {
     recentActivity: '/api/v1/core/activity/recent',
     governanceMetrics: '/api/v1/core/governance/metrics',
     metricsSummary: '/api/v1/core/metrics/summary',
-    model: (id: string) => `/api/v1/models/${id}`,
-    modelTest: (id: string) => `/api/v1/models/${id}/test`,
+    model: (id: string) => `/api/v1/core/models/${id}`,
+    modelTest: (id: string) => `/api/v1/core/models/${id}/test`,
   },
 
   // Database
@@ -154,10 +154,10 @@ export const API_ENDPOINTS = {
 
   // Datasets
   datasets: {
-    list: '/api/v1/datasets/',
-    upload: '/api/v1/datasets/upload',
-    get: (datasetId: string) => `/api/v1/datasets/${datasetId}`,
-    delete: (datasetId: string) => `/api/v1/datasets/${datasetId}`,
+    list: '/api/v1/core/datasets',
+    upload: '/api/v1/core/datasets',
+    get: (datasetId: string) => `/api/v1/core/datasets/${datasetId}`,
+    delete: (datasetId: string) => `/api/v1/core/datasets/${datasetId}`,
   },
 
   // Bias Detection V2 (Production API)

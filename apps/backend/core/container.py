@@ -261,6 +261,18 @@ def inject(service_type: Type[T]) -> T:
     return get_container().resolve(service_type)
 
 
+def provide(service_type: Type[T]) -> Callable[[], T]:
+    """
+    Returns a callable for FastAPI's Depends() that resolves the service.
+    
+    Usage:
+        def my_route(service: MyService = Depends(provide(MyService))):
+            ...
+    """
+    return lambda: get_container().resolve(service_type)
+
+
+
 def service(
     lifetime: ServiceLifetime = ServiceLifetime.TRANSIENT,
     interface: Optional[Type] = None

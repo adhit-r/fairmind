@@ -8,12 +8,12 @@ from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends, Query, status
 from pydantic import BaseModel
 
-from core.container import inject
+from core.container import inject, provide
 from core.exceptions import AppException
 from domain.dataset.services.dataset_service import DatasetService, DatasetMetadata, ValidationResult, CleanupResult
 
 
-router = APIRouter(prefix="/api/v1/datasets", tags=["datasets"])
+router = APIRouter(tags=["dataset"])
 
 
 # Response Models
@@ -36,7 +36,7 @@ async def upload_dataset(
     file: UploadFile = File(...),
     name: Optional[str] = Form(None),
     description: Optional[str] = Form(None),
-    service: DatasetService = Depends(inject(DatasetService))
+    service: DatasetService = Depends(provide(DatasetService))
 ):
     """
     Upload a new dataset.
@@ -82,7 +82,7 @@ async def list_datasets(
     limit: int = Query(10, ge=1, le=100),
     search: Optional[str] = None,
     file_type: Optional[str] = None,
-    service: DatasetService = Depends(inject(DatasetService))
+    service: DatasetService = Depends(provide(DatasetService))
 ):
     """
     List datasets with pagination.
@@ -112,7 +112,7 @@ async def list_datasets(
 @router.get("/{dataset_id}", response_model=DatasetResponse)
 async def get_dataset(
     dataset_id: str,
-    service: DatasetService = Depends(inject(DatasetService))
+    service: DatasetService = Depends(provide(DatasetService))
 ):
     """
     Get detailed dataset information.
@@ -147,7 +147,7 @@ async def get_dataset(
 @router.delete("/{dataset_id}", response_model=DatasetResponse)
 async def delete_dataset(
     dataset_id: str,
-    service: DatasetService = Depends(inject(DatasetService))
+    service: DatasetService = Depends(provide(DatasetService))
 ):
     """
     Delete a dataset.
@@ -166,7 +166,7 @@ async def validate_dataset_columns(
     target_column: str,
     feature_columns: List[str],
     protected_attributes: List[str],
-    service: DatasetService = Depends(inject(DatasetService))
+    service: DatasetService = Depends(provide(DatasetService))
 ):
     """
     Validate dataset columns.
@@ -200,7 +200,7 @@ async def validate_dataset_columns(
 @router.get("/{dataset_id}/schema")
 async def get_dataset_schema(
     dataset_id: str,
-    service: DatasetService = Depends(inject(DatasetService))
+    service: DatasetService = Depends(provide(DatasetService))
 ):
     """
     Get dataset schema.
@@ -222,7 +222,7 @@ async def get_dataset_schema(
 @router.post("/cleanup")
 async def cleanup_old_datasets(
     max_age_days: int = 30,
-    service: DatasetService = Depends(inject(DatasetService))
+    service: DatasetService = Depends(provide(DatasetService))
 ):
     """
     Clean up old dataset files.

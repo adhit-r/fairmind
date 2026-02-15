@@ -293,3 +293,12 @@ class ApiClient {
 
 export const apiClient = new ApiClient()
 
+// Initialize from localStorage if available
+if (typeof window !== 'undefined') {
+  const token = localStorage.getItem('access_token')
+  if (token) {
+    apiClient.setAccessToken(token)
+  }
+}
+
+

@@ -355,13 +355,10 @@ try:
     from .routes import auth
     # app.include_router(auth.router, prefix="/api/v1", tags=["authentication"]) # Legacy
     
-    # New Local Auth
-    from domain.auth.routes import auth_routes
-    app.include_router(auth_routes.router, prefix="/api/v1")
-    
-    logger.info("Authentication routes loaded successfully")
+    # New Local Auth is handled by discover_routes
+    pass
 except Exception as e:
-    logger.warning(f"Could not load authentication routes: {e}")
+    logger.warning(f"Old authentication routes skipped: {e}")
 
 try:
     from .routes import core
@@ -370,58 +367,16 @@ try:
 except Exception as e:
     logger.warning(f"Could not load core routes: {e}")
 
-# Model Upload Routes
-try:
-    from domain.models.routes.model_upload_routes import router as model_upload_router
-    app.include_router(model_upload_router, prefix="/api/v1", tags=["model-upload"])
-    logger.info("Model upload routes loaded successfully")
+    # Model routes are handled by discover_routes
+    pass
 except Exception as e:
-    logger.warning(f"Could not load model upload routes: {e}")
-
-# Model Test Routes
-try:
-    from domain.models.routes.model_test_routes import router as model_test_router
-    app.include_router(model_test_router, prefix="/api/v1", tags=["model-test"])
-    logger.info("Model test routes loaded successfully")
-except Exception as e:
-    logger.warning(f"Could not load model test routes: {e}")
+    logger.warning(f"Model routes discovery issue: {e}")
 
 # New imports and router inclusions
-try:
-    from apps.backend.domain.remediation.routes.remediation_routes import router as remediation_router
-    from apps.backend.domain.analytics.routes.analytics_routes import router as analytics_router
-    from apps.backend.domain.compliance.routes.compliance_routes import router as compliance_router
-    from apps.backend.domain.marketplace.routes.marketplace_routes import router as marketplace_router
-    from apps.backend.domain.reports.routes.reports_routes import router as reports_router
-    from apps.backend.domain.settings.routes.settings_routes import router as settings_router
-
-    # Include routers
-    app.include_router(
-        health_service.router,
-        prefix="/health",
-        tags=["Health"]
-    )
-
-    app.include_router(
-        remediation_router,
-        prefix="/api/v1/remediation",
-        tags=["Bias Remediation"]
-    )
-
-    app.include_router(
-        analytics_router,
-        prefix="/api/v1/analytics",
-        tags=["Advanced Analytics"]
-    )
-
-    app.include_router(
-        compliance_router,
-        prefix="/api/v1/compliance",
-        tags=["Compliance Automation"]
-    )
-    logger.info("Remediation, Analytics, and Compliance routes loaded successfully")
+    # These domains are handled by discover_routes
+    pass
 except Exception as e:
-    logger.warning(f"Could not load remediation, analytics, or compliance routes: {e}")
+    logger.warning(f"Domain routes discovery issue: {e}")
 # Register routers
 # Routers are already included in the try-except blocks above
 

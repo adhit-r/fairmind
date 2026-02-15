@@ -4,7 +4,7 @@
  */
 
 import { useState } from 'react';
-import { apiClient } from './api-client';
+import { apiClient } from '../api-client';
 
 export interface ModelUploadOptions {
     name?: string;
@@ -41,18 +41,6 @@ export function useModelUpload() {
             const response = await apiClient.post('/api/v1/models/upload', formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
-                },
-                onUploadProgress: (progressEvent) => {
-                    if (progressEvent.total) {
-                        const percentage = Math.round(
-                            (progressEvent.loaded * 100) / progressEvent.total
-                        );
-                        setProgress({
-                            loaded: progressEvent.loaded,
-                            total: progressEvent.total,
-                            percentage,
-                        });
-                    }
                 },
             });
 

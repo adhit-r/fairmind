@@ -7,16 +7,17 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 
-from core.container import inject
+from core.container import inject, provide
 from domain.auth.services.auth_service import AuthService, User
 
-router = APIRouter(prefix="/auth", tags=["auth"])
+router = APIRouter(tags=["auth"])
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
 
 class UserRegister(BaseModel):
     email: EmailStr
     password: str
     full_name: Optional[str] = None
+    role: Optional[str] = "user"
 
 class Token(BaseModel):
     access_token: str
@@ -29,7 +30,8 @@ async def register(user_data: UserRegister, auth_service: AuthService = Depends(
         user = await auth_service.register_user(
             email=user_data.email,
             password=user_data.password[:50], # Truncate here too
-            full_name=user_data.full_name
+            full_name=user_data.full_name,
+            role=user_data.role
         )
         return user
     except ValueError as e:

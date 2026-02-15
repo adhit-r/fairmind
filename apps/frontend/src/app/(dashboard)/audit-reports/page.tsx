@@ -353,7 +353,7 @@ Next Review Date: ${new Date(auditReport.next_review_date).toLocaleDateString()}
                                     </p>
                                     <p className="font-mono font-bold text-lg">{auditReport.report_id}</p>
                                 </div>
-                                <Button variant="outline" onClick={downloadReport}>
+                                <Button variant="neutral" onClick={downloadReport}>
                                     <IconDownload className="mr-2 h-4 w-4" />
                                     Download Report
                                 </Button>

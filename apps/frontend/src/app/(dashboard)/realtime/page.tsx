@@ -67,12 +67,12 @@ export default function RealtimeIntegrationPage() {
         const loadData = async () => {
             const providersData = await getProviders()
             if (providersData && providersData.success) {
-                setProviders(providersData.providers.providers)
+                setProviders(providersData.data?.providers || [])
             }
 
             const testTypesData = await getBiasTestTypes()
             if (testTypesData && testTypesData.success) {
-                setTestTypes(testTypesData.test_types.test_types)
+                setTestTypes(testTypesData.data?.test_types || [])
             }
         }
         loadData()

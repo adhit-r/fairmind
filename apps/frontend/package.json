@@ -14,6 +14,8 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^3.3.4",
+    "@hugeicons/core-free-icons": "^3.0.0",
+    "@hugeicons/react": "^1.1.2",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.0.5",
     "@radix-ui/react-avatar": "^1.1.11",
@@ -33,7 +35,11 @@
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-toast": "^1.2.15",
     "@radix-ui/react-tooltip": "^1.2.8",
+    "@supabase/supabase-js": "^2.78.0",
     "@tabler/icons-react": "^3.21.0",
+    "@tanstack/ai": "^0.0.3",
+    "@tanstack/ai-openai": "^0.0.3",
+    "@tanstack/ai-react": "^0.0.3",
     "@tanstack/react-table": "^8.20.5",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
@@ -48,7 +54,8 @@
     "sonner": "^2.0.7",
     "tailwind-merge": "^2.4.0",
     "tailwindcss-animate": "^1.0.7",
-    "zod": "^3.23.8"
+    "zod": "^3.23.8",
+    "zod-to-json-schema": "^3.25.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.44.0",

@@ -538,7 +538,7 @@ class DatasetService(AsyncBaseService):
         """Analyze CSV file using DuckDB."""
         try:
             from database.duckdb_manager import DuckDBManager
-            from core.container import inject
+            from core.container import inject, provide
             
             duckdb_manager = inject(DuckDBManager)
             
