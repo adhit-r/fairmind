@@ -33,7 +33,7 @@ jobs:
       - name: Security scanning
         run: |
           bandit -r apps/backend
-          safety check -r apps/backend/requirements.txt
+          safety check --file apps/backend/requirements.txt
       - name: Run tests
         run: pytest apps/backend/tests
 
@@ -53,14 +53,16 @@ jobs:
         uses: docker/build-push-action@v4
         with:
           context: apps/backend
-          push: true
-          tags: ghcr.io/${{ github.repository }}/backend:latest
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          tags: |
+            ghcr.io/${{ github.repository }}/backend:latest
+            ghcr.io/${{ github.repository }}/backend:${{ github.sha }}
       - name: Scan image
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.17.0  # Use a specific version
         with:
           image-ref: 'ghcr.io/${{ github.repository }}/backend:latest'
-          format: 'table'
-          exit-code: '1'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
 
   deploy:
     runs-on: ubuntu-latest
@@ -70,3 +72,5 @@ jobs:
         uses: railwayapp/cli-action@v1
         with:
           railway_token: ${{ secrets.RAILWAY_API_TOKEN }}
+          service: backend
+          environment: production

@@ -17,10 +17,7 @@ jobs:
         working-directory: ./apps/frontend
     steps:
       - uses: actions/checkout@v3
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '18'
+
       - name: Install Bun
         uses: oven-sh/setup-bun@v1
         with:
@@ -57,14 +54,19 @@ jobs:
         uses: docker/build-push-action@v4
         with:
           context: apps/frontend
-          push: true
-          tags: ghcr.io/${{ github.repository }}/frontend:latest
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          tags: |
+            ghcr.io/${{ github.repository }}/frontend:latest
+            ghcr.io/${{ github.repository }}/frontend:${{ github.sha }}
       - name: Scan image
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.17.0
         with:
           image-ref: 'ghcr.io/${{ github.repository }}/frontend:latest'
           format: 'table'
           exit-code: '1'
+        env:
+          TRIVY_USERNAME: ${{ github.actor }}
+          TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
 
   deploy:
     runs-on: ubuntu-latest
@@ -74,3 +76,5 @@ jobs:
         uses: railwayapp/cli-action@v1
         with:
           railway_token: ${{ secrets.RAILWAY_API_TOKEN }}
+          service: frontend
+          environment: production

@@ -6,12 +6,14 @@ WORKDIR /app
 
 # Install dependencies
 COPY apps/frontend/package.json apps/frontend/bun.lock ./apps/frontend/
+WORKDIR /app/apps/frontend
 RUN bun install --frozen-lockfile
 
 # Copy the rest of the frontend application code
 COPY apps/frontend/ ./apps/frontend/
 
 # Build the Next.js application
+WORKDIR /app/apps/frontend
 RUN bun run build
 
 # Stage 2: Create a lean production image
