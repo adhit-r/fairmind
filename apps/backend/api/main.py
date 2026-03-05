@@ -26,7 +26,7 @@ from config.settings import settings
 from config.logging import get_logger
 from config.database import init_database, close_database
 from config.cache import init_cache, close_cache
-from core.middleware.auth import SupabaseAuthMiddleware
+from core.middleware.auth import NeonAuthMiddleware
 from core.middleware import ErrorHandlingMiddleware, RequestLoggingMiddleware
 from middleware.security import (
     SecurityHeadersMiddleware,
@@ -65,6 +65,13 @@ async def lifespan(app: FastAPI):
     Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
     Path(settings.database_dir).mkdir(parents=True, exist_ok=True)
     Path(settings.model_cache_dir).mkdir(parents=True, exist_ok=True)
+
+    # Start lifecycle-managed background services.
+    try:
+        from domain.compliance.services.compliance_automation_service import compliance_automation_service
+        await compliance_automation_service.start_scheduler()
+    except Exception as e:
+        logger.warning(f"Compliance automation scheduler not started: {e}")
     
     logger.info("Application startup complete")
     
@@ -91,6 +98,13 @@ async def lifespan(app: FastAPI):
         logger.info("Cache connections closed")
     except Exception as e:
         logger.error(f"Error closing cache: {e}")
+
+    # Stop lifecycle-managed background services.
+    try:
+        from domain.compliance.services.compliance_automation_service import compliance_automation_service
+        await compliance_automation_service.stop_scheduler()
+    except Exception as e:
+        logger.warning(f"Compliance automation scheduler shutdown warning: {e}")
     
     logger.info("Application shutdown complete")
 
@@ -225,8 +239,10 @@ app.add_middleware(
 # Add production-ready middleware (order matters!)
 app.add_middleware(ErrorHandlingMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
-app.add_middleware(JWTAuthenticationMiddleware)  # JWT auth middleware
-app.add_middleware(SupabaseAuthMiddleware)  # Supabase JWT verification middleware
+if settings.neon_auth_enabled and settings.is_production:
+    app.add_middleware(NeonAuthMiddleware)  # Neon JWT verification middleware
+else:
+    app.add_middleware(JWTAuthenticationMiddleware)  # Internal JWT auth middleware
 
 # Add response compression middleware
 app.add_middleware(
@@ -325,138 +341,45 @@ try:
 except Exception as e:
     logger.warning(f"Could not register JWT exception handlers: {e}")
 
-# Initialize Route Registry
-try:
-    from api.registry import get_registry
-    
-    # Get registry instance
-    registry = get_registry(app)
-    
-    # Discover routes from domain directory
-    # This automatically finds and registers routes from:
-    # - domain/bias_detection
-    # - domain/compliance
-    # - domain/monitoring
-    # - domain/mlops
-    # - domain/dataset (if migrated)
-    base_path = Path(__file__).parent.parent
-    registry.discover_routes(base_path, fail_fast=False)
-    
-    # Log discovery results
-    routes = registry.get_route_listing()
-    logger.info(f"Discovered {len(routes)} routes from domains")
-    
-except Exception as e:
-    logger.error(f"Route discovery failed: {e}", exc_info=True)
+# Deterministic, explicit router registration.
+import importlib
 
-# Import and include legacy/core routes
-# These will be migrated to domains in future phases
-try:
-    from .routes import auth
-    # app.include_router(auth.router, prefix="/api/v1", tags=["authentication"]) # Legacy
-    
-    # New Local Auth is handled by discover_routes
-    pass
-except Exception as e:
-    logger.warning(f"Old authentication routes skipped: {e}")
 
-try:
-    from .routes import core
-    app.include_router(core.router, prefix="/api/v1", tags=["core"])
-    logger.info("Core routes loaded successfully")
-except Exception as e:
-    logger.warning(f"Could not load core routes: {e}")
+def _include_router(module_path: str, prefix: str = "", tags=None, attr: str = "router", required: bool = True):
+    try:
+        module = importlib.import_module(module_path)
+        router = getattr(module, attr)
+        app.include_router(router, prefix=prefix, tags=tags or [])
+        logger.info(f"Loaded router: {module_path}.{attr}")
+    except Exception as e:
+        if required:
+            raise
+        logger.warning(f"Skipped optional router {module_path}.{attr}: {e}")
 
-    # Model routes are handled by discover_routes
-    pass
-except Exception as e:
-    logger.warning(f"Model routes discovery issue: {e}")
 
-# New imports and router inclusions
-    # These domains are handled by discover_routes
-    pass
-except Exception as e:
-    logger.warning(f"Domain routes discovery issue: {e}")
-# Register routers
-# Routers are already included in the try-except blocks above
+# Required core routers.
+_include_router("api.routes.auth", prefix="/api/v1", tags=["authentication"], required=True)
+_include_router("api.routes.core", prefix="/api/v1", tags=["core"], required=True)
+_include_router("api.routes.database", prefix="/api/v1", tags=["database"], attr="router", required=True)
+_include_router("api.routes.database", prefix="/api/v1", tags=["main-api"], attr="main_router", required=True)
+_include_router("api.routes.ai_governance", prefix="/api/v1/ai-governance", tags=["ai-governance"], required=True)
 
-try:
-    from api.routes import database
-    app.include_router(database.router, prefix="/api/v1", tags=["database"])
-    app.include_router(database.main_router, prefix="/api/v1", tags=["main-api"])
-    logger.info("Database routes loaded successfully")
-except Exception as e:
-    logger.warning(f"Could not load database routes: {e}")
+# Optional feature routers.
+_include_router("api.routes.real_ai_bom", prefix="/api/v1", tags=["ai-bom"], required=False)
+_include_router("api.routes.advanced_bias_detection", prefix="/api/v1", tags=["advanced-bias-detection"], required=False)
+_include_router("api.routes.bias_detection", prefix="/api/v1", tags=["bias-detection"], required=False)
+_include_router("api.routes.compliance_check", tags=["compliance"], required=False)
+_include_router("api.routes.compliance_reporting", tags=["compliance-reporting"], required=False)
+_include_router("api.routes.datasets", tags=["datasets"], required=False)
+_include_router("api.routes.india_compliance", prefix="/api/v1", tags=["india-compliance"], required=False)
+_include_router("api.routes.llm_judge", prefix="/api/v1", tags=["llm-judge"], required=False)
+_include_router("api.routes.mlops", prefix="/api/v1", tags=["mlops"], required=False)
+_include_router("api.routes.modern_bias_detection", prefix="/api/v1", tags=["modern-bias-detection"], required=False)
+_include_router("api.routes.monitoring", prefix="/api/v1", tags=["monitoring"], required=False)
+_include_router("api.routes.multimodal_bias_detection", prefix="/api/v1", tags=["multimodal-bias-detection"], required=False)
+_include_router("api.routes.provenance", prefix="/api/v1/provenance", tags=["provenance"], required=False)
 
-try:
-    from .routes import real_ai_bom
-    app.include_router(real_ai_bom.router, prefix="/api/v1", tags=["ai-bom"])
-    logger.info("AI BOM routes loaded successfully")
-except Exception as e:
-    logger.warning(f"Could not load AI BOM routes: {e}")
-
-try:
-    from .routes import security
-    app.include_router(security.router, prefix="/api/v1", tags=["security"])
-    logger.info("Security testing routes loaded successfully")
-except Exception as e:
-    logger.warning(f"Could not load security routes: {e}")
-
-try:
-    from .routes import fairness_governance
-    app.include_router(fairness_governance.router, prefix="/api/v1", tags=["fairness-governance"])
-    logger.info("Fairness governance routes loaded successfully")
-except Exception as e:
-    logger.warning(f"Could not load fairness governance routes: {e}")
-
-try:
-    from .routes import provenance
-    app.include_router(provenance.router, prefix="/api/v1/provenance", tags=["provenance"])
-    logger.info("Provenance routes loaded successfully")
-except Exception as e:
-    logger.warning(f"Could not load provenance routes: {e}")
-
-try:
-    from .routes import advanced_fairness
-    app.include_router(advanced_fairness.router, prefix="/api/v1", tags=["advanced-fairness"])
-    logger.info("Advanced fairness routes loaded successfully")
-except Exception as e:
-    logger.warning(f"Could not load advanced fairness routes: {e}")
-
-try:
-    from .routes import comprehensive_bias_evaluation
-    app.include_router(comprehensive_bias_evaluation.router, prefix="/api/v1", tags=["comprehensive-bias-evaluation"])
-    logger.info("Comprehensive bias evaluation routes loaded successfully")
-except Exception as e:
-    logger.warning(f"Could not load comprehensive bias evaluation routes: {e}")
-
-try:
-    from .routes import realtime_model_integration
-    app.include_router(realtime_model_integration.router, prefix="/api/v1", tags=["realtime-model-integration"])
-    logger.info("Real-time model integration routes loaded successfully")
-except Exception as e:
-    logger.warning(f"Could not load real-time model integration routes: {e}")
-
-try:
-    from .routes import benchmark_suite
-    app.include_router(benchmark_suite.router, prefix="/api/v1", tags=["benchmark-suite"])
-    logger.info("Benchmark suite routes loaded successfully")
-except Exception as e:
-    logger.warning(f"Could not load benchmark suite routes: {e}")
-
-try:
-    from .routes import model_performance_benchmarking
-    app.include_router(model_performance_benchmarking.router, tags=["model-performance-benchmarking"])
-    logger.info("Model performance benchmarking routes loaded successfully")
-except Exception as e:
-    logger.warning(f"Could not load model performance benchmarking routes: {e}")
-
-try:
-    from .routes import ai_governance
-    app.include_router(ai_governance.router, prefix="/api/v1/ai-governance", tags=["ai-governance"])
-    logger.info("AI Governance routes loaded successfully")
-except Exception as e:
-    logger.warning(f"Could not load AI Governance routes: {e}")
+logger.info("Explicit API router map registered")
 
 
 # Production-ready health check endpoints

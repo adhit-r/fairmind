@@ -348,6 +348,7 @@ class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
                 "/api/v1/database",
                 "/api/v1/core",
                 "/api/v1/bias-detection",
+                "/api/v1/bias/llm-judge",
                 "/api/v1/modern-bias-detection",
                 "/api/v1/multimodal-bias-detection",
                 "/api/v1/ai-bom",

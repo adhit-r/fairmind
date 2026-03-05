@@ -8,7 +8,6 @@ import json
 import logging
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timezone
-from supabase import create_client, Client
 
 logger = logging.getLogger(__name__)
 
@@ -26,24 +25,8 @@ class BiasTestResultService:
     """Service for storing and retrieving bias test results"""
     
     def __init__(self):
-        self.supabase_url = os.getenv("SUPABASE_URL")
-        self.supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
         self.local_storage_path = os.getenv("TEST_RESULTS_PATH", "./uploads/test_results")
-        
-        # Initialize Supabase client
-        if self.supabase_url and self.supabase_key:
-            try:
-                self.client: Client = create_client(self.supabase_url, self.supabase_key)
-                self.use_supabase = True
-                logger.info("Bias test result storage initialized with Supabase")
-            except Exception as e:
-                logger.error(f"Failed to initialize Supabase: {e}")
-                self.client = None
-                self.use_supabase = False
-        else:
-            self.client = None
-            self.use_supabase = False
-            logger.info("Bias test result storage initialized with local file system")
+        logger.info("Bias test result storage initialized with local file system")
         
         # Ensure local storage directory exists
         os.makedirs(self.local_storage_path, exist_ok=True)
@@ -114,10 +97,7 @@ class BiasTestResultService:
                 "created_at": datetime.now(timezone.utc).isoformat()
             }
             
-            if self.use_supabase:
-                await self._save_supabase(test_record)
-            else:
-                await self._save_local(test_record)
+            await self._save_local(test_record)
             
             logger.info(f"Test result saved: {test_id} (type: {test_type})")
             return True
@@ -125,18 +105,6 @@ class BiasTestResultService:
         except Exception as e:
             logger.error(f"Failed to save test result {test_id}: {e}")
             return False
-    
-    async def _save_supabase(self, test_record: Dict[str, Any]):
-        """Save test result to Supabase"""
-        try:
-            response = self.client.table("bias_test_results").insert(test_record).execute()
-            
-            if hasattr(response, 'error') and response.error:
-                raise Exception(f"Database insert failed: {response.error}")
-            
-        except Exception as e:
-            logger.error(f"Supabase save error: {e}")
-            raise
     
     async def _save_local(self, test_record: Dict[str, Any]):
         """Save test result to local file system"""
@@ -159,29 +127,9 @@ class BiasTestResultService:
     async def get_test_result(self, test_id: str, user_id: str) -> Optional[Dict[str, Any]]:
         """Retrieve a specific test result"""
         try:
-            if self.use_supabase:
-                return await self._get_supabase(test_id, user_id)
-            else:
-                return await self._get_local(test_id, user_id)
+            return await self._get_local(test_id, user_id)
         except Exception as e:
             logger.error(f"Failed to retrieve test result {test_id}: {e}")
-            return None
-    
-    async def _get_supabase(self, test_id: str, user_id: str) -> Optional[Dict[str, Any]]:
-        """Retrieve test result from Supabase"""
-        try:
-            response = self.client.table("bias_test_results")\
-                .select("*")\
-                .eq("id", test_id)\
-                .eq("user_id", user_id)\
-                .execute()
-            
-            if response.data:
-                return response.data[0]
-            return None
-            
-        except Exception as e:
-            logger.error(f"Supabase retrieval error: {e}")
             return None
     
     async def _get_local(self, test_id: str, user_id: str) -> Optional[Dict[str, Any]]:
@@ -209,41 +157,9 @@ class BiasTestResultService:
     ) -> List[Dict[str, Any]]:
         """List test results with optional filtering"""
         try:
-            if self.use_supabase:
-                return await self._list_supabase(user_id, model_id, test_type, limit, offset)
-            else:
-                return await self._list_local(user_id, model_id, test_type, limit, offset)
+            return await self._list_local(user_id, model_id, test_type, limit, offset)
         except Exception as e:
             logger.error(f"Failed to list test results: {e}")
-            return []
-    
-    async def _list_supabase(
-        self,
-        user_id: str,
-        model_id: Optional[str],
-        test_type: Optional[str],
-        limit: int,
-        offset: int
-    ) -> List[Dict[str, Any]]:
-        """List test results from Supabase"""
-        try:
-            query = self.client.table("bias_test_results")\
-                .select("id, model_id, dataset_id, test_type, timestamp, overall_risk, metrics_passed, metrics_failed, summary")\
-                .eq("user_id", user_id)\
-                .order("timestamp", desc=True)\
-                .range(offset, offset + limit - 1)
-            
-            if model_id:
-                query = query.eq("model_id", model_id)
-            
-            if test_type:
-                query = query.eq("test_type", test_type)
-            
-            response = query.execute()
-            return response.data
-            
-        except Exception as e:
-            logger.error(f"Supabase list error: {e}")
             return []
     
     async def _list_local(
@@ -298,16 +214,9 @@ class BiasTestResultService:
     async def delete_test_result(self, test_id: str, user_id: str) -> bool:
         """Delete a test result"""
         try:
-            if self.use_supabase:
-                self.client.table("bias_test_results")\
-                    .delete()\
-                    .eq("id", test_id)\
-                    .eq("user_id", user_id)\
-                    .execute()
-            else:
-                result_path = os.path.join(self.local_storage_path, user_id, f"{test_id}.json")
-                if os.path.exists(result_path):
-                    os.remove(result_path)
+            result_path = os.path.join(self.local_storage_path, user_id, f"{test_id}.json")
+            if os.path.exists(result_path):
+                os.remove(result_path)
             
             logger.info(f"Test result deleted: {test_id}")
             return True

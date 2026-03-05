@@ -56,12 +56,11 @@ export function useDatasets() {
         }
       )
 
-      if (response.success) {
-        const data = response as any
-        setDatasets(data.datasets || data.data?.datasets || [])
-        setTotal(data.total || data.data?.total || 0)
+      if (response.success && response.data) {
+        setDatasets(response.data.datasets || [])
+        setTotal(response.data.total || 0)
       } else {
-        setError('Failed to fetch datasets')
+        setError(response.error || 'Failed to fetch datasets')
         setDatasets([])
       }
     } catch (err) {
@@ -95,10 +94,14 @@ export function useDatasets() {
         }
       )
 
-      if (response.success) {
+      if (response.success && response.data) {
         // Refresh dataset list
         await fetchDatasets()
-        return response as unknown as DatasetUploadResponse
+        return {
+          success: true,
+          dataset: response.data.dataset,
+          message: response.data.message,
+        }
       } else {
         throw new Error(response.error || 'Upload failed')
       }

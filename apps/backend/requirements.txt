@@ -87,9 +87,6 @@ httpx==0.28.1
     #   -r apps/backend/requirements.txt
     #   postgrest
     #   storage3
-    #   supabase
-    #   supabase-auth
-    #   supabase-functions
 hyperframe==6.1.0
     # via
     #   -r apps/backend/requirements.txt
@@ -140,7 +137,6 @@ passlib==1.7.4
 postgrest==2.24.0
     # via
     #   -r apps/backend/requirements.txt
-    #   supabase
 propcache==0.4.1
     # via
     #   -r apps/backend/requirements.txt
@@ -160,7 +156,6 @@ pydantic==2.12.4
     #   postgrest
     #   realtime
     #   storage3
-    #   supabase-auth
 pydantic-core==2.41.5
     # via
     #   -r apps/backend/requirements.txt
@@ -168,7 +163,6 @@ pydantic-core==2.41.5
 pyjwt==2.10.1
     # via
     #   -r apps/backend/requirements.txt
-    #   supabase-auth
 python-dateutil==2.9.0.post0
     # via
     #   -r apps/backend/requirements.txt
@@ -189,7 +183,6 @@ pyyaml==6.0.3
 realtime==2.24.0
     # via
     #   -r apps/backend/requirements.txt
-    #   supabase
 redis==7.0.1
     # via -r apps/backend/requirements.txt
 requests==2.32.5
@@ -226,21 +219,9 @@ starlette==0.49.3
 storage3==2.24.0
     # via
     #   -r apps/backend/requirements.txt
-    #   supabase
 strenum==0.4.15
     # via
     #   -r apps/backend/requirements.txt
-    #   supabase-functions
-supabase==2.24.0
-    # via -r apps/backend/requirements.txt
-supabase-auth==2.24.0
-    # via
-    #   -r apps/backend/requirements.txt
-    #   supabase
-supabase-functions==2.24.0
-    # via
-    #   -r apps/backend/requirements.txt
-    #   supabase
 threadpoolctl==3.6.0
     # via
     #   -r apps/backend/requirements.txt
@@ -286,7 +267,6 @@ yarl==1.22.0
     #   -r apps/backend/requirements.txt
     #   postgrest
     #   storage3
-    #   supabase-functions
 
 pydantic-settings
 email-validator

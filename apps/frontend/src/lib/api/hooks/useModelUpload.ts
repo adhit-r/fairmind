@@ -44,10 +44,13 @@ export function useModelUpload() {
                 },
             });
 
+            if (!response.success || !response.data) {
+                throw new Error(response.error || 'Upload failed');
+            }
             setUploading(false);
             return response.data;
-        } catch (err: any) {
-            const errorMessage = err.response?.data?.detail || 'Upload failed';
+        } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : 'Upload failed';
             setError(errorMessage);
             setUploading(false);
             throw new Error(errorMessage);

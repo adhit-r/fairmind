@@ -46,9 +46,13 @@ class Settings(BaseSettings):
     database_max_overflow: int = 30
     database_timeout: int = 30
     
-    # Supabase
-    supabase_url: Optional[str] = None
-    supabase_service_role_key: Optional[str] = None
+    # Neon Auth + Data API
+    neon_auth_enabled: bool = False
+    neon_jwks_url: Optional[str] = None
+    neon_jwt_issuer: Optional[str] = None
+    neon_jwt_audience: Optional[str] = None
+    neon_data_api_url: Optional[str] = None
+    neon_data_api_key: Optional[str] = None
     
     # File Storage
     upload_dir: str = "uploads"

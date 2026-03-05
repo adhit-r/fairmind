@@ -48,10 +48,10 @@ export function useRemediation() {
         }
       )
 
-      if (response) {
-        setRemediation(response as any)
+      if (response.success && response.data) {
+        setRemediation(response.data)
       } else {
-        setError('Failed to get remediation strategies')
+        setError(response.error || 'Failed to get remediation strategies')
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to get remediation strategies')
