@@ -63,11 +63,34 @@ def test_ai_governance_workflow_and_request_decision():
 
     decision_resp = client.post(
         f"/api/v1/ai-governance/approval-requests/{approval_request['id']}/decision",
-        json={"decision": "approved", "notes": "Looks good"},
+        json={
+            "decision": "approved",
+            "notes": "Looks good",
+            "decided_by": "approver@fairmind.ai",
+        },
     )
     assert decision_resp.status_code == 200
     decision = decision_resp.json()
     assert decision["status"] == "approved"
+
+    get_request_resp = client.get(
+        f"/api/v1/ai-governance/approval-requests/{approval_request['id']}"
+    )
+    assert get_request_resp.status_code == 200
+    request_data = get_request_resp.json()
+    assert request_data["id"] == approval_request["id"]
+    assert request_data["status"] == "approved"
+    assert request_data["decision_notes"] == "Looks good"
+
+    decisions_resp = client.get(
+        f"/api/v1/ai-governance/approval-requests/{approval_request['id']}/decisions"
+    )
+    assert decisions_resp.status_code == 200
+    trail = decisions_resp.json()
+    assert len(trail) >= 1
+    assert trail[-1]["decision"] == "approved"
+    assert trail[-1]["notes"] == "Looks good"
+    assert trail[-1]["decided_by"] == "approver@fairmind.ai"
 
 
 def test_ai_governance_evidence_collect_and_list():

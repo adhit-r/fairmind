@@ -107,6 +107,21 @@ def _ensure_tables(db: Session) -> None:
     db.execute(
         text(
             """
+            CREATE TABLE IF NOT EXISTS governance_approval_decisions (
+                id TEXT PRIMARY KEY,
+                request_id TEXT NOT NULL,
+                decision TEXT NOT NULL,
+                notes TEXT,
+                decided_by TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (request_id) REFERENCES governance_approval_requests(id)
+            )
+            """
+        )
+    )
+    db.execute(
+        text(
+            """
             CREATE TABLE IF NOT EXISTS governance_evidence (
                 id TEXT PRIMARY KEY,
                 system_id TEXT NOT NULL,
@@ -166,6 +181,7 @@ class ApprovalRequestCreateRequest(BaseModel):
 class ApprovalDecisionRequest(BaseModel):
     decision: str = Field(pattern="^(approved|rejected)$")
     notes: str = ""
+    decided_by: Optional[str] = None
 
 
 class EvidenceCollectRequest(BaseModel):
@@ -517,6 +533,21 @@ async def make_approval_decision(
     if result.rowcount == 0:
         raise HTTPException(status_code=404, detail="Approval request not found")
 
+    db.execute(
+        text(
+            "INSERT INTO governance_approval_decisions (id, request_id, decision, notes, decided_by, created_at) "
+            "VALUES (:id, :request_id, :decision, :notes, :decided_by, :created_at)"
+        ),
+        {
+            "id": str(uuid.uuid4()),
+            "request_id": request_id,
+            "decision": new_status,
+            "notes": request.notes,
+            "decided_by": request.decided_by,
+            "created_at": now,
+        },
+    )
+
     db.commit()
     return {
         "id": request_id,
@@ -524,6 +555,57 @@ async def make_approval_decision(
         "notes": request.notes,
         "updatedAt": now,
     }
+
+
+@router.get("/approval-requests/{request_id}")
+async def get_approval_request(request_id: str, db: Session = Depends(get_db)):
+    _ensure_tables(db)
+    row = db.execute(
+        text(
+            "SELECT id, workflow_id, entity_type, entity_id, requested_by, status, current_step, decision_notes, created_at, updated_at "
+            "FROM governance_approval_requests WHERE id = :id"
+        ),
+        {"id": request_id},
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Approval request not found")
+
+    return {
+        "id": row[0],
+        "workflow_id": row[1],
+        "entity_type": row[2],
+        "entity_id": row[3],
+        "requested_by": row[4],
+        "status": row[5],
+        "current_step": row[6],
+        "decision_notes": row[7] or "",
+        "createdAt": row[8],
+        "updatedAt": row[9],
+    }
+
+
+@router.get("/approval-requests/{request_id}/decisions")
+async def list_approval_decisions(request_id: str, db: Session = Depends(get_db)):
+    _ensure_tables(db)
+    rows = db.execute(
+        text(
+            "SELECT id, request_id, decision, notes, decided_by, created_at "
+            "FROM governance_approval_decisions WHERE request_id = :request_id "
+            "ORDER BY created_at ASC"
+        ),
+        {"request_id": request_id},
+    ).fetchall()
+    return [
+        {
+            "id": row[0],
+            "request_id": row[1],
+            "decision": row[2],
+            "notes": row[3] or "",
+            "decided_by": row[4],
+            "createdAt": row[5],
+        }
+        for row in rows
+    ]
 
 
 @router.post("/evidence/collect")
