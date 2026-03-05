@@ -218,6 +218,12 @@ logs/
 # IDE
 .vscode/
 .idea/
+
+# Local/external nested repositories (never track in this repo)
+.claude/worktrees/
+.wiki/
+_external/verifywise/
+apps/backend/src/domain/bias/bias_bench_repo/
 *.swp
 *.swo
 *~
@@ -335,5 +341,4 @@ apps/frontend-archive/.next/
 apps/frontend-archive/out/
 apps/frontend-archive/build/
 apps/frontend-archive/dist/
-
 
