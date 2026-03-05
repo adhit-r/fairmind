@@ -1,6 +1,6 @@
 import pytest
 from datetime import datetime
-from apps.backend.domain.marketplace.services.marketplace_service import marketplace_service, MarketplaceModel, ModelReview
+from domain.marketplace.services.marketplace_service import marketplace_service, MarketplaceModel, ModelReview
 
 @pytest.mark.asyncio
 async def test_publish_model():
