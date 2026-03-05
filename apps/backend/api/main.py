@@ -389,6 +389,7 @@ async def health_check():
     try:
         return {
             "status": "healthy",
+            "service": settings.api_title,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "version": settings.api_version,
             "environment": settings.environment,
@@ -420,6 +421,7 @@ async def liveness_check():
 async def root():
     """Root endpoint with API information."""
     return {
+        "message": "Fairmind AI Governance API",
         "name": settings.api_title,
         "version": settings.api_version,
         "environment": settings.environment,

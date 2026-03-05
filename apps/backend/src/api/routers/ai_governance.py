@@ -143,6 +143,14 @@ class PolicyCreateRequest(BaseModel):
     rules: List[Dict[str, Any]] = Field(default_factory=list)
 
 
+class PolicyUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    framework: Optional[str] = None
+    description: Optional[str] = None
+    rules: Optional[List[Dict[str, Any]]] = None
+    status: Optional[str] = Field(default=None, pattern="^(draft|awaiting_approval|approved|rejected|archived)$")
+
+
 class ApprovalWorkflowCreateRequest(BaseModel):
     name: str = Field(min_length=1)
     entity_type: str = Field(min_length=1)
@@ -268,6 +276,87 @@ async def create_policy(request: PolicyCreateRequest, db: Session = Depends(get_
         "status": "draft",
         "createdAt": now,
     }
+
+
+@router.get("/policies/{policy_id}")
+async def get_policy(policy_id: str, db: Session = Depends(get_db)):
+    _ensure_tables(db)
+    row = db.execute(
+        text(
+            "SELECT id, name, framework, description, rules_json, status, created_at, updated_at "
+            "FROM governance_policies WHERE id = :id"
+        ),
+        {"id": policy_id},
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Policy not found")
+
+    return {
+        "id": row[0],
+        "name": row[1],
+        "framework": row[2],
+        "description": row[3] or "",
+        "rules": json.loads(row[4]),
+        "status": row[5],
+        "createdAt": row[6],
+        "updatedAt": row[7],
+    }
+
+
+@router.put("/policies/{policy_id}")
+async def update_policy(
+    policy_id: str,
+    request: PolicyUpdateRequest,
+    db: Session = Depends(get_db),
+):
+    _ensure_tables(db)
+    existing = db.execute(
+        text("SELECT id, status FROM governance_policies WHERE id = :id"),
+        {"id": policy_id},
+    ).fetchone()
+    if not existing:
+        raise HTTPException(status_code=404, detail="Policy not found")
+
+    if existing[1] == "approved":
+        raise HTTPException(status_code=409, detail="Approved policies are immutable; create a new version")
+
+    updates = {
+        "name": request.name,
+        "framework": request.framework,
+        "description": request.description,
+        "rules_json": json.dumps(request.rules) if request.rules is not None else None,
+        "status": request.status,
+    }
+    set_parts = []
+    params: Dict[str, Any] = {"id": policy_id, "updated_at": _utc_now_iso()}
+    for key, value in updates.items():
+        if value is not None:
+            set_parts.append(f"{key} = :{key}")
+            params[key] = value
+
+    if not set_parts:
+        return await get_policy(policy_id, db)
+
+    set_parts.append("updated_at = :updated_at")
+    db.execute(
+        text(f"UPDATE governance_policies SET {', '.join(set_parts)} WHERE id = :id"),
+        params,
+    )
+    db.commit()
+    return await get_policy(policy_id, db)
+
+
+@router.delete("/policies/{policy_id}")
+async def delete_policy(policy_id: str, db: Session = Depends(get_db)):
+    _ensure_tables(db)
+    result = db.execute(
+        text("DELETE FROM governance_policies WHERE id = :id"),
+        {"id": policy_id},
+    )
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Policy not found")
+    db.commit()
+    return {"id": policy_id, "deleted": True}
 
 
 @router.post("/policies/{policy_id}/submit")
