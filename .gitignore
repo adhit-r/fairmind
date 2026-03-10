@@ -224,6 +224,7 @@ logs/
 .wiki/
 _external/verifywise/
 apps/backend/src/domain/bias/bias_bench_repo/
+apps/backend/uploads/
 *.swp
 *.swo
 *~
@@ -341,4 +342,3 @@ apps/frontend-archive/.next/
 apps/frontend-archive/out/
 apps/frontend-archive/build/
 apps/frontend-archive/dist/
-
