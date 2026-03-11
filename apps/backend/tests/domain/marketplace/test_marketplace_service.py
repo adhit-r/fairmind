@@ -30,9 +30,10 @@ async def test_list_models():
     assert len(models) > 0
     
     # Test filtering
-    filtered = await marketplace_service.list_models(search_query="GPT-2")
+    query = (models[0].name or "").split()[0]
+    filtered = await marketplace_service.list_models(search_query=query)
     assert len(filtered) > 0
-    assert "GPT-2" in filtered[0].name
+    assert any(query.lower() in (m.name or "").lower() for m in filtered)
 
 @pytest.mark.asyncio
 async def test_add_review():

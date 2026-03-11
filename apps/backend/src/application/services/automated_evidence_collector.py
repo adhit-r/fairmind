@@ -10,16 +10,17 @@ import json
 
 # Import FairMind's existing services
 try:
-    from api.services.bias_detection_service import BiasDetectionService
-    from api.services.dataset_service import DatasetService
-    from api.services.model_service import ModelService
-    from domain.monitoring.services.monitoring_service import MonitoringService
+    from src.application.services.dataset_service import DatasetService
+    from src.application.services.india_bias_detection_service import IndiaBiasDetectionService
+    from src.application.services.monitoring_service import MonitoringService
 except ImportError:
-    # Fallback for development
-    BiasDetectionService = None
     DatasetService = None
-    ModelService = None
+    IndiaBiasDetectionService = None
     MonitoringService = None
+
+# No canonical application ModelService exists yet.
+ModelService = None
+BiasDetectionService = IndiaBiasDetectionService
 
 
 class AutomatedEvidenceCollector:

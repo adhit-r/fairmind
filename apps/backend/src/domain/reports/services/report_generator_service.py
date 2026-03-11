@@ -205,6 +205,7 @@ class ReportGeneratorService:
         
         doc.build(story)
         logger.info(f"Generated Compliance Certificate: {filepath}")
+        return str(filepath)
     async def generate_model_card(self, model_data: Dict[str, Any], card_data: Dict[str, Any]) -> str:
         """
         Generate a Model Card PDF.

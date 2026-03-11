@@ -21,7 +21,7 @@ import base64
 from cryptography.fernet import Fernet
 import os
 
-from api.middleware.audit_logging import audit_logger, AuditEventType, AuditSeverity
+from src.common.audit import audit_logger, AuditSeverity
 
 logger = logging.getLogger(__name__)
 

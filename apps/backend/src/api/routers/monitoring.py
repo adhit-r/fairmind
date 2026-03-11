@@ -20,9 +20,9 @@ from pydantic import BaseModel, Field
 import uuid
 from enum import Enum
 
-# Import services directly from domain to avoid duplicate application aliases.
-from domain.monitoring.services.monitoring_service import MonitoringService
-from domain.monitoring.services.alert_service import AlertService
+# Application-layer adapters preserve API contracts while keeping dependency direction clean.
+from src.application.services.monitoring_service import MonitoringService
+from src.application.services.alert_service import AlertService
 from ..models.core import BaseResponse
 
 logger = logging.getLogger(__name__)

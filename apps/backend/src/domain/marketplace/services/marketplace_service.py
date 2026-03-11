@@ -67,7 +67,18 @@ class MarketplaceService:
     """
     
     def __init__(self):
-        pass
+        self._reviews_by_model: Dict[str, List[ModelReview]] = {}
+
+    @staticmethod
+    def _to_iso(dt_value: Any) -> str:
+        """Normalize DB datetime values to ISO-8601 strings."""
+        if not dt_value:
+            return datetime.now().isoformat()
+        if isinstance(dt_value, datetime):
+            return dt_value.isoformat()
+        if isinstance(dt_value, str):
+            return dt_value
+        return str(dt_value)
 
     def _map_db_row_to_model(self, row: Any) -> MarketplaceModel:
         """Helper to map a database row to a MarketplaceModel object"""
@@ -102,10 +113,10 @@ class MarketplaceService:
             tags=tags,
             bias_card=metadata.get("bias_card", default_bias_card),
             performance_metrics=metadata.get("performance_metrics", {}),
-            reviews=[], # No reviews table yet
+            reviews=self._reviews_by_model.get(row.id, []),
             download_count=metadata.get("download_count", 0),
-            created_at=row.upload_date.isoformat() if row.upload_date else datetime.now().isoformat(),
-            updated_at=row.updated_at.isoformat() if row.updated_at else datetime.now().isoformat()
+            created_at=self._to_iso(row.upload_date),
+            updated_at=self._to_iso(row.updated_at)
         )
 
     async def list_models(
@@ -232,6 +243,7 @@ class MarketplaceService:
         )
         
         # We can't persist it without a table, so we just log it
+        self._reviews_by_model.setdefault(model_id, []).append(review)
         logger.info(f"Review added for model {model_id}: {review}")
         
         return review

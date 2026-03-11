@@ -333,7 +333,7 @@ class IndiaComplianceHealthService:
         start_time = time.time()
         try:
             # Try to import the service
-            from api.services.india_evidence_collection_service import (
+            from src.application.services.india_evidence_collection_service import (
                 IndiaEvidenceCollectionService,
             )
 
@@ -390,7 +390,7 @@ class IndiaComplianceHealthService:
         start_time = time.time()
         try:
             # Try to import the service
-            from api.services.india_bias_detection_service import (
+            from src.application.services.india_bias_detection_service import (
                 IndiaBiasDetectionService,
             )
 

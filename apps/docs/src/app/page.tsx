@@ -4,6 +4,9 @@ export default function DocsHome() {
       <h1>FairMind Documentation</h1>
       <p>This app is the dedicated docs site for docs.fairmind.xyz.</p>
       <p>Canonical content is stored under <code>apps/docs/content</code>.</p>
+      <p>
+        Main website: <a href="https://fairmind.xyz">fairmind.xyz</a>
+      </p>
     </main>
   );
 }
