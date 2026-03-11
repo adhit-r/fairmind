@@ -233,7 +233,10 @@ async def login(login_data: LoginRequest):
         raise
     except (TokenExpiredException, InvalidTokenException, TokenMissingException) as e:
         logger.warning(f"JWT error during login: {str(e)}")
-        raise handle_jwt_exception(e)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e)
+        )
     except Exception as e:
         logger.error(f"Login error: {e}")
         raise HTTPException(
@@ -255,7 +258,10 @@ async def refresh_token(refresh_data: RefreshRequest):
         
     except (TokenExpiredException, InvalidTokenException, TokenMissingException) as e:
         logger.warning(f"JWT error during token refresh: {str(e)}")
-        raise handle_jwt_exception(e)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e)
+        )
     except HTTPException:
         raise
     except Exception as e:

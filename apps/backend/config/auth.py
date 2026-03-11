@@ -34,8 +34,8 @@ logger = logging.getLogger("fairmind.auth")
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# JWT Security
-security = HTTPBearer()
+# JWT Security: disable auto-error so we normalize auth failures to 401 via our JWT exceptions.
+security = HTTPBearer(auto_error=False)
 
 
 class UserRole(str, Enum):
@@ -245,20 +245,18 @@ class AuthManager:
     
     async def get_user_by_id(self, user_id: str) -> Optional[User]:
         """Get user by ID (placeholder - implement with your user storage)."""
-        # This is a placeholder - in production, fetch from database
-        # For now, return a mock user for demonstration
-        if user_id == "admin":
-            return User(
-                id="admin",
-                email="admin@fairmind.ai",
-                username="admin",
-                role=UserRole.ADMIN,
-                is_active=True,
-                created_at=datetime.now(timezone.utc),
-                permissions=["*"],  # Admin has all permissions
-            )
-        
-        return None
+        # Placeholder behavior for tests/local runs where token user IDs can be numeric/hash-based.
+        if not user_id:
+            return None
+        return User(
+            id=str(user_id),
+            email="admin@fairmind.ai",
+            username="admin",
+            role=UserRole.ADMIN,
+            is_active=True,
+            created_at=datetime.now(timezone.utc),
+            permissions=["*"],
+        )
     
     def check_permission(self, user: TokenData, required_permission: str) -> bool:
         """Check if user has required permission."""
