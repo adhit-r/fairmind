@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useModernBias } from '@/lib/api/hooks/useModernBias'
 import { useModels } from '@/lib/api/hooks/useModels'
 import { generateBiasPDF, generateBiasJSON, type BiasEvaluationPDFData } from '@/lib/export/pdf-generator'
+import { generatePDFReport, generateDOCXReport } from '@/lib/export/backend-report-generator'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -202,7 +203,7 @@ export default function LLMBiasDetectionPage() {
     }))
   }
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
     if (!results) {
       toast({
         title: 'No results to export',
@@ -213,26 +214,34 @@ export default function LLMBiasDetectionPage() {
     }
 
     try {
-      const pdfData: BiasEvaluationPDFData = {
-        timestamp: results.timestamp,
+      // Use backend API for report generation
+      await generatePDFReport({
         modelType: results.model_type,
         modelDescription: formData.model_description,
-        evaluationSummary: results.evaluation_summary,
-        overallRisk: results.overall_risk as any,
-        riskFactors: results.risk_factors,
-        complianceStatus: results.compliance_status,
-        explainabilityAnalysis: results.explainability_analysis,
-        recommendations: results.recommendations,
-        selectedTests: formData.selected_tests,
-      }
-
-      generateBiasPDF(pdfData)
+        evaluationSummary: {
+          totalTests: results.evaluation_summary.total_tests || 0,
+          testsPassed: results.evaluation_summary.tests_passed || 0,
+          testsFailed: results.evaluation_summary.tests_failed || 0,
+          overallBiasRate: results.evaluation_summary.overall_bias_rate || 0,
+          evaluationTime: results.evaluation_summary.evaluation_time || 0,
+        },
+        overallRisk: results.overall_risk as 'low' | 'medium' | 'high' | 'critical',
+        riskFactors: results.risk_factors || [],
+        recommendations: results.recommendations || [],
+        complianceStatus: {
+          gdprCompliant: results.compliance_status?.gdpr_compliant ?? false,
+          aiActCompliant: results.compliance_status?.ai_act_compliant ?? false,
+          fairnessScore: results.compliance_status?.fairness_score ?? 0,
+        },
+        explainabilityInsights: results.explainability_analysis || {},
+      })
 
       toast({
         title: 'PDF exported',
         description: 'Bias evaluation report has been downloaded.',
       })
     } catch (error) {
+      console.error('PDF export error:', error)
       toast({
         title: 'Export failed',
         description: error instanceof Error ? error.message : 'Failed to generate PDF',
@@ -275,6 +284,53 @@ export default function LLMBiasDetectionPage() {
       toast({
         title: 'Export failed',
         description: error instanceof Error ? error.message : 'Failed to generate JSON',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const handleExportDOCX = async () => {
+    if (!results) {
+      toast({
+        title: 'No results to export',
+        description: 'Please run an evaluation first.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    try {
+      // Use backend API for DOCX report generation
+      await generateDOCXReport({
+        modelType: results.model_type,
+        modelDescription: formData.model_description,
+        evaluationSummary: {
+          totalTests: results.evaluation_summary.total_tests || 0,
+          testsPassed: results.evaluation_summary.tests_passed || 0,
+          testsFailed: results.evaluation_summary.tests_failed || 0,
+          overallBiasRate: results.evaluation_summary.overall_bias_rate || 0,
+          evaluationTime: results.evaluation_summary.evaluation_time || 0,
+        },
+        overallRisk: results.overall_risk as 'low' | 'medium' | 'high' | 'critical',
+        riskFactors: results.risk_factors || [],
+        recommendations: results.recommendations || [],
+        complianceStatus: {
+          gdprCompliant: results.compliance_status?.gdpr_compliant ?? false,
+          aiActCompliant: results.compliance_status?.ai_act_compliant ?? false,
+          fairnessScore: results.compliance_status?.fairness_score ?? 0,
+        },
+        explainabilityInsights: results.explainability_analysis || {},
+      })
+
+      toast({
+        title: 'DOCX exported',
+        description: 'Bias evaluation report has been downloaded as Word document.',
+      })
+    } catch (error) {
+      console.error('DOCX export error:', error)
+      toast({
+        title: 'Export failed',
+        description: error instanceof Error ? error.message : 'Failed to generate DOCX',
         variant: 'destructive',
       })
     }
@@ -613,22 +669,30 @@ export default function LLMBiasDetectionPage() {
               )}
 
               {/* Export Options */}
-              <div className="flex gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <Button
                   variant="outline"
-                  className="flex-1 border-2 border-black font-bold hover:bg-black hover:text-white"
+                  className="border-2 border-black font-bold hover:bg-black hover:text-white"
                   onClick={handleExportPDF}
                 >
                   <IconFile className="h-4 w-4 mr-2" />
-                  Export as PDF
+                  PDF
                 </Button>
                 <Button
                   variant="outline"
-                  className="flex-1 border-2 border-black font-bold hover:bg-black hover:text-white"
+                  className="border-2 border-black font-bold hover:bg-black hover:text-white"
+                  onClick={handleExportDOCX}
+                >
+                  <IconFileText className="h-4 w-4 mr-2" />
+                  Word
+                </Button>
+                <Button
+                  variant="outline"
+                  className="border-2 border-black font-bold hover:bg-black hover:text-white"
                   onClick={handleExportJSON}
                 >
                   <IconFileText className="h-4 w-4 mr-2" />
-                  Export as JSON
+                  JSON
                 </Button>
               </div>
             </>
