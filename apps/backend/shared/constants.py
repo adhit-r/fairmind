@@ -63,7 +63,6 @@ class ServiceName(str, Enum):
     """Service identifiers."""
     DATABASE = "database"
     CACHE = "cache"
-    SUPABASE = "supabase"
     MLFLOW = "mlflow"
     WANDB = "wandb"
     STORAGE = "storage"

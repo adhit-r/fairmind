@@ -1,7 +1,6 @@
 
 import logging
-from typing import Optional, Dict, Any
-from fastapi import Request, Response, HTTPException, status
+from fastapi import Request, Response, status
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.types import ASGIApp
 import jwt
@@ -11,20 +10,17 @@ from config.settings import settings
 
 logger = logging.getLogger(__name__)
 
-class SupabaseAuthMiddleware(BaseHTTPMiddleware):
+class NeonAuthMiddleware(BaseHTTPMiddleware):
     """
-    Middleware to verify Supabase JWT tokens and inject user info into request.
+    Middleware to verify Neon JWT tokens and inject user info into request.
     """
     
     def __init__(self, app: ASGIApp):
         super().__init__(app)
-        self.supabase_url = settings.supabase_url
-        self.supabase_key = settings.supabase_service_role_key
-        self.jwt_secret = settings.jwt_secret # Fallback or specific secret
-        
-        # If using Supabase, we might need to fetch JWKS or use the secret
-        # For HS256 (default Supabase), it's the JWT secret (which is often the anon key or a specific secret)
-        # Usually Supabase uses the project JWT secret.
+        self.jwt_secret = settings.jwt_secret
+        self.neon_jwks_client = (
+            PyJWKClient(settings.neon_jwks_url) if settings.neon_jwks_url else None
+        )
         
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         # Skip auth for public endpoints
@@ -39,22 +35,36 @@ class SupabaseAuthMiddleware(BaseHTTPMiddleware):
         token = auth_header.split(" ")[1]
         
         try:
-            # Verify token
-            # Note: In a real Supabase setup, you'd use the JWT secret from Supabase dashboard
-            # Here we assume settings.jwt_secret is set to that value.
-            
-            # If we don't have the secret configured yet, we might skip verification or fail
-            if not settings.jwt_secret or settings.jwt_secret == "development-jwt-secret-change-in-production":
-                 # In dev with mock, maybe decode without verification or use a dummy secret
-                 # For now, let's try to decode unverified if in dev, or verify if secret exists
-                 if settings.is_development:
-                     payload = jwt.decode(token, options={"verify_signature": False})
-                 else:
-                     # Remove audience check to support internal tokens
-                     payload = jwt.decode(token, settings.jwt_secret, algorithms=["HS256"], options={"verify_aud": False})
+            verify_kwargs = {}
+            if settings.neon_jwt_audience:
+                verify_kwargs["audience"] = settings.neon_jwt_audience
+            if settings.neon_jwt_issuer:
+                verify_kwargs["issuer"] = settings.neon_jwt_issuer
+
+            if self.neon_jwks_client:
+                signing_key = self.neon_jwks_client.get_signing_key_from_jwt(token)
+                payload = jwt.decode(
+                    token,
+                    signing_key.key,
+                    algorithms=["RS256"],
+                    options={"verify_aud": bool(settings.neon_jwt_audience)},
+                    **verify_kwargs,
+                )
+            elif settings.jwt_secret:
+                payload = jwt.decode(
+                    token,
+                    settings.jwt_secret,
+                    algorithms=["HS256"],
+                    options={"verify_aud": bool(settings.neon_jwt_audience)},
+                    **verify_kwargs,
+                )
+            elif settings.is_development:
+                payload = jwt.decode(token, options={"verify_signature": False})
             else:
-                # Remove audience check to support internal tokens
-                payload = jwt.decode(token, settings.jwt_secret, algorithms=["HS256"], options={"verify_aud": False})
+                return Response(
+                    "JWT verification configuration missing",
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
                 
             request.state.user = payload
             
@@ -81,4 +91,28 @@ class SupabaseAuthMiddleware(BaseHTTPMiddleware):
             "/",
             "/api"
         ]
+        
+        # In development, also allow API access without auth for testing
+        if settings.is_development:
+            if any(path.startswith(p) for p in [
+                "/api/v1/database",
+                "/api/v1/core",
+                "/api/v1/bias-detection",
+                "/api/v1/bias/llm-judge",
+                "/api/v1/modern-bias-detection",
+                "/api/v1/multimodal-bias-detection",
+                "/api/v1/ai-bom",
+                "/api/v1/ai-governance",
+                "/api/v1/analytics",
+                "/api/v1/remediation",
+                "/api/v1/compliance",
+                "/api/v1/marketplace",
+                "/api/v1/reports",
+                "/api/v1/settings",
+                "/api/v1/datasets",
+                "/api/v1/monitoring",
+                "/api/v1/mlops"
+            ]):
+                return True
+                
         return path in public_paths or path.startswith("/static")

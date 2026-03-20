@@ -11,7 +11,7 @@ export const API_ENDPOINTS = {
 
   // Authentication
   auth: {
-    login: '/api/v1/auth/token',
+    login: '/api/v1/auth/login',
     register: '/api/v1/auth/register',
     refresh: '/api/v1/auth/refresh',
     logout: '/api/v1/auth/logout',
@@ -32,8 +32,8 @@ export const API_ENDPOINTS = {
     recentActivity: '/api/v1/core/activity/recent',
     governanceMetrics: '/api/v1/core/governance/metrics',
     metricsSummary: '/api/v1/core/metrics/summary',
-    model: (id: string) => `/api/v1/models/${id}`,
-    modelTest: (id: string) => `/api/v1/models/${id}/test`,
+    model: (id: string) => `/api/v1/core/models/${id}`,
+    modelTest: (id: string) => `/api/v1/core/models/${id}/test`,
   },
 
   // Database
@@ -124,7 +124,18 @@ export const API_ENDPOINTS = {
     evidenceCollect: '/api/v1/ai-governance/evidence/collect',
     evidenceUpload: '/api/v1/ai-governance/evidence/upload',
     evidence: (systemId: string) => `/api/v1/ai-governance/evidence/${systemId}`,
+    evidenceSummary: (systemId: string) => `/api/v1/ai-governance/evidence/${systemId}/summary`,
     evidenceCollections: '/api/v1/ai-governance/evidence/collections',
+    remediation: '/api/v1/ai-governance/remediation',
+    updateRemediation: (taskId: string) => `/api/v1/ai-governance/remediation/${taskId}`,
+    approvalRequests: '/api/v1/ai-governance/approval-requests',
+    approvalRequest: (requestId: string) => `/api/v1/ai-governance/approval-requests/${requestId}`,
+    approvalDecision: (requestId: string) => `/api/v1/ai-governance/approval-requests/${requestId}/decision`,
+    systemApproval: (systemId: string) => `/api/v1/ai-governance/approval/system/${systemId}`,
+    systemApprovalRequest: (systemId: string) => `/api/v1/ai-governance/approval/system/${systemId}/request`,
+    workspaces: '/api/v1/ai-governance/workspaces',
+    systems: '/api/v1/ai-governance/systems',
+    system: (systemId: string) => `/api/v1/ai-governance/systems/${systemId}`,
     generateReport: '/api/v1/ai-governance/reports/generate',
     exportReport: (reportId: string) => `/api/v1/ai-governance/reports/${reportId}/export`,
     assessRisks: '/api/v1/ai-governance/risks/assess',
@@ -154,10 +165,10 @@ export const API_ENDPOINTS = {
 
   // Datasets
   datasets: {
-    list: '/api/v1/datasets/',
-    upload: '/api/v1/datasets/upload',
-    get: (datasetId: string) => `/api/v1/datasets/${datasetId}`,
-    delete: (datasetId: string) => `/api/v1/datasets/${datasetId}`,
+    list: '/api/v1/core/datasets',
+    upload: '/api/v1/core/datasets',
+    get: (datasetId: string) => `/api/v1/core/datasets/${datasetId}`,
+    delete: (datasetId: string) => `/api/v1/core/datasets/${datasetId}`,
   },
 
   // Bias Detection V2 (Production API)
@@ -289,4 +300,3 @@ export const API_ENDPOINTS = {
     reviews: (modelId: string) => `/api/v1/marketplace/models/${modelId}/reviews`,
   },
 } as const
-

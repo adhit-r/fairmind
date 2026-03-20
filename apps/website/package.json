@@ -2,6 +2,20 @@
   "name": "fairmind-website",
   "type": "module",
   "version": "0.0.1",
+  "keywords": [
+    "ai-fairness",
+    "ai-bias-detection",
+    "ai-governance",
+    "responsible-ai",
+    "eu-ai-act",
+    "india-ai",
+    "dpdp-act",
+    "machine-learning-fairness",
+    "ethical-ai",
+    "mlops",
+    "llm-bias",
+    "niti-aayog"
+  ],
   "scripts": {
     "dev": "astro dev",
     "start": "astro dev",

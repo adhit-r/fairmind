@@ -1,0 +1,83 @@
+
+> fairmind-frontend@0.1.0 build
+> next build
+
+  ▲ Next.js 14.2.32
+  - Environments: .env.local
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully
+   Linting and checking validity of types ...
+   Collecting page data ...
+   Generating static pages (0/45) ...
+ ⚠ metadataBase property in metadata export is not set for resolving social open graph or twitter images, using "http://localhost:3000". See https://nextjs.org/docs/app/api-reference/functions/generate-metadata#metadatabase
+ ⚠ metadataBase property in metadata export is not set for resolving social open graph or twitter images, using "http://localhost:3000". See https://nextjs.org/docs/app/api-reference/functions/generate-metadata#metadatabase
+ ⚠ metadataBase property in metadata export is not set for resolving social open graph or twitter images, using "http://localhost:3000". See https://nextjs.org/docs/app/api-reference/functions/generate-metadata#metadatabase
+ ⚠ metadataBase property in metadata export is not set for resolving social open graph or twitter images, using "http://localhost:3000". See https://nextjs.org/docs/app/api-reference/functions/generate-metadata#metadatabase
+ ⚠ metadataBase property in metadata export is not set for resolving social open graph or twitter images, using "http://localhost:3000". See https://nextjs.org/docs/app/api-reference/functions/generate-metadata#metadatabase
+ ⚠ metadataBase property in metadata export is not set for resolving social open graph or twitter images, using "http://localhost:3000". See https://nextjs.org/docs/app/api-reference/functions/generate-metadata#metadatabase
+ ⚠ metadataBase property in metadata export is not set for resolving social open graph or twitter images, using "http://localhost:3000". See https://nextjs.org/docs/app/api-reference/functions/generate-metadata#metadatabase
+ ⚠ metadataBase property in metadata export is not set for resolving social open graph or twitter images, using "http://localhost:3000". See https://nextjs.org/docs/app/api-reference/functions/generate-metadata#metadatabase
+ ⚠ metadataBase property in metadata export is not set for resolving social open graph or twitter images, using "http://localhost:3000". See https://nextjs.org/docs/app/api-reference/functions/generate-metadata#metadatabase
+   Generating static pages (11/45) 
+Error: @mantine/core: MantineProvider was not found in component tree, make sure you have it in your app
+    at f (/Users/adhi/axonome/fairmind/apps/frontend/.next/server/chunks/7786.js:1:83225)
+    at i (/Users/adhi/axonome/fairmind/apps/frontend/.next/server/chunks/7786.js:1:87060)
+    at /Users/adhi/axonome/fairmind/apps/frontend/.next/server/chunks/7786.js:1:53633
+    at nj (/Users/adhi/axonome/fairmind/apps/frontend/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:46252)
+    at nM (/Users/adhi/axonome/fairmind/apps/frontend/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:60840)
+    at nN (/Users/adhi/axonome/fairmind/apps/frontend/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:64547)
+    at nI (/Users/adhi/axonome/fairmind/apps/frontend/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:47011)
+    at nM (/Users/adhi/axonome/fairmind/apps/frontend/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:47718)
+    at nN (/Users/adhi/axonome/fairmind/apps/frontend/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:64547)
+    at nI (/Users/adhi/axonome/fairmind/apps/frontend/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:47011) {
+  digest: '3059016217'
+}
+   Generating static pages (22/45) 
+
+Error occurred prerendering page "/fairness-documentation". Read more: https://nextjs.org/docs/messages/prerender-error
+
+Error: @mantine/core: MantineProvider was not found in component tree, make sure you have it in your app
+    at f (/Users/adhi/axonome/fairmind/apps/frontend/.next/server/chunks/7786.js:1:83225)
+    at i (/Users/adhi/axonome/fairmind/apps/frontend/.next/server/chunks/7786.js:1:87060)
+    at /Users/adhi/axonome/fairmind/apps/frontend/.next/server/chunks/7786.js:1:53633
+    at nj (/Users/adhi/axonome/fairmind/apps/frontend/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:46252)
+    at nM (/Users/adhi/axonome/fairmind/apps/frontend/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:60840)
+    at nN (/Users/adhi/axonome/fairmind/apps/frontend/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:64547)
+    at nI (/Users/adhi/axonome/fairmind/apps/frontend/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:47011)
+    at nM (/Users/adhi/axonome/fairmind/apps/frontend/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:47718)
+    at nN (/Users/adhi/axonome/fairmind/apps/frontend/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:64547)
+    at nI (/Users/adhi/axonome/fairmind/apps/frontend/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:47011)
+   Generating static pages (33/45) 
+Error: @mantine/core: MantineProvider was not found in component tree, make sure you have it in your app
+    at f (/Users/adhi/axonome/fairmind/apps/frontend/.next/server/chunks/7786.js:1:83225)
+    at i (/Users/adhi/axonome/fairmind/apps/frontend/.next/server/chunks/7786.js:1:87060)
+    at /Users/adhi/axonome/fairmind/apps/frontend/.next/server/chunks/7786.js:1:53633
+    at nj (/Users/adhi/axonome/fairmind/apps/frontend/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:46252)
+    at nM (/Users/adhi/axonome/fairmind/apps/frontend/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:60840)
+    at nN (/Users/adhi/axonome/fairmind/apps/frontend/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:64547)
+    at nI (/Users/adhi/axonome/fairmind/apps/frontend/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:47011)
+    at nM (/Users/adhi/axonome/fairmind/apps/frontend/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:47718)
+    at nN (/Users/adhi/axonome/fairmind/apps/frontend/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:64547)
+    at nI (/Users/adhi/axonome/fairmind/apps/frontend/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:47011) {
+  digest: '3059016217'
+}
+
+Error occurred prerendering page "/stakeholder-dashboard". Read more: https://nextjs.org/docs/messages/prerender-error
+
+Error: @mantine/core: MantineProvider was not found in component tree, make sure you have it in your app
+    at f (/Users/adhi/axonome/fairmind/apps/frontend/.next/server/chunks/7786.js:1:83225)
+    at i (/Users/adhi/axonome/fairmind/apps/frontend/.next/server/chunks/7786.js:1:87060)
+    at /Users/adhi/axonome/fairmind/apps/frontend/.next/server/chunks/7786.js:1:53633
+    at nj (/Users/adhi/axonome/fairmind/apps/frontend/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:46252)
+    at nM (/Users/adhi/axonome/fairmind/apps/frontend/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:60840)
+    at nN (/Users/adhi/axonome/fairmind/apps/frontend/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:64547)
+    at nI (/Users/adhi/axonome/fairmind/apps/frontend/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:47011)
+    at nM (/Users/adhi/axonome/fairmind/apps/frontend/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:47718)
+    at nN (/Users/adhi/axonome/fairmind/apps/frontend/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:64547)
+    at nI (/Users/adhi/axonome/fairmind/apps/frontend/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:47011)
+ ✓ Generating static pages (45/45)
+
+> Export encountered errors on following paths:
+	/(dashboard)/fairness-documentation/page: /fairness-documentation
+	/(dashboard)/stakeholder-dashboard/page: /stakeholder-dashboard

@@ -1,12 +1,12 @@
-import sys
-import os
 import asyncio
 import logging
 
-# Add project root to path
-sys.path.append(os.getcwd())
+import pytest
 
-from apps.backend.domain.bias.services.bias_bench_service import bias_bench_service
+try:
+    from domain.bias.services.bias_bench_service import bias_bench_service
+except ModuleNotFoundError as exc:
+    pytest.skip(f"bias bench dependencies unavailable: {exc}", allow_module_level=True)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

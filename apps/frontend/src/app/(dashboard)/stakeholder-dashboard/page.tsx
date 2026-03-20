@@ -58,6 +58,7 @@ interface DashboardData {
 }
 
 export default function StakeholderDashboardPage() {
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8010';
     const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
     const [loading, setLoading] = useState(false);
 
@@ -105,7 +106,7 @@ export default function StakeholderDashboardPage() {
             ];
 
             const response = await fetch(
-                'http://localhost:8000/api/v1/compliance/stakeholder-dashboard',
+                `${apiBase}/api/v1/compliance/stakeholder-dashboard`,
                 {
                     method: 'POST',
                     headers: {

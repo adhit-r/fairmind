@@ -37,19 +37,28 @@ def create_tables():
     # Execute SQL
     with db_manager.get_session() as session:
         try:
-            # Split SQL by semicolons and execute each statement
-            statements = [s.strip() for s in sql.split(';') if s.strip() and not s.strip().startswith('--')]
+            # Remove single-line comments before splitting to avoid dropping valid statements.
+            cleaned_lines = []
+            for line in sql.splitlines():
+                stripped = line.strip()
+                if stripped.startswith("--"):
+                    continue
+                cleaned_lines.append(line)
+
+            cleaned_sql = "\n".join(cleaned_lines)
+            statements = [s.strip() for s in cleaned_sql.split(';') if s.strip()]
             
             for statement in statements:
                 if statement:
                     try:
                         session.execute(text(statement))
+                        session.commit()
                     except Exception as e:
                         # Ignore "table already exists" errors
                         if "already exists" not in str(e).lower() and "duplicate" not in str(e).lower():
                             print(f"  Warning: {e}")
+                        session.rollback()
             
-            session.commit()
             print("  ✓ Tables created successfully")
             return True
             
@@ -60,4 +69,3 @@ def create_tables():
 
 if __name__ == "__main__":
     create_tables()
-

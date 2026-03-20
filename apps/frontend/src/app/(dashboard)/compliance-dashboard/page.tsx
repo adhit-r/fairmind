@@ -95,6 +95,7 @@ const EVIDENCE_SOURCE_MAP: Record<string, { icon: any; label: string; color: str
 };
 
 export default function ComplianceDashboardPage() {
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8010';
     const [frameworks, setFrameworks] = useState<Framework[]>([]);
     const [selectedFramework, setSelectedFramework] = useState<string>('');
     const [selectedModel, setSelectedModel] = useState<string>('model-demo-001');
@@ -108,7 +109,7 @@ export default function ComplianceDashboardPage() {
 
     const fetchFrameworks = async () => {
         try {
-            const response = await fetch('http://localhost:8000/api/v1/compliance/frameworks');
+            const response = await fetch(`${apiBase}/api/v1/compliance/frameworks`);
             const data = await response.json();
             setFrameworks(data.frameworks || []);
             if (data.frameworks && data.frameworks.length > 0) {
@@ -127,7 +128,7 @@ export default function ComplianceDashboardPage() {
             if (useAutomated && selectedModel) {
                 // AUTOMATED: Evidence collected automatically from FairMind features
                 const response = await fetch(
-                    `http://localhost:8000/api/v1/compliance/model/${selectedModel}/compliance?framework=${selectedFramework}`
+                    `${apiBase}/api/v1/compliance/model/${selectedModel}/compliance?framework=${selectedFramework}`
                 );
                 const data = await response.json();
                 setComplianceResults(data);
@@ -156,7 +157,7 @@ export default function ComplianceDashboardPage() {
                     evidence_IEEE_1: [{ quality: 0.83, description: 'Value-based design applied' }],
                 };
 
-                const response = await fetch('http://localhost:8000/api/v1/compliance/check', {
+                const response = await fetch(`${apiBase}/api/v1/compliance/check`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -214,7 +215,7 @@ export default function ComplianceDashboardPage() {
                     </p>
                 </div>
                 <div className="flex gap-2">
-                    <Button variant="outline" onClick={fetchFrameworks}>
+                    <Button variant="neutral" onClick={fetchFrameworks}>
                         <IconRefresh className="mr-2 h-4 w-4" />
                         Refresh
                     </Button>
@@ -241,7 +242,7 @@ export default function ComplianceDashboardPage() {
                                     {useAutomated ? ' Automated Evidence Collection Enabled' : ' Manual Evidence Mode'}
                                 </span>
                                 <Button
-                                    variant="outline"
+                                    variant="neutral"
                                     size="sm"
                                     onClick={() => setUseAutomated(!useAutomated)}
                                     className="ml-4"

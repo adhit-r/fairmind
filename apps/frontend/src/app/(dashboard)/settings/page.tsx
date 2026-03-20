@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/use-toast'
 import { MlopsSettings } from '@/components/settings/MlopsSettings'
 import { IconSettings, IconUser, IconBell, IconShield, IconAlertTriangle, IconActivity } from '@tabler/icons-react'
 import { apiClient } from '@/lib/api/api-client';
+import Link from 'next/link'
 
 interface UserSettings {
   email: string;
@@ -135,6 +136,10 @@ export default function SettingsPage() {
               <IconActivity className="mr-2 h-4 w-4" />
               MLOps
             </TabsTrigger>
+            <TabsTrigger value="about">
+              <IconSettings className="mr-2 h-4 w-4" />
+              About
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="profile">
@@ -253,6 +258,40 @@ export default function SettingsPage() {
 
           <TabsContent value="mlops">
             <MlopsSettings />
+          </TabsContent>
+
+          <TabsContent value="about">
+            <Card className="p-6 border-2 border-black shadow-brutal">
+              <h3 className="text-3xl font-bold mb-2">About FairMind</h3>
+              <p className="text-muted-foreground mb-6">
+                FairMind is an AI governance workspace for bias evaluation, compliance tracking, monitoring, and audit-ready reporting.
+              </p>
+              <div className="space-y-4 mb-6">
+                <div>
+                  <p className="font-semibold">Core workflow</p>
+                  <p className="text-sm text-muted-foreground">
+                    Assess systems, review risk/compliance status, apply remediation, monitor continuously, and generate evidence-backed reports.
+                  </p>
+                </div>
+                <div>
+                  <p className="font-semibold">Current app</p>
+                  <p className="text-sm text-muted-foreground">
+                    This dashboard is the operational product surface. Marketing pages and long-form product collateral are maintained on the website and docs apps.
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <Link href="/dashboard">
+                  <Button>Go to Dashboard</Button>
+                </Link>
+                <Link href="https://fairmind.xyz" target="_blank">
+                  <Button variant="neutral">Visit Website</Button>
+                </Link>
+                <Link href="https://docs.fairmind.xyz" target="_blank">
+                  <Button variant="neutral">Open Docs</Button>
+                </Link>
+              </div>
+            </Card>
           </TabsContent>
         </Tabs>
       )}

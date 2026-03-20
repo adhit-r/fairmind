@@ -3,10 +3,10 @@ Test configuration and fixtures for FairMind backend tests.
 """
 
 import pytest
-import asyncio
+import pytest_asyncio
 from typing import AsyncGenerator, Generator
 from fastapi.testclient import TestClient
-from httpx import AsyncClient
+from httpx import AsyncClient, ASGITransport
 import tempfile
 import os
 from pathlib import Path
@@ -17,7 +17,7 @@ from config.settings import Settings
 
 class TestSettings(Settings):
     """Test-specific settings."""
-    environment: str = "testing"
+    environment: str = "development"
     debug: bool = True
     database_url: str = "sqlite:///./test.db"
     secret_key: str = "test-secret-key"
@@ -25,16 +25,8 @@ class TestSettings(Settings):
     upload_dir: str = "test_uploads"
     database_dir: str = "test_datasets"
     model_cache_dir: str = "test_models"
-    redis_url: str = None  # Disable Redis for tests
-    sentry_dsn: str = None  # Disable Sentry for tests
-
-
-@pytest.fixture(scope="session")
-def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
-    """Create an instance of the default event loop for the test session."""
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
+    redis_url: str = "redis://localhost:6379/15"
+    sentry_dsn: str = ""
 
 
 @pytest.fixture(scope="session")
@@ -73,7 +65,7 @@ def client(test_settings: TestSettings, temp_dir: Path) -> Generator[TestClient,
     app.dependency_overrides = {}
 
 
-@pytest.fixture(scope="function")
+@pytest_asyncio.fixture(scope="function")
 async def async_client(test_settings: TestSettings, temp_dir: Path) -> AsyncGenerator[AsyncClient, None]:
     """Create an async test client."""
     # Override settings for tests
@@ -89,7 +81,8 @@ async def async_client(test_settings: TestSettings, temp_dir: Path) -> AsyncGene
     Path(test_settings.database_dir).mkdir(parents=True, exist_ok=True)
     Path(test_settings.model_cache_dir).mkdir(parents=True, exist_ok=True)
     
-    async with AsyncClient(app=app, base_url="http://test") as client:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
     
     # Clean up

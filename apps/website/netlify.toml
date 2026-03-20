@@ -14,8 +14,9 @@
 # Redirects for old URLs
 [[redirects]]
   from = "/docs"
-  to = "/docs/"
+  to = "https://docs.fairmind.xyz"
   status = 301
+  force = true
 
 [[redirects]]
   from = "/blog"
@@ -81,8 +82,8 @@
 
 [context.deploy-preview.environment]
   NODE_ENV = "preview"
-  SITE_URL = "https://deploy-preview-{id}--fairmind.netlify.app"
+  SITE_URL = "https://deploy-preview-{id}--docs-fairmind.netlify.app"
 
 [context.branch-deploy.environment]
   NODE_ENV = "development"
-  SITE_URL = "https://{branch}--fairmind.netlify.app"
+  SITE_URL = "https://{branch}--docs-fairmind.netlify.app"

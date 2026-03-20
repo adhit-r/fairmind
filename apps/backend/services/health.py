@@ -43,9 +43,6 @@ class HealthCheckService:
             if settings.redis_url:
                 checks["redis"] = await self._check_redis()
             
-            if settings.supabase_url:
-                checks["supabase"] = await self._check_supabase()
-            
             # Overall status
             all_healthy = all(check["status"] == "healthy" for check in checks.values())
             overall_status = "healthy" if all_healthy else "unhealthy"
@@ -178,25 +175,6 @@ class HealthCheckService:
                 "message": f"Redis connection failed: {e}",
                 "error": str(e),
                 "response_time": round(response_time, 4),
-            }
-    
-    async def _check_supabase(self) -> Dict[str, Any]:
-        """Check Supabase connectivity."""
-        try:
-            # TODO: Implement actual Supabase check
-            await asyncio.sleep(0.01)  # Simulate Supabase check
-            
-            return {
-                "status": "healthy",
-                "message": "Supabase connection successful",
-                "response_time": 0.01,
-            }
-            
-        except Exception as e:
-            return {
-                "status": "unhealthy",
-                "message": f"Supabase connection failed: {e}",
-                "error": str(e),
             }
     
     async def _check_disk_space(self) -> Dict[str, Any]:

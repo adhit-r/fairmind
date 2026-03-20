@@ -7,6 +7,7 @@
 
 import { useState } from 'react'
 import { IconUpload, IconAlertTriangle, IconCheck, IconX, IconLoader, IconArrowRight, IconChartBar } from '@tabler/icons-react'
+import { apiClient } from '@/lib/api/api-client'
 
 interface BiasResult {
     score: number
@@ -82,25 +83,12 @@ export default function BiasDetectionPage() {
         try {
             const formData = new FormData()
             formData.append('file', file)
-
-            // Get token from localStorage
-            const token = localStorage.getItem('access_token')
-            if (!token) throw new Error('Not authenticated')
-
-            const response = await fetch('/api/v1/bias-v2/upload-dataset', {
-                method: 'POST',
-                body: formData,
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            })
-
-            if (!response.ok) {
-                const err = await response.json()
-                throw new Error(err.detail || 'Upload failed')
+            const response = await apiClient.post<any>('/api/v1/bias-v2/upload-dataset', formData)
+            if (!response.success || !response.data) {
+                throw new Error(response.error || 'Upload failed')
             }
 
-            const data = await response.json()
+            const data = response.data
             setDatasetId(data.dataset_id)
             setColumns(data.columns)
 
@@ -128,9 +116,6 @@ export default function BiasDetectionPage() {
         setError(null)
 
         try {
-            const token = localStorage.getItem('access_token')
-            if (!token) throw new Error('Not authenticated')
-
             const endpoint = mode === 'tabular' ? '/api/v1/bias-v2/detect' : '/api/v1/bias-v2/detect-llm'
 
             const body = mode === 'tabular' ? {
@@ -149,22 +134,13 @@ export default function BiasDetectionPage() {
                 metrics: selectedMetrics
             }
 
-            const response = await fetch(endpoint, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify(body)
-            })
+            const response = await apiClient.post<BiasTestResponse>(endpoint, body)
 
-            if (!response.ok) {
-                const err = await response.json()
-                throw new Error(err.detail || 'Analysis failed')
+            if (!response.success || !response.data) {
+                throw new Error(response.error || 'Analysis failed')
             }
 
-            const data = await response.json()
-            setResults(data)
+            setResults(response.data)
 
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Analysis failed')

@@ -1,15 +1,24 @@
 'use client'
 
-// Temporarily disable AuthGuard for testing
-// import { AuthGuard } from '@/components/auth/AuthGuard'
+import { AuthGuard } from '@/components/auth/AuthGuard'
+import {
+  SystemContextBar,
+  SystemContextProvider,
+} from '@/components/workflow/SystemContext'
 
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  // Temporarily return children directly for testing
-  return <>{children}</>
-  // return <AuthGuard>{children}</AuthGuard>
+  return (
+    <AuthGuard>
+      <SystemContextProvider>
+        <div className="space-y-0">
+          <SystemContextBar />
+          {children}
+        </div>
+      </SystemContextProvider>
+    </AuthGuard>
+  )
 }
-

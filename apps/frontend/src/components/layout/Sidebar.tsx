@@ -23,10 +23,8 @@ import {
 } from '@/components/ui/tooltip'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
 import { IconSettings, IconChevronRight, IconLogout } from '@tabler/icons-react'
-import { NAVIGATION_ITEMS as navigationCategories, NavigationCategory } from '@/lib/constants/navigation';
+import { NAVIGATION_ITEMS as navigationCategories } from '@/lib/constants/navigation';
 import { cn } from '@/lib/utils'
 import { useSidebar } from '@/components/ui/sidebar'
 
@@ -83,6 +81,32 @@ export function AppSidebar({ className }: AppSidebarProps) {
 
             // When collapsed, show all items as icons directly (no categories)
             if (isCollapsed) {
+              // Render top-level leaf routes (e.g., Dashboard/Settings) in collapsed mode.
+              if (category.href && !category.items) {
+                const isActive = pathname === category.href
+                return (
+                  <TooltipProvider key={category.id}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Link
+                          href={category.href}
+                          className={cn(
+                            "flex items-center justify-center w-10 h-10 border-2 transition-all rounded-none",
+                            isActive
+                              ? "bg-black text-white border-black shadow-[2px_2px_0px_0px_#FF6B35]"
+                              : "bg-white text-black border-transparent hover:border-black hover:bg-orange hover:shadow-[2px_2px_0px_0px_#000]"
+                          )}
+                        >
+                          <CategoryIcon className="h-5 w-5" />
+                        </Link>
+                      </TooltipTrigger>
+                      <TooltipContent side="right" className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] bg-white rounded-none">
+                        <p className="font-black text-xs uppercase">{category.title}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )
+              }
               if (!category.items) return null
               return (
                 <div key={category.id} className="space-y-2">
@@ -117,6 +141,24 @@ export function AppSidebar({ className }: AppSidebarProps) {
             }
 
             // Expanded state - show full menu
+            if (category.href && !category.items) {
+              const isActive = pathname === category.href
+              return (
+                <Link
+                  key={category.id}
+                  href={category.href}
+                  className={cn(
+                    itemBaseClass,
+                    itemHoverClass,
+                    isActive && itemActiveClass
+                  )}
+                >
+                  <CategoryIcon className="h-5 w-5" />
+                  <span>{category.title}</span>
+                </Link>
+              )
+            }
+
             // Force open if category has active item
             const shouldBeOpen = isExpanded || hasActiveItem
 

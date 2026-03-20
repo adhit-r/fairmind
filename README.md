@@ -6,7 +6,8 @@
 
 <div align="center">
 
-**Ethical AI Governance and Bias Detection Platform**
+**Ethical AI Governance & Bias Detection Platform**
+*Compliant with EU AI Act, India DPDP Act, & GDPR*
 
 </div>
 

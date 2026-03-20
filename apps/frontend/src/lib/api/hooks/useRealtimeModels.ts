@@ -69,22 +69,8 @@ export function useRealtimeModels() {
         try {
             setLoading(true);
             const response = await apiClient.get(API_ENDPOINTS.realtimeModelIntegration.status); // Using status/capabilities endpoint
-            // Note: The backend route is actually just "/" for capabilities in the router, 
-            // but endpoints.ts maps 'status' to '/api/v1/realtime-model-integration/status'.
-            // Let's double check endpoints.ts mapping. 
-            // Looking at endpoints.ts: status: '/api/v1/realtime-model-integration/status'
-            // Looking at backend router: @router.get("/") is capabilities. 
-            // Wait, I should probably use the correct path. 
-            // The backend router has @router.get("/") for capabilities and @router.get("/health") for health.
-            // endpoints.ts has 'status' mapped to .../status. 
-            // I'll assume I might need to adjust endpoints.ts or just use the root path if 'status' isn't what I want.
-            // Actually, let's look at the backend code again.
-            // Backend: @router.get("/") -> get_capabilities
-            // Backend: @router.get("/providers") -> get_providers
-            // Backend: @router.get("/bias-test-types") -> get_bias_test_types
-
-            // I'll implement specific functions for these.
-            return response.data;
+            if (response.success && response.data) return response.data;
+            throw new Error(response.error || 'Failed to get capabilities');
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to get capabilities');
             return null;
@@ -117,7 +103,8 @@ export function useRealtimeModels() {
         try {
             setLoading(true);
             const response = await apiClient.post(API_ENDPOINTS.realtimeModelIntegration.configureModel, config);
-            return response.data;
+            if (response.success && response.data) return response.data;
+            throw new Error(response.error || 'Failed to configure model');
         } catch (err) {
             const msg = err instanceof Error ? err.message : 'Failed to configure model';
             setError(msg);
@@ -133,7 +120,8 @@ export function useRealtimeModels() {
             const response = await apiClient.post<ConnectionTestResult>(API_ENDPOINTS.realtimeModelIntegration.testConnection, {
                 model_config: config
             });
-            return response.data;
+            if (response.success && response.data) return response.data;
+            throw new Error(response.error || 'Connection test failed');
         } catch (err) {
             const msg = err instanceof Error ? err.message : 'Connection test failed';
             setError(msg);
@@ -157,7 +145,8 @@ export function useRealtimeModels() {
                 test_groups: testGroups,
                 custom_prompt: customPrompt
             });
-            return response.data;
+            if (response.success && response.data) return response.data;
+            throw new Error(response.error || 'Bias test failed');
         } catch (err) {
             const msg = err instanceof Error ? err.message : 'Bias test failed';
             setError(msg);
@@ -180,7 +169,8 @@ export function useRealtimeModels() {
                 custom_tests: customTests,
                 include_all_tests: true
             });
-            return response.data;
+            if (response.success && response.data) return response.data;
+            throw new Error(response.error || 'Comprehensive analysis failed');
         } catch (err) {
             const msg = err instanceof Error ? err.message : 'Comprehensive analysis failed';
             setError(msg);

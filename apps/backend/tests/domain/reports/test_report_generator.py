@@ -1,6 +1,6 @@
 import pytest
 import os
-from apps.backend.domain.reports.services.report_generator_service import report_generator_service
+from domain.reports.services.report_generator_service import report_generator_service
 
 @pytest.mark.asyncio
 async def test_generate_bias_audit_report():

@@ -124,7 +124,7 @@ volumes:
     -   For Auth, switch to `next-auth` hooks (`useSession`, `signIn`, `signOut`).
 
 2.  **File Uploads**:
-    -   Instead of `supabase.storage.upload`, POST files to `/api/v1/upload` (Backend handles MinIO upload).
+    -   Instead of direct storage SDK uploads, POST files to `/api/v1/upload` (Backend handles MinIO upload).
 
 ## 5. Migration Checklist
 

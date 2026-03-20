@@ -58,7 +58,7 @@ const canonicalURL = canonical || Astro.url.href;
     <meta property="twitter:creator" content="@fairmind_ai" />
     
     <!-- Additional Meta Tags -->
-    <meta name="keywords" content="AI governance, bias detection, machine learning fairness, responsible AI, AI ethics, model monitoring, AI compliance, fairness testing, AI transparency, model explainability, EU AI Act, GDPR compliance, MLOps, LLM bias" />
+    <meta name="keywords" content="AI governance, AI bias detection, EU AI Act compliance, India AI Framework, DPDP Act 2023, Digital Personal Data Protection Act, responsible AI, ethical AI, machine learning fairness, algorithmic bias, model monitoring, MLOps, LLM bias, generative AI safety, AI risk management, NITI Aayog AI, GDPR for AI, AI transparency, model explainability, XAI, automated compliance" />
     <meta name="theme-color" content="#EAB308" />
     <meta name="msapplication-TileColor" content="#EAB308" />
     
@@ -70,6 +70,32 @@ const canonicalURL = canonical || Astro.url.href;
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
     
     <!-- Structured Data -->
+    <!-- Structured Data -->
+    <script type="application/ld+json" set:html={JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "FairMind",
+      "url": "https://fairmind.xyz",
+      "potentialAction": {
+        "@type": "SearchAction",
+        "target": "https://fairmind.xyz/search?q={search_term_string}",
+        "query-input": "required name=search_term_string"
+      }
+    })} />
+    
+    <script type="application/ld+json" set:html={JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": "FairMind",
+      "url": "https://fairmind.xyz",
+      "logo": "https://fairmind.xyz/logo.png",
+      "sameAs": [
+        "https://twitter.com/fairmind_ai",
+        "https://github.com/adhit-r/fairmind",
+        "https://linkedin.com/company/fairmind"
+      ]
+    })} />
+
     {structuredData && (
       <script type="application/ld+json" set:html={JSON.stringify(structuredData)} />
     )}
@@ -126,7 +152,7 @@ const canonicalURL = canonical || Astro.url.href;
           <!-- Navigation -->
           <nav class="hidden md:flex items-center space-x-8">
             <a href="/features" class="text-gray-600 hover:text-gray-900 font-medium transition-colors">Features</a>
-            <a href="/docs" class="text-gray-600 hover:text-gray-900 font-medium transition-colors">Documentation</a>
+            <a href="https://docs.fairmind.xyz" class="text-gray-600 hover:text-gray-900 font-medium transition-colors">Documentation</a>
             <a href="/comparison" class="text-gray-600 hover:text-gray-900 font-medium transition-colors">Comparison</a>
           </nav>
           
@@ -194,8 +220,8 @@ const canonicalURL = canonical || Astro.url.href;
           <div>
             <h3 class="text-sm font-semibold text-gray-900 mb-4">Resources</h3>
             <ul class="space-y-2">
-              <li><a href="/docs" class="text-gray-600 hover:text-gray-900 text-sm transition-colors">Documentation</a></li>
-              <li><a href="/docs/getting-started" class="text-gray-600 hover:text-gray-900 text-sm transition-colors">Getting Started</a></li>
+              <li><a href="https://docs.fairmind.xyz" class="text-gray-600 hover:text-gray-900 text-sm transition-colors">Documentation</a></li>
+              <li><a href="https://docs.fairmind.xyz/docs/getting-started" class="text-gray-600 hover:text-gray-900 text-sm transition-colors">Getting Started</a></li>
               <li><a href="/contact" class="text-gray-600 hover:text-gray-900 text-sm transition-colors">Contact</a></li>
             </ul>
           </div>

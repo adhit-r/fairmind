@@ -43,7 +43,7 @@ export function Header({ onMenuToggle }: HeaderProps) {
         {/* Left: Sidebar Toggle + Logo */}
         <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
           <Button
-            variant="ghost"
+            variant="neutral"
             size="icon"
             onClick={toggleSidebar}
             className={brutalBtnClass}
@@ -63,7 +63,7 @@ export function Header({ onMenuToggle }: HeaderProps) {
         <div className="hidden lg:flex items-center flex-1 max-w-2xl mx-auto">
           <div className="relative w-full group">
             <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none z-10">
-               <IconSearch className="h-5 w-5 text-black" />
+              <IconSearch className="h-5 w-5 text-black" />
             </div>
             <Input
               type="search"
@@ -77,7 +77,7 @@ export function Header({ onMenuToggle }: HeaderProps) {
         <div className="flex items-center gap-2 sm:gap-3 md:gap-4">
           {/* Mobile Search */}
           <Button
-            variant="ghost"
+            variant="neutral"
             size="icon"
             className={`lg:hidden ${brutalBtnClass}`}
             title="Search"
@@ -87,7 +87,7 @@ export function Header({ onMenuToggle }: HeaderProps) {
 
           {/* Theme Toggle */}
           <Button
-            variant="ghost"
+            variant="neutral"
             size="icon"
             onClick={() => setIsDark(!isDark)}
             className={brutalBtnClass}
@@ -98,7 +98,7 @@ export function Header({ onMenuToggle }: HeaderProps) {
 
           {/* Notifications */}
           <Button
-            variant="ghost"
+            variant="neutral"
             size="icon"
             className={`${brutalBtnClass} relative`}
             title="Notifications"
@@ -113,7 +113,7 @@ export function Header({ onMenuToggle }: HeaderProps) {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
-                variant="ghost"
+                variant="neutral"
                 size="icon"
                 className={`${brutalBtnClass} p-0 overflow-hidden`}
               >

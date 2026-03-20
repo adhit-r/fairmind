@@ -102,10 +102,7 @@ class DependencyChecker(IDependencyChecker):
         """Check external service availability."""
         # Implement service-specific checks
         try:
-            if service_name == ServiceName.SUPABASE:
-                # Check Supabase connection
-                pass
-            elif service_name == ServiceName.MLFLOW:
+            if service_name == ServiceName.MLFLOW:
                 # Check MLflow connection
                 pass
             elif service_name == ServiceName.WANDB:

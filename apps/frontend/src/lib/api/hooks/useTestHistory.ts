@@ -61,12 +61,11 @@ export function useTestHistory(modelId?: string, testType?: string) {
                 }
             )
 
-            if (response) {
-                const data = response as any
-                setTests(data.tests || [])
-                setTotal(data.total || 0)
+            if (response.success && response.data) {
+                setTests(response.data.tests || [])
+                setTotal(response.data.total || 0)
             } else {
-                setError('Failed to fetch test history')
+                setError(response.error || 'Failed to fetch test history')
                 setTests([])
             }
         } catch (err) {
@@ -109,10 +108,10 @@ export function useTestStatistics(modelId?: string) {
                 }
             )
 
-            if (response) {
-                setStatistics(response as any)
+            if (response.success && response.data) {
+                setStatistics(response.data)
             } else {
-                setError('Failed to fetch statistics')
+                setError(response.error || 'Failed to fetch statistics')
             }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to fetch statistics')
@@ -152,10 +151,10 @@ export function useTestDetail(testId: string) {
                 }
             )
 
-            if (response) {
-                setTestDetail(response)
+            if (response.success && response.data) {
+                setTestDetail(response.data)
             } else {
-                setError('Failed to fetch test details')
+                setError(response.error || 'Failed to fetch test details')
             }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to fetch test details')

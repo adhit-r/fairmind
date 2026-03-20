@@ -15,7 +15,7 @@ function MainContent({ children }: { children: React.ReactNode }) {
     <>
       {/* Full width header at top - fixed position across entire viewport */}
       <div className="fixed top-0 left-0 right-0 z-30 w-full">
-        <Header onMenuToggle={() => {}} />
+        <Header onMenuToggle={() => { }} />
       </div>
 
       {/* Main content with sidebar offset */}
@@ -40,6 +40,7 @@ export function ClientNavigation({ children }: ClientNavigationProps) {
     pathname?.startsWith("/login") ||
     pathname?.startsWith("/register") ||
     pathname?.startsWith("/test");
+
 
   // Don't show sidebar/header on auth/test pages
   if (isAuthRoute) {

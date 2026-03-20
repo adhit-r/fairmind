@@ -17,22 +17,17 @@ export function useAuth() {
       setLoading(true)
       setError(null)
 
-      const formData = new FormData()
-      formData.append('username', credentials.email)
-      formData.append('password', credentials.password)
-
       const response: ApiResponse<LoginResponse> = await apiClient.post(
         API_ENDPOINTS.auth.login,
-        formData
+        credentials
       )
 
       if (response.success && response.data) {
         apiClient.setAccessToken(response.data.access_token)
-        // Store token in localStorage or secure storage
+        apiClient.setRefreshToken(response.data.refresh_token)
         if (typeof window !== 'undefined') {
           localStorage.setItem('access_token', response.data.access_token)
-          // Refresh token not yet implemented in local auth
-          // localStorage.setItem('refresh_token', response.data.refresh_token)
+          localStorage.setItem('refresh_token', response.data.refresh_token)
         }
         return response.data
       } else {
@@ -74,14 +69,12 @@ export function useAuth() {
   const logout = async () => {
     try {
       await apiClient.post(API_ENDPOINTS.auth.logout)
-      apiClient.setAccessToken(null)
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('access_token')
-        localStorage.removeItem('refresh_token')
-      }
+      apiClient.clearSession()
       setUser(null)
     } catch (err) {
       console.error('Logout error:', err)
+      apiClient.clearSession()
+      setUser(null)
     }
   }
 
@@ -94,8 +87,11 @@ export function useAuth() {
         setUser(response.data)
         return response.data
       }
+      throw new Error(response.error || 'Failed to get current user')
     } catch (err) {
-      setError(err instanceof Error ? err : new Error('Failed to get user'))
+      const error = err instanceof Error ? err : new Error('Failed to get user')
+      setError(error)
+      throw error
     } finally {
       setLoading(false)
     }
@@ -111,4 +107,3 @@ export function useAuth() {
     getCurrentUser,
   }
 }
-

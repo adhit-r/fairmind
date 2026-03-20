@@ -111,31 +111,18 @@ export default function LLMTestingPage() {
         metadata: { model: judgeForm.targetModel || 'unknown' }
       }))
 
-      // Call LLM-as-Judge endpoint (via comprehensive evaluation or direct)
-      const token = localStorage.getItem('access_token')
-      if (!token) throw new Error('Not authenticated')
-
-      // For now, use the bias detection endpoint with LLM mode
-      const response = await fetch('/api/v1/bias-detection/detect', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          model_type: 'text_generation',
-          test_category: 'representational',
-          sensitive_attributes: [judgeForm.biasCategory],
-          model_outputs: modelOutputs
-        })
+      const response = await apiClient.post<any>('/api/v1/bias-detection/detect', {
+        model_type: 'text_generation',
+        test_category: 'representational',
+        sensitive_attributes: [judgeForm.biasCategory],
+        model_outputs: modelOutputs
       })
 
-      if (!response.ok) {
-        const err = await response.json()
-        throw new Error(err.detail || 'LLM-as-Judge evaluation failed')
+      if (!response.success || !response.data) {
+        throw new Error(response.error || 'LLM-as-Judge evaluation failed')
       }
 
-      const data = await response.json()
+      const data = response.data
       
       // Format results for LLM-as-Judge display
       setResults({
@@ -180,31 +167,20 @@ export default function LLMTestingPage() {
         throw new Error('Number of prompts must match number of responses')
       }
 
-      const token = localStorage.getItem('access_token')
-      if (!token) throw new Error('Not authenticated')
-
-      const response = await fetch('/api/v1/bias-detection-v2/detect-llm', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          dataset_id: null, // Direct input mode
-          metrics: ['counterfactual_fairness'],
-          prompt_column: 'prompt',
-          response_column: 'response',
-          prompts: prompts,
-          responses: responses
-        })
+      const response = await apiClient.post<any>('/api/v1/bias-detection-v2/detect-llm', {
+        dataset_id: null,
+        metrics: ['counterfactual_fairness'],
+        prompt_column: 'prompt',
+        response_column: 'response',
+        prompts: prompts,
+        responses: responses
       })
 
-      if (!response.ok) {
-        const err = await response.json()
-        throw new Error(err.detail || 'Counterfactual analysis failed')
+      if (!response.success || !response.data) {
+        throw new Error(response.error || 'Counterfactual analysis failed')
       }
 
-      const data = await response.json()
+      const data = response.data
       setResults({
         method: 'counterfactual',
         timestamp: new Date().toISOString(),
@@ -528,4 +504,3 @@ export default function LLMTestingPage() {
     </div>
   )
 }
-
