@@ -3,6 +3,8 @@
  * Handles authentication, error handling, retry logic, and request/response interceptors
  */
 
+import { API_ENDPOINTS } from './endpoints'
+
 export interface ApiResponse<T> {
   success: boolean
   data?: T
@@ -114,13 +116,75 @@ interface RequestOptions extends RequestInit {
 class ApiClient {
   private baseUrl: string
   private accessToken: string | null = null
+  private refreshToken: string | null = null
+  private refreshPromise: Promise<boolean> | null = null
 
   constructor(baseUrl?: string) {
-    this.baseUrl = baseUrl || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+    this.baseUrl = baseUrl || process.env.NEXT_PUBLIC_API_URL || '/api/proxy'
   }
 
   setAccessToken(token: string | null) {
     this.accessToken = token
+  }
+
+  setRefreshToken(token: string | null) {
+    this.refreshToken = token
+  }
+
+  clearSession() {
+    this.accessToken = null
+    this.refreshToken = null
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem('access_token')
+      window.localStorage.removeItem('refresh_token')
+    }
+  }
+
+  private async refreshAccessToken(): Promise<boolean> {
+    if (!this.refreshToken) {
+      return false
+    }
+
+    if (this.refreshPromise) {
+      return this.refreshPromise
+    }
+
+    this.refreshPromise = (async () => {
+      try {
+        const response = await fetch(`${this.baseUrl}${API_ENDPOINTS.auth.refresh}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ refresh_token: this.refreshToken }),
+        })
+
+        if (!response.ok) {
+          this.clearSession()
+          return false
+        }
+
+        const payload = await response.json()
+        const nextToken = payload.access_token
+        if (!nextToken) {
+          this.clearSession()
+          return false
+        }
+
+        this.setAccessToken(nextToken)
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem('access_token', nextToken)
+        }
+        return true
+      } catch {
+        this.clearSession()
+        return false
+      } finally {
+        this.refreshPromise = null
+      }
+    })()
+
+    return this.refreshPromise
   }
 
   private async request<T>(
@@ -168,7 +232,7 @@ class ApiClient {
     }
 
     let retryCount = 0
-    const makeRequest = async (): Promise<ApiResponse<T>> => {
+    const makeRequest = async (allowRefresh = true): Promise<ApiResponse<T>> => {
       try {
         // Create abort controller for timeout
         const controller = new AbortController()
@@ -183,6 +247,14 @@ class ApiClient {
         clearTimeout(timeoutId)
 
         if (!response.ok) {
+          if (response.status === 401 && allowRefresh && this.refreshToken) {
+            const refreshed = await this.refreshAccessToken()
+            if (refreshed) {
+              headers['Authorization'] = `Bearer ${this.accessToken}`
+              return makeRequest(false)
+            }
+          }
+
           const apiError = classifyError(null, response)
 
           // Retry logic for retryable errors
@@ -296,9 +368,7 @@ export const apiClient = new ApiClient()
 // Initialize from localStorage if available
 if (typeof window !== 'undefined') {
   const token = localStorage.getItem('access_token')
-  if (token) {
-    apiClient.setAccessToken(token)
-  }
+  const refreshToken = localStorage.getItem('refresh_token')
+  apiClient.setAccessToken(token)
+  apiClient.setRefreshToken(refreshToken)
 }
-
-

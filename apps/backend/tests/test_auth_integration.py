@@ -3,10 +3,11 @@ Integration tests for authentication system using new JWT infrastructure.
 Tests complete authentication flows including login, token verification, and logout.
 """
 
+import base64
+import json
 import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch, AsyncMock
-import json
 from datetime import datetime, timedelta
 
 from api.main import app
@@ -339,8 +340,15 @@ class TestAuthenticationSecurity:
         login_response = client.post("/api/v1/auth/login", json=login_data)
         original_token = login_response.json()["access_token"]
         
-        # Tamper with token (change last character)
-        tampered_token = original_token[:-1] + "X"
+        # Tamper with the payload while keeping JWT structure intact.
+        header, payload, signature = original_token.split(".")
+        padded_payload = payload + "=" * (-len(payload) % 4)
+        decoded_payload = json.loads(base64.urlsafe_b64decode(padded_payload.encode("utf-8")).decode("utf-8"))
+        decoded_payload["email"] = "attacker@fairmind.ai"
+        tampered_payload = base64.urlsafe_b64encode(
+            json.dumps(decoded_payload, separators=(",", ":")).encode("utf-8")
+        ).decode("utf-8").rstrip("=")
+        tampered_token = ".".join([header, tampered_payload, signature])
         
         # Try to use tampered token
         headers = {"Authorization": f"Bearer {tampered_token}"}

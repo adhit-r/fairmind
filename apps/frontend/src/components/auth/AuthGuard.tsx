@@ -23,16 +23,9 @@ export function AuthGuard({ children }: AuthGuardProps) {
           return
         }
 
-        // Try to get current user
-        try {
-          await getCurrentUser()
-          setIsChecking(false)
-        } catch (err) {
-          // If getCurrentUser fails, still allow access (might be API issue)
-          setIsChecking(false)
-        }
-      } catch (error) {
-        // Not authenticated, redirect to login
+        await getCurrentUser()
+        setIsChecking(false)
+      } catch {
         router.push('/login')
       }
     }
@@ -58,4 +51,3 @@ export function AuthGuard({ children }: AuthGuardProps) {
 
   return <>{children}</>
 }
-

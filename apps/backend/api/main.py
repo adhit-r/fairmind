@@ -363,6 +363,7 @@ _include_router("api.routes.core", prefix="/api/v1", tags=["core"], required=Tru
 _include_router("api.routes.database", prefix="/api/v1", tags=["database"], attr="router", required=True)
 _include_router("api.routes.database", prefix="/api/v1", tags=["main-api"], attr="main_router", required=True)
 _include_router("api.routes.ai_governance", prefix="/api/v1/ai-governance", tags=["ai-governance"], required=True)
+_include_router("api.routes.settings", prefix="/api/v1", tags=["settings"], required=False)
 
 # Optional feature routers.
 _include_router("api.routes.real_ai_bom", prefix="/api/v1", tags=["ai-bom"], required=False)

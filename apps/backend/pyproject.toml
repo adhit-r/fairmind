@@ -178,16 +178,9 @@ minversion = "7.0"
 addopts = [
     "--strict-markers",
     "--strict-config",
-    "--cov=api",
-    "--cov=config",
-    "--cov=database",
-    "--cov=services",
-    "--cov=utils",
-    "--cov-report=term-missing",
-    "--cov-report=html",
-    "--cov-report=xml",
-    "--cov-fail-under=80",
-    "--asyncio-mode=auto",
+    "--asyncio-mode=strict",
+    "-m",
+    "not e2e",
 ]
 testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]

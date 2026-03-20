@@ -11,6 +11,7 @@ import {
   IconReportAnalytics,
   IconFileAnalytics,
   IconAlertCircle,
+  IconAlertHexagon,
 } from '@tabler/icons-react';
 import { ReactNode } from 'react';
 
@@ -37,8 +38,14 @@ export const NAVIGATION_ITEMS: NavigationCategory[] = [
     icon: IconDashboard,
   },
   {
+    id: 'onboard',
+    title: 'Onboard',
+    href: '/onboard',
+    icon: IconTarget,
+  },
+  {
     id: 'bias_fairness',
-    title: 'Bias & Fairness',
+    title: 'Assess',
     icon: IconScale,
     items: [
       {
@@ -69,7 +76,7 @@ export const NAVIGATION_ITEMS: NavigationCategory[] = [
   },
   {
     id: 'compliance',
-    title: 'Compliance',
+    title: 'Govern & Prove',
     icon: IconShieldLock,
     items: [
       {
@@ -77,6 +84,12 @@ export const NAVIGATION_ITEMS: NavigationCategory[] = [
         href: '/compliance-dashboard',
         description: 'Global compliance status',
         icon: IconShieldLock,
+      },
+      {
+        title: 'Risks',
+        href: '/risks',
+        description: 'Risk register and release blockers',
+        icon: IconAlertHexagon,
       },
       {
         title: 'Reports',
@@ -99,7 +112,7 @@ export const NAVIGATION_ITEMS: NavigationCategory[] = [
   },
   {
     id: 'monitoring',
-    title: 'Monitoring',
+    title: 'Operate',
     icon: IconActivity,
     items: [
       {

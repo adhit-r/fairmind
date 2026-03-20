@@ -68,6 +68,7 @@ interface FairnessDocumentation {
 }
 
 export default function FairnessDocumentationPage() {
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8010';
     const [modelName, setModelName] = useState('');
     const [modelVersion, setModelVersion] = useState('');
     const [modelType, setModelType] = useState('');
@@ -121,7 +122,7 @@ export default function FairnessDocumentationPage() {
             };
 
             const response = await fetch(
-                'http://localhost:8000/api/v1/compliance/fairness-documentation',
+                `${apiBase}/api/v1/compliance/fairness-documentation`,
                 {
                     method: 'POST',
                     headers: {

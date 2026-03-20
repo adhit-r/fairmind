@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev -p 1111",
     "build": "next build",
-    "start": "next start -p 1111",
+    "start": "sh -c 'next start -p ${PORT:-1111}'",
     "lint": "next lint",
     "test": "playwright test",
     "test:ui": "playwright test --ui",
@@ -13,9 +13,12 @@
     "test:debug": "playwright test --debug"
   },
   "dependencies": {
+    "@alcyone-labs/zod-to-json-schema": "^4.0.10",
     "@hookform/resolvers": "^3.3.4",
     "@hugeicons/core-free-icons": "^3.0.0",
     "@hugeicons/react": "^1.1.2",
+    "@mantine/core": "^8.3.18",
+    "@mantine/hooks": "^8.3.18",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.0.5",
     "@radix-ui/react-avatar": "^1.1.11",
@@ -44,7 +47,7 @@
     "clsx": "^2.1.0",
     "glob": "^13.0.0",
     "lucide-react": "^0.344.0",
-    "next": "14.2.32",
+    "next": "^14.2.35",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.51.0",
@@ -53,7 +56,7 @@
     "sonner": "^2.0.7",
     "tailwind-merge": "^2.4.0",
     "tailwindcss-animate": "^1.0.7",
-    "zod": "^3.23.8",
+    "zod": "^4.3.6",
     "zod-to-json-schema": "^3.25.0"
   },
   "devDependencies": {
@@ -63,7 +66,7 @@
     "@types/react-dom": "^18.3.0",
     "autoprefixer": "^10.4.19",
     "eslint": "^8.57.0",
-    "eslint-config-next": "14.2.32",
+    "eslint-config-next": "^14.2.35",
     "postcss": "^8.4.39",
     "tailwindcss": "^3.4.4",
     "typescript": "^5.5.3"
