@@ -15,17 +15,20 @@ const nextConfig = {
     optimizePackageImports: ['@tabler/icons-react', 'recharts'],
   },
 
-        // Webpack optimizations
-        webpack: (config, { isServer }) => {
-          if (!isServer) {
-            // Tree shaking optimizations (removed usedExports due to conflict with cacheUnaffected)
-            config.optimization = {
-              ...config.optimization,
-              sideEffects: false,
-            }
-          }
-          return config
-        },
+  // Turbopack configuration (Next.js 16 default bundler)
+  turbopack: {},
+
+  // Webpack optimizations (kept for compatibility but Turbopack is preferred)
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      // Tree shaking optimizations (removed usedExports due to conflict with cacheUnaffected)
+      config.optimization = {
+        ...config.optimization,
+        sideEffects: false,
+      }
+    }
+    return config
+  },
 
   // Production optimizations
   productionBrowserSourceMaps: false,

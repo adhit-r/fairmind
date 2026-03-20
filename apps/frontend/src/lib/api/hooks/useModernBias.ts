@@ -32,22 +32,49 @@ export function useModernBias() {
   const [error, setError] = useState<Error | null>(null)
 
   const runComprehensiveEvaluation = async (params: {
-    modelId: string
-    datasetId: string
+    modelId?: string
+    datasetId?: string
     testTypes?: string[]
     evaluationDatasets?: string[]
+    modelDescription?: string
+    modelType?: 'llm' | 'image_gen' | 'audio_gen' | 'video_gen'
   }) => {
     try {
       setLoading(true)
       setError(null)
 
+      // Format the request according to the backend schema
+      const requestData = {
+        model_outputs: [
+          {
+            text: params.modelDescription || 'LLM for evaluation',
+            metadata: {
+              model_id: params.modelId,
+              dataset_id: params.datasetId,
+            },
+            protected_attributes: {
+              gender: true,
+              race: true,
+              age: true,
+            },
+          },
+        ],
+        model_type: params.modelType || 'llm',
+        evaluation_config: {
+          test_types: params.testTypes || [],
+          evaluation_datasets: params.evaluationDatasets || [],
+        },
+        include_explainability: true,
+        include_multimodal: false,
+      }
+
       const response: ApiResponse<ComprehensiveEvaluationResult> = await apiClient.post(
         API_ENDPOINTS.modernBiasDetection.comprehensiveEvaluation,
-        params,
+        requestData,
         {
           enableRetry: true,
           maxRetries: 3,
-          timeout: 30000, // Longer timeout for comprehensive evaluation
+          timeout: 60000, // Longer timeout for comprehensive evaluation (backend operations can take time)
         }
       )
 
@@ -157,11 +184,77 @@ export function useModernBias() {
     }
   }
 
+  const getDetectionResults = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+
+      const response: ApiResponse<any> = await apiClient.get(
+        API_ENDPOINTS.modernBiasDetection.detectionResults,
+        {
+          enableRetry: true,
+          maxRetries: 3,
+        }
+      )
+
+      if (response.success && response.data) {
+        return response.data
+      } else {
+        throw new Error(response.error || 'Failed to fetch detection results')
+      }
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Failed to fetch detection results')
+      setError(error)
+      throw error
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const runExplainabilityAnalysis = async (params: {
+    modelOutputs: Array<{ text?: string; [key: string]: any }>
+    methods?: string[]
+    includeVisualizations?: boolean
+  }) => {
+    try {
+      setLoading(true)
+      setError(null)
+
+      const response: ApiResponse<any> = await apiClient.post(
+        API_ENDPOINTS.modernBiasDetection.explainabilityAnalysis,
+        {
+          model_outputs: params.modelOutputs,
+          methods: params.methods,
+          include_visualizations: params.includeVisualizations !== false,
+        },
+        {
+          enableRetry: true,
+          maxRetries: 3,
+          timeout: 30000,
+        }
+      )
+
+      if (response.success && response.data) {
+        return response.data
+      } else {
+        throw new Error(response.error || 'Explainability analysis failed')
+      }
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Explainability analysis failed')
+      setError(error)
+      throw error
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return {
     runComprehensiveEvaluation,
     runWEATTest,
     getBiasTests,
     getBiasCategories,
+    getDetectionResults,
+    runExplainabilityAnalysis,
     loading,
     error,
   }

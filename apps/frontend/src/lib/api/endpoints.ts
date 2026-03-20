@@ -78,17 +78,17 @@ export const API_ENDPOINTS = {
 
   // Modern Bias Detection
   modernBiasDetection: {
-    comprehensiveEvaluation: '/api/v1/modern-bias-detection/comprehensive-evaluation',
-    multimodalDetection: '/api/v1/modern-bias-detection/multimodal-detection',
-    explainabilityAnalysis: '/api/v1/modern-bias-detection/explainability-analysis',
-    biasTests: '/api/v1/modern-bias-detection/bias-tests',
-    configureBiasTest: '/api/v1/modern-bias-detection/bias-tests/configure',
-    biasCategories: '/api/v1/modern-bias-detection/bias-categories',
-    evaluationDatasets: '/api/v1/modern-bias-detection/evaluation-datasets',
-    batchEvaluation: '/api/v1/modern-bias-detection/batch-evaluation',
-    detectionResults: '/api/v1/modern-bias-detection/detection-results',
-    evaluationHistory: '/api/v1/modern-bias-detection/evaluation-history',
-    health: '/api/v1/modern-bias-detection/health',
+    comprehensiveEvaluation: '/api/v1/modern-bias/comprehensive-evaluation',
+    multimodalDetection: '/api/v1/modern-bias/multimodal-detection',
+    explainabilityAnalysis: '/api/v1/modern-bias/explainability-analysis',
+    biasTests: '/api/v1/modern-bias/bias-tests',
+    configureBiasTest: '/api/v1/modern-bias/bias-tests/configure',
+    biasCategories: '/api/v1/modern-bias/bias-categories',
+    evaluationDatasets: '/api/v1/modern-bias/evaluation-datasets',
+    batchEvaluation: '/api/v1/modern-bias/batch-evaluation',
+    detectionResults: '/api/v1/modern-bias/detection-results',
+    evaluationHistory: '/api/v1/modern-bias/evaluation-history',
+    health: '/api/v1/modern-bias/health',
   },
 
   // Advanced Bias Detection
