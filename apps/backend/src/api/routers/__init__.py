@@ -13,5 +13,6 @@ __all__ = [
     "mlops",
     "modern_bias_detection",
     "multimodal_bias_detection",
-    "advanced_bias_detection"
+    "advanced_bias_detection",
+    "reports"
 ]

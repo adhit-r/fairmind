@@ -175,6 +175,10 @@ openapi_tags = [
         "name": "Compliance & Reporting",
         "description": "Regulatory compliance checks, audit reports, and fairness documentation",
     },
+    {
+        "name": "reports",
+        "description": "Report generation in PDF and DOCX formats with audit-ready documentation",
+    },
 ]
 
 # Create FastAPI application with production configuration
@@ -379,6 +383,7 @@ _include_router("api.routes.modern_bias_detection", prefix="/api/v1", tags=["mod
 _include_router("api.routes.monitoring", prefix="/api/v1", tags=["monitoring"], required=False)
 _include_router("api.routes.multimodal_bias_detection", prefix="/api/v1", tags=["multimodal-bias-detection"], required=False)
 _include_router("api.routes.provenance", prefix="/api/v1/provenance", tags=["provenance"], required=False)
+_include_router("api.routes.reports", tags=["reports"], required=False)
 
 logger.info("Explicit API router map registered")
 
