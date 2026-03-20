@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useModernBias } from '@/lib/api/hooks/useModernBias'
 import { useModels } from '@/lib/api/hooks/useModels'
+import { generateBiasPDF, generateBiasJSON, type BiasEvaluationPDFData } from '@/lib/export/pdf-generator'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -199,6 +200,84 @@ export default function LLMBiasDetectionPage() {
         ? prev.selected_tests.filter(t => t !== testId)
         : [...prev.selected_tests, testId],
     }))
+  }
+
+  const handleExportPDF = () => {
+    if (!results) {
+      toast({
+        title: 'No results to export',
+        description: 'Please run an evaluation first.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    try {
+      const pdfData: BiasEvaluationPDFData = {
+        timestamp: results.timestamp,
+        modelType: results.model_type,
+        modelDescription: formData.model_description,
+        evaluationSummary: results.evaluation_summary,
+        overallRisk: results.overall_risk as any,
+        riskFactors: results.risk_factors,
+        complianceStatus: results.compliance_status,
+        explainabilityAnalysis: results.explainability_analysis,
+        recommendations: results.recommendations,
+        selectedTests: formData.selected_tests,
+      }
+
+      generateBiasPDF(pdfData)
+
+      toast({
+        title: 'PDF exported',
+        description: 'Bias evaluation report has been downloaded.',
+      })
+    } catch (error) {
+      toast({
+        title: 'Export failed',
+        description: error instanceof Error ? error.message : 'Failed to generate PDF',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const handleExportJSON = () => {
+    if (!results) {
+      toast({
+        title: 'No results to export',
+        description: 'Please run an evaluation first.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    try {
+      const jsonData: BiasEvaluationPDFData = {
+        timestamp: results.timestamp,
+        modelType: results.model_type,
+        modelDescription: formData.model_description,
+        evaluationSummary: results.evaluation_summary,
+        overallRisk: results.overall_risk as any,
+        riskFactors: results.risk_factors,
+        complianceStatus: results.compliance_status,
+        explainabilityAnalysis: results.explainability_analysis,
+        recommendations: results.recommendations,
+        selectedTests: formData.selected_tests,
+      }
+
+      generateBiasJSON(jsonData)
+
+      toast({
+        title: 'JSON exported',
+        description: 'Evaluation data has been downloaded in JSON format.',
+      })
+    } catch (error) {
+      toast({
+        title: 'Export failed',
+        description: error instanceof Error ? error.message : 'Failed to generate JSON',
+        variant: 'destructive',
+      })
+    }
   }
 
   const getRiskColor = (risk: string) => {
@@ -535,11 +614,19 @@ export default function LLMBiasDetectionPage() {
 
               {/* Export Options */}
               <div className="flex gap-3">
-                <Button variant="outline" className="flex-1 border-2 border-black font-bold">
+                <Button
+                  variant="outline"
+                  className="flex-1 border-2 border-black font-bold hover:bg-black hover:text-white"
+                  onClick={handleExportPDF}
+                >
                   <IconFile className="h-4 w-4 mr-2" />
                   Export as PDF
                 </Button>
-                <Button variant="outline" className="flex-1 border-2 border-black font-bold">
+                <Button
+                  variant="outline"
+                  className="flex-1 border-2 border-black font-bold hover:bg-black hover:text-white"
+                  onClick={handleExportJSON}
+                >
                   <IconFileText className="h-4 w-4 mr-2" />
                   Export as JSON
                 </Button>
