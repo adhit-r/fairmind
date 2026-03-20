@@ -24,6 +24,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { BiasDetectionWidget } from '@/components/dashboard/BiasDetectionWidget';
 
 interface Framework {
     id: string;
@@ -225,6 +226,9 @@ export default function ComplianceDashboardPage() {
                     </Button>
                 </div>
             </div>
+
+            {/* Bias Detection Widget */}
+            <BiasDetectionWidget />
 
             {/* Framework Selection */}
             <Card>
