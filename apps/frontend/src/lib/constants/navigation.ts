@@ -12,6 +12,7 @@ import {
   IconFileAnalytics,
   IconAlertCircle,
   IconAlertHexagon,
+  IconMicroscope,
 } from '@tabler/icons-react';
 import { ReactNode } from 'react';
 
@@ -71,6 +72,12 @@ export const NAVIGATION_ITEMS: NavigationCategory[] = [
         href: "/model-dna",
         icon: IconDna,
         description: "Lineage & Provenance",
+      },
+      {
+        title: "Explainability Studio",
+        href: "/explainability-studio",
+        icon: IconMicroscope,
+        description: "Attribution & attention analysis",
       },
     ],
   },
