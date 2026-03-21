@@ -1,206 +1,131 @@
-#  FairMind Project Roadmap
+# FairMind Roadmap
 
-This roadmap outlines the planned features, improvements, and milestones for FairMind.
+> Last updated: March 2026
 
-##  Vision
+## Vision
 
-FairMind aims to be the most comprehensive and accessible platform for AI fairness, bias detection, and ethical AI governance.
-
-##  Timeline Overview
-
-```
-Q1 2025: Foundation & Core Features 
-Q2 2025: Advanced Features & Community Building
-Q3 2025: Enterprise Features & Scale
-Q4 2025: AI Research & Innovation
-```
-
-##  Current Phase: Q1 2025 (Foundation)
-
-###  Completed
-- [x] Core AI governance features (8 traditional features)
-- [x] Modern LLM bias detection (WEAT, SEAT, Minimal Pairs)
-- [x] Multimodal bias analysis (Image, Audio, Video, Cross-Modal)
-- [x] Explainability integration (4 tools)
-- [x] Comprehensive evaluation pipeline
-- [x] 45+ API endpoints
-- [x] Production deployment
-- [x] 100% test coverage
-- [x] Documentation suite
-- [x] Community building infrastructure
-
-###  In Progress
-- [ ] CI/CD pipeline automation
-- [ ] Additional frontend components
-- [ ] Enhanced documentation
-- [ ] Community growth initiatives
-
-###  Planned (Q1 2025)
-- [ ] Security vulnerability fixes
-- [ ] Rate limiting and API throttling
-- [ ] Performance optimizations
-- [ ] Mobile responsiveness improvements
-- [ ] Accessibility enhancements
-
-##  Q2 2025: Advanced Features & Community
-
-### Frontend Enhancements
-- [ ] Interactive API documentation
-- [ ] E2E testing with Playwright
-- [ ] Loading states and skeleton screens
-- [ ] Bundle size optimization
-- [ ] Multi-language support (i18n)
-- [ ] User analytics dashboard
-- [ ] Mobile app responsiveness
-
-### Backend Improvements
-- [ ] Rate limiting and API throttling
-- [ ] Advanced access control
-- [ ] Third-party integrations
-- [ ] Performance optimization
-- [ ] Model performance benchmarking
-
-### Community Building
-- [ ] Regular community meetups
-- [ ] Contributor recognition program
-- [ ] Documentation improvements
-- [ ] Tutorial videos
-- [ ] Blog posts and case studies
-- [ ] Conference presentations
-
-### Testing & Quality
-- [ ] E2E test coverage
-- [ ] Performance testing
-- [ ] Security audits
-- [ ] Accessibility testing
-- [ ] Load testing
-
-##  Q3 2025: Enterprise Features & Scale
-
-### Enterprise Features
-- [ ] Advanced analytics dashboard
-- [ ] Compliance reporting
-- [ ] Executive dashboards
-- [ ] Attestation management
-- [ ] Evidence tracking
-- [ ] Regulatory mapping
-- [ ] Vendor risk assessment
-- [ ] Supply chain security
-
-### OECD Framework Integration
-- [ ] Cross-border risk assessment
-- [ ] Automated risk analysis
-- [ ] Risk register implementation
-- [ ] Risk analytics & reporting
-- [ ] API integration & backend services
-- [ ] Testing & quality assurance
-- [ ] Documentation & training
-
-### Scale & Performance
-- [ ] Database optimization
-- [ ] Caching strategies
-- [ ] CDN integration
-- [ ] Load balancing
-- [ ] Auto-scaling
-- [ ] Monitoring & alerting
-
-##  Q4 2025: AI Research & Innovation
-
-### Advanced AI/ML Features
-- [ ] Advanced bias detection algorithms
-- [ ] Fairness research integration
-- [ ] LLM model integration
-- [ ] Advanced ML research
-- [ ] Model optimization
-- [ ] Production deployment features
-
-### Research & Development
-- [ ] Academic partnerships
-- [ ] Research paper publications
-- [ ] Open research data
-- [ ] Collaborative research
-- [ ] Innovation labs
-
-### Innovation
-- [ ] New bias detection methods
-- [ ] Explainability improvements
-- [ ] Novel fairness metrics
-- [ ] Advanced visualization
-- [ ] AI-powered insights
-
-##  Long-term Vision (2026+)
-
-### Platform Evolution
-- [ ] AI-powered recommendations
-- [ ] Automated compliance checking
-- [ ] Predictive bias detection
-- [ ] Advanced explainability
-- [ ] Cross-platform integrations
-
-### Community Growth
-- [ ] 1000+ contributors
-- [ ] Global community
-- [ ] Educational partnerships
-- [ ] Industry collaborations
-- [ ] Open standards development
-
-### Impact
-- [ ] Widespread adoption
-- [ ] Industry recognition
-- [ ] Research impact
-- [ ] Policy influence
-- [ ] Real-world deployment
-
-##  Metrics & Goals
-
-### Q1 2025 Goals
--  100% test coverage
--  Production deployment
--  Core features complete
--  50+ contributors
--  100+ GitHub stars
-
-### Q2 2025 Goals
-- 200+ contributors
-- 500+ GitHub stars
-- 10+ active maintainers
-- 50+ good first issues
-- 100+ PRs merged
-
-### Q3 2025 Goals
-- 500+ contributors
-- 1000+ GitHub stars
-- 20+ active maintainers
-- Enterprise features complete
-- Industry partnerships
-
-### Q4 2025 Goals
-- 1000+ contributors
-- 2000+ GitHub stars
-- Research publications
-- Industry recognition
-- Widespread adoption
-
-##  How to Contribute
-
-See our [Contributing Guide](docs/CONTRIBUTING.md) for:
-- How to pick issues
-- Development workflow
-- Testing requirements
-- Code style guidelines
-
-##  Roadmap Updates
-
-This roadmap is a living document and will be updated regularly based on:
-- Community feedback
-- Industry needs
-- Technical capabilities
-- Research developments
-
-**Last Updated**: January 2025
-**Next Review**: February 2025
+FairMind is building the most advanced AI fairness and governance platform — with capabilities that don't exist anywhere else. We're focused on research-grade features that solve real problems no other tool addresses.
 
 ---
 
-**Want to help shape the roadmap?** [Join our discussions](https://github.com/adhit-r/fairmind/discussions) or [open an issue](https://github.com/adhit-r/fairmind/issues/new)!
+## Shipped
 
+- Bias detection — text, image, audio, video, cross-modal (WEAT, SEAT, causal, counterfactual, adversarial, temporal)
+- India compliance automation — DPDP Act, NITI Aayog, MeitY, Digital India Act
+- International compliance — EU AI Act, GDPR, ISO 42001, NIST AI RMF, IEEE 7000
+- Remediation wizard — reweighting, resampling, threshold optimization with code generation
+- AI Bill of Materials (BOM) — component tracking, risk scoring, dependency mapping
+- Explainability studio — attribution, attention visualization, counterfactual analysis
+- LLM-as-Judge evaluation — multi-judge ensemble, batch evaluation
+- Real-time monitoring — WebSocket metrics, alert rules, drift detection
+- Report generation — PDF/DOCX exports, automated compliance reports with email distribution
+- Model marketplace — publish, version, review models
+- MLOps integrations — MLflow, Comet, DeepEval, Arize Phoenix, AWS Clarify
+- Authentik SSO — OAuth2 authentication with API key management
+
+---
+
+## Q2 2026 — Next-Gen Fairness Engine
+
+### Causal Fairness Engine
+Build causal DAGs for AI systems and run counterfactual fairness tests. Answer: "would this decision change if the person belonged to a different group?" No tool implements this. Based on Plecko & Bareinboim (2024).
+- Risk taxonomy and causal graph builder
+- Counterfactual fairness testing
+- Integration with existing bias detection pipeline
+
+### Fairness Drift Monitor
+Treat fairness degradation over time as a first-class metric — separate from accuracy drift. EU AI Act mandates ongoing monitoring.
+- Temporal fairness tracking per model
+- Alert rules for fairness threshold violations
+- Historical fairness trend visualization
+
+### Agentic AI Fairness Analyzer
+Analyze bias propagation across multi-agent chains. When Agent A feeds Agent B feeds Agent C — does bias amplify? First tool to address this.
+- Agent chain mapping and visualization
+- Per-hop bias measurement
+- Amplification detection and alerting
+
+---
+
+## Q3 2026 — India & Regulatory Moat
+
+### RBI FREE-AI + SEBI Compliance
+Complete Indian regulatory coverage. No competitor touches Indian financial sector AI compliance.
+- RBI Framework for Responsible AI mapping
+- SEBI AI disclosure requirement automation
+- Board-approved AI policy document generation
+- Independent algorithm validation reports
+
+### Auto-Generated FRIA/DPIA
+One-click Fundamental Rights Impact Assessments (EU AI Act) and Data Protection Impact Assessments (India DPDP). Auto-populated from existing FairMind data.
+- EU AI Act FRIA generation
+- India DPDP Act DPIA generation
+- Auto-population from bias test results, model metadata, compliance scores
+
+### Regulatory Sandbox Simulator
+Simulate how a model would perform under different regulatory regimes before deploying. Select target jurisdictions, see pass/fail, get gap analysis.
+- Multi-jurisdiction rule engine
+- What-if analysis across EU, India, US frameworks
+- Gap analysis with remediation paths
+
+### Regulatory Change Impact Analysis
+When new regulations drop, automatically identify which deployed models are affected and what needs to change.
+- NLP-based regulatory text ingestion
+- Model registry cross-referencing
+- Automated gap analysis and remediation recommendations
+
+---
+
+## Q4 2026 — Research-Grade Capabilities
+
+### Bias Supply Chain Tracker
+Trace which pretrained components (embeddings, layers, datasets) contribute what fraction of observed bias. Like git blame for bias.
+- Bias lineage graph across model components
+- Attribution scoring per component
+- Integration with AI BOM
+
+### Multilingual & Cultural Fairness
+Test the same model across Hindi, Tamil, Bengali, Marathi, English and other languages for sentiment divergence and cultural bias. Based on Ray (2025) methodology.
+- Cross-language bias testing
+- Cultural context-aware evaluation
+- Indic language support (12+ languages)
+
+### Fairness-Performance Pareto Explorer
+Interactive visualization of the exact tradeoff between fairness and accuracy. Users pick their operating point on the Pareto curve.
+- Multi-objective optimization (NSGA-II)
+- Interactive Pareto frontier UI
+- Per-metric tradeoff analysis
+
+### Fairness Certification Passports
+Machine-readable, cryptographically signed fairness certificates embeddable in model cards and APIs. Based on W3C Verifiable Credentials.
+- JSON-LD fairness certificates
+- Cryptographic signing and verification
+- API-embeddable compliance badges
+
+---
+
+## 2027 — Frontier
+
+### Privacy-Preserving Fairness Auditing
+Audit fairness without accessing protected attributes directly. Uses differential privacy and secure computation. Critical for DPDP/GDPR compliance.
+
+### Fairness Under Missing Demographics
+Infer fairness bounds when protected attributes are incomplete. Uses proxy methods and Bayesian estimation.
+
+### Adaptive Context-Aware Fairness
+Auto-select appropriate fairness definitions based on domain (healthcare → equalized odds, lending → statistical parity, hiring → four-fifths rule).
+
+### Synthetic Data Fairness
+Generate provably fair synthetic datasets with formal guarantees on demographic parity or equalized odds.
+
+### Federated Fairness
+Fairness auditing in federated learning settings without centralizing data. Distributed fairness constraints.
+
+### Community Red-Team Module
+Structured bias bounty program integrated into the compliance pipeline. Invite external testers, aggregate findings into reports.
+
+---
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions. Browse [good first issues](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) to get started.
