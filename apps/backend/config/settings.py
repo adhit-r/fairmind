@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     api_description: str = "Production-ready AI governance and bias detection platform"
     api_version: str = "1.0.0"
     api_port: int = 8000
+    api_url: str = "http://localhost:8000"
+    frontend_url: str = "http://localhost:3000"
     
     # Security
     secret_key: str = secrets.token_urlsafe(32)
@@ -53,6 +55,21 @@ class Settings(BaseSettings):
     neon_jwt_audience: Optional[str] = None
     neon_data_api_url: Optional[str] = None
     neon_data_api_key: Optional[str] = None
+
+    # Authentik Configuration
+    authentik_enabled: bool = False
+    authentik_server_url: Optional[str] = None
+    authentik_jwks_url: Optional[str] = None
+    authentik_issuer: Optional[str] = None
+    authentik_audience: Optional[str] = None
+    authentik_jwt_algorithm: str = "RS256"
+    authentik_jwks_cache_ttl: int = 3600
+    jwt_validation_mode: str = "internal"  # "internal" (HS256) or "authentik" (RS256)
+    authentik_oauth_client_id: Optional[str] = "fairmind-frontend"
+    authentik_oauth_client_secret: Optional[str] = None
+    authentik_oauth_redirect_uri: Optional[str] = "http://localhost:3000/auth/callback"
+    authentik_token_endpoint: Optional[str] = None  # Will default to {authentik_server_url}/application/o/token/
+    authentik_refresh_token_ttl: int = 604800  # 7 days in seconds
     
     # File Storage
     upload_dir: str = "uploads"
@@ -80,12 +97,18 @@ class Settings(BaseSettings):
     redis_url: Optional[str] = None
     redis_ttl: int = 3600
     
-    # Email
+    # Email Configuration
+    email_backend: str = "console"  # "console", "smtp", "sendgrid", "ses", "resend"
+    email_from_address: str = "noreply@fairmind.ai"
     smtp_host: Optional[str] = None
     smtp_port: int = 587
     smtp_user: Optional[str] = None
     smtp_password: Optional[str] = None
     smtp_tls: bool = True
+    sendgrid_api_key: Optional[str] = None
+    resend_api_key: Optional[str] = None
+    resend_from_email: str = "noreply@fairmind.ai"
+    admin_email: str = "admin@fairmind.ai"
     
     # Error Tracking
     sentry_dsn: Optional[str] = None

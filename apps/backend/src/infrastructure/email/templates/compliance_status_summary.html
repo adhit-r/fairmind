@@ -1,0 +1,70 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { border-bottom: 4px solid #000; padding-bottom: 20px; margin-bottom: 30px; }
+        .header h1 { margin: 0; font-size: 28px; font-weight: bold; }
+        .metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 30px 0; }
+        .metric-card { border: 4px solid #000; padding: 20px; background: #f5f5f5; }
+        .metric-value { font-size: 32px; font-weight: bold; color: #000; }
+        .metric-label { font-size: 12px; color: #666; margin-top: 5px; text-transform: uppercase; }
+        .compliance-score { font-size: 48px; font-weight: bold; color: #16A34A; margin: 30px 0; text-align: center; }
+        .insights { background: #F3F4F6; border-left: 4px solid #000; padding: 20px; margin: 20px 0; }
+        .button { display: inline-block; background: #000; color: white; padding: 12px 24px; text-decoration: none; font-weight: bold; margin-top: 20px; border-radius: 4px; }
+        .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #999; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 Compliance Status Summary</h1>
+            <p>Period summary and compliance metrics</p>
+        </div>
+
+        <div class="compliance-score">{{ compliance_score }}%</div>
+
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-value">{{ active_schedules }}</div>
+                <div class="metric-label">Active Schedules</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value">{{ reports_generated }}</div>
+                <div class="metric-label">Reports Generated</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value">{{ total_violations }}</div>
+                <div class="metric-label">Total Violations</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value">{{ critical_violations }}</div>
+                <div class="metric-label">Critical Issues</div>
+            </div>
+        </div>
+
+        <div class="insights">
+            <h3 style="margin-top: 0;">Key Insights</h3>
+            <ul style="margin: 0; padding-left: 20px;">
+                <li>Compliance automation is actively monitoring {{ active_schedules }} frameworks</li>
+                <li>{{ reports_generated }} compliance reports have been generated</li>
+                <li>Current compliance score: {{ compliance_score }}%</li>
+                {% if critical_violations > 0 %}
+                <li><strong>⚠️ Action Required:</strong> {{ critical_violations }} critical violations need attention</li>
+                {% endif %}
+            </ul>
+        </div>
+
+        <p>Review the compliance dashboard for detailed metrics, violation tracking, and remediation planning.</p>
+
+        <a href="{{ dashboard_url }}" class="button">📈 View Dashboard</a>
+
+        <div class="footer">
+            <p>This is an automated message from FairMind Compliance Automation System. Please do not reply to this email.</p>
+        </div>
+    </div>
+</body>
+</html>

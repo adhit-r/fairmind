@@ -13,6 +13,7 @@ from config.database import get_database, get_db_connection
 from config.cache import cache_manager, cached, cache_key_for_model, cache_key_for_dataset
 from config.auth import get_current_active_user, require_permission, TokenData, Permissions, auth_manager
 from config.settings import settings
+from core.decorators.org_isolation import isolate_by_org
 
 router = APIRouter(prefix="/core", tags=["core"])
 
@@ -39,20 +40,29 @@ async def health_check():
     }
 
 @router.get("/models")
+@isolate_by_org
 async def get_models(
     request: Request,
     limit: int = Query(10, ge=1, le=100, description="Number of models to return"),
     offset: int = Query(0, ge=0, description="Number of models to skip"),
+    org_id: str = None,
+    user_id: str = None,
 ):
     """
-    Get all models from database with caching.
-    
+    Get organization's models from database with caching.
+
+    This endpoint:
+    - Returns models filtered by org_id
+    - Supports pagination with limit/offset
+    - Caches results for 5 minutes
+    - Enforces org isolation at decorator level
+
     **Example Request:**
     ```
-    GET /api/v1/models?limit=10&offset=0
+    GET /api/v1/core/models?limit=10&offset=0
     Authorization: Bearer YOUR_ACCESS_TOKEN
     ```
-    
+
     **Example Response:**
     ```json
     {
@@ -65,16 +75,17 @@ async def get_models(
           "model_type": "classification",
           "version": "1.0.0",
           "upload_date": "2024-01-15T10:00:00Z",
-          "status": "active"
+          "status": "active",
+          "org_id": "org-uuid"
         }
       ],
       "count": 1
     }
     ```
-    
+
     **Error Responses:**
     - `401 Unauthorized`: Missing or invalid authentication token
-    - `403 Forbidden`: Insufficient permissions
+    - `403 Forbidden`: User has no org assignment or insufficient permissions
     - `429 Too Many Requests`: Rate limit exceeded
     - `500 Internal Server Error`: Server error during database query
     """
@@ -90,44 +101,46 @@ async def get_models(
             raise
         except Exception as e:
             raise HTTPException(status_code=401, detail="Authentication required")
-    
+
     try:
-        # Try cache first
-        cache_key = f"models:list:{limit}:{offset}"
+        logger.info(f"Fetching models for org: {org_id}, user: {user_id}")
+
+        # Try cache first (cache key now includes org_id for isolation)
+        cache_key = f"models:list:{org_id}:{limit}:{offset}"
         cached_models = await cache_manager.get(cache_key)
-        
+
         if cached_models is not None:
-            logger.debug("Returning cached models")
+            logger.debug(f"Returning cached models for org {org_id}")
             return cached_models
-        
-        # Fetch from database
+
+        # Fetch from database with org_id filtering
         async with get_db_connection() as conn:
             query = """
-                SELECT id, name, description, model_type, version, upload_date, 
-                       file_path, file_size, tags, metadata, status
-                FROM models 
-                WHERE status = 'active'
-                ORDER BY upload_date DESC 
+                SELECT id, name, description, model_type, version, upload_date,
+                       file_path, file_size, tags, metadata, status, org_id
+                FROM models
+                WHERE status = 'active' AND org_id = :org_id
+                ORDER BY upload_date DESC
                 LIMIT :limit OFFSET :offset
             """
-            models = await conn.fetch_all(query, {"limit": limit, "offset": offset})
-            
+            models = await conn.fetch_all(query, {"org_id": org_id, "limit": limit, "offset": offset})
+
             # Convert to dict format
             models_data = [dict(model) for model in models]
-        
+
         result = {
             "success": True,
             "data": models_data,
             "count": len(models_data)
         }
-        
+
         # Cache the result for 5 minutes
         await cache_manager.set(cache_key, result, ttl=300)
-        
+
         return result
-        
+
     except Exception as e:
-        logger.error(f"Error fetching models: {e}")
+        logger.error(f"Error fetching models for org {org_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch models: {str(e)}")
 
 @router.get("/datasets")

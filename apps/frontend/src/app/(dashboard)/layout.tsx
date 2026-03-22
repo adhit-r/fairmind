@@ -5,6 +5,8 @@ import {
   SystemContextBar,
   SystemContextProvider,
 } from '@/components/workflow/SystemContext'
+import { OrgProvider } from '@/context/OrgContext'
+import { OrgSwitcher } from '@/components/OrgSwitcher'
 
 export default function DashboardLayout({
   children,
@@ -13,12 +15,15 @@ export default function DashboardLayout({
 }) {
   return (
     <AuthGuard>
-      <SystemContextProvider>
-        <div className="space-y-0">
-          <SystemContextBar />
-          {children}
-        </div>
-      </SystemContextProvider>
+      <OrgProvider>
+        <SystemContextProvider>
+          <div className="space-y-0">
+            <OrgSwitcher />
+            <SystemContextBar />
+            {children}
+          </div>
+        </SystemContextProvider>
+      </OrgProvider>
     </AuthGuard>
   )
 }

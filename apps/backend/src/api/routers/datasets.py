@@ -3,7 +3,7 @@ Dataset Management API Routes
 Handles dataset upload, listing, and management operations
 """
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends, Query
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends, Query, Request
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 import logging
@@ -13,6 +13,9 @@ from pydantic import BaseModel
 
 # Import services
 from ..services.dataset_service import dataset_service
+
+# Import org isolation decorators
+from core.decorators.org_isolation import isolate_by_org
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/datasets", tags=["datasets"])
@@ -78,28 +81,38 @@ async def upload_dataset(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/", response_model=DatasetListResponse)
+@isolate_by_org
 async def list_datasets(
+    request: Request,
     page: int = Query(1, ge=1, description="Page number"),
     limit: int = Query(10, ge=1, le=100, description="Items per page"),
     search: Optional[str] = Query(None, description="Search term for dataset names"),
-    file_type: Optional[str] = Query(None, description="Filter by file type (csv, parquet)")
+    file_type: Optional[str] = Query(None, description="Filter by file type (csv, parquet)"),
+    org_id: str = None,
+    user_id: str = None
 ):
     """
-    List user's datasets with pagination and filtering
-    
+    List organization's datasets with pagination and filtering
+
     This endpoint:
-    - Returns paginated list of datasets
+    - Returns paginated list of datasets filtered by org_id
     - Supports search by name
     - Filters by file type
     - Includes basic metadata
+    - Org isolation enforced at decorator level
     """
     try:
+        # Org context automatically injected by @isolate_by_org decorator
+        logger.info(f"Listing datasets for org: {org_id}, user: {user_id}")
+
         # For now, return mock data since we don't have database integration yet
-        # This will be replaced with actual database queries
-        
+        # In production, this will query the database with org_id filtering:
+        # SELECT * FROM datasets WHERE org_id = :org_id ORDER BY created_at DESC
+
         mock_datasets = [
             {
                 "id": "sample-1",
+                "org_id": org_id,
                 "name": "Sample Dataset 1",
                 "description": "A sample dataset for testing",
                 "file_type": "csv",
@@ -108,7 +121,8 @@ async def list_datasets(
                 "created_at": datetime.now().isoformat()
             },
             {
-                "id": "sample-2", 
+                "id": "sample-2",
+                "org_id": org_id,
                 "name": "Sample Dataset 2",
                 "description": "Another sample dataset",
                 "file_type": "parquet",
@@ -117,20 +131,20 @@ async def list_datasets(
                 "created_at": datetime.now().isoformat()
             }
         ]
-        
+
         # Apply filters
         if search:
             mock_datasets = [d for d in mock_datasets if search.lower() in d["name"].lower()]
-        
+
         if file_type:
             mock_datasets = [d for d in mock_datasets if d["file_type"] == file_type.lower()]
-        
+
         # Apply pagination
         total = len(mock_datasets)
         start_idx = (page - 1) * limit
         end_idx = start_idx + limit
         paginated_datasets = mock_datasets[start_idx:end_idx]
-        
+
         return DatasetListResponse(
             success=True,
             datasets=paginated_datasets,
@@ -141,7 +155,7 @@ async def list_datasets(
                 "pages": (total + limit - 1) // limit
             }
         )
-        
+
     except Exception as e:
         logger.error(f"Dataset listing failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))

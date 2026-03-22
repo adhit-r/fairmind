@@ -220,7 +220,20 @@ class ApiClient {
       }
     }
 
-    const url = `${this.baseUrl}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`
+    // Inject selected org_id into GET requests for dashboard routes
+    let finalEndpoint = endpoint
+    if (typeof window !== 'undefined' && endpoint.includes('/api/v1/')) {
+      const selectedOrgId = localStorage.getItem('selected_org_id')
+      if (selectedOrgId) {
+        // Add org_id parameter only if not already present
+        const separator = endpoint.includes('?') ? '&' : '?'
+        if (!endpoint.includes('org_id=')) {
+          finalEndpoint = `${endpoint}${separator}org_id=${selectedOrgId}`
+        }
+      }
+    }
+
+    const url = `${this.baseUrl}${finalEndpoint.startsWith('/') ? finalEndpoint : `/${finalEndpoint}`}`
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',

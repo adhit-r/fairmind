@@ -13,6 +13,10 @@ import {
   IconAlertCircle,
   IconAlertHexagon,
   IconMicroscope,
+  IconUsers,
+  IconKey,
+  IconClipboardList,
+  IconUserCheck,
 } from '@tabler/icons-react';
 import { ReactNode } from 'react';
 
@@ -152,6 +156,68 @@ export const NAVIGATION_ITEMS: NavigationCategory[] = [
         href: '/marketplace',
         description: 'Discover & share models',
         icon: IconTarget,
+      },
+    ],
+  },
+  {
+    id: 'admin',
+    title: 'Admin',
+    icon: IconUsers,
+    items: [
+      {
+        title: 'Users',
+        href: '/admin/users',
+        description: 'Manage user access and roles',
+        icon: IconUsers,
+      },
+      {
+        title: 'Roles',
+        href: '/admin/roles',
+        description: 'View role permissions',
+        icon: IconKey,
+      },
+      {
+        title: 'Audit Log',
+        href: '/admin/audit-log',
+        description: 'Compliance audit trail',
+        icon: IconClipboardList,
+      },
+      {
+        title: 'Access Requests',
+        href: '/admin/registrations',
+        description: 'Review signup requests',
+        icon: IconUserCheck,
+      },
+    ],
+  },
+  {
+    id: 'org-admin',
+    title: 'Organization',
+    icon: IconUsers,
+    items: [
+      {
+        title: 'Members',
+        href: '/org-admin/members',
+        description: 'Manage team members',
+        icon: IconUsers,
+      },
+      {
+        title: 'Roles',
+        href: '/org-admin/roles',
+        description: 'Manage organization roles',
+        icon: IconKey,
+      },
+      {
+        title: 'Settings',
+        href: '/org-admin/settings',
+        description: 'Organization settings',
+        icon: IconSettings,
+      },
+      {
+        title: 'Audit Log',
+        href: '/org-admin/audit-log',
+        description: 'Organization audit trail',
+        icon: IconClipboardList,
       },
     ],
   },

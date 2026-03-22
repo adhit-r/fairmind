@@ -3,9 +3,14 @@ JWT Configuration Module
 
 This module provides JWT token management functionality using PyJWT library.
 Replaces the vulnerable python-jose library to eliminate security vulnerabilities.
+
+Supports both:
+- Internal HS256 JWT tokens (for backwards compatibility)
+- External Authentik RS256 tokens (for enterprise SSO)
 """
 
 import jwt
+import asyncio
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, Union
 from jwt.exceptions import InvalidTokenError, ExpiredSignatureError, DecodeError
@@ -83,20 +88,38 @@ class JWTManager:
             logger.error(f"Failed to create JWT token: {str(e)}")
             raise Exception(f"Token creation failed: {str(e)}") 
    
-    def verify_token(self, token: str) -> Optional[Dict[str, Any]]:
+    def verify_token(
+        self,
+        token: str,
+        use_authentik: bool = False,
+        authentik_config: Optional[Any] = None
+    ) -> Optional[Dict[str, Any]]:
         """
         Verify and decode a JWT token.
-        
+
+        Supports both internal HS256 tokens and external Authentik RS256 tokens.
+
         Args:
             token: JWT token string to verify
-            
+            use_authentik: Whether to use Authentik JWKS validation
+            authentik_config: Authentik configuration object (required if use_authentik=True)
+
         Returns:
             Decoded token payload if valid, None if invalid
         """
+        # If Authentik is enabled, use async JWKS validation
+        if use_authentik and authentik_config:
+            logger.debug("Using Authentik JWKS validation for token")
+            # Note: This requires async context. Should be called via async wrapper
+            # For now, we'll require calling the async method directly
+            logger.warning("Use async validate_token_with_authentik() for Authentik tokens")
+            return None
+
+        # Use internal HS256 validation
         try:
             payload = jwt.decode(
-                token, 
-                self.secret_key, 
+                token,
+                self.secret_key,
                 algorithms=[self.algorithm],
                 options={
                     "verify_exp": True,
@@ -106,7 +129,7 @@ class JWTManager:
             )
             logger.debug(f"JWT token verified for subject: {payload.get('sub', 'unknown')}")
             return payload
-            
+
         except ExpiredSignatureError:
             logger.warning("JWT token has expired")
             return None
@@ -181,9 +204,41 @@ class JWTManager:
             return datetime.utcnow() > expiry
         return True  # Consider invalid tokens as expired
     
+    async def verify_token_with_authentik(
+        self,
+        token: str,
+        authentik_config: Any
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Verify JWT token using Authentik JWKS (RS256).
+
+        This is an async method that validates tokens issued by Authentik.
+
+        Args:
+            token: JWT token string to verify
+            authentik_config: AuthentikConfig instance with JWKS endpoint
+
+        Returns:
+            Decoded token payload if valid, None if invalid
+        """
+        try:
+            logger.debug("Validating token with Authentik JWKS")
+            payload = await authentik_config.validate_token(token)
+
+            if payload:
+                logger.debug(f"Authentik token verified for subject: {payload.get('sub', 'unknown')}")
+                return payload
+            else:
+                logger.warning("Authentik token validation failed")
+                return None
+
+        except Exception as e:
+            logger.error(f"Unexpected error validating Authentik token: {str(e)}")
+            return None
+
     def refresh_token(
-        self, 
-        token: str, 
+        self,
+        token: str,
         expires_delta: Optional[timedelta] = None
     ) -> Optional[str]:
         """

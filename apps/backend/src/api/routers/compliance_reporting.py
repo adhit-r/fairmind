@@ -5,10 +5,11 @@ Endpoints for regulatory compliance checking, audit report generation,
 and fairness documentation.
 """
 
-from fastapi import APIRouter, HTTPException, Body
+from fastapi import APIRouter, HTTPException, Body, Request, Query
 from typing import Dict, List, Any, Optional
 from pydantic import BaseModel, Field
 from datetime import datetime
+import logging
 
 from ..services.compliance_reporting_service import (
     ComplianceReportingService,
@@ -16,6 +17,11 @@ from ..services.compliance_reporting_service import (
     RiskLevel,
     ComplianceStatus,
 )
+
+# Import org isolation decorators
+from core.decorators.org_isolation import isolate_by_org
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/compliance", tags=["Compliance & Reporting"])
 

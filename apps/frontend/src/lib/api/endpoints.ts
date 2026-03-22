@@ -299,4 +299,14 @@ export const API_ENDPOINTS = {
     publish: '/api/v1/marketplace/models',
     reviews: (modelId: string) => `/api/v1/marketplace/models/${modelId}/reviews`,
   },
+
+  // Organizations (Multi-org support)
+  organizations: {
+    list: '/api/v1/organizations',
+    get: (orgId: string) => `/api/v1/organizations/${orgId}`,
+    create: '/api/v1/organizations',
+    update: (orgId: string) => `/api/v1/organizations/${orgId}`,
+    members: (orgId: string) => `/api/v1/organizations/${orgId}/members`,
+    inviteMembers: (orgId: string) => `/api/v1/organizations/${orgId}/members/invite`,
+  },
 } as const

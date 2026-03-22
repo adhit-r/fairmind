@@ -91,9 +91,17 @@ class DatabaseManager:
                 autoflush=False,
                 bind=self.engine
             )
-            
+
+            # Create all tables defined in models
+            try:
+                from src.infrastructure.db.database.models import Base
+                Base.metadata.create_all(bind=self.engine)
+                logger.info("Database tables created successfully")
+            except Exception as e:
+                logger.warning(f"Error creating database tables (may already exist): {e}")
+
             logger.info("Database connections initialized successfully")
-            
+
         except Exception as e:
             logger.error(f"Failed to initialize database: {e}")
             raise

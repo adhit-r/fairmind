@@ -26,7 +26,10 @@ from config.settings import settings
 from config.logging import get_logger
 from config.database import init_database, close_database
 from config.cache import init_cache, close_cache
+from config.authentik_config import init_authentik_config
 from core.middleware.auth import NeonAuthMiddleware
+from core.middleware.audit import AuditLoggingMiddleware
+from core.middleware.org_isolation import OrgIsolationMiddleware
 from core.middleware import ErrorHandlingMiddleware, RequestLoggingMiddleware
 from middleware.security import (
     SecurityHeadersMiddleware,
@@ -44,7 +47,27 @@ async def lifespan(app: FastAPI):
     """Application lifespan events."""
     # Startup
     logger.info(f"Starting FairMind API in {settings.environment} mode")
-    
+
+    # Initialize Authentik config if enabled
+    try:
+        if settings.authentik_enabled:
+            if settings.authentik_jwks_url and settings.authentik_issuer and settings.authentik_audience:
+                init_authentik_config(
+                    jwks_url=settings.authentik_jwks_url,
+                    issuer=settings.authentik_issuer,
+                    audience=settings.authentik_audience,
+                    algorithm=settings.authentik_jwt_algorithm,
+                    jwks_cache_ttl=settings.authentik_jwks_cache_ttl,
+                )
+                logger.info("Authentik configuration initialized")
+            else:
+                logger.warning("Authentik enabled but missing required config: jwks_url, issuer, or audience")
+        else:
+            logger.debug("Authentik is disabled")
+    except Exception as e:
+        logger.warning(f"Failed to initialize Authentik config: {e}")
+        # Authentik is optional, continue without it
+
     # Initialize database connections
     try:
         await init_database()
@@ -52,7 +75,7 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Failed to initialize database: {e}")
         raise
-    
+
     # Initialize cache connections
     try:
         await init_cache()
@@ -241,7 +264,9 @@ app.add_middleware(
 )
 
 # Add production-ready middleware (order matters!)
+app.add_middleware(AuditLoggingMiddleware)  # Audit logging for compliance
 app.add_middleware(ErrorHandlingMiddleware)
+app.add_middleware(OrgIsolationMiddleware)  # Org isolation and context injection
 app.add_middleware(SecurityHeadersMiddleware)
 if settings.neon_auth_enabled and settings.is_production:
     app.add_middleware(NeonAuthMiddleware)  # Neon JWT verification middleware
@@ -384,8 +409,71 @@ _include_router("api.routes.monitoring", prefix="/api/v1", tags=["monitoring"], 
 _include_router("api.routes.multimodal_bias_detection", prefix="/api/v1", tags=["multimodal-bias-detection"], required=False)
 _include_router("api.routes.provenance", prefix="/api/v1/provenance", tags=["provenance"], required=False)
 _include_router("api.routes.reports", tags=["reports"], required=False)
+_include_router("src.api.routers.compliance_automation", prefix="/api/v1", tags=["Compliance & Reporting"], required=False)
+_include_router("src.api.routers.registration", prefix="/api/v1", tags=["registration"], required=False)
+_include_router("src.api.routers.org_management", tags=["organization-management"], required=False)
 
 logger.info("Explicit API router map registered")
+
+
+# Audit logs endpoint
+@app.get("/api/v1/audit-logs", tags=["audit"])
+async def list_audit_logs(
+    limit: int = 25,
+    offset: int = 0,
+    action: str = None,
+    status_filter: str = None,
+    resource_type: str = None,
+):
+    """Retrieve audit logs for compliance reporting."""
+    try:
+        from config.database import get_db
+        from sqlalchemy import text
+
+        filters = []
+        params = {"limit": limit, "offset": offset}
+
+        if action:
+            filters.append("action = :action")
+            params["action"] = action
+        if status_filter:
+            filters.append("status = :status_filter")
+            params["status_filter"] = status_filter
+        if resource_type:
+            filters.append("resource_type = :resource_type")
+            params["resource_type"] = resource_type
+
+        where = f"WHERE {' AND '.join(filters)}" if filters else ""
+        query = text(
+            f"SELECT id, user_id, action, resource_type, resource_id, status, "
+            f"ip_address, user_agent, details, error_message, timestamp "
+            f"FROM audit_logs {where} ORDER BY timestamp DESC LIMIT :limit OFFSET :offset"
+        )
+
+        async with get_db() as db:
+            result = await db.execute(query, params)
+            rows = result.mappings().all()
+            logs = [
+                {
+                    "id": str(row["id"]),
+                    "user_id": str(row["user_id"]) if row["user_id"] else None,
+                    "action": row["action"],
+                    "resource_type": row.get("resource_type"),
+                    "resource_id": str(row["resource_id"]) if row.get("resource_id") else None,
+                    "status": row["status"],
+                    "ip_address": row.get("ip_address"),
+                    "user_agent": row.get("user_agent"),
+                    "details": row.get("details") or {},
+                    "error_message": row.get("error_message"),
+                    "timestamp": row["timestamp"].isoformat() if row["timestamp"] else None,
+                }
+                for row in rows
+            ]
+            return {"logs": logs}
+
+    except Exception as e:
+        logger.warning(f"Audit logs query failed: {e}")
+        return {"logs": []}
 
 
 # Production-ready health check endpoints
