@@ -308,5 +308,13 @@ export const API_ENDPOINTS = {
     update: (orgId: string) => `/api/v1/organizations/${orgId}`,
     members: (orgId: string) => `/api/v1/organizations/${orgId}/members`,
     inviteMembers: (orgId: string) => `/api/v1/organizations/${orgId}/members/invite`,
+    auditReport: (orgId: string) => `/api/v1/organizations/${orgId}/compliance/audit-report`,
+  },
+
+  // Invitations
+  invitations: {
+    getDetails: (token: string) => `/api/v1/invitations/${token}`,
+    accept: (token: string) => `/api/v1/invitations/${token}/accept`,
+    decline: (token: string) => `/api/v1/invitations/${token}/decline`,
   },
 } as const
