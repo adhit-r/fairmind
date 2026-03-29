@@ -392,7 +392,7 @@ async def test_pdf_export_content_type(client):
 
 def test_parse_iso_date_full_timestamp():
     """Test ISO date parsing with full timestamp."""
-    from src.api.routers.compliance import _parse_iso_date
+    from api.routes.compliance import _parse_iso_date
 
     date_str = "2026-03-15T14:30:00Z"
     result = _parse_iso_date(date_str)
@@ -405,7 +405,7 @@ def test_parse_iso_date_full_timestamp():
 
 def test_parse_iso_date_date_only():
     """Test ISO date parsing with date only."""
-    from src.api.routers.compliance import _parse_iso_date
+    from api.routes.compliance import _parse_iso_date
 
     date_str = "2026-03-15"
     result = _parse_iso_date(date_str)
@@ -418,7 +418,7 @@ def test_parse_iso_date_date_only():
 
 def test_parse_iso_date_invalid():
     """Test ISO date parsing with invalid format."""
-    from src.api.routers.compliance import _parse_iso_date
+    from api.routes.compliance import _parse_iso_date
 
     with pytest.raises(ValueError, match="Invalid date format"):
         _parse_iso_date("not-a-date")
