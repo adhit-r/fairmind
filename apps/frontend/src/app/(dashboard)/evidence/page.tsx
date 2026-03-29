@@ -1,9 +1,23 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { IconAlertTriangle, IconArrowRight, IconCircleCheck, IconFileText, IconLoader2, IconRouteAltLeft, IconShieldCheck, IconSparkles, IconUpload } from '@tabler/icons-react'
+import {
+  IconAlertTriangle,
+  IconArrowRight,
+  IconCircleCheck,
+  IconFileText,
+  IconFilterSearch,
+  IconLoader2,
+  IconRouteAltLeft,
+  IconShieldCheck,
+  IconShieldOff,
+  IconSparkles,
+  IconUpload,
+  IconX,
+} from '@tabler/icons-react'
 
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -11,8 +25,10 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Slider } from '@/components/ui/slider'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
+import { Progress } from '@/components/ui/progress'
 import { useToast } from '@/hooks/use-toast'
 import { useSystemContext } from '@/components/workflow/SystemContext'
 import { evidenceSchema, type EvidenceFormData } from '@/lib/validations/schemas'
@@ -68,9 +84,10 @@ function normalizeContent(content: unknown) {
 
 export default function EvidencePage() {
   const { selectedSystem } = useSystemContext()
-  const { data, loading, collecting, error, collectEvidence, refreshEvidence } = useEvidence(selectedSystem.id)
+  const { data, summary, loading, collecting, error, collectEvidence, refreshEvidence } = useEvidence(selectedSystem.id)
   const { toast } = useToast()
   const [confidence, setConfidence] = useState([0.8])
+  const [statusFilter, setStatusFilter] = useState<string>('all')
 
   const {
     register,
@@ -97,7 +114,7 @@ export default function EvidencePage() {
     setConfidence([0.8])
   }, [reset, selectedSystem.id])
 
-  const summary = useMemo(() => {
+  const localSummary = useMemo(() => {
     const averageConfidence =
       data.length > 0
         ? Math.round((data.reduce((sum, item) => sum + item.confidence, 0) / data.length) * 100)
@@ -111,6 +128,27 @@ export default function EvidencePage() {
       highConfidenceCount,
     }
   }, [data])
+
+  const completeness = useMemo(() => {
+    const totalRequired = summary.linkedEvidence + summary.missingSignals.length
+    const linked = summary.linkedEvidence
+    const gaps = summary.missingSignals.length
+    const readiness = summary.decisionReadiness
+
+    let gate: 'green' | 'yellow' | 'red' = 'green'
+    if (readiness !== 'review_ready') {
+      gate = gaps > 2 ? 'red' : 'yellow'
+    }
+
+    return { totalRequired, linked, gaps, gate, readiness }
+  }, [summary])
+
+  const filteredData = useMemo(() => {
+    if (statusFilter === 'all') return data
+    if (statusFilter === 'high_confidence') return data.filter((e) => e.confidence >= 0.8)
+    if (statusFilter === 'low_confidence') return data.filter((e) => e.confidence < 0.8)
+    return data
+  }, [data, statusFilter])
 
   const onSubmit = async (formData: EvidenceFormData) => {
     try {
@@ -231,11 +269,11 @@ export default function EvidencePage() {
             Average confidence
           </p>
           <p className="mt-2 text-3xl font-black">
-            {data.length > 0 ? `${summary.averageConfidence}%` : '—'}
+            {data.length > 0 ? `${localSummary.averageConfidence}%` : '—'}
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
             {data.length > 0
-              ? `${summary.highConfidenceCount} artifacts are at or above 80%.`
+              ? `${localSummary.highConfidenceCount} artifacts are at or above 80%.`
               : 'Collect the first artifact to start the evidence trail.'}
           </p>
         </Card>
@@ -245,15 +283,134 @@ export default function EvidencePage() {
             Latest capture
           </p>
           <p className="mt-2 text-lg font-black">
-            {summary.latestEvidence ? summary.latestEvidence.type : 'None yet'}
+            {localSummary.latestEvidence ? localSummary.latestEvidence.type : 'None yet'}
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
-            {summary.latestEvidence
-              ? formatTimestamp(summary.latestEvidence.timestamp)
+            {localSummary.latestEvidence
+              ? formatTimestamp(localSummary.latestEvidence.timestamp)
               : 'Use the form below to add the first governance artifact.'}
           </p>
         </Card>
       </div>
+
+      {/* Completeness indicator + approval-readiness gate */}
+      <Card className={`border-4 p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] ${
+        completeness.gate === 'green'
+          ? 'border-emerald-600 bg-emerald-50'
+          : completeness.gate === 'yellow'
+            ? 'border-amber-500 bg-amber-50'
+            : 'border-red-600 bg-red-50'
+      }`}>
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              {completeness.gate === 'green' ? (
+                <IconShieldCheck className="h-7 w-7 text-emerald-700" />
+              ) : completeness.gate === 'yellow' ? (
+                <IconAlertTriangle className="h-7 w-7 text-amber-700" />
+              ) : (
+                <IconShieldOff className="h-7 w-7 text-red-700" />
+              )}
+              <div>
+                <h2 className="text-xl font-black uppercase">
+                  {completeness.gate === 'green'
+                    ? 'Evidence complete — approval gate: ready'
+                    : completeness.gate === 'yellow'
+                      ? 'Evidence gaps present — approval gate: conditional'
+                      : 'Critical evidence gaps — approval gate: blocked'}
+                </h2>
+                {summary.recommendedNextStep && (
+                  <p className="mt-1 text-sm font-medium text-muted-foreground">
+                    {summary.recommendedNextStep}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="border-2 border-black bg-white p-4 shadow-[4px_4px_0px_0px_#000]">
+                <p className="text-xs font-bold uppercase text-muted-foreground">Controls requiring evidence</p>
+                <p className="mt-2 text-3xl font-black">{completeness.totalRequired || '—'}</p>
+              </div>
+              <div className="border-2 border-black bg-white p-4 shadow-[4px_4px_0px_0px_#000]">
+                <p className="text-xs font-bold uppercase text-muted-foreground">With linked evidence</p>
+                <p className="mt-2 text-3xl font-black text-emerald-700">{completeness.linked}</p>
+              </div>
+              <div className={`border-2 border-black p-4 shadow-[4px_4px_0px_0px_#000] ${completeness.gaps > 0 ? 'bg-red-100' : 'bg-white'}`}>
+                <p className="text-xs font-bold uppercase text-muted-foreground">Missing / critical gaps</p>
+                <p className={`mt-2 text-3xl font-black ${completeness.gaps > 0 ? 'text-red-700' : 'text-emerald-700'}`}>
+                  {completeness.gaps}
+                </p>
+              </div>
+            </div>
+
+            {completeness.totalRequired > 0 && (
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs font-bold uppercase text-muted-foreground">
+                  <span>Evidence coverage</span>
+                  <span>{completeness.totalRequired > 0 ? Math.round((completeness.linked / completeness.totalRequired) * 100) : 0}%</span>
+                </div>
+                <Progress
+                  value={completeness.totalRequired > 0 ? Math.round((completeness.linked / completeness.totalRequired) * 100) : 0}
+                  className="h-3 border-2 border-black"
+                />
+              </div>
+            )}
+          </div>
+
+          {completeness.gate !== 'green' && (
+            <Badge className={`self-start whitespace-nowrap border-2 border-black px-4 py-2 text-sm font-black uppercase shadow-[4px_4px_0px_0px_#000] ${
+              completeness.gate === 'yellow'
+                ? 'bg-amber-400 text-black'
+                : 'bg-red-600 text-white'
+            }`}>
+              {completeness.gate === 'yellow' ? 'Gaps present' : 'Approval blocked'}
+            </Badge>
+          )}
+        </div>
+      </Card>
+
+      {/* Evidence gaps routing */}
+      {summary.missingSignals.length > 0 && (
+        <Card className="border-4 border-black p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <IconFilterSearch className="h-6 w-6 text-red-600" />
+              <h2 className="text-xl font-black uppercase">Evidence gaps blocking approval</h2>
+            </div>
+            <Badge className="border-2 border-red-600 bg-red-100 px-3 py-1 font-black uppercase text-red-800">
+              {summary.missingSignals.length} gap{summary.missingSignals.length !== 1 ? 's' : ''}
+            </Badge>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {summary.missingSignals.map((signal) => (
+              <div key={signal} className="flex flex-col gap-3 border-2 border-black bg-red-50 p-4 shadow-[4px_4px_0px_0px_#000]">
+                <div className="flex items-start gap-2">
+                  <IconX className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
+                  <p className="text-sm font-bold uppercase leading-tight">{signal}</p>
+                </div>
+                <Button asChild size="sm" variant="default" className="mt-auto border-2 border-black font-black uppercase">
+                  <Link
+                    href={{
+                      pathname: '/remediation',
+                      query: {
+                        gap: signal,
+                        systemId: selectedSystem.id,
+                        title: `Evidence gap: ${signal}`,
+                        description: `Missing evidence signal "${signal}" is required for ${selectedSystem.name} approval readiness.`,
+                        priority: 'high',
+                      },
+                    }}
+                  >
+                    <IconRouteAltLeft className="mr-2 h-4 w-4" />
+                    Create Remediation
+                  </Link>
+                </Button>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
         <Card className="border-2 border-black p-6 shadow-brutal">
@@ -363,18 +520,30 @@ export default function EvidencePage() {
               </p>
             </div>
 
-            <Button
-              type="button"
-              variant="neutral"
-              className="border-2 border-black font-bold"
-              onClick={() => {
-                void refreshEvidence()
-              }}
-              disabled={loading}
-            >
-              <IconArrowRight className="mr-2 h-4 w-4" />
-              Refresh
-            </Button>
+            <div className="flex shrink-0 items-center gap-2">
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-44 border-2 border-black font-bold">
+                  <SelectValue placeholder="Filter" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All artifacts</SelectItem>
+                  <SelectItem value="high_confidence">High confidence</SelectItem>
+                  <SelectItem value="low_confidence">Low confidence</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                type="button"
+                variant="neutral"
+                className="border-2 border-black font-bold"
+                onClick={() => {
+                  void refreshEvidence()
+                }}
+                disabled={loading}
+              >
+                <IconArrowRight className="mr-2 h-4 w-4" />
+                Refresh
+              </Button>
+            </div>
           </div>
 
           {loading && (
@@ -435,7 +604,7 @@ export default function EvidencePage() {
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-2xl border-2 border-black bg-slate-50 p-4">
                   <p className="text-xs font-bold uppercase text-muted-foreground">High confidence</p>
-                  <p className="mt-1 text-2xl font-black">{summary.highConfidenceCount}</p>
+                  <p className="mt-1 text-2xl font-black">{localSummary.highConfidenceCount}</p>
                 </div>
                 <div className="rounded-2xl border-2 border-black bg-slate-50 p-4">
                   <p className="text-xs font-bold uppercase text-muted-foreground">Most recent</p>
@@ -443,63 +612,78 @@ export default function EvidencePage() {
                 </div>
               </div>
 
-              <div className="overflow-hidden rounded-3xl border-2 border-black">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="border-b-2 border-black bg-slate-100">
-                      <TableHead className="font-black">Type</TableHead>
-                      <TableHead className="font-black">Confidence</TableHead>
-                      <TableHead className="font-black">Captured</TableHead>
-                      <TableHead className="font-black">Notes</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {data.map((evidence) => (
-                      <TableRow key={evidence.id} className="border-b border-black/20">
-                        <TableCell className="align-top">
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              <Badge className="border-2 border-black bg-black px-2 py-1 font-black uppercase text-white">
-                                {evidence.type}
-                              </Badge>
-                              {evidence.confidence >= 0.8 && (
-                                <IconCircleCheck className="h-4 w-4 text-emerald-600" />
-                              )}
-                            </div>
-                            <p className="max-w-[260px] text-xs text-muted-foreground">
-                              {previewContent(evidence.content)}
-                            </p>
-                          </div>
-                        </TableCell>
-                        <TableCell className="align-top font-semibold">
-                          {formatConfidence(evidence.confidence)}
-                        </TableCell>
-                        <TableCell className="align-top text-sm text-muted-foreground">
-                          {formatTimestamp(evidence.timestamp)}
-                        </TableCell>
-                        <TableCell className="align-top">
-                          <div className="space-y-2">
-                            <p className="text-sm font-medium">
-                              {evidence.metadata?.source
-                                ? String(evidence.metadata.source)
-                                : 'Supports the selected AI system review.'}
-                            </p>
-                            <div className="flex flex-wrap gap-2">
-                              {Object.entries(evidence.metadata || {})
-                                .slice(0, 2)
-                                .map(([key, value]) => (
-                                  <Badge key={key} variant="outline" className="border-2 border-black bg-white px-2 py-1 text-[11px] font-bold">
-                                    {key}: {String(value)}
-                                  </Badge>
-                                ))}
-                            </div>
-                          </div>
-                        </TableCell>
+              {filteredData.length === 0 ? (
+                <div className="rounded-3xl border-2 border-dashed border-black bg-slate-50 px-6 py-10 text-center">
+                  <p className="font-bold text-muted-foreground">No artifacts match this filter.</p>
+                  <Button
+                    type="button"
+                    variant="neutral"
+                    size="sm"
+                    className="mt-3 border-2 border-black font-bold"
+                    onClick={() => setStatusFilter('all')}
+                  >
+                    Clear filter
+                  </Button>
+                </div>
+              ) : (
+                <div className="overflow-hidden rounded-3xl border-2 border-black">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="border-b-2 border-black bg-slate-100">
+                        <TableHead className="font-black">Type</TableHead>
+                        <TableHead className="font-black">Confidence</TableHead>
+                        <TableHead className="font-black">Captured</TableHead>
+                        <TableHead className="font-black">Notes</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredData.map((evidence) => (
+                        <TableRow key={evidence.id} className="border-b border-black/20">
+                          <TableCell className="align-top">
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <Badge className="border-2 border-black bg-black px-2 py-1 font-black uppercase text-white">
+                                  {evidence.type}
+                                </Badge>
+                                {evidence.confidence >= 0.8 && (
+                                  <IconCircleCheck className="h-4 w-4 text-emerald-600" />
+                                )}
+                              </div>
+                              <p className="max-w-[260px] text-xs text-muted-foreground">
+                                {previewContent(evidence.content)}
+                              </p>
+                            </div>
+                          </TableCell>
+                          <TableCell className="align-top font-semibold">
+                            {formatConfidence(evidence.confidence)}
+                          </TableCell>
+                          <TableCell className="align-top text-sm text-muted-foreground">
+                            {formatTimestamp(evidence.timestamp)}
+                          </TableCell>
+                          <TableCell className="align-top">
+                            <div className="space-y-2">
+                              <p className="text-sm font-medium">
+                                {evidence.metadata?.source
+                                  ? String(evidence.metadata.source)
+                                  : 'Supports the selected AI system review.'}
+                              </p>
+                              <div className="flex flex-wrap gap-2">
+                                {Object.entries(evidence.metadata || {})
+                                  .slice(0, 2)
+                                  .map(([key, value]) => (
+                                    <Badge key={key} variant="outline" className="border-2 border-black bg-white px-2 py-1 text-[11px] font-bold">
+                                      {key}: {String(value)}
+                                    </Badge>
+                                  ))}
+                              </div>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
             </div>
           )}
         </Card>

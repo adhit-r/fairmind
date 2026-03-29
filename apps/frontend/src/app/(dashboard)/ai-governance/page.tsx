@@ -277,8 +277,19 @@ export default function AIGovernancePage() {
                 <p className="mt-1 text-sm opacity-90">Start with scoped risks before touching reports or approvals.</p>
               </Link>
               <Link href="/evidence" className="block border-2 border-white bg-white/10 p-4 transition hover:bg-orange hover:text-black">
-                <p className="font-black uppercase">Close evidence gaps</p>
-                <p className="mt-1 text-sm opacity-90">Attach traceable proof to each important control or decision.</p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-black uppercase">Close evidence gaps</p>
+                  {evidenceSummary.missingSignals.length > 0 && (
+                    <span className="shrink-0 rounded border-2 border-red-500 bg-red-500 px-2 py-0.5 text-xs font-black text-white">
+                      {evidenceSummary.missingSignals.length} gap{evidenceSummary.missingSignals.length !== 1 ? 's' : ''}
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1 text-sm opacity-90">
+                  {evidenceSummary.missingSignals.length > 0
+                    ? `Missing: ${evidenceSummary.missingSignals.slice(0, 2).join(', ')}${evidenceSummary.missingSignals.length > 2 ? ` +${evidenceSummary.missingSignals.length - 2} more` : ''}`
+                    : 'Attach traceable proof to each important control or decision.'}
+                </p>
               </Link>
             </div>
           </div>
@@ -311,7 +322,19 @@ export default function AIGovernancePage() {
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <Card className="xl:col-span-2">
           <CardHeader className="border-b-2 border-black bg-[#fff4de]">
-            <CardTitle className="text-xl font-black uppercase">Framework Review</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-xl font-black uppercase">Framework Review</CardTitle>
+              {evidenceSummary.missingSignals.length > 0 && (
+                <Link
+                  href="/evidence"
+                  className="flex items-center gap-2 border-2 border-red-600 bg-red-50 px-3 py-1.5 text-xs font-black uppercase text-red-700 transition hover:bg-red-600 hover:text-white"
+                >
+                  <IconLockExclamation className="h-3.5 w-3.5" />
+                  {evidenceSummary.missingSignals.length} evidence gap{evidenceSummary.missingSignals.length !== 1 ? 's' : ''}
+                  <IconArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="space-y-4 p-6">
             {frameworks.map((framework) => {
@@ -320,9 +343,18 @@ export default function AIGovernancePage() {
                 <div key={framework.id} className="border-2 border-black bg-white p-4">
                   <div className="mb-2 flex items-center justify-between">
                     <h3 className="text-lg font-black">{framework.name}</h3>
-                    <Badge className="border-2 border-black bg-black text-white">
-                      {framework.controls.length} controls
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      {evidenceSummary.decisionReadiness !== 'review_ready' && (
+                        <Link href="/evidence">
+                          <Badge className="border-2 border-amber-500 bg-amber-100 px-2 py-1 text-[11px] font-black uppercase text-amber-900 transition hover:bg-amber-500 hover:text-white">
+                            evidence gaps
+                          </Badge>
+                        </Link>
+                      )}
+                      <Badge className="border-2 border-black bg-black text-white">
+                        {framework.controls.length} controls
+                      </Badge>
+                    </div>
                   </div>
                   <p className="mb-3 text-sm text-muted-foreground">{framework.description}</p>
                   <div className="mb-2 flex items-center justify-between text-sm">
