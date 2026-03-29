@@ -399,6 +399,7 @@ export default function EvidencePage() {
                         title: `Evidence gap: ${signal}`,
                         description: `Missing evidence signal "${signal}" is required for ${selectedSystem.name} approval readiness.`,
                         priority: 'high',
+                        source: 'evidence_gap',
                       },
                     }}
                   >

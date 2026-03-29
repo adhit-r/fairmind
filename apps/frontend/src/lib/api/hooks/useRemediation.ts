@@ -39,6 +39,7 @@ export interface RemediationSummary {
   total: number
   active: number
   completed: number
+  criticalActive: number
   retestRequiredTasks: number
   linkedRiskReferences: number
   byStatus: Record<string, number>
@@ -50,6 +51,8 @@ interface RemediationListResponse {
   summary: RemediationSummary
 }
 
+export type RemediationSourceType = 'governance_blocker' | 'risk' | 'bias_scan' | 'evidence_gap' | 'manual'
+
 export interface CreateRemediationTaskInput {
   riskId?: string
   title: string
@@ -57,6 +60,8 @@ export interface CreateRemediationTaskInput {
   priority: RemediationPriority
   owner?: string
   evidenceNeeded?: string[]
+  source?: RemediationSourceType
+  retestRequired?: boolean
 }
 
 const EMPTY_SUMMARY: RemediationSummary = {
@@ -64,6 +69,7 @@ const EMPTY_SUMMARY: RemediationSummary = {
   total: 0,
   active: 0,
   completed: 0,
+  criticalActive: 0,
   retestRequiredTasks: 0,
   linkedRiskReferences: 0,
   byStatus: {},
@@ -179,6 +185,9 @@ function buildSummary(systemId: string, tasks: RemediationTask[]): RemediationSu
         accumulator.completed += 1
       } else {
         accumulator.active += 1
+        if (task.priority === 'critical') {
+          accumulator.criticalActive += 1
+        }
       }
 
       if (task.retestRequired) {
@@ -190,6 +199,7 @@ function buildSummary(systemId: string, tasks: RemediationTask[]): RemediationSu
     {
       ...EMPTY_SUMMARY,
       systemId,
+      criticalActive: 0,
       byStatus: {},
       byPriority: {},
     }
@@ -276,19 +286,20 @@ export function useRemediation(systemId?: string) {
       setError(null)
 
       try {
+        const derivedSourceType = input.source ?? (input.riskId ? 'risk' : 'manual')
         const response: ApiResponse<RemediationTask> = await apiClient.post(
           API_ENDPOINTS.aiGovernance.remediation,
           {
             system_id: systemId,
             title: input.title.trim(),
             description: input.description.trim(),
-            source_type: input.riskId ? 'risk' : 'manual',
+            source_type: derivedSourceType,
             source_id: input.riskId || '',
             linked_risk_ids: input.riskId ? [input.riskId] : [],
             owner: input.owner?.trim() || '',
             priority: input.priority,
             due_date: null,
-            retest_required: true,
+            retest_required: input.retestRequired !== undefined ? input.retestRequired : true,
             notes: (input.evidenceNeeded || []).join('\n'),
           }
         )

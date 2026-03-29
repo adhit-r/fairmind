@@ -24,6 +24,7 @@ import {
   IconClipboardCheck,
   IconFileCheck,
   IconLockExclamation,
+  IconRouteAltLeft,
   IconShield,
   IconSparkles,
 } from '@tabler/icons-react'
@@ -115,34 +116,68 @@ export default function AIGovernancePage() {
 
   const loading = frameworksLoading || complianceLoading || policiesLoading || risksLoading || evidenceLoading || remediationLoading
 
+  type BlockerEntry = {
+    text: string
+    remediationHref?: string
+  }
+
   const governanceState = useMemo(() => {
-    const blockers: string[] = []
+    const blockerEntries: BlockerEntry[] = []
 
     if (riskSummary.bySeverity.critical > 0) {
-      blockers.push(`${riskSummary.bySeverity.critical} critical risk item(s) remain open.`)
+      blockerEntries.push({
+        text: `${riskSummary.bySeverity.critical} critical risk item(s) remain open.`,
+        remediationHref: `/remediation?source=governance_blocker&priority=critical&title=${encodeURIComponent('Resolve critical risk items')}&description=${encodeURIComponent(`${riskSummary.bySeverity.critical} critical risk item(s) remain open for ${selectedSystem.name}. Review and mitigate before approval.`)}`,
+      })
     }
     if (riskSummary.bySeverity.high > 0) {
-      blockers.push(`${riskSummary.bySeverity.high} high-severity risk item(s) still need mitigation or acceptance.`)
+      blockerEntries.push({
+        text: `${riskSummary.bySeverity.high} high-severity risk item(s) still need mitigation or acceptance.`,
+        remediationHref: `/remediation?source=governance_blocker&priority=high&title=${encodeURIComponent('Mitigate high-severity risks')}&description=${encodeURIComponent(`${riskSummary.bySeverity.high} high-severity risk item(s) still need mitigation for ${selectedSystem.name}.`)}`,
+      })
     }
     if (overallComplianceRate < 70) {
-      blockers.push(`Compliance coverage is only ${overallComplianceRate}%. Core controls are still failing.`)
+      blockerEntries.push({
+        text: `Compliance coverage is only ${overallComplianceRate}%. Core controls are still failing.`,
+        remediationHref: `/remediation?source=governance_blocker&priority=critical&title=${encodeURIComponent('Resolve failing compliance controls')}&description=${encodeURIComponent(`Compliance coverage is only ${overallComplianceRate}% for ${selectedSystem.name}. Core controls are failing.`)}`,
+      })
     } else if (overallComplianceRate < 85) {
-      blockers.push(`Compliance coverage is ${overallComplianceRate}%. Approval should stay conditional until framework gaps are reduced.`)
+      blockerEntries.push({
+        text: `Compliance coverage is ${overallComplianceRate}%. Approval should stay conditional until framework gaps are reduced.`,
+        remediationHref: `/remediation?source=governance_blocker&priority=high&title=${encodeURIComponent('Improve compliance coverage')}&description=${encodeURIComponent(`Compliance coverage is ${overallComplianceRate}% for ${selectedSystem.name}. Reduce framework gaps before full approval.`)}`,
+      })
     }
     if (evidenceSummary.decisionReadiness !== 'review_ready') {
-      blockers.push(evidenceSummary.recommendedNextStep || 'Evidence is not yet linked strongly enough for approval review.')
+      blockerEntries.push({
+        text: evidenceSummary.recommendedNextStep || 'Evidence is not yet linked strongly enough for approval review.',
+        remediationHref: `/remediation?source=evidence_gap&priority=high&title=${encodeURIComponent('Strengthen evidence linkage')}&description=${encodeURIComponent(evidenceSummary.recommendedNextStep || 'Evidence is not yet linked strongly enough for approval review.')}`,
+      })
     }
     if (evidenceSummary.missingSignals.length > 0) {
-      blockers.push(`Evidence gaps: ${evidenceSummary.missingSignals.join(', ')}.`)
+      blockerEntries.push({
+        text: `Evidence gaps: ${evidenceSummary.missingSignals.join(', ')}.`,
+        remediationHref: `/evidence`,
+      })
     }
     if (remediationSummary.active > 0) {
-      blockers.push(`${remediationSummary.active} remediation task(s) are still active.`)
+      blockerEntries.push({
+        text: `${remediationSummary.active} remediation task(s) are still active.`,
+        remediationHref: `/remediation`,
+      })
     }
     if (remediationSummary.retestRequiredTasks > remediationSummary.completed) {
-      blockers.push('At least one remediation task still requires a completed re-test before sign-off.')
+      blockerEntries.push({
+        text: 'At least one remediation task still requires a completed re-test before sign-off.',
+        remediationHref: `/remediation`,
+      })
     }
 
-    const uniqueBlockers = blockers.filter((item, index) => blockers.indexOf(item) === index)
+    const seen = new Set<string>()
+    const uniqueBlockers = blockerEntries.filter((entry) => {
+      if (seen.has(entry.text)) return false
+      seen.add(entry.text)
+      return true
+    })
 
     let recommendation: 'Go' | 'Conditional Go' | 'No-Go' = 'Go'
     if (
@@ -164,6 +199,7 @@ export default function AIGovernancePage() {
     return {
       recommendation,
       blockers: uniqueBlockers,
+      blockerTexts: uniqueBlockers.map((b) => b.text),
       releaseReady: recommendation === 'Go',
     }
   }, [
@@ -178,6 +214,7 @@ export default function AIGovernancePage() {
     riskSummary.bySeverity.critical,
     riskSummary.bySeverity.high,
     riskSummary.open,
+    selectedSystem.name,
   ])
 
   const recommendationTone = governanceState.recommendation === 'Go'
@@ -264,7 +301,18 @@ export default function AIGovernancePage() {
               <div className="mt-2 space-y-2 text-sm text-slate-200">
                 {governanceState.blockers.length > 0 ? (
                   governanceState.blockers.slice(0, 4).map((blocker) => (
-                    <p key={blocker}>• {blocker}</p>
+                    <div key={blocker.text} className="flex items-start justify-between gap-2">
+                      <p className="flex-1">• {blocker.text}</p>
+                      {blocker.remediationHref && (
+                        <Link
+                          href={blocker.remediationHref}
+                          className="shrink-0 border border-white/40 bg-white/10 px-2 py-0.5 text-[11px] font-black uppercase text-white transition hover:bg-orange hover:text-black hover:border-orange"
+                        >
+                          <IconRouteAltLeft className="inline h-3 w-3 mr-1" />
+                          Remediate
+                        </Link>
+                      )}
+                    </div>
                   ))
                 ) : (
                   <p>• No material blockers are currently visible for this AI system.</p>
@@ -374,6 +422,28 @@ export default function AIGovernancePage() {
               <CardTitle className="text-xl font-black uppercase">Approval Gate</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 p-6">
+              {remediationSummary.criticalActive > 0 && (
+                <div className="border-2 border-red-600 bg-red-50 p-4">
+                  <div className="flex items-start gap-3">
+                    <IconAlertTriangle className="mt-0.5 h-5 w-5 text-red-700 shrink-0" />
+                    <div className="space-y-2">
+                      <p className="font-black uppercase text-red-800">
+                        {remediationSummary.criticalActive} critical remediation task{remediationSummary.criticalActive !== 1 ? 's' : ''} open
+                      </p>
+                      <p className="text-sm text-red-700">
+                        The "Approve release" action is blocked until all critical remediation tasks are resolved or their priority is reduced.
+                      </p>
+                      <Link
+                        href="/remediation"
+                        className="inline-flex items-center gap-1.5 border-2 border-red-700 bg-red-700 px-3 py-1.5 text-xs font-black uppercase text-white transition hover:bg-white hover:text-red-700"
+                      >
+                        <IconRouteAltLeft className="h-3.5 w-3.5" />
+                        Review critical remediations
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className="border-2 border-black p-4">
                 <div className="flex items-center gap-3">
                   <IconLockExclamation className="h-5 w-5" />
@@ -455,9 +525,11 @@ export default function AIGovernancePage() {
                   <div>
                     <p className="font-black uppercase">What next?</p>
                     <p className="text-sm text-slate-700">
-                      {governanceState.recommendation === 'Go'
-                        ? 'Evidence and remediation are aligned enough to prepare approval artifacts.'
-                        : 'Move unresolved issues into remediation, close evidence gaps, then return here for sign-off.'}
+                      {remediationSummary.criticalActive > 0
+                        ? `Resolve ${remediationSummary.criticalActive} critical remediation task${remediationSummary.criticalActive !== 1 ? 's' : ''} before the approval gate can be cleared.`
+                        : governanceState.recommendation === 'Go'
+                          ? 'Evidence and remediation are aligned enough to prepare approval artifacts.'
+                          : 'Move unresolved issues into remediation, close evidence gaps, then return here for sign-off.'}
                     </p>
                   </div>
                 </div>
@@ -486,7 +558,8 @@ export default function AIGovernancePage() {
                       type="button"
                       variant="neutral"
                       className="w-full border-2 border-black font-bold"
-                      disabled={approvalLoading}
+                      disabled={approvalLoading || remediationSummary.criticalActive > 0}
+                      title={remediationSummary.criticalActive > 0 ? 'Resolve critical remediation tasks before approving' : undefined}
                       onClick={async () => {
                         try {
                           await decideApprovalRequest(
@@ -503,7 +576,7 @@ export default function AIGovernancePage() {
                         }
                       }}
                     >
-                      Approve release
+                      {remediationSummary.criticalActive > 0 ? 'Approval blocked — critical remediations open' : 'Approve release'}
                     </Button>
                     <Button
                       type="button"

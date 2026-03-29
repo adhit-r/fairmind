@@ -404,6 +404,7 @@ export default function RisksPage() {
                                   title: risk.title,
                                   description: risk.description,
                                   priority: risk.severity,
+                                  source: 'risk',
                                 },
                               }}
                             >

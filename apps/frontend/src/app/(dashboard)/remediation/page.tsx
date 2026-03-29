@@ -8,6 +8,7 @@ import {
   IconArrowRight,
   IconCheck,
   IconClipboardCheck,
+  IconFlask,
   IconLoader2,
   IconPlus,
   IconRefresh,
@@ -25,15 +26,17 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/hooks/use-toast'
-import { useRemediation, type RemediationPriority, type RemediationStatus } from '@/lib/api/hooks/useRemediation'
+import { useRemediation, type RemediationPriority, type RemediationSourceType, type RemediationStatus } from '@/lib/api/hooks/useRemediation'
 
 type DraftState = {
   riskId: string
   title: string
   description: string
   priority: RemediationPriority
+  source: RemediationSourceType
   owner: string
   evidenceNeeded: string
+  retestRequired: boolean
 }
 
 const PRIORITY_OPTIONS: RemediationPriority[] = ['critical', 'high', 'medium', 'low']
@@ -52,6 +55,28 @@ function normalizePriority(value: string | null): RemediationPriority {
   }
 
   return 'medium'
+}
+
+function normalizeSource(value: string | null): RemediationSourceType {
+  if (
+    value === 'governance_blocker' ||
+    value === 'risk' ||
+    value === 'bias_scan' ||
+    value === 'evidence_gap' ||
+    value === 'manual'
+  ) {
+    return value
+  }
+
+  return 'manual'
+}
+
+const SOURCE_LABELS: Record<RemediationSourceType, string> = {
+  governance_blocker: 'Governance Blocker',
+  risk: 'Risk Register',
+  bias_scan: 'Bias Scan',
+  evidence_gap: 'Evidence Gap',
+  manual: 'Manual',
 }
 
 function priorityClassName(priority: RemediationPriority) {
@@ -75,20 +100,32 @@ function splitEvidenceNeeded(value: string) {
     .filter(Boolean)
 }
 
-function getPrimaryAction(status: RemediationStatus) {
+function getPrimaryAction(status: RemediationStatus, retestRequired: boolean, retestStatus: string) {
   if (status === 'open') {
-    return { label: 'Start work', next: 'in_progress' as const }
+    return { label: 'Start work', next: 'in_progress' as const, blocked: false }
   }
 
   if (status === 'in_progress') {
-    return { label: 'Mark done', next: 'done' as const }
+    const retestBlocked = retestRequired && retestStatus !== 'passed'
+    return {
+      label: retestBlocked ? 'Awaiting re-test' : 'Mark done',
+      next: 'done' as const,
+      blocked: retestBlocked,
+    }
   }
 
   if (status === 'blocked') {
-    return { label: 'Unblock', next: 'in_progress' as const }
+    return { label: 'Unblock', next: 'in_progress' as const, blocked: false }
   }
 
-  return { label: 'Reopen', next: 'in_progress' as const }
+  return { label: 'Reopen', next: 'in_progress' as const, blocked: false }
+}
+
+function retestStatusClassName(status: string) {
+  if (status === 'passed') return 'bg-emerald-100 text-emerald-800 border-emerald-500'
+  if (status === 'failed') return 'bg-red-100 text-red-800 border-red-500'
+  if (status === 'pending') return 'bg-blue-100 text-blue-800 border-blue-500'
+  return 'bg-slate-100 text-slate-800 border-slate-500'
 }
 
 export default function RemediationPage() {
@@ -101,14 +138,17 @@ export default function RemediationPage() {
   const queryTitle = searchParams.get('title') ?? ''
   const queryDescription = searchParams.get('description') ?? ''
   const queryPriority = normalizePriority(searchParams.get('priority'))
+  const querySource = normalizeSource(searchParams.get('source'))
 
   const [draft, setDraft] = useState<DraftState>({
     riskId: queryRiskId,
     title: queryTitle,
     description: queryDescription,
     priority: queryPriority,
+    source: querySource,
     owner: '',
     evidenceNeeded: '',
+    retestRequired: true,
   })
 
   useEffect(() => {
@@ -117,10 +157,13 @@ export default function RemediationPage() {
       title: queryTitle,
       description: queryDescription,
       priority: queryPriority,
+      source: querySource,
       owner: '',
       evidenceNeeded: '',
+      retestRequired: true,
     })
-  }, [queryDescription, queryPriority, queryRiskId, queryTitle, selectedSystem.id])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queryDescription, queryPriority, queryRiskId, queryTitle, querySource, selectedSystem.id])
 
   const linkedRiskTitle = useMemo(() => {
     if (!queryRiskId) {
@@ -148,8 +191,10 @@ export default function RemediationPage() {
         title: draft.title.trim(),
         description: draft.description.trim(),
         priority: draft.priority,
+        source: draft.source,
         owner: draft.owner.trim() || undefined,
         evidenceNeeded: splitEvidenceNeeded(draft.evidenceNeeded),
+        retestRequired: draft.retestRequired,
       })
 
       toast({
@@ -162,8 +207,10 @@ export default function RemediationPage() {
         title: '',
         description: '',
         priority: 'medium',
+        source: 'manual',
         owner: '',
         evidenceNeeded: '',
+        retestRequired: true,
       })
     } catch (creationError) {
       toast({
@@ -294,6 +341,42 @@ export default function RemediationPage() {
           </div>
 
           <div className="mt-5 space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label className="font-bold uppercase tracking-wide">Source</Label>
+                <div className="flex flex-wrap gap-2">
+                  {(['governance_blocker', 'risk', 'evidence_gap', 'bias_scan', 'manual'] as RemediationSourceType[]).map((option) => (
+                    <Button
+                      key={option}
+                      type="button"
+                      variant={draft.source === option ? 'default' : 'neutral'}
+                      className="border-2 border-black text-xs font-bold uppercase"
+                      onClick={() => setDraft((current) => ({ ...current, source: option }))}
+                    >
+                      {SOURCE_LABELS[option]}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="font-bold uppercase tracking-wide">Re-test Required</Label>
+                <div className="flex items-center gap-3 rounded-2xl border-2 border-black bg-slate-50 p-3">
+                  <button
+                    type="button"
+                    onClick={() => setDraft((current) => ({ ...current, retestRequired: !current.retestRequired }))}
+                    className={`flex h-7 w-14 items-center rounded-full border-2 border-black transition-colors ${draft.retestRequired ? 'bg-black' : 'bg-white'}`}
+                  >
+                    <span className={`inline-block h-5 w-5 rounded-full border-2 border-black bg-white transition-transform ${draft.retestRequired ? 'translate-x-7' : 'translate-x-0.5'}`} />
+                  </button>
+                  <div>
+                    <p className="text-sm font-bold">{draft.retestRequired ? 'Yes — re-test before closing' : 'No re-test needed'}</p>
+                    <p className="text-xs text-muted-foreground">Requires a passing re-test result before the task can be marked done.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label className="font-bold uppercase tracking-wide">Risk ID</Label>
               <Input
@@ -476,7 +559,7 @@ export default function RemediationPage() {
           {!loading && !error && tasks.length > 0 && (
             <div className="mt-6 space-y-4">
               {tasks.map((task) => {
-                const primaryAction = getPrimaryAction(task.status)
+                const primaryAction = getPrimaryAction(task.status, task.retestRequired, task.retestStatus)
 
                 return (
                   <Card key={task.id} className="border-2 border-black bg-white p-5 shadow-[4px_4px_0px_0px_#000]">
@@ -490,8 +573,22 @@ export default function RemediationPage() {
                             {task.status.replace(/_/g, ' ')}
                           </Badge>
                           <Badge variant="outline" className="border-2 border-black bg-white px-3 py-1 font-bold uppercase">
-                            {task.source === 'risk' ? 'Risk-linked' : 'Manual'}
+                            {task.sourceType === 'governance_blocker'
+                              ? 'Governance Blocker'
+                              : task.sourceType === 'evidence_gap'
+                                ? 'Evidence Gap'
+                                : task.sourceType === 'bias_scan'
+                                  ? 'Bias Scan'
+                                  : task.source === 'risk'
+                                    ? 'Risk-linked'
+                                    : 'Manual'}
                           </Badge>
+                          {task.retestRequired && (
+                            <Badge className={`border-2 font-black uppercase ${retestStatusClassName(task.retestStatus)}`}>
+                              <IconFlask className="mr-1 h-3 w-3" />
+                              Re-test: {task.retestStatus.replace(/_/g, ' ')}
+                            </Badge>
+                          )}
                         </div>
 
                         <div>
@@ -541,7 +638,7 @@ export default function RemediationPage() {
                         <Button
                           type="button"
                           className="border-2 border-black font-bold"
-                          disabled={saving}
+                          disabled={saving || primaryAction.blocked}
                           onClick={async () => {
                             try {
                               await updateTaskStatus(task.id, primaryAction.next)
@@ -558,9 +655,18 @@ export default function RemediationPage() {
                             }
                           }}
                         >
-                          <IconCheck className="mr-2 h-4 w-4" />
+                          {primaryAction.blocked ? (
+                            <IconFlask className="mr-2 h-4 w-4" />
+                          ) : (
+                            <IconCheck className="mr-2 h-4 w-4" />
+                          )}
                           {primaryAction.label}
                         </Button>
+                        {primaryAction.blocked && (
+                          <p className="text-xs font-bold text-amber-700">
+                            Re-test must pass before this task can be closed.
+                          </p>
+                        )}
 
                         {task.status !== 'done' && (
                           <Button
