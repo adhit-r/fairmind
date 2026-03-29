@@ -413,6 +413,7 @@ _include_router("src.api.routers.compliance_automation", prefix="/api/v1", tags=
 _include_router("src.api.routers.registration", prefix="/api/v1", tags=["registration"], required=False)
 _include_router("src.api.routers.org_management", tags=["organization-management"], required=False)
 _include_router("src.api.routers.compliance", tags=["compliance"], required=False)
+_include_router("api.routes.compliance_audit", tags=["compliance-audit"], required=False)
 
 logger.info("Explicit API router map registered")
 
