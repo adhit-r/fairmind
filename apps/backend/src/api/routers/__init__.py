@@ -14,5 +14,13 @@ __all__ = [
     "modern_bias_detection",
     "multimodal_bias_detection",
     "advanced_bias_detection",
-    "reports"
+    "reports",
+    "bias_detection",
+    "compliance",
+    "compliance_audit",
+    "compliance_automation",
+    "llm_judge",
+    "org_management",
+    "registration",
+    "settings",
 ]

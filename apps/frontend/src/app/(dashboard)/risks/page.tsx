@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRisks } from '@/lib/api/hooks/useRisks'
+import { useEvidence } from '@/lib/api/hooks/useEvidence'
 import { useSystemContext } from '@/components/workflow/SystemContext'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -26,6 +27,8 @@ import {
   IconClipboardCheck,
   IconPlus,
   IconRouteAltLeft,
+  IconShieldCheck,
+  IconShieldOff,
   IconSparkles,
 } from '@tabler/icons-react'
 
@@ -41,6 +44,7 @@ const riskTypeOptions = [
 export default function RisksPage() {
   const { selectedSystem } = useSystemContext()
   const { data: risks, summary, loading, error, assessRisks } = useRisks(selectedSystem.id)
+  const { summary: evidenceSummary } = useEvidence(selectedSystem.id)
   const { toast } = useToast()
   const [dialogOpen, setDialogOpen] = useState(false)
 
@@ -156,6 +160,29 @@ export default function RisksPage() {
           <div className="bg-black p-6 text-white">
             <p className="text-xs font-black uppercase tracking-[0.22em] text-orange">Next Actions</p>
             <div className="mt-4 space-y-3">
+              {/* Evidence completeness indicator */}
+              <Link href="/evidence" className="block border-2 border-white bg-white/10 p-4 transition hover:bg-orange hover:text-black">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    {evidenceSummary.decisionReadiness === 'review_ready' ? (
+                      <IconShieldCheck className="h-5 w-5 shrink-0 text-emerald-400" />
+                    ) : (
+                      <IconShieldOff className="h-5 w-5 shrink-0 text-red-400" />
+                    )}
+                    <p className="font-black uppercase">Evidence completeness</p>
+                  </div>
+                  {evidenceSummary.missingSignals.length > 0 && (
+                    <span className="shrink-0 rounded border-2 border-red-500 bg-red-500 px-2 py-0.5 text-xs font-black text-white">
+                      {evidenceSummary.missingSignals.length} gap{evidenceSummary.missingSignals.length !== 1 ? 's' : ''}
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1 text-sm opacity-90">
+                  {evidenceSummary.decisionReadiness === 'review_ready'
+                    ? 'Evidence is linked and ready for approval review.'
+                    : evidenceSummary.recommendedNextStep || 'Evidence gaps detected — review before proceeding to approval.'}
+                </p>
+              </Link>
               <Link href="/ai-governance" className="block border-2 border-white bg-white/10 p-4 transition hover:bg-orange hover:text-black">
                 <p className="font-black uppercase">Review failed controls</p>
                 <p className="mt-1 text-sm opacity-90">Use governance review to validate whether blockers are evidence, policy, or remediation gaps.</p>
@@ -377,6 +404,7 @@ export default function RisksPage() {
                                   title: risk.title,
                                   description: risk.description,
                                   priority: risk.severity,
+                                  source: 'risk',
                                 },
                               }}
                             >

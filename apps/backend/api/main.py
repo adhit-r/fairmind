@@ -409,10 +409,13 @@ _include_router("api.routes.monitoring", prefix="/api/v1", tags=["monitoring"], 
 _include_router("api.routes.multimodal_bias_detection", prefix="/api/v1", tags=["multimodal-bias-detection"], required=False)
 _include_router("api.routes.provenance", prefix="/api/v1/provenance", tags=["provenance"], required=False)
 _include_router("api.routes.reports", tags=["reports"], required=False)
-_include_router("src.api.routers.compliance_automation", prefix="/api/v1", tags=["Compliance & Reporting"], required=False)
-_include_router("src.api.routers.registration", prefix="/api/v1", tags=["registration"], required=False)
-_include_router("src.api.routers.org_management", tags=["organization-management"], required=False)
-_include_router("src.api.routers.compliance", tags=["compliance"], required=False)
+_include_router("api.routes.compliance_automation", prefix="/api/v1", tags=["Compliance & Reporting"], required=False)
+_include_router("api.routes.registration", prefix="/api/v1", tags=["registration"], required=False)
+_include_router("api.routes.org_management", tags=["organization-management"], required=False)
+_include_router("api.routes.compliance", tags=["compliance"], required=False)
+_include_router("api.routes.compliance_audit", tags=["compliance-audit"], required=False)
+_include_router("api.routes.policies", tags=["policies"], required=False)
+_include_router("api.routes.approvals", tags=["approvals"], required=False)
 
 logger.info("Explicit API router map registered")
 

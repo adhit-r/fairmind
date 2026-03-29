@@ -17,6 +17,7 @@ import {
   IconAlertTriangle,
   IconArrowRight,
   IconBrain,
+  IconBuildingSkyscraper,
   IconChartBar,
   IconClipboardCheck,
   IconFileCheck,
@@ -181,6 +182,8 @@ export default function DashboardPage() {
     })
   }
 
+  const isFallbackSystem = selectedSystem.metadata?.source === 'fallback'
+
   if (loading || logsLoading) {
     return (
       <div className="space-y-6">
@@ -194,6 +197,57 @@ export default function DashboardPage() {
           <Skeleton className="h-96 xl:col-span-2" />
           <Skeleton className="h-96" />
         </div>
+      </div>
+    )
+  }
+
+  if (isFallbackSystem) {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center space-y-6">
+        <Card className="w-full max-w-2xl overflow-hidden border-4 border-black bg-[linear-gradient(135deg,#fff4de_0%,#fff_55%,#e9f7f0_100%)] shadow-[10px_10px_0px_0px_rgba(0,0,0,1)]">
+          <div className="border-b-4 border-black bg-black p-6 text-white">
+            <div className="flex items-center gap-3">
+              <div className="border-2 border-white p-2 shadow-[4px_4px_0px_0px_#FF6B35]">
+                <IconBuildingSkyscraper className="h-6 w-6 text-orange" />
+              </div>
+              <Badge className="border-2 border-orange bg-orange/20 px-3 py-1 font-black uppercase text-orange">
+                No AI systems registered
+              </Badge>
+            </div>
+            <h1 className="mt-4 text-3xl font-black uppercase">Register your first AI system</h1>
+            <p className="mt-2 text-sm text-slate-300">
+              FairMind has no AI systems registered yet. Onboard your first system to unlock bias detection,
+              compliance checks, risk tracking, and the full governance lifecycle.
+            </p>
+          </div>
+          <div className="p-6">
+            <div className="mb-6 space-y-3">
+              {[
+                { step: '1', label: 'Register', desc: 'Name, owner, risk tier, and workspace' },
+                { step: '2', label: 'Select frameworks', desc: 'EU AI Act, GDPR, ISO 42001, NIST AI RMF, DPDP Act' },
+                { step: '3', label: 'Queue bias scan', desc: 'Baseline fairness profile for the system' },
+                { step: '4', label: 'Enter lifecycle', desc: 'Assess → Govern → Remediate → Operate' },
+              ].map((item) => (
+                <div key={item.step} className="flex items-start gap-4 border-2 border-black bg-white p-3 shadow-[2px_2px_0px_0px_#000]">
+                  <div className="flex h-7 w-7 shrink-0 items-center justify-center border-2 border-black bg-black font-black text-sm text-white">
+                    {item.step}
+                  </div>
+                  <div>
+                    <p className="font-black uppercase">{item.label}</p>
+                    <p className="text-sm text-muted-foreground">{item.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <Button asChild className="w-full border-2 border-black py-4 text-lg font-black uppercase shadow-[4px_4px_0px_0px_#FF6B35]">
+              <Link href="/onboard">
+                <IconBuildingSkyscraper className="mr-3 h-5 w-5" />
+                Start onboarding
+                <IconArrowRight className="ml-3 h-5 w-5" />
+              </Link>
+            </Button>
+          </div>
+        </Card>
       </div>
     )
   }
