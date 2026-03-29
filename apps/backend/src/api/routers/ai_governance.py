@@ -185,198 +185,20 @@ def _generate_automated_risks(system_id: str, risk_type: Optional[str] = None) -
     return sorted(selected, key=lambda item: (_severity_rank(item["severity"]), item["risk_score"]), reverse=True)
 
 
+_tables_ready = False
+
+
 def _ensure_tables(db: Session) -> None:
-    """Create governance tables if missing (idempotent)."""
-    db.execute(
-        text(
-            """
-            CREATE TABLE IF NOT EXISTS governance_workspaces (
-                id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                owner TEXT,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            )
-            """
-        )
-    )
-    db.execute(
-        text(
-            """
-            CREATE TABLE IF NOT EXISTS governance_ai_systems (
-                id TEXT PRIMARY KEY,
-                workspace_id TEXT NOT NULL,
-                name TEXT NOT NULL,
-                owner TEXT,
-                risk_tier TEXT NOT NULL,
-                lifecycle_stage TEXT NOT NULL,
-                metadata_json TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                FOREIGN KEY (workspace_id) REFERENCES governance_workspaces(id)
-            )
-            """
-        )
-    )
-    db.execute(
-        text(
-            "CREATE INDEX IF NOT EXISTS idx_governance_ai_systems_workspace_id "
-            "ON governance_ai_systems(workspace_id)"
-        )
-    )
-    db.execute(
-        text(
-            """
-            CREATE TABLE IF NOT EXISTS governance_policies (
-                id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                framework TEXT NOT NULL,
-                description TEXT,
-                rules_json TEXT NOT NULL,
-                status TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            )
-            """
-        )
-    )
-    db.execute(
-        text(
-            """
-            CREATE TABLE IF NOT EXISTS governance_approval_workflows (
-                id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                entity_type TEXT NOT NULL,
-                steps_json TEXT NOT NULL,
-                is_active INTEGER NOT NULL,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            )
-            """
-        )
-    )
-    db.execute(
-        text(
-            """
-            CREATE TABLE IF NOT EXISTS governance_approval_requests (
-                id TEXT PRIMARY KEY,
-                workflow_id TEXT NOT NULL,
-                entity_type TEXT NOT NULL,
-                entity_id TEXT NOT NULL,
-                requested_by TEXT,
-                status TEXT NOT NULL,
-                current_step INTEGER NOT NULL,
-                decision_notes TEXT,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                FOREIGN KEY (workflow_id) REFERENCES governance_approval_workflows(id)
-            )
-            """
-        )
-    )
-    db.execute(
-        text(
-            """
-            CREATE TABLE IF NOT EXISTS governance_approval_decisions (
-                id TEXT PRIMARY KEY,
-                request_id TEXT NOT NULL,
-                decision TEXT NOT NULL,
-                notes TEXT,
-                decided_by TEXT,
-                created_at TEXT NOT NULL,
-                FOREIGN KEY (request_id) REFERENCES governance_approval_requests(id)
-            )
-            """
-        )
-    )
-    db.execute(
-        text(
-            """
-            CREATE TABLE IF NOT EXISTS governance_evidence (
-                id TEXT PRIMARY KEY,
-                system_id TEXT NOT NULL,
-                evidence_type TEXT NOT NULL,
-                content_json TEXT NOT NULL,
-                confidence REAL NOT NULL,
-                metadata_json TEXT NOT NULL,
-                created_at TEXT NOT NULL
-            )
-            """
-        )
-    )
-    db.execute(
-        text(
-            """
-            CREATE TABLE IF NOT EXISTS governance_evidence_links (
-                id TEXT PRIMARY KEY,
-                evidence_id TEXT NOT NULL,
-                entity_type TEXT NOT NULL,
-                entity_id TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                FOREIGN KEY (evidence_id) REFERENCES governance_evidence(id)
-            )
-            """
-        )
-    )
-    db.execute(
-        text(
-            """
-            CREATE TABLE IF NOT EXISTS governance_risks (
-                id TEXT PRIMARY KEY,
-                system_id TEXT NOT NULL,
-                title TEXT NOT NULL,
-                severity TEXT NOT NULL,
-                status TEXT NOT NULL,
-                description TEXT NOT NULL,
-                mitigation TEXT NOT NULL,
-                likelihood TEXT NOT NULL,
-                risk_score REAL NOT NULL,
-                source TEXT NOT NULL,
-                categories_json TEXT NOT NULL,
-                metadata_json TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            )
-            """
-        )
-    )
-    db.execute(
-        text(
-            """
-            CREATE TABLE IF NOT EXISTS governance_remediation_tasks (
-                id TEXT PRIMARY KEY,
-                system_id TEXT NOT NULL,
-                title TEXT NOT NULL,
-                description TEXT NOT NULL,
-                source_type TEXT NOT NULL,
-                source_id TEXT NOT NULL,
-                linked_risk_ids_json TEXT NOT NULL,
-                owner TEXT,
-                priority TEXT NOT NULL,
-                due_date TEXT,
-                status TEXT NOT NULL,
-                retest_required INTEGER NOT NULL,
-                retest_status TEXT NOT NULL,
-                notes TEXT,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            )
-            """
-        )
-    )
-    db.execute(
-        text(
-            "CREATE INDEX IF NOT EXISTS idx_governance_remediation_tasks_system_id "
-            "ON governance_remediation_tasks(system_id)"
-        )
-    )
-    db.execute(
-        text(
-            "CREATE INDEX IF NOT EXISTS idx_governance_remediation_tasks_source_id "
-            "ON governance_remediation_tasks(source_id)"
-        )
-    )
-    db.commit()
+    """Ensure governance tables exist via ORM metadata (runs once)."""
+    global _tables_ready
+    if _tables_ready:
+        return
+    # Import models so Base.metadata is populated, then create all.
+    import database.governance_models  # noqa: F401
+    from database.connection import Base, db_manager
+
+    Base.metadata.create_all(bind=db_manager.engine)
+    _tables_ready = True
 
 
 class PolicyCreateRequest(BaseModel):
@@ -1294,6 +1116,324 @@ async def get_framework_controls(framework: str):
     return {
         "framework": framework,
         "controls": found["controls"],
+    }
+
+
+# ---------------------------------------------------------------------------
+# Framework Controls (DB-backed CRUD)
+# ---------------------------------------------------------------------------
+
+
+class FrameworkControlCreateRequest(BaseModel):
+    control_id: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    description: str = ""
+    status: str = Field(default="not_started")
+    owner: Optional[str] = None
+    evidence_required: int = Field(default=0, ge=0)
+
+
+@router.get("/frameworks/{framework}/controls")
+async def list_framework_controls(framework: str, db: Session = Depends(get_db)):
+    """List all controls stored in the DB for a given framework."""
+    _ensure_tables(db)
+    rows = db.execute(
+        text(
+            "SELECT id, framework, control_id, title, description, status, owner, evidence_required, created_at, updated_at "
+            "FROM governance_framework_controls WHERE framework = :framework ORDER BY control_id"
+        ),
+        {"framework": framework},
+    ).fetchall()
+    return [
+        {
+            "id": row[0],
+            "framework": row[1],
+            "controlId": row[2],
+            "title": row[3],
+            "description": row[4],
+            "status": row[5],
+            "owner": row[6],
+            "evidenceRequired": row[7],
+            "createdAt": row[8],
+            "updatedAt": row[9],
+        }
+        for row in rows
+    ]
+
+
+@router.post("/frameworks/{framework}/controls")
+async def create_framework_control(
+    framework: str,
+    request: FrameworkControlCreateRequest,
+    db: Session = Depends(get_db),
+):
+    """Create a framework control record in the DB."""
+    _ensure_tables(db)
+    control_id_pk = str(uuid.uuid4())
+    now = _utc_now_iso()
+    db.execute(
+        text(
+            "INSERT INTO governance_framework_controls "
+            "(id, framework, control_id, title, description, status, owner, evidence_required, created_at, updated_at) "
+            "VALUES (:id, :framework, :control_id, :title, :description, :status, :owner, :evidence_required, :created_at, :updated_at)"
+        ),
+        {
+            "id": control_id_pk,
+            "framework": framework,
+            "control_id": request.control_id,
+            "title": request.title,
+            "description": request.description,
+            "status": request.status,
+            "owner": request.owner,
+            "evidence_required": request.evidence_required,
+            "created_at": now,
+            "updated_at": now,
+        },
+    )
+    db.commit()
+    return {
+        "id": control_id_pk,
+        "framework": framework,
+        "controlId": request.control_id,
+        "title": request.title,
+        "description": request.description,
+        "status": request.status,
+        "owner": request.owner,
+        "evidenceRequired": request.evidence_required,
+        "createdAt": now,
+        "updatedAt": now,
+    }
+
+
+# ---------------------------------------------------------------------------
+# System-scoped evidence and approval endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.get("/systems/{system_id}/evidence")
+async def list_system_evidence(system_id: str, db: Session = Depends(get_db)):
+    """List all evidence items linked to an AI system."""
+    _ensure_tables(db)
+    rows = db.execute(
+        text(
+            "SELECT id, system_id, control_id, evidence_type, title, source, content_json, "
+            "confidence, status, uploaded_by, metadata_json, captured_at, created_at "
+            "FROM governance_evidence WHERE system_id = :system_id ORDER BY created_at DESC"
+        ),
+        {"system_id": system_id},
+    ).fetchall()
+    return [
+        {
+            "id": row[0],
+            "systemId": row[1],
+            "controlId": row[2],
+            "evidenceType": row[3],
+            "title": row[4],
+            "source": row[5],
+            "content": _load_json_value(row[6], {}),
+            "confidence": row[7],
+            "status": row[8],
+            "uploadedBy": row[9],
+            "metadata": _load_json_value(row[10], {}),
+            "capturedAt": row[11],
+            "createdAt": row[12],
+        }
+        for row in rows
+    ]
+
+
+class SystemEvidenceCreateRequest(BaseModel):
+    control_id: Optional[str] = None
+    evidence_type: str = Field(min_length=1)
+    title: Optional[str] = None
+    source: Optional[str] = None
+    content: Dict[str, Any] = Field(default_factory=dict)
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    status: str = Field(default="draft")
+    uploaded_by: Optional[str] = None
+    captured_at: Optional[str] = None
+
+
+@router.post("/systems/{system_id}/evidence")
+async def create_system_evidence(
+    system_id: str,
+    request: SystemEvidenceCreateRequest,
+    db: Session = Depends(get_db),
+):
+    """Create an evidence item directly linked to an AI system."""
+    _ensure_tables(db)
+    # Verify AI system exists
+    row = db.execute(
+        text("SELECT id FROM governance_ai_systems WHERE id = :id"),
+        {"id": system_id},
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="AI system not found")
+
+    evidence_id = str(uuid.uuid4())
+    now = _utc_now_iso()
+    db.execute(
+        text(
+            "INSERT INTO governance_evidence "
+            "(id, system_id, control_id, evidence_type, title, source, content_json, "
+            "confidence, status, uploaded_by, metadata_json, captured_at, created_at) "
+            "VALUES (:id, :system_id, :control_id, :evidence_type, :title, :source, "
+            ":content_json, :confidence, :status, :uploaded_by, :metadata_json, :captured_at, :created_at)"
+        ),
+        {
+            "id": evidence_id,
+            "system_id": system_id,
+            "control_id": request.control_id,
+            "evidence_type": request.evidence_type,
+            "title": request.title,
+            "source": request.source,
+            "content_json": json.dumps(request.content),
+            "confidence": request.confidence,
+            "status": request.status,
+            "uploaded_by": request.uploaded_by,
+            "metadata_json": "{}",
+            "captured_at": request.captured_at or now,
+            "created_at": now,
+        },
+    )
+    db.commit()
+    return {
+        "id": evidence_id,
+        "systemId": system_id,
+        "controlId": request.control_id,
+        "evidenceType": request.evidence_type,
+        "title": request.title,
+        "source": request.source,
+        "confidence": request.confidence,
+        "status": request.status,
+        "uploadedBy": request.uploaded_by,
+        "capturedAt": request.captured_at or now,
+        "createdAt": now,
+    }
+
+
+@router.get("/systems/{system_id}/approvals")
+async def list_system_approvals(system_id: str, db: Session = Depends(get_db)):
+    """List all approval requests linked to an AI system."""
+    _ensure_tables(db)
+    rows = db.execute(
+        text(
+            "SELECT id, workflow_id, entity_type, entity_id, ai_system_id, requested_by, "
+            "status, current_step, decision, decision_notes, decided_by, decided_at, created_at, updated_at "
+            "FROM governance_approval_requests "
+            "WHERE entity_type = 'ai_system' AND entity_id = :system_id "
+            "   OR ai_system_id = :system_id "
+            "ORDER BY created_at DESC"
+        ),
+        {"system_id": system_id},
+    ).fetchall()
+    return [
+        {
+            "id": row[0],
+            "workflowId": row[1],
+            "entityType": row[2],
+            "entityId": row[3],
+            "aiSystemId": row[4],
+            "requestedBy": row[5],
+            "status": row[6],
+            "currentStep": row[7],
+            "decision": row[8],
+            "decisionNotes": row[9],
+            "decidedBy": row[10],
+            "decidedAt": row[11],
+            "createdAt": row[12],
+            "updatedAt": row[13],
+        }
+        for row in rows
+    ]
+
+
+@router.post("/systems/{system_id}/approvals")
+async def create_system_approval(
+    system_id: str,
+    request: SystemApprovalRequestCreateRequest,
+    db: Session = Depends(get_db),
+):
+    """Create an approval request for an AI system, using the default system workflow."""
+    _ensure_tables(db)
+    # Verify system exists
+    system_row = db.execute(
+        text("SELECT id FROM governance_ai_systems WHERE id = :id"),
+        {"id": system_id},
+    ).fetchone()
+    if not system_row:
+        raise HTTPException(status_code=404, detail="AI system not found")
+
+    # Find or create a default workflow for ai_system entity type
+    workflow_row = db.execute(
+        text(
+            "SELECT id FROM governance_approval_workflows "
+            "WHERE entity_type = 'ai_system' AND is_active = 1 LIMIT 1"
+        )
+    ).fetchone()
+
+    if not workflow_row:
+        workflow_id = str(uuid.uuid4())
+        now = _utc_now_iso()
+        db.execute(
+            text(
+                "INSERT INTO governance_approval_workflows "
+                "(id, name, entity_type, steps_json, is_active, created_by, created_at, updated_at) "
+                "VALUES (:id, :name, :entity_type, :steps_json, :is_active, :created_by, :created_at, :updated_at)"
+            ),
+            {
+                "id": workflow_id,
+                "name": "AI System Release Approval",
+                "entity_type": "ai_system",
+                "steps_json": json.dumps([
+                    {"step": 1, "name": "Technical Review", "approver_role": "tech_lead"},
+                    {"step": 2, "name": "Compliance Review", "approver_role": "compliance_officer"},
+                    {"step": 3, "name": "Final Approval", "approver_role": "governance_lead"},
+                ]),
+                "is_active": 1,
+                "created_by": "system",
+                "created_at": now,
+                "updated_at": now,
+            },
+        )
+    else:
+        workflow_id = workflow_row[0]
+
+    request_id = str(uuid.uuid4())
+    now = _utc_now_iso()
+    db.execute(
+        text(
+            "INSERT INTO governance_approval_requests "
+            "(id, workflow_id, entity_type, entity_id, ai_system_id, requested_by, "
+            "status, current_step, created_at, updated_at) "
+            "VALUES (:id, :workflow_id, :entity_type, :entity_id, :ai_system_id, "
+            ":requested_by, :status, :current_step, :created_at, :updated_at)"
+        ),
+        {
+            "id": request_id,
+            "workflow_id": workflow_id,
+            "entity_type": "ai_system",
+            "entity_id": system_id,
+            "ai_system_id": system_id,
+            "requested_by": request.requested_by,
+            "status": "pending",
+            "current_step": 0,
+            "created_at": now,
+            "updated_at": now,
+        },
+    )
+    db.commit()
+    return {
+        "id": request_id,
+        "workflowId": workflow_id,
+        "entityType": "ai_system",
+        "entityId": system_id,
+        "aiSystemId": system_id,
+        "requestedBy": request.requested_by,
+        "status": "pending",
+        "currentStep": 0,
+        "createdAt": now,
+        "updatedAt": now,
     }
 
 

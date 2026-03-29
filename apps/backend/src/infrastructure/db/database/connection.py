@@ -53,8 +53,11 @@ class DatabaseManager:
         self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
     
     def create_tables(self):
-        """Create all database tables"""
+        """Create all database tables defined via ORM models."""
         try:
+            # Import all model modules so Base.metadata is populated
+            import database.governance_models  # noqa: F401
+
             Base.metadata.create_all(bind=self.engine)
             logger.info("Database tables created successfully")
         except Exception as e:
