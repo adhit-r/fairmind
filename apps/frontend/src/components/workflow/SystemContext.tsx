@@ -138,6 +138,9 @@ type SystemContextValue = {
     systemOwner: string
     riskTier: AISystemSummary["riskTier"]
     stage: AISystemSummary["stage"]
+    systemType?: string
+    systemVersion?: string
+    complianceFrameworks?: string[]
   }) => Promise<AISystemSummary>
 }
 
@@ -340,6 +343,9 @@ export function SystemContextProvider({ children }: { children: React.ReactNode 
     systemOwner: string
     riskTier: AISystemSummary["riskTier"]
     stage: AISystemSummary["stage"]
+    systemType?: string
+    systemVersion?: string
+    complianceFrameworks?: string[]
   }) => {
     const workspaceResponse: ApiResponse<WorkspaceRecord> = await apiClient.post(
       API_ENDPOINTS.aiGovernance.workspaces,
@@ -364,6 +370,9 @@ export function SystemContextProvider({ children }: { children: React.ReactNode 
         metadata: {
           created_from: "onboard",
           workspace_name: params.workspaceName,
+          ...(params.systemType && { system_type: params.systemType }),
+          ...(params.systemVersion && { system_version: params.systemVersion }),
+          ...(params.complianceFrameworks && { compliance_frameworks: params.complianceFrameworks }),
         },
       }
     )
