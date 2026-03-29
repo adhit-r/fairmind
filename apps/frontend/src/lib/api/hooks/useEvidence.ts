@@ -1,5 +1,5 @@
 /**
- * Evidence API Hooks
+ * Evidence API Hooks — V2
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -10,17 +10,59 @@ export interface Evidence {
   id: string
   systemId: string
   type: string
+  title: string
+  source: string
+  status: string
+  uploadedBy: string
+  capturedAt: string
   content: any
   confidence: number
-  timestamp: string
   metadata: Record<string, any>
+  tags: string[]
+  folder: string
+  artifactKind: string
+  fileUrl: string
+  fileName: string
+  fileSize: number
+  timestamp: string
+  stale: boolean
+  linkedEntityCount: number
+  linkedEntities: EvidenceLink[]
+  metadataSummary: Record<string, any>
+  workflowState: string
+}
+
+export interface EvidenceLink {
+  id: string
+  entityType: string
+  entityId: string
+  createdAt: string
 }
 
 export interface CollectEvidenceInput {
   systemId: string
   type: string
+  title?: string
   content: unknown
   confidence: number
+  tags?: string[]
+  folder?: string
+  artifactKind?: string
+  fileUrl?: string
+  fileName?: string
+  fileSize?: number
+  uploadedBy?: string
+}
+
+export interface EvidenceUpdateInput {
+  title?: string
+  status?: string
+  tags?: string[]
+  folder?: string
+  artifactKind?: string
+  fileUrl?: string
+  fileName?: string
+  fileSize?: number
 }
 
 export interface EvidenceSummary {
@@ -55,22 +97,8 @@ function sortEvidence(records: Evidence[]) {
   return [...records].sort((left, right) => {
     const leftTime = new Date(left.timestamp).getTime()
     const rightTime = new Date(right.timestamp).getTime()
-
     return rightTime - leftTime
   })
-}
-
-function normalizeEvidence(record: Evidence, fallback: CollectEvidenceInput): Evidence {
-  return {
-    ...record,
-    id: record.id || `evidence-${Date.now()}`,
-    systemId: record.systemId || fallback.systemId,
-    type: record.type || fallback.type,
-    content: record.content ?? fallback.content,
-    confidence: typeof record.confidence === 'number' ? record.confidence : fallback.confidence,
-    timestamp: record.timestamp || new Date().toISOString(),
-    metadata: record.metadata || {},
-  }
 }
 
 export function useEvidence(systemId?: string) {
@@ -89,7 +117,7 @@ export function useEvidence(systemId?: string) {
 
     try {
       const [recordsResponse, summaryResponse] = await Promise.all([
-        apiClient.get<Evidence[]>(API_ENDPOINTS.aiGovernance.evidence(targetSystemId)),
+        apiClient.get<Evidence[]>(API_ENDPOINTS.aiGovernance.evidenceV2(targetSystemId)),
         apiClient.get<EvidenceSummary>(API_ENDPOINTS.aiGovernance.evidenceSummary(targetSystemId)),
       ])
 
@@ -110,13 +138,9 @@ export function useEvidence(systemId?: string) {
       if (currentRequest !== requestVersion.current) {
         return
       }
-
       setError(err instanceof Error ? err : new Error('Unknown error'))
       setData([])
-      setSummary({
-        ...EMPTY_SUMMARY,
-        systemId: targetSystemId,
-      })
+      setSummary({ ...EMPTY_SUMMARY, systemId: targetSystemId })
     } finally {
       if (currentRequest === requestVersion.current) {
         setLoading(false)
@@ -133,7 +157,6 @@ export function useEvidence(systemId?: string) {
       setLoading(false)
       return
     }
-
     void loadEvidence(systemId)
   }, [loadEvidence, systemId])
 
@@ -146,43 +169,116 @@ export function useEvidence(systemId?: string) {
       setLoading(false)
       return Promise.resolve()
     }
-
     return loadEvidence(systemId)
   }, [loadEvidence, systemId])
 
-  const collectEvidence = useCallback(async (params: CollectEvidenceInput) => {
+  const collectEvidence = useCallback(async (params: CollectEvidenceInput): Promise<Evidence> => {
     setCollecting(true)
     setError(null)
-
     try {
       const response: ApiResponse<Evidence> = await apiClient.post(
-        API_ENDPOINTS.aiGovernance.evidenceCollect,
-        params
+        API_ENDPOINTS.aiGovernance.evidenceCollectV2,
+        {
+          system_id: params.systemId,
+          type: params.type,
+          title: params.title || '',
+          content: params.content ?? {},
+          confidence: params.confidence,
+          tags: params.tags || [],
+          folder: params.folder || '',
+          artifact_kind: params.artifactKind || 'narrative',
+          file_url: params.fileUrl || '',
+          file_name: params.fileName || '',
+          file_size: params.fileSize || 0,
+          uploaded_by: params.uploadedBy || '',
+        }
       )
-
       if (response.success && response.data) {
-        const nextEvidence = normalizeEvidence(response.data, params)
-
-        setData((current) =>
-          sortEvidence([
-            nextEvidence,
-            ...current.filter((item) => item.id !== nextEvidence.id),
-          ])
-        )
+        const item = response.data
+        setData((current) => sortEvidence([item, ...current.filter((e) => e.id !== item.id)]))
         void refreshEvidence()
-
-        return nextEvidence
-      } else {
-        throw new Error(response.error || 'Evidence collection failed')
+        return item
       }
+      throw new Error(response.error || 'Evidence collection failed')
     } catch (err) {
-      const error = err instanceof Error ? err : new Error('Evidence collection failed')
-      setError(error)
-      throw error
+      const e = err instanceof Error ? err : new Error('Evidence collection failed')
+      setError(e)
+      throw e
     } finally {
       setCollecting(false)
     }
+  }, [refreshEvidence])
+
+  const updateEvidence = useCallback(async (evidenceId: string, updates: EvidenceUpdateInput): Promise<Evidence> => {
+    const response: ApiResponse<Evidence> = await apiClient.patch(
+      API_ENDPOINTS.aiGovernance.evidenceItem(evidenceId),
+      {
+        title: updates.title,
+        status: updates.status,
+        tags: updates.tags,
+        folder: updates.folder,
+        artifact_kind: updates.artifactKind,
+        file_url: updates.fileUrl,
+        file_name: updates.fileName,
+        file_size: updates.fileSize,
+      }
+    )
+    if (response.success && response.data) {
+      const updated = response.data
+      setData((current) =>
+        sortEvidence(current.map((e) => (e.id === evidenceId ? updated : e)))
+      )
+      return updated
+    }
+    throw new Error(response.error || 'Update failed')
   }, [])
 
-  return { data, summary, loading, collecting, error, collectEvidence, refreshEvidence }
+  const addLink = useCallback(async (evidenceId: string, entityType: string, entityId: string): Promise<EvidenceLink> => {
+    const response: ApiResponse<EvidenceLink> = await apiClient.post(
+      API_ENDPOINTS.aiGovernance.evidenceItemLinks(evidenceId),
+      { entity_type: entityType, entity_id: entityId }
+    )
+    if (response.success && response.data) {
+      const link = response.data
+      setData((current) =>
+        current.map((e) => {
+          if (e.id !== evidenceId) return e
+          const newLinks = [...e.linkedEntities, link]
+          return { ...e, linkedEntities: newLinks, linkedEntityCount: newLinks.length, workflowState: 'linked' }
+        })
+      )
+      return link
+    }
+    throw new Error(response.error || 'Failed to add link')
+  }, [])
+
+  const removeLink = useCallback(async (evidenceId: string, linkId: string): Promise<void> => {
+    const response: ApiResponse<{ deleted: boolean }> = await apiClient.delete(
+      API_ENDPOINTS.aiGovernance.evidenceItemLink(evidenceId, linkId)
+    )
+    if (response.success) {
+      setData((current) =>
+        current.map((e) => {
+          if (e.id !== evidenceId) return e
+          const newLinks = e.linkedEntities.filter((l) => l.id !== linkId)
+          return { ...e, linkedEntities: newLinks, linkedEntityCount: newLinks.length, workflowState: newLinks.length > 0 ? 'linked' : 'collected' }
+        })
+      )
+      return
+    }
+    throw new Error(response.error || 'Failed to remove link')
+  }, [])
+
+  return {
+    data,
+    summary,
+    loading,
+    collecting,
+    error,
+    collectEvidence,
+    updateEvidence,
+    addLink,
+    removeLink,
+    refreshEvidence,
+  }
 }

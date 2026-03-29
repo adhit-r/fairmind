@@ -1948,6 +1948,290 @@ async def create_system_approval_request(
     }
 
 
+# ---------------------------------------------------------------------------
+# Evidence Hub V2 — item-level CRUD and link management
+# ---------------------------------------------------------------------------
+
+def _serialize_evidence_item_v2(row: Any, link_rows: List[Any]) -> Dict[str, Any]:
+    """Serialize a full evidence row (V2 schema with title, status, tags, folder)."""
+    content = _load_json_value(row[3], {})
+    metadata = _load_json_value(row[5], {})
+    confidence = float(row[4])
+    links = [
+        {"id": lr[0], "entityType": lr[1], "entityId": lr[2], "createdAt": lr[3]}
+        for lr in link_rows
+    ]
+    tags = metadata.get("tags") if isinstance(metadata.get("tags"), list) else []
+    folder = metadata.get("folder") or ""
+    artifact_kind = metadata.get("artifact_kind") or "narrative"
+    file_url = metadata.get("file_url") or ""
+    file_name = metadata.get("file_name") or ""
+    file_size = metadata.get("file_size") or 0
+    created_at = row[6] or ""
+    # Stale = older than 90 days
+    stale = False
+    try:
+        created_dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+        age_days = (datetime.now(timezone.utc) - created_dt).days
+        stale = age_days > 90
+    except Exception:
+        pass
+    return {
+        "id": row[0],
+        "systemId": row[1],
+        "type": row[2],
+        "title": row[7] or "",
+        "source": row[8] or "",
+        "status": row[9] or "draft",
+        "uploadedBy": row[10] or "",
+        "capturedAt": row[11] or created_at,
+        "content": content,
+        "confidence": confidence,
+        "metadata": metadata,
+        "tags": tags,
+        "folder": folder,
+        "artifactKind": artifact_kind,
+        "fileUrl": file_url,
+        "fileName": file_name,
+        "fileSize": file_size,
+        "timestamp": created_at,
+        "stale": stale,
+        "linkedEntityCount": len(links),
+        "linkedEntities": links,
+        "metadataSummary": _evidence_metadata_summary(metadata, content, len(links), confidence),
+        "workflowState": "linked" if links else "collected",
+    }
+
+
+def _fetch_evidence_item_v2(db: Session, evidence_id: str) -> Optional[Dict[str, Any]]:
+    row = db.execute(
+        text(
+            "SELECT id, system_id, evidence_type, content_json, confidence, metadata_json, "
+            "created_at, title, source, status, uploaded_by, captured_at "
+            "FROM governance_evidence WHERE id = :id"
+        ),
+        {"id": evidence_id},
+    ).fetchone()
+    if not row:
+        return None
+    link_rows = db.execute(
+        text(
+            "SELECT id, entity_type, entity_id, created_at "
+            "FROM governance_evidence_links WHERE evidence_id = :eid ORDER BY created_at DESC"
+        ),
+        {"eid": evidence_id},
+    ).fetchall()
+    return _serialize_evidence_item_v2(row, link_rows)
+
+
+def _fetch_evidence_records_v2(db: Session, system_id: str) -> List[Dict[str, Any]]:
+    rows = db.execute(
+        text(
+            "SELECT id, system_id, evidence_type, content_json, confidence, metadata_json, "
+            "created_at, title, source, status, uploaded_by, captured_at "
+            "FROM governance_evidence WHERE system_id = :system_id ORDER BY created_at DESC"
+        ),
+        {"system_id": system_id},
+    ).fetchall()
+    if not rows:
+        return []
+    evidence_ids = [r[0] for r in rows]
+    # Bulk fetch links
+    placeholders = ",".join(f":eid{i}" for i in range(len(evidence_ids)))
+    link_rows = db.execute(
+        text(
+            f"SELECT evidence_id, id, entity_type, entity_id, created_at "
+            f"FROM governance_evidence_links WHERE evidence_id IN ({placeholders}) "
+            f"ORDER BY created_at DESC"
+        ),
+        {f"eid{i}": eid for i, eid in enumerate(evidence_ids)},
+    ).fetchall()
+    links_by_evidence_id: Dict[str, List[Any]] = {}
+    for lr in link_rows:
+        links_by_evidence_id.setdefault(lr[0], []).append((lr[1], lr[2], lr[3], lr[4]))
+    return [
+        _serialize_evidence_item_v2(row, links_by_evidence_id.get(row[0], []))
+        for row in rows
+    ]
+
+
+class EvidenceUpdateRequest(BaseModel):
+    title: Optional[str] = None
+    status: Optional[str] = None
+    tags: Optional[List[str]] = None
+    folder: Optional[str] = None
+    artifact_kind: Optional[str] = None
+    file_url: Optional[str] = None
+    file_name: Optional[str] = None
+    file_size: Optional[int] = None
+
+
+class EvidenceLinkItemRequest(BaseModel):
+    entity_type: str = Field(min_length=1)
+    entity_id: str = Field(min_length=1)
+
+
+class EvidenceCollectV2Request(BaseModel):
+    system_id: str = Field(min_length=1)
+    type: str = Field(min_length=1)
+    title: Optional[str] = None
+    content: Dict[str, Any] = Field(default_factory=dict)
+    confidence: float = Field(default=0.8, ge=0.0, le=1.0)
+    tags: List[str] = Field(default_factory=list)
+    folder: str = ""
+    artifact_kind: str = "narrative"
+    file_url: str = ""
+    file_name: str = ""
+    file_size: int = 0
+    uploaded_by: Optional[str] = None
+
+
+@router.get("/evidence-v2/{system_id}")
+async def list_evidence_v2(system_id: str, db: Session = Depends(get_db)):
+    """List evidence for a system with V2 schema (tags, folder, stale, full links)."""
+    _ensure_tables(db)
+    return _fetch_evidence_records_v2(db, system_id)
+
+
+@router.get("/evidence-item/{evidence_id}")
+async def get_evidence_item(evidence_id: str, db: Session = Depends(get_db)):
+    """Fetch a single evidence item by ID."""
+    _ensure_tables(db)
+    item = _fetch_evidence_item_v2(db, evidence_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Evidence not found")
+    return item
+
+
+@router.patch("/evidence-item/{evidence_id}")
+async def update_evidence_item(
+    evidence_id: str, request: EvidenceUpdateRequest, db: Session = Depends(get_db)
+):
+    """Update evidence title, status, tags, folder, or artifact metadata."""
+    _ensure_tables(db)
+    row = db.execute(
+        text("SELECT id, metadata_json FROM governance_evidence WHERE id = :id"),
+        {"id": evidence_id},
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Evidence not found")
+
+    metadata = _load_json_value(row[1], {})
+    if request.tags is not None:
+        metadata["tags"] = request.tags
+    if request.folder is not None:
+        metadata["folder"] = request.folder
+    if request.artifact_kind is not None:
+        metadata["artifact_kind"] = request.artifact_kind
+    if request.file_url is not None:
+        metadata["file_url"] = request.file_url
+    if request.file_name is not None:
+        metadata["file_name"] = request.file_name
+    if request.file_size is not None:
+        metadata["file_size"] = request.file_size
+
+    updates: Dict[str, Any] = {"id": evidence_id, "metadata_json": json.dumps(metadata)}
+    set_clauses = ["metadata_json = :metadata_json"]
+    if request.title is not None:
+        updates["title"] = request.title
+        set_clauses.append("title = :title")
+    if request.status is not None:
+        updates["status"] = request.status
+        set_clauses.append("status = :status")
+
+    db.execute(
+        text(f"UPDATE governance_evidence SET {', '.join(set_clauses)} WHERE id = :id"),
+        updates,
+    )
+    db.commit()
+    return _fetch_evidence_item_v2(db, evidence_id)
+
+
+@router.post("/evidence-item/{evidence_id}/links")
+async def add_evidence_item_link(
+    evidence_id: str, request: EvidenceLinkItemRequest, db: Session = Depends(get_db)
+):
+    """Add a cross-entity link to an evidence item."""
+    _ensure_tables(db)
+    exists = db.execute(
+        text("SELECT id FROM governance_evidence WHERE id = :id"), {"id": evidence_id}
+    ).fetchone()
+    if not exists:
+        raise HTTPException(status_code=404, detail="Evidence not found")
+    link_id = str(uuid.uuid4())
+    now = _utc_now_iso()
+    db.execute(
+        text(
+            "INSERT INTO governance_evidence_links (id, evidence_id, entity_type, entity_id, created_at) "
+            "VALUES (:id, :evidence_id, :entity_type, :entity_id, :created_at)"
+        ),
+        {
+            "id": link_id,
+            "evidence_id": evidence_id,
+            "entity_type": request.entity_type,
+            "entity_id": request.entity_id,
+            "created_at": now,
+        },
+    )
+    db.commit()
+    return {"id": link_id, "evidenceId": evidence_id, "entityType": request.entity_type, "entityId": request.entity_id, "createdAt": now}
+
+
+@router.delete("/evidence-item/{evidence_id}/links/{link_id}")
+async def remove_evidence_item_link(
+    evidence_id: str, link_id: str, db: Session = Depends(get_db)
+):
+    """Remove a cross-entity link from an evidence item."""
+    _ensure_tables(db)
+    result = db.execute(
+        text("DELETE FROM governance_evidence_links WHERE id = :link_id AND evidence_id = :evidence_id"),
+        {"link_id": link_id, "evidence_id": evidence_id},
+    )
+    db.commit()
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Link not found")
+    return {"deleted": True, "id": link_id}
+
+
+@router.post("/evidence/collect-v2")
+async def collect_evidence_v2(request: EvidenceCollectV2Request, db: Session = Depends(get_db)):
+    """Collect evidence with V2 schema support (tags, folder, artifact_kind, file_url)."""
+    _ensure_tables(db)
+    evidence_id = str(uuid.uuid4())
+    now = _utc_now_iso()
+    metadata: Dict[str, Any] = {
+        "tags": request.tags,
+        "folder": request.folder,
+        "artifact_kind": request.artifact_kind,
+        "file_url": request.file_url,
+        "file_name": request.file_name,
+        "file_size": request.file_size,
+    }
+    db.execute(
+        text(
+            "INSERT INTO governance_evidence "
+            "(id, system_id, evidence_type, title, content_json, confidence, status, uploaded_by, metadata_json, captured_at, created_at) "
+            "VALUES (:id, :system_id, :evidence_type, :title, :content_json, :confidence, :status, :uploaded_by, :metadata_json, :captured_at, :created_at)"
+        ),
+        {
+            "id": evidence_id,
+            "system_id": request.system_id,
+            "evidence_type": request.type,
+            "title": request.title or "",
+            "content_json": json.dumps(request.content),
+            "confidence": request.confidence,
+            "status": "draft",
+            "uploaded_by": request.uploaded_by or "",
+            "metadata_json": json.dumps(metadata),
+            "captured_at": now,
+            "created_at": now,
+        },
+    )
+    db.commit()
+    item = _fetch_evidence_item_v2(db, evidence_id)
+    return item
+
+
 @router.post("/evidence/collect")
 async def collect_evidence(request: EvidenceCollectRequest, db: Session = Depends(get_db)):
     _ensure_tables(db)
