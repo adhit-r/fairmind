@@ -2444,3 +2444,266 @@ async def update_remediation_task(
     if not updated_row:
         raise HTTPException(status_code=404, detail="Remediation task not found")
     return _serialize_remediation_task_row(updated_row)
+
+
+# ---------------------------------------------------------------------------
+# Audit Report Generation & History
+# ---------------------------------------------------------------------------
+
+def _ensure_audit_report_table(db: Session) -> None:
+    """Create governance_audit_reports table if it does not exist."""
+    db.execute(text("""
+        CREATE TABLE IF NOT EXISTS governance_audit_reports (
+            id TEXT PRIMARY KEY,
+            workspace_id TEXT,
+            system_id TEXT,
+            report_type TEXT NOT NULL,
+            title TEXT NOT NULL,
+            generated_by TEXT,
+            config_json TEXT,
+            data_json TEXT,
+            created_at TEXT NOT NULL
+        )
+    """))
+    db.commit()
+
+
+def _serialize_audit_report_row(row: Any) -> Dict[str, Any]:
+    config = {}
+    data = {}
+    try:
+        config = json.loads(row.config_json or "{}")
+    except Exception:
+        pass
+    try:
+        data = json.loads(row.data_json or "{}")
+    except Exception:
+        pass
+    return {
+        "id": row.id,
+        "systemId": row.system_id,
+        "reportType": row.report_type,
+        "title": row.title,
+        "generatedBy": row.generated_by,
+        "config": config,
+        "data": data,
+        "createdAt": row.created_at,
+    }
+
+
+class AuditReportGenerateRequest(BaseModel):
+    system_id: str
+    report_type: str  # compliance | bias | governance
+    title: Optional[str] = None
+    frameworks: Optional[List[str]] = None
+    date_from: Optional[str] = None
+    date_to: Optional[str] = None
+    sections: Optional[List[str]] = None
+    generated_by: Optional[str] = None
+
+
+@router.post("/reports/generate")
+async def generate_audit_report(
+    request: AuditReportGenerateRequest,
+    db: Session = Depends(get_db),
+):
+    """Generate and persist a governance audit report snapshot."""
+    _ensure_tables(db)
+    _ensure_audit_report_table(db)
+
+    system_id = request.system_id
+
+    # --- collect data snapshot ---
+    # Risks
+    risk_rows = db.execute(
+        text(
+            "SELECT id, title, severity, status, description, mitigation, likelihood, risk_score "
+            "FROM governance_risks WHERE system_id = :sid"
+        ),
+        {"sid": system_id},
+    ).fetchall()
+    risks_data = [
+        {
+            "id": r.id,
+            "title": r.title,
+            "severity": r.severity,
+            "status": r.status,
+            "description": r.description or "",
+            "mitigation": r.mitigation or "",
+            "likelihood": r.likelihood or "",
+            "riskScore": r.risk_score or 0,
+        }
+        for r in risk_rows
+    ]
+
+    # Evidence
+    evidence_rows = db.execute(
+        text(
+            "SELECT id, evidence_type, title, status, confidence, captured_at "
+            "FROM governance_evidence WHERE system_id = :sid"
+        ),
+        {"sid": system_id},
+    ).fetchall()
+    evidence_data = [
+        {
+            "id": e.id,
+            "type": e.evidence_type,
+            "title": e.title or "",
+            "status": e.status or "",
+            "confidence": e.confidence or 0,
+            "capturedAt": e.captured_at or "",
+        }
+        for e in evidence_rows
+    ]
+
+    # Remediation
+    remediation_rows = db.execute(
+        text(
+            "SELECT id, title, status, priority, owner, due_date, created_at, updated_at "
+            "FROM governance_remediation_tasks WHERE system_id = :sid"
+        ),
+        {"sid": system_id},
+    ).fetchall()
+    remediation_data = [
+        {
+            "id": t.id,
+            "title": t.title,
+            "status": t.status,
+            "priority": t.priority or "",
+            "owner": t.owner or "",
+            "dueDate": t.due_date or "",
+        }
+        for t in remediation_rows
+    ]
+
+    # Approvals
+    approval_rows = db.execute(
+        text(
+            "SELECT id, status, requested_by, decision_notes, created_at "
+            "FROM governance_approval_requests WHERE system_id = :sid ORDER BY created_at DESC"
+        ),
+        {"sid": system_id},
+    ).fetchall()
+    approvals_data = [
+        {
+            "id": a.id,
+            "status": a.status,
+            "requestedBy": a.requested_by or "",
+            "decisionNotes": a.decision_notes or "",
+            "createdAt": a.created_at,
+        }
+        for a in approval_rows
+    ]
+
+    # System info
+    sys_row = db.execute(
+        text(
+            "SELECT id, name, owner, risk_tier, lifecycle_stage, readiness, created_at, updated_at "
+            "FROM governance_ai_systems WHERE id = :sid"
+        ),
+        {"sid": system_id},
+    ).fetchone()
+    system_data = {}
+    if sys_row:
+        system_data = {
+            "id": sys_row.id,
+            "name": sys_row.name,
+            "owner": sys_row.owner or "",
+            "riskTier": sys_row.risk_tier,
+            "lifecycleStage": sys_row.lifecycle_stage,
+            "readiness": sys_row.readiness or 0,
+        }
+
+    data_snapshot = {
+        "system": system_data,
+        "risks": risks_data,
+        "evidence": evidence_data,
+        "remediation": remediation_data,
+        "approvals": approvals_data,
+        "generatedAt": _utc_now_iso(),
+    }
+
+    config_snapshot = {
+        "frameworks": request.frameworks or [],
+        "dateFrom": request.date_from or "",
+        "dateTo": request.date_to or "",
+        "sections": request.sections or [],
+    }
+
+    type_labels = {
+        "compliance": "Compliance Audit Report",
+        "bias": "Bias Assessment Report",
+        "governance": "Governance Summary Report",
+    }
+    title = request.title or type_labels.get(request.report_type, "Audit Report")
+
+    report_id = str(uuid.uuid4())
+    now = _utc_now_iso()
+    db.execute(
+        text(
+            "INSERT INTO governance_audit_reports (id, system_id, report_type, title, generated_by, config_json, data_json, created_at) "
+            "VALUES (:id, :system_id, :report_type, :title, :generated_by, :config_json, :data_json, :created_at)"
+        ),
+        {
+            "id": report_id,
+            "system_id": system_id,
+            "report_type": request.report_type,
+            "title": title,
+            "generated_by": request.generated_by or "",
+            "config_json": json.dumps(config_snapshot),
+            "data_json": json.dumps(data_snapshot),
+            "created_at": now,
+        },
+    )
+    db.commit()
+
+    row = db.execute(
+        text("SELECT id, system_id, report_type, title, generated_by, config_json, data_json, created_at FROM governance_audit_reports WHERE id = :id"),
+        {"id": report_id},
+    ).fetchone()
+    return _serialize_audit_report_row(row)
+
+
+@router.get("/reports")
+async def list_audit_reports(
+    system_id: Optional[str] = Query(None),
+    report_type: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """List previously generated audit reports."""
+    _ensure_tables(db)
+    _ensure_audit_report_table(db)
+
+    conditions = []
+    params: Dict[str, Any] = {}
+    if system_id:
+        conditions.append("system_id = :system_id")
+        params["system_id"] = system_id
+    if report_type:
+        conditions.append("report_type = :report_type")
+        params["report_type"] = report_type
+
+    where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    rows = db.execute(
+        text(
+            f"SELECT id, system_id, report_type, title, generated_by, config_json, data_json, created_at "
+            f"FROM governance_audit_reports {where} ORDER BY created_at DESC LIMIT 50"
+        ),
+        params,
+    ).fetchall()
+    return [_serialize_audit_report_row(r) for r in rows]
+
+
+@router.get("/reports/{report_id}")
+async def get_audit_report(report_id: str, db: Session = Depends(get_db)):
+    """Get a specific audit report with full data snapshot."""
+    _ensure_tables(db)
+    _ensure_audit_report_table(db)
+
+    row = db.execute(
+        text("SELECT id, system_id, report_type, title, generated_by, config_json, data_json, created_at FROM governance_audit_reports WHERE id = :id"),
+        {"id": report_id},
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Report not found")
+    return _serialize_audit_report_row(row)

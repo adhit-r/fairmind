@@ -4,7 +4,7 @@ Canonical governance data models for AI system management.
 Tables: governance_workspaces, governance_ai_systems, governance_framework_controls,
 governance_evidence, governance_evidence_links, governance_approval_workflows,
 governance_approval_requests, governance_approval_decisions, governance_policies,
-governance_risks, governance_remediation_tasks.
+governance_risks, governance_remediation_tasks, governance_audit_reports.
 """
 
 import enum
@@ -488,3 +488,27 @@ class GovernanceIncidentHistory(Base):
 
     def __repr__(self) -> str:
         return f"<GovernanceIncidentHistory(id={self.id}, incident_id={self.incident_id})>"
+
+
+class GovernanceAuditReport(Base):
+    """Generated audit reports with config snapshot and export history."""
+
+    __tablename__ = "governance_audit_reports"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    workspace_id = Column(String, ForeignKey("governance_workspaces.id"), nullable=True, index=True)
+    system_id = Column(String, ForeignKey("governance_ai_systems.id"), nullable=True, index=True)
+    report_type = Column(String, nullable=False)  # compliance | bias | governance
+    title = Column(String, nullable=False)
+    generated_by = Column(String, nullable=True)
+    config_json = Column(Text, nullable=True)   # JSON: frameworks, date_range, sections
+    data_json = Column(Text, nullable=True)     # Full snapshot of report data at generation time
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+    __table_args__ = (
+        Index("idx_governance_audit_reports_system_id", "system_id"),
+        Index("idx_governance_audit_reports_type", "report_type"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<GovernanceAuditReport(id={self.id}, type={self.report_type})>"

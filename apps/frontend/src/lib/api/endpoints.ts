@@ -142,6 +142,8 @@ export const API_ENDPOINTS = {
     systems: '/api/v1/ai-governance/systems',
     system: (systemId: string) => `/api/v1/ai-governance/systems/${systemId}`,
     generateReport: '/api/v1/ai-governance/reports/generate',
+    listReports: '/api/v1/ai-governance/reports',
+    getReport: (reportId: string) => `/api/v1/ai-governance/reports/${reportId}`,
     exportReport: (reportId: string) => `/api/v1/ai-governance/reports/${reportId}/export`,
     assessRisks: '/api/v1/ai-governance/risks/assess',
     incidents: '/api/v1/ai-governance/incidents',
