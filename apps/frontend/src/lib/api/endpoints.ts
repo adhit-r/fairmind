@@ -153,6 +153,12 @@ export const API_ENDPOINTS = {
     modelExplainabilitySummary: (modelId: string) => `/api/v1/ai-governance/ai-models/${modelId}/explainability/summary`,
     modelBiasSummary: (modelId: string) => `/api/v1/ai-governance/ai-models/${modelId}/bias/summary`,
     status: '/api/v1/ai-governance/status',
+    // Model Inventory
+    aiSystems: '/api/v1/ai-governance/systems',
+    aiSystem: (systemId: string) => `/api/v1/ai-governance/systems/${systemId}`,
+    aiSystemRisks: (systemId: string) => `/api/v1/ai-governance/dashboard/risk?system_id=${systemId}`,
+    aiSystemApprovals: (systemId: string) => `/api/v1/ai-governance/systems/${systemId}/approvals`,
+    lifecycleSummary: (systemId: string) => `/api/v1/ai-governance/lifecycle/${systemId}/summary`,
   },
 
   // AI BOM

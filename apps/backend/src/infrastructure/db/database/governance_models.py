@@ -98,6 +98,28 @@ class RemediationStatus(str, enum.Enum):
     DEFERRED = "deferred"
 
 
+class IncidentSeverity(str, enum.Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+
+class IncidentStatus(str, enum.Enum):
+    OPEN = "open"
+    INVESTIGATING = "investigating"
+    CONTAINED = "contained"
+    RESOLVED = "resolved"
+    CLOSED = "closed"
+
+
+class IncidentSource(str, enum.Enum):
+    BIAS_SCAN = "bias_scan"
+    COMPLIANCE_AUDIT = "compliance_audit"
+    MONITORING_ALERT = "monitoring_alert"
+    MANUAL = "manual"
+
+
 # ---------------------------------------------------------------------------
 # Models
 # ---------------------------------------------------------------------------
@@ -144,6 +166,7 @@ class GovernanceAISystem(Base):
     evidence_items = relationship("GovernanceEvidence", back_populates="ai_system", cascade="all, delete-orphan")
     risks = relationship("GovernanceRisk", back_populates="ai_system", cascade="all, delete-orphan")
     remediation_tasks = relationship("GovernanceRemediationTask", back_populates="ai_system", cascade="all, delete-orphan")
+    incidents = relationship("GovernanceIncident", back_populates="ai_system", cascade="all, delete-orphan")
 
     __table_args__ = (
         Index("idx_governance_ai_systems_workspace_id", "workspace_id"),
@@ -404,3 +427,64 @@ class GovernanceRemediationTask(Base):
 
     def __repr__(self) -> str:
         return f"<GovernanceRemediationTask(id={self.id}, title={self.title})>"
+
+
+class GovernanceIncident(Base):
+    """Governance incident case linked to an AI system."""
+
+    __tablename__ = "governance_incidents"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    ai_system_id = Column(String, ForeignKey("governance_ai_systems.id"), nullable=False, index=True)
+    title = Column(String, nullable=False)
+    description = Column(Text, nullable=False, default="")
+    severity = Column(String, nullable=False, default="medium")
+    status = Column(String, nullable=False, default="open")
+    source = Column(String, nullable=False, default="manual")
+    source_ref_id = Column(String, nullable=True)
+    root_cause = Column(Text, nullable=True)
+    impact_summary = Column(Text, nullable=True)
+    owner = Column(String, nullable=True)
+    reporter = Column(String, nullable=True)
+    reported_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    resolved_at = Column(String, nullable=True)
+    remediation_task_id = Column(String, ForeignKey("governance_remediation_tasks.id"), nullable=True)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+    # Relationships
+    ai_system = relationship("GovernanceAISystem", back_populates="incidents")
+    history = relationship("GovernanceIncidentHistory", back_populates="incident", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index("idx_governance_incidents_ai_system_id", "ai_system_id"),
+        Index("idx_governance_incidents_severity", "severity"),
+        Index("idx_governance_incidents_status", "status"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<GovernanceIncident(id={self.id}, title={self.title})>"
+
+
+class GovernanceIncidentHistory(Base):
+    """Append-only status change history for incidents."""
+
+    __tablename__ = "governance_incident_history"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    incident_id = Column(String, ForeignKey("governance_incidents.id"), nullable=False, index=True)
+    old_status = Column(String, nullable=True)
+    new_status = Column(String, nullable=False)
+    changed_by = Column(String, nullable=True)
+    comment = Column(Text, nullable=True)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+    # Relationships
+    incident = relationship("GovernanceIncident", back_populates="history")
+
+    __table_args__ = (
+        Index("idx_governance_incident_history_incident_id", "incident_id"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<GovernanceIncidentHistory(id={self.id}, incident_id={self.incident_id})>"
