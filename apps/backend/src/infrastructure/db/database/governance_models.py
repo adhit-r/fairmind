@@ -239,11 +239,47 @@ class GovernancePolicy(Base):
     description = Column(Text, nullable=True)
     rules_json = Column(Text, nullable=False, default="[]")
     status = Column(String, nullable=False, default="draft")
+    version = Column(Integer, nullable=False, default=1)
+    owner = Column(String, nullable=True)
+    reviewer = Column(String, nullable=True)
+    approver = Column(String, nullable=True)
+    approved_at = Column(String, nullable=True)
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
     updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
 
+    # Relationships
+    versions = relationship("GovernancePolicyVersion", back_populates="policy", cascade="all, delete-orphan")
+
     def __repr__(self) -> str:
         return f"<GovernancePolicy(id={self.id}, name={self.name})>"
+
+
+class GovernancePolicyVersion(Base):
+    """Snapshot of a policy at a specific version."""
+
+    __tablename__ = "governance_policy_versions"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    policy_id = Column(String, ForeignKey("governance_policies.id"), nullable=False, index=True)
+    version = Column(Integer, nullable=False)
+    name = Column(String, nullable=False)
+    framework = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    rules_json = Column(Text, nullable=False, default="[]")
+    status = Column(String, nullable=False)
+    changed_by = Column(String, nullable=True)
+    change_summary = Column(Text, nullable=True)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+    # Relationships
+    policy = relationship("GovernancePolicy", back_populates="versions")
+
+    __table_args__ = (
+        Index("idx_gpv_policy_id", "policy_id"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<GovernancePolicyVersion(policy_id={self.policy_id}, version={self.version})>"
 
 
 class GovernanceApprovalWorkflow(Base):
