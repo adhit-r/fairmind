@@ -225,7 +225,7 @@ logs/
 # Local/external nested repositories (never track in this repo)
 .claude/worktrees/
 .wiki/
-_external/verifywise/
+_external/
 apps/backend/src/domain/bias/bias_bench_repo/
 apps/backend/uploads/
 *.swp
