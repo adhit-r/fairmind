@@ -1,375 +1,367 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { IconAlertTriangle, IconArrowRight, IconCircleCheck, IconFileText, IconLoader2, IconRouteAltLeft, IconShieldCheck, IconSparkles, IconUpload } from '@tabler/icons-react'
+import { useMemo, useState } from 'react'
+import {
+  IconAlertTriangle,
+  IconArrowRight,
+  IconCircleCheck,
+  IconFileText,
+  IconLoader2,
+  IconPlus,
+  IconRouteAltLeft,
+  IconSearch,
+  IconShieldCheck,
+  IconShieldOff,
+  IconSparkles,
+  IconX,
+} from '@tabler/icons-react'
+import Link from 'next/link'
 
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { Slider } from '@/components/ui/slider'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
+import { Progress } from '@/components/ui/progress'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
 import { useSystemContext } from '@/components/workflow/SystemContext'
-import { evidenceSchema, type EvidenceFormData } from '@/lib/validations/schemas'
-import { useEvidence } from '@/lib/api/hooks/useEvidence'
+import { useEvidence, type Evidence } from '@/lib/api/hooks/useEvidence'
 
-function formatConfidence(confidence: number) {
-  return `${Math.round(confidence * 100)}%`
+import { EvidenceFolderTree } from './components/EvidenceFolderTree'
+import { EvidenceTagFilter } from './components/EvidenceTagFilter'
+import { EvidenceUploader } from './components/EvidenceUploader'
+import { EvidenceDetailDrawer } from './components/EvidenceDetailDrawer'
+
+function formatDate(ts: string) {
+  if (!ts) return '—'
+  const d = new Date(ts)
+  return Number.isNaN(d.getTime()) ? ts : d.toLocaleDateString()
 }
 
-function formatTimestamp(timestamp: string) {
-  const date = new Date(timestamp)
-
-  if (Number.isNaN(date.getTime())) {
-    return 'Unknown time'
-  }
-
-  return date.toLocaleString()
-}
-
-function previewContent(content: unknown) {
-  if (content === null || content === undefined || content === '') {
-    return 'No content provided'
-  }
-
-  if (typeof content === 'string') {
-    return content.length > 120 ? `${content.slice(0, 117)}...` : content
-  }
-
-  try {
-    const serialized = JSON.stringify(content)
-    return serialized.length > 120 ? `${serialized.slice(0, 117)}...` : serialized
-  } catch {
-    return 'Structured content attached'
+function getArtifactKindLabel(kind: string) {
+  switch (kind) {
+    case 'file': return 'File'
+    case 'url': return 'External URL'
+    case 'attestation': return 'Attested'
+    default: return 'Narrative'
   }
 }
 
-function normalizeContent(content: unknown) {
-  if (typeof content !== 'string') {
-    return content
-  }
+function EvidenceCard({
+  evidence,
+  onClick,
+}: {
+  evidence: Evidence
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="group w-full rounded-xl border-2 border-black bg-white p-4 text-left shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all hover:shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] hover:-translate-x-0.5 hover:-translate-y-0.5"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Badge className="border-2 border-black bg-black px-2 py-0.5 text-[10px] font-black uppercase text-white">
+              {evidence.type}
+            </Badge>
+            {evidence.stale && (
+              <Badge className="border-2 border-amber-400 bg-amber-50 px-2 py-0.5 text-[10px] font-black uppercase text-amber-800">
+                <IconAlertTriangle className="mr-1 h-2.5 w-2.5" />
+                Stale
+              </Badge>
+            )}
+            {evidence.linkedEntityCount > 0 && (
+              <Badge className="border-2 border-emerald-500 bg-emerald-50 px-2 py-0.5 text-[10px] font-black uppercase text-emerald-800">
+                <IconCircleCheck className="mr-1 h-2.5 w-2.5" />
+                {evidence.linkedEntityCount} link{evidence.linkedEntityCount !== 1 ? 's' : ''}
+              </Badge>
+            )}
+          </div>
 
-  const trimmed = content.trim()
-  if (!trimmed) {
-    return ''
-  }
+          <p className="truncate text-sm font-bold">
+            {evidence.title || evidence.type}
+          </p>
 
-  try {
-    return JSON.parse(trimmed)
-  } catch {
-    return content
-  }
+          <div className="flex flex-wrap items-center gap-1.5">
+            {(evidence.tags ?? []).slice(0, 3).map((tag) => (
+              <Badge
+                key={tag}
+                variant="outline"
+                className="border border-black/30 bg-white px-1.5 py-0 text-[10px] font-bold"
+              >
+                {tag}
+              </Badge>
+            ))}
+            {(evidence.tags ?? []).length > 3 && (
+              <span className="text-[10px] text-muted-foreground">
+                +{evidence.tags.length - 3}
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="shrink-0 text-right">
+          <p className="text-[10px] font-bold uppercase text-muted-foreground">
+            {getArtifactKindLabel(evidence.artifactKind)}
+          </p>
+          <p className="mt-0.5 text-sm font-black">{Math.round(evidence.confidence * 100)}%</p>
+          <p className="mt-0.5 text-[10px] text-muted-foreground">{formatDate(evidence.timestamp)}</p>
+        </div>
+      </div>
+    </button>
+  )
 }
 
 export default function EvidencePage() {
   const { selectedSystem } = useSystemContext()
-  const { data, loading, collecting, error, collectEvidence, refreshEvidence } = useEvidence(selectedSystem.id)
-  const { toast } = useToast()
-  const [confidence, setConfidence] = useState([0.8])
-
   const {
-    register,
-    handleSubmit,
-    formState: { errors },
-    reset,
-  } = useForm<EvidenceFormData>({
-    resolver: zodResolver(evidenceSchema),
-    defaultValues: {
-      systemId: selectedSystem.id,
-      type: 'test_results',
-      content: '',
-      confidence: 0.8,
-    },
-  })
+    data,
+    summary,
+    loading,
+    collecting,
+    error,
+    collectEvidence,
+    updateEvidence,
+    addLink,
+    removeLink,
+    refreshEvidence,
+  } = useEvidence(selectedSystem.id)
+  const { toast } = useToast()
 
-  useEffect(() => {
-    reset({
-      systemId: selectedSystem.id,
-      type: 'test_results',
-      content: '',
-      confidence: 0.8,
+  const [activeFolder, setActiveFolder] = useState<string | null>(null)
+  const [activeTags, setActiveTags] = useState<string[]>([])
+  const [search, setSearch] = useState('')
+  const [uploaderOpen, setUploaderOpen] = useState(false)
+  const [selectedEvidence, setSelectedEvidence] = useState<Evidence | null>(null)
+  const [drawerOpen, setDrawerOpen] = useState(false)
+
+  const filteredData = useMemo(() => {
+    let result = data
+    if (activeFolder !== null) {
+      if (activeFolder === '__uncategorized__') {
+        result = result.filter((e) => !e.folder)
+      } else {
+        result = result.filter((e) => e.folder === activeFolder)
+      }
+    }
+    if (activeTags.length > 0) {
+      result = result.filter((e) =>
+        activeTags.every((tag) => (e.tags ?? []).includes(tag))
+      )
+    }
+    if (search.trim()) {
+      const q = search.trim().toLowerCase()
+      result = result.filter(
+        (e) =>
+          (e.title || e.type).toLowerCase().includes(q) ||
+          e.type.toLowerCase().includes(q) ||
+          (e.tags ?? []).some((t) => t.toLowerCase().includes(q))
+      )
+    }
+    return result
+  }, [data, activeFolder, activeTags, search])
+
+  const staleCount = useMemo(() => data.filter((e) => e.stale).length, [data])
+  const linkedCount = useMemo(() => data.filter((e) => e.linkedEntityCount > 0).length, [data])
+  const highConfidenceCount = useMemo(() => data.filter((e) => e.confidence >= 0.8).length, [data])
+
+  const completeness = useMemo(() => {
+    const totalRequired = summary.linkedEvidence + summary.missingSignals.length
+    const linked = summary.linkedEvidence
+    const gaps = summary.missingSignals.length
+    const readiness = summary.decisionReadiness
+    let gate: 'green' | 'yellow' | 'red' = 'green'
+    if (readiness !== 'review_ready') {
+      gate = gaps > 2 ? 'red' : 'yellow'
+    }
+    return { totalRequired, linked, gaps, gate, readiness }
+  }, [summary])
+
+  const handleTagToggle = (tag: string) => {
+    setActiveTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+    )
+  }
+
+  const openDrawer = (evidence: Evidence) => {
+    setSelectedEvidence(evidence)
+    setDrawerOpen(true)
+  }
+
+  const handleCollect = async (params: Parameters<typeof collectEvidence>[0]) => {
+    await collectEvidence(params)
+    toast({
+      title: 'Evidence saved',
+      description: `${params.title || params.type} added to ${selectedSystem.name}.`,
     })
-    setConfidence([0.8])
-  }, [reset, selectedSystem.id])
-
-  const summary = useMemo(() => {
-    const averageConfidence =
-      data.length > 0
-        ? Math.round((data.reduce((sum, item) => sum + item.confidence, 0) / data.length) * 100)
-        : 0
-    const latestEvidence = data[0]
-    const highConfidenceCount = data.filter((item) => item.confidence >= 0.8).length
-
-    return {
-      averageConfidence,
-      latestEvidence,
-      highConfidenceCount,
-    }
-  }, [data])
-
-  const onSubmit = async (formData: EvidenceFormData) => {
-    try {
-      const collected = await collectEvidence({
-        systemId: selectedSystem.id,
-        type: formData.type,
-        content: normalizeContent(formData.content),
-        confidence: confidence[0],
-      })
-
-      toast({
-        title: 'Evidence collected',
-        description: `${collected.type} is now attached to ${selectedSystem.name}.`,
-      })
-      reset({
-        systemId: selectedSystem.id,
-        type: 'test_results',
-        content: '',
-        confidence: 0.8,
-      })
-      setConfidence([0.8])
-    } catch (err) {
-      toast({
-        title: 'Collection failed',
-        description: err instanceof Error ? err.message : 'Unable to store evidence for the selected AI system.',
-        variant: 'destructive',
-      })
-    }
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex min-h-0 flex-col gap-6">
+      {/* Header */}
       <Card className="border-4 border-black bg-gradient-to-br from-[#fff4de] via-white to-[#e9f7f0] p-6 shadow-[10px_10px_0px_0px_rgba(0,0,0,1)]">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-          <div className="max-w-3xl space-y-4">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <Badge className="border-2 border-black bg-black px-3 py-1 font-black uppercase text-white">
                 <IconSparkles className="mr-2 h-4 w-4" />
-                Workflow bridge
+                Evidence Hub V2
               </Badge>
-              <Badge className="border-2 border-black bg-white px-3 py-1 font-black uppercase text-black">
-                <IconRouteAltLeft className="mr-2 h-4 w-4" />
-                Risks to approval
-              </Badge>
-            </div>
-
-            <div className="space-y-3">
-              <h1 className="text-4xl font-black uppercase tracking-tight text-balance">
-                Evidence closes the gap between risks and approval
-              </h1>
-              <p className="max-w-2xl text-base text-muted-foreground">
-                Collect artifacts for the selected AI system so governance can decide whether
-                risks are controlled, evidence is complete, and release sign-off is justified.
-                No system ID retyping, no disconnected uploads.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <Badge variant="outline" className="border-2 border-black bg-white px-3 py-1 font-bold uppercase">
+              <Badge variant="outline" className="border-2 border-black bg-white px-3 py-1 font-black uppercase">
                 {selectedSystem.name}
               </Badge>
-              <Badge variant="outline" className="border-2 border-black bg-white px-3 py-1 font-bold uppercase">
-                Owner: {selectedSystem.owner}
-              </Badge>
-              <Badge className="border-2 border-black bg-black px-3 py-1 font-black uppercase text-white">
-                {selectedSystem.stage}
-              </Badge>
-              <Badge className="border-2 border-black bg-amber-100 px-3 py-1 font-black uppercase text-amber-900">
-                Risk tier: {selectedSystem.riskTier}
-              </Badge>
             </div>
+            <h1 className="text-3xl font-black uppercase tracking-tight">
+              Evidence Hub
+            </h1>
+            <p className="max-w-2xl text-sm text-muted-foreground">
+              Organize, tag, and link governance artifacts for {selectedSystem.name}. Upload files, link external sources, attest controls, and connect evidence to frameworks.
+            </p>
           </div>
 
-          <Card className="w-full max-w-md border-2 border-black bg-white p-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
-            <p className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">
-              Selected system
-            </p>
-            <h2 className="mt-2 text-2xl font-black uppercase">{selectedSystem.name}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{selectedSystem.owner}</p>
-
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <div className="rounded-2xl border-2 border-black bg-slate-50 p-3">
-                <p className="text-xs font-bold uppercase text-muted-foreground">Readiness</p>
-                <p className="mt-1 text-2xl font-black">{selectedSystem.readiness}%</p>
-              </div>
-              <div className="rounded-2xl border-2 border-black bg-slate-50 p-3">
-                <p className="text-xs font-bold uppercase text-muted-foreground">Stage</p>
-                <p className="mt-1 text-2xl font-black uppercase">{selectedSystem.stage}</p>
-              </div>
-            </div>
-
-            <div className="mt-4 rounded-2xl border-2 border-black bg-black p-3 text-white">
-              <p className="text-xs font-black uppercase tracking-[0.2em] text-orange-300">
-                Evidence should answer
-              </p>
-              <p className="mt-2 text-sm leading-6">
-                What proof do we have that the selected system is safe enough to move from
-                governance review to approval?
-              </p>
-            </div>
-          </Card>
+          <Button
+            className="border-2 border-black font-black uppercase shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
+            onClick={() => setUploaderOpen(true)}
+          >
+            <IconPlus className="mr-2 h-4 w-4" />
+            Add evidence
+          </Button>
         </div>
       </Card>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card className="border-2 border-black p-5 shadow-brutal">
-          <p className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">
-            Collected artifacts
-          </p>
-          <p className="mt-2 text-3xl font-black">{data.length}</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Attached to {selectedSystem.name}
-          </p>
+      {/* Stats row */}
+      <div className="grid gap-4 sm:grid-cols-4">
+        <Card className="border-2 border-black p-4 shadow-brutal">
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Total artifacts</p>
+          <p className="mt-1 text-3xl font-black">{data.length}</p>
         </Card>
-
-        <Card className="border-2 border-black p-5 shadow-brutal">
-          <p className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">
-            Average confidence
-          </p>
-          <p className="mt-2 text-3xl font-black">
-            {data.length > 0 ? `${summary.averageConfidence}%` : '—'}
-          </p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {data.length > 0
-              ? `${summary.highConfidenceCount} artifacts are at or above 80%.`
-              : 'Collect the first artifact to start the evidence trail.'}
-          </p>
+        <Card className="border-2 border-black p-4 shadow-brutal">
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Linked to entities</p>
+          <p className="mt-1 text-3xl font-black text-emerald-700">{linkedCount}</p>
         </Card>
-
-        <Card className="border-2 border-black p-5 shadow-brutal">
-          <p className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">
-            Latest capture
-          </p>
-          <p className="mt-2 text-lg font-black">
-            {summary.latestEvidence ? summary.latestEvidence.type : 'None yet'}
-          </p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {summary.latestEvidence
-              ? formatTimestamp(summary.latestEvidence.timestamp)
-              : 'Use the form below to add the first governance artifact.'}
-          </p>
+        <Card className="border-2 border-black p-4 shadow-brutal">
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">High confidence</p>
+          <p className="mt-1 text-3xl font-black">{highConfidenceCount}</p>
+        </Card>
+        <Card className={`border-2 border-black p-4 shadow-brutal ${staleCount > 0 ? 'bg-amber-50' : ''}`}>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Potentially stale</p>
+          <p className={`mt-1 text-3xl font-black ${staleCount > 0 ? 'text-amber-700' : ''}`}>{staleCount}</p>
         </Card>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-        <Card className="border-2 border-black p-6 shadow-brutal">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h2 className="text-2xl font-black">Collect evidence</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                The selected AI system is already in scope. Attach the artifact that proves a
-                control, resolves a risk, or explains an approval decision.
-              </p>
+      {/* Approval gate */}
+      <Card className={`border-4 p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] ${
+        completeness.gate === 'green' ? 'border-emerald-600 bg-emerald-50' :
+        completeness.gate === 'yellow' ? 'border-amber-500 bg-amber-50' :
+        'border-red-600 bg-red-50'
+      }`}>
+        <div className="flex items-center gap-3">
+          {completeness.gate === 'green' ? (
+            <IconShieldCheck className="h-6 w-6 text-emerald-700" />
+          ) : completeness.gate === 'yellow' ? (
+            <IconAlertTriangle className="h-6 w-6 text-amber-700" />
+          ) : (
+            <IconShieldOff className="h-6 w-6 text-red-700" />
+          )}
+          <div className="flex-1">
+            <p className="font-black uppercase">
+              {completeness.gate === 'green' ? 'Evidence complete — approval gate: ready' :
+               completeness.gate === 'yellow' ? 'Evidence gaps present — conditional' :
+               'Critical gaps — approval blocked'}
+            </p>
+            {summary.recommendedNextStep && (
+              <p className="text-xs text-muted-foreground">{summary.recommendedNextStep}</p>
+            )}
+          </div>
+          {completeness.totalRequired > 0 && (
+            <div className="min-w-[120px] space-y-1">
+              <div className="flex justify-between text-[10px] font-bold uppercase text-muted-foreground">
+                <span>Coverage</span>
+                <span>{Math.round((completeness.linked / completeness.totalRequired) * 100)}%</span>
+              </div>
+              <Progress value={Math.round((completeness.linked / completeness.totalRequired) * 100)} className="h-2 border border-black" />
             </div>
+          )}
+        </div>
+      </Card>
 
-            <Badge className="border-2 border-black bg-emerald-100 px-3 py-2 font-black uppercase text-emerald-900">
-              <IconShieldCheck className="mr-2 h-4 w-4" />
-              System locked
+      {/* Evidence gaps */}
+      {summary.missingSignals.length > 0 && (
+        <Card className="border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+          <div className="mb-3 flex items-center gap-2">
+            <IconX className="h-5 w-5 text-red-600" />
+            <h2 className="font-black uppercase">Evidence gaps blocking approval</h2>
+            <Badge className="border-2 border-red-600 bg-red-100 px-2 font-black uppercase text-red-800">
+              {summary.missingSignals.length}
             </Badge>
           </div>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {summary.missingSignals.map((signal) => (
+              <div key={signal} className="flex flex-col gap-2 rounded-xl border-2 border-black bg-red-50 p-3 shadow-[3px_3px_0px_0px_#000]">
+                <p className="text-sm font-bold uppercase">{signal}</p>
+                <Button asChild size="sm" variant="default" className="mt-auto border-2 border-black font-black uppercase">
+                  <Link
+                    href={{
+                      pathname: '/remediation',
+                      query: {
+                        gap: signal,
+                        systemId: selectedSystem.id,
+                        title: `Evidence gap: ${signal}`,
+                        priority: 'high',
+                        source: 'evidence_gap',
+                      },
+                    }}
+                  >
+                    <IconRouteAltLeft className="mr-1.5 h-3.5 w-3.5" />
+                    Create Remediation
+                  </Link>
+                </Button>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
-          <div className="mt-5 rounded-2xl border-2 border-black bg-slate-50 p-4">
-            <p className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">
-              Good evidence examples
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {['Bias test result', 'Monitoring snapshot', 'Model card', 'Audit note', 'Compliance export'].map((item) => (
-                <Badge key={item} variant="outline" className="border-2 border-black bg-white px-3 py-1 font-bold">
-                  {item}
-                </Badge>
-              ))}
+      {/* Main content: sidebar + list */}
+      <div className="flex min-h-0 gap-5">
+        {/* Sidebar */}
+        {data.length > 0 && (
+          <div className="hidden w-52 shrink-0 space-y-5 lg:block">
+            <EvidenceFolderTree
+              evidence={data}
+              activeFolder={activeFolder}
+              onFolderChange={setActiveFolder}
+            />
+            <div className="border-t-2 border-black/10 pt-4">
+              <EvidenceTagFilter
+                evidence={data}
+                activeTags={activeTags}
+                onTagToggle={handleTagToggle}
+                onClearTags={() => setActiveTags([])}
+              />
             </div>
           </div>
+        )}
 
-          <form onSubmit={handleSubmit(onSubmit)} className="mt-6 space-y-5">
-            <input type="hidden" {...register('systemId')} />
-
-            <div className="space-y-2">
-              <Label htmlFor="type" className="font-bold uppercase tracking-wide">
-                Evidence type
-              </Label>
+        {/* Evidence list */}
+        <div className="min-w-0 flex-1 space-y-4">
+          {/* Search + filters */}
+          <div className="flex items-center gap-3">
+            <div className="relative flex-1">
+              <IconSearch className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                id="type"
-                {...register('type')}
-                className="border-2 border-black bg-white font-medium"
-                placeholder="e.g. bias_test_result, monitoring_snapshot, compliance_note"
-              />
-              {errors.type && (
-                <p className="text-sm text-red-600">{errors.type.message}</p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="content" className="font-bold uppercase tracking-wide">
-                Evidence content
-              </Label>
-              <Textarea
-                id="content"
-                {...register('content')}
-                className="min-h-[180px] border-2 border-black bg-white font-mono text-sm"
-                placeholder='Paste JSON or a concise narrative that supports the selected system’s risk review.'
-              />
-              {errors.content && (
-                <p className="text-sm text-red-600">{String(errors.content.message)}</p>
-              )}
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex items-center justify-between gap-4">
-                <Label className="font-bold uppercase tracking-wide">
-                  Confidence: {formatConfidence(confidence[0])}
-                </Label>
-                <span className="text-xs font-medium text-muted-foreground">
-                  Higher confidence helps governance decide faster.
-                </span>
-              </div>
-              <Slider
-                value={confidence}
-                onValueChange={setConfidence}
-                min={0}
-                max={1}
-                step={0.01}
-                className="border-2 border-black"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="border-2 border-black pl-9 font-medium"
+                placeholder="Search evidence by title, type, or tag..."
               />
             </div>
-
-            <Button type="submit" className="w-full border-2 border-black text-base font-black uppercase tracking-wide" disabled={collecting}>
-              {collecting ? (
-                <>
-                  <IconLoader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Collecting evidence
-                </>
-              ) : (
-                <>
-                  <IconUpload className="mr-2 h-4 w-4" />
-                  Collect evidence for {selectedSystem.name}
-                </>
-              )}
-            </Button>
-          </form>
-        </Card>
-
-        <Card className="border-2 border-black p-6 shadow-brutal">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h2 className="text-2xl font-black">Evidence records</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                This list is scoped to the selected AI system and updates as soon as new evidence
-                is collected.
-              </p>
-            </div>
-
             <Button
-              type="button"
               variant="neutral"
               className="border-2 border-black font-bold"
-              onClick={() => {
-                void refreshEvidence()
-              }}
+              onClick={() => void refreshEvidence()}
               disabled={loading}
             >
               <IconArrowRight className="mr-2 h-4 w-4" />
@@ -377,34 +369,57 @@ export default function EvidencePage() {
             </Button>
           </div>
 
+          {/* Active filter chips */}
+          {(activeTags.length > 0 || activeFolder !== null || search) && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-bold uppercase text-muted-foreground">Filters:</span>
+              {activeFolder !== null && (
+                <Badge className="border-2 border-black bg-black px-2 py-0.5 text-[11px] font-bold text-white">
+                  Folder: {activeFolder === '__uncategorized__' ? 'Uncategorized' : activeFolder}
+                  <button type="button" onClick={() => setActiveFolder(null)} className="ml-1.5">
+                    <IconX className="h-2.5 w-2.5" />
+                  </button>
+                </Badge>
+              )}
+              {activeTags.map((tag) => (
+                <Badge key={tag} className="border-2 border-black bg-black px-2 py-0.5 text-[11px] font-bold text-white">
+                  #{tag}
+                  <button type="button" onClick={() => handleTagToggle(tag)} className="ml-1.5">
+                    <IconX className="h-2.5 w-2.5" />
+                  </button>
+                </Badge>
+              ))}
+              {search && (
+                <Badge className="border-2 border-black bg-black px-2 py-0.5 text-[11px] font-bold text-white">
+                  Search: {search}
+                  <button type="button" onClick={() => setSearch('')} className="ml-1.5">
+                    <IconX className="h-2.5 w-2.5" />
+                  </button>
+                </Badge>
+              )}
+            </div>
+          )}
+
           {loading && (
-            <div className="flex flex-col items-center justify-center gap-3 rounded-3xl border-2 border-dashed border-black bg-slate-50 px-6 py-14 text-center">
+            <div className="flex flex-col items-center justify-center gap-3 rounded-3xl border-2 border-dashed border-black bg-slate-50 px-6 py-16 text-center">
               <IconLoader2 className="h-8 w-8 animate-spin" />
-              <div>
-                <p className="text-base font-bold">Loading evidence for {selectedSystem.name}</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Pulling the selected system’s artifacts so governance can review the current trail.
-                </p>
-              </div>
+              <p className="font-bold">Loading evidence for {selectedSystem.name}</p>
             </div>
           )}
 
           {!loading && error && (
-            <div className="rounded-3xl border-2 border-red-600 bg-red-50 px-6 py-6">
+            <div className="rounded-3xl border-2 border-red-600 bg-red-50 p-6">
               <div className="flex items-start gap-3">
                 <IconAlertTriangle className="mt-0.5 h-5 w-5 text-red-700" />
                 <div className="space-y-2">
                   <p className="font-bold text-red-800">Could not load evidence</p>
                   <p className="text-sm text-red-700">{error.message}</p>
                   <Button
-                    type="button"
                     variant="neutral"
                     className="border-2 border-red-700 font-bold text-red-700"
-                    onClick={() => {
-                      void refreshEvidence()
-                    }}
+                    onClick={() => void refreshEvidence()}
                   >
-                    Retry load
+                    Retry
                   </Button>
                 </div>
               </div>
@@ -412,98 +427,97 @@ export default function EvidencePage() {
           )}
 
           {!loading && !error && data.length === 0 && (
-            <div className="rounded-3xl border-2 border-dashed border-black bg-slate-50 px-6 py-14 text-center">
-              <IconFileText className="mx-auto h-12 w-12 opacity-60" />
-              <h3 className="mt-4 text-xl font-black">No evidence attached yet</h3>
+            <div className="rounded-3xl border-2 border-dashed border-black bg-slate-50 px-6 py-16 text-center">
+              <IconFileText className="mx-auto h-12 w-12 opacity-50" />
+              <h3 className="mt-4 text-xl font-black">No evidence yet</h3>
               <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-                Start with a control proof, a test result, or a monitoring export that helps
-                governance decide whether this system can move from risks into approval.
+                Start by uploading a file, linking an external artifact, or writing a narrative for {selectedSystem.name}.
               </p>
-
-              <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-                {['Bias test', 'Monitoring export', 'Policy note', 'Audit artifact'].map((item) => (
-                  <Badge key={item} variant="outline" className="border-2 border-black bg-white px-3 py-1 font-bold">
-                    {item}
-                  </Badge>
-                ))}
-              </div>
+              <Button
+                className="mt-5 border-2 border-black font-black uppercase"
+                onClick={() => setUploaderOpen(true)}
+              >
+                <IconPlus className="mr-2 h-4 w-4" />
+                Add first evidence
+              </Button>
             </div>
           )}
 
-          {!loading && !error && data.length > 0 && (
-            <div className="space-y-4">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-2xl border-2 border-black bg-slate-50 p-4">
-                  <p className="text-xs font-bold uppercase text-muted-foreground">High confidence</p>
-                  <p className="mt-1 text-2xl font-black">{summary.highConfidenceCount}</p>
-                </div>
-                <div className="rounded-2xl border-2 border-black bg-slate-50 p-4">
-                  <p className="text-xs font-bold uppercase text-muted-foreground">Most recent</p>
-                  <p className="mt-1 text-sm font-semibold">{formatTimestamp(data[0].timestamp)}</p>
-                </div>
-              </div>
-
-              <div className="overflow-hidden rounded-3xl border-2 border-black">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="border-b-2 border-black bg-slate-100">
-                      <TableHead className="font-black">Type</TableHead>
-                      <TableHead className="font-black">Confidence</TableHead>
-                      <TableHead className="font-black">Captured</TableHead>
-                      <TableHead className="font-black">Notes</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {data.map((evidence) => (
-                      <TableRow key={evidence.id} className="border-b border-black/20">
-                        <TableCell className="align-top">
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              <Badge className="border-2 border-black bg-black px-2 py-1 font-black uppercase text-white">
-                                {evidence.type}
-                              </Badge>
-                              {evidence.confidence >= 0.8 && (
-                                <IconCircleCheck className="h-4 w-4 text-emerald-600" />
-                              )}
-                            </div>
-                            <p className="max-w-[260px] text-xs text-muted-foreground">
-                              {previewContent(evidence.content)}
-                            </p>
-                          </div>
-                        </TableCell>
-                        <TableCell className="align-top font-semibold">
-                          {formatConfidence(evidence.confidence)}
-                        </TableCell>
-                        <TableCell className="align-top text-sm text-muted-foreground">
-                          {formatTimestamp(evidence.timestamp)}
-                        </TableCell>
-                        <TableCell className="align-top">
-                          <div className="space-y-2">
-                            <p className="text-sm font-medium">
-                              {evidence.metadata?.source
-                                ? String(evidence.metadata.source)
-                                : 'Supports the selected AI system review.'}
-                            </p>
-                            <div className="flex flex-wrap gap-2">
-                              {Object.entries(evidence.metadata || {})
-                                .slice(0, 2)
-                                .map(([key, value]) => (
-                                  <Badge key={key} variant="outline" className="border-2 border-black bg-white px-2 py-1 text-[11px] font-bold">
-                                    {key}: {String(value)}
-                                  </Badge>
-                                ))}
-                            </div>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+          {!loading && !error && data.length > 0 && filteredData.length === 0 && (
+            <div className="rounded-3xl border-2 border-dashed border-black bg-slate-50 px-6 py-10 text-center">
+              <p className="font-bold text-muted-foreground">No evidence matches your filters.</p>
+              <Button
+                variant="neutral"
+                size="sm"
+                className="mt-3 border-2 border-black font-bold"
+                onClick={() => { setActiveFolder(null); setActiveTags([]); setSearch('') }}
+              >
+                Clear filters
+              </Button>
             </div>
           )}
-        </Card>
+
+          {!loading && !error && filteredData.length > 0 && (
+            <div className="space-y-3">
+              <p className="text-xs font-bold uppercase text-muted-foreground">
+                {filteredData.length} artifact{filteredData.length !== 1 ? 's' : ''}
+                {data.length !== filteredData.length && ` (${data.length} total)`}
+              </p>
+              {filteredData.map((evidence) => (
+                <EvidenceCard
+                  key={evidence.id}
+                  evidence={evidence}
+                  onClick={() => openDrawer(evidence)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* Add evidence dialog */}
+      <Dialog open={uploaderOpen} onOpenChange={setUploaderOpen}>
+        <DialogContent className="max-w-lg border-4 border-black">
+          <DialogHeader>
+            <DialogTitle className="font-black uppercase">Add evidence</DialogTitle>
+          </DialogHeader>
+          <EvidenceUploader
+            systemId={selectedSystem.id}
+            onCollect={handleCollect}
+            onClose={() => setUploaderOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* Evidence detail drawer */}
+      <EvidenceDetailDrawer
+        evidence={selectedEvidence}
+        open={drawerOpen}
+        onClose={() => { setDrawerOpen(false); setSelectedEvidence(null) }}
+        onUpdate={async (id, updates) => {
+          const updated = await updateEvidence(id, updates)
+          setSelectedEvidence(updated)
+          return updated
+        }}
+        onAddLink={async (evidenceId, entityType, entityId) => {
+          const link = await addLink(evidenceId, entityType, entityId)
+          // Refresh selected evidence to show new link
+          setSelectedEvidence((prev) => {
+            if (!prev || prev.id !== evidenceId) return prev
+            const newLinks = [...prev.linkedEntities, link]
+            return { ...prev, linkedEntities: newLinks, linkedEntityCount: newLinks.length, workflowState: 'linked' }
+          })
+          return link
+        }}
+        onRemoveLink={async (evidenceId, linkId) => {
+          await removeLink(evidenceId, linkId)
+          setSelectedEvidence((prev) => {
+            if (!prev || prev.id !== evidenceId) return prev
+            const newLinks = prev.linkedEntities.filter((l) => l.id !== linkId)
+            return { ...prev, linkedEntities: newLinks, linkedEntityCount: newLinks.length, workflowState: newLinks.length > 0 ? 'linked' : 'collected' }
+          })
+        }}
+      />
     </div>
   )
 }

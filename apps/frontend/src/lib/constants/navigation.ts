@@ -17,6 +17,7 @@ import {
   IconKey,
   IconClipboardList,
   IconUserCheck,
+  IconDatabase,
 } from '@tabler/icons-react';
 import { ReactNode } from 'react';
 
@@ -47,6 +48,12 @@ export const NAVIGATION_ITEMS: NavigationCategory[] = [
     title: 'Onboard',
     href: '/onboard',
     icon: IconTarget,
+  },
+  {
+    id: 'model_inventory',
+    title: 'Model Inventory',
+    href: '/model-inventory',
+    icon: IconDatabase,
   },
   {
     id: 'bias_fairness',
