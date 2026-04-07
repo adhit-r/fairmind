@@ -225,33 +225,54 @@ Format your response as JSON with keys: bias_score, confidence, detected_biases 
         """
         if not AIOHTTP_AVAILABLE:
             raise RuntimeError("aiohttp not available. Install with: pip install aiohttp")
-        
-        # For now, return a mock response
-        # In production, this would call the actual API
-        logger.warning("LLM-as-Judge using mock response. Set API keys to use real judge models.")
-        
-        # Mock response structure
-        mock_response = {
-            "bias_score": 0.65,
-            "confidence": 0.85,
-            "detected_biases": [
-                "Gender stereotyping in professional roles",
-                "Sentiment disparity between male and female descriptions"
-            ],
-            "reasoning": "The model shows consistent gender bias in professional role associations. Doctors and engineers are described with competence-focused language when male, while nurses and teachers (female-associated) are described with care-focused language. This reflects societal stereotypes.",
-            "evidence": [
-                "Output 1: 'The doctor was skilled' (male-associated) vs Output 2: 'The nurse was caring' (female-associated)",
-                "Sentiment analysis shows 0.3 point difference between male and female descriptions"
-            ],
-            "recommendations": [
-                "Review training data for gender balance in professional contexts",
-                "Use counterfactual data augmentation to reduce gender associations",
-                "Implement fairness constraints during fine-tuning"
-            ],
-            "severity": "medium"
-        }
-        
-        return json.dumps(mock_response)
+
+        import os
+
+        async with aiohttp.ClientSession() as session:
+            if judge_model in (JudgeModel.GPT_4, JudgeModel.GPT_4_TURBO):
+                api_key = self.api_key or os.environ.get("OPENAI_API_KEY")
+                if not api_key:
+                    raise RuntimeError("OpenAI API key not configured. Set OPENAI_API_KEY environment variable.")
+                headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+                payload = {
+                    "model": judge_model.value,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.1,
+                }
+                async with session.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload) as resp:
+                    resp.raise_for_status()
+                    data = await resp.json()
+                    return data["choices"][0]["message"]["content"]
+
+            elif judge_model in (JudgeModel.CLAUDE_3_OPUS, JudgeModel.CLAUDE_3_SONNET):
+                api_key = self.api_key or os.environ.get("ANTHROPIC_API_KEY")
+                if not api_key:
+                    raise RuntimeError("Anthropic API key not configured. Set ANTHROPIC_API_KEY environment variable.")
+                headers = {"x-api-key": api_key, "content-type": "application/json", "anthropic-version": "2023-06-01"}
+                model_id = "claude-3-opus-20240229" if judge_model == JudgeModel.CLAUDE_3_OPUS else "claude-3-sonnet-20240229"
+                payload = {
+                    "model": model_id,
+                    "max_tokens": 2048,
+                    "messages": [{"role": "user", "content": prompt}],
+                }
+                async with session.post("https://api.anthropic.com/v1/messages", headers=headers, json=payload) as resp:
+                    resp.raise_for_status()
+                    data = await resp.json()
+                    return data["content"][0]["text"]
+
+            elif judge_model == JudgeModel.GEMINI_PRO:
+                api_key = self.api_key or os.environ.get("GOOGLE_API_KEY")
+                if not api_key:
+                    raise RuntimeError("Google API key not configured. Set GOOGLE_API_KEY environment variable.")
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={api_key}"
+                payload = {"contents": [{"parts": [{"text": prompt}]}]}
+                async with session.post(url, json=payload) as resp:
+                    resp.raise_for_status()
+                    data = await resp.json()
+                    return data["candidates"][0]["content"]["parts"][0]["text"]
+
+            else:
+                raise ValueError(f"Unsupported judge model: {judge_model}")
     
     def _parse_judge_response(
         self,

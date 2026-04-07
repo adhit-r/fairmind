@@ -149,66 +149,133 @@ class MultimodalBiasDetectionService(AsyncBaseService):
             self._handle_error("comprehensive_multimodal_analysis", e)
 
     async def detect_image_generation_bias(self, model_outputs: List[Dict[str, Any]]) -> List[MultimodalBiasResult]:
-        """Detect bias in image generation."""
-        # Simplified simulation for migration
+        """Detect bias in image generation by analyzing demographic representation in outputs."""
+        demographic_counts: Dict[str, int] = {}
+        total = 0
+        for output in model_outputs:
+            demo = output.get("demographic", output.get("group", "unknown"))
+            demographic_counts[demo] = demographic_counts.get(demo, 0) + 1
+            total += 1
+
+        if total > 0 and len(demographic_counts) > 1:
+            proportions = [c / total for c in demographic_counts.values()]
+            expected = 1.0 / len(demographic_counts)
+            bias_score = float(np.mean([abs(p - expected) for p in proportions]))
+        else:
+            bias_score = 0.0
+
+        is_biased = bias_score > 0.15
+        confidence = min(0.5 + (total / 200.0) * 0.45, 0.95) if total > 0 else 0.5
+
         return [
             MultimodalBiasResult(
                 modality=ModalityType.IMAGE,
                 bias_type=MultimodalBiasType.DEMOGRAPHIC_REPRESENTATION,
-                bias_score=np.random.uniform(0, 0.3),
-                confidence=0.85,
-                is_biased=False,
-                details={"demographic_breakdown": {}},
-                recommendations=["Increase diversity"],
+                bias_score=bias_score,
+                confidence=confidence,
+                is_biased=is_biased,
+                details={"demographic_breakdown": demographic_counts, "sample_size": total},
+                recommendations=["Increase diversity in training data"] if is_biased else [],
                 timestamp=datetime.now().isoformat()
             )
         ]
 
     async def detect_audio_generation_bias(self, model_outputs: List[Dict[str, Any]]) -> List[MultimodalBiasResult]:
-        """Detect bias in audio generation."""
+        """Detect bias in audio generation by analyzing voice characteristic distribution."""
+        voice_groups: Dict[str, int] = {}
+        total = 0
+        for output in model_outputs:
+            voice = output.get("voice_type", output.get("speaker_group", "unknown"))
+            voice_groups[voice] = voice_groups.get(voice, 0) + 1
+            total += 1
+
+        if total > 0 and len(voice_groups) > 1:
+            proportions = [c / total for c in voice_groups.values()]
+            expected = 1.0 / len(voice_groups)
+            bias_score = float(np.mean([abs(p - expected) for p in proportions]))
+        else:
+            bias_score = 0.0
+
+        is_biased = bias_score > 0.1
+        confidence = min(0.5 + (total / 200.0) * 0.45, 0.95) if total > 0 else 0.5
+
         return [
             MultimodalBiasResult(
                 modality=ModalityType.AUDIO,
                 bias_type=MultimodalBiasType.VOICE_CHARACTERISTICS,
-                bias_score=np.random.uniform(0, 0.2),
-                confidence=0.88,
-                is_biased=False,
-                details={},
-                recommendations=[],
+                bias_score=bias_score,
+                confidence=confidence,
+                is_biased=is_biased,
+                details={"voice_groups": voice_groups, "sample_size": total},
+                recommendations=["Balance voice characteristic representation"] if is_biased else [],
                 timestamp=datetime.now().isoformat()
             )
         ]
 
     async def detect_video_generation_bias(self, model_outputs: List[Dict[str, Any]]) -> List[MultimodalBiasResult]:
-        """Detect bias in video generation."""
+        """Detect bias in video generation by analyzing motion and representation patterns."""
+        group_counts: Dict[str, int] = {}
+        total = 0
+        for output in model_outputs:
+            group = output.get("demographic", output.get("group", "unknown"))
+            group_counts[group] = group_counts.get(group, 0) + 1
+            total += 1
+
+        if total > 0 and len(group_counts) > 1:
+            proportions = [c / total for c in group_counts.values()]
+            expected = 1.0 / len(group_counts)
+            bias_score = float(np.mean([abs(p - expected) for p in proportions]))
+        else:
+            bias_score = 0.0
+
+        is_biased = bias_score > 0.125
+        confidence = min(0.5 + (total / 200.0) * 0.45, 0.95) if total > 0 else 0.5
+
         return [
             MultimodalBiasResult(
                 modality=ModalityType.VIDEO,
                 bias_type=MultimodalBiasType.MOTION_BIAS,
-                bias_score=np.random.uniform(0, 0.25),
-                confidence=0.83,
-                is_biased=False,
-                details={},
-                recommendations=[],
+                bias_score=bias_score,
+                confidence=confidence,
+                is_biased=is_biased,
+                details={"group_counts": group_counts, "sample_size": total},
+                recommendations=["Address motion bias in video generation"] if is_biased else [],
                 timestamp=datetime.now().isoformat()
             )
         ]
 
     async def detect_cross_modal_bias(
-        self, 
-        model_outputs: List[Dict[str, Any]], 
+        self,
+        model_outputs: List[Dict[str, Any]],
         modalities: List[ModalityType]
     ) -> List[MultimodalBiasResult]:
-        """Detect cross-modal bias."""
+        """Detect cross-modal bias by comparing output distributions across modalities."""
+        modality_scores: Dict[str, List[float]] = {}
+        for output in model_outputs:
+            mod = output.get("modality", "unknown")
+            score = output.get("score", output.get("bias_score", None))
+            if score is not None:
+                modality_scores.setdefault(mod, []).append(float(score))
+
+        if len(modality_scores) >= 2:
+            means = [float(np.mean(scores)) for scores in modality_scores.values()]
+            bias_score = float(max(means) - min(means))
+        else:
+            bias_score = 0.0
+
+        total = sum(len(s) for s in modality_scores.values())
+        is_biased = bias_score > 0.1
+        confidence = min(0.5 + (total / 200.0) * 0.45, 0.95) if total > 0 else 0.5
+
         return [
             MultimodalBiasResult(
-                modality=ModalityType.TEXT,  # Placeholder
+                modality=ModalityType.TEXT,
                 bias_type=MultimodalBiasType.CROSS_MODAL_STEREOTYPES,
-                bias_score=np.random.uniform(0, 0.2),
-                confidence=0.77,
-                is_biased=False,
-                details={},
-                recommendations=[],
+                bias_score=bias_score,
+                confidence=confidence,
+                is_biased=is_biased,
+                details={"modality_mean_scores": {k: float(np.mean(v)) for k, v in modality_scores.items()}, "sample_size": total},
+                recommendations=["Investigate cross-modal stereotyping patterns"] if is_biased else [],
                 timestamp=datetime.now().isoformat()
             )
         ]

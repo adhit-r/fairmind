@@ -6,7 +6,6 @@ Integrates with latest explainability and bias detection tools from 2025
 import asyncio
 import json
 import logging
-import numpy as np
 from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass, asdict
 from datetime import datetime
@@ -170,32 +169,27 @@ class ModernToolsIntegrationService:
                     timestamp=datetime.now().isoformat()
                 )
             
-            # Simulate CometLLM API call
+            # CometLLM integration: compute real metrics from provided data
+            prompt_lengths = [len(p) for p in prompts]
+            response_lengths = [len(r) for r in responses]
+
             comet_data = {
                 "project_id": "fairmind_bias_detection",
                 "experiment_id": f"bias_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
                 "prompts": prompts,
                 "responses": responses,
                 "metadata": metadata or {},
-                "parameters": {
-                    "model": "gpt-4",
-                    "temperature": 0.7,
-                    "max_tokens": 1000
-                },
+                "parameters": metadata.get("parameters", {}) if metadata else {},
                 "metrics": {
-                    "prompt_length": [len(p) for p in prompts],
-                    "response_length": [len(r) for r in responses],
-                    "bias_score": np.random.uniform(0, 0.3, len(prompts)).tolist()
+                    "prompt_length": prompt_lengths,
+                    "response_length": response_lengths,
+                    "avg_prompt_length": sum(prompt_lengths) / max(len(prompt_lengths), 1),
+                    "avg_response_length": sum(response_lengths) / max(len(response_lengths), 1),
+                    "total_prompts": len(prompts)
                 },
-                "visualizations": [
-                    "prompt_effectiveness_heatmap.png",
-                    "response_quality_distribution.png",
-                    "bias_trend_analysis.png"
-                ]
+                "status": "data_logged",
+                "note": "CometLLM API not connected; metrics computed locally from provided data"
             }
-            
-            # Simulate API response
-            await asyncio.sleep(0.1)  # Simulate API call delay
             
             return ToolIntegrationResult(
                 tool_name="comet_llm",
@@ -233,48 +227,48 @@ class ModernToolsIntegrationService:
                     timestamp=datetime.now().isoformat()
                 )
             
-            # Simulate DeepEval evaluation
+            # DeepEval integration: compute metrics from actual model outputs
             criteria = evaluation_criteria or ["bias", "faithfulness", "relevance"]
             evaluation_results = {}
-            
+
             for criterion in criteria:
-                if criterion == "bias":
+                # Extract relevant scores from model outputs if available
+                criterion_scores = [
+                    float(output.get(criterion, output.get("score", 0)))
+                    for output in model_outputs
+                    if criterion in output or "score" in output
+                ]
+
+                if criterion_scores:
+                    score = sum(criterion_scores) / len(criterion_scores)
                     evaluation_results[criterion] = {
-                        "score": np.random.uniform(0.7, 0.95),
+                        "score": score,
                         "details": {
-                            "demographic_parity": np.random.uniform(0.8, 0.95),
-                            "equalized_odds": np.random.uniform(0.75, 0.9),
-                            "calibration": np.random.uniform(0.8, 0.95)
+                            "sample_count": len(criterion_scores),
+                            "min_score": min(criterion_scores),
+                            "max_score": max(criterion_scores)
                         }
                     }
-                elif criterion == "faithfulness":
+                else:
                     evaluation_results[criterion] = {
-                        "score": np.random.uniform(0.8, 0.95),
+                        "score": 0.0,
                         "details": {
-                            "factual_accuracy": np.random.uniform(0.85, 0.95),
-                            "consistency": np.random.uniform(0.8, 0.9)
+                            "sample_count": 0,
+                            "note": f"No {criterion} data available in model outputs"
                         }
                     }
-                elif criterion == "relevance":
-                    evaluation_results[criterion] = {
-                        "score": np.random.uniform(0.75, 0.9),
-                        "details": {
-                            "topic_relevance": np.random.uniform(0.8, 0.95),
-                            "context_appropriateness": np.random.uniform(0.7, 0.9)
-                        }
-                    }
-            
+
+            result_scores = [r["score"] for r in evaluation_results.values()]
+            overall_score = sum(result_scores) / max(len(result_scores), 1)
+
             deepeval_data = {
                 "evaluation_id": f"deepeval_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
                 "model_outputs_count": len(model_outputs),
                 "evaluation_criteria": criteria,
                 "results": evaluation_results,
-                "overall_score": np.mean([r["score"] for r in evaluation_results.values()]),
-                "recommendations": [
-                    "Consider fine-tuning for better bias mitigation",
-                    "Implement additional evaluation metrics",
-                    "Regular monitoring recommended"
-                ]
+                "overall_score": overall_score,
+                "status": "evaluated_locally",
+                "note": "DeepEval API not connected; metrics computed from provided model outputs"
             }
             
             return ToolIntegrationResult(
@@ -313,48 +307,66 @@ class ModernToolsIntegrationService:
                     timestamp=datetime.now().isoformat()
                 )
             
-            # Simulate Phoenix monitoring data
+            # Arize Phoenix integration: compute monitoring metrics from actual data
+            # Extract scores and group labels from model outputs
+            all_scores = [float(o.get("score", 0)) for o in model_outputs if "score" in o]
+            all_bias = [float(o.get("bias_score", 0)) for o in model_outputs if "bias_score" in o]
+
+            # Group-level analysis from actual outputs
+            group_performance = {}
+            for output in model_outputs:
+                group = output.get("group", "default")
+                if group not in group_performance:
+                    group_performance[group] = {"scores": [], "bias_scores": []}
+                if "score" in output:
+                    group_performance[group]["scores"].append(float(output["score"]))
+                if "bias_score" in output:
+                    group_performance[group]["bias_scores"].append(float(output["bias_score"]))
+
+            demographic_analysis = {}
+            for group, data in group_performance.items():
+                scores = data["scores"]
+                b_scores = data["bias_scores"]
+                demographic_analysis[group] = {
+                    "accuracy": sum(scores) / max(len(scores), 1) if scores else 0.0,
+                    "bias_score": sum(b_scores) / max(len(b_scores), 1) if b_scores else 0.0
+                }
+
+            avg_bias = sum(all_bias) / max(len(all_bias), 1) if all_bias else 0.0
+
             phoenix_data = {
                 "monitoring_session_id": f"phoenix_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
                 "data_points": len(model_outputs),
                 "monitoring_metrics": {
-                    "data_drift_score": np.random.uniform(0.1, 0.3),
-                    "performance_degradation": np.random.uniform(0.05, 0.2),
+                    "data_drift_score": 0.0,
+                    "performance_degradation": 0.0,
                     "bias_trend": {
-                        "current": np.random.uniform(0.1, 0.25),
-                        "trend": "stable",
-                        "change_rate": np.random.uniform(-0.05, 0.05)
-                    }
+                        "current": avg_bias,
+                        "trend": "unknown",
+                        "change_rate": 0.0
+                    },
+                    "note": "Arize Phoenix API not connected; metrics computed from provided data"
                 },
                 "demographic_analysis": {
-                    "group_performance": {
-                        "group_a": {"accuracy": 0.85, "bias_score": 0.12},
-                        "group_b": {"accuracy": 0.82, "bias_score": 0.15},
-                        "group_c": {"accuracy": 0.88, "bias_score": 0.08}
-                    }
+                    "group_performance": demographic_analysis
                 },
                 "alerts": [],
-                "recommendations": [
-                    "Monitor bias trend closely",
-                    "Consider retraining if drift continues",
-                    "Implement additional monitoring points"
-                ]
+                "recommendations": []
             }
-            
-            # Check for alerts
-            if phoenix_data["monitoring_metrics"]["data_drift_score"] > 0.25:
-                phoenix_data["alerts"].append({
-                    "type": "data_drift",
-                    "severity": "warning",
-                    "message": "Significant data drift detected"
-                })
-            
-            if phoenix_data["monitoring_metrics"]["bias_trend"]["current"] > 0.2:
+
+            # Generate alerts from actual data
+            if avg_bias > 0.2:
                 phoenix_data["alerts"].append({
                     "type": "bias_increase",
                     "severity": "critical",
-                    "message": "Bias levels above acceptable threshold"
+                    "message": f"Bias level ({avg_bias:.3f}) above acceptable threshold (0.2)"
                 })
+                phoenix_data["recommendations"].append("Review and mitigate detected bias")
+
+            if not all_scores and not all_bias:
+                phoenix_data["recommendations"].append(
+                    "Provide 'score' and 'bias_score' fields in model outputs for meaningful monitoring"
+                )
             
             return ToolIntegrationResult(
                 tool_name="arize_phoenix",
@@ -392,38 +404,52 @@ class ModernToolsIntegrationService:
                     timestamp=datetime.now().isoformat()
                 )
             
-            # Simulate AWS Clarify analysis
+            # AWS Clarify integration: compute bias metrics from actual model outputs
             clarify_data = {
                 "analysis_job_id": f"clarify_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
                 "sensitive_attributes": sensitive_attributes,
                 "bias_metrics": {},
                 "fairness_metrics": {},
-                "visual_reports": []
+                "status": "analyzed_locally",
+                "note": "AWS Clarify API not connected; metrics computed from provided data"
             }
-            
-            # Generate bias metrics for each sensitive attribute
+
             for attr in sensitive_attributes:
-                clarify_data["bias_metrics"][attr] = {
-                    "demographic_parity_difference": np.random.uniform(0.02, 0.15),
-                    "equalized_odds_difference": np.random.uniform(0.01, 0.12),
-                    "calibration_difference": np.random.uniform(0.01, 0.08)
-                }
-                
-                clarify_data["fairness_metrics"][attr] = {
-                    "statistical_parity": np.random.uniform(0.85, 0.98),
-                    "equal_opportunity": np.random.uniform(0.88, 0.96),
-                    "predictive_parity": np.random.uniform(0.82, 0.94)
-                }
-            
-            # Generate visual reports
-            clarify_data["visual_reports"] = [
-                f"bias_analysis_report_{attr}.html" for attr in sensitive_attributes
-            ]
-            clarify_data["visual_reports"].extend([
-                "demographic_parity_plot.png",
-                "equalized_odds_comparison.png",
-                "calibration_analysis.png"
-            ])
+                # Group model outputs by sensitive attribute value
+                groups = {}
+                for output in model_outputs:
+                    attr_val = output.get(attr, output.get("group", "unknown"))
+                    groups.setdefault(str(attr_val), []).append(output)
+
+                if len(groups) >= 2:
+                    # Compute actual demographic parity from outcome rates
+                    group_rates = {}
+                    for group_name, group_outputs in groups.items():
+                        positive = sum(1 for o in group_outputs
+                                      if o.get("outcome", o.get("prediction", 0)) == 1)
+                        group_rates[group_name] = positive / max(len(group_outputs), 1)
+
+                    rates = list(group_rates.values())
+                    dp_diff = max(rates) - min(rates)
+
+                    clarify_data["bias_metrics"][attr] = {
+                        "demographic_parity_difference": dp_diff,
+                        "group_rates": group_rates,
+                        "groups_analyzed": len(groups)
+                    }
+                    clarify_data["fairness_metrics"][attr] = {
+                        "statistical_parity": 1.0 - dp_diff,
+                        "groups_analyzed": len(groups)
+                    }
+                else:
+                    clarify_data["bias_metrics"][attr] = {
+                        "demographic_parity_difference": 0.0,
+                        "note": f"Insufficient group variation for attribute '{attr}'"
+                    }
+                    clarify_data["fairness_metrics"][attr] = {
+                        "statistical_parity": 1.0,
+                        "note": f"Insufficient group variation for attribute '{attr}'"
+                    }
             
             return ToolIntegrationResult(
                 tool_name="aws_clarify",
@@ -463,48 +489,60 @@ class ModernToolsIntegrationService:
             
             frameworks = compliance_frameworks or ["EU_AI_ACT", "FTC_GUIDELINES"]
             
-            # Simulate Confident AI enterprise analysis
+            # Confident AI integration: compute risk and compliance from actual data
+            # Analyze model outputs for risk indicators
+            all_bias_scores = [float(o.get("bias_score", 0)) for o in model_outputs if "bias_score" in o]
+            avg_bias = sum(all_bias_scores) / max(len(all_bias_scores), 1) if all_bias_scores else 0.0
+
+            if avg_bias > 0.5:
+                overall_risk_level = "high"
+            elif avg_bias > 0.2:
+                overall_risk_level = "medium"
+            else:
+                overall_risk_level = "low"
+
+            risk_factors = []
+            if avg_bias > 0.3:
+                risk_factors.append(f"Elevated bias detected (avg: {avg_bias:.3f})")
+            if len(model_outputs) < 10:
+                risk_factors.append("Small sample size limits confidence in risk assessment")
+            if not all_bias_scores:
+                risk_factors.append("No bias scores provided in model outputs")
+
             confident_data = {
                 "enterprise_session_id": f"confident_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
                 "compliance_frameworks": frameworks,
                 "risk_assessment": {
-                    "overall_risk_level": "medium",
-                    "risk_score": np.random.uniform(0.3, 0.6),
-                    "risk_factors": [
-                        "Moderate bias detected in demographic groups",
-                        "Some compliance gaps identified",
-                        "Recommendation for additional monitoring"
-                    ]
+                    "overall_risk_level": overall_risk_level,
+                    "risk_score": avg_bias,
+                    "risk_factors": risk_factors
                 },
                 "compliance_status": {},
                 "governance_reports": [],
-                "real_time_alerts": []
+                "real_time_alerts": [],
+                "status": "assessed_locally",
+                "note": "Confident AI API not connected; risk computed from provided data"
             }
-            
-            # Generate compliance status for each framework
+
             for framework in frameworks:
+                # Compliance determined from actual risk level
+                is_compliant = avg_bias < 0.3
+                gaps = []
+                if not is_compliant:
+                    gaps.append(f"Bias score ({avg_bias:.3f}) exceeds compliance threshold")
+                if not all_bias_scores:
+                    gaps.append("No bias metrics available for compliance assessment")
+
                 confident_data["compliance_status"][framework] = {
-                    "compliant": np.random.choice([True, False], p=[0.7, 0.3]),
-                    "compliance_score": np.random.uniform(0.6, 0.95),
-                    "gaps": [
-                        "Documentation needs improvement",
-                        "Monitoring frequency below recommended"
-                    ] if np.random.random() > 0.5 else [],
+                    "compliant": is_compliant,
+                    "compliance_score": max(0.0, 1.0 - avg_bias),
+                    "gaps": gaps,
                     "recommendations": [
                         "Implement additional bias monitoring",
                         "Update compliance documentation",
                         "Schedule regular audits"
-                    ]
+                    ] if gaps else ["Continue current monitoring practices"]
                 }
-            
-            # Generate governance reports
-            confident_data["governance_reports"] = [
-                f"compliance_report_{framework}.pdf" for framework in frameworks
-            ]
-            confident_data["governance_reports"].extend([
-                "bias_risk_assessment.pdf",
-                "governance_dashboard.html"
-            ])
             
             return ToolIntegrationResult(
                 tool_name="confident_ai",
@@ -542,47 +580,26 @@ class ModernToolsIntegrationService:
                     timestamp=datetime.now().isoformat()
                 )
             
-            # Simulate TransformerLens analysis
-            lens_data = {
-                "analysis_id": f"transformer_lens_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
-                "analysis_type": analysis_type,
-                "model_architecture": "transformer",
-                "analysis_results": {}
-            }
-            
-            if analysis_type == "activation_patching":
-                lens_data["analysis_results"] = {
-                    "critical_layers": [8, 12, 16],
-                    "intervention_effects": {
-                        "layer_8": {"effect_size": 0.3, "significance": 0.95},
-                        "layer_12": {"effect_size": 0.5, "significance": 0.99},
-                        "layer_16": {"effect_size": 0.2, "significance": 0.90}
-                    },
-                    "causal_pathways": [
-                        "input_embedding -> attention -> bias_activation",
-                        "position_embedding -> layer_norm -> output"
-                    ]
-                }
-            elif analysis_type == "circuit_discovery":
-                lens_data["analysis_results"] = {
-                    "discovered_circuits": {
-                        "bias_circuit": {
-                            "neurons": [1024, 2048, 3072],
-                            "connections": ["strong", "moderate", "weak"],
-                            "function": "gender_bias_detection"
-                        },
-                        "fairness_circuit": {
-                            "neurons": [1536, 2560, 3584],
-                            "connections": ["moderate", "strong", "moderate"],
-                            "function": "fairness_processing"
-                        }
-                    }
-                }
-            
+            # TransformerLens requires a loaded model for real analysis
+            try:
+                import transformer_lens  # noqa: F401
+            except ImportError:
+                return ToolIntegrationResult(
+                    tool_name="transformer_lens",
+                    success=False,
+                    data={},
+                    error="TransformerLens package not installed. Install with: pip install transformer-lens",
+                    timestamp=datetime.now().isoformat()
+                )
+
             return ToolIntegrationResult(
                 tool_name="transformer_lens",
-                success=True,
-                data=lens_data,
+                success=False,
+                data={"analysis_type": analysis_type},
+                error=(
+                    "TransformerLens analysis requires a loaded model instance. "
+                    "Pass a HookedTransformer model via model_outputs to run real analysis."
+                ),
                 timestamp=datetime.now().isoformat()
             )
             
@@ -615,27 +632,26 @@ class ModernToolsIntegrationService:
                     timestamp=datetime.now().isoformat()
                 )
             
-            # Simulate BertViz analysis
+            # BertViz requires actual attention weights from a loaded model
+            try:
+                import bertviz  # noqa: F401
+            except ImportError:
+                return ToolIntegrationResult(
+                    tool_name="bertviz",
+                    success=False,
+                    data={},
+                    error="BertViz package not installed. Install with: pip install bertviz",
+                    timestamp=datetime.now().isoformat()
+                )
+
             bertviz_data = {
                 "visualization_id": f"bertviz_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
                 "visualization_type": visualization_type,
-                "attention_analysis": {
-                    "layer_attention_patterns": {
-                        "layer_1": {"attention_entropy": 0.85, "focus_tokens": ["bias", "fairness"]},
-                        "layer_6": {"attention_entropy": 0.72, "focus_tokens": ["gender", "race"]},
-                        "layer_12": {"attention_entropy": 0.68, "focus_tokens": ["discrimination", "equality"]}
-                    },
-                    "head_analysis": {
-                        "head_1": {"bias_attention": 0.3, "function": "syntactic"},
-                        "head_8": {"bias_attention": 0.7, "function": "semantic"},
-                        "head_12": {"bias_attention": 0.8, "function": "bias_detection"}
-                    }
-                },
-                "visualizations": [
-                    f"attention_{visualization_type}.html",
-                    "attention_flow_animation.gif",
-                    "layer_attention_heatmap.png"
-                ]
+                "status": "requires_model",
+                "error": (
+                    "BertViz visualization requires actual attention weights from a loaded model. "
+                    "Pass attention tensors via model_outputs to generate real visualizations."
+                ),
             }
             
             return ToolIntegrationResult(

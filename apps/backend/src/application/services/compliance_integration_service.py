@@ -21,7 +21,18 @@ import base64
 from cryptography.fernet import Fernet
 import os
 
+try:
+    import aiohttp
+    AIOHTTP_AVAILABLE = True
+except ImportError:
+    AIOHTTP_AVAILABLE = False
+
 from src.common.audit import audit_logger, AuditSeverity
+
+
+class IntegrationNotConfiguredError(Exception):
+    """Raised when an integration is called without proper API credentials."""
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -149,7 +160,7 @@ class OneTrustConnector(BaseConnector):
     async def test_connection(self) -> Tuple[bool, str]:
         """Test OneTrust API connection"""
         try:
-            # Simulate API call
+            # Validate credentials before attempting connection
             if not self.api_key or not self.org_id:
                 return False, "Missing API key or organization ID"
 
@@ -169,20 +180,20 @@ class OneTrustConnector(BaseConnector):
             List of consent records
         """
         async def _fetch():
-            # Simulate fetching consent records
-            return {
-                "consent_records": [
-                    {
-                        "id": "consent_001",
-                        "timestamp": datetime.utcnow().isoformat(),
-                        "purpose": "AI model training",
-                        "withdrawal_mechanism": "email",
-                    }
-                ]
-            }
+            if not AIOHTTP_AVAILABLE or not self.api_key:
+                raise IntegrationNotConfiguredError(
+                    "OneTrust API credentials not configured. "
+                    "Provide api_key and org_id to fetch consent records."
+                )
+            async with aiohttp.ClientSession() as session:
+                headers = {"Authorization": f"Bearer {self.api_key}"}
+                url = f"{self.base_url}/api/consentmanager/v2/consent-receipts"
+                async with session.get(url, headers=headers) as resp:
+                    resp.raise_for_status()
+                    return await resp.json()
 
         result = await self._retry_with_backoff(_fetch)
-        return result.get("consent_records", [])
+        return result.get("consent_records", result.get("content", []))
 
     async def get_privacy_assessments(self) -> List[Dict[str, Any]]:
         """
@@ -192,20 +203,20 @@ class OneTrustConnector(BaseConnector):
             List of privacy assessments
         """
         async def _fetch():
-            # Simulate fetching privacy assessments
-            return {
-                "assessments": [
-                    {
-                        "id": "assessment_001",
-                        "name": "Data Processing Assessment",
-                        "status": "completed",
-                        "date": datetime.utcnow().isoformat(),
-                    }
-                ]
-            }
+            if not AIOHTTP_AVAILABLE or not self.api_key:
+                raise IntegrationNotConfiguredError(
+                    "OneTrust API credentials not configured. "
+                    "Provide api_key and org_id to fetch privacy assessments."
+                )
+            async with aiohttp.ClientSession() as session:
+                headers = {"Authorization": f"Bearer {self.api_key}"}
+                url = f"{self.base_url}/api/pia/v2/assessments"
+                async with session.get(url, headers=headers) as resp:
+                    resp.raise_for_status()
+                    return await resp.json()
 
         result = await self._retry_with_backoff(_fetch)
-        return result.get("assessments", [])
+        return result.get("assessments", result.get("content", []))
 
     async def get_data_mapping(self) -> Dict[str, Any]:
         """
@@ -215,17 +226,17 @@ class OneTrustConnector(BaseConnector):
             Data mapping information
         """
         async def _fetch():
-            # Simulate fetching data mapping
-            return {
-                "data_flows": [
-                    {
-                        "source": "India",
-                        "destination": "India",
-                        "data_type": "personal_data",
-                        "purpose": "AI processing",
-                    }
-                ]
-            }
+            if not AIOHTTP_AVAILABLE or not self.api_key:
+                raise IntegrationNotConfiguredError(
+                    "OneTrust API credentials not configured. "
+                    "Provide api_key and org_id to fetch data mapping."
+                )
+            async with aiohttp.ClientSession() as session:
+                headers = {"Authorization": f"Bearer {self.api_key}"}
+                url = f"{self.base_url}/api/datamap/v2/data-flows"
+                async with session.get(url, headers=headers) as resp:
+                    resp.raise_for_status()
+                    return await resp.json()
 
         result = await self._retry_with_backoff(_fetch)
         return result
@@ -286,17 +297,17 @@ class SecuritiConnector(BaseConnector):
             Data discovery results
         """
         async def _fetch():
-            # Simulate fetching data discovery results
-            return {
-                "discovered_data": [
-                    {
-                        "location": "database_1",
-                        "data_type": "personal_data",
-                        "count": 10000,
-                        "sensitivity": "high",
-                    }
-                ]
-            }
+            if not AIOHTTP_AVAILABLE or not self.api_key:
+                raise IntegrationNotConfiguredError(
+                    "Securiti API credentials not configured. "
+                    "Provide api_key and tenant_id to fetch data discovery results."
+                )
+            async with aiohttp.ClientSession() as session:
+                headers = {"Authorization": f"Bearer {self.api_key}"}
+                url = f"{self.base_url}/v1/data-discovery/results"
+                async with session.get(url, headers=headers) as resp:
+                    resp.raise_for_status()
+                    return await resp.json()
 
         result = await self._retry_with_backoff(_fetch)
         return result
@@ -309,17 +320,17 @@ class SecuritiConnector(BaseConnector):
             List of classification tags
         """
         async def _fetch():
-            # Simulate fetching classification tags
-            return {
-                "tags": [
-                    {
-                        "id": "tag_001",
-                        "name": "PII",
-                        "category": "personal_data",
-                        "sensitivity": "high",
-                    }
-                ]
-            }
+            if not AIOHTTP_AVAILABLE or not self.api_key:
+                raise IntegrationNotConfiguredError(
+                    "Securiti API credentials not configured. "
+                    "Provide api_key and tenant_id to fetch classification tags."
+                )
+            async with aiohttp.ClientSession() as session:
+                headers = {"Authorization": f"Bearer {self.api_key}"}
+                url = f"{self.base_url}/v1/classification/tags"
+                async with session.get(url, headers=headers) as resp:
+                    resp.raise_for_status()
+                    return await resp.json()
 
         result = await self._retry_with_backoff(_fetch)
         return result.get("tags", [])
@@ -332,17 +343,17 @@ class SecuritiConnector(BaseConnector):
             Privacy automation evidence
         """
         async def _fetch():
-            # Simulate fetching privacy automation evidence
-            return {
-                "automation_status": "active",
-                "automated_controls": [
-                    {
-                        "control_id": "auto_001",
-                        "name": "Data Minimization",
-                        "status": "active",
-                    }
-                ]
-            }
+            if not AIOHTTP_AVAILABLE or not self.api_key:
+                raise IntegrationNotConfiguredError(
+                    "Securiti API credentials not configured. "
+                    "Provide api_key and tenant_id to fetch privacy automation evidence."
+                )
+            async with aiohttp.ClientSession() as session:
+                headers = {"Authorization": f"Bearer {self.api_key}"}
+                url = f"{self.base_url}/v1/privacy/automation"
+                async with session.get(url, headers=headers) as resp:
+                    resp.raise_for_status()
+                    return await resp.json()
 
         result = await self._retry_with_backoff(_fetch)
         return result
@@ -402,17 +413,17 @@ class SprintoConnector(BaseConnector):
             List of security controls
         """
         async def _fetch():
-            # Simulate fetching security controls
-            return {
-                "controls": [
-                    {
-                        "id": "control_001",
-                        "name": "Encryption at Rest",
-                        "status": "implemented",
-                        "framework": "ISO27001",
-                    }
-                ]
-            }
+            if not AIOHTTP_AVAILABLE or not self.api_key:
+                raise IntegrationNotConfiguredError(
+                    "Sprinto API credentials not configured. "
+                    "Provide api_key to fetch security controls."
+                )
+            async with aiohttp.ClientSession() as session:
+                headers = {"Authorization": f"Bearer {self.api_key}"}
+                url = f"{self.base_url}/v1/controls"
+                async with session.get(url, headers=headers) as resp:
+                    resp.raise_for_status()
+                    return await resp.json()
 
         result = await self._retry_with_backoff(_fetch)
         return result.get("controls", [])
@@ -425,17 +436,17 @@ class SprintoConnector(BaseConnector):
             List of audit evidence
         """
         async def _fetch():
-            # Simulate fetching audit evidence
-            return {
-                "audit_logs": [
-                    {
-                        "id": "audit_001",
-                        "action": "access_control_check",
-                        "timestamp": datetime.utcnow().isoformat(),
-                        "status": "passed",
-                    }
-                ]
-            }
+            if not AIOHTTP_AVAILABLE or not self.api_key:
+                raise IntegrationNotConfiguredError(
+                    "Sprinto API credentials not configured. "
+                    "Provide api_key to fetch audit evidence."
+                )
+            async with aiohttp.ClientSession() as session:
+                headers = {"Authorization": f"Bearer {self.api_key}"}
+                url = f"{self.base_url}/v1/audit-logs"
+                async with session.get(url, headers=headers) as resp:
+                    resp.raise_for_status()
+                    return await resp.json()
 
         result = await self._retry_with_backoff(_fetch)
         return result.get("audit_logs", [])
@@ -448,16 +459,17 @@ class SprintoConnector(BaseConnector):
             Compliance status information
         """
         async def _fetch():
-            # Simulate fetching compliance status
-            return {
-                "frameworks": [
-                    {
-                        "name": "ISO27001",
-                        "status": "in_progress",
-                        "completion": 75,
-                    }
-                ]
-            }
+            if not AIOHTTP_AVAILABLE or not self.api_key:
+                raise IntegrationNotConfiguredError(
+                    "Sprinto API credentials not configured. "
+                    "Provide api_key to fetch compliance status."
+                )
+            async with aiohttp.ClientSession() as session:
+                headers = {"Authorization": f"Bearer {self.api_key}"}
+                url = f"{self.base_url}/v1/compliance/status"
+                async with session.get(url, headers=headers) as resp:
+                    resp.raise_for_status()
+                    return await resp.json()
 
         result = await self._retry_with_backoff(_fetch)
         return result
@@ -517,17 +529,16 @@ class MLflowConnector(BaseConnector):
             Model lineage information
         """
         async def _fetch():
-            # Simulate fetching model lineage
-            return {
-                "models": [
-                    {
-                        "name": "bias_detection_model",
-                        "version": "1.0",
-                        "source": "training_pipeline",
-                        "created_at": datetime.utcnow().isoformat(),
-                    }
-                ]
-            }
+            if not AIOHTTP_AVAILABLE or not self.tracking_uri:
+                raise IntegrationNotConfiguredError(
+                    "MLflow tracking URI not configured. "
+                    "Provide tracking_uri to fetch model lineage."
+                )
+            async with aiohttp.ClientSession() as session:
+                url = f"{self.base_url}/api/2.0/mlflow/registered-models/list"
+                async with session.get(url) as resp:
+                    resp.raise_for_status()
+                    return await resp.json()
 
         result = await self._retry_with_backoff(_fetch)
         return result
@@ -540,20 +551,20 @@ class MLflowConnector(BaseConnector):
             List of model versions
         """
         async def _fetch():
-            # Simulate fetching model versions
-            return {
-                "versions": [
-                    {
-                        "version": "1.0",
-                        "stage": "production",
-                        "created_at": datetime.utcnow().isoformat(),
-                        "metrics": {"accuracy": 0.95},
-                    }
-                ]
-            }
+            if not AIOHTTP_AVAILABLE or not self.tracking_uri:
+                raise IntegrationNotConfiguredError(
+                    "MLflow tracking URI not configured. "
+                    "Provide tracking_uri to fetch model versions."
+                )
+            async with aiohttp.ClientSession() as session:
+                url = f"{self.base_url}/api/2.0/mlflow/registered-models/get-latest-versions"
+                async with session.get(url) as resp:
+                    resp.raise_for_status()
+                    data = await resp.json()
+                    return data
 
         result = await self._retry_with_backoff(_fetch)
-        return result.get("versions", [])
+        return result.get("model_versions", [])
 
     async def get_performance_metrics(self) -> Dict[str, Any]:
         """
@@ -563,15 +574,16 @@ class MLflowConnector(BaseConnector):
             Performance metrics
         """
         async def _fetch():
-            # Simulate fetching performance metrics
-            return {
-                "metrics": {
-                    "accuracy": 0.95,
-                    "precision": 0.92,
-                    "recall": 0.93,
-                    "f1_score": 0.925,
-                }
-            }
+            if not AIOHTTP_AVAILABLE or not self.tracking_uri:
+                raise IntegrationNotConfiguredError(
+                    "MLflow tracking URI not configured. "
+                    "Provide tracking_uri to fetch performance metrics."
+                )
+            async with aiohttp.ClientSession() as session:
+                url = f"{self.base_url}/api/2.0/mlflow/runs/search"
+                async with session.post(url, json={"max_results": 1}) as resp:
+                    resp.raise_for_status()
+                    return await resp.json()
 
         result = await self._retry_with_backoff(_fetch)
         return result
@@ -632,17 +644,16 @@ class AWSConnector(BaseConnector):
             Data residency information
         """
         async def _fetch():
-            # Simulate fetching data residency
-            return {
-                "storage_locations": [
-                    {
-                        "service": "S3",
-                        "bucket": "data-bucket",
-                        "region": "ap-south-1",
-                        "encryption": "AES-256",
-                    }
-                ]
-            }
+            if not AIOHTTP_AVAILABLE or not self.access_key_id:
+                raise IntegrationNotConfiguredError(
+                    "AWS credentials not configured. "
+                    "Provide access_key_id and secret_access_key to fetch data residency evidence."
+                )
+            # Use AWS SDK or signed requests for real implementation
+            raise IntegrationNotConfiguredError(
+                "AWS data residency evidence requires boto3 integration. "
+                "Configure AWS credentials and enable the boto3 connector."
+            )
 
         result = await self._retry_with_backoff(_fetch)
         return result
@@ -693,17 +704,15 @@ class AzureConnector(BaseConnector):
             Data residency information
         """
         async def _fetch():
-            # Simulate fetching data residency
-            return {
-                "storage_locations": [
-                    {
-                        "service": "Blob Storage",
-                        "container": "data-container",
-                        "region": "southindia",
-                        "encryption": "AES-256",
-                    }
-                ]
-            }
+            if not AIOHTTP_AVAILABLE or not self.subscription_id:
+                raise IntegrationNotConfiguredError(
+                    "Azure credentials not configured. "
+                    "Provide subscription_id and tenant_id to fetch data residency evidence."
+                )
+            raise IntegrationNotConfiguredError(
+                "Azure data residency evidence requires azure-identity integration. "
+                "Configure Azure credentials and enable the Azure connector."
+            )
 
         result = await self._retry_with_backoff(_fetch)
         return result
@@ -753,17 +762,15 @@ class GCPConnector(BaseConnector):
             Data residency information
         """
         async def _fetch():
-            # Simulate fetching data residency
-            return {
-                "storage_locations": [
-                    {
-                        "service": "Cloud Storage",
-                        "bucket": "data-bucket",
-                        "region": "asia-south1",
-                        "encryption": "AES-256",
-                    }
-                ]
-            }
+            if not AIOHTTP_AVAILABLE or not self.project_id:
+                raise IntegrationNotConfiguredError(
+                    "GCP credentials not configured. "
+                    "Provide project_id and service_account_key to fetch data residency evidence."
+                )
+            raise IntegrationNotConfiguredError(
+                "GCP data residency evidence requires google-cloud integration. "
+                "Configure GCP credentials and enable the GCP connector."
+            )
 
         result = await self._retry_with_backoff(_fetch)
         return result
@@ -813,14 +820,17 @@ class CustomAPIConnector(BaseConnector):
     async def get_evidence(self, evidence_type: str) -> Dict[str, Any]:
         """Get evidence from custom API"""
         async def _fetch():
-            # Simulate fetching from custom API
-            return {
-                "type": evidence_type,
-                "data": {
-                    "source": "custom_api",
-                    "timestamp": datetime.utcnow().isoformat(),
-                }
-            }
+            if not AIOHTTP_AVAILABLE or not self.api_key or not self.base_url:
+                raise IntegrationNotConfiguredError(
+                    "Custom API credentials not configured. "
+                    "Provide base_url and api_key to fetch evidence."
+                )
+            async with aiohttp.ClientSession() as session:
+                headers = {"Authorization": f"Bearer {self.api_key}"}
+                url = f"{self.base_url}/evidence/{evidence_type}"
+                async with session.get(url, headers=headers) as resp:
+                    resp.raise_for_status()
+                    return await resp.json()
 
         result = await self._retry_with_backoff(_fetch)
         return result

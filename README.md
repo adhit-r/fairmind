@@ -13,7 +13,7 @@
 
 [![Backend Status](https://img.shields.io/badge/Backend-FastAPI-green)](https://api.fairmind.xyz)
 [![Frontend Status](https://img.shields.io/badge/Frontend-Next.js-blue)](https://app-demo.fairmind.xyz)
-[![Testing Coverage](https://img.shields.io/badge/Testing-80%25%2B-brightgreen)](./FINAL_TESTING_SUMMARY.md)
+[![Testing Coverage](https://img.shields.io/badge/Testing-80%25%2B-brightgreen)](./docs/TESTING_GUIDE.md)
 [![Contributors](https://img.shields.io/github/contributors/adhit-r/fairmind)](https://github.com/adhit-r/fairmind/graphs/contributors)
 [![Issues](https://img.shields.io/github/issues/adhit-r/fairmind/good%20first%20issue)](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)

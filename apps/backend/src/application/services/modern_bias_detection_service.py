@@ -116,35 +116,54 @@ class ModernBiasDetectionService:
             return self._generate_synthetic_adult_data()
     
     def _generate_synthetic_adult_data(self) -> pd.DataFrame:
-        """Generate synthetic Adult Census data as a fallback."""
-        np.random.seed(42)
+        """Generate deterministic synthetic Adult Census data as a fallback.
+
+        Uses cyclic assignment and rule-based outcomes instead of randomness
+        so the dataset is fully reproducible without randomness.
+        """
         n_samples = 1000
-        age = np.clip(np.random.normal(38, 13, n_samples), 17, 90)
-        workclass = np.random.choice(['Private', 'Self-emp-not-inc', 'Self-emp-inc', 'Federal-gov', 'Local-gov', 'State-gov', 'Without-pay', 'Never-worked'], n_samples, p=[0.7, 0.1, 0.05, 0.05, 0.05, 0.03, 0.01, 0.01])
-        education = np.random.choice(['Bachelors', 'Some-college', 'HS-grad', 'Masters', 'Doctorate'], n_samples)
-        race = np.random.choice(['White', 'Black', 'Asian-Pac-Islander', 'Other'], n_samples, p=[0.85, 0.1, 0.03, 0.02])
-        sex = np.random.choice(['Male', 'Female'], n_samples, p=[0.55, 0.45])
+        workclass_opts = ['Private', 'Self-emp-not-inc', 'Self-emp-inc', 'Federal-gov',
+                          'Local-gov', 'State-gov', 'Without-pay', 'Never-worked']
+        education_opts = ['Bachelors', 'Some-college', 'HS-grad', 'Masters', 'Doctorate']
+        race_opts = ['White', 'Black', 'Asian-Pac-Islander', 'Other']
+        sex_opts = ['Male', 'Female']
+
+        age = np.clip(np.linspace(17, 90, n_samples), 17, 90)
+        workclass = np.array([workclass_opts[i % len(workclass_opts)] for i in range(n_samples)])
+        education = np.array([education_opts[i % len(education_opts)] for i in range(n_samples)])
+        race = np.array([race_opts[i % len(race_opts)] for i in range(n_samples)])
+        sex = np.array([sex_opts[i % len(sex_opts)] for i in range(n_samples)])
         income = np.zeros(n_samples, dtype=int)
         for i in range(n_samples):
-            base_prob = 0.25 + (0.1 if race[i] == 'White' else 0) + (0.15 if sex[i] == 'Male' else 0) + (0.2 if education[i] in ['Bachelors', 'Masters', 'Doctorate'] else 0) + (0.1 if age[i] > 30 else 0)
-            income[i] = np.random.binomial(1, min(base_prob, 0.9))
-        return pd.DataFrame({'age': age, 'workclass': workclass, 'education': education, 'race': race, 'sex': sex, 'income': income})
+            base_prob = (0.25
+                         + (0.1 if race[i] == 'White' else 0)
+                         + (0.15 if sex[i] == 'Male' else 0)
+                         + (0.2 if education[i] in ['Bachelors', 'Masters', 'Doctorate'] else 0)
+                         + (0.1 if age[i] > 30 else 0))
+            income[i] = 1 if min(base_prob, 0.9) > 0.5 else 0
+        return pd.DataFrame({'age': age, 'workclass': workclass, 'education': education,
+                             'race': race, 'sex': sex, 'income': income})
 
     def _load_compas_dataset(self) -> pd.DataFrame:
         """Load COMPAS dataset or generate synthetic if unavailable."""
         return self._generate_synthetic_compas_data()
 
     def _generate_synthetic_compas_data(self) -> pd.DataFrame:
-        """Generate synthetic COMPAS data."""
-        np.random.seed(42)
+        """Generate deterministic synthetic COMPAS data."""
         n_samples = 1000
-        age = np.clip(np.random.normal(35, 12, n_samples), 18, 75)
-        race = np.random.choice(['Caucasian', 'African-American', 'Hispanic', 'Other'], n_samples, p=[0.5, 0.3, 0.15, 0.05])
-        sex = np.random.choice(['Male', 'Female'], n_samples, p=[0.7, 0.3])
+        race_opts = ['Caucasian', 'African-American', 'Hispanic', 'Other']
+        sex_opts = ['Male', 'Female']
+
+        age = np.clip(np.linspace(18, 75, n_samples), 18, 75)
+        race = np.array([race_opts[i % len(race_opts)] for i in range(n_samples)])
+        sex = np.array([sex_opts[i % len(sex_opts)] for i in range(n_samples)])
         recidivism = np.zeros(n_samples, dtype=int)
         for i in range(n_samples):
-            base_prob = 0.3 + (0.2 if race[i] == 'African-American' else 0) + (0.1 if sex[i] == 'Male' else 0) + (0.15 if age[i] < 25 else 0)
-            recidivism[i] = np.random.binomial(1, min(base_prob, 0.8))
+            base_prob = (0.3
+                         + (0.2 if race[i] == 'African-American' else 0)
+                         + (0.1 if sex[i] == 'Male' else 0)
+                         + (0.15 if age[i] < 25 else 0))
+            recidivism[i] = 1 if min(base_prob, 0.8) > 0.5 else 0
         return pd.DataFrame({'age': age, 'race': race, 'sex': sex, 'recidivism': recidivism})
 
     def _load_german_dataset(self) -> pd.DataFrame:
@@ -152,16 +171,21 @@ class ModernBiasDetectionService:
         return self._generate_synthetic_german_data()
 
     def _generate_synthetic_german_data(self) -> pd.DataFrame:
-        """Generate synthetic German Credit data."""
-        np.random.seed(42)
+        """Generate deterministic synthetic German Credit data."""
         n_samples = 1000
-        age = np.clip(np.random.normal(35, 12, n_samples), 18, 75)
-        credit_history = np.random.choice(['good', 'poor', 'none'], n_samples, p=[0.6, 0.3, 0.1])
-        sex = np.random.choice(['male', 'female'], n_samples, p=[0.6, 0.4])
+        history_opts = ['good', 'poor', 'none']
+        sex_opts = ['male', 'female']
+
+        age = np.clip(np.linspace(18, 75, n_samples), 18, 75)
+        credit_history = np.array([history_opts[i % len(history_opts)] for i in range(n_samples)])
+        sex = np.array([sex_opts[i % len(sex_opts)] for i in range(n_samples)])
         credit_risk = np.zeros(n_samples, dtype=int)
         for i in range(n_samples):
-            base_prob = 0.3 + (0.3 if credit_history[i] == 'poor' else 0) + (0.1 if sex[i] == 'female' else 0) + (0.1 if age[i] < 25 else 0)
-            credit_risk[i] = np.random.binomial(1, min(base_prob, 0.8))
+            base_prob = (0.3
+                         + (0.3 if credit_history[i] == 'poor' else 0)
+                         + (0.1 if sex[i] == 'female' else 0)
+                         + (0.1 if age[i] < 25 else 0))
+            credit_risk[i] = 1 if min(base_prob, 0.8) > 0.5 else 0
         return pd.DataFrame({'age': age, 'credit_history': credit_history, 'sex': sex, 'credit_risk': credit_risk})
 
     def _load_diabetes_dataset(self) -> pd.DataFrame:
@@ -169,17 +193,22 @@ class ModernBiasDetectionService:
         return self._generate_synthetic_diabetes_data()
 
     def _generate_synthetic_diabetes_data(self) -> pd.DataFrame:
-        """Generate synthetic Diabetes data."""
-        np.random.seed(42)
+        """Generate deterministic synthetic Diabetes data."""
         n_samples = 1000
-        age = np.clip(np.random.normal(50, 15, n_samples), 20, 80)
-        bmi = np.clip(np.random.normal(30, 8, n_samples), 15, 50)
-        glucose = np.clip(np.random.normal(120, 30, n_samples), 70, 200)
-        sex = np.random.choice(['male', 'female'], n_samples, p=[0.5, 0.5])
+        sex_opts = ['male', 'female']
+
+        age = np.clip(np.linspace(20, 80, n_samples), 20, 80)
+        bmi = np.clip(np.linspace(15, 50, n_samples), 15, 50)
+        glucose = np.clip(np.linspace(70, 200, n_samples), 70, 200)
+        sex = np.array([sex_opts[i % len(sex_opts)] for i in range(n_samples)])
         diabetes = np.zeros(n_samples, dtype=int)
         for i in range(n_samples):
-            base_prob = 0.2 + (0.2 if bmi[i] > 30 else 0) + (0.3 if glucose[i] > 140 else 0) + (0.1 if age[i] > 45 else 0) + (0.05 if sex[i] == 'male' else 0)
-            diabetes[i] = np.random.binomial(1, min(base_prob, 0.8))
+            base_prob = (0.2
+                         + (0.2 if bmi[i] > 30 else 0)
+                         + (0.3 if glucose[i] > 140 else 0)
+                         + (0.1 if age[i] > 45 else 0)
+                         + (0.05 if sex[i] == 'male' else 0))
+            diabetes[i] = 1 if min(base_prob, 0.8) > 0.5 else 0
         return pd.DataFrame({'age': age, 'bmi': bmi, 'glucose': glucose, 'sex': sex, 'diabetes': diabetes})
 
     def _load_titanic_dataset(self) -> pd.DataFrame:
@@ -187,16 +216,21 @@ class ModernBiasDetectionService:
         return self._generate_synthetic_titanic_data()
 
     def _generate_synthetic_titanic_data(self) -> pd.DataFrame:
-        """Generate synthetic Titanic data."""
-        np.random.seed(42)
+        """Generate deterministic synthetic Titanic data."""
         n_samples = 1000
-        age = np.clip(np.random.normal(30, 15, n_samples), 1, 80)
-        sex = np.random.choice(['male', 'female'], n_samples, p=[0.6, 0.4])
-        pclass = np.random.choice([1, 2, 3], n_samples, p=[0.2, 0.3, 0.5])
+        sex_opts = ['male', 'female']
+        pclass_opts = [1, 2, 3]
+
+        age = np.clip(np.linspace(1, 80, n_samples), 1, 80)
+        sex = np.array([sex_opts[i % len(sex_opts)] for i in range(n_samples)])
+        pclass = np.array([pclass_opts[i % len(pclass_opts)] for i in range(n_samples)])
         survived = np.zeros(n_samples, dtype=int)
         for i in range(n_samples):
-            base_prob = 0.4 + (0.3 if sex[i] == 'female' else 0) + (0.2 if pclass[i] == 1 else 0) + (0.1 if age[i] < 18 else 0)
-            survived[i] = np.random.binomial(1, min(base_prob, 0.9))
+            base_prob = (0.4
+                         + (0.3 if sex[i] == 'female' else 0)
+                         + (0.2 if pclass[i] == 1 else 0)
+                         + (0.1 if age[i] < 18 else 0))
+            survived[i] = 1 if min(base_prob, 0.9) > 0.5 else 0
         return pd.DataFrame({'age': age, 'sex': sex, 'pclass': pclass, 'survived': survived})
 
     def _load_credit_dataset(self) -> pd.DataFrame:
@@ -204,17 +238,23 @@ class ModernBiasDetectionService:
         return self._generate_synthetic_credit_data()
 
     def _generate_synthetic_credit_data(self) -> pd.DataFrame:
-        """Generate synthetic Credit data."""
-        np.random.seed(42)
+        """Generate deterministic synthetic Credit data."""
         n_samples = 1000
-        income = np.clip(np.random.lognormal(10, 0.5, n_samples), 10000, 200000)
-        age = np.clip(np.random.normal(35, 12, n_samples), 18, 75)
-        education = np.random.choice(['high_school', 'bachelor', 'master', 'phd'], n_samples, p=[0.4, 0.4, 0.15, 0.05])
-        sex = np.random.choice(['male', 'female'], n_samples, p=[0.5, 0.5])
+        education_opts = ['high_school', 'bachelor', 'master', 'phd']
+        sex_opts = ['male', 'female']
+
+        income = np.clip(np.linspace(10000, 200000, n_samples), 10000, 200000)
+        age = np.clip(np.linspace(18, 75, n_samples), 18, 75)
+        education = np.array([education_opts[i % len(education_opts)] for i in range(n_samples)])
+        sex = np.array([sex_opts[i % len(sex_opts)] for i in range(n_samples)])
         default = np.zeros(n_samples, dtype=int)
         for i in range(n_samples):
-            base_prob = 0.2 + (0.3 if income[i] < 30000 else 0) + (0.1 if education[i] == 'high_school' else 0) + (0.1 if age[i] < 25 else 0) + (0.05 if sex[i] == 'male' else 0)
-            default[i] = np.random.binomial(1, min(base_prob, 0.7))
+            base_prob = (0.2
+                         + (0.3 if income[i] < 30000 else 0)
+                         + (0.1 if education[i] == 'high_school' else 0)
+                         + (0.1 if age[i] < 25 else 0)
+                         + (0.05 if sex[i] == 'male' else 0))
+            default[i] = 1 if min(base_prob, 0.7) > 0.5 else 0
         return pd.DataFrame({'income': income, 'age': age, 'education': education, 'sex': sex, 'default': default})
 
     def _load_dataset_by_name(self, dataset_name: str) -> pd.DataFrame:

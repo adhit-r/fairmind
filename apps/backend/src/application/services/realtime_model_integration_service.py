@@ -68,6 +68,11 @@ class BiasTestType(Enum):
     TEMPORAL_BIAS = "temporal_bias"
     CONTEXTUAL_BIAS = "contextual_bias"
 
+class IntegrationError(Exception):
+    """Raised when an external model API call fails or is not configured."""
+    pass
+
+
 @dataclass
 class ModelConfig:
     """Configuration for a model"""
@@ -76,6 +81,7 @@ class ModelConfig:
     model_type: ModelType
     api_key: Optional[str] = None
     base_url: Optional[str] = None
+    endpoint: Optional[str] = None
     max_tokens: int = 1000
     temperature: float = 0.7
     top_p: float = 1.0
@@ -446,37 +452,60 @@ class RealTimeModelIntegrationService:
             raise
     
     async def _call_cohere(self, config: ModelConfig, prompt: str) -> Dict[str, Any]:
-        """Call Cohere API (simulated)"""
-        # Simulate Cohere API call
-        await asyncio.sleep(0.1)  # Simulate network delay
-        
-        return {
-            "text": f"Cohere API response to: {prompt[:50]}...",
-            "tokens_used": len(prompt.split()) + 15,
-            "metadata": {"provider": "cohere", "model": config.model_name}
-        }
-    
+        """Call Cohere API"""
+        api_key = config.api_key or os.environ.get("COHERE_API_KEY")
+        if not api_key:
+            raise IntegrationError("Cohere API key not configured. Set COHERE_API_KEY or provide api_key in model config.")
+
+        async with aiohttp.ClientSession() as session:
+            headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+            payload = {"model": config.model_name, "prompt": prompt}
+            async with session.post("https://api.cohere.ai/v1/generate", headers=headers, json=payload) as resp:
+                resp.raise_for_status()
+                data = await resp.json()
+                text = data.get("generations", [{}])[0].get("text", "")
+                return {
+                    "text": text,
+                    "tokens_used": data.get("meta", {}).get("billed_units", {}).get("input_tokens", 0),
+                    "metadata": {"provider": "cohere", "model": config.model_name}
+                }
+
     async def _call_huggingface(self, config: ModelConfig, prompt: str) -> Dict[str, Any]:
-        """Call Hugging Face API (simulated)"""
-        # Simulate Hugging Face API call
-        await asyncio.sleep(0.1)  # Simulate network delay
-        
-        return {
-            "text": f"Hugging Face API response to: {prompt[:50]}...",
-            "tokens_used": len(prompt.split()) + 10,
-            "metadata": {"provider": "huggingface", "model": config.model_name}
-        }
-    
+        """Call Hugging Face Inference API"""
+        api_key = config.api_key or os.environ.get("HF_API_KEY")
+        if not api_key:
+            raise IntegrationError("Hugging Face API key not configured. Set HF_API_KEY or provide api_key in model config.")
+
+        async with aiohttp.ClientSession() as session:
+            headers = {"Authorization": f"Bearer {api_key}"}
+            url = f"https://api-inference.huggingface.co/models/{config.model_name}"
+            payload = {"inputs": prompt}
+            async with session.post(url, headers=headers, json=payload) as resp:
+                resp.raise_for_status()
+                data = await resp.json()
+                text = data[0].get("generated_text", "") if isinstance(data, list) else str(data)
+                return {
+                    "text": text,
+                    "tokens_used": len(prompt.split()) + len(text.split()),
+                    "metadata": {"provider": "huggingface", "model": config.model_name}
+                }
+
     async def _call_local(self, config: ModelConfig, prompt: str) -> Dict[str, Any]:
-        """Call local model (simulated)"""
-        # Simulate local model call
-        await asyncio.sleep(0.05)  # Simulate processing delay
-        
-        return {
-            "text": f"Local model response to: {prompt[:50]}...",
-            "tokens_used": len(prompt.split()) + 5,
-            "metadata": {"provider": "local", "model": config.model_name}
-        }
+        """Call local model via HTTP endpoint"""
+        endpoint = config.endpoint or os.environ.get("LOCAL_MODEL_ENDPOINT")
+        if not endpoint:
+            raise IntegrationError("Local model endpoint not configured. Set LOCAL_MODEL_ENDPOINT or provide endpoint in model config.")
+
+        async with aiohttp.ClientSession() as session:
+            payload = {"prompt": prompt, "model": config.model_name}
+            async with session.post(endpoint, json=payload) as resp:
+                resp.raise_for_status()
+                data = await resp.json()
+                return {
+                    "text": data.get("text", data.get("response", "")),
+                    "tokens_used": data.get("tokens_used", len(prompt.split())),
+                    "metadata": {"provider": "local", "model": config.model_name}
+                }
     
     async def perform_bias_test(
         self,

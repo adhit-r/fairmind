@@ -252,49 +252,138 @@ class AdvancedBiasDetectionService:
         protected_attrs: List[str],
         confounders: Optional[List[str]]
     ) -> CausalAnalysisResult:
-        """Perform causal inference analysis"""
-        
-        # Simulate causal analysis (in real implementation, use causal inference libraries)
-        treatment_effect = np.random.normal(0.1, 0.05)  # Simulated treatment effect
-        confidence_interval = (treatment_effect - 0.1, treatment_effect + 0.1)
-        p_value = np.random.uniform(0.01, 0.05)
-        
-        # Calculate causal strength
-        causal_strength = abs(treatment_effect) / (np.std(df[outcome]) if outcome in df.columns else 1.0)
-        
-        # Identify confounding factors
+        """Perform causal inference analysis using difference-in-means with t-tests"""
+
+        if treatment not in df.columns or outcome not in df.columns:
+            return CausalAnalysisResult(
+                treatment_effect=0.0,
+                confidence_interval=(0.0, 0.0),
+                p_value=1.0,
+                causal_strength=0.0,
+                confounding_factors=[],
+                mediation_effects={},
+                interaction_effects={},
+                robustness_score=0.0
+            )
+
+        # Binarize treatment if not already binary
+        treatment_vals = df[treatment].dropna()
+        if treatment_vals.nunique() > 2:
+            median_val = treatment_vals.median()
+            treated = df[df[treatment] >= median_val][outcome].dropna()
+            control = df[df[treatment] < median_val][outcome].dropna()
+        else:
+            unique_vals = sorted(treatment_vals.unique())
+            treated = df[df[treatment] == unique_vals[-1]][outcome].dropna()
+            control = df[df[treatment] == unique_vals[0]][outcome].dropna()
+
+        # Difference-in-means treatment effect with Welch's t-test
+        if len(treated) < 2 or len(control) < 2:
+            return CausalAnalysisResult(
+                treatment_effect=0.0,
+                confidence_interval=(0.0, 0.0),
+                p_value=1.0,
+                causal_strength=0.0,
+                confounding_factors=[],
+                mediation_effects={},
+                interaction_effects={},
+                robustness_score=0.0
+            )
+
+        treatment_effect = float(treated.mean() - control.mean())
+
+        if SCIPY_AVAILABLE:
+            t_stat, p_value = stats.ttest_ind(treated, control, equal_var=False)
+            p_value = float(p_value)
+            # 95% confidence interval via t-distribution
+            se = math.sqrt(treated.var() / len(treated) + control.var() / len(control))
+            dof = len(treated) + len(control) - 2
+            t_crit = stats.t.ppf(0.975, dof)
+            ci = (treatment_effect - t_crit * se, treatment_effect + t_crit * se)
+        else:
+            se = math.sqrt(treated.var() / len(treated) + control.var() / len(control))
+            z_score = treatment_effect / se if se > 0 else 0.0
+            p_value = float(2 * (1 - 0.5 * (1 + math.erf(abs(z_score) / math.sqrt(2)))))
+            ci = (treatment_effect - 1.96 * se, treatment_effect + 1.96 * se)
+
+        confidence_interval = (float(ci[0]), float(ci[1]))
+
+        # Causal strength: Cohen's d (effect size)
+        pooled_std = math.sqrt(
+            ((len(treated) - 1) * treated.var() + (len(control) - 1) * control.var())
+            / (len(treated) + len(control) - 2)
+        )
+        causal_strength = float(abs(treatment_effect) / pooled_std) if pooled_std > 0 else 0.0
+
+        # Identify confounding factors via correlation with both treatment and outcome
         confounding_factors = []
         if confounders:
             for confounder in confounders:
                 if confounder in df.columns:
-                    correlation = df[treatment].corr(df[confounder]) if SCIPY_AVAILABLE else 0.3
-                    if abs(correlation) > 0.3:
+                    corr_treatment = df[treatment].corr(df[confounder])
+                    corr_outcome = df[outcome].corr(df[confounder])
+                    if abs(corr_treatment) > 0.3 and abs(corr_outcome) > 0.3:
                         confounding_factors.append(confounder)
-        
-        # Calculate mediation effects
+
+        # Mediation effects: proportion of treatment-outcome association
+        # explained through each protected attribute
         mediation_effects = {}
         for attr in protected_attrs:
             if attr in df.columns:
-                mediation_effects[attr] = np.random.uniform(0.1, 0.3)
-        
-        # Calculate interaction effects
+                corr_treat_attr = df[treatment].corr(df[attr])
+                corr_attr_outcome = df[attr].corr(df[outcome])
+                # Indirect effect estimate (product of coefficients method)
+                indirect = corr_treat_attr * corr_attr_outcome
+                mediation_effects[attr] = float(abs(indirect))
+
+        # Interaction effects: difference in treatment effect across
+        # protected attribute subgroups
         interaction_effects = {}
         for attr in protected_attrs:
             if attr in df.columns:
-                interaction_effects[attr] = np.random.uniform(0.05, 0.2)
-        
-        # Calculate robustness score
-        robustness_score = max(0, 1 - len(confounding_factors) * 0.2 - p_value)
-        
+                attr_vals = df[attr].dropna()
+                if attr_vals.nunique() >= 2:
+                    if attr_vals.nunique() > 2:
+                        median_a = attr_vals.median()
+                        group_high = df[df[attr] >= median_a]
+                        group_low = df[df[attr] < median_a]
+                    else:
+                        vals = sorted(attr_vals.unique())
+                        group_high = df[df[attr] == vals[-1]]
+                        group_low = df[df[attr] == vals[0]]
+
+                    te_high = group_high[outcome].mean() - group_high[outcome].mean() if len(group_high) < 2 else 0.0
+                    te_low = 0.0
+                    # Treatment effect in each subgroup
+                    if treatment_vals.nunique() <= 2:
+                        unique_t = sorted(treatment_vals.unique())
+                        t_high_treated = group_high[group_high[treatment] == unique_t[-1]][outcome]
+                        t_high_control = group_high[group_high[treatment] == unique_t[0]][outcome]
+                        t_low_treated = group_low[group_low[treatment] == unique_t[-1]][outcome]
+                        t_low_control = group_low[group_low[treatment] == unique_t[0]][outcome]
+                        te_high = float(t_high_treated.mean() - t_high_control.mean()) if len(t_high_treated) > 0 and len(t_high_control) > 0 else 0.0
+                        te_low = float(t_low_treated.mean() - t_low_control.mean()) if len(t_low_treated) > 0 and len(t_low_control) > 0 else 0.0
+                    else:
+                        median_t = treatment_vals.median()
+                        te_high = float(group_high[group_high[treatment] >= median_t][outcome].mean() - group_high[group_high[treatment] < median_t][outcome].mean()) if len(group_high) > 1 else 0.0
+                        te_low = float(group_low[group_low[treatment] >= median_t][outcome].mean() - group_low[group_low[treatment] < median_t][outcome].mean()) if len(group_low) > 1 else 0.0
+
+                    te_high = 0.0 if math.isnan(te_high) else te_high
+                    te_low = 0.0 if math.isnan(te_low) else te_low
+                    interaction_effects[attr] = float(abs(te_high - te_low))
+
+        # Robustness score: penalize for confounders and low significance
+        robustness_score = max(0.0, min(1.0, 1.0 - len(confounding_factors) * 0.15 - p_value))
+
         return CausalAnalysisResult(
-            treatment_effect=treatment_effect,
+            treatment_effect=float(treatment_effect),
             confidence_interval=confidence_interval,
-            p_value=p_value,
-            causal_strength=causal_strength,
+            p_value=float(p_value),
+            causal_strength=float(causal_strength),
             confounding_factors=confounding_factors,
             mediation_effects=mediation_effects,
             interaction_effects=interaction_effects,
-            robustness_score=robustness_score
+            robustness_score=float(robustness_score)
         )
     
     async def analyze_counterfactual_bias(
@@ -356,32 +445,90 @@ class AdvancedBiasDetectionService:
         protected_attrs: List[str],
         strategy: str
     ) -> CounterfactualResult:
-        """Generate counterfactual predictions"""
-        
-        # Simulate counterfactual generation
-        original_pred = np.mean([p.get('prediction', 0.5) for p in predictions])
-        counterfactual_pred = original_pred + np.random.normal(0, 0.1)
-        
-        bias_magnitude = counterfactual_pred - original_pred
-        intervention_effect = abs(bias_magnitude)
-        
-        # Calculate feature importance
+        """Generate counterfactual predictions by flipping protected attributes
+        and measuring prediction change."""
+
+        df = pd.DataFrame(predictions)
+
+        if len(df) == 0 or 'prediction' not in df.columns:
+            return CounterfactualResult(
+                original_prediction=0.0,
+                counterfactual_prediction=0.0,
+                bias_magnitude=0.0,
+                intervention_effect=0.0,
+                feature_importance={},
+                minimal_intervention={},
+                confidence_score=0.0,
+                explanation="Insufficient data: no predictions found in input."
+            )
+
+        original_pred = float(df['prediction'].mean())
+
+        # For each protected attribute, compute the counterfactual prediction
+        # by swapping attribute values and measuring the change
+        attr_effects = {}
+        attr_counterfactual_preds = {}
+        for attr in protected_attrs:
+            if attr not in df.columns:
+                continue
+            attr_vals = df[attr].dropna().unique()
+            if len(attr_vals) < 2:
+                attr_effects[attr] = 0.0
+                continue
+
+            # For each row, compute the mean prediction of the opposite group
+            group_means = df.groupby(attr)['prediction'].mean()
+            # Effect: difference between group means (max - min)
+            effect = float(group_means.max() - group_means.min())
+            attr_effects[attr] = effect
+
+            # Counterfactual prediction: for each sample, assign the mean of
+            # the complementary group
+            counterfactual_preds = []
+            for val in attr_vals:
+                other_vals = [v for v in attr_vals if v != val]
+                if other_vals:
+                    other_mean = float(df[df[attr].isin(other_vals)]['prediction'].mean())
+                    counterfactual_preds.append(other_mean)
+            if counterfactual_preds:
+                attr_counterfactual_preds[attr] = float(np.mean(counterfactual_preds))
+
+        # Overall counterfactual prediction: average across attribute counterfactuals
+        if attr_counterfactual_preds:
+            counterfactual_pred = float(np.mean(list(attr_counterfactual_preds.values())))
+        else:
+            counterfactual_pred = original_pred
+
+        bias_magnitude = float(counterfactual_pred - original_pred)
+        intervention_effect = float(abs(bias_magnitude))
+
+        # Feature importance: normalized absolute effects
+        total_effect = sum(abs(v) for v in attr_effects.values())
         feature_importance = {}
-        for attr in protected_attrs:
-            feature_importance[attr] = np.random.uniform(0.1, 0.5)
-        
-        # Generate minimal intervention
+        for attr, effect in attr_effects.items():
+            feature_importance[attr] = float(abs(effect) / total_effect) if total_effect > 0 else 0.0
+
+        # Minimal intervention: recommend strategy based on effect magnitude
         minimal_intervention = {}
-        for attr in protected_attrs:
-            minimal_intervention[attr] = np.random.choice(['flip', 'neutralize', 'balance'])
-        
-        # Calculate confidence score
-        confidence_score = max(0, 1 - abs(bias_magnitude) * 2)
-        
+        for attr, effect in attr_effects.items():
+            if abs(effect) > 0.2:
+                minimal_intervention[attr] = "balance"
+            elif abs(effect) > 0.05:
+                minimal_intervention[attr] = "neutralize"
+            else:
+                minimal_intervention[attr] = "none"
+
+        # Confidence score based on sample size and consistency
+        n = len(df)
+        confidence_score = float(min(1.0, max(0.0, 1.0 - 1.0 / math.sqrt(n) - abs(bias_magnitude))))
+
         # Generate explanation
-        explanation = f"Counterfactual analysis shows {bias_magnitude:.3f} bias magnitude. "
-        explanation += f"Key intervention: {minimal_intervention}"
-        
+        top_attrs = sorted(attr_effects.items(), key=lambda x: abs(x[1]), reverse=True)
+        explanation = f"Counterfactual analysis on {n} samples shows {bias_magnitude:.3f} bias magnitude. "
+        if top_attrs:
+            explanation += f"Most sensitive attribute: {top_attrs[0][0]} (effect={top_attrs[0][1]:.3f}). "
+        explanation += f"Recommended interventions: {minimal_intervention}"
+
         return CounterfactualResult(
             original_prediction=original_pred,
             counterfactual_prediction=counterfactual_pred,
@@ -452,45 +599,88 @@ class AdvancedBiasDetectionService:
         intersection_groups: List[List[str]],
         outcome_var: str
     ) -> IntersectionalBiasResult:
-        """Perform intersectional bias analysis"""
-        
+        """Perform intersectional bias analysis by computing real group-level
+        metrics and measuring outcome disparities between intersectional groups."""
+
         df = pd.DataFrame(data)
-        
-        # Calculate bias scores for each intersection
+
+        if outcome_var not in df.columns or len(df) == 0:
+            return IntersectionalBiasResult(
+                intersection_groups=["_".join(group) for group in intersection_groups],
+                bias_scores={},
+                compound_effects={},
+                interaction_strength=0.0,
+                fairness_gaps={},
+                worst_case_group="",
+                mitigation_priority=[]
+            )
+
+        overall_mean = float(df[outcome_var].mean())
+        overall_std = float(df[outcome_var].std()) if len(df) > 1 else 1.0
+        if overall_std == 0:
+            overall_std = 1.0
+
         bias_scores = {}
         compound_effects = {}
         fairness_gaps = {}
-        
+        individual_effects = {}  # store single-attribute effects for compound calc
+
+        # Pre-compute individual attribute effects for compound effect calculation
+        for group_combo in intersection_groups:
+            for attr in group_combo:
+                if attr not in individual_effects and attr in df.columns:
+                    attr_data = df[df[attr] == 1][outcome_var] if df[attr].nunique() <= 2 else df[df[attr] >= df[attr].median()][outcome_var]
+                    if len(attr_data) > 0:
+                        individual_effects[attr] = float(abs(attr_data.mean() - overall_mean))
+                    else:
+                        individual_effects[attr] = 0.0
+
         for group_combo in intersection_groups:
             group_name = "_".join(group_combo)
-            
+
             # Filter data for this intersection
             group_data = df.copy()
+            valid_attrs = []
             for attr in group_combo:
                 if attr in df.columns:
-                    group_data = group_data[group_data[attr] == 1]  # Assuming binary attributes
-            
+                    valid_attrs.append(attr)
+                    if df[attr].nunique() <= 2:
+                        group_data = group_data[group_data[attr] == 1]
+                    else:
+                        group_data = group_data[group_data[attr] >= df[attr].median()]
+
             if len(group_data) > 0 and outcome_var in group_data.columns:
-                # Calculate bias score
-                group_mean = group_data[outcome_var].mean()
-                overall_mean = df[outcome_var].mean()
-                bias_scores[group_name] = abs(group_mean - overall_mean)
-                
-                # Calculate compound effects
-                compound_effects[group_name] = np.random.uniform(0.1, 0.4)
-                
-                # Calculate fairness gaps
-                fairness_gaps[group_name] = abs(group_mean - overall_mean) / overall_mean if overall_mean != 0 else 0
-        
-        # Calculate interaction strength
-        interaction_strength = np.mean(list(compound_effects.values())) if compound_effects else 0
-        
+                group_mean = float(group_data[outcome_var].mean())
+
+                # Bias score: standardized difference from overall mean
+                bias_scores[group_name] = float(abs(group_mean - overall_mean) / overall_std)
+
+                # Compound effect: how much the intersectional effect exceeds
+                # the sum of individual attribute effects (super-additivity)
+                sum_individual = sum(individual_effects.get(a, 0.0) for a in valid_attrs)
+                intersectional_effect = abs(group_mean - overall_mean)
+                compound_effects[group_name] = float(
+                    max(0.0, intersectional_effect - sum_individual) / overall_std
+                )
+
+                # Fairness gap: relative disparity
+                fairness_gaps[group_name] = float(
+                    abs(group_mean - overall_mean) / abs(overall_mean)
+                ) if overall_mean != 0 else 0.0
+            else:
+                bias_scores[group_name] = 0.0
+                compound_effects[group_name] = 0.0
+                fairness_gaps[group_name] = 0.0
+
+        # Interaction strength: mean compound effect across groups
+        interaction_strength = float(np.mean(list(compound_effects.values()))) if compound_effects else 0.0
+
         # Find worst case group
         worst_case_group = max(bias_scores.keys(), key=lambda k: bias_scores[k]) if bias_scores else ""
-        
+
         # Generate mitigation priority
         mitigation_priority = sorted(bias_scores.keys(), key=lambda k: bias_scores[k], reverse=True)
-        
+
         return IntersectionalBiasResult(
             intersection_groups=["_".join(group) for group in intersection_groups],
             bias_scores=bias_scores,
@@ -560,42 +750,105 @@ class AdvancedBiasDetectionService:
         attack_vectors: List[str],
         protected_attrs: List[str]
     ) -> AdversarialBiasResult:
-        """Perform adversarial bias testing"""
-        
-        # Simulate adversarial testing
-        attack_success_rate = np.random.uniform(0.1, 0.4)
-        bias_amplification = np.random.uniform(0.2, 0.6)
-        robustness_score = max(0, 1 - attack_success_rate - bias_amplification)
-        
-        # Identify vulnerable features
+        """Perform adversarial bias testing by perturbing protected attributes
+        and measuring model sensitivity to those changes."""
+
+        df = pd.DataFrame(predictions)
+
+        if len(df) == 0 or 'prediction' not in df.columns:
+            return AdversarialBiasResult(
+                attack_success_rate=0.0,
+                bias_amplification=0.0,
+                robustness_score=1.0,
+                vulnerable_features=[],
+                attack_vectors=attack_vectors,
+                defense_effectiveness=1.0,
+                worst_case_scenarios=[]
+            )
+
+        original_preds = df['prediction'].values.astype(float)
+        overall_mean = float(np.mean(original_preds))
+        overall_std = float(np.std(original_preds)) if len(original_preds) > 1 else 1.0
+        if overall_std == 0:
+            overall_std = 1.0
+
+        # For each protected attribute, measure sensitivity by computing
+        # prediction variance across attribute groups
+        attr_sensitivities = {}
         vulnerable_features = []
+
         for attr in protected_attrs:
-            if np.random.random() > 0.5:  # 50% chance of being vulnerable
+            if attr not in df.columns:
+                continue
+            groups = df.groupby(attr)['prediction']
+            if groups.ngroups < 2:
+                attr_sensitivities[attr] = 0.0
+                continue
+
+            group_means = groups.mean()
+            # Sensitivity: range of group means normalized by overall std
+            sensitivity = float((group_means.max() - group_means.min()) / overall_std)
+            attr_sensitivities[attr] = sensitivity
+
+            # A feature is vulnerable if perturbing it causes >10% shift
+            if sensitivity > 0.1:
                 vulnerable_features.append(attr)
-        
-        # Generate attack vectors
-        attack_vectors_used = attack_vectors[:np.random.randint(1, len(attack_vectors) + 1)]
-        
-        # Calculate defense effectiveness
-        defense_effectiveness = max(0, 1 - attack_success_rate)
-        
-        # Generate worst case scenarios
+
+        # Attack success rate: fraction of attributes that are vulnerable
+        total_tested = len([a for a in protected_attrs if a in df.columns])
+        attack_success_rate = float(len(vulnerable_features) / total_tested) if total_tested > 0 else 0.0
+
+        # Bias amplification: max sensitivity across attributes
+        max_sensitivity = max(attr_sensitivities.values()) if attr_sensitivities else 0.0
+        bias_amplification = float(min(1.0, max_sensitivity))
+
+        # Robustness score
+        robustness_score = float(max(0.0, 1.0 - attack_success_rate * 0.5 - bias_amplification * 0.5))
+
+        # Defense effectiveness
+        defense_effectiveness = float(max(0.0, 1.0 - attack_success_rate))
+
+        # Build worst-case scenarios from actual data
         worst_case_scenarios = []
-        for i in range(3):
-            scenario = {
-                "attack_type": np.random.choice(attack_vectors_used),
-                "bias_increase": np.random.uniform(0.3, 0.8),
-                "affected_group": np.random.choice(protected_attrs),
-                "confidence": np.random.uniform(0.7, 0.95)
-            }
-            worst_case_scenarios.append(scenario)
-        
+        sorted_attrs = sorted(attr_sensitivities.items(), key=lambda x: x[1], reverse=True)
+        for attr, sensitivity in sorted_attrs[:min(3, len(sorted_attrs))]:
+            if attr not in df.columns:
+                continue
+            groups = df.groupby(attr)['prediction']
+            group_means = groups.mean()
+            worst_group = group_means.idxmin()
+            best_group = group_means.idxmax()
+
+            # Compute a confidence measure from the statistical test
+            worst_vals = df[df[attr] == worst_group]['prediction'].values
+            best_vals = df[df[attr] == best_group]['prediction'].values
+            confidence = 0.5
+            if SCIPY_AVAILABLE and len(worst_vals) >= 2 and len(best_vals) >= 2:
+                _, p_val = stats.ttest_ind(worst_vals, best_vals, equal_var=False)
+                confidence = float(1.0 - p_val)
+
+            # Associate with the most relevant attack vector
+            attack_type = attack_vectors[0] if attack_vectors else "attribute_perturbation"
+            for vector in attack_vectors:
+                if attr.lower() in vector.lower() or vector.lower() in attr.lower():
+                    attack_type = vector
+                    break
+
+            worst_case_scenarios.append({
+                "attack_type": attack_type,
+                "bias_increase": float(sensitivity),
+                "affected_group": attr,
+                "worst_subgroup": str(worst_group),
+                "best_subgroup": str(best_group),
+                "confidence": float(min(1.0, max(0.0, confidence)))
+            })
+
         return AdversarialBiasResult(
             attack_success_rate=attack_success_rate,
             bias_amplification=bias_amplification,
             robustness_score=robustness_score,
             vulnerable_features=vulnerable_features,
-            attack_vectors=attack_vectors_used,
+            attack_vectors=attack_vectors,
             defense_effectiveness=defense_effectiveness,
             worst_case_scenarios=worst_case_scenarios
         )
@@ -663,47 +916,140 @@ class AdvancedBiasDetectionService:
         outcome_var: str,
         protected_attrs: List[str]
     ) -> TemporalBiasResult:
-        """Perform temporal bias analysis"""
-        
+        """Perform temporal bias analysis using rolling statistics and
+        distribution shift detection (KS tests)."""
+
         df = pd.DataFrame(data)
-        
-        # Convert time column to datetime if needed
-        if time_col in df.columns:
-            df[time_col] = pd.to_datetime(df[time_col])
-        
-        # Calculate temporal trends
+
+        if time_col not in df.columns or outcome_var not in df.columns or len(df) < 4:
+            return TemporalBiasResult(
+                temporal_trends={},
+                seasonality_effects={},
+                drift_detection={},
+                concept_drift=0.0,
+                performance_degradation=0.0,
+                adaptation_recommendations=[
+                    "Insufficient temporal data for analysis. Collect more time-stamped samples."
+                ]
+            )
+
+        # Convert time column to datetime and sort
+        df[time_col] = pd.to_datetime(df[time_col], errors='coerce')
+        df = df.dropna(subset=[time_col]).sort_values(time_col).reset_index(drop=True)
+
+        if len(df) < 4:
+            return TemporalBiasResult(
+                temporal_trends={},
+                seasonality_effects={},
+                drift_detection={},
+                concept_drift=0.0,
+                performance_degradation=0.0,
+                adaptation_recommendations=[
+                    "Insufficient valid temporal data after parsing dates."
+                ]
+            )
+
+        # Split data into time windows for trend analysis
+        n = len(df)
+        n_windows = min(12, max(2, n // 5))  # between 2 and 12 windows
+        window_size = n // n_windows
+
+        # Temporal trends: per-window mean bias gap for each protected attribute
         temporal_trends = {}
+        overall_mean = float(df[outcome_var].mean())
+
         for attr in protected_attrs:
-            if attr in df.columns:
-                # Simulate temporal trend
-                trend = [np.random.normal(0, 0.1) for _ in range(12)]  # 12 months
-                temporal_trends[attr] = trend
-        
-        # Calculate seasonality effects
+            if attr not in df.columns:
+                continue
+            trend = []
+            for i in range(n_windows):
+                start_idx = i * window_size
+                end_idx = start_idx + window_size if i < n_windows - 1 else n
+                window = df.iloc[start_idx:end_idx]
+                if len(window) > 0 and attr in window.columns:
+                    groups = window.groupby(attr)[outcome_var].mean()
+                    if len(groups) >= 2:
+                        gap = float(groups.max() - groups.min())
+                    else:
+                        gap = 0.0
+                else:
+                    gap = 0.0
+                trend.append(gap)
+            temporal_trends[attr] = trend
+
+        # Seasonality effects: if data spans enough time, measure variance
+        # of bias gaps across windows (higher variance = more seasonality)
         seasonality_effects = {}
-        for attr in protected_attrs:
-            seasonality_effects[attr] = np.random.uniform(0.1, 0.3)
-        
-        # Detect drift
+        for attr, trend in temporal_trends.items():
+            if len(trend) >= 2:
+                trend_std = float(np.std(trend))
+                trend_mean = float(np.mean(trend)) if np.mean(trend) != 0 else 1.0
+                # Coefficient of variation as seasonality measure
+                seasonality_effects[attr] = float(trend_std / abs(trend_mean)) if abs(trend_mean) > 0 else 0.0
+            else:
+                seasonality_effects[attr] = 0.0
+
+        # Drift detection: KS test between first half and second half
+        # for outcome distribution within each protected attribute group
         drift_detection = {}
+        half = n // 2
+        first_half = df.iloc[:half]
+        second_half = df.iloc[half:]
+
         for attr in protected_attrs:
-            drift_detection[attr] = np.random.uniform(0.1, 0.4)
-        
-        # Calculate concept drift
-        concept_drift = np.mean(list(drift_detection.values())) if drift_detection else 0
-        
-        # Calculate performance degradation
-        performance_degradation = concept_drift * 0.8
-        
-        # Generate adaptation recommendations
-        adaptation_recommendations = [
-            "Implement temporal rebalancing",
-            "Add time-based features",
-            "Use sliding window training",
-            "Monitor for concept drift",
-            "Implement adaptive learning rates"
-        ]
-        
+            if attr not in df.columns:
+                drift_detection[attr] = 0.0
+                continue
+
+            # Compute bias gap in first half vs second half
+            first_outcome = first_half[outcome_var].values
+            second_outcome = second_half[outcome_var].values
+
+            if SCIPY_AVAILABLE and len(first_outcome) >= 2 and len(second_outcome) >= 2:
+                ks_stat, ks_p = stats.ks_2samp(first_outcome, second_outcome)
+                drift_detection[attr] = float(ks_stat)
+            elif len(first_outcome) >= 1 and len(second_outcome) >= 1:
+                # Fallback: absolute difference in means normalized by pooled std
+                pooled_std = float(np.std(np.concatenate([first_outcome, second_outcome])))
+                if pooled_std > 0:
+                    drift_detection[attr] = float(abs(np.mean(first_outcome) - np.mean(second_outcome)) / pooled_std)
+                else:
+                    drift_detection[attr] = 0.0
+            else:
+                drift_detection[attr] = 0.0
+
+        # Concept drift: mean drift across attributes
+        concept_drift = float(np.mean(list(drift_detection.values()))) if drift_detection else 0.0
+
+        # Performance degradation: compare outcome variance between halves
+        first_var = float(first_half[outcome_var].var()) if len(first_half) > 1 else 0.0
+        second_var = float(second_half[outcome_var].var()) if len(second_half) > 1 else 0.0
+        performance_degradation = float(abs(second_var - first_var) / max(first_var, 1e-10))
+        performance_degradation = min(1.0, performance_degradation)
+
+        # Generate data-driven adaptation recommendations
+        adaptation_recommendations = []
+        if concept_drift > 0.3:
+            adaptation_recommendations.append("High distribution drift detected -- retrain model on recent data.")
+        if concept_drift > 0.1:
+            adaptation_recommendations.append("Use sliding window training to adapt to distribution changes.")
+        for attr, drift_val in drift_detection.items():
+            if drift_val > 0.3:
+                adaptation_recommendations.append(
+                    f"Significant drift in '{attr}' (KS={drift_val:.3f}) -- monitor and rebalance."
+                )
+        for attr, seas in seasonality_effects.items():
+            if seas > 0.5:
+                adaptation_recommendations.append(
+                    f"High seasonality in '{attr}' bias gap (CV={seas:.3f}) -- add time-based features."
+                )
+        if performance_degradation > 0.2:
+            adaptation_recommendations.append(
+                "Outcome variance has shifted over time -- implement adaptive learning rates."
+            )
+        if not adaptation_recommendations:
+            adaptation_recommendations.append("No significant temporal bias drift detected.")
+
         return TemporalBiasResult(
             temporal_trends=temporal_trends,
             seasonality_effects=seasonality_effects,
@@ -776,45 +1122,135 @@ class AdvancedBiasDetectionService:
         protected_attrs: List[str],
         outcome_var: str
     ) -> ContextualBiasResult:
-        """Perform contextual bias analysis"""
-        
+        """Perform contextual bias analysis by measuring real performance
+        differences across context subgroups."""
+
         df = pd.DataFrame(data)
-        
-        # Calculate context sensitivity
+
+        if outcome_var not in df.columns or len(df) == 0:
+            return ContextualBiasResult(
+                context_sensitivity={},
+                domain_adaptation={},
+                cultural_bias={},
+                linguistic_bias={},
+                situational_fairness={},
+                context_recommendations=[
+                    "Insufficient data for contextual analysis."
+                ]
+            )
+
+        overall_mean = float(df[outcome_var].mean())
+        overall_std = float(df[outcome_var].std()) if len(df) > 1 else 1.0
+        if overall_std == 0:
+            overall_std = 1.0
+
+        # Context sensitivity: how much outcome varies across context subgroups
+        # Measured as the range of group means normalized by overall std
         context_sensitivity = {}
         for context in context_features:
-            if context in df.columns:
-                context_sensitivity[context] = np.random.uniform(0.1, 0.4)
-        
-        # Calculate domain adaptation
+            if context not in df.columns:
+                continue
+            groups = df.groupby(context)[outcome_var]
+            if groups.ngroups < 2:
+                context_sensitivity[context] = 0.0
+                continue
+            group_means = groups.mean()
+            context_sensitivity[context] = float(
+                (group_means.max() - group_means.min()) / overall_std
+            )
+
+        # Domain adaptation: for each context subgroup, measure how different
+        # the outcome distribution is from the overall (using std ratio)
         domain_adaptation = {}
         for context in context_features:
-            domain_adaptation[context] = np.random.uniform(0.2, 0.6)
-        
-        # Calculate cultural bias
+            if context not in df.columns:
+                continue
+            groups = df.groupby(context)[outcome_var]
+            if groups.ngroups < 2:
+                domain_adaptation[context] = 1.0
+                continue
+            # Mean absolute deviation of group means from overall mean
+            group_means = groups.mean()
+            mad = float(np.mean(np.abs(group_means.values - overall_mean)))
+            # Normalize: lower = better adaptation (0=perfect, 1=poor)
+            domain_adaptation[context] = float(min(1.0, mad / overall_std))
+
+        # Cultural/group bias: for each protected attribute, measure
+        # outcome disparity (standardized mean difference)
         cultural_bias = {}
         for attr in protected_attrs:
-            cultural_bias[attr] = np.random.uniform(0.1, 0.3)
-        
-        # Calculate linguistic bias
+            if attr not in df.columns:
+                continue
+            groups = df.groupby(attr)[outcome_var]
+            if groups.ngroups < 2:
+                cultural_bias[attr] = 0.0
+                continue
+            group_means = groups.mean()
+            cultural_bias[attr] = float(
+                (group_means.max() - group_means.min()) / overall_std
+            )
+
+        # Linguistic bias: measure outcome variation within each protected
+        # attribute group across contexts (interaction effect)
         linguistic_bias = {}
         for attr in protected_attrs:
-            linguistic_bias[attr] = np.random.uniform(0.1, 0.2)
-        
-        # Calculate situational fairness
+            if attr not in df.columns:
+                linguistic_bias[attr] = 0.0
+                continue
+            interaction_effects = []
+            for context in context_features:
+                if context not in df.columns:
+                    continue
+                cross = df.groupby([attr, context])[outcome_var].mean()
+                if len(cross) >= 2:
+                    interaction_effects.append(float(cross.max() - cross.min()) / overall_std)
+            linguistic_bias[attr] = float(np.mean(interaction_effects)) if interaction_effects else 0.0
+
+        # Situational fairness: for each context, measure how equal
+        # outcomes are across protected attributes (1 = perfectly fair)
         situational_fairness = {}
         for context in context_features:
-            situational_fairness[context] = np.random.uniform(0.6, 0.9)
-        
-        # Generate context recommendations
-        context_recommendations = [
-            "Implement context-aware preprocessing",
-            "Add contextual features to model",
-            "Use domain adaptation techniques",
-            "Monitor context-specific performance",
-            "Implement context-sensitive debiasing"
-        ]
-        
+            if context not in df.columns:
+                continue
+            context_groups = df.groupby(context)
+            fairness_scores = []
+            for _, ctx_df in context_groups:
+                if len(ctx_df) < 2:
+                    continue
+                for attr in protected_attrs:
+                    if attr not in ctx_df.columns:
+                        continue
+                    attr_groups = ctx_df.groupby(attr)[outcome_var].mean()
+                    if len(attr_groups) >= 2:
+                        gap = float(attr_groups.max() - attr_groups.min()) / overall_std
+                        fairness_scores.append(max(0.0, 1.0 - gap))
+            situational_fairness[context] = float(np.mean(fairness_scores)) if fairness_scores else 1.0
+
+        # Generate data-driven recommendations
+        context_recommendations = []
+        for context, sensitivity in context_sensitivity.items():
+            if sensitivity > 0.3:
+                context_recommendations.append(
+                    f"High outcome sensitivity in '{context}' (sensitivity={sensitivity:.3f}) -- use context-aware models."
+                )
+        for attr, bias in cultural_bias.items():
+            if bias > 0.2:
+                context_recommendations.append(
+                    f"Group disparity on '{attr}' (gap={bias:.3f}) -- implement targeted debiasing."
+                )
+        for context, adapt in domain_adaptation.items():
+            if adapt > 0.3:
+                context_recommendations.append(
+                    f"Poor domain adaptation for '{context}' (score={adapt:.3f}) -- consider domain-specific calibration."
+                )
+        for ctx, fairness in situational_fairness.items():
+            if fairness < 0.7:
+                context_recommendations.append(
+                    f"Low situational fairness in '{ctx}' (fairness={fairness:.3f}) -- investigate context-specific disparities."
+                )
+        if not context_recommendations:
+            context_recommendations.append("No significant contextual bias detected.")
+
         return ContextualBiasResult(
             context_sensitivity=context_sensitivity,
             domain_adaptation=domain_adaptation,

@@ -200,13 +200,13 @@ class EnhancedBiasDetectionService:
                 if "minimal_pair" in output:
                     pair = output["minimal_pair"]
                     
-                    # Simulate toxicity and sentiment analysis
-                    toxicity_a = self._simulate_toxicity_score(pair["output_a"])
-                    toxicity_b = self._simulate_toxicity_score(pair["output_b"])
+                    # Keyword-based toxicity and sentiment analysis
+                    toxicity_a = self._compute_toxicity_score(pair["output_a"])
+                    toxicity_b = self._compute_toxicity_score(pair["output_b"])
                     toxicity_gap = abs(toxicity_a - toxicity_b)
                     
-                    sentiment_a = self._simulate_sentiment_score(pair["output_a"])
-                    sentiment_b = self._simulate_sentiment_score(pair["output_b"])
+                    sentiment_a = self._compute_sentiment_score(pair["output_a"])
+                    sentiment_b = self._compute_sentiment_score(pair["output_b"])
                     sentiment_gap = abs(sentiment_a - sentiment_b)
                     
                     results["toxicity_gaps"].append(toxicity_gap)
@@ -514,10 +514,11 @@ class EnhancedBiasDetectionService:
                     # Simple permutation test for demographic parity
                     observed_diff = self._demographic_parity_diff(y_pred, sensitive_attr)[0]
                     
-                    # Permutation test
+                    # Permutation test with seeded RNG for reproducibility
+                    rng = np.random.default_rng(seed=42)
                     perm_diffs = []
                     for _ in range(1000):  # 1000 permutations
-                        perm_attr = np.random.permutation(sensitive_attr)
+                        perm_attr = rng.permutation(sensitive_attr)
                         perm_diff = self._demographic_parity_diff(y_pred, perm_attr)[0]
                         perm_diffs.append(perm_diff)
                     
@@ -573,17 +574,14 @@ class EnhancedBiasDetectionService:
         except:
             return 0.0
     
-    def _simulate_toxicity_score(self, text: str) -> float:
-        """Simulate toxicity score (placeholder for real toxicity classifier)"""
-        # This would integrate with a real toxicity classifier
-        # For now, return a simulated score based on text content
+    def _compute_toxicity_score(self, text: str) -> float:
+        """Compute toxicity score using keyword-based heuristic"""
         toxic_words = ["hate", "kill", "stupid", "idiot", "racist", "sexist"]
         toxic_count = sum(1 for word in toxic_words if word.lower() in text.lower())
         return min(toxic_count * 0.2, 1.0)
     
-    def _simulate_sentiment_score(self, text: str) -> float:
-        """Simulate sentiment score (placeholder for real sentiment classifier)"""
-        # This would integrate with a real sentiment classifier
+    def _compute_sentiment_score(self, text: str) -> float:
+        """Compute sentiment score using keyword-based heuristic"""
         positive_words = ["good", "great", "excellent", "amazing", "wonderful"]
         negative_words = ["bad", "terrible", "awful", "horrible", "disgusting"]
         

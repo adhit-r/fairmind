@@ -263,16 +263,64 @@ class LLMBiasDetectionService(AsyncBaseService):
             return None
 
     async def _calculate_bias_score(self, template: BiasTestTemplate, model_outputs: List[Dict[str, Any]]) -> float:
-        """Calculate bias score based on template and outputs."""
-        # Simplified implementation for migration
-        # In real implementation, this would call specific calculators
-        return np.random.uniform(0, 0.2)  # Placeholder
+        """Calculate bias score based on template and outputs.
+
+        Computes disparity across sensitive attribute groups by comparing
+        mean output scores.  Falls back to 0.0 when data is insufficient.
+        """
+        if not model_outputs:
+            return 0.0
+
+        group_scores: Dict[str, List[float]] = {}
+        for output in model_outputs:
+            for attr in template.sensitive_attributes:
+                group = output.get(attr, output.get("group", "unknown"))
+                score = output.get("score", output.get("bias_score", None))
+                if score is not None:
+                    group_scores.setdefault(str(group), []).append(float(score))
+
+        if len(group_scores) < 2:
+            # Not enough groups to measure disparity
+            return 0.0
+
+        group_means = [float(np.mean(scores)) for scores in group_scores.values()]
+        return float(max(group_means) - min(group_means))
 
     async def _calculate_fairness_metrics(self, template: BiasTestTemplate, model_outputs: List[Dict[str, Any]]) -> Dict[str, float]:
-        """Calculate fairness metrics."""
+        """Calculate fairness metrics from model outputs.
+
+        For each requested metric, computes a fairness score (0-1) based on
+        group parity in model outputs.  Returns 1.0 (perfectly fair) when
+        data is insufficient to compute.
+        """
+        if not model_outputs:
+            return {metric: 1.0 for metric in template.fairness_metrics}
+
+        # Build per-group positive-outcome rates
+        group_positives: Dict[str, List[int]] = {}
+        for output in model_outputs:
+            for attr in template.sensitive_attributes:
+                group = str(output.get(attr, output.get("group", "unknown")))
+                outcome = 1 if output.get("score", output.get("prediction", 0)) > 0.5 else 0
+                group_positives.setdefault(group, []).append(outcome)
+
+        group_rates = {g: float(np.mean(v)) for g, v in group_positives.items() if v}
+
         metrics = {}
         for metric in template.fairness_metrics:
-            metrics[metric] = np.random.uniform(0.8, 1.0)  # Placeholder
+            if len(group_rates) < 2:
+                metrics[metric] = 1.0
+            else:
+                rates = list(group_rates.values())
+                max_rate = max(rates)
+                min_rate = min(rates)
+                if metric == "demographic_parity":
+                    metrics[metric] = 1.0 - (max_rate - min_rate)
+                elif metric == "disparate_impact":
+                    metrics[metric] = (min_rate / max_rate) if max_rate > 0 else 1.0
+                else:
+                    # Generic parity measure
+                    metrics[metric] = 1.0 - (max_rate - min_rate)
         return metrics
 
     def _calculate_confidence(self, model_outputs: List[Dict[str, Any]]) -> float:
