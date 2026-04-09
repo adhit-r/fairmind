@@ -714,8 +714,8 @@ class IndiaBiasDetectionService:
             y_pred = test_data.get("y_pred", test_data.get("prediction", np.array([]))).values
 
             if len(y_true) == 0 or len(y_pred) == 0:
-                # Generate predictions if not available
-                y_pred = np.random.randint(0, 2, len(test_data))
+                logger.warning("Missing y_true or y_pred columns in test_data for caste fairness metrics; returning default metrics")
+                return FairnessMetrics()
 
             sensitive_attrs = {sensitive_attribute: test_data[sensitive_attribute].values}
 
@@ -738,7 +738,8 @@ class IndiaBiasDetectionService:
             y_pred = test_data.get("y_pred", test_data.get("prediction", np.array([]))).values
 
             if len(y_true) == 0 or len(y_pred) == 0:
-                y_pred = np.random.randint(0, 2, len(test_data))
+                logger.warning("Missing y_true or y_pred columns in test_data for religious fairness metrics; returning default metrics")
+                return FairnessMetrics()
 
             sensitive_attrs = {sensitive_attribute: test_data[sensitive_attribute].values}
 
@@ -761,7 +762,8 @@ class IndiaBiasDetectionService:
             y_pred = test_data.get("y_pred", test_data.get("prediction", np.array([]))).values
 
             if len(y_true) == 0 or len(y_pred) == 0:
-                y_pred = np.random.randint(0, 2, len(test_data))
+                logger.warning("Missing y_true or y_pred columns in test_data for linguistic fairness metrics; returning default metrics")
+                return FairnessMetrics()
 
             sensitive_attrs = {sensitive_attribute: test_data[sensitive_attribute].values}
 
@@ -784,7 +786,8 @@ class IndiaBiasDetectionService:
             y_pred = test_data.get("y_pred", test_data.get("prediction", np.array([]))).values
 
             if len(y_true) == 0 or len(y_pred) == 0:
-                y_pred = np.random.randint(0, 2, len(test_data))
+                logger.warning("Missing y_true or y_pred columns in test_data for regional fairness metrics; returning default metrics")
+                return FairnessMetrics()
 
             sensitive_attrs = {sensitive_attribute: test_data[sensitive_attribute].values}
 
@@ -807,7 +810,8 @@ class IndiaBiasDetectionService:
             y_pred = test_data.get("y_pred", test_data.get("prediction", np.array([]))).values
 
             if len(y_true) == 0 or len(y_pred) == 0:
-                y_pred = np.random.randint(0, 2, len(test_data))
+                logger.warning("Missing y_true or y_pred columns in test_data for intersectional fairness metrics; returning default metrics")
+                return FairnessMetrics()
 
             sensitive_attrs = {sensitive_attribute: test_data[sensitive_attribute].values}
 

@@ -111,22 +111,21 @@ class AIBOMDatabaseService:
                 await self._disconnect()
     
     async def _connect(self):
-        """Connect to the database with timeout"""
+        """Connect to the database"""
         try:
-            # Simulate database connection for now
-            await asyncio.sleep(0.1)  # Simulate connection time
+            # Connection managed by the application's database layer
             self._is_connected = True
+            logger.info("AI BOM database service connected")
         except Exception as e:
             self._is_connected = False
             raise AIBOMDatabaseError(f"Failed to connect to database: {e}")
-    
+
     async def _disconnect(self):
         """Disconnect from the database"""
         try:
             if self._is_connected:
-                # Simulate disconnection
-                await asyncio.sleep(0.1)
                 self._is_connected = False
+                logger.info("AI BOM database service disconnected")
         except Exception as e:
             logger.error(f"Failed to disconnect from database: {e}")
     
