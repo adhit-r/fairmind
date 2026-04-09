@@ -2,37 +2,61 @@
 
 ## Supported Versions
 
-Use this section to tell people about which versions of your project are currently being supported with security updates.
+FairMind is in active pre-1.0 development. Security fixes are applied to the
+`main` branch and any active release branches. We recommend running the latest
+commit on `main` until a tagged release line exists.
 
-| Version | Supported          |
-| ------- | ------------------ |
-| v1.0.x  | :white_check_mark: |
-| < 1.0   | :x:                |
+| Version       | Supported          |
+| ------------- | ------------------ |
+| `main` (HEAD) | Yes                |
+| Older commits | No                 |
 
 ## Reporting a Vulnerability
 
-We take the security of FairMind very seriously. If you have discovered a security vulnerability in FairMind, please report it to us as described below.
+We take the security of FairMind seriously. **Please do not report security
+vulnerabilities through public GitHub issues, discussions, or pull requests.**
 
-**Please do not report security vulnerabilities through public GitHub issues.**
+Instead, report vulnerabilities privately via one of the following channels:
 
-### How to Report
+1. **Email**: send a report to **security@fairmind.xyz**.
+2. **GitHub Security Advisories**: open a private advisory at
+   <https://github.com/adhit-r/fairmind/security/advisories/new>.
 
-Please email us at **security@fairmind.xyz** with a description of the vulnerability. We encourage you to use [PGP] to encrypt your communications with us.
+### What to include in the report
 
-Please include the following details in your report:
+- The type of vulnerability (e.g. XSS, SQLi, RCE, auth bypass, IDOR)
+- The full path(s) to the affected source file(s)
+- The branch, tag, or commit SHA where you observed the issue
+- Any configuration required to reproduce the issue
+- Step-by-step instructions to reproduce
+- A proof-of-concept or exploit code (if available)
+- The impact: what an attacker could do, and under which conditions
 
-*   The type of vulnerability (e.g., XSS, SQLi, RCE)
-*   Full paths to source file(s) related to the manifestation of the vulnerability
-*   The location of the affected source code (tag/branch/commit or direct URL)
-*   Any special configuration required to reproduce the issue
-*   Step-by-step instructions to reproduce the issue
-*   Proof-of-concept or exploit code (if possible)
-*   Impact of the vulnerability, including how an attacker might exploit it
+### What to expect
 
-### Response
+- We will acknowledge receipt within **3 business days**.
+- We will provide an initial assessment within **7 business days**.
+- We will keep you informed of progress as we investigate and remediate.
+- Once a fix is released, we will credit you in the advisory unless you ask
+  to remain anonymous.
 
-We will acknowledge receipt of your report within 24 hours. We will then work with you to understand and resolve the issue.
+### Disclosure policy
 
-### Disclosure Policy
+We follow coordinated disclosure. Please give us a reasonable window to
+remediate before disclosing publicly. We aim to ship fixes within 90 days of
+the initial report, sooner for critical issues. We will notify you when the
+vulnerability is fixed and when it is safe to disclose.
 
-We ask that you give us a reasonable amount of time to fix the vulnerability before disclosing it to the public. We will notify you when the vulnerability is fixed and when it is safe to disclose.
+## Out of scope
+
+The following are generally not considered vulnerabilities for the purposes of
+this policy:
+
+- Issues in third-party dependencies that already have a public CVE and an
+  available upstream fix (please open a regular dependency-update issue
+  instead)
+- Self-XSS that requires the victim to paste attacker-controlled content into
+  their own browser console
+- Missing security headers without a demonstrated attack
+- Rate-limiting or brute-force concerns on endpoints that already enforce
+  authentication and account lockout
