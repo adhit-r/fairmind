@@ -62,7 +62,7 @@ export default function RegisterPage() {
           <p className="text-muted-foreground mb-6">
             Your access request has been sent for admin review. You'll receive an email once it's approved.
           </p>
-          <Button variant="outline" className="border-2 border-black font-bold" onClick={() => router.push('/auth/login')}>
+          <Button variant="neutral" className="border-2 border-black font-bold" onClick={() => router.push('/auth/login')}>
             Back to Login
           </Button>
         </Card>

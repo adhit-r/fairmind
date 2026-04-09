@@ -356,15 +356,13 @@ export default function InvitationPage() {
             <Button
               onClick={handleAccept}
               className="w-full bg-[#FF6B35] text-white font-bold border-2 border-black hover:shadow-brutal-lg"
-              disabled={state === 'accepting'}
             >
               Accept Invitation
             </Button>
             <Button
               onClick={handleDecline}
-              variant="outline"
+              variant="neutral"
               className="w-full border-2 border-black font-bold hover:shadow-brutal"
-              disabled={state === 'accepting'}
             >
               Decline
             </Button>

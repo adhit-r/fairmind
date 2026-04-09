@@ -245,7 +245,7 @@ export function AuditLogTable({
               <Button
                 onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
                 disabled={currentPage === 1}
-                variant="outline"
+                variant="neutral"
                 className="border-2 border-black font-bold disabled:opacity-50"
               >
                 ← PREV
@@ -253,7 +253,7 @@ export function AuditLogTable({
               <Button
                 onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
                 disabled={currentPage === totalPages}
-                variant="outline"
+                variant="neutral"
                 className="border-2 border-black font-bold disabled:opacity-50"
               >
                 NEXT →

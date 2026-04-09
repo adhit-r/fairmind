@@ -150,7 +150,7 @@ export default function ComplianceDashboard() {
       <AuditReportPanel
         onGenerateReport={handleGenerateReport}
         isLoading={isGenerating}
-        error={reportError}
+        error={reportError ?? undefined}
         success={reportSuccess}
       />
 
