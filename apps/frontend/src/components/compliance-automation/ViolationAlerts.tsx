@@ -19,9 +19,7 @@ export default function ViolationAlerts() {
         setLoading(true);
         try {
             const res = await complianceAutomationService.listViolations();
-            if (res.success && res.data) {
-                setViolations(res.data);
-            }
+            setViolations(res.violations || []);
         } catch (error) {
             console.error("Failed to fetch violations", error);
         } finally {

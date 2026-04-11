@@ -43,7 +43,7 @@ export default function RegistrationsPage() {
       const data = await apiClient.get<{ requests: RegistrationRequest[] }>(
         `/api/v1/registrations?status_filter=${filter}`
       )
-      setRequests(data.requests || [])
+      setRequests(data.data?.requests || [])
     } catch (e) {
       console.error(e)
     } finally {

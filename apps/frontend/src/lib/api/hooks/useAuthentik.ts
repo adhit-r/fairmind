@@ -178,7 +178,11 @@ export function useAuthentik(options: UseAuthentikOptions = {}) {
           `/api/v1/auth/callback?${params.toString()}`
         );
 
-        const { access_token, refresh_token, user } = response;
+        const tokenData = response.data;
+        if (!tokenData) {
+          throw new Error(response.error ?? "Authentication failed — no token data returned");
+        }
+        const { access_token, refresh_token, user } = tokenData;
 
         // Store tokens (access in memory/state, refresh in secure cookie handled by backend)
         localStorage.setItem("access_token", access_token);
@@ -191,7 +195,7 @@ export function useAuthentik(options: UseAuthentikOptions = {}) {
         sessionStorage.removeItem("code_verifier");
 
         // Call success callback
-        options.onSuccess?.(response);
+        options.onSuccess?.(tokenData);
 
         // Redirect to dashboard
         router.push("/");
