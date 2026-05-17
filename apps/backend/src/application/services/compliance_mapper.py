@@ -4,7 +4,6 @@ Maps policies to multiple regulatory frameworks and provides automated complianc
 """
 
 import json
-import yaml
 from typing import Dict, List, Any, Optional, Set, Tuple
 from dataclasses import dataclass, asdict
 from datetime import datetime
@@ -16,6 +15,7 @@ logger = logging.getLogger(__name__)
 class RiskCategory(Enum):
     PROHIBITED = "prohibited"
     HIGH_RISK = "high_risk"
+    MEDIUM_RISK = "medium_risk"
     LIMITED_RISK = "limited_risk"
     MINIMAL_RISK = "minimal_risk"
 
