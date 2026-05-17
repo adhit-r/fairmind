@@ -160,7 +160,6 @@ export const API_ENDPOINTS = {
     aiSystem: (systemId: string) => `/api/v1/ai-governance/systems/${systemId}`,
     aiSystemRisks: (systemId: string) => `/api/v1/ai-governance/dashboard/risk?system_id=${systemId}`,
     aiSystemApprovals: (systemId: string) => `/api/v1/ai-governance/systems/${systemId}/approvals`,
-    lifecycleSummary: (systemId: string) => `/api/v1/ai-governance/lifecycle/${systemId}/summary`,
   },
 
   // AI BOM

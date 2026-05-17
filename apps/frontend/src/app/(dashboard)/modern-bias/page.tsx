@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useModernBias } from '@/lib/api/hooks/useModernBias'
 import { useModels } from '@/lib/api/hooks/useModels'
-import { generateBiasPDF, generateBiasJSON, type BiasEvaluationPDFData } from '@/lib/export/pdf-generator'
+import { generateBiasJSON, type BiasEvaluationPDFData } from '@/lib/export/json-export'
 import { generatePDFReport, generateDOCXReport } from '@/lib/export/backend-report-generator'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -82,7 +82,7 @@ interface ComprehensiveBiasResult {
 
 export default function LLMBiasDetectionPage() {
   const { loading, error } = useModernBias()
-  const { models, loading: modelsLoading } = useModels()
+  const { data: models, loading: modelsLoading } = useModels()
   const { toast } = useToast()
 
   const [activeTab, setActiveTab] = useState<'form' | 'results'>('form')
@@ -223,7 +223,7 @@ export default function LLMBiasDetectionPage() {
           testsPassed: results.evaluation_summary.tests_passed || 0,
           testsFailed: results.evaluation_summary.tests_failed || 0,
           overallBiasRate: results.evaluation_summary.overall_bias_rate || 0,
-          evaluationTime: results.evaluation_summary.evaluation_time || 0,
+          evaluationTime: Number(results.evaluation_summary.evaluation_time) || 0,
         },
         overallRisk: results.overall_risk as 'low' | 'medium' | 'high' | 'critical',
         riskFactors: results.risk_factors || [],
@@ -265,10 +265,20 @@ export default function LLMBiasDetectionPage() {
         timestamp: results.timestamp,
         modelType: results.model_type,
         modelDescription: formData.model_description,
-        evaluationSummary: results.evaluation_summary,
+        evaluationSummary: {
+          totalTests: results.evaluation_summary.total_tests || 0,
+          testsPassed: results.evaluation_summary.tests_passed || 0,
+          testsFailed: results.evaluation_summary.tests_failed || 0,
+          overallBiasRate: results.evaluation_summary.overall_bias_rate || 0,
+          evaluationTime: results.evaluation_summary.evaluation_time,
+        },
         overallRisk: results.overall_risk as any,
         riskFactors: results.risk_factors,
-        complianceStatus: results.compliance_status,
+        complianceStatus: {
+          gdprCompliant: results.compliance_status?.gdpr_compliant ?? false,
+          aiActCompliant: results.compliance_status?.ai_act_compliant ?? false,
+          fairnessScore: results.compliance_status?.fairness_score ?? 0,
+        },
         explainabilityAnalysis: results.explainability_analysis,
         recommendations: results.recommendations,
         selectedTests: formData.selected_tests,
@@ -309,7 +319,7 @@ export default function LLMBiasDetectionPage() {
           testsPassed: results.evaluation_summary.tests_passed || 0,
           testsFailed: results.evaluation_summary.tests_failed || 0,
           overallBiasRate: results.evaluation_summary.overall_bias_rate || 0,
-          evaluationTime: results.evaluation_summary.evaluation_time || 0,
+          evaluationTime: Number(results.evaluation_summary.evaluation_time) || 0,
         },
         overallRisk: results.overall_risk as 'low' | 'medium' | 'high' | 'critical',
         riskFactors: results.risk_factors || [],
@@ -671,7 +681,7 @@ export default function LLMBiasDetectionPage() {
               {/* Export Options */}
               <div className="grid grid-cols-3 gap-3">
                 <Button
-                  variant="outline"
+                  variant="neutral"
                   className="border-2 border-black font-bold hover:bg-black hover:text-white"
                   onClick={handleExportPDF}
                 >
@@ -679,7 +689,7 @@ export default function LLMBiasDetectionPage() {
                   PDF
                 </Button>
                 <Button
-                  variant="outline"
+                  variant="neutral"
                   className="border-2 border-black font-bold hover:bg-black hover:text-white"
                   onClick={handleExportDOCX}
                 >
@@ -687,7 +697,7 @@ export default function LLMBiasDetectionPage() {
                   Word
                 </Button>
                 <Button
-                  variant="outline"
+                  variant="neutral"
                   className="border-2 border-black font-bold hover:bg-black hover:text-white"
                   onClick={handleExportJSON}
                 >

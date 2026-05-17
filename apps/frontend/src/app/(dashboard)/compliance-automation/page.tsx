@@ -38,7 +38,7 @@ export default function ComplianceAutomationPage() {
   const fetchStatus = async () => {
     try {
       const response = await apiClient.get<SystemStatus>("/api/v1/compliance/status");
-      setStatus(response);
+      if (response.data) setStatus(response.data);
       setError(null);
     } catch (err) {
       console.error("Failed to fetch compliance status:", err);
@@ -220,7 +220,7 @@ function SchedulesSection() {
   const fetchSchedules = async () => {
     try {
       const response = await apiClient.get("/api/v1/compliance/schedules");
-      setSchedules(response.schedules || []);
+      setSchedules((response.data as any)?.schedules || []);
     } catch (err) {
       console.error("Failed to fetch schedules:", err);
     } finally {
@@ -296,7 +296,7 @@ function ViolationsSection() {
   const fetchViolations = async () => {
     try {
       const response = await apiClient.get("/api/v1/compliance/violations?limit=50");
-      setViolations(response.violations || []);
+      setViolations((response.data as any)?.violations || []);
     } catch (err) {
       console.error("Failed to fetch violations:", err);
     } finally {
@@ -381,7 +381,7 @@ function ReportsSection() {
   const fetchReports = async () => {
     try {
       const response = await apiClient.get("/api/v1/compliance/reports?limit=20");
-      setReports(response.reports || []);
+      setReports((response.data as any)?.reports || []);
     } catch (err) {
       console.error("Failed to fetch reports:", err);
     } finally {

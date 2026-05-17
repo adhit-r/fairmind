@@ -27,7 +27,7 @@ export default function ScheduleManager() {
         setLoading(true);
         try {
             const res = await complianceAutomationService.listSchedules();
-            if (res.success && res.data) {
+            if (res.data) {
                 setSchedules(res.data);
             }
         } catch (error) {
@@ -42,11 +42,11 @@ export default function ScheduleManager() {
             const recipientList = recipients.split(',').map(e => e.trim()).filter(e => e);
             const res = await complianceAutomationService.createSchedule({
                 framework,
-                frequency,
+                frequency: frequency as 'daily' | 'weekly' | 'monthly',
                 recipients: recipientList
             });
 
-            if (res.success) {
+            if (res) {
                 setShowForm(false);
                 setRecipients('');
                 fetchSchedules();

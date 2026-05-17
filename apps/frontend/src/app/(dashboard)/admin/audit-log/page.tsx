@@ -53,7 +53,7 @@ export default function AdminAuditLogPage() {
         const response = await api.get<{ logs: AuditLog[] }>(
           `/api/v1/audit-logs?${params}`
         );
-        setLogs(response.logs || []);
+        setLogs(response.data?.logs || []);
         setError(null);
       } catch (err) {
         // If API endpoint doesn't exist yet, show placeholder data

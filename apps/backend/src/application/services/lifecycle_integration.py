@@ -545,14 +545,21 @@ class LifecycleIntegration:
         """Check bias during training"""
         monitoring_frequency = parameters.get("monitoring_frequency", "epoch")
         bias_threshold = parameters.get("bias_threshold", 0.1)
-        
-        # Evaluate training bias from context metadata
-        bias_metrics = {
-            "demographic_parity": 0.08,
-            "equalized_odds": 0.12,
-            "calibration": 0.05
-        }
-        
+
+        # Read training bias metrics from context metadata; if absent, the
+        # check cannot make a determination and fails safely.
+        bias_metrics = context.metadata.get("training_bias_metrics", {})
+
+        if not bias_metrics:
+            return {
+                "passed": False,
+                "score": 0.0,
+                "message": "Training bias check skipped: no bias metrics provided in context",
+                "evidence": {"threshold": bias_threshold, "monitoring_frequency": monitoring_frequency},
+                "recommendations": ["Provide training_bias_metrics in lifecycle context metadata"],
+                "metadata": {"check_type": "training_bias", "data_available": False}
+            }
+
         max_bias = max(bias_metrics.values())
         passed = max_bias <= bias_threshold
         
@@ -571,15 +578,14 @@ class LifecycleIntegration:
     
     async def _check_training_reproducibility(self, context: LifecycleContext, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """Check training reproducibility"""
-        seed_documentation = parameters.get("seed_documentation", True)
-        environment_documentation = parameters.get("environment_documentation", True)
-        
-        # Evaluate reproducibility from declared parameters
+        # All four reproducibility flags must be supplied via parameters or
+        # context metadata; defaults are False so that missing evidence fails
+        # the check rather than fabricating a pass.
         reproducibility_checks = {
-            "seed_documented": seed_documentation,
-            "environment_documented": environment_documentation,
-            "dependencies_locked": True,
-            "version_control": True
+            "seed_documented": parameters.get("seed_documentation", False),
+            "environment_documented": parameters.get("environment_documentation", False),
+            "dependencies_locked": parameters.get("dependencies_locked", context.metadata.get("dependencies_locked", False)),
+            "version_control": parameters.get("version_control", context.metadata.get("version_control", False)),
         }
         
         passed = all(reproducibility_checks.values())
@@ -600,23 +606,32 @@ class LifecycleIntegration:
         """Check bias in validation"""
         test_sets = parameters.get("test_sets", ["validation", "test"])
         bias_metrics = parameters.get("bias_metrics", ["demographic_parity", "equalized_odds"])
-        
-        # Evaluate validation bias from context metadata
-        validation_results = {}
-        for test_set in test_sets:
-            validation_results[test_set] = {
-                "demographic_parity": 0.09,
-                "equalized_odds": 0.11
+        threshold = parameters.get("threshold", 0.1)
+
+        # Read validation bias results from context metadata. Expected shape:
+        # { "validation_bias_results": { "validation": { "demographic_parity": 0.05, ... }, ... } }
+        validation_results = context.metadata.get("validation_bias_results", {})
+
+        if not validation_results:
+            return {
+                "passed": False,
+                "score": 0.0,
+                "message": "Validation bias check skipped: no validation_bias_results in context",
+                "evidence": {"test_sets": test_sets, "bias_metrics": bias_metrics, "threshold": threshold},
+                "recommendations": ["Provide validation_bias_results in lifecycle context metadata"],
+                "metadata": {"check_type": "validation_bias", "data_available": False}
             }
-        
+
         # Check if any bias exceeds threshold
         max_bias = 0.0
         for test_set_results in validation_results.values():
+            if not isinstance(test_set_results, dict):
+                continue
             for metric in bias_metrics:
                 if metric in test_set_results:
                     max_bias = max(max_bias, test_set_results[metric])
-        
-        passed = max_bias <= 0.1  # 10% threshold
+
+        passed = max_bias <= threshold
         
         return {
             "passed": passed,
@@ -634,20 +649,26 @@ class LifecycleIntegration:
     async def _check_model_explainability(self, context: LifecycleContext, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """Check model explainability"""
         explainability_methods = parameters.get("explainability_methods", ["shap", "lime"])
-        
-        # Evaluate explainability from declared parameters
-        explainability_results = {}
-        for method in explainability_methods:
-            explainability_results[method] = {
-                "available": True,
-                "coverage": 0.95,
-                "interpretability_score": 0.88
+
+        # Read explainability results from context metadata. Expected shape:
+        # { "explainability_results": { "shap": { "available": True, "interpretability_score": 0.9 }, ... } }
+        explainability_results = context.metadata.get("explainability_results", {})
+
+        if not explainability_results:
+            return {
+                "passed": False,
+                "score": 0.0,
+                "message": "Explainability check skipped: no explainability_results in context",
+                "evidence": {"methods": explainability_methods},
+                "recommendations": ["Provide explainability_results in lifecycle context metadata"],
+                "metadata": {"check_type": "explainability", "data_available": False}
             }
-        
+
         # Check if all methods are available and meet threshold
-        all_available = all(result["available"] for result in explainability_results.values())
-        avg_interpretability = sum(result["interpretability_score"] for result in explainability_results.values()) / len(explainability_results)
-        
+        all_available = all(result.get("available", False) for result in explainability_results.values())
+        scores = [result.get("interpretability_score", 0.0) for result in explainability_results.values()]
+        avg_interpretability = sum(scores) / len(scores) if scores else 0.0
+
         passed = all_available and avg_interpretability >= 0.8
         
         return {
@@ -665,17 +686,22 @@ class LifecycleIntegration:
     async def _check_deployment_security(self, context: LifecycleContext, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """Check deployment security"""
         scan_types = parameters.get("scan_types", ["vulnerability", "malware"])
-        
-        # Evaluate security posture from declared parameters
-        security_results = {}
-        for scan_type in scan_types:
-            security_results[scan_type] = {
-                "passed": True,
-                "issues_found": 0,
-                "severity": "low"
+
+        # Read security scan results from context metadata. Expected shape:
+        # { "security_scan_results": { "vulnerability": { "passed": True, "issues_found": 0 }, ... } }
+        security_results = context.metadata.get("security_scan_results", {})
+
+        if not security_results:
+            return {
+                "passed": False,
+                "score": 0.0,
+                "message": "Security scan check skipped: no security_scan_results in context",
+                "evidence": {"scan_types": scan_types},
+                "recommendations": ["Run security scans and provide security_scan_results in lifecycle context"],
+                "metadata": {"check_type": "security_scan", "data_available": False}
             }
-        
-        all_passed = all(result["passed"] for result in security_results.values())
+
+        all_passed = all(result.get("passed", False) for result in security_results.values())
         
         return {
             "passed": all_passed,
@@ -692,19 +718,25 @@ class LifecycleIntegration:
     async def _check_deployment_documentation(self, context: LifecycleContext, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """Check deployment documentation"""
         required_docs = parameters.get("required_docs", ["deployment_guide", "api_docs"])
-        
-        # Evaluate documentation completeness from declared parameters
-        doc_status = {}
-        for doc in required_docs:
-            doc_status[doc] = {
-                "exists": True,
-                "up_to_date": True,
-                "completeness": 0.95
+
+        # Read documentation status from context metadata. Expected shape:
+        # { "documentation_status": { "deployment_guide": { "exists": True, "completeness": 0.9 }, ... } }
+        doc_status = context.metadata.get("documentation_status", {})
+
+        if not doc_status:
+            return {
+                "passed": False,
+                "score": 0.0,
+                "message": "Documentation check skipped: no documentation_status in context",
+                "evidence": {"required_docs": required_docs},
+                "recommendations": ["Provide documentation_status in lifecycle context metadata"],
+                "metadata": {"check_type": "documentation", "data_available": False}
             }
-        
-        all_docs_present = all(status["exists"] for status in doc_status.values())
-        avg_completeness = sum(status["completeness"] for status in doc_status.values()) / len(doc_status)
-        
+
+        all_docs_present = all(doc_status.get(doc, {}).get("exists", False) for doc in required_docs)
+        completeness_values = [doc_status.get(doc, {}).get("completeness", 0.0) for doc in required_docs]
+        avg_completeness = sum(completeness_values) / len(completeness_values) if completeness_values else 0.0
+
         passed = all_docs_present and avg_completeness >= 0.9
         
         return {
@@ -723,14 +755,21 @@ class LifecycleIntegration:
         """Check runtime bias monitoring"""
         monitoring_frequency = parameters.get("monitoring_frequency", "hourly")
         alert_threshold = parameters.get("alert_threshold", 0.15)
-        
-        # Evaluate runtime bias from context metadata
-        runtime_bias = {
-            "demographic_parity": 0.12,
-            "equalized_odds": 0.14,
-            "calibration": 0.08
-        }
-        
+
+        # Read runtime bias metrics from context metadata. Expected shape:
+        # { "runtime_bias_metrics": { "demographic_parity": 0.05, "equalized_odds": 0.08 } }
+        runtime_bias = context.metadata.get("runtime_bias_metrics", {})
+
+        if not runtime_bias:
+            return {
+                "passed": False,
+                "score": 0.0,
+                "message": "Runtime bias check skipped: no runtime_bias_metrics in context",
+                "evidence": {"monitoring_frequency": monitoring_frequency, "alert_threshold": alert_threshold},
+                "recommendations": ["Wire up runtime monitoring to populate runtime_bias_metrics"],
+                "metadata": {"check_type": "runtime_bias", "data_available": False}
+            }
+
         max_bias = max(runtime_bias.values())
         passed = max_bias <= alert_threshold
         
@@ -751,16 +790,24 @@ class LifecycleIntegration:
         """Check performance monitoring"""
         metrics = parameters.get("metrics", ["accuracy", "latency"])
         alert_threshold = parameters.get("alert_threshold", 0.1)
-        
-        # Evaluate performance from context metadata
-        performance_metrics = {
-            "accuracy": 0.92,
-            "latency": 0.05,  # 50ms
-            "throughput": 1000  # requests per second
-        }
-        
-        # Check if performance is within acceptable range
-        baseline_accuracy = 0.95
+
+        # Read performance and baseline metrics from context metadata. Expected shape:
+        # { "performance_metrics": { "accuracy": 0.92, "latency": 0.05 },
+        #   "baseline_metrics": { "accuracy": 0.95 } }
+        performance_metrics = context.metadata.get("performance_metrics", {})
+        baseline_metrics = context.metadata.get("baseline_metrics", {})
+
+        if not performance_metrics or "accuracy" not in performance_metrics or "accuracy" not in baseline_metrics:
+            return {
+                "passed": False,
+                "score": 0.0,
+                "message": "Performance monitoring skipped: performance_metrics or baseline_metrics missing accuracy",
+                "evidence": {"metrics": metrics, "alert_threshold": alert_threshold},
+                "recommendations": ["Provide performance_metrics and baseline_metrics in lifecycle context"],
+                "metadata": {"check_type": "performance_monitoring", "data_available": False}
+            }
+
+        baseline_accuracy = baseline_metrics["accuracy"]
         accuracy_drop = baseline_accuracy - performance_metrics["accuracy"]
         passed = accuracy_drop <= alert_threshold
         

@@ -182,7 +182,7 @@ export function BiasDetectionWidget() {
               <p className="text-sm">Run a bias evaluation to get started</p>
             </div>
             <Link href="/dashboard/modern-bias">
-              <Button variant="outline" size="sm" className="border-2 border-black mt-2">
+              <Button variant="neutral" size="sm" className="border-2 border-black mt-2">
                 Start Evaluation
               </Button>
             </Link>

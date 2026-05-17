@@ -9,7 +9,17 @@
  * - System status monitoring
  */
 
-import { api } from '@/lib/api/api-client'
+import { apiClient as api, type ApiResponse } from '@/lib/api/api-client'
+
+/** Unwrap ApiResponse — returns .data or throws on failure */
+function unwrap<T>(promise: Promise<ApiResponse<T>>): Promise<T> {
+    return promise.then(r => {
+        if (!r.success || r.data === undefined) {
+            throw new Error(r.error ?? r.message ?? 'API request failed')
+        }
+        return r.data
+    })
+}
 
 // Type definitions
 export interface ComplianceSchedule {
@@ -101,7 +111,7 @@ export const scheduleAPI = {
      * Create a new compliance automation schedule
      */
     create: async (data: ScheduleCreateRequest): Promise<ComplianceSchedule> => {
-        return api.post('/api/v1/compliance/schedules', data)
+        return unwrap(api.post('/api/v1/compliance/schedules', data))
     },
 
     /**
@@ -119,14 +129,14 @@ export const scheduleAPI = {
         if (params?.offset) query.append('offset', String(params.offset))
         if (params?.limit) query.append('limit', String(params.limit))
 
-        return api.get(`/api/v1/compliance/schedules?${query}`)
+        return unwrap(api.get(`/api/v1/compliance/schedules?${query}`))
     },
 
     /**
      * Get a specific schedule by ID
      */
     get: async (id: string): Promise<ComplianceSchedule> => {
-        return api.get(`/api/v1/compliance/schedules/${id}`)
+        return unwrap(api.get(`/api/v1/compliance/schedules/${id}`))
     },
 
     /**
@@ -142,21 +152,21 @@ export const scheduleAPI = {
             is_active: boolean
         }>
     ): Promise<ComplianceSchedule> => {
-        return api.put(`/api/v1/compliance/schedules/${id}`, data)
+        return unwrap(api.put(`/api/v1/compliance/schedules/${id}`, data))
     },
 
     /**
      * Delete a compliance schedule
      */
     delete: async (id: string): Promise<{ message: string }> => {
-        return api.delete(`/api/v1/compliance/schedules/${id}`)
+        return unwrap(api.delete(`/api/v1/compliance/schedules/${id}`))
     },
 
     /**
      * Trigger immediate execution of a schedule
      */
     runNow: async (id: string): Promise<{ message: string; schedule_id: string; triggered_at: string }> => {
-        return api.post(`/api/v1/compliance/schedules/${id}/run`, {})
+        return unwrap(api.post(`/api/v1/compliance/schedules/${id}/run`, {}))
     },
 }
 
@@ -181,21 +191,21 @@ export const violationAPI = {
         if (params?.offset) query.append('offset', String(params.offset))
         if (params?.limit) query.append('limit', String(params.limit))
 
-        return api.get(`/api/v1/compliance/violations?${query}`)
+        return unwrap(api.get(`/api/v1/compliance/violations?${query}`))
     },
 
     /**
      * Get a specific violation by ID
      */
     get: async (id: string): Promise<ComplianceViolation> => {
-        return api.get(`/api/v1/compliance/violations/${id}`)
+        return unwrap(api.get(`/api/v1/compliance/violations/${id}`))
     },
 
     /**
      * Acknowledge a compliance violation
      */
     acknowledge: async (id: string, notes?: string): Promise<ComplianceViolation> => {
-        return api.patch(`/api/v1/compliance/violations/${id}/acknowledge`, { notes })
+        return unwrap(api.patch(`/api/v1/compliance/violations/${id}/acknowledge`, { notes }))
     },
 }
 
@@ -214,14 +224,14 @@ export const reportAPI = {
         if (params?.offset) query.append('offset', String(params.offset))
         if (params?.limit) query.append('limit', String(params.limit))
 
-        return api.get(`/api/v1/compliance/reports?${query}`)
+        return unwrap(api.get(`/api/v1/compliance/reports?${query}`))
     },
 
     /**
      * Get a specific report by ID
      */
     get: async (id: string): Promise<ComplianceReport> => {
-        return api.get(`/api/v1/compliance/reports/${id}`)
+        return unwrap(api.get(`/api/v1/compliance/reports/${id}`))
     },
 
     /**
@@ -244,7 +254,7 @@ export const remediationAPI = {
         gap_id: string
         model_id?: string
     }): Promise<RemediationPlan> => {
-        return api.post('/api/v1/compliance/gap-remediation', data)
+        return unwrap(api.post('/api/v1/compliance/gap-remediation', data))
     },
 }
 
@@ -254,7 +264,7 @@ export const statusAPI = {
      * Get compliance automation system status
      */
     get: async (): Promise<AutomationStatus> => {
-        return api.get('/api/v1/compliance/status')
+        return unwrap(api.get('/api/v1/compliance/status'))
     },
 }
 

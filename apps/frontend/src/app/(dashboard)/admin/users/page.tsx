@@ -37,7 +37,7 @@ export default function AdminUsersPage() {
         const response = await api.get<{ users: User[] }>(
           "/api/v1/auth/users"
         );
-        setUsers(response.users || []);
+        setUsers(response.data?.users || []);
         setError(null);
       } catch (err) {
         const errorMessage =
