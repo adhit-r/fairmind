@@ -1,0 +1,86 @@
+{
+  "bom_id": "generic-loan-approval-mlbom-v0",
+  "bom_format": "generic-ai-ml-bom",
+  "system_name": "Loan Approval Model",
+  "system_domain": "consumer_credit",
+  "generated_at": "2026-05-23T00:00:00Z",
+  "components": [
+    {
+      "component_id": "loan.dataset.applications",
+      "component_type": "dataset",
+      "name": "Synthetic Loan Application Training Data",
+      "version": "2026.05.synthetic",
+      "dependencies": []
+    },
+    {
+      "component_id": "loan.preprocessing.features",
+      "component_type": "preprocessing",
+      "name": "Loan Feature Engineering Pipeline",
+      "version": "1.4.2",
+      "dependencies": [
+        "loan.dataset.applications"
+      ]
+    },
+    {
+      "component_id": "loan.model.scorecard",
+      "component_type": "model",
+      "name": "Gradient Boosted Loan Approval Model",
+      "version": "2.1.0",
+      "dependencies": [
+        "loan.preprocessing.features"
+      ],
+      "model_metadata": {
+        "algorithm": "gradient_boosted_trees",
+        "task": "binary_classification",
+        "output": "approval_probability"
+      }
+    },
+    {
+      "component_id": "loan.evaluation.fairness_set",
+      "component_type": "evaluation_set",
+      "name": "Loan Fairness Evaluation Set",
+      "version": "2026.01.synthetic",
+      "dependencies": [
+        "loan.dataset.applications",
+        "loan.model.scorecard"
+      ]
+    },
+    {
+      "component_id": "loan.remediation.thresholds",
+      "component_type": "remediation",
+      "name": "Loan Threshold Adjustment Proposal",
+      "version": "0.3.0",
+      "dependencies": [
+        "loan.model.scorecard",
+        "loan.evaluation.fairness_set"
+      ]
+    },
+    {
+      "component_id": "loan.monitor.production",
+      "component_type": "monitor",
+      "name": "Loan Fairness Drift Monitor",
+      "version": "0.9.0",
+      "dependencies": [
+        "loan.model.scorecard"
+      ]
+    },
+    {
+      "component_id": "loan.report.release",
+      "component_type": "report",
+      "name": "Loan Release Fairness Report",
+      "version": "draft-2026-05",
+      "dependencies": [
+        "loan.dataset.applications",
+        "loan.preprocessing.features",
+        "loan.model.scorecard",
+        "loan.evaluation.fairness_set",
+        "loan.remediation.thresholds",
+        "loan.monitor.production"
+      ]
+    }
+  ],
+  "limitations": [
+    "This generic BOM records component identity, versions, and dependencies only.",
+    "It does not encode subgroup coverage, fairness evidence freshness, validation state, or reviewer approval."
+  ]
+}

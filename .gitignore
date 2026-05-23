@@ -178,6 +178,7 @@ credentials*
 *.json
 !package.json
 !package-lock.json
+!research/aibom-fairness-evidence/**/*.json
 !tsconfig.json
 !next.config.js
 !tailwind.config.ts
@@ -282,6 +283,7 @@ checkpoints/
 
 # Data files
 *.csv
+!research/aibom-fairness-evidence/**/*.csv
 *.xml
 *.yaml
 *.yml

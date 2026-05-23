@@ -1,0 +1,781 @@
+{
+  "profile_id": "aibom-fairness-loan-approval-v0",
+  "profile_version": "0.1.0",
+  "bom_ref": "generic-loan-approval-mlbom-v0",
+  "system_name": "Loan Approval Model",
+  "system_domain": "consumer_credit",
+  "generated_at": "2026-05-23T00:00:00Z",
+  "fairmind_context": {
+    "platform_name": "FairMind",
+    "generation_mode": "synthetic_fixture",
+    "source_services": [
+      {
+        "path": "apps/backend/src/application/services/ai_bom_service.py",
+        "role": "AIBOM component lineage and risk/compliance status"
+      },
+      {
+        "path": "apps/backend/src/application/services/real_ai_bom_service.py",
+        "role": "Database-backed AIBOM document and component persistence"
+      },
+      {
+        "path": "apps/backend/src/application/services/india_bias_detection_service.py",
+        "role": "India-specific protected-attribute and subgroup fairness evidence"
+      },
+      {
+        "path": "apps/backend/src/application/services/automated_evidence_collector.py",
+        "role": "Evidence categories for training data bias, fairness monitoring, documentation, and audit logging"
+      },
+      {
+        "path": "apps/backend/src/application/services/compliance_mapper.py",
+        "role": "Regulatory control and evidence mapping"
+      }
+    ],
+    "evidence_boundary": "Synthetic FairMind fixture derived from FairMind service capabilities; not a production runtime export."
+  },
+  "components": [
+    {
+      "component_id": "loan.dataset.applications",
+      "component_type": "dataset",
+      "component_name": "Synthetic Loan Application Training Data",
+      "version": "2026.05.synthetic",
+      "upstream_components": [],
+      "downstream_components": [
+        "loan.preprocessing.features"
+      ],
+      "protected_attributes_tested": [
+        "gender",
+        "region",
+        "language",
+        "age"
+      ],
+      "subgroup_coverage": {
+        "evaluated_groups": [
+          "gender:female",
+          "gender:male",
+          "region:north",
+          "region:south",
+          "language:english",
+          "language:hindi",
+          "age:under_30",
+          "age:30_to_55"
+        ],
+        "missing_groups": [
+          "caste_category_proxy",
+          "language:regional_low_resource",
+          "age:over_55"
+        ],
+        "coverage_notes": "Caste/category proxy and older applicant coverage are not supported by the synthetic sample."
+      },
+      "fairness_metrics": [
+        {
+          "metric": "selection_rate_gap",
+          "value": 0.14,
+          "threshold": 0.1,
+          "affected_groups": [
+            "region:east",
+            "language:regional_low_resource"
+          ],
+          "evidence_state": "simulated"
+        }
+      ],
+      "bias_tests_run": [
+        {
+          "test_name": "FairMind synthetic subgroup coverage scan",
+          "test_type": "coverage",
+          "result": "missing caste/category proxy and low-resource language slices",
+          "evidence_state": "simulated",
+          "evidence_ref": "loan-evidence-coverage-001"
+        }
+      ],
+      "known_bias_risks": [
+        {
+          "risk_id": "loan-risk-001",
+          "description": "Protected-category proxy risk may be hidden in geography, school, and occupation features.",
+          "affected_groups": [
+            "caste_category_proxy",
+            "region:east",
+            "language:regional_low_resource"
+          ],
+          "severity": "high",
+          "evidence_state": "simulated"
+        }
+      ],
+      "remediation_history": [],
+      "validation_state": "simulated",
+      "evidence_refs": [
+        "loan-evidence-coverage-001"
+      ],
+      "evidence_freshness": {
+        "last_updated": "2026-05-10T00:00:00Z",
+        "expires_at": "2026-08-10T00:00:00Z",
+        "staleness_rule": "Dataset coverage evidence expires after 90 days or after material data refresh.",
+        "evidence_state": "simulated"
+      },
+      "review_status": "review_required",
+      "regulatory_mapping": [
+        {
+          "framework": "NIST AI RMF",
+          "control": "Map 2.2",
+          "claim": "Impacted groups are identified and documented.",
+          "evidence_state": "simulated"
+        }
+      ],
+      "unknowns": [
+        "No direct caste/category labels are available; only proxy risk is represented."
+      ],
+      "risk_summary": {
+        "overall_severity": "high",
+        "key_risks": [
+          "proxy discrimination",
+          "missing subgroup coverage"
+        ],
+        "unknown_count": 1,
+        "stale_evidence_count": 0,
+        "simulated_evidence_count": 2,
+        "reviewer_action": "Request additional subgroup coverage evidence before release approval."
+      }
+    },
+    {
+      "component_id": "loan.preprocessing.features",
+      "component_type": "preprocessing",
+      "component_name": "Loan Feature Engineering Pipeline",
+      "version": "1.4.2",
+      "upstream_components": [
+        "loan.dataset.applications"
+      ],
+      "downstream_components": [
+        "loan.model.scorecard"
+      ],
+      "protected_attributes_tested": [
+        "gender",
+        "region",
+        "language",
+        "age"
+      ],
+      "subgroup_coverage": {
+        "evaluated_groups": [
+          "gender:female",
+          "gender:male",
+          "region:north",
+          "region:south",
+          "language:english",
+          "language:hindi"
+        ],
+        "missing_groups": [
+          "caste_category_proxy"
+        ],
+        "coverage_notes": "Feature list includes postal region and employment category, which may act as protected-category proxies."
+      },
+      "fairness_metrics": [
+        {
+          "metric": "proxy_feature_correlation",
+          "value": "not measured",
+          "threshold": "requires review",
+          "affected_groups": [
+            "caste_category_proxy"
+          ],
+          "evidence_state": "unknown"
+        }
+      ],
+      "bias_tests_run": [
+        {
+          "test_name": "Proxy feature inventory",
+          "test_type": "static_feature_review",
+          "result": "postal region and occupation category flagged for reviewer inspection",
+          "evidence_state": "simulated",
+          "evidence_ref": "loan-evidence-proxy-001"
+        }
+      ],
+      "known_bias_risks": [
+        {
+          "risk_id": "loan-risk-002",
+          "description": "Geography and occupation features may encode protected-category proxies.",
+          "affected_groups": [
+            "caste_category_proxy",
+            "region:east"
+          ],
+          "severity": "high",
+          "evidence_state": "simulated"
+        }
+      ],
+      "remediation_history": [],
+      "validation_state": "simulated",
+      "evidence_refs": [
+        "loan-evidence-proxy-001"
+      ],
+      "evidence_freshness": {
+        "last_updated": "2026-05-10T00:00:00Z",
+        "expires_at": "2026-08-10T00:00:00Z",
+        "staleness_rule": "Proxy inventory must be refreshed when feature definitions change.",
+        "evidence_state": "simulated"
+      },
+      "review_status": "review_required",
+      "regulatory_mapping": [
+        {
+          "framework": "EU AI Act",
+          "control": "Data governance",
+          "claim": "Potential bias from input features is examined.",
+          "evidence_state": "simulated"
+        }
+      ],
+      "unknowns": [
+        "No quantitative proxy correlation report is attached."
+      ],
+      "risk_summary": {
+        "overall_severity": "high",
+        "key_risks": [
+          "proxy feature risk not quantified"
+        ],
+        "unknown_count": 1,
+        "stale_evidence_count": 0,
+        "simulated_evidence_count": 2,
+        "reviewer_action": "Request proxy analysis before accepting fairness claims."
+      }
+    },
+    {
+      "component_id": "loan.model.scorecard",
+      "component_type": "model",
+      "component_name": "Gradient Boosted Loan Approval Model",
+      "version": "2.1.0",
+      "upstream_components": [
+        "loan.preprocessing.features"
+      ],
+      "downstream_components": [
+        "loan.evaluation.fairness_set",
+        "loan.monitor.production"
+      ],
+      "protected_attributes_tested": [
+        "gender",
+        "region",
+        "language",
+        "age"
+      ],
+      "subgroup_coverage": {
+        "evaluated_groups": [
+          "gender:female",
+          "gender:male",
+          "region:north",
+          "region:south",
+          "language:english",
+          "language:hindi",
+          "age:under_30",
+          "age:30_to_55"
+        ],
+        "missing_groups": [
+          "caste_category_proxy",
+          "age:over_55"
+        ],
+        "coverage_notes": "Model fairness evidence does not cover the full protected-attribute set claimed by the release report."
+      },
+      "fairness_metrics": [
+        {
+          "metric": "disparate_impact_ratio",
+          "value": 0.72,
+          "threshold": 0.8,
+          "affected_groups": [
+            "region:east"
+          ],
+          "evidence_state": "simulated"
+        },
+        {
+          "metric": "equal_opportunity_gap",
+          "value": 0.11,
+          "threshold": 0.1,
+          "affected_groups": [
+            "language:regional_low_resource"
+          ],
+          "evidence_state": "simulated"
+        }
+      ],
+      "bias_tests_run": [
+        {
+          "test_name": "Synthetic loan fairness regression",
+          "test_type": "disaggregated_metric_test",
+          "result": "regional low-resource language group exceeds threshold",
+          "evidence_state": "simulated",
+          "evidence_ref": "loan-evidence-model-001"
+        }
+      ],
+      "known_bias_risks": [
+        {
+          "risk_id": "loan-risk-003",
+          "description": "Approval score has elevated disparity for regional language applicants.",
+          "affected_groups": [
+            "language:regional_low_resource"
+          ],
+          "severity": "high",
+          "evidence_state": "simulated"
+        }
+      ],
+      "remediation_history": [
+        {
+          "remediation_id": "loan-remediation-001",
+          "description": "Threshold calibration proposed for regional language applicants.",
+          "status": "proposed",
+          "validation_state": "untested",
+          "evidence_ref": "loan-evidence-remediation-001"
+        }
+      ],
+      "validation_state": "simulated",
+      "evidence_refs": [
+        "loan-evidence-model-001",
+        "loan-evidence-remediation-001"
+      ],
+      "evidence_freshness": {
+        "last_updated": "2026-04-15T00:00:00Z",
+        "expires_at": "2026-07-15T00:00:00Z",
+        "staleness_rule": "Model fairness evidence expires after 90 days or after model version change.",
+        "evidence_state": "simulated"
+      },
+      "review_status": "review_required",
+      "regulatory_mapping": [
+        {
+          "framework": "NIST AI RMF",
+          "control": "Measure 2.11",
+          "claim": "Model performance is evaluated across relevant subgroups.",
+          "evidence_state": "simulated"
+        }
+      ],
+      "unknowns": [
+        "Remediation has not been validated after the proposed calibration."
+      ],
+      "risk_summary": {
+        "overall_severity": "high",
+        "key_risks": [
+          "regional language disparity",
+          "unvalidated remediation"
+        ],
+        "unknown_count": 1,
+        "stale_evidence_count": 0,
+        "simulated_evidence_count": 3,
+        "reviewer_action": "Request remediation validation and subgroup expansion."
+      }
+    },
+    {
+      "component_id": "loan.evaluation.fairness_set",
+      "component_type": "evaluation_set",
+      "component_name": "Loan Fairness Evaluation Set",
+      "version": "2026.01.synthetic",
+      "upstream_components": [
+        "loan.dataset.applications",
+        "loan.model.scorecard"
+      ],
+      "downstream_components": [
+        "loan.report.release"
+      ],
+      "protected_attributes_tested": [
+        "gender",
+        "region"
+      ],
+      "subgroup_coverage": {
+        "evaluated_groups": [
+          "gender:female",
+          "gender:male",
+          "region:north",
+          "region:south"
+        ],
+        "missing_groups": [
+          "language",
+          "age",
+          "caste_category_proxy"
+        ],
+        "coverage_notes": "The evaluation set is narrower than the release claim."
+      },
+      "fairness_metrics": [
+        {
+          "metric": "demographic_parity_difference",
+          "value": 0.09,
+          "threshold": 0.1,
+          "affected_groups": [
+            "region:south"
+          ],
+          "evidence_state": "stale"
+        }
+      ],
+      "bias_tests_run": [
+        {
+          "test_name": "Release fairness snapshot",
+          "test_type": "batch_metric_test",
+          "result": "test predates model version 2.1.0",
+          "evidence_state": "stale",
+          "evidence_ref": "loan-evidence-eval-001"
+        }
+      ],
+      "known_bias_risks": [
+        {
+          "risk_id": "loan-risk-004",
+          "description": "Fairness result is stale after a model update.",
+          "affected_groups": [
+            "all_tested_groups"
+          ],
+          "severity": "high",
+          "evidence_state": "stale"
+        }
+      ],
+      "remediation_history": [],
+      "validation_state": "simulated",
+      "evidence_refs": [
+        "loan-evidence-eval-001"
+      ],
+      "evidence_freshness": {
+        "last_updated": "2026-01-20T00:00:00Z",
+        "expires_at": "2026-04-20T00:00:00Z",
+        "staleness_rule": "Evaluation evidence expires after 90 days or after model version change.",
+        "evidence_state": "stale"
+      },
+      "review_status": "review_required",
+      "regulatory_mapping": [
+        {
+          "framework": "ISO/IEC 42001",
+          "control": "AI system impact assessment",
+          "claim": "Fairness evidence is current for the released model.",
+          "evidence_state": "stale"
+        }
+      ],
+      "unknowns": [
+        "No evaluation result exists for model version 2.1.0."
+      ],
+      "risk_summary": {
+        "overall_severity": "high",
+        "key_risks": [
+          "stale fairness evidence"
+        ],
+        "unknown_count": 1,
+        "stale_evidence_count": 2,
+        "simulated_evidence_count": 0,
+        "reviewer_action": "Reject release approval until current evaluation is attached."
+      }
+    },
+    {
+      "component_id": "loan.remediation.thresholds",
+      "component_type": "remediation",
+      "component_name": "Loan Threshold Adjustment Proposal",
+      "version": "0.3.0",
+      "upstream_components": [
+        "loan.model.scorecard",
+        "loan.evaluation.fairness_set"
+      ],
+      "downstream_components": [
+        "loan.report.release"
+      ],
+      "protected_attributes_tested": [
+        "region",
+        "language"
+      ],
+      "subgroup_coverage": {
+        "evaluated_groups": [
+          "region:east",
+          "language:regional_low_resource"
+        ],
+        "missing_groups": [
+          "caste_category_proxy",
+          "age:over_55"
+        ],
+        "coverage_notes": "Remediation proposal targets a narrow group and has not been validated against other subgroups."
+      },
+      "fairness_metrics": [
+        {
+          "metric": "post_remediation_disparate_impact_ratio",
+          "value": null,
+          "threshold": 0.8,
+          "affected_groups": [
+            "region:east",
+            "language:regional_low_resource"
+          ],
+          "evidence_state": "missing"
+        }
+      ],
+      "bias_tests_run": [
+        {
+          "test_name": "Post-remediation fairness test",
+          "test_type": "not_run",
+          "result": "missing",
+          "evidence_state": "missing",
+          "evidence_ref": ""
+        }
+      ],
+      "known_bias_risks": [
+        {
+          "risk_id": "loan-risk-005",
+          "description": "Remediation may overcorrect one group while increasing disparity for another.",
+          "affected_groups": [
+            "language:regional_low_resource",
+            "age:over_55"
+          ],
+          "severity": "medium",
+          "evidence_state": "unknown"
+        }
+      ],
+      "remediation_history": [
+        {
+          "remediation_id": "loan-remediation-001",
+          "description": "Threshold adjustment drafted but not evaluated.",
+          "status": "attempted",
+          "validation_state": "untested",
+          "evidence_ref": ""
+        }
+      ],
+      "validation_state": "untested",
+      "evidence_refs": [],
+      "evidence_freshness": {
+        "last_updated": null,
+        "expires_at": null,
+        "staleness_rule": "Untested remediation has no freshness window.",
+        "evidence_state": "missing"
+      },
+      "review_status": "review_required",
+      "regulatory_mapping": [
+        {
+          "framework": "NIST AI RMF",
+          "control": "Manage 4.1",
+          "claim": "Bias mitigation is tracked and evaluated.",
+          "evidence_state": "missing"
+        }
+      ],
+      "unknowns": [
+        "No post-remediation evaluation has been run."
+      ],
+      "risk_summary": {
+        "overall_severity": "medium",
+        "key_risks": [
+          "remediation attempted but not validated"
+        ],
+        "unknown_count": 1,
+        "stale_evidence_count": 0,
+        "simulated_evidence_count": 0,
+        "reviewer_action": "Request post-remediation evidence before accepting mitigation claims."
+      }
+    },
+    {
+      "component_id": "loan.monitor.production",
+      "component_type": "monitor",
+      "component_name": "Loan Fairness Drift Monitor",
+      "version": "0.9.0",
+      "upstream_components": [
+        "loan.model.scorecard"
+      ],
+      "downstream_components": [
+        "loan.report.release"
+      ],
+      "protected_attributes_tested": [
+        "gender",
+        "region"
+      ],
+      "subgroup_coverage": {
+        "evaluated_groups": [
+          "gender:female",
+          "gender:male",
+          "region:north",
+          "region:south"
+        ],
+        "missing_groups": [
+          "language",
+          "age",
+          "caste_category_proxy"
+        ],
+        "coverage_notes": "Monitor excludes several attributes claimed in release documentation."
+      },
+      "fairness_metrics": [
+        {
+          "metric": "monthly_selection_rate_gap",
+          "value": "not connected",
+          "threshold": 0.1,
+          "affected_groups": [
+            "all_live_groups"
+          ],
+          "evidence_state": "unknown"
+        }
+      ],
+      "bias_tests_run": [
+        {
+          "test_name": "Monitor connectivity check",
+          "test_type": "integration_check",
+          "result": "simulated only; no live data feed evidence",
+          "evidence_state": "simulated",
+          "evidence_ref": "loan-evidence-monitor-001"
+        }
+      ],
+      "known_bias_risks": [
+        {
+          "risk_id": "loan-risk-006",
+          "description": "Fairness drift may not be detected after deployment.",
+          "affected_groups": [
+            "all_live_groups"
+          ],
+          "severity": "medium",
+          "evidence_state": "unknown"
+        }
+      ],
+      "remediation_history": [],
+      "validation_state": "simulated",
+      "evidence_refs": [
+        "loan-evidence-monitor-001"
+      ],
+      "evidence_freshness": {
+        "last_updated": "2026-05-12T00:00:00Z",
+        "expires_at": "2026-06-12T00:00:00Z",
+        "staleness_rule": "Monitor evidence expires after 30 days or after data feed change.",
+        "evidence_state": "simulated"
+      },
+      "review_status": "pending",
+      "regulatory_mapping": [
+        {
+          "framework": "NIST AI RMF",
+          "control": "Measure 2.5",
+          "claim": "Deployed system is monitored for performance and risks.",
+          "evidence_state": "simulated"
+        }
+      ],
+      "unknowns": [
+        "No live monitor feed has been attached."
+      ],
+      "risk_summary": {
+        "overall_severity": "medium",
+        "key_risks": [
+          "monitor coverage gap"
+        ],
+        "unknown_count": 1,
+        "stale_evidence_count": 0,
+        "simulated_evidence_count": 2,
+        "reviewer_action": "Request live monitoring evidence."
+      }
+    },
+    {
+      "component_id": "loan.report.release",
+      "component_type": "report",
+      "component_name": "Loan Release Fairness Report",
+      "version": "draft-2026-05",
+      "upstream_components": [
+        "loan.dataset.applications",
+        "loan.preprocessing.features",
+        "loan.model.scorecard",
+        "loan.evaluation.fairness_set",
+        "loan.remediation.thresholds",
+        "loan.monitor.production"
+      ],
+      "downstream_components": [],
+      "protected_attributes_tested": [
+        "gender",
+        "region"
+      ],
+      "subgroup_coverage": {
+        "evaluated_groups": [
+          "gender:female",
+          "gender:male",
+          "region:north",
+          "region:south"
+        ],
+        "missing_groups": [
+          "language",
+          "age",
+          "caste_category_proxy"
+        ],
+        "coverage_notes": "Report claims broader coverage than the evidence supports."
+      },
+      "fairness_metrics": [
+        {
+          "metric": "release_fairness_claim",
+          "value": "acceptable",
+          "threshold": "requires current evidence",
+          "affected_groups": [
+            "all_claimed_groups"
+          ],
+          "evidence_state": "stale"
+        }
+      ],
+      "bias_tests_run": [
+        {
+          "test_name": "Release evidence review",
+          "test_type": "document_review",
+          "result": "unsupported regulatory claim detected",
+          "evidence_state": "stale",
+          "evidence_ref": "loan-evidence-report-001"
+        }
+      ],
+      "known_bias_risks": [
+        {
+          "risk_id": "loan-risk-007",
+          "description": "Release report overclaims compliance coverage.",
+          "affected_groups": [
+            "all_claimed_groups"
+          ],
+          "severity": "high",
+          "evidence_state": "stale"
+        }
+      ],
+      "remediation_history": [
+        {
+          "remediation_id": "loan-remediation-001",
+          "description": "Report references a mitigation that lacks validation evidence.",
+          "status": "referenced",
+          "validation_state": "untested",
+          "evidence_ref": ""
+        }
+      ],
+      "validation_state": "simulated",
+      "evidence_refs": [
+        "loan-evidence-report-001"
+      ],
+      "evidence_freshness": {
+        "last_updated": "2026-01-20T00:00:00Z",
+        "expires_at": "2026-04-20T00:00:00Z",
+        "staleness_rule": "Report evidence expires when source evaluations expire.",
+        "evidence_state": "stale"
+      },
+      "review_status": "review_required",
+      "regulatory_mapping": [
+        {
+          "framework": "EU AI Act",
+          "control": "High-risk system technical documentation",
+          "claim": "System has adequate bias testing and mitigation evidence.",
+          "evidence_state": "stale"
+        }
+      ],
+      "unknowns": [
+        "No reviewer approval is attached.",
+        "Regulatory claim depends on stale evaluation evidence."
+      ],
+      "risk_summary": {
+        "overall_severity": "high",
+        "key_risks": [
+          "unsupported regulatory claim",
+          "missing reviewer approval"
+        ],
+        "unknown_count": 2,
+        "stale_evidence_count": 2,
+        "simulated_evidence_count": 0,
+        "reviewer_action": "Reject release approval until claims are narrowed or evidence is refreshed."
+      }
+    }
+  ],
+  "risk_summary": {
+    "overall_severity": "high",
+    "key_risks": [
+      "proxy discrimination",
+      "missing subgroup coverage",
+      "stale fairness result",
+      "unsupported regulatory claim"
+    ],
+    "unknown_count": 8,
+    "stale_evidence_count": 4,
+    "simulated_evidence_count": 11,
+    "reviewer_action": "Request more evidence before release approval."
+  },
+  "review_summary": {
+    "status": "review_required",
+    "reviewer": null,
+    "reviewed_at": null,
+    "notes": "Synthetic profile for formative review only.",
+    "pending_actions": [
+      "Refresh fairness evaluation for model version 2.1.0.",
+      "Attach subgroup coverage evidence for caste/category proxy and low-resource language groups.",
+      "Validate threshold remediation.",
+      "Remove unsupported compliance claims."
+    ]
+  },
+  "limitations": [
+    "Synthetic example only.",
+    "No real applicant records are included.",
+    "Evidence states are illustrative and must not be treated as production validation."
+  ]
+}

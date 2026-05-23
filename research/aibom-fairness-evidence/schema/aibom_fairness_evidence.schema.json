@@ -1,0 +1,570 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fairmind.local/schemas/aibom_fairness_evidence.schema.json",
+  "title": "AIBOM Fairness Evidence Profile",
+  "description": "A fairness evidence profile layered onto an AI or ML bill of materials.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "profile_id",
+    "profile_version",
+    "bom_ref",
+    "system_name",
+    "system_domain",
+    "generated_at",
+    "fairmind_context",
+    "components",
+    "risk_summary",
+    "review_summary",
+    "limitations"
+  ],
+  "properties": {
+    "profile_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "profile_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "bom_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "system_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "system_domain": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "fairmind_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "platform_name",
+        "generation_mode",
+        "source_services",
+        "evidence_boundary"
+      ],
+      "properties": {
+        "platform_name": {
+          "type": "string",
+          "const": "FairMind"
+        },
+        "generation_mode": {
+          "type": "string",
+          "enum": [
+            "synthetic_fixture",
+            "fairmind_runtime_export",
+            "hybrid"
+          ]
+        },
+        "source_services": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "path",
+              "role"
+            ],
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "role": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "evidence_boundary": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "components": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/component"
+      }
+    },
+    "risk_summary": {
+      "$ref": "#/$defs/risk_summary"
+    },
+    "review_summary": {
+      "$ref": "#/$defs/review_summary"
+    },
+    "limitations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "$defs": {
+    "severity": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "critical",
+        "unknown"
+      ]
+    },
+    "evidence_state": {
+      "type": "string",
+      "enum": [
+        "unknown",
+        "missing",
+        "simulated",
+        "stale",
+        "current",
+        "reviewed",
+        "not_applicable"
+      ]
+    },
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "component_id",
+        "component_type",
+        "component_name",
+        "version",
+        "upstream_components",
+        "downstream_components",
+        "protected_attributes_tested",
+        "subgroup_coverage",
+        "fairness_metrics",
+        "bias_tests_run",
+        "known_bias_risks",
+        "remediation_history",
+        "validation_state",
+        "evidence_refs",
+        "evidence_freshness",
+        "review_status",
+        "regulatory_mapping",
+        "unknowns",
+        "risk_summary"
+      ],
+      "properties": {
+        "component_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "component_type": {
+          "type": "string",
+          "enum": [
+            "dataset",
+            "model",
+            "embedding",
+            "preprocessing",
+            "evaluation_set",
+            "remediation",
+            "monitor",
+            "report"
+          ]
+        },
+        "component_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "upstream_components": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "downstream_components": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "protected_attributes_tested": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "subgroup_coverage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "evaluated_groups",
+            "missing_groups",
+            "coverage_notes"
+          ],
+          "properties": {
+            "evaluated_groups": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "missing_groups": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "coverage_notes": {
+              "type": "string"
+            }
+          }
+        },
+        "fairness_metrics": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "metric",
+              "value",
+              "threshold",
+              "affected_groups",
+              "evidence_state"
+            ],
+            "properties": {
+              "metric": {
+                "type": "string",
+                "minLength": 1
+              },
+              "value": {
+                "type": [
+                  "number",
+                  "string",
+                  "null"
+                ]
+              },
+              "threshold": {
+                "type": [
+                  "number",
+                  "string",
+                  "null"
+                ]
+              },
+              "affected_groups": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "evidence_state": {
+                "$ref": "#/$defs/evidence_state"
+              }
+            }
+          }
+        },
+        "bias_tests_run": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "test_name",
+              "test_type",
+              "result",
+              "evidence_state",
+              "evidence_ref"
+            ],
+            "properties": {
+              "test_name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "test_type": {
+                "type": "string",
+                "minLength": 1
+              },
+              "result": {
+                "type": "string"
+              },
+              "evidence_state": {
+                "$ref": "#/$defs/evidence_state"
+              },
+              "evidence_ref": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "known_bias_risks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "risk_id",
+              "description",
+              "affected_groups",
+              "severity",
+              "evidence_state"
+            ],
+            "properties": {
+              "risk_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "description": {
+                "type": "string",
+                "minLength": 1
+              },
+              "affected_groups": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "severity": {
+                "$ref": "#/$defs/severity"
+              },
+              "evidence_state": {
+                "$ref": "#/$defs/evidence_state"
+              }
+            }
+          }
+        },
+        "remediation_history": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "remediation_id",
+              "description",
+              "status",
+              "validation_state",
+              "evidence_ref"
+            ],
+            "properties": {
+              "remediation_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "description": {
+                "type": "string",
+                "minLength": 1
+              },
+              "status": {
+                "type": "string",
+                "minLength": 1
+              },
+              "validation_state": {
+                "type": "string",
+                "enum": [
+                  "untested",
+                  "simulated",
+                  "retrained",
+                  "validated",
+                  "reviewed"
+                ]
+              },
+              "evidence_ref": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "validation_state": {
+          "type": "string",
+          "enum": [
+            "untested",
+            "simulated",
+            "retrained",
+            "validated",
+            "reviewed"
+          ]
+        },
+        "evidence_refs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "evidence_freshness": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "last_updated",
+            "expires_at",
+            "staleness_rule",
+            "evidence_state"
+          ],
+          "properties": {
+            "last_updated": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date-time"
+            },
+            "expires_at": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date-time"
+            },
+            "staleness_rule": {
+              "type": "string"
+            },
+            "evidence_state": {
+              "$ref": "#/$defs/evidence_state"
+            }
+          }
+        },
+        "review_status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "accepted",
+            "rejected",
+            "review_required"
+          ]
+        },
+        "regulatory_mapping": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "framework",
+              "control",
+              "claim",
+              "evidence_state"
+            ],
+            "properties": {
+              "framework": {
+                "type": "string",
+                "minLength": 1
+              },
+              "control": {
+                "type": "string",
+                "minLength": 1
+              },
+              "claim": {
+                "type": "string",
+                "minLength": 1
+              },
+              "evidence_state": {
+                "$ref": "#/$defs/evidence_state"
+              }
+            }
+          }
+        },
+        "unknowns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "risk_summary": {
+          "$ref": "#/$defs/risk_summary"
+        }
+      }
+    },
+    "risk_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "overall_severity",
+        "key_risks",
+        "unknown_count",
+        "stale_evidence_count",
+        "simulated_evidence_count",
+        "reviewer_action"
+      ],
+      "properties": {
+        "overall_severity": {
+          "$ref": "#/$defs/severity"
+        },
+        "key_risks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "unknown_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "stale_evidence_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "simulated_evidence_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reviewer_action": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "review_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "reviewer",
+        "reviewed_at",
+        "notes",
+        "pending_actions"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "accepted",
+            "rejected",
+            "review_required"
+          ]
+        },
+        "reviewer": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reviewed_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "notes": {
+          "type": "string"
+        },
+        "pending_actions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

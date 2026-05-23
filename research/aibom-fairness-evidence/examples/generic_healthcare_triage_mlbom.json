@@ -1,0 +1,86 @@
+{
+  "bom_id": "generic-healthcare-triage-mlbom-v0",
+  "bom_format": "generic-ai-ml-bom",
+  "system_name": "Healthcare Triage Model",
+  "system_domain": "clinical_triage",
+  "generated_at": "2026-05-23T00:00:00Z",
+  "components": [
+    {
+      "component_id": "health.dataset.encounters",
+      "component_type": "dataset",
+      "name": "Synthetic Triage Encounter Dataset",
+      "version": "2026.05.synthetic",
+      "dependencies": []
+    },
+    {
+      "component_id": "health.preprocessing.features",
+      "component_type": "preprocessing",
+      "name": "Triage Feature Normalization Pipeline",
+      "version": "2.0.1",
+      "dependencies": [
+        "health.dataset.encounters"
+      ]
+    },
+    {
+      "component_id": "health.model.triage",
+      "component_type": "model",
+      "name": "Urgency Triage Model",
+      "version": "4.0.0",
+      "dependencies": [
+        "health.preprocessing.features"
+      ],
+      "model_metadata": {
+        "algorithm": "gradient_boosted_trees",
+        "task": "risk_scoring",
+        "output": "urgency_score"
+      }
+    },
+    {
+      "component_id": "health.evaluation.fairness_set",
+      "component_type": "evaluation_set",
+      "name": "Triage Fairness Evaluation Set",
+      "version": "missing",
+      "dependencies": [
+        "health.dataset.encounters",
+        "health.model.triage"
+      ]
+    },
+    {
+      "component_id": "health.remediation.reweighting",
+      "component_type": "remediation",
+      "name": "Rural Example Reweighting Proposal",
+      "version": "0.1.0",
+      "dependencies": [
+        "health.model.triage",
+        "health.evaluation.fairness_set"
+      ]
+    },
+    {
+      "component_id": "health.monitor.production",
+      "component_type": "monitor",
+      "name": "Triage Fairness Monitor",
+      "version": "0.5.0",
+      "dependencies": [
+        "health.model.triage"
+      ]
+    },
+    {
+      "component_id": "health.report.release",
+      "component_type": "report",
+      "name": "Triage Release Fairness Report",
+      "version": "draft-2026-05",
+      "dependencies": [
+        "health.dataset.encounters",
+        "health.preprocessing.features",
+        "health.model.triage",
+        "health.evaluation.fairness_set",
+        "health.remediation.reweighting",
+        "health.monitor.production"
+      ]
+    }
+  ],
+  "limitations": [
+    "This generic BOM records component identity, versions, and dependencies only.",
+    "It does not encode subgroup coverage, fairness evidence freshness, validation state, or reviewer approval."
+  ]
+}

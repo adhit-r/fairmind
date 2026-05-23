@@ -1,0 +1,25 @@
+case_id,system,component_id,fault_type,generic_bom_visible,fairness_profile_visible,expected_reviewer_action,severity,ground_truth_explanation
+FI-001,Loan Approval Model,loan.evaluation.fairness_set,missing protected attribute test,false,true,request_more_evidence,high,Language age and caste/category proxy are absent from the tested attributes.
+FI-002,Hiring Ranker,hiring.evaluation.fairness_set,missing protected attribute test,false,true,request_more_evidence,high,Disability and non-English language are absent from the tested attributes.
+FI-003,Healthcare Triage Model,health.evaluation.fairness_set,missing protected attribute test,true,true,reject,critical,The current evaluation set is missing and no protected attributes are tested.
+FI-004,Loan Approval Model,loan.dataset.applications,subgroup missing from evaluation set,false,true,request_more_evidence,high,Caste/category proxy low-resource language and older applicant coverage are missing.
+FI-005,Hiring Ranker,hiring.dataset.applications,subgroup missing from evaluation set,false,true,request_more_evidence,high,Disability non-English and rural applicant coverage are missing.
+FI-006,Healthcare Triage Model,health.dataset.encounters,subgroup missing from evaluation set,false,true,request_more_evidence,high,Rural non-English and socioeconomic proxy coverage are missing.
+FI-007,Loan Approval Model,loan.evaluation.fairness_set,stale fairness result after model update,true,true,reject,high,Evaluation evidence expired before the current model release.
+FI-008,Hiring Ranker,hiring.evaluation.fairness_set,stale fairness result after model update,true,true,request_more_evidence,high,Evaluation evidence is expired and does not cover missing groups.
+FI-009,Healthcare Triage Model,health.model.triage,stale fairness result after model update,false,true,request_more_evidence,high,Model evidence predates deployment-population shift.
+FI-010,Loan Approval Model,loan.remediation.thresholds,remediation attempted but not validated,false,true,request_more_evidence,medium,Threshold adjustment was attempted but no post-remediation metric exists.
+FI-011,Hiring Ranker,hiring.remediation.feature_deweighting,remediation attempted but not validated,false,true,reject,high,Feature deweighting is claimed without post-remediation ranking evidence.
+FI-012,Healthcare Triage Model,health.remediation.reweighting,remediation attempted but not validated,false,true,reject,high,Rural reweighting cannot be credited without a current evaluation set.
+FI-013,Loan Approval Model,loan.preprocessing.features,proxy feature risk not surfaced,false,true,request_more_evidence,high,Postal region and occupation proxy risk has no quantitative evidence.
+FI-014,Hiring Ranker,hiring.preprocessing.resume_features,proxy feature risk not surfaced,false,true,request_more_evidence,high,Education prestige and language fluency proxy risk require measurement.
+FI-015,Healthcare Triage Model,health.preprocessing.features,proxy feature risk not surfaced,false,true,request_more_evidence,medium,Missingness patterns may proxy rural access and language barriers.
+FI-016,Loan Approval Model,loan.monitor.production,fairness monitor absent or disconnected,false,true,request_more_evidence,medium,Only simulated monitor evidence exists and live feed is not attached.
+FI-017,Hiring Ranker,hiring.monitor.production,fairness monitor absent or disconnected,false,true,request_more_evidence,medium,Monitor lacks live applicant outcome feed and misses language risk.
+FI-018,Healthcare Triage Model,health.monitor.production,fairness monitor absent or disconnected,false,true,reject,high,Clinical monitor has no live outcome feed and omits region and language.
+FI-019,Loan Approval Model,loan.report.release,unsupported regulatory claim,false,true,reject,high,Release report claims adequate bias evidence using stale and incomplete source evidence.
+FI-020,Hiring Ranker,hiring.report.release,unsupported regulatory claim,false,true,request_more_evidence,high,Employment report claims mitigated bias without validation evidence.
+FI-021,Healthcare Triage Model,health.report.release,unsupported regulatory claim,false,true,reject,critical,Clinical release claim is unsupported by current evaluation or monitoring evidence.
+FI-022,Loan Approval Model,loan.report.release,reviewer approval missing,false,true,request_more_evidence,high,No human reviewer approval is attached to the release report.
+FI-023,Hiring Ranker,hiring.report.release,reviewer approval missing,false,true,request_more_evidence,high,Release report is marked review_required and no reviewer is attached.
+FI-024,Healthcare Triage Model,health.report.release,reviewer approval missing,false,true,reject,critical,High-risk clinical release has no reviewer approval and missing evidence.
