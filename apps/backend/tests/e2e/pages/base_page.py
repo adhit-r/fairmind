@@ -9,7 +9,7 @@ from typing import Optional
 class BasePage:
     """Base class for all page objects."""
 
-    def __init__(self, page: Page, base_url: str = "http://localhost:3000"):
+    def __init__(self, page: Page, base_url: str = "http://localhost:1111"):
         """Initialize the base page.
 
         Args:
@@ -110,6 +110,5 @@ class BasePage:
             True if element is visible, False otherwise
         """
         return self.page.locator(selector).is_visible()
-
 
 

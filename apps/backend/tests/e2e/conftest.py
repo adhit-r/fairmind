@@ -7,18 +7,35 @@ from playwright.sync_api import Page, Browser, BrowserContext, Playwright
 from typing import Generator
 import os
 from pathlib import Path
+from tests.e2e.pages.login_page import LoginPage
 
 
 @pytest.fixture(scope="session")
 def base_url() -> str:
     """Get the base URL for the application."""
-    return os.getenv("E2E_BASE_URL", "http://localhost:3000")
+    return os.getenv("E2E_BASE_URL", "http://localhost:1111")
 
 
 @pytest.fixture(scope="session")
 def api_url() -> str:
     """Get the API base URL."""
     return os.getenv("E2E_API_URL", "http://localhost:8000")
+
+
+@pytest.fixture(scope="function")
+def login_as_admin(page: Page, base_url: str):
+    """Log in using deterministic local E2E credentials."""
+    def _login() -> None:
+        login_page = LoginPage(page, base_url)
+        login_page.navigate_to_login()
+        assert login_page.is_login_form_ready(), "Login form should be ready"
+        login_page.login(
+            os.getenv("E2E_ADMIN_EMAIL", "admin@fairmind.ai"),
+            os.getenv("E2E_ADMIN_PASSWORD", "admin123"),
+        )
+        page.wait_for_url("**/dashboard", timeout=10000)
+
+    return _login
 
 
 @pytest.fixture(scope="session")
@@ -96,6 +113,4 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "e2e: marks tests as end-to-end tests")
     config.addinivalue_line("markers", "smoke: marks tests as smoke tests")
     config.addinivalue_line("markers", "critical: marks tests as critical path tests")
-
-
 

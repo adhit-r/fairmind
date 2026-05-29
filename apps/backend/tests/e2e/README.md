@@ -67,7 +67,7 @@ E2E_HEADLESS=false uv run pytest tests/e2e/ -m e2e
 
 ## Environment Variables
 
-- `E2E_BASE_URL`: Base URL of the frontend application (default: `http://localhost:3000`)
+- `E2E_BASE_URL`: Base URL of the frontend application (default: `http://localhost:1111`)
 - `E2E_API_URL`: Base URL of the backend API (default: `http://localhost:8000`)
 - `E2E_HEADLESS`: Run browser in headless mode (default: `true`)
 - `E2E_SLOW_MO`: Slow down operations by specified milliseconds (default: `0`)
@@ -149,6 +149,5 @@ uv run playwright install chromium
 - Add tests for all critical user flows
 - Set up test data fixtures
 - Add performance testing
-
 
 
