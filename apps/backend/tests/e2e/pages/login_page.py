@@ -55,6 +55,8 @@ class LoginPage(BasePage):
             password: Password
         """
         self.navigate_to_login()
+        if not self.is_login_form_ready():
+            raise AssertionError("Login form should be ready")
         self.enter_email(email)
         self.enter_password(password)
         self.click_login()
@@ -96,10 +98,16 @@ class LoginPage(BasePage):
         """
         return "/login" in self.get_url() or self.is_visible(self.email_input)
 
-    def is_login_form_ready(self) -> bool:
+    def is_login_form_ready(self, timeout_ms: int = 10000) -> bool:
         """Check if the login form is ready for input."""
-        return (
-            self.is_visible(self.email_input)
-            and self.is_visible(self.password_input)
-            and self.is_visible(self.submit_button)
-        )
+        deadline = time.monotonic() + (timeout_ms / 1000)
+        while time.monotonic() < deadline:
+            if (
+                self.is_visible(self.email_input)
+                and self.is_visible(self.password_input)
+                and self.is_visible(self.submit_button)
+            ):
+                return True
+            self.page.wait_for_timeout(250)
+
+        return False
