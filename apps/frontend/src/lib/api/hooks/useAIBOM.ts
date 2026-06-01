@@ -41,6 +41,72 @@ export interface BOMDocument {
   complianceStatus?: string
 }
 
+export interface FairnessEvidenceProfile {
+  profile_id: string
+  profile_version: string
+  bom_ref: string
+  system_name: string
+  system_domain: string
+  generated_at: string
+  components: FairnessEvidenceComponent[]
+  risk_summary: {
+    overall_severity: string
+    key_risks: string[]
+    unknown_count: number
+    stale_evidence_count: number
+    simulated_evidence_count: number
+    reviewer_action: string
+  }
+  review_summary: {
+    status: string
+    reviewer?: string | null
+    reviewed_at?: string | null
+    notes: string
+    pending_actions: string[]
+  }
+  limitations: string[]
+}
+
+export interface FairnessEvidenceComponent {
+  component_id: string
+  component_type: string
+  component_name: string
+  version: string
+  validation_state: string
+  review_status: string
+  protected_attributes_tested: string[]
+  fairness_metrics: Array<{
+    metric: string
+    value?: number | string | null
+    threshold?: number | string | null
+    affected_groups: string[]
+    evidence_state: string
+  }>
+  bias_tests_run: Array<{
+    test_name: string
+    test_type: string
+    result: string
+    evidence_state: string
+    evidence_ref: string
+  }>
+  known_bias_risks: Array<{
+    risk_id: string
+    description: string
+    affected_groups: string[]
+    severity: string
+    evidence_state: string
+  }>
+  unknowns: string[]
+  risk_summary: {
+    overall_severity: string
+    key_risks: string[]
+    unknown_count: number
+    stale_evidence_count: number
+    simulated_evidence_count: number
+    reviewer_action: string
+  }
+}
+
 export function useAIBOM() {
   const [documents, setDocuments] = useState<BOMDocument[]>([])
   const [loading, setLoading] = useState(true)
@@ -116,6 +182,61 @@ export function useAIBOM() {
   return { documents, loading, error, refetch: fetchDocuments, createBOM }
 }
 
+export function useAIBOMFairnessProfile(documentId?: string) {
+  const [profile, setProfile] = useState<FairnessEvidenceProfile | null>(null)
+  const [loading, setLoading] = useState(Boolean(documentId))
+  const [error, setError] = useState<Error | null>(null)
+
+  const fetchProfile = useCallback(async () => {
+    if (!documentId) {
+      setProfile(null)
+      setError(null)
+      setLoading(false)
+      return
+    }
+
+    try {
+      setLoading(true)
+      setError(null)
+
+      const response: ApiResponse<FairnessEvidenceProfile> = await apiClient.get(
+        API_ENDPOINTS.aiBOM.fairnessEvidenceProfile(documentId),
+        {
+          enableRetry: true,
+          maxRetries: 2,
+          timeout: 10000,
+        }
+      )
+
+      if (response.success && response.data) {
+        setProfile(response.data)
+        setError(null)
+      } else {
+        const errorMessage = response.error || 'Failed to fetch fairness evidence profile'
+        setError(new Error(errorMessage))
+        setProfile(null)
+      }
+    } catch (err) {
+      console.error('AI BOM fairness evidence profile API error:', err)
+      setError(err instanceof Error ? err : new Error('Failed to fetch fairness evidence profile'))
+      setProfile(null)
+    } finally {
+      setLoading(false)
+    }
+  }, [documentId])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      setLoading(false)
+      return
+    }
+
+    fetchProfile()
+  }, [fetchProfile])
+
+  return { profile, loading, error, refetch: fetchProfile }
+}
+
 export function useAIBOMStats(documentId?: string) {
   const [stats, setStats] = useState<BOMStats | null>(null)
   const [loading, setLoading] = useState(true)
@@ -167,4 +288,3 @@ export function useAIBOMStats(documentId?: string) {
 
   return { stats, loading, error, refetch: fetchStats }
 }
-

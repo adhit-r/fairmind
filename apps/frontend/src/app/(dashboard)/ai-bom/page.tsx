@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useMemo } from 'react'
-import { useAIBOM, useAIBOMStats } from '@/lib/api/hooks/useAIBOM'
+import { useMemo } from 'react'
+import { useAIBOM, useAIBOMFairnessProfile, useAIBOMStats } from '@/lib/api/hooks/useAIBOM'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -17,6 +17,13 @@ import { useToast } from '@/hooks/use-toast'
 export default function AIBOMPage() {
   const { documents, loading, error, refetch, createBOM } = useAIBOM()
   const { stats, loading: statsLoading } = useAIBOMStats()
+  const selectedDocument = useMemo(() => documents?.[0] || null, [documents])
+  const {
+    profile: fairnessProfile,
+    loading: fairnessLoading,
+    error: fairnessError,
+    refetch: refetchFairnessProfile,
+  } = useAIBOMFairnessProfile(selectedDocument?.id)
   const { toast } = useToast()
   
   // Extract all components from all documents
@@ -36,11 +43,62 @@ export default function AIBOMPage() {
     return <Badge variant={config.variant} className="border-2 border-black">{config.label}</Badge>
   }
 
+  const getStateBadge = (state?: string) => {
+    const normalized = state || 'unknown'
+    const variant: 'default' | 'secondary' | 'destructive' =
+      ['high', 'critical', 'missing', 'stale', 'unknown', 'untested'].includes(normalized)
+        ? 'destructive'
+        : ['medium', 'simulated', 'pending', 'review_required'].includes(normalized)
+          ? 'secondary'
+          : 'default'
+
+    return (
+      <Badge variant={variant} className="border-2 border-black capitalize">
+        {normalized.replace(/_/g, ' ')}
+      </Badge>
+    )
+  }
+
+  const handleRefresh = () => {
+    refetch()
+    refetchFairnessProfile()
+  }
+
   const handleGenerateBOM = async () => {
     try {
       await createBOM({
-        projectName: 'Default Project',
+        name: 'Default Project BOM',
+        version: '1.0.0',
         description: 'Auto-generated BOM',
+        project_name: 'Default Project',
+        organization: 'FairMind',
+        overall_risk_level: 'medium',
+        overall_compliance_status: 'partial',
+        components: [
+          {
+            id: 'default.dataset',
+            name: 'Default Dataset',
+            type: 'dataset',
+            version: 'unknown',
+            risk_level: 'medium',
+            compliance_status: 'partial',
+            component_metadata: {
+              profile_component_type: 'dataset',
+            },
+          },
+          {
+            id: 'default.model',
+            name: 'Default Model',
+            type: 'model',
+            version: 'unknown',
+            risk_level: 'medium',
+            compliance_status: 'partial',
+            dependencies: ['default.dataset'],
+            component_metadata: {
+              profile_component_type: 'model',
+            },
+          },
+        ],
       })
       toast({
         title: "BOM Generated",
@@ -98,7 +156,7 @@ export default function AIBOMPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="default" onClick={() => refetch()}>
+          <Button variant="default" onClick={handleRefresh}>
             <IconRefresh className="mr-2 h-4 w-4" />
             Refresh
           </Button>
@@ -139,7 +197,8 @@ export default function AIBOMPage() {
         <TabsList className="border-2 border-black">
           <TabsTrigger value="components" className="border-r-2 border-black">Components</TabsTrigger>
           <TabsTrigger value="vulnerabilities" className="border-r-2 border-black">Vulnerabilities</TabsTrigger>
-          <TabsTrigger value="licenses">Licenses</TabsTrigger>
+          <TabsTrigger value="licenses" className="border-r-2 border-black">Licenses</TabsTrigger>
+          <TabsTrigger value="fairness-evidence">Fairness Evidence</TabsTrigger>
         </TabsList>
 
         <TabsContent value="components">
@@ -258,8 +317,108 @@ export default function AIBOMPage() {
             )}
           </Card>
         </TabsContent>
+
+        <TabsContent value="fairness-evidence">
+          <Card className="p-6 border-2 border-black shadow-brutal">
+            {!selectedDocument ? (
+              <div className="text-center py-12">
+                <IconShield className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                <p className="text-lg font-medium mb-2">No BOM selected</p>
+                <p className="text-muted-foreground">
+                  Generate a BOM to review fairness evidence state
+                </p>
+              </div>
+            ) : fairnessLoading ? (
+              <div className="space-y-4">
+                <Skeleton className="h-24 w-full" />
+                <Skeleton className="h-64 w-full" />
+              </div>
+            ) : fairnessError ? (
+              <Alert className="border-2 border-red-500">
+                <IconAlertTriangle className="h-4 w-4" />
+                <AlertTitle>Fairness Evidence Unavailable</AlertTitle>
+                <AlertDescription>
+                  {fairnessError.message}
+                  <br />
+                  <Button variant="default" className="mt-4" onClick={() => refetchFairnessProfile()}>
+                    <IconRefresh className="mr-2 h-4 w-4" />
+                    Retry
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            ) : fairnessProfile ? (
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="border-2 border-black p-4 bg-white">
+                    <p className="text-sm font-medium text-muted-foreground">Overall Severity</p>
+                    <div className="mt-2">{getStateBadge(fairnessProfile.risk_summary.overall_severity)}</div>
+                  </div>
+                  <div className="border-2 border-black p-4 bg-white">
+                    <p className="text-sm font-medium text-muted-foreground">Unknowns</p>
+                    <p className="text-2xl font-bold mt-1">{fairnessProfile.risk_summary.unknown_count}</p>
+                  </div>
+                  <div className="border-2 border-black p-4 bg-white">
+                    <p className="text-sm font-medium text-muted-foreground">Simulated Evidence</p>
+                    <p className="text-2xl font-bold mt-1">{fairnessProfile.risk_summary.simulated_evidence_count}</p>
+                  </div>
+                  <div className="border-2 border-black p-4 bg-white">
+                    <p className="text-sm font-medium text-muted-foreground">Review Status</p>
+                    <div className="mt-2">{getStateBadge(fairnessProfile.review_summary.status)}</div>
+                  </div>
+                </div>
+
+                <Alert className="border-2 border-black">
+                  <IconShield className="h-4 w-4" />
+                  <AlertTitle>{fairnessProfile.system_name}</AlertTitle>
+                  <AlertDescription>
+                    {fairnessProfile.risk_summary.reviewer_action}
+                  </AlertDescription>
+                </Alert>
+
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-2 border-black">
+                      <TableHead className="font-bold">Component</TableHead>
+                      <TableHead className="font-bold">Type</TableHead>
+                      <TableHead className="font-bold">Validation</TableHead>
+                      <TableHead className="font-bold">Review</TableHead>
+                      <TableHead className="font-bold">Unknowns</TableHead>
+                      <TableHead className="font-bold">Risk</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {fairnessProfile.components.map((component) => (
+                      <TableRow key={component.component_id} className="border-b-2 border-black">
+                        <TableCell>
+                          <p className="font-medium">{component.component_name}</p>
+                          <p className="font-mono text-xs text-muted-foreground">{component.component_id}</p>
+                        </TableCell>
+                        <TableCell className="capitalize">{component.component_type.replace(/_/g, ' ')}</TableCell>
+                        <TableCell>{getStateBadge(component.validation_state)}</TableCell>
+                        <TableCell>{getStateBadge(component.review_status)}</TableCell>
+                        <TableCell>
+                          <span className={component.unknowns.length > 0 ? 'text-red-600 font-bold' : 'text-green-600 font-bold'}>
+                            {component.unknowns.length}
+                          </span>
+                        </TableCell>
+                        <TableCell>{getStateBadge(component.risk_summary.overall_severity)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <IconShield className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                <p className="text-lg font-medium mb-2">No fairness evidence profile</p>
+                <p className="text-muted-foreground">
+                  Refresh this BOM to load current fairness evidence state
+                </p>
+              </div>
+            )}
+          </Card>
+        </TabsContent>
       </Tabs>
     </div>
   )
 }
-
