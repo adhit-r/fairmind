@@ -178,6 +178,7 @@ credentials*
 *.json
 !package.json
 !package-lock.json
+!research/aibom-fairness-evidence/**/*.json
 !tsconfig.json
 !next.config.js
 !tailwind.config.ts
@@ -282,6 +283,7 @@ checkpoints/
 
 # Data files
 *.csv
+!research/aibom-fairness-evidence/**/*.csv
 *.xml
 *.yaml
 *.yml
@@ -308,7 +310,6 @@ apps/backend/private_key.pem
 apps/backend/api/services/real_bias_detection_service.py
 apps/backend/email_service.py
 apps/backend/neo4j_integration.py
-apps/frontend/src/app/\(auth\)/login/page.tsx
 apps/frontend/src/app/\(auth\)/signup/page.tsx
 apps/website/bun.lock
 apps/website/src/content/docs/installation.mdx

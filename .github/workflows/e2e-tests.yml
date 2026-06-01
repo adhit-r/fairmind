@@ -44,6 +44,7 @@ jobs:
       env:
         APP_ENV: development
         DATABASE_URL: sqlite:///./test.db
+        RATE_LIMIT_REQUESTS: "10000"
 
     - name: Start frontend server
       working-directory: apps/frontend
@@ -53,6 +54,7 @@ jobs:
         npm run start &
         sleep 10
       env:
+        PORT: "1111"
         NEXT_PUBLIC_API_URL: http://localhost:8000
 
     - name: Run E2E tests
@@ -60,7 +62,7 @@ jobs:
       run: |
         uv run pytest tests/e2e/ -m e2e --tb=short -v
       env:
-        E2E_BASE_URL: http://localhost:3000
+        E2E_BASE_URL: http://localhost:1111
         E2E_API_URL: http://localhost:8000
         E2E_HEADLESS: "true"
     
@@ -116,6 +118,7 @@ jobs:
       env:
         APP_ENV: development
         DATABASE_URL: sqlite:///./test.db
+        RATE_LIMIT_REQUESTS: "10000"
 
     - name: Start frontend server
       working-directory: apps/frontend
@@ -125,6 +128,7 @@ jobs:
         npm run start &
         sleep 10
       env:
+        PORT: "1111"
         NEXT_PUBLIC_API_URL: http://localhost:8000
 
     - name: Run smoke tests
@@ -132,10 +136,8 @@ jobs:
       run: |
         uv run pytest tests/e2e/ -m "e2e and smoke" --tb=short -v
       env:
-        E2E_BASE_URL: http://localhost:3000
+        E2E_BASE_URL: http://localhost:1111
         E2E_API_URL: http://localhost:8000
         E2E_HEADLESS: "true"
-
-
 
 

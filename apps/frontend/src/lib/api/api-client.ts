@@ -59,6 +59,15 @@ const classifyError = (error: any, response?: Response): ApiError => {
   }
 
   if (response) {
+    if (response.status === 401 || response.status === 403) {
+      return {
+        message: 'Authentication failed',
+        status: response.status,
+        type: 'client',
+        canRetry: false,
+      }
+    }
+
     if (response.status === 404) {
       return {
         message: 'Endpoint not found',

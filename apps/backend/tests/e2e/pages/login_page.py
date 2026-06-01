@@ -2,6 +2,7 @@
 Login page object.
 """
 
+import time
 from playwright.sync_api import Page
 from tests.e2e.pages.base_page import BasePage
 
@@ -9,7 +10,7 @@ from tests.e2e.pages.base_page import BasePage
 class LoginPage(BasePage):
     """Page object for the login page."""
 
-    def __init__(self, page: Page, base_url: str = "http://localhost:3000"):
+    def __init__(self, page: Page, base_url: str = "http://localhost:1111"):
         """Initialize the login page.
 
         Args:
@@ -54,6 +55,8 @@ class LoginPage(BasePage):
             password: Password
         """
         self.navigate_to_login()
+        if not self.is_login_form_ready():
+            raise AssertionError("Login form should be ready")
         self.enter_email(email)
         self.enter_password(password)
         self.click_login()
@@ -64,8 +67,27 @@ class LoginPage(BasePage):
         Returns:
             Error message text
         """
-        if self.is_visible(self.error_message):
-            return self.get_text(self.error_message)
+        deadline = time.monotonic() + 5
+        error_markers = (
+            "login failed",
+            "invalid email or password",
+            "invalid credentials",
+            "unable to sign in",
+        )
+
+        while time.monotonic() < deadline:
+            error_locator = self.page.locator(self.error_message).first
+            if self.page.locator(self.error_message).count() > 0 and error_locator.is_visible():
+                return error_locator.text_content() or ""
+
+            body_text = self.page.locator("body").inner_text(timeout=1000)
+            lower_body_text = body_text.lower()
+            for marker in error_markers:
+                if marker in lower_body_text:
+                    return marker
+
+            self.page.wait_for_timeout(250)
+
         return ""
 
     def is_login_page(self) -> bool:
@@ -76,5 +98,16 @@ class LoginPage(BasePage):
         """
         return "/login" in self.get_url() or self.is_visible(self.email_input)
 
+    def is_login_form_ready(self, timeout_ms: int = 10000) -> bool:
+        """Check if the login form is ready for input."""
+        deadline = time.monotonic() + (timeout_ms / 1000)
+        while time.monotonic() < deadline:
+            if (
+                self.is_visible(self.email_input)
+                and self.is_visible(self.password_input)
+                and self.is_visible(self.submit_button)
+            ):
+                return True
+            self.page.wait_for_timeout(250)
 
-
+        return False

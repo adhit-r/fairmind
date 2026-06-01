@@ -1,0 +1,779 @@
+{
+  "profile_id": "aibom-fairness-hiring-ranker-v0",
+  "profile_version": "0.1.0",
+  "bom_ref": "generic-hiring-ranker-mlbom-v0",
+  "system_name": "Hiring Ranker",
+  "system_domain": "employment_screening",
+  "generated_at": "2026-05-23T00:00:00Z",
+  "fairmind_context": {
+    "platform_name": "FairMind",
+    "generation_mode": "synthetic_fixture",
+    "source_services": [
+      {
+        "path": "apps/backend/src/application/services/ai_bom_service.py",
+        "role": "AIBOM component lineage and risk/compliance status"
+      },
+      {
+        "path": "apps/backend/src/application/services/real_ai_bom_service.py",
+        "role": "Database-backed AIBOM document and component persistence"
+      },
+      {
+        "path": "apps/backend/src/application/services/modern_llm_bias_service.py",
+        "role": "Modern bias tests, human-in-loop evidence, and monitoring semantics"
+      },
+      {
+        "path": "apps/backend/src/application/services/benchmark_suite_service.py",
+        "role": "Benchmark datasets, protected attributes, and fairness metrics"
+      },
+      {
+        "path": "apps/backend/src/application/services/compliance_mapper.py",
+        "role": "Regulatory control and evidence mapping"
+      }
+    ],
+    "evidence_boundary": "Synthetic FairMind fixture derived from FairMind service capabilities; not a production runtime export."
+  },
+  "components": [
+    {
+      "component_id": "hiring.dataset.applications",
+      "component_type": "dataset",
+      "component_name": "Synthetic Hiring Application Dataset",
+      "version": "2026.05.synthetic",
+      "upstream_components": [],
+      "downstream_components": [
+        "hiring.preprocessing.resume_features"
+      ],
+      "protected_attributes_tested": [
+        "gender",
+        "age",
+        "region",
+        "language"
+      ],
+      "subgroup_coverage": {
+        "evaluated_groups": [
+          "gender:female",
+          "gender:male",
+          "age:under_30",
+          "age:30_to_55",
+          "region:urban",
+          "language:english"
+        ],
+        "missing_groups": [
+          "disability",
+          "language:non_english",
+          "region:rural"
+        ],
+        "coverage_notes": "Synthetic data lacks disability representation and underrepresents non-English applicants."
+      },
+      "fairness_metrics": [
+        {
+          "metric": "historical_label_selection_gap",
+          "value": 0.18,
+          "threshold": 0.1,
+          "affected_groups": [
+            "gender:female",
+            "language:non_english"
+          ],
+          "evidence_state": "simulated"
+        }
+      ],
+      "bias_tests_run": [
+        {
+          "test_name": "Historical label skew scan",
+          "test_type": "label_distribution",
+          "result": "past interview labels favor English-language resumes",
+          "evidence_state": "simulated",
+          "evidence_ref": "hiring-evidence-labels-001"
+        }
+      ],
+      "known_bias_risks": [
+        {
+          "risk_id": "hiring-risk-001",
+          "description": "Biased historical labels may reproduce prior selection disparities.",
+          "affected_groups": [
+            "gender:female",
+            "language:non_english"
+          ],
+          "severity": "high",
+          "evidence_state": "simulated"
+        }
+      ],
+      "remediation_history": [],
+      "validation_state": "simulated",
+      "evidence_refs": [
+        "hiring-evidence-labels-001"
+      ],
+      "evidence_freshness": {
+        "last_updated": "2026-05-08T00:00:00Z",
+        "expires_at": "2026-08-08T00:00:00Z",
+        "staleness_rule": "Label-bias evidence expires after 90 days or after training data refresh.",
+        "evidence_state": "simulated"
+      },
+      "review_status": "review_required",
+      "regulatory_mapping": [
+        {
+          "framework": "NIST AI RMF",
+          "control": "Map 2.3",
+          "claim": "Dataset limitations and representativeness are documented.",
+          "evidence_state": "simulated"
+        }
+      ],
+      "unknowns": [
+        "No disability subgroup evidence is attached."
+      ],
+      "risk_summary": {
+        "overall_severity": "high",
+        "key_risks": [
+          "biased historical labels",
+          "missing disability coverage"
+        ],
+        "unknown_count": 1,
+        "stale_evidence_count": 0,
+        "simulated_evidence_count": 2,
+        "reviewer_action": "Request subgroup expansion and label-bias mitigation evidence."
+      }
+    },
+    {
+      "component_id": "hiring.preprocessing.resume_features",
+      "component_type": "preprocessing",
+      "component_name": "Resume Feature Extraction Pipeline",
+      "version": "3.2.0",
+      "upstream_components": [
+        "hiring.dataset.applications"
+      ],
+      "downstream_components": [
+        "hiring.model.ranker"
+      ],
+      "protected_attributes_tested": [
+        "gender",
+        "age",
+        "region",
+        "language"
+      ],
+      "subgroup_coverage": {
+        "evaluated_groups": [
+          "gender:female",
+          "gender:male",
+          "age:under_30",
+          "age:30_to_55",
+          "region:urban",
+          "language:english"
+        ],
+        "missing_groups": [
+          "disability",
+          "language:non_english"
+        ],
+        "coverage_notes": "Education prestige and grammar features may proxy language and socioeconomic background."
+      },
+      "fairness_metrics": [
+        {
+          "metric": "proxy_feature_review",
+          "value": "flagged",
+          "threshold": "manual review required",
+          "affected_groups": [
+            "language:non_english",
+            "region:rural"
+          ],
+          "evidence_state": "simulated"
+        }
+      ],
+      "bias_tests_run": [
+        {
+          "test_name": "Resume proxy inventory",
+          "test_type": "static_feature_review",
+          "result": "education prestige and language fluency features flagged",
+          "evidence_state": "simulated",
+          "evidence_ref": "hiring-evidence-proxy-001"
+        }
+      ],
+      "known_bias_risks": [
+        {
+          "risk_id": "hiring-risk-002",
+          "description": "Education prestige and language fluency features can operate as proxies.",
+          "affected_groups": [
+            "language:non_english",
+            "region:rural"
+          ],
+          "severity": "high",
+          "evidence_state": "simulated"
+        }
+      ],
+      "remediation_history": [],
+      "validation_state": "simulated",
+      "evidence_refs": [
+        "hiring-evidence-proxy-001"
+      ],
+      "evidence_freshness": {
+        "last_updated": "2026-05-08T00:00:00Z",
+        "expires_at": "2026-08-08T00:00:00Z",
+        "staleness_rule": "Proxy review expires after feature extraction changes.",
+        "evidence_state": "simulated"
+      },
+      "review_status": "review_required",
+      "regulatory_mapping": [
+        {
+          "framework": "EU AI Act",
+          "control": "Data governance",
+          "claim": "Input data and feature risks are examined for bias.",
+          "evidence_state": "simulated"
+        }
+      ],
+      "unknowns": [
+        "No measured proxy-correlation test is attached."
+      ],
+      "risk_summary": {
+        "overall_severity": "high",
+        "key_risks": [
+          "education proxy",
+          "language proxy"
+        ],
+        "unknown_count": 1,
+        "stale_evidence_count": 0,
+        "simulated_evidence_count": 2,
+        "reviewer_action": "Request quantitative proxy analysis for education and language features."
+      }
+    },
+    {
+      "component_id": "hiring.model.ranker",
+      "component_type": "model",
+      "component_name": "Candidate Ranking Model",
+      "version": "1.8.0",
+      "upstream_components": [
+        "hiring.preprocessing.resume_features"
+      ],
+      "downstream_components": [
+        "hiring.evaluation.fairness_set",
+        "hiring.monitor.production"
+      ],
+      "protected_attributes_tested": [
+        "gender",
+        "age",
+        "region",
+        "language"
+      ],
+      "subgroup_coverage": {
+        "evaluated_groups": [
+          "gender:female",
+          "gender:male",
+          "age:under_30",
+          "age:30_to_55",
+          "region:urban",
+          "language:english"
+        ],
+        "missing_groups": [
+          "disability",
+          "region:rural",
+          "language:non_english"
+        ],
+        "coverage_notes": "Model evaluation excludes disability and non-English applicants."
+      },
+      "fairness_metrics": [
+        {
+          "metric": "top_k_selection_gap",
+          "value": 0.16,
+          "threshold": 0.1,
+          "affected_groups": [
+            "language:non_english"
+          ],
+          "evidence_state": "simulated"
+        }
+      ],
+      "bias_tests_run": [
+        {
+          "test_name": "Top-k disaggregated ranking test",
+          "test_type": "ranking_metric_test",
+          "result": "non-English resumes are underselected in top-k results",
+          "evidence_state": "simulated",
+          "evidence_ref": "hiring-evidence-model-001"
+        }
+      ],
+      "known_bias_risks": [
+        {
+          "risk_id": "hiring-risk-003",
+          "description": "Ranker underselects non-English resumes.",
+          "affected_groups": [
+            "language:non_english"
+          ],
+          "severity": "high",
+          "evidence_state": "simulated"
+        }
+      ],
+      "remediation_history": [
+        {
+          "remediation_id": "hiring-remediation-001",
+          "description": "Feature deweighting proposed for education prestige and language fluency.",
+          "status": "attempted",
+          "validation_state": "untested",
+          "evidence_ref": "hiring-evidence-remediation-001"
+        }
+      ],
+      "validation_state": "simulated",
+      "evidence_refs": [
+        "hiring-evidence-model-001",
+        "hiring-evidence-remediation-001"
+      ],
+      "evidence_freshness": {
+        "last_updated": "2026-04-01T00:00:00Z",
+        "expires_at": "2026-07-01T00:00:00Z",
+        "staleness_rule": "Model fairness evidence expires after 90 days or ranking model changes.",
+        "evidence_state": "simulated"
+      },
+      "review_status": "review_required",
+      "regulatory_mapping": [
+        {
+          "framework": "ISO/IEC 42001",
+          "control": "AI risk assessment",
+          "claim": "Model fairness risk is assessed for affected groups.",
+          "evidence_state": "simulated"
+        }
+      ],
+      "unknowns": [
+        "Feature deweighting has not been validated."
+      ],
+      "risk_summary": {
+        "overall_severity": "high",
+        "key_risks": [
+          "language proxy",
+          "unvalidated remediation"
+        ],
+        "unknown_count": 1,
+        "stale_evidence_count": 0,
+        "simulated_evidence_count": 3,
+        "reviewer_action": "Request post-remediation ranking evaluation."
+      }
+    },
+    {
+      "component_id": "hiring.evaluation.fairness_set",
+      "component_type": "evaluation_set",
+      "component_name": "Hiring Fairness Evaluation Set",
+      "version": "2026.02.synthetic",
+      "upstream_components": [
+        "hiring.dataset.applications",
+        "hiring.model.ranker"
+      ],
+      "downstream_components": [
+        "hiring.report.release"
+      ],
+      "protected_attributes_tested": [
+        "gender",
+        "age",
+        "language"
+      ],
+      "subgroup_coverage": {
+        "evaluated_groups": [
+          "gender:female",
+          "gender:male",
+          "age:under_30",
+          "age:30_to_55",
+          "language:english"
+        ],
+        "missing_groups": [
+          "disability",
+          "language:non_english",
+          "region:rural"
+        ],
+        "coverage_notes": "Evaluation set does not include the subgroup most affected by the language-proxy risk."
+      },
+      "fairness_metrics": [
+        {
+          "metric": "equal_opportunity_gap",
+          "value": 0.08,
+          "threshold": 0.1,
+          "affected_groups": [
+            "gender:female"
+          ],
+          "evidence_state": "simulated"
+        }
+      ],
+      "bias_tests_run": [
+        {
+          "test_name": "Hiring fairness evaluation",
+          "test_type": "disaggregated_metric_test",
+          "result": "passes only for covered groups",
+          "evidence_state": "simulated",
+          "evidence_ref": "hiring-evidence-eval-001"
+        }
+      ],
+      "known_bias_risks": [
+        {
+          "risk_id": "hiring-risk-004",
+          "description": "Evaluation excludes non-English and disability subgroups.",
+          "affected_groups": [
+            "language:non_english",
+            "disability"
+          ],
+          "severity": "high",
+          "evidence_state": "simulated"
+        }
+      ],
+      "remediation_history": [],
+      "validation_state": "simulated",
+      "evidence_refs": [
+        "hiring-evidence-eval-001"
+      ],
+      "evidence_freshness": {
+        "last_updated": "2026-02-15T00:00:00Z",
+        "expires_at": "2026-05-15T00:00:00Z",
+        "staleness_rule": "Evaluation evidence expires after 90 days or after model change.",
+        "evidence_state": "stale"
+      },
+      "review_status": "review_required",
+      "regulatory_mapping": [
+        {
+          "framework": "NIST AI RMF",
+          "control": "Measure 2.11",
+          "claim": "Fairness is measured across relevant subgroups.",
+          "evidence_state": "stale"
+        }
+      ],
+      "unknowns": [
+        "Evaluation does not test disability or non-English applicants."
+      ],
+      "risk_summary": {
+        "overall_severity": "high",
+        "key_risks": [
+          "subgroup missing from evaluation set",
+          "stale fairness result"
+        ],
+        "unknown_count": 1,
+        "stale_evidence_count": 2,
+        "simulated_evidence_count": 1,
+        "reviewer_action": "Request refreshed evaluation with missing subgroups."
+      }
+    },
+    {
+      "component_id": "hiring.remediation.feature_deweighting",
+      "component_type": "remediation",
+      "component_name": "Education and Language Feature Deweighting",
+      "version": "0.2.0",
+      "upstream_components": [
+        "hiring.model.ranker",
+        "hiring.evaluation.fairness_set"
+      ],
+      "downstream_components": [
+        "hiring.report.release"
+      ],
+      "protected_attributes_tested": [
+        "language",
+        "region"
+      ],
+      "subgroup_coverage": {
+        "evaluated_groups": [
+          "language:english",
+          "region:urban"
+        ],
+        "missing_groups": [
+          "language:non_english",
+          "region:rural",
+          "disability"
+        ],
+        "coverage_notes": "Remediation was configured but not evaluated on affected subgroups."
+      },
+      "fairness_metrics": [
+        {
+          "metric": "post_remediation_top_k_selection_gap",
+          "value": null,
+          "threshold": 0.1,
+          "affected_groups": [
+            "language:non_english"
+          ],
+          "evidence_state": "missing"
+        }
+      ],
+      "bias_tests_run": [
+        {
+          "test_name": "Post-remediation ranking test",
+          "test_type": "not_run",
+          "result": "missing",
+          "evidence_state": "missing",
+          "evidence_ref": ""
+        }
+      ],
+      "known_bias_risks": [
+        {
+          "risk_id": "hiring-risk-005",
+          "description": "Remediation may not address the language-proxy failure mode.",
+          "affected_groups": [
+            "language:non_english"
+          ],
+          "severity": "high",
+          "evidence_state": "unknown"
+        }
+      ],
+      "remediation_history": [
+        {
+          "remediation_id": "hiring-remediation-001",
+          "description": "Feature weights changed for education prestige and language fluency.",
+          "status": "attempted",
+          "validation_state": "untested",
+          "evidence_ref": ""
+        }
+      ],
+      "validation_state": "untested",
+      "evidence_refs": [],
+      "evidence_freshness": {
+        "last_updated": null,
+        "expires_at": null,
+        "staleness_rule": "Untested remediation has no freshness window.",
+        "evidence_state": "missing"
+      },
+      "review_status": "review_required",
+      "regulatory_mapping": [
+        {
+          "framework": "NIST AI RMF",
+          "control": "Manage 4.1",
+          "claim": "Risk treatments are evaluated for effectiveness.",
+          "evidence_state": "missing"
+        }
+      ],
+      "unknowns": [
+        "No post-remediation result is available."
+      ],
+      "risk_summary": {
+        "overall_severity": "high",
+        "key_risks": [
+          "remediation attempted but not validated"
+        ],
+        "unknown_count": 1,
+        "stale_evidence_count": 0,
+        "simulated_evidence_count": 0,
+        "reviewer_action": "Reject remediation claim until validation evidence is attached."
+      }
+    },
+    {
+      "component_id": "hiring.monitor.production",
+      "component_type": "monitor",
+      "component_name": "Hiring Outcome Fairness Monitor",
+      "version": "0.7.0",
+      "upstream_components": [
+        "hiring.model.ranker"
+      ],
+      "downstream_components": [
+        "hiring.report.release"
+      ],
+      "protected_attributes_tested": [
+        "gender",
+        "age"
+      ],
+      "subgroup_coverage": {
+        "evaluated_groups": [
+          "gender:female",
+          "gender:male",
+          "age:under_30",
+          "age:30_to_55"
+        ],
+        "missing_groups": [
+          "language",
+          "region",
+          "disability"
+        ],
+        "coverage_notes": "Monitor does not track the language-proxy risk identified upstream."
+      },
+      "fairness_metrics": [
+        {
+          "metric": "interview_invitation_gap",
+          "value": "not connected",
+          "threshold": 0.1,
+          "affected_groups": [
+            "language:non_english",
+            "region:rural"
+          ],
+          "evidence_state": "unknown"
+        }
+      ],
+      "bias_tests_run": [
+        {
+          "test_name": "Monitor integration check",
+          "test_type": "integration_check",
+          "result": "no evidence of live applicant outcome feed",
+          "evidence_state": "unknown",
+          "evidence_ref": ""
+        }
+      ],
+      "known_bias_risks": [
+        {
+          "risk_id": "hiring-risk-006",
+          "description": "Deployment drift for language and region is not observable.",
+          "affected_groups": [
+            "language:non_english",
+            "region:rural"
+          ],
+          "severity": "medium",
+          "evidence_state": "unknown"
+        }
+      ],
+      "remediation_history": [],
+      "validation_state": "untested",
+      "evidence_refs": [],
+      "evidence_freshness": {
+        "last_updated": null,
+        "expires_at": null,
+        "staleness_rule": "No monitor evidence exists.",
+        "evidence_state": "unknown"
+      },
+      "review_status": "pending",
+      "regulatory_mapping": [
+        {
+          "framework": "ISO/IEC 42001",
+          "control": "Operational monitoring",
+          "claim": "Fairness monitoring exists after deployment.",
+          "evidence_state": "unknown"
+        }
+      ],
+      "unknowns": [
+        "No live monitor feed is attached.",
+        "Language and disability monitoring are absent."
+      ],
+      "risk_summary": {
+        "overall_severity": "medium",
+        "key_risks": [
+          "fairness monitor absent or disconnected"
+        ],
+        "unknown_count": 2,
+        "stale_evidence_count": 0,
+        "simulated_evidence_count": 0,
+        "reviewer_action": "Request monitor connection evidence before deployment."
+      }
+    },
+    {
+      "component_id": "hiring.report.release",
+      "component_type": "report",
+      "component_name": "Hiring Ranker Fairness Report",
+      "version": "draft-2026-05",
+      "upstream_components": [
+        "hiring.dataset.applications",
+        "hiring.preprocessing.resume_features",
+        "hiring.model.ranker",
+        "hiring.evaluation.fairness_set",
+        "hiring.remediation.feature_deweighting",
+        "hiring.monitor.production"
+      ],
+      "downstream_components": [],
+      "protected_attributes_tested": [
+        "gender",
+        "age",
+        "language"
+      ],
+      "subgroup_coverage": {
+        "evaluated_groups": [
+          "gender:female",
+          "gender:male",
+          "age:under_30",
+          "age:30_to_55",
+          "language:english"
+        ],
+        "missing_groups": [
+          "disability",
+          "language:non_english",
+          "region:rural"
+        ],
+        "coverage_notes": "Report does not support all release claims."
+      },
+      "fairness_metrics": [
+        {
+          "metric": "release_fairness_claim",
+          "value": "acceptable",
+          "threshold": "requires complete evidence",
+          "affected_groups": [
+            "all_claimed_groups"
+          ],
+          "evidence_state": "stale"
+        }
+      ],
+      "bias_tests_run": [
+        {
+          "test_name": "Release package review",
+          "test_type": "document_review",
+          "result": "approval missing and remediation overclaimed",
+          "evidence_state": "stale",
+          "evidence_ref": "hiring-evidence-report-001"
+        }
+      ],
+      "known_bias_risks": [
+        {
+          "risk_id": "hiring-risk-007",
+          "description": "Report overclaims remediation and omits missing subgroup evidence.",
+          "affected_groups": [
+            "language:non_english",
+            "disability",
+            "region:rural"
+          ],
+          "severity": "high",
+          "evidence_state": "stale"
+        }
+      ],
+      "remediation_history": [
+        {
+          "remediation_id": "hiring-remediation-001",
+          "description": "Report claims feature deweighting mitigated proxy bias, but no validation result exists.",
+          "status": "referenced",
+          "validation_state": "untested",
+          "evidence_ref": ""
+        }
+      ],
+      "validation_state": "simulated",
+      "evidence_refs": [
+        "hiring-evidence-report-001"
+      ],
+      "evidence_freshness": {
+        "last_updated": "2026-02-15T00:00:00Z",
+        "expires_at": "2026-05-15T00:00:00Z",
+        "staleness_rule": "Report evidence expires when source evaluation evidence expires.",
+        "evidence_state": "stale"
+      },
+      "review_status": "review_required",
+      "regulatory_mapping": [
+        {
+          "framework": "EU AI Act",
+          "control": "Employment high-risk AI documentation",
+          "claim": "Bias risks are tested, mitigated, and reviewed.",
+          "evidence_state": "stale"
+        }
+      ],
+      "unknowns": [
+        "No reviewer approval is attached.",
+        "Report claims mitigation without validation."
+      ],
+      "risk_summary": {
+        "overall_severity": "high",
+        "key_risks": [
+          "unsupported regulatory claim",
+          "reviewer approval missing"
+        ],
+        "unknown_count": 2,
+        "stale_evidence_count": 2,
+        "simulated_evidence_count": 0,
+        "reviewer_action": "Request more evidence and human approval before release."
+      }
+    }
+  ],
+  "risk_summary": {
+    "overall_severity": "high",
+    "key_risks": [
+      "biased training labels",
+      "education proxy",
+      "language proxy",
+      "unvalidated remediation"
+    ],
+    "unknown_count": 9,
+    "stale_evidence_count": 4,
+    "simulated_evidence_count": 10,
+    "reviewer_action": "Request subgroup expansion, remediation validation, and reviewer approval."
+  },
+  "review_summary": {
+    "status": "review_required",
+    "reviewer": null,
+    "reviewed_at": null,
+    "notes": "Synthetic profile for formative review only.",
+    "pending_actions": [
+      "Add disability and non-English subgroup evidence.",
+      "Quantify education and language proxy risks.",
+      "Validate feature deweighting remediation.",
+      "Attach reviewer approval or mark release blocked."
+    ]
+  },
+  "limitations": [
+    "Synthetic example only.",
+    "No real applicant, employee, or protected-class records are included.",
+    "Evidence states are illustrative and must not be treated as production validation."
+  ]
+}

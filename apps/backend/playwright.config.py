@@ -7,7 +7,7 @@ import os
 
 
 # Base URL for the application
-BASE_URL = os.getenv("E2E_BASE_URL", "http://localhost:3000")
+BASE_URL = os.getenv("E2E_BASE_URL", "http://localhost:1111")
 API_URL = os.getenv("E2E_API_URL", "http://localhost:8000")
 
 # Test directories
@@ -29,6 +29,5 @@ RECORD_VIDEO = os.getenv("E2E_RECORD_VIDEO", "false").lower() == "true"
 BROWSER = os.getenv("E2E_BROWSER", "chromium")  # chromium, firefox, webkit
 VIEWPORT_WIDTH = int(os.getenv("E2E_VIEWPORT_WIDTH", "1920"))
 VIEWPORT_HEIGHT = int(os.getenv("E2E_VIEWPORT_HEIGHT", "1080"))
-
 
 

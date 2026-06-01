@@ -7,11 +7,19 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuthentik } from "@/lib/api/hooks/useAuthentik";
 
 export default function AuthCallbackPage() {
+  return (
+    <Suspense fallback={<AuthCallbackLoading />}>
+      <AuthCallbackContent />
+    </Suspense>
+  );
+}
+
+function AuthCallbackContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { handleCallback } = useAuthentik();
@@ -111,6 +119,29 @@ export default function AuthCallbackPage() {
             Redirecting to dashboard...
           </p>
         )}
+      </div>
+    </div>
+  );
+}
+
+function AuthCallbackLoading() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="w-full max-w-md rounded-lg border-4 border-black bg-white p-8 shadow-brutal-lg">
+        <h1 className="mb-4 text-2xl font-bold text-black">
+          Completing Authentication
+        </h1>
+        <p className="mb-6 text-gray-700">
+          Please wait while we process your authentication...
+        </p>
+
+        <div className="flex justify-center">
+          <div
+            className="h-12 w-12 animate-spin rounded-full border-4 border-gray-300 border-t-black"
+            role="status"
+            aria-label="Loading"
+          />
+        </div>
       </div>
     </div>
   );

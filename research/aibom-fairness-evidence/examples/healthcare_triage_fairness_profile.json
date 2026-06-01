@@ -1,0 +1,764 @@
+{
+  "profile_id": "aibom-fairness-healthcare-triage-v0",
+  "profile_version": "0.1.0",
+  "bom_ref": "generic-healthcare-triage-mlbom-v0",
+  "system_name": "Healthcare Triage Model",
+  "system_domain": "clinical_triage",
+  "generated_at": "2026-05-23T00:00:00Z",
+  "fairmind_context": {
+    "platform_name": "FairMind",
+    "generation_mode": "synthetic_fixture",
+    "source_services": [
+      {
+        "path": "apps/backend/src/application/services/ai_bom_service.py",
+        "role": "AIBOM component lineage and risk/compliance status"
+      },
+      {
+        "path": "apps/backend/src/application/services/real_ai_bom_service.py",
+        "role": "Database-backed AIBOM document and component persistence"
+      },
+      {
+        "path": "apps/backend/src/application/services/comprehensive_bias_detection_service.py",
+        "role": "Dataset and model fairness metric evidence"
+      },
+      {
+        "path": "apps/backend/src/application/services/monitoring_service.py",
+        "role": "Post-deployment monitoring and drift evidence"
+      },
+      {
+        "path": "apps/backend/src/application/services/automated_evidence_collector.py",
+        "role": "Evidence categories for monitoring, documentation, and audit logging"
+      }
+    ],
+    "evidence_boundary": "Synthetic FairMind fixture derived from FairMind service capabilities; not a production runtime export."
+  },
+  "components": [
+    {
+      "component_id": "health.dataset.encounters",
+      "component_type": "dataset",
+      "component_name": "Synthetic Triage Encounter Dataset",
+      "version": "2026.05.synthetic",
+      "upstream_components": [],
+      "downstream_components": [
+        "health.preprocessing.features"
+      ],
+      "protected_attributes_tested": [
+        "gender",
+        "age",
+        "region",
+        "language"
+      ],
+      "subgroup_coverage": {
+        "evaluated_groups": [
+          "gender:female",
+          "gender:male",
+          "age:under_30",
+          "age:30_to_55",
+          "age:over_55",
+          "region:urban",
+          "language:english"
+        ],
+        "missing_groups": [
+          "region:rural",
+          "language:non_english",
+          "socioeconomic_proxy"
+        ],
+        "coverage_notes": "Synthetic encounters underrepresent rural and non-English patients."
+      },
+      "fairness_metrics": [
+        {
+          "metric": "dataset_representation_gap",
+          "value": 0.22,
+          "threshold": 0.1,
+          "affected_groups": [
+            "region:rural",
+            "language:non_english"
+          ],
+          "evidence_state": "simulated"
+        }
+      ],
+      "bias_tests_run": [
+        {
+          "test_name": "Synthetic encounter coverage scan",
+          "test_type": "coverage",
+          "result": "rural and non-English groups underrepresented",
+          "evidence_state": "simulated",
+          "evidence_ref": "health-evidence-coverage-001"
+        }
+      ],
+      "known_bias_risks": [
+        {
+          "risk_id": "health-risk-001",
+          "description": "Underrepresented groups may receive less reliable triage scores.",
+          "affected_groups": [
+            "region:rural",
+            "language:non_english"
+          ],
+          "severity": "high",
+          "evidence_state": "simulated"
+        }
+      ],
+      "remediation_history": [],
+      "validation_state": "simulated",
+      "evidence_refs": [
+        "health-evidence-coverage-001"
+      ],
+      "evidence_freshness": {
+        "last_updated": "2026-05-09T00:00:00Z",
+        "expires_at": "2026-08-09T00:00:00Z",
+        "staleness_rule": "Dataset coverage evidence expires after 90 days or population refresh.",
+        "evidence_state": "simulated"
+      },
+      "review_status": "review_required",
+      "regulatory_mapping": [
+        {
+          "framework": "NIST AI RMF",
+          "control": "Map 2.2",
+          "claim": "Impacted groups are identified and represented in evidence.",
+          "evidence_state": "simulated"
+        }
+      ],
+      "unknowns": [
+        "Socioeconomic proxy coverage is not measured."
+      ],
+      "risk_summary": {
+        "overall_severity": "high",
+        "key_risks": [
+          "underrepresented groups"
+        ],
+        "unknown_count": 1,
+        "stale_evidence_count": 0,
+        "simulated_evidence_count": 2,
+        "reviewer_action": "Request coverage evidence for rural, non-English, and socioeconomic proxy groups."
+      }
+    },
+    {
+      "component_id": "health.preprocessing.features",
+      "component_type": "preprocessing",
+      "component_name": "Triage Feature Normalization Pipeline",
+      "version": "2.0.1",
+      "upstream_components": [
+        "health.dataset.encounters"
+      ],
+      "downstream_components": [
+        "health.model.triage"
+      ],
+      "protected_attributes_tested": [
+        "gender",
+        "age",
+        "region",
+        "language"
+      ],
+      "subgroup_coverage": {
+        "evaluated_groups": [
+          "gender:female",
+          "gender:male",
+          "age:under_30",
+          "age:30_to_55",
+          "age:over_55",
+          "region:urban"
+        ],
+        "missing_groups": [
+          "region:rural",
+          "language:non_english",
+          "socioeconomic_proxy"
+        ],
+        "coverage_notes": "Missingness imputation may interact with region and language access patterns."
+      },
+      "fairness_metrics": [
+        {
+          "metric": "missingness_gap",
+          "value": 0.19,
+          "threshold": 0.1,
+          "affected_groups": [
+            "region:rural"
+          ],
+          "evidence_state": "simulated"
+        }
+      ],
+      "bias_tests_run": [
+        {
+          "test_name": "Missingness disparity scan",
+          "test_type": "data_quality_bias_test",
+          "result": "rural encounter features have higher missingness",
+          "evidence_state": "simulated",
+          "evidence_ref": "health-evidence-preprocess-001"
+        }
+      ],
+      "known_bias_risks": [
+        {
+          "risk_id": "health-risk-002",
+          "description": "Imputation may reduce reliability for rural patients.",
+          "affected_groups": [
+            "region:rural"
+          ],
+          "severity": "medium",
+          "evidence_state": "simulated"
+        }
+      ],
+      "remediation_history": [],
+      "validation_state": "simulated",
+      "evidence_refs": [
+        "health-evidence-preprocess-001"
+      ],
+      "evidence_freshness": {
+        "last_updated": "2026-05-09T00:00:00Z",
+        "expires_at": "2026-08-09T00:00:00Z",
+        "staleness_rule": "Feature-bias evidence expires after pipeline changes.",
+        "evidence_state": "simulated"
+      },
+      "review_status": "review_required",
+      "regulatory_mapping": [
+        {
+          "framework": "ISO/IEC 42001",
+          "control": "Data quality management",
+          "claim": "Input quality limitations are documented.",
+          "evidence_state": "simulated"
+        }
+      ],
+      "unknowns": [
+        "No post-imputation subgroup calibration evidence is attached."
+      ],
+      "risk_summary": {
+        "overall_severity": "medium",
+        "key_risks": [
+          "feature missingness disparity"
+        ],
+        "unknown_count": 1,
+        "stale_evidence_count": 0,
+        "simulated_evidence_count": 2,
+        "reviewer_action": "Request post-imputation subgroup performance evidence."
+      }
+    },
+    {
+      "component_id": "health.model.triage",
+      "component_type": "model",
+      "component_name": "Urgency Triage Model",
+      "version": "4.0.0",
+      "upstream_components": [
+        "health.preprocessing.features"
+      ],
+      "downstream_components": [
+        "health.evaluation.fairness_set",
+        "health.monitor.production"
+      ],
+      "protected_attributes_tested": [
+        "gender",
+        "age",
+        "region",
+        "language"
+      ],
+      "subgroup_coverage": {
+        "evaluated_groups": [
+          "gender:female",
+          "gender:male",
+          "age:under_30",
+          "age:30_to_55",
+          "age:over_55",
+          "region:urban",
+          "language:english"
+        ],
+        "missing_groups": [
+          "region:rural",
+          "language:non_english",
+          "socioeconomic_proxy"
+        ],
+        "coverage_notes": "Model was updated for a new deployment population, but fairness evidence still reflects the old population."
+      },
+      "fairness_metrics": [
+        {
+          "metric": "false_negative_rate_gap",
+          "value": 0.13,
+          "threshold": 0.1,
+          "affected_groups": [
+            "region:rural"
+          ],
+          "evidence_state": "simulated"
+        }
+      ],
+      "bias_tests_run": [
+        {
+          "test_name": "Synthetic triage subgroup test",
+          "test_type": "disaggregated_metric_test",
+          "result": "rural subgroup exceeds false-negative threshold",
+          "evidence_state": "simulated",
+          "evidence_ref": "health-evidence-model-001"
+        }
+      ],
+      "known_bias_risks": [
+        {
+          "risk_id": "health-risk-003",
+          "description": "False-negative rate may be higher for rural patients.",
+          "affected_groups": [
+            "region:rural"
+          ],
+          "severity": "high",
+          "evidence_state": "simulated"
+        }
+      ],
+      "remediation_history": [
+        {
+          "remediation_id": "health-remediation-001",
+          "description": "Reweighting proposed for underrepresented rural examples.",
+          "status": "proposed",
+          "validation_state": "untested",
+          "evidence_ref": "health-evidence-remediation-001"
+        }
+      ],
+      "validation_state": "simulated",
+      "evidence_refs": [
+        "health-evidence-model-001",
+        "health-evidence-remediation-001"
+      ],
+      "evidence_freshness": {
+        "last_updated": "2026-03-01T00:00:00Z",
+        "expires_at": "2026-06-01T00:00:00Z",
+        "staleness_rule": "Model fairness evidence expires after 90 days or after deployment-population shift.",
+        "evidence_state": "simulated"
+      },
+      "review_status": "review_required",
+      "regulatory_mapping": [
+        {
+          "framework": "NIST AI RMF",
+          "control": "Measure 2.11",
+          "claim": "Model performance is evaluated across relevant subgroups.",
+          "evidence_state": "simulated"
+        }
+      ],
+      "unknowns": [
+        "No fairness evidence is attached for the shifted deployment population."
+      ],
+      "risk_summary": {
+        "overall_severity": "high",
+        "key_risks": [
+          "shifted deployment population",
+          "underrepresented rural group"
+        ],
+        "unknown_count": 1,
+        "stale_evidence_count": 0,
+        "simulated_evidence_count": 3,
+        "reviewer_action": "Request deployment-population evaluation before approval."
+      }
+    },
+    {
+      "component_id": "health.evaluation.fairness_set",
+      "component_type": "evaluation_set",
+      "component_name": "Triage Fairness Evaluation Set",
+      "version": "missing",
+      "upstream_components": [
+        "health.dataset.encounters",
+        "health.model.triage"
+      ],
+      "downstream_components": [
+        "health.report.release"
+      ],
+      "protected_attributes_tested": [],
+      "subgroup_coverage": {
+        "evaluated_groups": [],
+        "missing_groups": [
+          "gender",
+          "age",
+          "region",
+          "language",
+          "socioeconomic_proxy"
+        ],
+        "coverage_notes": "No evaluation set is attached for the current triage model release."
+      },
+      "fairness_metrics": [
+        {
+          "metric": "current_release_fairness_metric",
+          "value": null,
+          "threshold": "required",
+          "affected_groups": [
+            "all_groups"
+          ],
+          "evidence_state": "missing"
+        }
+      ],
+      "bias_tests_run": [
+        {
+          "test_name": "Current release fairness test",
+          "test_type": "not_run",
+          "result": "missing evaluation set",
+          "evidence_state": "missing",
+          "evidence_ref": ""
+        }
+      ],
+      "known_bias_risks": [
+        {
+          "risk_id": "health-risk-004",
+          "description": "Release has no fairness evaluation set for current model version.",
+          "affected_groups": [
+            "all_groups"
+          ],
+          "severity": "critical",
+          "evidence_state": "missing"
+        }
+      ],
+      "remediation_history": [],
+      "validation_state": "untested",
+      "evidence_refs": [],
+      "evidence_freshness": {
+        "last_updated": null,
+        "expires_at": null,
+        "staleness_rule": "Missing evaluation set has no freshness window.",
+        "evidence_state": "missing"
+      },
+      "review_status": "review_required",
+      "regulatory_mapping": [
+        {
+          "framework": "EU AI Act",
+          "control": "High-risk system testing",
+          "claim": "The system has current test evidence before deployment.",
+          "evidence_state": "missing"
+        }
+      ],
+      "unknowns": [
+        "No current fairness evaluation set is attached.",
+        "No current subgroup metrics are available."
+      ],
+      "risk_summary": {
+        "overall_severity": "critical",
+        "key_risks": [
+          "missing evaluation set"
+        ],
+        "unknown_count": 2,
+        "stale_evidence_count": 0,
+        "simulated_evidence_count": 0,
+        "reviewer_action": "Reject release approval until evaluation evidence exists."
+      }
+    },
+    {
+      "component_id": "health.remediation.reweighting",
+      "component_type": "remediation",
+      "component_name": "Rural Example Reweighting Proposal",
+      "version": "0.1.0",
+      "upstream_components": [
+        "health.model.triage",
+        "health.evaluation.fairness_set"
+      ],
+      "downstream_components": [
+        "health.report.release"
+      ],
+      "protected_attributes_tested": [
+        "region"
+      ],
+      "subgroup_coverage": {
+        "evaluated_groups": [
+          "region:rural"
+        ],
+        "missing_groups": [
+          "language:non_english",
+          "socioeconomic_proxy"
+        ],
+        "coverage_notes": "Remediation is proposed but cannot be validated without a current evaluation set."
+      },
+      "fairness_metrics": [
+        {
+          "metric": "post_reweighting_false_negative_gap",
+          "value": null,
+          "threshold": 0.1,
+          "affected_groups": [
+            "region:rural"
+          ],
+          "evidence_state": "missing"
+        }
+      ],
+      "bias_tests_run": [
+        {
+          "test_name": "Post-reweighting fairness evaluation",
+          "test_type": "not_run",
+          "result": "blocked by missing evaluation set",
+          "evidence_state": "missing",
+          "evidence_ref": ""
+        }
+      ],
+      "known_bias_risks": [
+        {
+          "risk_id": "health-risk-005",
+          "description": "Reweighting may not improve performance for shifted deployment groups.",
+          "affected_groups": [
+            "region:rural",
+            "language:non_english"
+          ],
+          "severity": "high",
+          "evidence_state": "unknown"
+        }
+      ],
+      "remediation_history": [
+        {
+          "remediation_id": "health-remediation-001",
+          "description": "Rural example reweighting proposed.",
+          "status": "proposed",
+          "validation_state": "untested",
+          "evidence_ref": ""
+        }
+      ],
+      "validation_state": "untested",
+      "evidence_refs": [],
+      "evidence_freshness": {
+        "last_updated": null,
+        "expires_at": null,
+        "staleness_rule": "Untested remediation has no freshness window.",
+        "evidence_state": "missing"
+      },
+      "review_status": "review_required",
+      "regulatory_mapping": [
+        {
+          "framework": "NIST AI RMF",
+          "control": "Manage 4.1",
+          "claim": "Mitigations are assessed for effectiveness.",
+          "evidence_state": "missing"
+        }
+      ],
+      "unknowns": [
+        "No post-remediation test can be run without an evaluation set."
+      ],
+      "risk_summary": {
+        "overall_severity": "high",
+        "key_risks": [
+          "remediation blocked by missing evaluation set"
+        ],
+        "unknown_count": 1,
+        "stale_evidence_count": 0,
+        "simulated_evidence_count": 0,
+        "reviewer_action": "Request evaluation set before remediation can be credited."
+      }
+    },
+    {
+      "component_id": "health.monitor.production",
+      "component_type": "monitor",
+      "component_name": "Triage Fairness Monitor",
+      "version": "0.5.0",
+      "upstream_components": [
+        "health.model.triage"
+      ],
+      "downstream_components": [
+        "health.report.release"
+      ],
+      "protected_attributes_tested": [
+        "gender",
+        "age"
+      ],
+      "subgroup_coverage": {
+        "evaluated_groups": [
+          "gender:female",
+          "gender:male",
+          "age:under_30",
+          "age:30_to_55",
+          "age:over_55"
+        ],
+        "missing_groups": [
+          "region",
+          "language",
+          "socioeconomic_proxy"
+        ],
+        "coverage_notes": "Monitor does not include the deployment-shift dimensions identified upstream."
+      },
+      "fairness_metrics": [
+        {
+          "metric": "triage_false_negative_drift",
+          "value": "not connected",
+          "threshold": 0.1,
+          "affected_groups": [
+            "region:rural",
+            "language:non_english"
+          ],
+          "evidence_state": "unknown"
+        }
+      ],
+      "bias_tests_run": [
+        {
+          "test_name": "Monitor connectivity check",
+          "test_type": "integration_check",
+          "result": "monitor has no connected post-deployment outcome feed",
+          "evidence_state": "unknown",
+          "evidence_ref": ""
+        }
+      ],
+      "known_bias_risks": [
+        {
+          "risk_id": "health-risk-006",
+          "description": "Deployment drift cannot be detected for rural and non-English patients.",
+          "affected_groups": [
+            "region:rural",
+            "language:non_english"
+          ],
+          "severity": "high",
+          "evidence_state": "unknown"
+        }
+      ],
+      "remediation_history": [],
+      "validation_state": "untested",
+      "evidence_refs": [],
+      "evidence_freshness": {
+        "last_updated": null,
+        "expires_at": null,
+        "staleness_rule": "No live monitor evidence exists.",
+        "evidence_state": "unknown"
+      },
+      "review_status": "pending",
+      "regulatory_mapping": [
+        {
+          "framework": "NIST AI RMF",
+          "control": "Measure 2.5",
+          "claim": "Deployed system is monitored for risk drift.",
+          "evidence_state": "unknown"
+        }
+      ],
+      "unknowns": [
+        "No live outcome feed is connected.",
+        "Monitor excludes region and language."
+      ],
+      "risk_summary": {
+        "overall_severity": "high",
+        "key_risks": [
+          "monitor disconnected"
+        ],
+        "unknown_count": 2,
+        "stale_evidence_count": 0,
+        "simulated_evidence_count": 0,
+        "reviewer_action": "Request monitor integration evidence."
+      }
+    },
+    {
+      "component_id": "health.report.release",
+      "component_type": "report",
+      "component_name": "Triage Release Fairness Report",
+      "version": "draft-2026-05",
+      "upstream_components": [
+        "health.dataset.encounters",
+        "health.preprocessing.features",
+        "health.model.triage",
+        "health.evaluation.fairness_set",
+        "health.remediation.reweighting",
+        "health.monitor.production"
+      ],
+      "downstream_components": [],
+      "protected_attributes_tested": [
+        "gender",
+        "age"
+      ],
+      "subgroup_coverage": {
+        "evaluated_groups": [
+          "gender:female",
+          "gender:male",
+          "age:under_30",
+          "age:30_to_55",
+          "age:over_55"
+        ],
+        "missing_groups": [
+          "region",
+          "language",
+          "socioeconomic_proxy"
+        ],
+        "coverage_notes": "Report claims release readiness despite missing evaluation and disconnected monitor evidence."
+      },
+      "fairness_metrics": [
+        {
+          "metric": "release_fairness_claim",
+          "value": "acceptable",
+          "threshold": "requires current evaluation and monitoring",
+          "affected_groups": [
+            "all_claimed_groups"
+          ],
+          "evidence_state": "missing"
+        }
+      ],
+      "bias_tests_run": [
+        {
+          "test_name": "Release evidence review",
+          "test_type": "document_review",
+          "result": "release claim unsupported by current evaluation or monitor evidence",
+          "evidence_state": "missing",
+          "evidence_ref": "health-evidence-report-001"
+        }
+      ],
+      "known_bias_risks": [
+        {
+          "risk_id": "health-risk-007",
+          "description": "Release report gives false assurance for a high-risk clinical workflow.",
+          "affected_groups": [
+            "all_claimed_groups"
+          ],
+          "severity": "critical",
+          "evidence_state": "missing"
+        }
+      ],
+      "remediation_history": [
+        {
+          "remediation_id": "health-remediation-001",
+          "description": "Report references reweighting proposal without validation.",
+          "status": "referenced",
+          "validation_state": "untested",
+          "evidence_ref": ""
+        }
+      ],
+      "validation_state": "untested",
+      "evidence_refs": [
+        "health-evidence-report-001"
+      ],
+      "evidence_freshness": {
+        "last_updated": null,
+        "expires_at": null,
+        "staleness_rule": "Report cannot be current when required source evidence is missing.",
+        "evidence_state": "missing"
+      },
+      "review_status": "review_required",
+      "regulatory_mapping": [
+        {
+          "framework": "EU AI Act",
+          "control": "High-risk system technical documentation",
+          "claim": "Clinical triage system is tested and monitored for bias.",
+          "evidence_state": "missing"
+        }
+      ],
+      "unknowns": [
+        "No current evaluation set is attached.",
+        "No live monitor evidence is attached.",
+        "No reviewer approval is attached."
+      ],
+      "risk_summary": {
+        "overall_severity": "critical",
+        "key_risks": [
+          "unsupported regulatory claim",
+          "missing reviewer approval"
+        ],
+        "unknown_count": 3,
+        "stale_evidence_count": 0,
+        "simulated_evidence_count": 0,
+        "reviewer_action": "Reject release approval."
+      }
+    }
+  ],
+  "risk_summary": {
+    "overall_severity": "critical",
+    "key_risks": [
+      "underrepresented groups",
+      "shifted deployment population",
+      "missing evaluation set",
+      "monitor disconnected"
+    ],
+    "unknown_count": 11,
+    "stale_evidence_count": 0,
+    "simulated_evidence_count": 9,
+    "reviewer_action": "Reject release approval until current evaluation, monitoring, and subgroup evidence exist."
+  },
+  "review_summary": {
+    "status": "review_required",
+    "reviewer": null,
+    "reviewed_at": null,
+    "notes": "Synthetic profile for formative review only.",
+    "pending_actions": [
+      "Attach current fairness evaluation set.",
+      "Evaluate shifted deployment population.",
+      "Connect live fairness monitor.",
+      "Remove unsupported release claims."
+    ]
+  },
+  "limitations": [
+    "Synthetic example only.",
+    "No real patient or protected-class records are included.",
+    "Evidence states are illustrative and must not be treated as production validation."
+  ]
+}
