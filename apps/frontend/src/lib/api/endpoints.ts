@@ -168,6 +168,7 @@ export const API_ENDPOINTS = {
     create: '/api/v1/ai-bom/create',
     document: (bomId: string) => `/api/v1/ai-bom/documents/${bomId}`,
     analyze: (bomId: string) => `/api/v1/ai-bom/documents/${bomId}/analyze`,
+    fairnessEvidenceProfile: (bomId: string) => `/api/v1/ai-bom/documents/${bomId}/fairness-evidence-profile`,
     metrics: (bomId: string) => `/api/v1/ai-bom/documents/${bomId}/metrics`,
     dependencyGraph: (bomId: string) => `/api/v1/ai-bom/documents/${bomId}/dependency-graph`,
     componentTypes: '/api/v1/ai-bom/components/types',

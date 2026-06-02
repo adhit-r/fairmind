@@ -21,7 +21,6 @@ export { useAuditLogs } from './useAuditLogs'
 export { useMonitoring, useSystemHealth } from './useMonitoring'
 export { useAnalytics } from './useAnalytics'
 export { useCompliance } from './useCompliance'
-export { useAIBOM, useAIBOMStats } from './useAIBOM'
+export { useAIBOM, useAIBOMFairnessProfile, useAIBOMStats } from './useAIBOM'
 export { useModernBias } from './useModernBias'
 export { useMultimodalBias } from './useMultimodalBias'
-
