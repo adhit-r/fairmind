@@ -6,20 +6,27 @@ import { useState, useEffect, useCallback } from 'react'
 import { apiClient, type ApiResponse } from '../api-client'
 import { API_ENDPOINTS } from '../endpoints'
 
+type RawObject = Record<string, unknown>
+export type AIBOMRiskLevel = 'none' | 'low' | 'medium' | 'high' | 'critical' | 'unknown'
+
 export interface BOMComponent {
   id: string
   name: string
   version: string
-  type: 'model' | 'dataset' | 'library' | 'framework' | 'tool'
+  type: string
   vendor?: string
   license?: string
   status?: 'active' | 'deprecated' | 'vulnerable' | 'updated'
-  riskLevel?: 'low' | 'medium' | 'high' | 'critical'
+  riskLevel: AIBOMRiskLevel
+  complianceStatus?: string
   lastUpdated?: string
   dependencies?: string[]
   vulnerabilities?: number
   compliance?: string
   description?: string
+  componentMetadata?: RawObject
+  createdAt?: string
+  updatedAt?: string
 }
 
 export interface BOMStats {
@@ -33,12 +40,18 @@ export interface BOMStats {
 
 export interface BOMDocument {
   id: string
+  name?: string
+  version?: string
+  description?: string
   projectName: string
+  organization?: string
   components: BOMComponent[]
-  createdAt: string
-  updatedAt: string
-  riskLevel?: string
+  createdAt?: string
+  updatedAt?: string
+  riskLevel: AIBOMRiskLevel
   complianceStatus?: string
+  totalComponents?: number
+  tags?: string[]
 }
 
 export interface FairnessEvidenceProfile {
@@ -72,9 +85,16 @@ export interface FairnessEvidenceComponent {
   component_type: string
   component_name: string
   version: string
+  upstream_components: string[]
+  downstream_components: string[]
   validation_state: string
   review_status: string
   protected_attributes_tested: string[]
+  subgroup_coverage: {
+    evaluated_groups: string[]
+    missing_groups: string[]
+    coverage_notes: string
+  }
   fairness_metrics: Array<{
     metric: string
     value?: number | string | null
@@ -96,6 +116,26 @@ export interface FairnessEvidenceComponent {
     severity: string
     evidence_state: string
   }>
+  remediation_history: Array<{
+    remediation_id: string
+    description: string
+    status: string
+    validation_state: string
+    evidence_ref: string
+  }>
+  evidence_refs: string[]
+  evidence_freshness: {
+    last_updated?: string | null
+    expires_at?: string | null
+    staleness_rule: string
+    evidence_state: string
+  }
+  regulatory_mapping: Array<{
+    framework: string
+    control: string
+    claim: string
+    evidence_state: string
+  }>
   unknowns: string[]
   risk_summary: {
     overall_severity: string
@@ -104,6 +144,127 @@ export interface FairnessEvidenceComponent {
     stale_evidence_count: number
     simulated_evidence_count: number
     reviewer_action: string
+  }
+}
+
+const isRecord = (value: unknown): value is RawObject =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+const asString = (value: unknown, fallback = ''): string => {
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  return fallback
+}
+
+const asOptionalString = (value: unknown): string | undefined => {
+  const text = asString(value)
+  return text || undefined
+}
+
+const asOptionalNumber = (value: unknown): number | undefined => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : undefined
+  }
+  return undefined
+}
+
+const asStringArray = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((item) => asString(item))
+    .filter((item) => item.length > 0)
+}
+
+const asObject = (value: unknown): RawObject | undefined =>
+  isRecord(value) ? value : undefined
+
+const normalizeRiskLevel = (value: unknown): AIBOMRiskLevel => {
+  const normalized = asString(value).toLowerCase()
+  if (['none', 'low', 'medium', 'high', 'critical'].includes(normalized)) {
+    return normalized as AIBOMRiskLevel
+  }
+  return 'unknown'
+}
+
+const normalizeComponentStatus = (value: unknown): BOMComponent['status'] | undefined => {
+  const normalized = asString(value).toLowerCase()
+  if (['active', 'deprecated', 'vulnerable', 'updated'].includes(normalized)) {
+    return normalized as BOMComponent['status']
+  }
+  return undefined
+}
+
+const normalizeBOMComponent = (component: unknown, index: number): BOMComponent => {
+  const raw = isRecord(component) ? component : {}
+  const fallbackId = `component-${index + 1}`
+  const name = asString(raw.name, fallbackId)
+  const componentMetadata = asObject(raw.componentMetadata) || asObject(raw.component_metadata)
+
+  return {
+    id: asString(raw.id, fallbackId),
+    name,
+    version: asString(raw.version, 'unknown'),
+    type: asString(raw.type, 'unknown'),
+    vendor: asOptionalString(raw.vendor),
+    license: asOptionalString(raw.license),
+    status: normalizeComponentStatus(raw.status),
+    riskLevel: normalizeRiskLevel(raw.riskLevel ?? raw.risk_level),
+    complianceStatus: asOptionalString(raw.complianceStatus ?? raw.compliance_status),
+    lastUpdated: asOptionalString(raw.lastUpdated ?? raw.last_updated ?? raw.updated_at),
+    dependencies: asStringArray(raw.dependencies),
+    vulnerabilities: asOptionalNumber(raw.vulnerabilities),
+    compliance: asOptionalString(raw.compliance ?? raw.compliance_status),
+    description: asOptionalString(raw.description),
+    componentMetadata,
+    createdAt: asOptionalString(raw.createdAt ?? raw.created_at),
+    updatedAt: asOptionalString(raw.updatedAt ?? raw.updated_at),
+  }
+}
+
+const normalizeBOMDocument = (document: unknown, index: number): BOMDocument => {
+  const raw = isRecord(document) ? document : {}
+  const components = Array.isArray(raw.components)
+    ? raw.components.map((component, componentIndex) => normalizeBOMComponent(component, componentIndex))
+    : []
+  const fallbackId = `bom-${index + 1}`
+  const name = asOptionalString(raw.name)
+
+  return {
+    id: asString(raw.id, fallbackId),
+    name,
+    version: asOptionalString(raw.version),
+    description: asOptionalString(raw.description),
+    projectName: asString(raw.projectName ?? raw.project_name ?? raw.name, fallbackId),
+    organization: asOptionalString(raw.organization),
+    components,
+    createdAt: asOptionalString(raw.createdAt ?? raw.created_at),
+    updatedAt: asOptionalString(raw.updatedAt ?? raw.updated_at),
+    riskLevel: normalizeRiskLevel(raw.riskLevel ?? raw.overall_risk_level),
+    complianceStatus: asOptionalString(raw.complianceStatus ?? raw.overall_compliance_status),
+    totalComponents: asOptionalNumber(raw.totalComponents ?? raw.total_components) ?? components.length,
+    tags: asStringArray(raw.tags),
+  }
+}
+
+const extractBOMDocuments = (payload: unknown): BOMDocument[] => {
+  if (!isRecord(payload)) return []
+  const documents = payload.documents ?? payload.data
+  if (!Array.isArray(documents)) return []
+  return documents.map((document, index) => normalizeBOMDocument(document, index))
+}
+
+const normalizeBOMStats = (stats: unknown): BOMStats => {
+  const raw = isRecord(stats) ? stats : {}
+
+  return {
+    totalComponents: asOptionalNumber(raw.totalComponents ?? raw.total_components),
+    vulnerableComponents: asOptionalNumber(raw.vulnerableComponents ?? raw.vulnerable_components),
+    outdatedComponents: asOptionalNumber(raw.outdatedComponents ?? raw.outdated_components),
+    complianceScore: asOptionalNumber(raw.complianceScore ?? raw.compliance_score),
+    licenseIssues: asOptionalNumber(raw.licenseIssues ?? raw.license_issues),
+    lastScan: asOptionalString(raw.lastScan ?? raw.last_scan),
   }
 }
 
@@ -117,7 +278,7 @@ export function useAIBOM() {
       setLoading(true)
       setError(null)
       
-      const response: ApiResponse<{ documents?: BOMDocument[], data?: BOMDocument[] }> = await apiClient.get(
+      const response: ApiResponse<unknown> = await apiClient.get(
         API_ENDPOINTS.aiBOM.documents,
         {
           enableRetry: true,
@@ -127,8 +288,7 @@ export function useAIBOM() {
       )
       
       if (response.success && response.data) {
-        const data = response.data as any
-        setDocuments(data.documents || data.data || [])
+        setDocuments(extractBOMDocuments(response.data))
         setError(null)
       } else {
         const errorMessage = response.error || 'Failed to fetch AI BOM documents'
@@ -156,7 +316,7 @@ export function useAIBOM() {
   const createBOM = async (request: any) => {
     try {
       setLoading(true)
-      const response: ApiResponse<BOMDocument> = await apiClient.post(
+      const response: ApiResponse<unknown> = await apiClient.post(
         API_ENDPOINTS.aiBOM.create,
         request,
         {
@@ -167,7 +327,7 @@ export function useAIBOM() {
       
       if (response.success && response.data) {
         await fetchDocuments() // Refresh list
-        return response.data
+        return normalizeBOMDocument(response.data, 0)
       } else {
         throw new Error(response.error || 'Failed to create AI BOM')
       }
@@ -251,7 +411,7 @@ export function useAIBOMStats(documentId?: string) {
         ? API_ENDPOINTS.aiBOM.metrics(documentId)
         : API_ENDPOINTS.aiBOM.stats
       
-      const response: ApiResponse<BOMStats> = await apiClient.get(
+      const response: ApiResponse<unknown> = await apiClient.get(
         endpoint,
         {
           enableRetry: true,
@@ -261,7 +421,7 @@ export function useAIBOMStats(documentId?: string) {
       )
       
       if (response.success && response.data) {
-        setStats(response.data)
+        setStats(normalizeBOMStats(response.data))
         setError(null)
       } else {
         const errorMessage = response.error || 'Failed to fetch AI BOM stats'
