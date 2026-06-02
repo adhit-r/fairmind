@@ -2,8 +2,10 @@ import pytest
 import sys
 from pathlib import Path
 
-# Add backend directory to python path
-backend_path = Path(__file__).parent.parent / "apps" / "backend"
+# Add project and backend directories to python path
+project_path = Path(__file__).parent.parent
+backend_path = project_path / "apps" / "backend"
+sys.path.append(str(project_path))
 sys.path.append(str(backend_path))
 
 from core.container import ServiceContainer
