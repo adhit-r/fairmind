@@ -24,11 +24,27 @@
     "astro": "astro"
   },
   "dependencies": {
-    "@astrojs/sitemap": "^3.6.0",
-    "@astrojs/tailwind": "^5.0.0",
-    "astro": "^4.16.19"
+    "@astrojs/sitemap": "^3.7.3",
+    "astro": "^6.4.4"
   },
   "devDependencies": {
-    "tailwindcss": "^3.3.0"
+    "autoprefixer": "^10.4.22",
+    "postcss": "^8.5.15",
+    "tailwindcss": "^3.4.17"
+  },
+  "overrides": {
+    "brace-expansion": "^5.0.6",
+    "devalue": "^5.8.1",
+    "diff": "^5.2.2",
+    "esbuild": "^0.25.12",
+    "glob": "^13.0.0",
+    "js-yaml": "^4.1.1",
+    "mdast-util-to-hast": "^13.2.1",
+    "minimatch": "^10.1.1",
+    "picomatch": "^4.0.4",
+    "postcss": "^8.5.15",
+    "rollup": "^4.61.1",
+    "vite": "^8.0.16",
+    "yaml": "^2.8.3"
   }
 }
