@@ -160,7 +160,12 @@
         "review_status",
         "regulatory_mapping",
         "unknowns",
-        "risk_summary"
+        "risk_summary",
+        "claim_support",
+        "evidence_gap_type",
+        "evidence_state_reason",
+        "component_fault_localization",
+        "reviewer_required_action"
       ],
       "properties": {
         "component_id": {
@@ -480,6 +485,114 @@
         },
         "risk_summary": {
           "$ref": "#/$defs/risk_summary"
+        },
+        "claim_support": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "claim_id",
+            "claim_text",
+            "support_status",
+            "supporting_evidence_refs",
+            "unsupported_reason"
+          ],
+          "properties": {
+            "claim_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "claim_text": {
+              "type": "string",
+              "minLength": 1
+            },
+            "support_status": {
+              "type": "string",
+              "enum": [
+                "supported",
+                "partially_supported",
+                "unsupported",
+                "not_applicable"
+              ]
+            },
+            "supporting_evidence_refs": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "unsupported_reason": {
+              "type": "string"
+            }
+          }
+        },
+        "evidence_gap_type": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": [
+              "missing_protected_attribute_test",
+              "missing_subgroup_coverage",
+              "stale_fairness_result",
+              "unvalidated_remediation",
+              "proxy_risk_not_surfaced",
+              "disconnected_monitor",
+              "unsupported_regulatory_claim",
+              "missing_reviewer_approval",
+              "none"
+            ]
+          }
+        },
+        "evidence_state_reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "component_fault_localization": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "fault_component_id",
+            "upstream_faults",
+            "downstream_claims_affected",
+            "localization_confidence"
+          ],
+          "properties": {
+            "fault_component_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "upstream_faults": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "downstream_claims_affected": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "localization_confidence": {
+              "type": "string",
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                "unknown"
+              ]
+            }
+          }
+        },
+        "reviewer_required_action": {
+          "type": "string",
+          "enum": [
+            "approve",
+            "reject",
+            "request_more_evidence",
+            "require_human_review"
+          ]
         }
       }
     },

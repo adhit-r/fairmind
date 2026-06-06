@@ -186,6 +186,7 @@ class FairnessEvidenceProfileService:
             fairness_metrics=fairness_metrics,
             bias_tests_run=bias_tests_run,
             known_bias_risks=known_bias_risks,
+            regulatory_mapping=regulatory_mapping,
             remediations=remediations,
         )
         component_type, type_unknown = self._component_type(raw_component)
@@ -207,6 +208,28 @@ class FairnessEvidenceProfileService:
             evidence.get("review_status")
             or metadata.get("review_status")
             or ("review_required" if unknowns else "pending")
+        )
+        reviewer = (
+            evidence.get("reviewer")
+            or evidence.get("reviewed_by")
+            or metadata.get("reviewer")
+            or metadata.get("reviewed_by")
+        )
+        reviewer_evidence = self._reviewer_evidence_fields(
+            component_id=component_id,
+            component_type=component_type,
+            evidence=evidence,
+            evidence_refs=evidence_refs,
+            protected_attributes=protected_attributes,
+            subgroup_coverage=subgroup_coverage,
+            fairness_metrics=fairness_metrics,
+            bias_tests_run=bias_tests_run,
+            known_bias_risks=known_bias_risks,
+            remediations=remediations,
+            regulatory_mapping=regulatory_mapping,
+            evidence_freshness=evidence_freshness,
+            review_status=review_status,
+            reviewer=reviewer,
         )
 
         return {
@@ -234,6 +257,7 @@ class FairnessEvidenceProfileService:
             "regulatory_mapping": regulatory_mapping,
             "unknowns": unknowns,
             "risk_summary": risk_summary,
+            **reviewer_evidence,
         }
 
     def _system_name(self, bom_document: Mapping[str, Any] | Any) -> str:
@@ -412,13 +436,14 @@ class FairnessEvidenceProfileService:
         fairness_metrics: list[Mapping[str, Any]],
         bias_tests_run: list[Mapping[str, Any]],
         known_bias_risks: list[Mapping[str, Any]],
+        regulatory_mapping: list[Mapping[str, Any]],
         remediations: list[Mapping[str, Any]],
     ) -> str:
         states = self._component_evidence_states(
             fairness_metrics=fairness_metrics,
             bias_tests_run=bias_tests_run,
             known_bias_risks=known_bias_risks,
-            regulatory_mapping=[],
+            regulatory_mapping=regulatory_mapping,
             evidence_freshness=evidence_freshness,
         )
         remediation_states = {
@@ -473,6 +498,230 @@ class FairnessEvidenceProfileService:
             + remediations_simulated,
             "reviewer_action": self._reviewer_action(severity, unknowns),
         }
+
+    def _reviewer_evidence_fields(
+        self,
+        *,
+        component_id: str,
+        component_type: str,
+        evidence: Mapping[str, Any],
+        evidence_refs: list[str],
+        protected_attributes: list[str],
+        subgroup_coverage: Mapping[str, Any],
+        fairness_metrics: list[Mapping[str, Any]],
+        bias_tests_run: list[Mapping[str, Any]],
+        known_bias_risks: list[Mapping[str, Any]],
+        remediations: list[Mapping[str, Any]],
+        regulatory_mapping: list[Mapping[str, Any]],
+        evidence_freshness: Mapping[str, Any],
+        review_status: str,
+        reviewer: Any,
+    ) -> dict[str, Any]:
+        gap_type, reason, fault, action = self._component_evidence_gap(
+            component_type=component_type,
+            evidence=evidence,
+            protected_attributes=protected_attributes,
+            subgroup_coverage=subgroup_coverage,
+            fairness_metrics=fairness_metrics,
+            bias_tests_run=bias_tests_run,
+            known_bias_risks=known_bias_risks,
+            remediations=remediations,
+            regulatory_mapping=regulatory_mapping,
+            evidence_freshness=evidence_freshness,
+            review_status=review_status,
+            reviewer=reviewer,
+        )
+        gap_types = [gap_type]
+        support_status = "supported" if gap_type == "none" else "unsupported"
+        unsupported_reason = "" if gap_type == "none" else reason
+        downstream_claims = [
+            str(mapping.get("claim"))
+            for mapping in regulatory_mapping
+            if mapping.get("claim")
+        ]
+        return {
+            "claim_support": {
+                "claim_id": f"{component_id}:fairness-reviewability",
+                "claim_text": (
+                    f"Fairness evidence for {component_type} component "
+                    "is ready for reviewer assessment."
+                ),
+                "support_status": support_status,
+                "supporting_evidence_refs": evidence_refs,
+                "unsupported_reason": unsupported_reason,
+            },
+            "evidence_gap_type": gap_types,
+            "evidence_state_reason": reason,
+            "component_fault_localization": {
+                "fault_component_id": component_id,
+                "upstream_faults": [] if fault == "none" else [fault],
+                "downstream_claims_affected": downstream_claims,
+                "localization_confidence": "unknown" if gap_type == "none" else "high",
+            },
+            "reviewer_required_action": action,
+        }
+
+    def _component_evidence_gap(
+        self,
+        *,
+        component_type: str,
+        evidence: Mapping[str, Any],
+        protected_attributes: list[str],
+        subgroup_coverage: Mapping[str, Any],
+        fairness_metrics: list[Mapping[str, Any]],
+        bias_tests_run: list[Mapping[str, Any]],
+        known_bias_risks: list[Mapping[str, Any]],
+        remediations: list[Mapping[str, Any]],
+        regulatory_mapping: list[Mapping[str, Any]],
+        evidence_freshness: Mapping[str, Any],
+        review_status: str,
+        reviewer: Any,
+    ) -> tuple[str, str, str, str]:
+        if not protected_attributes:
+            return (
+                "missing_protected_attribute_test",
+                "No protected attributes are tested for this component.",
+                "protected_attributes_tested",
+                "request_more_evidence",
+            )
+
+        if subgroup_coverage.get("missing_groups"):
+            return (
+                "missing_subgroup_coverage",
+                "Subgroup coverage has missing groups.",
+                "subgroup_coverage.missing_groups",
+                "request_more_evidence",
+            )
+
+        if not subgroup_coverage.get("evaluated_groups"):
+            return (
+                "missing_subgroup_coverage",
+                "No evaluated subgroups are attached.",
+                "subgroup_coverage.evaluated_groups",
+                "request_more_evidence",
+            )
+
+        if evidence_freshness.get("evidence_state") == "stale":
+            return (
+                "stale_fairness_result",
+                "Fairness evidence is stale.",
+                "evidence_freshness.evidence_state",
+                "request_more_evidence",
+            )
+
+        remediation_gap = self._unvalidated_remediation_gap(remediations)
+        if remediation_gap is not None:
+            return remediation_gap
+
+        if self._has_proxy_risk_without_current_evidence(
+            known_bias_risks=known_bias_risks,
+            fairness_metrics=fairness_metrics,
+            bias_tests_run=bias_tests_run,
+            evidence_freshness=evidence_freshness,
+        ):
+            return (
+                "proxy_risk_not_surfaced",
+                "Proxy-related bias risk has no current supporting evidence.",
+                "known_bias_risks",
+                "request_more_evidence",
+            )
+
+        if component_type == "monitor" and not self._has_connected_monitor_evidence(evidence):
+            return (
+                "disconnected_monitor",
+                "Monitor component has no connected live evidence feed.",
+                "fairness_evidence.live_feed_connected",
+                "request_more_evidence",
+            )
+
+        regulatory_gap = self._unsupported_regulatory_gap(regulatory_mapping)
+        if regulatory_gap is not None:
+            return regulatory_gap
+
+        if review_status.lower() in {"review_required", "pending"} and not reviewer:
+            return (
+                "missing_reviewer_approval",
+                "Review is required or pending but no reviewer is assigned.",
+                "review_status",
+                "require_human_review",
+            )
+
+        return (
+            "none",
+            "Current reviewer-visible fairness evidence is attached.",
+            "none",
+            "approve",
+        )
+
+    def _unvalidated_remediation_gap(
+        self, remediations: list[Mapping[str, Any]]
+    ) -> tuple[str, str, str, str] | None:
+        for index, remediation in enumerate(remediations):
+            status = str(remediation.get("status") or "").lower()
+            validation_state = str(remediation.get("validation_state") or "").lower()
+            if status in {"attempted", "proposed"} and validation_state in {
+                "untested",
+                "simulated",
+            }:
+                return (
+                    "unvalidated_remediation",
+                    "Remediation is attempted or proposed without validated evidence.",
+                    f"remediation_history[{index}].validation_state",
+                    "request_more_evidence",
+                )
+        return None
+
+    def _has_proxy_risk_without_current_evidence(
+        self,
+        *,
+        known_bias_risks: list[Mapping[str, Any]],
+        fairness_metrics: list[Mapping[str, Any]],
+        bias_tests_run: list[Mapping[str, Any]],
+        evidence_freshness: Mapping[str, Any],
+    ) -> bool:
+        has_proxy_risk = any(
+            "proxy" in str(risk.get("risk_id") or "").lower()
+            or "proxy" in str(risk.get("description") or "").lower()
+            for risk in known_bias_risks
+        )
+        if not has_proxy_risk:
+            return False
+
+        states = self._component_evidence_states(
+            fairness_metrics=fairness_metrics,
+            bias_tests_run=bias_tests_run,
+            known_bias_risks=[],
+            regulatory_mapping=[],
+            evidence_freshness=evidence_freshness,
+        )
+        return not any(state in {"current", "reviewed"} for state in states)
+
+    def _has_connected_monitor_evidence(self, evidence: Mapping[str, Any]) -> bool:
+        if evidence.get("live_feed_connected") is True:
+            return True
+        if evidence.get("monitoring_live_feed_connected") is True:
+            return True
+        if evidence.get("connected_evidence_ref") or evidence.get("live_feed_ref"):
+            return True
+
+        live_feed_status = str(evidence.get("live_feed_status") or "").lower()
+        monitoring_status = str(evidence.get("monitoring_status") or "").lower()
+        connected_states = {"active", "connected", "enabled", "live"}
+        return live_feed_status in connected_states or monitoring_status in connected_states
+
+    def _unsupported_regulatory_gap(
+        self, regulatory_mapping: list[Mapping[str, Any]]
+    ) -> tuple[str, str, str, str] | None:
+        unsupported_states = {"missing", "stale", "simulated", "unknown"}
+        for index, mapping in enumerate(regulatory_mapping):
+            if mapping.get("evidence_state") in unsupported_states:
+                return (
+                    "unsupported_regulatory_claim",
+                    "Regulatory mapping claim is not supported by current evidence.",
+                    f"regulatory_mapping[{index}].evidence_state",
+                    "request_more_evidence",
+                )
+        return None
 
     def _aggregate_risk_summary(self, components: list[Mapping[str, Any]]) -> dict[str, Any]:
         severities = [

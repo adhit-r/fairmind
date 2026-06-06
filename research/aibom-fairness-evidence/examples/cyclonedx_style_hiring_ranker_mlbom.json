@@ -1,0 +1,228 @@
+{
+  "$schema": "https://cyclonedx.org/schema/bom-1.7.schema.json",
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.7",
+  "serialNumber": "urn:uuid:2ccf9f74-011f-4561-bf0c-47922c2f8b02",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-05-23T00:00:00Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "hiring.system.release",
+      "name": "Hiring Ranker",
+      "version": "2026.05",
+      "description": "Synthetic hiring ranker used as a stronger AI/ML BOM baseline for reviewer-task comparison."
+    }
+  },
+  "components": [
+    {
+      "type": "data",
+      "bom-ref": "hiring.dataset.applications",
+      "name": "Synthetic Hiring Application Dataset",
+      "version": "2026.05.synthetic",
+      "description": "Synthetic resumes, recruiter-screen labels, interview outcomes, education fields, language fields, and region fields.",
+      "properties": [
+        {
+          "name": "fairmind:system-domain",
+          "value": "employment_screening"
+        },
+        {
+          "name": "fairmind:profile-counterpart",
+          "value": "hiring.dataset.applications"
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "hiring.preprocessing.resume_features",
+      "name": "Resume Feature Extraction Pipeline",
+      "version": "1.8.0",
+      "description": "Pipeline that extracts education prestige, language fluency, experience duration, skills, and region features from resumes.",
+      "properties": [
+        {
+          "name": "fairmind:profile-counterpart",
+          "value": "hiring.preprocessing.resume_features"
+        },
+        {
+          "name": "ml:feature-family",
+          "value": "education, language, experience, skills, region"
+        }
+      ]
+    },
+    {
+      "type": "machine-learning-model",
+      "bom-ref": "hiring.model.ranker",
+      "name": "Candidate Ranking Model",
+      "version": "1.0.0",
+      "description": "Learning-to-rank model that orders candidates for recruiter review in a synthetic hiring workflow.",
+      "modelCard": {
+        "modelParameters": {
+          "approach": {
+            "type": "supervised"
+          },
+          "inputs": [
+            {
+              "format": "resume_features"
+            }
+          ],
+          "outputs": [
+            {
+              "format": "ranked_candidate_list"
+            }
+          ]
+        },
+        "quantitativeAnalysis": {
+          "performanceMetrics": [
+            {
+              "type": "ndcg_at_10",
+              "value": "0.74"
+            },
+            {
+              "type": "precision_at_10",
+              "value": "0.61"
+            }
+          ]
+        },
+        "considerations": {
+          "users": [
+            "hiring operations reviewer",
+            "model governance reviewer"
+          ],
+          "useCases": [
+            "Synthetic release-readiness review for candidate ranking"
+          ],
+          "fairnessAssessments": [
+            {
+              "groupAtRisk": "Candidates grouped by gender, age, language, region, disability status, and education background.",
+              "harms": "A fairness note reports that historical labels and education prestige features may reproduce prior screening bias.",
+              "mitigationStrategy": "Feature deweighting is listed as a mitigation candidate for education and language proxy risk."
+            }
+          ]
+        }
+      },
+      "properties": [
+        {
+          "name": "ml:algorithm",
+          "value": "gradient_boosted_ranking"
+        },
+        {
+          "name": "fairmind:profile-counterpart",
+          "value": "hiring.model.ranker"
+        }
+      ]
+    },
+    {
+      "type": "data",
+      "bom-ref": "hiring.evaluation.fairness_set",
+      "name": "Hiring Fairness Evaluation Set",
+      "version": "2026.02.synthetic",
+      "description": "Synthetic ranking evaluation set with selected subgroup annotations and candidate outcome labels.",
+      "properties": [
+        {
+          "name": "fairmind:profile-counterpart",
+          "value": "hiring.evaluation.fairness_set"
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "hiring.remediation.feature_deweighting",
+      "name": "Education and Language Feature Deweighting",
+      "version": "0.2.0",
+      "description": "Mitigation proposal that reduces influence of education prestige and language fluency features.",
+      "properties": [
+        {
+          "name": "fairmind:profile-counterpart",
+          "value": "hiring.remediation.feature_deweighting"
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "hiring.monitor.production",
+      "name": "Hiring Outcome Fairness Monitor",
+      "version": "0.8.1",
+      "description": "Monitoring component intended to track ranked candidates, interview progression, and selected subgroup outcomes.",
+      "properties": [
+        {
+          "name": "fairmind:profile-counterpart",
+          "value": "hiring.monitor.production"
+        }
+      ]
+    },
+    {
+      "type": "file",
+      "bom-ref": "hiring.report.release",
+      "name": "Hiring Ranker Fairness Report",
+      "version": "draft-2026-05",
+      "description": "Release report summarizing dataset, ranking model, proxy-risk notes, remediation, and monitoring notes.",
+      "properties": [
+        {
+          "name": "fairmind:profile-counterpart",
+          "value": "hiring.report.release"
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "hiring.dataset.applications",
+      "dependsOn": []
+    },
+    {
+      "ref": "hiring.preprocessing.resume_features",
+      "dependsOn": [
+        "hiring.dataset.applications"
+      ]
+    },
+    {
+      "ref": "hiring.model.ranker",
+      "dependsOn": [
+        "hiring.preprocessing.resume_features"
+      ]
+    },
+    {
+      "ref": "hiring.evaluation.fairness_set",
+      "dependsOn": [
+        "hiring.dataset.applications",
+        "hiring.model.ranker"
+      ]
+    },
+    {
+      "ref": "hiring.remediation.feature_deweighting",
+      "dependsOn": [
+        "hiring.model.ranker",
+        "hiring.evaluation.fairness_set"
+      ]
+    },
+    {
+      "ref": "hiring.monitor.production",
+      "dependsOn": [
+        "hiring.model.ranker"
+      ]
+    },
+    {
+      "ref": "hiring.report.release",
+      "dependsOn": [
+        "hiring.dataset.applications",
+        "hiring.preprocessing.resume_features",
+        "hiring.model.ranker",
+        "hiring.evaluation.fairness_set",
+        "hiring.remediation.feature_deweighting",
+        "hiring.monitor.production"
+      ]
+    }
+  ],
+  "externalReferences": [
+    {
+      "type": "documentation",
+      "url": "https://fairmind.local/research/aibom-fairness-evidence"
+    }
+  ],
+  "properties": [
+    {
+      "name": "research:baseline-condition",
+      "value": "cyclonedx_style_mlbom"
+    }
+  ]
+}

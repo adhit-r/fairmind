@@ -1,0 +1,228 @@
+{
+  "$schema": "https://cyclonedx.org/schema/bom-1.7.schema.json",
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.7",
+  "serialNumber": "urn:uuid:0c3b2e9f-0d2f-45b3-8a6f-5a10f5b91501",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-05-23T00:00:00Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "loan.system.release",
+      "name": "Loan Approval Model",
+      "version": "2026.05",
+      "description": "Synthetic loan approval system used as a stronger AI/ML BOM baseline for reviewer-task comparison."
+    }
+  },
+  "components": [
+    {
+      "type": "data",
+      "bom-ref": "loan.dataset.applications",
+      "name": "Synthetic Loan Application Training Data",
+      "version": "2026.05.synthetic",
+      "description": "Application, repayment, employment, region, and declared-income records for a synthetic consumer-credit model.",
+      "properties": [
+        {
+          "name": "fairmind:system-domain",
+          "value": "consumer_credit"
+        },
+        {
+          "name": "fairmind:profile-counterpart",
+          "value": "loan.dataset.applications"
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "loan.preprocessing.features",
+      "name": "Loan Feature Engineering Pipeline",
+      "version": "1.4.2",
+      "description": "Feature engineering pipeline for income normalization, credit-history aggregation, postal-region encoding, and occupation-category encoding.",
+      "properties": [
+        {
+          "name": "fairmind:profile-counterpart",
+          "value": "loan.preprocessing.features"
+        },
+        {
+          "name": "ml:feature-family",
+          "value": "income, credit_history, region, occupation"
+        }
+      ]
+    },
+    {
+      "type": "machine-learning-model",
+      "bom-ref": "loan.model.scorecard",
+      "name": "Gradient Boosted Loan Approval Model",
+      "version": "2.1.0",
+      "description": "Binary classifier that outputs an approval probability for synthetic loan applications.",
+      "modelCard": {
+        "modelParameters": {
+          "approach": {
+            "type": "supervised"
+          },
+          "inputs": [
+            {
+              "format": "tabular"
+            }
+          ],
+          "outputs": [
+            {
+              "format": "approval_probability"
+            }
+          ]
+        },
+        "quantitativeAnalysis": {
+          "performanceMetrics": [
+            {
+              "type": "roc_auc",
+              "value": "0.82"
+            },
+            {
+              "type": "calibration_error",
+              "value": "0.06"
+            }
+          ]
+        },
+        "considerations": {
+          "users": [
+            "credit risk reviewer",
+            "model governance reviewer"
+          ],
+          "useCases": [
+            "Synthetic release-readiness review for a consumer-credit model"
+          ],
+          "fairnessAssessments": [
+            {
+              "groupAtRisk": "Applicants grouped by gender, age band, region, language, and caste/category proxy.",
+              "harms": "A fairness note reports possible disparate approval outcomes when postal region and occupation category are used as proxy features.",
+              "mitigationStrategy": "A threshold adjustment proposal is listed as a mitigation candidate for reviewer consideration."
+            }
+          ]
+        }
+      },
+      "properties": [
+        {
+          "name": "ml:algorithm",
+          "value": "gradient_boosted_trees"
+        },
+        {
+          "name": "fairmind:profile-counterpart",
+          "value": "loan.model.scorecard"
+        }
+      ]
+    },
+    {
+      "type": "data",
+      "bom-ref": "loan.evaluation.fairness_set",
+      "name": "Loan Fairness Evaluation Set",
+      "version": "2026.01.synthetic",
+      "description": "Synthetic evaluation set used for loan fairness checks and release review notes.",
+      "properties": [
+        {
+          "name": "fairmind:profile-counterpart",
+          "value": "loan.evaluation.fairness_set"
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "loan.remediation.thresholds",
+      "name": "Loan Threshold Adjustment Proposal",
+      "version": "0.3.0",
+      "description": "Post-processing proposal for adjusting approval thresholds after fairness review.",
+      "properties": [
+        {
+          "name": "fairmind:profile-counterpart",
+          "value": "loan.remediation.thresholds"
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "loan.monitor.production",
+      "name": "Loan Fairness Drift Monitor",
+      "version": "0.9.0",
+      "description": "Monitoring component intended to compare production approval distributions across selected groups.",
+      "properties": [
+        {
+          "name": "fairmind:profile-counterpart",
+          "value": "loan.monitor.production"
+        }
+      ]
+    },
+    {
+      "type": "file",
+      "bom-ref": "loan.report.release",
+      "name": "Loan Release Fairness Report",
+      "version": "draft-2026-05",
+      "description": "Release report summarizing model, dataset, evaluation, remediation, and monitoring notes.",
+      "properties": [
+        {
+          "name": "fairmind:profile-counterpart",
+          "value": "loan.report.release"
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "loan.dataset.applications",
+      "dependsOn": []
+    },
+    {
+      "ref": "loan.preprocessing.features",
+      "dependsOn": [
+        "loan.dataset.applications"
+      ]
+    },
+    {
+      "ref": "loan.model.scorecard",
+      "dependsOn": [
+        "loan.preprocessing.features"
+      ]
+    },
+    {
+      "ref": "loan.evaluation.fairness_set",
+      "dependsOn": [
+        "loan.dataset.applications",
+        "loan.model.scorecard"
+      ]
+    },
+    {
+      "ref": "loan.remediation.thresholds",
+      "dependsOn": [
+        "loan.model.scorecard",
+        "loan.evaluation.fairness_set"
+      ]
+    },
+    {
+      "ref": "loan.monitor.production",
+      "dependsOn": [
+        "loan.model.scorecard"
+      ]
+    },
+    {
+      "ref": "loan.report.release",
+      "dependsOn": [
+        "loan.dataset.applications",
+        "loan.preprocessing.features",
+        "loan.model.scorecard",
+        "loan.evaluation.fairness_set",
+        "loan.remediation.thresholds",
+        "loan.monitor.production"
+      ]
+    }
+  ],
+  "externalReferences": [
+    {
+      "type": "documentation",
+      "url": "https://fairmind.local/research/aibom-fairness-evidence"
+    }
+  ],
+  "properties": [
+    {
+      "name": "research:baseline-condition",
+      "value": "cyclonedx_style_mlbom"
+    }
+  ]
+}

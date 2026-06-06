@@ -133,7 +133,31 @@
         "stale_evidence_count": 0,
         "simulated_evidence_count": 2,
         "reviewer_action": "Request additional subgroup coverage evidence before release approval."
-      }
+      },
+      "claim_support": {
+        "claim_id": "loan.dataset.applications.claim.reviewability",
+        "claim_text": "Fairness evidence for Synthetic Loan Application Training Data is reviewable within the FairMind AIBOM fairness evidence profile.",
+        "support_status": "partially_supported",
+        "supporting_evidence_refs": [
+          "loan-evidence-coverage-001"
+        ],
+        "unsupported_reason": "No direct caste/category labels are available; only proxy risk is represented."
+      },
+      "evidence_gap_type": [
+        "missing_subgroup_coverage",
+        "proxy_risk_not_surfaced"
+      ],
+      "evidence_state_reason": "Evidence is synthetic fixture evidence, not a production runtime validation. Component validation_state is simulated; freshness evidence_state is simulated. Recorded evidence gaps: missing_subgroup_coverage, proxy_risk_not_surfaced.",
+      "component_fault_localization": {
+        "fault_component_id": "loan.dataset.applications",
+        "upstream_faults": [],
+        "downstream_claims_affected": [
+          "loan.preprocessing.features.claim.reviewability",
+          "NIST AI RMF Map 2.2"
+        ],
+        "localization_confidence": "medium"
+      },
+      "reviewer_required_action": "request_more_evidence"
     },
     {
       "component_id": "loan.preprocessing.features",
@@ -230,7 +254,33 @@
         "stale_evidence_count": 0,
         "simulated_evidence_count": 2,
         "reviewer_action": "Request proxy analysis before accepting fairness claims."
-      }
+      },
+      "claim_support": {
+        "claim_id": "loan.preprocessing.features.claim.reviewability",
+        "claim_text": "Fairness evidence for Loan Feature Engineering Pipeline is reviewable within the FairMind AIBOM fairness evidence profile.",
+        "support_status": "partially_supported",
+        "supporting_evidence_refs": [
+          "loan-evidence-proxy-001"
+        ],
+        "unsupported_reason": "No quantitative proxy correlation report is attached."
+      },
+      "evidence_gap_type": [
+        "missing_subgroup_coverage",
+        "proxy_risk_not_surfaced"
+      ],
+      "evidence_state_reason": "Evidence is synthetic fixture evidence, not a production runtime validation. Component validation_state is simulated; freshness evidence_state is simulated. Recorded evidence gaps: missing_subgroup_coverage, proxy_risk_not_surfaced.",
+      "component_fault_localization": {
+        "fault_component_id": "loan.preprocessing.features",
+        "upstream_faults": [
+          "loan.dataset.applications"
+        ],
+        "downstream_claims_affected": [
+          "loan.model.scorecard.claim.reviewability",
+          "EU AI Act Data governance"
+        ],
+        "localization_confidence": "medium"
+      },
+      "reviewer_required_action": "request_more_evidence"
     },
     {
       "component_id": "loan.model.scorecard",
@@ -349,7 +399,35 @@
         "stale_evidence_count": 0,
         "simulated_evidence_count": 3,
         "reviewer_action": "Request remediation validation and subgroup expansion."
-      }
+      },
+      "claim_support": {
+        "claim_id": "loan.model.scorecard.claim.reviewability",
+        "claim_text": "Fairness evidence for Gradient Boosted Loan Approval Model is reviewable within the FairMind AIBOM fairness evidence profile.",
+        "support_status": "partially_supported",
+        "supporting_evidence_refs": [
+          "loan-evidence-model-001",
+          "loan-evidence-remediation-001"
+        ],
+        "unsupported_reason": "Remediation has not been validated after the proposed calibration."
+      },
+      "evidence_gap_type": [
+        "missing_subgroup_coverage",
+        "unvalidated_remediation"
+      ],
+      "evidence_state_reason": "Evidence is synthetic fixture evidence, not a production runtime validation. Component validation_state is simulated; freshness evidence_state is simulated. Recorded evidence gaps: missing_subgroup_coverage, unvalidated_remediation.",
+      "component_fault_localization": {
+        "fault_component_id": "loan.model.scorecard",
+        "upstream_faults": [
+          "loan.preprocessing.features"
+        ],
+        "downstream_claims_affected": [
+          "loan.evaluation.fairness_set.claim.reviewability",
+          "loan.monitor.production.claim.reviewability",
+          "NIST AI RMF Measure 2.11"
+        ],
+        "localization_confidence": "medium"
+      },
+      "reviewer_required_action": "request_more_evidence"
     },
     {
       "component_id": "loan.evaluation.fairness_set",
@@ -444,7 +522,34 @@
         "stale_evidence_count": 2,
         "simulated_evidence_count": 0,
         "reviewer_action": "Reject release approval until current evaluation is attached."
-      }
+      },
+      "claim_support": {
+        "claim_id": "loan.evaluation.fairness_set.claim.reviewability",
+        "claim_text": "Fairness evidence for Loan Fairness Evaluation Set is reviewable within the FairMind AIBOM fairness evidence profile.",
+        "support_status": "partially_supported",
+        "supporting_evidence_refs": [
+          "loan-evidence-eval-001"
+        ],
+        "unsupported_reason": "No evaluation result exists for model version 2.1.0."
+      },
+      "evidence_gap_type": [
+        "missing_subgroup_coverage",
+        "stale_fairness_result"
+      ],
+      "evidence_state_reason": "Evidence is synthetic fixture evidence, not a production runtime validation. Component validation_state is simulated; freshness evidence_state is stale. Recorded evidence gaps: missing_subgroup_coverage, stale_fairness_result.",
+      "component_fault_localization": {
+        "fault_component_id": "loan.evaluation.fairness_set",
+        "upstream_faults": [
+          "loan.dataset.applications",
+          "loan.model.scorecard"
+        ],
+        "downstream_claims_affected": [
+          "loan.report.release.claim.reviewability",
+          "ISO/IEC 42001 AI system impact assessment"
+        ],
+        "localization_confidence": "medium"
+      },
+      "reviewer_required_action": "reject"
     },
     {
       "component_id": "loan.remediation.thresholds",
@@ -544,7 +649,32 @@
         "stale_evidence_count": 0,
         "simulated_evidence_count": 0,
         "reviewer_action": "Request post-remediation evidence before accepting mitigation claims."
-      }
+      },
+      "claim_support": {
+        "claim_id": "loan.remediation.thresholds.claim.reviewability",
+        "claim_text": "Fairness evidence for Loan Threshold Adjustment Proposal is reviewable within the FairMind AIBOM fairness evidence profile.",
+        "support_status": "unsupported",
+        "supporting_evidence_refs": [],
+        "unsupported_reason": "No post-remediation evaluation has been run."
+      },
+      "evidence_gap_type": [
+        "missing_subgroup_coverage",
+        "unvalidated_remediation"
+      ],
+      "evidence_state_reason": "Evidence is not sufficient for production validation. Component validation_state is untested; freshness evidence_state is missing. Recorded evidence gaps: missing_subgroup_coverage, unvalidated_remediation.",
+      "component_fault_localization": {
+        "fault_component_id": "loan.remediation.thresholds",
+        "upstream_faults": [
+          "loan.model.scorecard",
+          "loan.evaluation.fairness_set"
+        ],
+        "downstream_claims_affected": [
+          "loan.report.release.claim.reviewability",
+          "NIST AI RMF Manage 4.1"
+        ],
+        "localization_confidence": "high"
+      },
+      "reviewer_required_action": "request_more_evidence"
     },
     {
       "component_id": "loan.monitor.production",
@@ -638,7 +768,33 @@
         "stale_evidence_count": 0,
         "simulated_evidence_count": 2,
         "reviewer_action": "Request live monitoring evidence."
-      }
+      },
+      "claim_support": {
+        "claim_id": "loan.monitor.production.claim.reviewability",
+        "claim_text": "Fairness evidence for Loan Fairness Drift Monitor is reviewable within the FairMind AIBOM fairness evidence profile.",
+        "support_status": "partially_supported",
+        "supporting_evidence_refs": [
+          "loan-evidence-monitor-001"
+        ],
+        "unsupported_reason": "No live monitor feed has been attached."
+      },
+      "evidence_gap_type": [
+        "missing_subgroup_coverage",
+        "disconnected_monitor"
+      ],
+      "evidence_state_reason": "Evidence is synthetic fixture evidence, not a production runtime validation. Component validation_state is simulated; freshness evidence_state is simulated. Recorded evidence gaps: missing_subgroup_coverage, disconnected_monitor.",
+      "component_fault_localization": {
+        "fault_component_id": "loan.monitor.production",
+        "upstream_faults": [
+          "loan.model.scorecard"
+        ],
+        "downstream_claims_affected": [
+          "loan.report.release.claim.reviewability",
+          "NIST AI RMF Measure 2.5"
+        ],
+        "localization_confidence": "medium"
+      },
+      "reviewer_required_action": "request_more_evidence"
     },
     {
       "component_id": "loan.report.release",
@@ -745,7 +901,39 @@
         "stale_evidence_count": 2,
         "simulated_evidence_count": 0,
         "reviewer_action": "Reject release approval until claims are narrowed or evidence is refreshed."
-      }
+      },
+      "claim_support": {
+        "claim_id": "loan.report.release.claim.reviewability",
+        "claim_text": "Fairness evidence for Loan Release Fairness Report is reviewable within the FairMind AIBOM fairness evidence profile.",
+        "support_status": "partially_supported",
+        "supporting_evidence_refs": [
+          "loan-evidence-report-001"
+        ],
+        "unsupported_reason": "No reviewer approval is attached. Regulatory claim depends on stale evaluation evidence."
+      },
+      "evidence_gap_type": [
+        "missing_subgroup_coverage",
+        "stale_fairness_result",
+        "unsupported_regulatory_claim",
+        "missing_reviewer_approval"
+      ],
+      "evidence_state_reason": "Evidence is synthetic fixture evidence, not a production runtime validation. Component validation_state is simulated; freshness evidence_state is stale. Recorded evidence gaps: missing_subgroup_coverage, stale_fairness_result, unsupported_regulatory_claim, missing_reviewer_approval.",
+      "component_fault_localization": {
+        "fault_component_id": "loan.report.release",
+        "upstream_faults": [
+          "loan.dataset.applications",
+          "loan.preprocessing.features",
+          "loan.model.scorecard",
+          "loan.evaluation.fairness_set",
+          "loan.remediation.thresholds",
+          "loan.monitor.production"
+        ],
+        "downstream_claims_affected": [
+          "EU AI Act High-risk system technical documentation"
+        ],
+        "localization_confidence": "medium"
+      },
+      "reviewer_required_action": "reject"
     }
   ],
   "risk_summary": {

@@ -197,3 +197,219 @@ def test_generate_profile_uses_review_state_and_component_lineage():
     assert dataset["downstream_components"] == ["health.model.triage"]
     assert model["upstream_components"] == ["health.dataset.encounters"]
     assert model["downstream_components"] == ["health.report.release"]
+
+
+def test_generate_profile_surfaces_stale_fairness_evidence_gap():
+    service = FairnessEvidenceProfileService()
+
+    profile = service.generate_profile(
+        bom_document={
+            "id": "bom-credit-002",
+            "project_name": "Credit Review",
+            "components": [
+                {
+                    "id": "credit.model.score",
+                    "name": "Credit Score Model",
+                    "type": "model",
+                    "version": "2.0.0",
+                }
+            ],
+        },
+        evidence_records={
+            "credit.model.score": {
+                "protected_attributes_tested": ["age", "gender"],
+                "subgroup_coverage": {
+                    "evaluated_groups": ["age:under_30", "gender:female"],
+                    "missing_groups": [],
+                },
+                "fairness_metrics": [
+                    {
+                        "metric": "approval_rate_parity",
+                        "value": 0.08,
+                        "threshold": 0.1,
+                        "affected_groups": [],
+                        "evidence_state": "stale",
+                    }
+                ],
+                "bias_tests_run": [
+                    {
+                        "test_name": "approval parity",
+                        "test_type": "parity",
+                        "result": "within threshold when last run",
+                        "evidence_state": "stale",
+                        "evidence_ref": "credit-evidence-001",
+                    }
+                ],
+                "evidence_refs": ["credit-evidence-001"],
+                "evidence_freshness": {
+                    "last_updated": "2025-12-01T00:00:00Z",
+                    "expires_at": "2026-03-01T00:00:00Z",
+                    "staleness_rule": "Re-run after model update.",
+                    "evidence_state": "stale",
+                },
+            }
+        },
+    )
+
+    component = profile["components"][0]
+
+    assert component["evidence_gap_type"] == ["stale_fairness_result"]
+    assert component["claim_support"]["support_status"] == "unsupported"
+    assert component["claim_support"]["supporting_evidence_refs"] == [
+        "credit-evidence-001"
+    ]
+    assert component["evidence_state_reason"] == "Fairness evidence is stale."
+    assert component["component_fault_localization"]["fault_component_id"] == (
+        "credit.model.score"
+    )
+    assert component["component_fault_localization"]["upstream_faults"] == [
+        "evidence_freshness.evidence_state"
+    ]
+    assert component["reviewer_required_action"] == "request_more_evidence"
+
+
+def test_generate_profile_surfaces_unsupported_regulatory_claim_gap():
+    service = FairnessEvidenceProfileService()
+
+    profile = service.generate_profile(
+        bom_document={
+            "id": "bom-report-001",
+            "project_name": "Regulatory Review",
+            "components": [
+                {
+                    "id": "release.report.fairness",
+                    "name": "Release Fairness Report",
+                    "type": "report",
+                    "version": "2026.06",
+                }
+            ],
+        },
+        evidence_records={
+            "release.report.fairness": {
+                "protected_attributes_tested": ["gender"],
+                "subgroup_coverage": {
+                    "evaluated_groups": ["gender:female", "gender:male"],
+                    "missing_groups": [],
+                },
+                "fairness_metrics": [
+                    {
+                        "metric": "selection_rate_gap",
+                        "value": 0.04,
+                        "threshold": 0.1,
+                        "affected_groups": [],
+                        "evidence_state": "current",
+                    }
+                ],
+                "bias_tests_run": [
+                    {
+                        "test_name": "selection parity",
+                        "test_type": "parity",
+                        "result": "within threshold",
+                        "evidence_state": "current",
+                        "evidence_ref": "report-evidence-001",
+                    }
+                ],
+                "evidence_refs": ["report-evidence-001"],
+                "evidence_freshness": {
+                    "last_updated": "2026-06-01T00:00:00Z",
+                    "expires_at": "2026-09-01T00:00:00Z",
+                    "staleness_rule": "Re-run quarterly.",
+                    "evidence_state": "current",
+                },
+                "regulatory_mapping": [
+                    {
+                        "framework": "NIST AI RMF",
+                        "control": "Measure 2.11",
+                        "claim": "Fairness has reviewer-ready evidence.",
+                        "evidence_state": "simulated",
+                    }
+                ],
+            }
+        },
+    )
+
+    component = profile["components"][0]
+
+    assert component["evidence_gap_type"] == ["unsupported_regulatory_claim"]
+    assert component["claim_support"]["support_status"] == "unsupported"
+    assert component["component_fault_localization"]["upstream_faults"] == [
+        "regulatory_mapping[0].evidence_state"
+    ]
+    assert component["component_fault_localization"]["downstream_claims_affected"] == [
+        "Fairness has reviewer-ready evidence."
+    ]
+    assert component["reviewer_required_action"] == "request_more_evidence"
+
+
+def test_generate_profile_surfaces_unvalidated_remediation_gap():
+    service = FairnessEvidenceProfileService()
+
+    profile = service.generate_profile(
+        bom_document={
+            "id": "bom-hiring-002",
+            "project_name": "Hiring Remediation",
+            "components": [
+                {
+                    "id": "hiring.model.ranker",
+                    "name": "Candidate Ranker",
+                    "type": "model",
+                    "version": "1.1.0",
+                }
+            ],
+        },
+        evidence_records={
+            "hiring.model.ranker": {
+                "protected_attributes_tested": ["gender"],
+                "subgroup_coverage": {
+                    "evaluated_groups": ["gender:female", "gender:male"],
+                    "missing_groups": [],
+                },
+                "fairness_metrics": [
+                    {
+                        "metric": "top_k_selection_gap",
+                        "value": 0.13,
+                        "threshold": 0.1,
+                        "affected_groups": ["gender:female"],
+                        "evidence_state": "current",
+                    }
+                ],
+                "bias_tests_run": [
+                    {
+                        "test_name": "ranking fairness",
+                        "test_type": "ranking",
+                        "result": "gap exceeds threshold",
+                        "evidence_state": "current",
+                        "evidence_ref": "hiring-evidence-002",
+                    }
+                ],
+                "evidence_refs": ["hiring-evidence-002"],
+                "evidence_freshness": {
+                    "last_updated": "2026-06-01T00:00:00Z",
+                    "expires_at": "2026-09-01T00:00:00Z",
+                    "staleness_rule": "Re-run quarterly.",
+                    "evidence_state": "current",
+                },
+            }
+        },
+        remediation_records={
+            "hiring.model.ranker": [
+                {
+                    "remediation_id": "hiring-remediation-002",
+                    "description": "Adjust ranking features.",
+                    "status": "attempted",
+                    "validation_state": "simulated",
+                    "evidence_ref": "simulation-only",
+                }
+            ]
+        },
+    )
+
+    component = profile["components"][0]
+
+    assert component["evidence_gap_type"] == ["unvalidated_remediation"]
+    assert component["claim_support"]["support_status"] == "unsupported"
+    assert component["evidence_state_reason"] == "Remediation is attempted or proposed without validated evidence."
+    assert component["component_fault_localization"]["upstream_faults"] == [
+        "remediation_history[0].validation_state"
+    ]
+    assert component["reviewer_required_action"] == "request_more_evidence"

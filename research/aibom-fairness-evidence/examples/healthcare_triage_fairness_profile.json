@@ -130,7 +130,31 @@
         "stale_evidence_count": 0,
         "simulated_evidence_count": 2,
         "reviewer_action": "Request coverage evidence for rural, non-English, and socioeconomic proxy groups."
-      }
+      },
+      "claim_support": {
+        "claim_id": "health.dataset.encounters.claim.reviewability",
+        "claim_text": "Fairness evidence for Synthetic Triage Encounter Dataset is reviewable within the FairMind AIBOM fairness evidence profile.",
+        "support_status": "partially_supported",
+        "supporting_evidence_refs": [
+          "health-evidence-coverage-001"
+        ],
+        "unsupported_reason": "Socioeconomic proxy coverage is not measured."
+      },
+      "evidence_gap_type": [
+        "missing_subgroup_coverage",
+        "proxy_risk_not_surfaced"
+      ],
+      "evidence_state_reason": "Evidence is synthetic fixture evidence, not a production runtime validation. Component validation_state is simulated; freshness evidence_state is simulated. Recorded evidence gaps: missing_subgroup_coverage, proxy_risk_not_surfaced.",
+      "component_fault_localization": {
+        "fault_component_id": "health.dataset.encounters",
+        "upstream_faults": [],
+        "downstream_claims_affected": [
+          "health.preprocessing.features.claim.reviewability",
+          "NIST AI RMF Map 2.2"
+        ],
+        "localization_confidence": "medium"
+      },
+      "reviewer_required_action": "request_more_evidence"
     },
     {
       "component_id": "health.preprocessing.features",
@@ -228,7 +252,32 @@
         "stale_evidence_count": 0,
         "simulated_evidence_count": 2,
         "reviewer_action": "Request post-imputation subgroup performance evidence."
-      }
+      },
+      "claim_support": {
+        "claim_id": "health.preprocessing.features.claim.reviewability",
+        "claim_text": "Fairness evidence for Triage Feature Normalization Pipeline is reviewable within the FairMind AIBOM fairness evidence profile.",
+        "support_status": "partially_supported",
+        "supporting_evidence_refs": [
+          "health-evidence-preprocess-001"
+        ],
+        "unsupported_reason": "No post-imputation subgroup calibration evidence is attached."
+      },
+      "evidence_gap_type": [
+        "missing_subgroup_coverage"
+      ],
+      "evidence_state_reason": "Evidence is synthetic fixture evidence, not a production runtime validation. Component validation_state is simulated; freshness evidence_state is simulated. Recorded evidence gaps: missing_subgroup_coverage.",
+      "component_fault_localization": {
+        "fault_component_id": "health.preprocessing.features",
+        "upstream_faults": [
+          "health.dataset.encounters"
+        ],
+        "downstream_claims_affected": [
+          "health.model.triage.claim.reviewability",
+          "ISO/IEC 42001 Data quality management"
+        ],
+        "localization_confidence": "medium"
+      },
+      "reviewer_required_action": "request_more_evidence"
     },
     {
       "component_id": "health.model.triage",
@@ -338,7 +387,34 @@
         "stale_evidence_count": 0,
         "simulated_evidence_count": 3,
         "reviewer_action": "Request deployment-population evaluation before approval."
-      }
+      },
+      "claim_support": {
+        "claim_id": "health.model.triage.claim.reviewability",
+        "claim_text": "Fairness evidence for Urgency Triage Model is reviewable within the FairMind AIBOM fairness evidence profile.",
+        "support_status": "partially_supported",
+        "supporting_evidence_refs": [
+          "health-evidence-model-001",
+          "health-evidence-remediation-001"
+        ],
+        "unsupported_reason": "No fairness evidence is attached for the shifted deployment population."
+      },
+      "evidence_gap_type": [
+        "missing_subgroup_coverage"
+      ],
+      "evidence_state_reason": "Evidence is synthetic fixture evidence, not a production runtime validation. Component validation_state is simulated; freshness evidence_state is simulated. Recorded evidence gaps: missing_subgroup_coverage.",
+      "component_fault_localization": {
+        "fault_component_id": "health.model.triage",
+        "upstream_faults": [
+          "health.preprocessing.features"
+        ],
+        "downstream_claims_affected": [
+          "health.evaluation.fairness_set.claim.reviewability",
+          "health.monitor.production.claim.reviewability",
+          "NIST AI RMF Measure 2.11"
+        ],
+        "localization_confidence": "medium"
+      },
+      "reviewer_required_action": "request_more_evidence"
     },
     {
       "component_id": "health.evaluation.fairness_set",
@@ -426,7 +502,33 @@
         "stale_evidence_count": 0,
         "simulated_evidence_count": 0,
         "reviewer_action": "Reject release approval until evaluation evidence exists."
-      }
+      },
+      "claim_support": {
+        "claim_id": "health.evaluation.fairness_set.claim.reviewability",
+        "claim_text": "Fairness evidence for Triage Fairness Evaluation Set is reviewable within the FairMind AIBOM fairness evidence profile.",
+        "support_status": "unsupported",
+        "supporting_evidence_refs": [],
+        "unsupported_reason": "No current fairness evaluation set is attached. No current subgroup metrics are available."
+      },
+      "evidence_gap_type": [
+        "missing_protected_attribute_test",
+        "missing_subgroup_coverage",
+        "stale_fairness_result"
+      ],
+      "evidence_state_reason": "Evidence is not sufficient for production validation. Component validation_state is untested; freshness evidence_state is missing. Recorded evidence gaps: missing_protected_attribute_test, missing_subgroup_coverage, stale_fairness_result.",
+      "component_fault_localization": {
+        "fault_component_id": "health.evaluation.fairness_set",
+        "upstream_faults": [
+          "health.dataset.encounters",
+          "health.model.triage"
+        ],
+        "downstream_claims_affected": [
+          "health.report.release.claim.reviewability",
+          "EU AI Act High-risk system testing"
+        ],
+        "localization_confidence": "high"
+      },
+      "reviewer_required_action": "reject"
     },
     {
       "component_id": "health.remediation.reweighting",
@@ -523,7 +625,33 @@
         "stale_evidence_count": 0,
         "simulated_evidence_count": 0,
         "reviewer_action": "Request evaluation set before remediation can be credited."
-      }
+      },
+      "claim_support": {
+        "claim_id": "health.remediation.reweighting.claim.reviewability",
+        "claim_text": "Fairness evidence for Rural Example Reweighting Proposal is reviewable within the FairMind AIBOM fairness evidence profile.",
+        "support_status": "unsupported",
+        "supporting_evidence_refs": [],
+        "unsupported_reason": "No post-remediation test can be run without an evaluation set."
+      },
+      "evidence_gap_type": [
+        "missing_subgroup_coverage",
+        "stale_fairness_result",
+        "unvalidated_remediation"
+      ],
+      "evidence_state_reason": "Evidence is not sufficient for production validation. Component validation_state is untested; freshness evidence_state is missing. Recorded evidence gaps: missing_subgroup_coverage, stale_fairness_result, unvalidated_remediation.",
+      "component_fault_localization": {
+        "fault_component_id": "health.remediation.reweighting",
+        "upstream_faults": [
+          "health.model.triage",
+          "health.evaluation.fairness_set"
+        ],
+        "downstream_claims_affected": [
+          "health.report.release.claim.reviewability",
+          "NIST AI RMF Manage 4.1"
+        ],
+        "localization_confidence": "high"
+      },
+      "reviewer_required_action": "request_more_evidence"
     },
     {
       "component_id": "health.monitor.production",
@@ -619,7 +747,31 @@
         "stale_evidence_count": 0,
         "simulated_evidence_count": 0,
         "reviewer_action": "Request monitor integration evidence."
-      }
+      },
+      "claim_support": {
+        "claim_id": "health.monitor.production.claim.reviewability",
+        "claim_text": "Fairness evidence for Triage Fairness Monitor is reviewable within the FairMind AIBOM fairness evidence profile.",
+        "support_status": "unsupported",
+        "supporting_evidence_refs": [],
+        "unsupported_reason": "No live outcome feed is connected. Monitor excludes region and language."
+      },
+      "evidence_gap_type": [
+        "missing_subgroup_coverage",
+        "disconnected_monitor"
+      ],
+      "evidence_state_reason": "Evidence is not sufficient for production validation. Component validation_state is untested; freshness evidence_state is unknown. Recorded evidence gaps: missing_subgroup_coverage, disconnected_monitor.",
+      "component_fault_localization": {
+        "fault_component_id": "health.monitor.production",
+        "upstream_faults": [
+          "health.model.triage"
+        ],
+        "downstream_claims_affected": [
+          "health.report.release.claim.reviewability",
+          "NIST AI RMF Measure 2.5"
+        ],
+        "localization_confidence": "high"
+      },
+      "reviewer_required_action": "request_more_evidence"
     },
     {
       "component_id": "health.report.release",
@@ -728,7 +880,41 @@
         "stale_evidence_count": 0,
         "simulated_evidence_count": 0,
         "reviewer_action": "Reject release approval."
-      }
+      },
+      "claim_support": {
+        "claim_id": "health.report.release.claim.reviewability",
+        "claim_text": "Fairness evidence for Triage Release Fairness Report is reviewable within the FairMind AIBOM fairness evidence profile.",
+        "support_status": "unsupported",
+        "supporting_evidence_refs": [
+          "health-evidence-report-001"
+        ],
+        "unsupported_reason": "No current evaluation set is attached. No live monitor evidence is attached. No reviewer approval is attached."
+      },
+      "evidence_gap_type": [
+        "missing_subgroup_coverage",
+        "stale_fairness_result",
+        "unvalidated_remediation",
+        "disconnected_monitor",
+        "unsupported_regulatory_claim",
+        "missing_reviewer_approval"
+      ],
+      "evidence_state_reason": "Evidence is not sufficient for production validation. Component validation_state is untested; freshness evidence_state is missing. Recorded evidence gaps: missing_subgroup_coverage, stale_fairness_result, unvalidated_remediation, disconnected_monitor, unsupported_regulatory_claim, missing_reviewer_approval.",
+      "component_fault_localization": {
+        "fault_component_id": "health.report.release",
+        "upstream_faults": [
+          "health.dataset.encounters",
+          "health.preprocessing.features",
+          "health.model.triage",
+          "health.evaluation.fairness_set",
+          "health.remediation.reweighting",
+          "health.monitor.production"
+        ],
+        "downstream_claims_affected": [
+          "EU AI Act High-risk system technical documentation"
+        ],
+        "localization_confidence": "high"
+      },
+      "reviewer_required_action": "reject"
     }
   ],
   "risk_summary": {

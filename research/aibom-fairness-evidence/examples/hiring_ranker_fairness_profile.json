@@ -130,7 +130,30 @@
         "stale_evidence_count": 0,
         "simulated_evidence_count": 2,
         "reviewer_action": "Request subgroup expansion and label-bias mitigation evidence."
-      }
+      },
+      "claim_support": {
+        "claim_id": "hiring.dataset.applications.claim.reviewability",
+        "claim_text": "Fairness evidence for Synthetic Hiring Application Dataset is reviewable within the FairMind AIBOM fairness evidence profile.",
+        "support_status": "partially_supported",
+        "supporting_evidence_refs": [
+          "hiring-evidence-labels-001"
+        ],
+        "unsupported_reason": "No disability subgroup evidence is attached."
+      },
+      "evidence_gap_type": [
+        "missing_subgroup_coverage"
+      ],
+      "evidence_state_reason": "Evidence is synthetic fixture evidence, not a production runtime validation. Component validation_state is simulated; freshness evidence_state is simulated. Recorded evidence gaps: missing_subgroup_coverage.",
+      "component_fault_localization": {
+        "fault_component_id": "hiring.dataset.applications",
+        "upstream_faults": [],
+        "downstream_claims_affected": [
+          "hiring.preprocessing.resume_features.claim.reviewability",
+          "NIST AI RMF Map 2.3"
+        ],
+        "localization_confidence": "medium"
+      },
+      "reviewer_required_action": "request_more_evidence"
     },
     {
       "component_id": "hiring.preprocessing.resume_features",
@@ -230,7 +253,32 @@
         "stale_evidence_count": 0,
         "simulated_evidence_count": 2,
         "reviewer_action": "Request quantitative proxy analysis for education and language features."
-      }
+      },
+      "claim_support": {
+        "claim_id": "hiring.preprocessing.resume_features.claim.reviewability",
+        "claim_text": "Fairness evidence for Resume Feature Extraction Pipeline is reviewable within the FairMind AIBOM fairness evidence profile.",
+        "support_status": "partially_supported",
+        "supporting_evidence_refs": [
+          "hiring-evidence-proxy-001"
+        ],
+        "unsupported_reason": "No measured proxy-correlation test is attached."
+      },
+      "evidence_gap_type": [
+        "missing_subgroup_coverage"
+      ],
+      "evidence_state_reason": "Evidence is synthetic fixture evidence, not a production runtime validation. Component validation_state is simulated; freshness evidence_state is simulated. Recorded evidence gaps: missing_subgroup_coverage.",
+      "component_fault_localization": {
+        "fault_component_id": "hiring.preprocessing.resume_features",
+        "upstream_faults": [
+          "hiring.dataset.applications"
+        ],
+        "downstream_claims_affected": [
+          "hiring.model.ranker.claim.reviewability",
+          "EU AI Act Data governance"
+        ],
+        "localization_confidence": "medium"
+      },
+      "reviewer_required_action": "request_more_evidence"
     },
     {
       "component_id": "hiring.model.ranker",
@@ -339,7 +387,35 @@
         "stale_evidence_count": 0,
         "simulated_evidence_count": 3,
         "reviewer_action": "Request post-remediation ranking evaluation."
-      }
+      },
+      "claim_support": {
+        "claim_id": "hiring.model.ranker.claim.reviewability",
+        "claim_text": "Fairness evidence for Candidate Ranking Model is reviewable within the FairMind AIBOM fairness evidence profile.",
+        "support_status": "partially_supported",
+        "supporting_evidence_refs": [
+          "hiring-evidence-model-001",
+          "hiring-evidence-remediation-001"
+        ],
+        "unsupported_reason": "Feature deweighting has not been validated."
+      },
+      "evidence_gap_type": [
+        "missing_subgroup_coverage",
+        "unvalidated_remediation"
+      ],
+      "evidence_state_reason": "Evidence is synthetic fixture evidence, not a production runtime validation. Component validation_state is simulated; freshness evidence_state is simulated. Recorded evidence gaps: missing_subgroup_coverage, unvalidated_remediation.",
+      "component_fault_localization": {
+        "fault_component_id": "hiring.model.ranker",
+        "upstream_faults": [
+          "hiring.preprocessing.resume_features"
+        ],
+        "downstream_claims_affected": [
+          "hiring.evaluation.fairness_set.claim.reviewability",
+          "hiring.monitor.production.claim.reviewability",
+          "ISO/IEC 42001 AI risk assessment"
+        ],
+        "localization_confidence": "medium"
+      },
+      "reviewer_required_action": "request_more_evidence"
     },
     {
       "component_id": "hiring.evaluation.fairness_set",
@@ -438,7 +514,34 @@
         "stale_evidence_count": 2,
         "simulated_evidence_count": 1,
         "reviewer_action": "Request refreshed evaluation with missing subgroups."
-      }
+      },
+      "claim_support": {
+        "claim_id": "hiring.evaluation.fairness_set.claim.reviewability",
+        "claim_text": "Fairness evidence for Hiring Fairness Evaluation Set is reviewable within the FairMind AIBOM fairness evidence profile.",
+        "support_status": "partially_supported",
+        "supporting_evidence_refs": [
+          "hiring-evidence-eval-001"
+        ],
+        "unsupported_reason": "Evaluation does not test disability or non-English applicants."
+      },
+      "evidence_gap_type": [
+        "missing_subgroup_coverage",
+        "stale_fairness_result"
+      ],
+      "evidence_state_reason": "Evidence is synthetic fixture evidence, not a production runtime validation. Component validation_state is simulated; freshness evidence_state is stale. Recorded evidence gaps: missing_subgroup_coverage, stale_fairness_result.",
+      "component_fault_localization": {
+        "fault_component_id": "hiring.evaluation.fairness_set",
+        "upstream_faults": [
+          "hiring.dataset.applications",
+          "hiring.model.ranker"
+        ],
+        "downstream_claims_affected": [
+          "hiring.report.release.claim.reviewability",
+          "NIST AI RMF Measure 2.11"
+        ],
+        "localization_confidence": "medium"
+      },
+      "reviewer_required_action": "request_more_evidence"
     },
     {
       "component_id": "hiring.remediation.feature_deweighting",
@@ -537,7 +640,32 @@
         "stale_evidence_count": 0,
         "simulated_evidence_count": 0,
         "reviewer_action": "Reject remediation claim until validation evidence is attached."
-      }
+      },
+      "claim_support": {
+        "claim_id": "hiring.remediation.feature_deweighting.claim.reviewability",
+        "claim_text": "Fairness evidence for Education and Language Feature Deweighting is reviewable within the FairMind AIBOM fairness evidence profile.",
+        "support_status": "unsupported",
+        "supporting_evidence_refs": [],
+        "unsupported_reason": "No post-remediation result is available."
+      },
+      "evidence_gap_type": [
+        "missing_subgroup_coverage",
+        "unvalidated_remediation"
+      ],
+      "evidence_state_reason": "Evidence is not sufficient for production validation. Component validation_state is untested; freshness evidence_state is missing. Recorded evidence gaps: missing_subgroup_coverage, unvalidated_remediation.",
+      "component_fault_localization": {
+        "fault_component_id": "hiring.remediation.feature_deweighting",
+        "upstream_faults": [
+          "hiring.model.ranker",
+          "hiring.evaluation.fairness_set"
+        ],
+        "downstream_claims_affected": [
+          "hiring.report.release.claim.reviewability",
+          "NIST AI RMF Manage 4.1"
+        ],
+        "localization_confidence": "high"
+      },
+      "reviewer_required_action": "reject"
     },
     {
       "component_id": "hiring.monitor.production",
@@ -632,7 +760,31 @@
         "stale_evidence_count": 0,
         "simulated_evidence_count": 0,
         "reviewer_action": "Request monitor connection evidence before deployment."
-      }
+      },
+      "claim_support": {
+        "claim_id": "hiring.monitor.production.claim.reviewability",
+        "claim_text": "Fairness evidence for Hiring Outcome Fairness Monitor is reviewable within the FairMind AIBOM fairness evidence profile.",
+        "support_status": "unsupported",
+        "supporting_evidence_refs": [],
+        "unsupported_reason": "No live monitor feed is attached. Language and disability monitoring are absent."
+      },
+      "evidence_gap_type": [
+        "missing_subgroup_coverage",
+        "disconnected_monitor"
+      ],
+      "evidence_state_reason": "Evidence is not sufficient for production validation. Component validation_state is untested; freshness evidence_state is unknown. Recorded evidence gaps: missing_subgroup_coverage, disconnected_monitor.",
+      "component_fault_localization": {
+        "fault_component_id": "hiring.monitor.production",
+        "upstream_faults": [
+          "hiring.model.ranker"
+        ],
+        "downstream_claims_affected": [
+          "hiring.report.release.claim.reviewability",
+          "ISO/IEC 42001 Operational monitoring"
+        ],
+        "localization_confidence": "high"
+      },
+      "reviewer_required_action": "request_more_evidence"
     },
     {
       "component_id": "hiring.report.release",
@@ -743,7 +895,40 @@
         "stale_evidence_count": 2,
         "simulated_evidence_count": 0,
         "reviewer_action": "Request more evidence and human approval before release."
-      }
+      },
+      "claim_support": {
+        "claim_id": "hiring.report.release.claim.reviewability",
+        "claim_text": "Fairness evidence for Hiring Ranker Fairness Report is reviewable within the FairMind AIBOM fairness evidence profile.",
+        "support_status": "partially_supported",
+        "supporting_evidence_refs": [
+          "hiring-evidence-report-001"
+        ],
+        "unsupported_reason": "No reviewer approval is attached. Report claims mitigation without validation."
+      },
+      "evidence_gap_type": [
+        "missing_subgroup_coverage",
+        "stale_fairness_result",
+        "unvalidated_remediation",
+        "unsupported_regulatory_claim",
+        "missing_reviewer_approval"
+      ],
+      "evidence_state_reason": "Evidence is synthetic fixture evidence, not a production runtime validation. Component validation_state is simulated; freshness evidence_state is stale. Recorded evidence gaps: missing_subgroup_coverage, stale_fairness_result, unvalidated_remediation, unsupported_regulatory_claim, missing_reviewer_approval.",
+      "component_fault_localization": {
+        "fault_component_id": "hiring.report.release",
+        "upstream_faults": [
+          "hiring.dataset.applications",
+          "hiring.preprocessing.resume_features",
+          "hiring.model.ranker",
+          "hiring.evaluation.fairness_set",
+          "hiring.remediation.feature_deweighting",
+          "hiring.monitor.production"
+        ],
+        "downstream_claims_affected": [
+          "EU AI Act Employment high-risk AI documentation"
+        ],
+        "localization_confidence": "medium"
+      },
+      "reviewer_required_action": "require_human_review"
     }
   ],
   "risk_summary": {

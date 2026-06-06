@@ -1,0 +1,228 @@
+{
+  "$schema": "https://cyclonedx.org/schema/bom-1.7.schema.json",
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.7",
+  "serialNumber": "urn:uuid:9db17bd5-95a8-46a8-90cf-6e19fd62e303",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-05-23T00:00:00Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "health.system.release",
+      "name": "Healthcare Triage Model",
+      "version": "2026.05",
+      "description": "Synthetic healthcare triage system used as a stronger AI/ML BOM baseline for reviewer-task comparison."
+    }
+  },
+  "components": [
+    {
+      "type": "data",
+      "bom-ref": "health.dataset.encounters",
+      "name": "Synthetic Triage Encounter Dataset",
+      "version": "2026.05.synthetic",
+      "description": "Synthetic emergency and outpatient encounter records with clinical features, urgency labels, language fields, region fields, and socioeconomic proxies.",
+      "properties": [
+        {
+          "name": "fairmind:system-domain",
+          "value": "healthcare_triage"
+        },
+        {
+          "name": "fairmind:profile-counterpart",
+          "value": "health.dataset.encounters"
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "health.preprocessing.features",
+      "name": "Triage Feature Normalization Pipeline",
+      "version": "3.2.0",
+      "description": "Feature pipeline for vitals normalization, symptom encoding, missingness indicators, region fields, and language fields.",
+      "properties": [
+        {
+          "name": "fairmind:profile-counterpart",
+          "value": "health.preprocessing.features"
+        },
+        {
+          "name": "ml:feature-family",
+          "value": "vitals, symptoms, prior_visits, missingness, region, language"
+        }
+      ]
+    },
+    {
+      "type": "machine-learning-model",
+      "bom-ref": "health.model.triage",
+      "name": "Urgency Triage Model",
+      "version": "4.0.0",
+      "description": "Multiclass model that recommends urgency bands for synthetic healthcare triage encounters.",
+      "modelCard": {
+        "modelParameters": {
+          "approach": {
+            "type": "supervised"
+          },
+          "inputs": [
+            {
+              "format": "clinical_tabular"
+            }
+          ],
+          "outputs": [
+            {
+              "format": "urgency_band"
+            }
+          ]
+        },
+        "quantitativeAnalysis": {
+          "performanceMetrics": [
+            {
+              "type": "macro_f1",
+              "value": "0.71"
+            },
+            {
+              "type": "undertriage_rate",
+              "value": "0.09"
+            }
+          ]
+        },
+        "considerations": {
+          "users": [
+            "clinical safety reviewer",
+            "model governance reviewer"
+          ],
+          "useCases": [
+            "Synthetic release-readiness review for healthcare triage support"
+          ],
+          "fairnessAssessments": [
+            {
+              "groupAtRisk": "Patients grouped by age, gender, region, language, and socioeconomic proxy.",
+              "harms": "A fairness note reports possible under-triage for rural and non-English patient groups after deployment-population shift.",
+              "mitigationStrategy": "Rural example reweighting is listed as a mitigation candidate for future evaluation."
+            }
+          ]
+        }
+      },
+      "properties": [
+        {
+          "name": "ml:algorithm",
+          "value": "multiclass_gradient_boosted_trees"
+        },
+        {
+          "name": "fairmind:profile-counterpart",
+          "value": "health.model.triage"
+        }
+      ]
+    },
+    {
+      "type": "data",
+      "bom-ref": "health.evaluation.fairness_set",
+      "name": "Triage Fairness Evaluation Set",
+      "version": "2026.01.synthetic",
+      "description": "Synthetic evaluation set for subgroup triage performance review.",
+      "properties": [
+        {
+          "name": "fairmind:profile-counterpart",
+          "value": "health.evaluation.fairness_set"
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "health.remediation.reweighting",
+      "name": "Rural Example Reweighting Proposal",
+      "version": "0.1.0",
+      "description": "Mitigation proposal to reweight rural patient examples during model update or evaluation.",
+      "properties": [
+        {
+          "name": "fairmind:profile-counterpart",
+          "value": "health.remediation.reweighting"
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "health.monitor.production",
+      "name": "Triage Fairness Monitor",
+      "version": "0.7.0",
+      "description": "Monitoring component intended to track urgency recommendation distributions and outcome drift.",
+      "properties": [
+        {
+          "name": "fairmind:profile-counterpart",
+          "value": "health.monitor.production"
+        }
+      ]
+    },
+    {
+      "type": "file",
+      "bom-ref": "health.report.release",
+      "name": "Triage Release Fairness Report",
+      "version": "draft-2026-05",
+      "description": "Release report summarizing dataset, model, evaluation, remediation, monitoring, and clinical governance notes.",
+      "properties": [
+        {
+          "name": "fairmind:profile-counterpart",
+          "value": "health.report.release"
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "health.dataset.encounters",
+      "dependsOn": []
+    },
+    {
+      "ref": "health.preprocessing.features",
+      "dependsOn": [
+        "health.dataset.encounters"
+      ]
+    },
+    {
+      "ref": "health.model.triage",
+      "dependsOn": [
+        "health.preprocessing.features"
+      ]
+    },
+    {
+      "ref": "health.evaluation.fairness_set",
+      "dependsOn": [
+        "health.dataset.encounters",
+        "health.model.triage"
+      ]
+    },
+    {
+      "ref": "health.remediation.reweighting",
+      "dependsOn": [
+        "health.model.triage",
+        "health.evaluation.fairness_set"
+      ]
+    },
+    {
+      "ref": "health.monitor.production",
+      "dependsOn": [
+        "health.model.triage"
+      ]
+    },
+    {
+      "ref": "health.report.release",
+      "dependsOn": [
+        "health.dataset.encounters",
+        "health.preprocessing.features",
+        "health.model.triage",
+        "health.evaluation.fairness_set",
+        "health.remediation.reweighting",
+        "health.monitor.production"
+      ]
+    }
+  ],
+  "externalReferences": [
+    {
+      "type": "documentation",
+      "url": "https://fairmind.local/research/aibom-fairness-evidence"
+    }
+  ],
+  "properties": [
+    {
+      "name": "research:baseline-condition",
+      "value": "cyclonedx_style_mlbom"
+    }
+  ]
+}

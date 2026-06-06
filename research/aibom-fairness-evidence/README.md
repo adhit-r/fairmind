@@ -10,15 +10,22 @@ FairMind is the prototype platform for this work. The profile connects FairMind'
 
 ## Artifact Set
 
+- `ARTIFACT_README.md`: Reviewer-facing artifact guide, package inventory, validation quickstart, and reproducibility checklist.
 - `schema/aibom_fairness_evidence.schema.json`: JSON Schema for the fairness evidence profile.
 - `FAIRMIND_INTEGRATION.md`: Mapping from FairMind services to fairness evidence profile fields.
 - `examples/*_fairness_profile.json`: Three FairMind synthetic fixture profiles for loan approval, hiring, and healthcare triage systems.
 - `examples/generic_*_mlbom.json`: Matching generic AI/ML BOM comparisons with component, version, and dependency metadata only.
+- `examples/cyclonedx_style_*_mlbom.json`: Stronger CycloneDX-style baseline BOMs with model-card-like fairness notes but without explicit reviewability fields.
 - `evaluation/fault_injection_cases.csv`: Twenty-four evidence-gap cases for reviewer evaluation.
 - `evaluation/reviewer_task_cards.md`: Twelve reviewer tasks mapped to the synthetic systems.
+- `evaluation/study_protocol.md`: Formative pilot protocol for comparing generic, CycloneDX-style, and fairness-profile artifact conditions.
+- `evaluation/analysis_plan.md`: Metrics and analysis plan for detection, localization, false assurance, timing, confidence, and qualitative error themes.
 - `evaluation/pilot_results.md`: A formative pilot template for accuracy, time, confidence, and qualitative notes.
+- `evaluation/response_sheet_template.csv`: Header-only response sheet for pilot data collection and analysis coding.
+- `evaluation/validate_research_package.py`: Stdlib package readiness check for required files, mappings, fault cases, baselines, and response sheet columns.
 - `poster/soups_abstract.md`: SOUPS-ready abstract draft.
 - `poster/poster_outline.md`: Poster structure, central figure, ethics, and limitations.
+- `paper/`: Paper draft, roadmap, claim ledger, and prior-art matrix for reviewability-centered submission work.
 
 ## Non-Goals
 
@@ -31,9 +38,17 @@ FairMind is the prototype platform for this work. The profile connects FairMind'
 ## Roadmap
 
 1. **Research artifact package**: Complete the schema, FairMind integration map, examples, comparison artifacts, fault-injection cases, reviewer task cards, pilot template, poster abstract, and poster outline.
-2. **Minimal generator**: Use `apps/backend/src/application/services/fairness_evidence_profile_service.py` to turn AIBOM documents, bias results, evidence records, remediation records, and review state into a profile JSON document.
-3. **Reviewer UI**: Add a task-focused reviewer view with component graph, evidence-state badges, missing subgroup warnings, stale evidence warnings, remediation status, and JSON export.
+2. **Paper claim grounding**: Maintain the paper roadmap, claim ledger, and prior-art matrix so the contribution remains centered on reviewer-visible fairness evidence state.
+3. **Stronger baselines**: Compare against both generic AI/ML BOMs and CycloneDX-style ML-BOM/model-card baselines.
+4. **Minimal generator**: Use `apps/backend/src/application/services/fairness_evidence_profile_service.py` to turn AIBOM documents, bias results, evidence records, remediation records, and review state into a profile JSON document.
+5. **Reviewer UI**: Add a task-focused reviewer view with component graph, evidence-state badges, missing subgroup warnings, stale evidence warnings, remediation status, and JSON export.
 
 ## Validation
 
-Run the validation command described in `evaluation/validation_notes.md` before using the package for a submission or pilot.
+Run the maintained package check before using the package for a submission or pilot:
+
+```bash
+python3 research/aibom-fairness-evidence/evaluation/validate_research_package.py
+```
+
+Run the schema and baseline validation commands described in `evaluation/validation_notes.md` when examples, schema, or baseline artifacts change.

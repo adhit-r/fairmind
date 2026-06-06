@@ -185,3 +185,78 @@ async def test_fairness_evidence_profile_route_preserves_component_metadata(monk
     assert component["fairness_metrics"][0]["evidence_state"] == "simulated"
     assert component["known_bias_risks"][0]["severity"] == "high"
     assert component["risk_summary"]["overall_severity"] == "high"
+
+
+@pytest.mark.asyncio
+async def test_fairness_evidence_profile_route_surfaces_disconnected_monitor(monkeypatch):
+    document = AIBOMDocument(
+        id="bom-monitor-001",
+        name="Monitor BOM",
+        version="1.0.0",
+        project_name="Monitor Coverage",
+        organization="FairMind",
+        overall_risk_level="medium",
+        overall_compliance_status="partial",
+        total_components=1,
+        components=[
+            AIBOMComponent(
+                id="monitor.fairness.live",
+                name="Fairness Live Monitor",
+                type="monitor",
+                version="1.0.0",
+                risk_level="medium",
+                compliance_status="partial",
+                component_metadata={
+                    "fairness_evidence": {
+                        "protected_attributes_tested": ["gender"],
+                        "subgroup_coverage": {
+                            "evaluated_groups": ["gender:female", "gender:male"],
+                            "missing_groups": [],
+                        },
+                        "fairness_metrics": [
+                            {
+                                "metric": "selection_rate_gap",
+                                "value": 0.05,
+                                "threshold": 0.1,
+                                "affected_groups": [],
+                                "evidence_state": "current",
+                            }
+                        ],
+                        "bias_tests_run": [
+                            {
+                                "test_name": "selection parity",
+                                "test_type": "parity",
+                                "result": "within threshold",
+                                "evidence_state": "current",
+                                "evidence_ref": "monitor-evidence-001",
+                            }
+                        ],
+                        "evidence_refs": ["monitor-evidence-001"],
+                        "evidence_freshness": {
+                            "last_updated": "2026-06-01T00:00:00Z",
+                            "expires_at": "2026-09-01T00:00:00Z",
+                            "staleness_rule": "Re-run quarterly.",
+                            "evidence_state": "current",
+                        },
+                        "live_feed_connected": False,
+                    }
+                },
+            )
+        ],
+    )
+    monkeypatch.setattr(real_ai_bom, "ai_bom_service", StubAIBOMService(document))
+
+    response = await real_ai_bom.get_fairness_evidence_profile("bom-monitor-001")
+    component = response.data["components"][0]
+
+    assert response.success is True
+    assert component["component_type"] == "monitor"
+    assert component["evidence_gap_type"] == ["disconnected_monitor"]
+    assert component["claim_support"]["support_status"] == "unsupported"
+    assert component["component_fault_localization"]["fault_component_id"] == (
+        "monitor.fairness.live"
+    )
+    assert component["component_fault_localization"]["upstream_faults"] == [
+        "fairness_evidence.live_feed_connected"
+    ]
+    assert component["reviewer_required_action"] == "request_more_evidence"
