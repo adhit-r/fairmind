@@ -78,6 +78,7 @@ class AuditLog(Base):
         Index('idx_audit_logs_resource_type', 'resource_type'),
         Index('idx_audit_logs_timestamp', 'timestamp'),
         Index('idx_audit_logs_severity', 'severity'),
+        {"extend_existing": True},
     )
 
     def __repr__(self):

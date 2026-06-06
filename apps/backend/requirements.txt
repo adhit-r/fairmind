@@ -6,13 +6,13 @@ absl-py==2.4.0
     #   tensorflow
 aif360==0.6.1
     # via fairmind-backend (pyproject.toml)
-aiohappyeyeballs==2.6.1
+aiohappyeyeballs==2.6.2
     # via aiohttp
-aiohttp==3.13.3
+aiohttp==3.14.0
     # via fairmind-backend (pyproject.toml)
 aiosignal==1.4.0
     # via aiohttp
-aiosmtplib==5.1.0
+aiosmtplib==5.1.1
     # via fairmind-backend (pyproject.toml)
 aiosqlite==0.22.1
     # via fairmind-backend (pyproject.toml)
@@ -22,7 +22,7 @@ annotated-doc==0.0.4
     # via fastapi
 annotated-types==0.7.0
     # via pydantic
-anyio==4.12.1
+anyio==4.13.0
     # via
     #   httpx
     #   starlette
@@ -41,39 +41,47 @@ bcrypt==5.0.0
     # via
     #   fairmind-backend (pyproject.toml)
     #   passlib
-boto3==1.42.72
+boto3==1.43.24
     # via fairmind-backend (pyproject.toml)
-botocore==1.42.72
+botocore==1.43.24
     # via
     #   boto3
     #   s3transfer
-certifi==2026.2.25
+certifi==2026.5.20
     # via
     #   httpcore
     #   httpx
     #   requests
     #   sentry-sdk
-charset-normalizer==3.4.6
+cffi==2.0.0
+    # via cryptography
+charset-normalizer==3.4.7
     # via
     #   reportlab
     #   requests
-click==8.3.1
+click==8.4.1
     # via uvicorn
 contourpy==1.3.3
     # via matplotlib
+cryptography==48.0.0
+    # via fairmind-backend (pyproject.toml)
 cycler==0.12.1
     # via matplotlib
 databases==0.9.0
     # via fairmind-backend (pyproject.toml)
-duckdb==1.5.0
+dnspython==2.8.0
+    # via email-validator
+duckdb==1.5.3
     # via fairmind-backend (pyproject.toml)
-fastapi==0.135.1
+email-validator==2.3.0
+    # via pydantic
+fastapi==0.136.3
     # via
     #   fairmind-backend (pyproject.toml)
     #   sentry-sdk
 flatbuffers==25.12.19
     # via tensorflow
-fonttools==4.62.1
+fonttools==4.63.0
     # via matplotlib
 frozenlist==1.8.0
     # via
@@ -83,9 +91,9 @@ gast==0.7.0
     # via tensorflow
 google-pasta==0.2.0
     # via tensorflow
-grpcio==1.78.0
+grpcio==1.81.0
     # via tensorflow
-gunicorn==25.1.0
+gunicorn==26.0.0
     # via fairmind-backend (pyproject.toml)
 h11==0.16.0
     # via
@@ -97,13 +105,14 @@ h5py==3.14.0
     #   tensorflow
 httpcore==1.0.9
     # via httpx
-httptools==0.7.1
+httptools==0.8.0
     # via uvicorn
 httpx==0.28.1
     # via fairmind-backend (pyproject.toml)
-idna==3.11
+idna==3.18
     # via
     #   anyio
+    #   email-validator
     #   httpx
     #   requests
     #   yarl
@@ -115,19 +124,21 @@ joblib==1.5.3
     # via
     #   fairmind-backend (pyproject.toml)
     #   scikit-learn
-keras==3.13.2
+keras==3.14.1
     # via tensorflow
 kiwisolver==1.5.0
     # via matplotlib
 libclang==18.1.1
     # via tensorflow
-mako==1.3.10
+lxml==6.1.1
+    # via python-docx
+mako==1.3.12
     # via alembic
-markdown-it-py==4.0.0
+markdown-it-py==4.2.0
     # via rich
 markupsafe==3.0.3
     # via mako
-matplotlib==3.10.8
+matplotlib==3.10.9
     # via aif360
 mdurl==0.1.2
     # via markdown-it-py
@@ -141,7 +152,9 @@ multidict==6.7.1
     #   yarl
 namex==0.1.0
     # via keras
-numpy==2.4.3
+narwhals==2.22.1
+    # via scikit-learn
+numpy==2.4.6
     # via
     #   fairmind-backend (pyproject.toml)
     #   aif360
@@ -156,47 +169,49 @@ numpy==2.4.3
     #   tensorflow
 opt-einsum==3.4.0
     # via tensorflow
-optree==0.19.0
+optree==0.19.1
     # via keras
-packaging==26.0
+packaging==26.2
     # via
     #   gunicorn
     #   keras
     #   matplotlib
     #   tensorflow
     #   wheel
-pandas==3.0.1
+pandas==3.0.3
     # via
     #   fairmind-backend (pyproject.toml)
     #   aif360
 passlib==1.7.4
     # via fairmind-backend (pyproject.toml)
-pillow==12.1.1
+pillow==12.2.0
     # via
     #   matplotlib
     #   reportlab
-propcache==0.4.1
+propcache==0.5.2
     # via
     #   aiohttp
     #   yarl
-protobuf==7.34.0
+protobuf==7.35.0
     # via tensorflow
 psutil==7.2.2
     # via fairmind-backend (pyproject.toml)
-psycopg2-binary==2.9.11
+psycopg2-binary==2.9.12
     # via fairmind-backend (pyproject.toml)
-pydantic==2.12.5
+pycparser==3.0
+    # via cffi
+pydantic==2.13.4
     # via
     #   fairmind-backend (pyproject.toml)
     #   fastapi
     #   pydantic-settings
-pydantic-core==2.41.5
+pydantic-core==2.46.4
     # via pydantic
-pydantic-settings==2.13.1
+pydantic-settings==2.14.1
     # via fairmind-backend (pyproject.toml)
-pygments==2.19.2
+pygments==2.20.0
     # via rich
-pyjwt==2.12.1
+pyjwt==2.13.0
     # via fairmind-backend (pyproject.toml)
 pyparsing==3.3.2
     # via matplotlib
@@ -205,30 +220,32 @@ python-dateutil==2.9.0.post0
     #   botocore
     #   matplotlib
     #   pandas
+python-docx==1.2.0
+    # via fairmind-backend (pyproject.toml)
 python-dotenv==1.2.2
     # via
     #   fairmind-backend (pyproject.toml)
     #   pydantic-settings
     #   uvicorn
-python-json-logger==4.0.0
+python-json-logger==4.1.0
     # via fairmind-backend (pyproject.toml)
-python-multipart==0.0.22
+python-multipart==0.0.32
     # via fairmind-backend (pyproject.toml)
 pyyaml==6.0.3
     # via uvicorn
-redis==7.3.0
+redis==8.0.0
     # via fairmind-backend (pyproject.toml)
-reportlab==4.4.10
+reportlab==4.5.1
     # via fairmind-backend (pyproject.toml)
-requests==2.32.5
+requests==2.34.2
     # via
     #   fairmind-backend (pyproject.toml)
     #   tensorflow
-rich==14.3.3
+rich==15.0.0
     # via keras
-s3transfer==0.16.0
+s3transfer==0.18.0
     # via boto3
-scikit-learn==1.8.0
+scikit-learn==1.9.0
     # via
     #   fairmind-backend (pyproject.toml)
     #   aif360
@@ -236,7 +253,7 @@ scipy==1.17.1
     # via
     #   aif360
     #   scikit-learn
-sentry-sdk==2.55.0
+sentry-sdk==2.61.1
     # via fairmind-backend (pyproject.toml)
 setuptools==82.0.1
     # via tensorflow
@@ -246,12 +263,12 @@ six==1.17.0
     #   google-pasta
     #   python-dateutil
     #   tensorflow
-sqlalchemy==2.0.48
+sqlalchemy==2.0.50
     # via
     #   fairmind-backend (pyproject.toml)
     #   alembic
     #   databases
-starlette==0.52.1
+starlette==1.2.1
     # via fastapi
 tensorflow==2.21.0
     # via fairmind-backend (pyproject.toml)
@@ -267,6 +284,7 @@ typing-extensions==4.15.0
     #   optree
     #   pydantic
     #   pydantic-core
+    #   python-docx
     #   sqlalchemy
     #   tensorflow
     #   typing-inspection
@@ -277,24 +295,24 @@ typing-inspection==0.4.2
     #   pydantic-settings
 tzlocal==5.3.1
     # via apscheduler
-urllib3==2.6.3
+urllib3==2.7.0
     # via
     #   botocore
     #   requests
     #   sentry-sdk
-uvicorn==0.42.0
+uvicorn==0.49.0
     # via fairmind-backend (pyproject.toml)
 uvloop==0.22.1
     # via uvicorn
-watchfiles==1.1.1
+watchfiles==1.2.0
     # via uvicorn
 websockets==16.0
     # via
     #   fairmind-backend (pyproject.toml)
     #   uvicorn
-wheel==0.46.3
+wheel==0.47.0
     # via astunparse
-wrapt==2.1.2
+wrapt==2.2.1
     # via tensorflow
-yarl==1.23.0
+yarl==1.24.2
     # via aiohttp
