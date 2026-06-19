@@ -22,7 +22,7 @@ Comprehensive E2E tests for FairMind UI using Playwright. Tests cover:
 2. **Database seeded** with realistic models
    ```bash
    cd apps/backend
-   python3 scripts/seed_models_realistic.py
+   python3 scripts/seed_database.py
    ```
 
 3. **Frontend dependencies installed**
@@ -121,7 +121,7 @@ Tests are configured in `playwright.config.ts`:
 - Check `NEXT_PUBLIC_API_URL` in `.env.local`
 
 ### Tests fail with "No models found"
-- Run seed script: `python3 apps/backend/scripts/seed_models_realistic.py`
+- Run seed script: `python3 apps/backend/scripts/seed_database.py`
 
 ### Tests timeout
 - Increase timeout in test file

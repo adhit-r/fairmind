@@ -30,7 +30,7 @@ if [ "$MODEL_COUNT" -gt "0" ]; then
     echo -e "${GREEN}✅ Database has $MODEL_COUNT models${NC}"
 else
     echo -e "${YELLOW}⚠️  Database has no models${NC}"
-    echo "   Seed with: cd apps/backend && python3 scripts/seed_models_realistic.py"
+    echo "   Seed with: cd apps/backend && python3 scripts/seed_database.py"
 fi
 
 # Check frontend pages

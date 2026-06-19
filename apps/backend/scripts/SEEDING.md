@@ -24,13 +24,9 @@ python scripts/seed_database.py
 - All datasets are from public repositories (UCI, ProPublica, Kaggle)
 - All metadata includes real citations, release dates, and known limitations
 
-## Legacy Seed Scripts
+## Removed Legacy Scripts
 
-The following scripts are deprecated in favor of `seed_database.py`:
-- `seed_models.py` - Use `seed_database.py` instead
-- `seed_models_simple.py` - Use `seed_database.py` instead
-- `seed_models_realistic.py` - Use `seed_database.py` instead
-- `seed_models_api.py` - Use `seed_database.py` instead
+The older `seed_models*` scripts have been removed. Use `seed_database.py` as the supported path for full demo-data seeding.
 
 ## Requirements
 
