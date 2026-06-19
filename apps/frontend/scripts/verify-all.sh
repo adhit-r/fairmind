@@ -36,7 +36,7 @@ fi
 # Check frontend pages
 echo ""
 echo "3️⃣  Checking Frontend Pages..."
-cd apps/frontend-new
+cd apps/frontend
 bun run scripts/check-frontend-pages.ts
 
 # Check API integrations
@@ -52,4 +52,3 @@ echo "  1. Review any failed endpoints"
 echo "  2. Fix broken integrations"
 echo "  3. Add missing features"
 echo "  4. Run E2E tests: bun test"
-

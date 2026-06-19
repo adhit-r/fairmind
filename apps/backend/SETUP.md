@@ -21,7 +21,7 @@
 4. **Start the backend:**
    ```bash
    cd apps/backend
-   python main.py
+   uv run python -m uvicorn api.main:app --reload --port 8000
    ```
 
 ## Notes

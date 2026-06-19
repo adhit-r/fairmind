@@ -288,7 +288,7 @@ uv run python scripts/create_dev_user.py
 uv run python -m uvicorn api.main:app --reload --port 8000
 
 # Frontend Setup (New Terminal)
-cd ../frontend-new
+cd ../frontend
 bun install
 bun run dev
 ```
@@ -321,7 +321,7 @@ JWT_ALGORITHM=HS256
 ENVIRONMENT=development
 ```
 
-**Frontend** (`apps/frontend-new/.env.local`):
+**Frontend** (`apps/frontend/.env.local`):
 ```env
 NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
@@ -530,7 +530,7 @@ fairmind/
 │   │   ├── tests/            # Test suite (21 files)
 │   │   └── pyproject.toml    # Python dependencies
 │   │
-│   ├── frontend-new/         # Next.js frontend
+│   ├── frontend/             # Next.js frontend
 │   │   ├── src/
 │   │   │   ├── app/          # Next.js app router (30+ pages)
 │   │   │   ├── components/   # React components (60+)
@@ -567,7 +567,7 @@ uv run python -m uvicorn api.main:app --reload --port 8000
 
 **Frontend Development**
 ```bash
-cd apps/frontend-new
+cd apps/frontend
 bun install
 bun run dev
 ```
@@ -583,7 +583,7 @@ uv run pytest --cov=api --cov-report=html
 
 **Frontend E2E Tests**
 ```bash
-cd apps/frontend-new
+cd apps/frontend
 bun run test
 bun run test:ui
 ```
@@ -636,7 +636,7 @@ docker build -t fairmind-backend .
 docker run -p 8000:8000 fairmind-backend
 
 # Build frontend image
-cd apps/frontend-new
+cd apps/frontend
 docker build -t fairmind-frontend .
 
 # Run frontend

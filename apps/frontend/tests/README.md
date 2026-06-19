@@ -27,7 +27,7 @@ Comprehensive E2E tests for FairMind UI using Playwright. Tests cover:
 
 3. **Frontend dependencies installed**
    ```bash
-   cd apps/frontend-new
+   cd apps/frontend
    bun install
    ```
 
@@ -143,4 +143,3 @@ This will:
 - Not reuse existing servers
 - Retry failed tests
 - Generate HTML report
-
