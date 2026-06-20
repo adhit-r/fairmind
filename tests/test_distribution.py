@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from apps.backend.utils.visualization.data_distribution import (
+from apps.ml.visualizations.data_distribution import (
     plot_numeric_distributions
 )
 
