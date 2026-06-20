@@ -3,7 +3,7 @@
   command = "bun run build"
 
 [build.environment]
-  NODE_VERSION = "18"
+  NODE_VERSION = "22.12.0"
 
 # Redirects for SPA routing
 [[redirects]]
