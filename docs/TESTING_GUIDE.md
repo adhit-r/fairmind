@@ -418,7 +418,7 @@ Both perspectives were valuable to the outcome.
 ```bash
 cd apps/backend
 python -m pip install -r requirements.txt
-python main.py
+uv run python -m uvicorn api.main:app --reload --port 8000
 # Check error logs
 ```
 
