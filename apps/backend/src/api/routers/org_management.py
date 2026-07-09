@@ -26,7 +26,7 @@ from pydantic import BaseModel, EmailStr
 from config.database import get_db_connection, get_database
 from config.settings import settings
 from config.auth import get_current_active_user, TokenData
-from src.infrastructure.email.resend_service import email_service
+from src.application.services.api_boundary_dependencies import email_service
 from core.decorators.org_permissions import require_org_admin, require_org_member
 
 logger = logging.getLogger("fairmind.org_management")

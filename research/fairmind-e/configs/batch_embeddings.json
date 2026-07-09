@@ -1,0 +1,37 @@
+{
+  "workload_id": "batch_embeddings",
+  "run_id": "smoke",
+  "functional_unit": "10000_embeddings",
+  "records": [
+    {
+      "method": "batched_tool_estimate",
+      "duration_seconds": 90,
+      "energy_kwh": 0.310,
+      "location_carbon_intensity_g_co2e_per_kwh": 310.0,
+      "market_carbon_intensity_g_co2e_per_kwh": 220.0,
+      "carbon_intensity_basis": "average",
+      "provenance_class": "tool_estimated",
+      "uncertainty_pct": 20,
+      "impact_level": "low",
+      "intensity_vs_baseline": 0.70,
+      "mitigation_readiness": "documented",
+      "offsets_retired_kg_co2e": 0.0,
+      "notes": "Batching keeps the synthetic embedding workload below baseline."
+    },
+    {
+      "method": "uncached_vendor_report",
+      "duration_seconds": 135,
+      "energy_kwh": 0.720,
+      "location_carbon_intensity_g_co2e_per_kwh": 310.0,
+      "market_carbon_intensity_g_co2e_per_kwh": 220.0,
+      "carbon_intensity_basis": "average",
+      "provenance_class": "vendor_reported",
+      "uncertainty_pct": 35,
+      "impact_level": "high",
+      "intensity_vs_baseline": 2.30,
+      "mitigation_readiness": "planned",
+      "offsets_retired_kg_co2e": 0.0,
+      "notes": "High-impact vendor-reported uncached batch is blocked."
+    }
+  ]
+}

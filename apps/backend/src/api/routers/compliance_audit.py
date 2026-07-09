@@ -19,9 +19,7 @@ from src.api.schemas.compliance_audit import (
     FrameworkInfoResponse,
     FrameworkResultResponse,
 )
-from src.domain.compliance.services.compliance_audit_engine import (
-    ComplianceAuditEngine,
-)
+from src.application.services.api_boundary_dependencies import ComplianceAuditEngine
 
 logger = logging.getLogger("fairmind.compliance_audit")
 router = APIRouter(prefix="/api/v1/compliance/audit", tags=["compliance-audit"])

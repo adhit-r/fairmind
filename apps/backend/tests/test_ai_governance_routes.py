@@ -142,6 +142,36 @@ def test_ai_governance_lifecycle_summary_persists_stage_progression():
     assert approval_req.status_code == 200
     request_id = approval_req.json()["request"]["id"]
 
+    environmental_resp = client.post(
+        "/api/v1/ai-governance/environment/assess",
+        json={
+            "system_id": system_id,
+            "assessment": {
+                "boundary_json": {"scope": "release gate"},
+                "lifecycle_phase": "training",
+                "functional_unit": "one run",
+                "metrics": {
+                    "total_kwh": 1200.0,
+                    "total_kg_co2e_location": 12_000.0,
+                    "total_kg_co2e_market": 9_000.0,
+                    "kg_co2e_per_1m_tokens": 5.0,
+                },
+                "measurement_source": "hardware_telemetry",
+                "provenance_class": "measured",
+                "uncertainty_pct": 8.0,
+                "confidence_score": 0.92,
+                "mitigation_readiness": "documented",
+                "mitigations_json": [
+                    {
+                        "description": "Shift next run to a lower-carbon region.",
+                        "target_date": "2026-12-31",
+                    }
+                ],
+            },
+        },
+    )
+    assert environmental_resp.status_code == 200
+
     approval_decision = client.post(
         f"/api/v1/ai-governance/approval-requests/{request_id}/decision",
         json={

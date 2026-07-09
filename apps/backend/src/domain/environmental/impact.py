@@ -21,15 +21,22 @@ from typing import Any, Mapping
 # Tier rule: value < low_max -> low; value > high_min -> high; otherwise medium.
 # (Boundaries fall into the medium tier: e.g. exactly 100 kgCO2e training is
 # medium, matching "<100 / 100-10,000 / >10,000".)
+# ``metric`` is the primary/display key; ``metric_aliases`` are equivalent keys
+# tried in order. Location-based carbon is preferred for release tiering so
+# offsets and REC claims cannot lower the gate outcome.
 PROVISIONAL_THRESHOLDS: dict[str, dict[str, Any]] = {
     # training total kgCO2e: <100 / 100-10,000 / >10,000   # PROVISIONAL - recalibrate from Phase 4 data
-    "training": {"metric": "total_kg_co2e", "unit": "kgCO2e", "low_max": 100.0, "high_min": 10_000.0},
+    "training": {"metric": "total_kg_co2e_location", "metric_aliases": ["total_kg_co2e", "total_kg_co2e_market"],
+                 "unit": "kgCO2e", "low_max": 100.0, "high_min": 10_000.0},
     # fine-tune total kgCO2e: <50 / 50-5,000 / >5,000       # PROVISIONAL - recalibrate from Phase 4 data
-    "fine_tune": {"metric": "total_kg_co2e", "unit": "kgCO2e", "low_max": 50.0, "high_min": 5_000.0},
+    "fine_tune": {"metric": "total_kg_co2e_location", "metric_aliases": ["total_kg_co2e", "total_kg_co2e_market"],
+                  "unit": "kgCO2e", "low_max": 50.0, "high_min": 5_000.0},
     # inference per 1k requests: <0.001 / 0.001-0.01 / >0.01  # PROVISIONAL - recalibrate from Phase 4 data
-    "inference": {"metric": "kg_co2e_per_1k_requests", "unit": "kgCO2e/1k req", "low_max": 0.001, "high_min": 0.01},
+    "inference": {"metric": "kg_co2e_per_1000_requests", "metric_aliases": ["kg_co2e_per_1k_requests"],
+                  "unit": "kgCO2e/1k req", "low_max": 0.001, "high_min": 0.01},
     # LLM per 1M tokens: <1 / 1-10 / >10                    # PROVISIONAL - recalibrate from Phase 4 data
-    "llm_inference": {"metric": "kg_co2e_per_1m_tokens", "unit": "kgCO2e/1M tok", "low_max": 1.0, "high_min": 10.0},
+    "llm_inference": {"metric": "kg_co2e_per_1m_tokens", "metric_aliases": [],
+                      "unit": "kgCO2e/1M tok", "low_max": 1.0, "high_min": 10.0},
 }
 
 # Phase aliases callers may pass.
@@ -48,6 +55,7 @@ _PHASE_ALIASES: dict[str, str] = {
 }
 
 LIFECYCLE_PHASES = tuple(PROVISIONAL_THRESHOLDS.keys())
+_TIERS = ("low", "medium", "high")
 
 # Module-level, overridable thresholds (so the API benchmarks endpoint can serve
 # a configurable copy without mutating the provisional defaults).
@@ -90,7 +98,25 @@ def normalize_phase(phase: str | None) -> str:
     )
 
 
-def impact_tier(metrics: Mapping[str, Any], lifecycle_phase: str) -> str:
+def adjust_impact_tier(tier: str, intensity_vs_baseline: float | None, confidence_score: float | None) -> str:
+    """Apply the baseline-intensity adjustment without using offsets/RECs."""
+    if intensity_vs_baseline is None:
+        return tier
+    ratio = float(intensity_vs_baseline)
+    idx = _TIERS.index(tier)
+    if ratio > 1.25:
+        return _TIERS[min(idx + 1, len(_TIERS) - 1)]
+    if ratio < 0.75 and confidence_score is not None and float(confidence_score) >= 0.70:
+        return _TIERS[max(idx - 1, 0)]
+    return tier
+
+
+def impact_tier(
+    metrics: Mapping[str, Any],
+    lifecycle_phase: str,
+    intensity_vs_baseline: float | None = None,
+    confidence_score: float | None = None,
+) -> str:
     """Return the impact tier (low / medium / high) for the given metrics + phase.
 
     Raises ``ValueError`` if the metric required for the phase is absent — a
@@ -98,15 +124,17 @@ def impact_tier(metrics: Mapping[str, Any], lifecycle_phase: str) -> str:
     """
     phase = normalize_phase(lifecycle_phase)
     config = _thresholds[phase]
-    metric_key = config["metric"]
-    value = metrics.get(metric_key)
+    candidate_keys = [config["metric"], *config.get("metric_aliases", [])]
+    value = next((metrics[k] for k in candidate_keys if metrics.get(k) is not None), None)
     if value is None:
         raise ValueError(
-            f"metric '{metric_key}' is required to tier impact for phase '{phase}'"
+            f"one of {candidate_keys} is required to tier impact for phase '{phase}'"
         )
     value = float(value)
     if value < float(config["low_max"]):
-        return "low"
-    if value > float(config["high_min"]):
-        return "high"
-    return "medium"
+        tier = "low"
+    elif value > float(config["high_min"]):
+        tier = "high"
+    else:
+        tier = "medium"
+    return adjust_impact_tier(tier, intensity_vs_baseline, confidence_score)

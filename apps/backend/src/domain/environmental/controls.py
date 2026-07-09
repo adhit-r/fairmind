@@ -1,13 +1,13 @@
 """
-ENV-1 .. ENV-9 control set + coverage checks.
+ENV-1 .. ENV-6 control set + coverage checks.
 
 These controls define what environmental evidence a governed AI system is
 expected to carry. Coverage is computed against an assessment payload: each
 control is ``present`` (evidence supplied), ``missing`` (applicable but absent),
 or ``not_applicable`` (explicitly waived for this system/phase).
 
-The control codes map to rows in FairMind's ``governance_framework_controls``
-table under ``framework='environmental_governance'`` (see the Phase 2 seeding).
+The controls are intentionally narrow for the MVP: boundary, energy, dual
+carbon, functional-unit intensity, evidence quality, and gate mitigation.
 """
 
 from __future__ import annotations
@@ -32,8 +32,6 @@ class Control:
     governance_test: str
     # Returns True when the assessment carries evidence for this control.
     check: Callable[[Mapping[str, Any]], bool]
-    # Controls that only apply to some systems (water, embodied carbon, energy
-    # source) can be waived; core controls (ENV-1..6) always apply.
     optional: bool = False
 
 
@@ -47,7 +45,9 @@ CONTROLS: tuple[Control, ...] = (
         "ENV-1",
         "Assessment boundary",
         "System, lifecycle phase, and functional unit of the assessment are declared.",
-        lambda a: bool(a.get("boundary")) and bool(a.get("lifecycle_phase")) and bool(a.get("functional_unit")),
+        lambda a: bool(a.get("boundary_json") or a.get("boundary"))
+        and bool(a.get("lifecycle_phase"))
+        and bool(a.get("functional_unit")),
     ),
     Control(
         "ENV-2",
@@ -57,48 +57,38 @@ CONTROLS: tuple[Control, ...] = (
     ),
     Control(
         "ENV-3",
-        "Carbon accounting",
-        "Greenhouse-gas emissions (kgCO2e) are measured for the declared boundary.",
-        lambda a: _has(_metrics(a), "total_kg_co2e"),
+        "Dual carbon accounting",
+        "Location-based and market-based kgCO2e are reported separately.",
+        lambda a: _has(_metrics(a), "total_kg_co2e_location", "total_kg_co2e")
+        and _has(_metrics(a), "total_kg_co2e_market", "total_kg_co2e"),
     ),
     Control(
         "ENV-4",
         "Efficiency metric",
         "A per-functional-unit efficiency figure is reported (per 1M tokens or per 1k requests).",
-        lambda a: _has(_metrics(a), "kg_co2e_per_1m_tokens", "kg_co2e_per_1k_requests"),
+        lambda a: _has(
+            _metrics(a),
+            "kg_co2e_per_1m_tokens",
+            "kg_co2e_per_1000_requests",
+            "kg_co2e_per_1k_requests",
+        ),
     ),
     Control(
         "ENV-5",
         "Evidence confidence",
-        "The measurement source is disclosed and an evidence-confidence score is derived.",
-        lambda a: bool(a.get("source")) and a.get("evidence_confidence") is not None,
+        "Provenance class, uncertainty, and confidence are disclosed separately.",
+        lambda a: bool(a.get("provenance_class") or a.get("source"))
+        and a.get("confidence_score", a.get("evidence_confidence")) is not None
+        and a.get("uncertainty_pct") is not None,
     ),
     Control(
         "ENV-6",
         "Mitigation & approval",
-        "Where a conditional_go is recommended, a dated mitigation is documented for reviewer sign-off.",
-        lambda a: (a.get("recommendation") != "conditional_go") or _has_dated_mitigation(a),
-    ),
-    Control(
-        "ENV-7",
-        "Water use (WUE)",
-        "Water usage effectiveness / on-site water consumption is reported.",
-        lambda a: _has(_metrics(a), "wue_litres_per_kwh", "water_litres"),
-        optional=True,
-    ),
-    Control(
-        "ENV-8",
-        "Embodied carbon",
-        "Embodied (manufacturing) carbon of the underlying hardware is accounted for.",
-        lambda a: _has(_metrics(a), "embodied_kg_co2e"),
-        optional=True,
-    ),
-    Control(
-        "ENV-9",
-        "Energy source",
-        "Grid carbon intensity and/or renewable-energy share of the compute region is reported.",
-        lambda a: _has(_metrics(a), "carbon_intensity_gco2e_kwh", "energy_renewable_pct"),
-        optional=True,
+        "Conditional releases carry documented mitigation or an owned exception.",
+        lambda a: (a.get("recommendation") != "conditional_go")
+        or a.get("mitigation_readiness") == "documented"
+        or _has_dated_mitigation(a)
+        or _has_exception(a),
     ),
 )
 
@@ -107,13 +97,20 @@ _CONTROLS_BY_CODE = {c.code: c for c in CONTROLS}
 
 def _has_dated_mitigation(assessment: Mapping[str, Any]) -> bool:
     """True if at least one mitigation has both a description and a target date."""
-    mitigations = assessment.get("mitigations") or []
+    mitigations = assessment.get("mitigations_json") or assessment.get("mitigations") or []
     for m in mitigations:
         if not isinstance(m, Mapping):
             continue
         if m.get("description") and m.get("target_date"):
             return True
     return False
+
+
+def _has_exception(assessment: Mapping[str, Any]) -> bool:
+    exception = assessment.get("exception")
+    if not isinstance(exception, Mapping):
+        return False
+    return bool(exception.get("owner") and exception.get("expiry") and exception.get("rationale"))
 
 
 def get_control(code: str) -> Control:
@@ -123,8 +120,9 @@ def get_control(code: str) -> Control:
 def coverage(assessment: Mapping[str, Any]) -> dict[str, str]:
     """Return per-control coverage: present / missing / not_applicable.
 
-    Optional controls (ENV-7/8/9) can be waived by listing their code in
-    ``assessment['not_applicable_controls']``.
+    Optional controls can be waived by listing their code in
+    ``assessment['not_applicable_controls']``. The MVP control set has no
+    optional controls, so waivers currently have no effect.
     """
     waived = set(assessment.get("not_applicable_controls") or [])
     result: dict[str, str] = {}

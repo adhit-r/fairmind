@@ -1730,6 +1730,26 @@ async def make_approval_decision(
     _ensure_tables(db)
     new_status = "approved" if request.decision == "approved" else "rejected"
     now = _utc_now_iso()
+    existing = db.execute(
+        text(
+            "SELECT id, entity_type, entity_id FROM governance_approval_requests WHERE id = :id"
+        ),
+        {"id": request_id},
+    ).fetchone()
+    if not existing:
+        raise HTTPException(status_code=404, detail="Approval request not found")
+    if new_status == "approved" and existing.entity_type == "ai_system":
+        from src.application.services.environmental_service import env_gate_status
+
+        environmental_gate = env_gate_status(db, existing.entity_id)
+        if environmental_gate.get("blocked"):
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": environmental_gate.get("reason"),
+                    "environmentalGate": environmental_gate,
+                },
+            )
     result = db.execute(
         text(
             "UPDATE governance_approval_requests "

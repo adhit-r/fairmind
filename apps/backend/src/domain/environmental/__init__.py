@@ -23,9 +23,11 @@ Load-bearing invariants (do not break without updating tests AND the paper):
 from .confidence import (
     CONFIDENCE_RANGES,
     band_from_score,
+    cap_confidence_for_provenance,
     confidence_from_source,
     confidence_range,
     get_confidence_band,
+    normalize_provenance,
 )
 from .controls import CONTROLS, coverage, coverage_rate, get_control
 from .decision_matrix import (
@@ -34,21 +36,28 @@ from .decision_matrix import (
     requires_mitigation,
 )
 from .engine import EnvironmentalEngineResult, run_assessment
-from .impact import get_thresholds, impact_tier
+from .impact import adjust_impact_tier, get_thresholds, impact_tier
 from .schemas import (
     EnvironmentalAssessment,
+    EnvironmentalException,
     EnvironmentalMetrics,
+    ImpactType,
     Mitigation,
+    MitigationReadiness,
+    ProvenanceClass,
 )
 
 __all__ = [
     # confidence
     "CONFIDENCE_RANGES",
     "band_from_score",
+    "cap_confidence_for_provenance",
     "confidence_from_source",
     "confidence_range",
     "get_confidence_band",
+    "normalize_provenance",
     # impact
+    "adjust_impact_tier",
     "get_thresholds",
     "impact_tier",
     # decision matrix
@@ -62,8 +71,12 @@ __all__ = [
     "get_control",
     # schemas
     "EnvironmentalAssessment",
+    "EnvironmentalException",
     "EnvironmentalMetrics",
+    "ImpactType",
     "Mitigation",
+    "MitigationReadiness",
+    "ProvenanceClass",
     # engine
     "EnvironmentalEngineResult",
     "run_assessment",

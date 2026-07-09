@@ -164,6 +164,11 @@ class GovernanceAISystem(Base):
     # Relationships
     workspace = relationship("GovernanceWorkspace", back_populates="ai_systems")
     evidence_items = relationship("GovernanceEvidence", back_populates="ai_system", cascade="all, delete-orphan")
+    environmental_assessments = relationship(
+        "GovernanceEnvironmentalAssessment",
+        back_populates="ai_system",
+        cascade="all, delete-orphan",
+    )
     risks = relationship("GovernanceRisk", back_populates="ai_system", cascade="all, delete-orphan")
     remediation_tasks = relationship("GovernanceRemediationTask", back_populates="ai_system", cascade="all, delete-orphan")
     incidents = relationship("GovernanceIncident", back_populates="ai_system", cascade="all, delete-orphan")
@@ -231,6 +236,54 @@ class GovernanceEvidence(Base):
 
     def __repr__(self) -> str:
         return f"<GovernanceEvidence(id={self.id}, system_id={self.system_id})>"
+
+
+class GovernanceEnvironmentalAssessment(Base):
+    """Append-only FairMind-E environmental assessment versions."""
+
+    __tablename__ = "governance_environmental_assessments"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    system_id = Column(String, ForeignKey("governance_ai_systems.id"), nullable=False, index=True)
+    evidence_id = Column(String, ForeignKey("governance_evidence.id"), nullable=True, index=True)
+    version = Column(Integer, nullable=False, default=1)
+    boundary_json = Column(Text, nullable=False, default="{}")
+    period_start = Column(String, nullable=True)
+    period_end = Column(String, nullable=True)
+    lifecycle_phase = Column(String, nullable=False, default="inference")
+    functional_unit = Column(String, nullable=False, default="1000_requests")
+    impact_type = Column(String, nullable=False, default="carbon")
+    total_kwh = Column(Float, nullable=True)
+    total_kg_co2e_location = Column(Float, nullable=True)
+    total_kg_co2e_market = Column(Float, nullable=True)
+    kg_co2e_per_1000_requests = Column(Float, nullable=True)
+    kg_co2e_per_1m_tokens = Column(Float, nullable=True)
+    measurement_source = Column(String, nullable=False, default="unknown")
+    provenance_class = Column(String, nullable=False, default="unknown")
+    uncertainty_pct = Column(Float, nullable=True)
+    confidence_score = Column(Float, nullable=False, default=0.0)
+    intensity_vs_baseline = Column(Float, nullable=True)
+    risk_tier = Column(String, nullable=False, default="high")
+    recommendation = Column(String, nullable=False, default="no_go")
+    mitigation_readiness = Column(String, nullable=False, default="missing")
+    mitigations_json = Column(Text, nullable=False, default="[]")
+    evidence_refs_json = Column(Text, nullable=False, default="[]")
+    controls_json = Column(Text, nullable=False, default="{}")
+    blockers_json = Column(Text, nullable=False, default="[]")
+    reviewer_state = Column(String, nullable=False, default="draft")
+    exception_json = Column(Text, nullable=False, default="{}")
+    payload_json = Column(Text, nullable=False, default="{}")
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+    ai_system = relationship("GovernanceAISystem", back_populates="environmental_assessments")
+
+    __table_args__ = (
+        Index("idx_governance_env_assessments_system_version", "system_id", "version", unique=True),
+        Index("idx_governance_env_assessments_recommendation", "recommendation"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<GovernanceEnvironmentalAssessment(system_id={self.system_id}, version={self.version})>"
 
 
 class GovernanceEvidenceLink(Base):

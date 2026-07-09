@@ -17,7 +17,7 @@ from pydantic import BaseModel, EmailStr
 from config.database import get_db_connection
 from config.settings import settings
 from config.auth import get_current_active_user, require_admin, TokenData
-from src.infrastructure.email.resend_service import email_service
+from src.application.services.api_boundary_dependencies import email_service
 
 logger = logging.getLogger("fairmind.registration")
 router = APIRouter(tags=["registration"])

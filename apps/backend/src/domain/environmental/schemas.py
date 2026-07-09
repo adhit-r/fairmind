@@ -1,101 +1,145 @@
 """
-Pydantic v2 models for environmental assessment payloads.
+Pydantic v2 models for FairMind-E environmental assessment payloads.
 
-These are the wire/validation contract for the engine and the API layer. The
-engine itself operates on plain mappings (see ``engine.run_assessment``) so it
-stays usable without pydantic; these models validate inbound API payloads and
-serialise results.
+Units are explicit in field names. Provenance remains categorical and separate
+from uncertainty.
 """
 
 from __future__ import annotations
 
 from datetime import date
-from typing import Optional
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
+ProvenanceClass = Literal["measured", "tool_estimated", "vendor_reported", "manual", "unknown"]
+ImpactType = Literal["carbon", "water", "embodied"]
+MitigationReadiness = Literal["documented", "planned", "missing"]
+Recommendation = Literal["go", "conditional_go", "no_go"]
+RiskTier = Literal["low", "medium", "high"]
+
+
 class EnvironmentalMetrics(BaseModel):
-    """Measured environmental figures. All optional — coverage is scored on what
-    is supplied, and missing figures surface as control gaps, never as zeros."""
+    """Measured or estimated environmental figures for the declared boundary."""
 
     model_config = ConfigDict(extra="forbid")
 
-    total_kwh: Optional[float] = Field(default=None, ge=0)
-    total_kg_co2e: Optional[float] = Field(default=None, ge=0)
-    kg_co2e_per_1m_tokens: Optional[float] = Field(default=None, ge=0)
-    kg_co2e_per_1k_requests: Optional[float] = Field(default=None, ge=0)
-    # Water, embodied carbon, energy source (ENV-7/8/9).
-    wue_litres_per_kwh: Optional[float] = Field(default=None, ge=0)
-    water_litres: Optional[float] = Field(default=None, ge=0)
-    embodied_kg_co2e: Optional[float] = Field(default=None, ge=0)
-    carbon_intensity_gco2e_kwh: Optional[float] = Field(default=None, ge=0)
-    energy_renewable_pct: Optional[float] = Field(default=None, ge=0, le=100)
-    pue: Optional[float] = Field(default=None, ge=1.0)
+    total_kwh: float | None = Field(default=None, ge=0)
+    total_kg_co2e_location: float | None = Field(default=None, ge=0)
+    total_kg_co2e_market: float | None = Field(default=None, ge=0)
+    kg_co2e_per_1000_requests: float | None = Field(default=None, ge=0)
+    kg_co2e_per_1m_tokens: float | None = Field(default=None, ge=0)
+    location_carbon_intensity_g_co2e_per_kwh: float | None = Field(default=None, ge=0)
+    market_carbon_intensity_g_co2e_per_kwh: float | None = Field(default=None, ge=0)
+    marginal_carbon_intensity_g_co2e_per_kwh: float | None = Field(default=None, ge=0)
+    carbon_intensity_basis: Literal["average", "marginal"] | None = None
+    water_litres: float | None = Field(default=None, ge=0)
+    wue_litres_per_kwh: float | None = Field(default=None, ge=0)
+    embodied_kg_co2e: float | None = Field(default=None, ge=0)
+    pue: float | None = Field(default=None, ge=1.0)
+    energy_renewable_pct: float | None = Field(default=None, ge=0, le=100)
+
+    # Backward-compatible aliases used by the initial FairMind-E engine commit.
+    total_kg_co2e: float | None = Field(default=None, ge=0)
+    kg_co2e_per_1k_requests: float | None = Field(default=None, ge=0)
+    carbon_intensity_gco2e_kwh: float | None = Field(default=None, ge=0)
 
 
 class Mitigation(BaseModel):
-    """A documented action to reduce environmental impact. A dated mitigation is
-    required to approve a ``conditional_go``."""
+    """A documented action to reduce impact or improve evidence quality."""
 
     model_config = ConfigDict(extra="forbid")
 
     description: str = Field(min_length=1)
-    expected_reduction_pct: Optional[float] = Field(default=None, ge=0, le=100)
-    target_date: Optional[date] = None
-    owner: Optional[str] = None
-    status: str = Field(default="proposed")
-
-    @field_validator("status")
-    @classmethod
-    def _valid_status(cls, v: str) -> str:
-        allowed = {"proposed", "in_progress", "completed", "cancelled"}
-        if v not in allowed:
-            raise ValueError(f"status must be one of {sorted(allowed)}")
-        return v
+    expected_reduction_pct: float | None = Field(default=None, ge=0, le=100)
+    target_date: date | None = None
+    owner: str | None = None
+    status: Literal["proposed", "in_progress", "completed", "cancelled"] = "proposed"
 
 
-class EnvironmentalAssessment(BaseModel):
-    """A full environmental assessment for one AI system + lifecycle phase.
-
-    ``evidence_confidence``, ``impact_tier``, and ``recommendation`` are derived
-    by the engine; on inbound payloads they may be omitted and will be computed.
-    """
+class EnvironmentalException(BaseModel):
+    """Reviewer exception path for a conditional gate."""
 
     model_config = ConfigDict(extra="forbid")
 
-    # Boundary / scoping (ENV-1).
-    lifecycle_phase: str
-    functional_unit: Optional[str] = None
-    boundary: Optional[str] = None
-    assumptions: Optional[str] = None
+    owner: str = Field(min_length=1)
+    expiry: date
+    rationale: str = Field(min_length=1)
 
-    # Provenance (ENV-5).
-    source: str = "unknown"
 
-    # Metrics (ENV-2/3/4/7/8/9).
+class EnvironmentalAssessment(BaseModel):
+    """Full environmental assessment for one AI system and period."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    system_id: str | None = None
+    boundary_json: dict[str, Any] = Field(default_factory=dict)
+    period_start: date | None = None
+    period_end: date | None = None
+    lifecycle_phase: str = "inference"
+    functional_unit: str = "1000_requests"
+    impact_type: ImpactType = "carbon"
+
     metrics: EnvironmentalMetrics = Field(default_factory=EnvironmentalMetrics)
+    measurement_source: str = "unknown"
+    provenance_class: ProvenanceClass = "unknown"
+    uncertainty_pct: float | None = Field(default=None, ge=0, le=100)
+    confidence_score: float | None = Field(default=None, ge=0.0, le=1.0)
+    intensity_vs_baseline: float | None = Field(default=None, ge=0)
+    mitigation_readiness: MitigationReadiness = "missing"
 
-    # Derived by the engine (optional on input).
-    evidence_confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
-    impact_tier: Optional[str] = None
-    recommendation: Optional[str] = None
+    # Derived by the engine. Optional on input.
+    risk_tier: RiskTier | None = None
+    recommendation: Recommendation | None = None
 
-    # Mitigation & evidence linkage.
+    mitigations_json: list[Mitigation] = Field(default_factory=list)
+    evidence_refs_json: list[str] = Field(default_factory=list)
+    not_applicable_controls: list[str] = Field(default_factory=list)
+    reviewer_state: str = "draft"
+    exception: EnvironmentalException | None = None
+    notes: str = ""
+
+    # Backward-compatible fields from the initial package.
+    source: str | None = None
+    boundary: str | None = None
+    assumptions: str | None = None
+    evidence_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    impact_tier: RiskTier | None = None
     mitigations: list[Mitigation] = Field(default_factory=list)
     evidence_refs: list[str] = Field(default_factory=list)
-    not_applicable_controls: list[str] = Field(default_factory=list)
 
-    @field_validator("impact_tier")
+    @field_validator("provenance_class", mode="before")
     @classmethod
-    def _valid_tier(cls, v: Optional[str]) -> Optional[str]:
-        if v is not None and v not in {"low", "medium", "high"}:
-            raise ValueError("impact_tier must be low, medium, or high")
-        return v
+    def _normalize_provenance(cls, value: str | None) -> str:
+        if value is None:
+            return "unknown"
+        normalized = str(value).strip().lower().replace("-", "_").replace(" ", "_")
+        aliases = {
+            "hardware_telemetry": "measured",
+            "metered": "measured",
+            "metered_feed": "measured",
+            "manual_estimate": "manual",
+            "cloud_api": "vendor_reported",
+            "cloud_billing": "vendor_reported",
+        }
+        return aliases.get(normalized, normalized)
 
-    @field_validator("recommendation")
-    @classmethod
-    def _valid_reco(cls, v: Optional[str]) -> Optional[str]:
-        if v is not None and v not in {"go", "conditional_go", "no_go"}:
-            raise ValueError("recommendation must be go, conditional_go, or no_go")
-        return v
+    def normalized_payload(self) -> dict[str, Any]:
+        """Return a domain-engine friendly mapping."""
+        data = self.model_dump(mode="json")
+        if self.source and self.provenance_class == "unknown":
+            data["provenance_class"] = self.source
+        if self.evidence_confidence is not None and self.confidence_score is None:
+            data["confidence_score"] = self.evidence_confidence
+        if self.impact_tier and not self.risk_tier:
+            data["risk_tier"] = self.impact_tier
+        if self.mitigations and not self.mitigations_json:
+            data["mitigations_json"] = [m.model_dump(mode="json") for m in self.mitigations]
+        if self.evidence_refs and not self.evidence_refs_json:
+            data["evidence_refs_json"] = list(self.evidence_refs)
+        if self.boundary and not self.boundary_json:
+            data["boundary_json"] = {"description": self.boundary}
+        if self.assumptions:
+            data.setdefault("boundary_json", {})["assumptions"] = self.assumptions
+        return data

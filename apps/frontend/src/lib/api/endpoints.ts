@@ -131,6 +131,7 @@ export const API_ENDPOINTS = {
     evidenceItem: (evidenceId: string) => `/api/v1/ai-governance/evidence-item/${evidenceId}`,
     evidenceItemLinks: (evidenceId: string) => `/api/v1/ai-governance/evidence-item/${evidenceId}/links`,
     evidenceItemLink: (evidenceId: string, linkId: string) => `/api/v1/ai-governance/evidence-item/${evidenceId}/links/${linkId}`,
+    environmentalImpact: (systemId: string) => `/api/v1/systems/${systemId}/environmental-impact`,
     remediation: '/api/v1/ai-governance/remediation',
     updateRemediation: (taskId: string) => `/api/v1/ai-governance/remediation/${taskId}`,
     approvalRequests: '/api/v1/ai-governance/approval-requests',

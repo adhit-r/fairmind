@@ -1,0 +1,37 @@
+{
+  "workload_id": "rag_inference",
+  "run_id": "smoke",
+  "functional_unit": "1000_queries",
+  "records": [
+    {
+      "method": "ecologits_estimate",
+      "duration_seconds": 65,
+      "energy_kwh": 0.095,
+      "location_carbon_intensity_g_co2e_per_kwh": 290.0,
+      "market_carbon_intensity_g_co2e_per_kwh": 210.0,
+      "carbon_intensity_basis": "average",
+      "provenance_class": "tool_estimated",
+      "uncertainty_pct": 18,
+      "impact_level": "low",
+      "intensity_vs_baseline": 0.76,
+      "mitigation_readiness": "documented",
+      "offsets_retired_kg_co2e": 0.0,
+      "notes": "Synthetic RAG query batch with estimator provenance."
+    },
+    {
+      "method": "provider_metadata",
+      "duration_seconds": 65,
+      "energy_kwh": 0.130,
+      "location_carbon_intensity_g_co2e_per_kwh": 290.0,
+      "market_carbon_intensity_g_co2e_per_kwh": 210.0,
+      "carbon_intensity_basis": "average",
+      "provenance_class": "vendor_reported",
+      "uncertainty_pct": 25,
+      "impact_level": "moderate",
+      "intensity_vs_baseline": 1.35,
+      "mitigation_readiness": "planned",
+      "offsets_retired_kg_co2e": 0.0,
+      "notes": "Provider metadata can support conditional release but remains capped."
+    }
+  ]
+}

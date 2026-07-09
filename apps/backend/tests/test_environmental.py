@@ -31,11 +31,10 @@ pytestmark = pytest.mark.unit
 @pytest.mark.parametrize(
     "source,expected_range",
     [
-        ("hardware_telemetry", (0.85, 1.00)),
-        ("cloud_api", (0.70, 0.85)),
-        ("tool_estimated", (0.50, 0.70)),
-        ("vendor_reported", (0.35, 0.55)),
-        ("manual_estimate", (0.20, 0.40)),
+        ("measured", (0.85, 1.00)),
+        ("tool_estimated", (0.60, 0.85)),
+        ("vendor_reported", (0.40, 0.60)),
+        ("manual", (0.20, 0.40)),
         ("unknown", (0.0, 0.0)),
     ],
 )
@@ -44,18 +43,32 @@ def test_confidence_ranges(source, expected_range):
 
 
 def test_confidence_range_aliases_and_unrecognized():
+    # Hardware telemetry is measured; cloud provider billing is vendor-reported.
     assert confidence_range("NVIDIA-SMI") == (0.85, 1.00)
-    assert confidence_range("aws") == (0.70, 0.85)
-    assert confidence_range("codecarbon") == (0.50, 0.70)
+    assert confidence_range("hardware_telemetry") == (0.85, 1.00)
+    assert confidence_range("aws") == (0.40, 0.60)
+    assert confidence_range("cloud_api") == (0.40, 0.60)
+    assert confidence_range("codecarbon") == (0.60, 0.85)
     # Unrecognised sources never get the benefit of the doubt.
     assert confidence_range("something_made_up") == (0.0, 0.0)
     assert confidence_range(None) == (0.0, 0.0)
 
 
 def test_confidence_from_source_midpoint():
-    assert confidence_from_source("hardware_telemetry") == 0.93
-    assert confidence_from_source("cloud_api") == 0.77
+    assert confidence_from_source("measured") == 0.93
+    assert confidence_from_source("vendor_reported") == 0.50
     assert confidence_from_source("unknown") == 0.0
+
+
+def test_confidence_capped_by_provenance():
+    from src.domain.environmental.confidence import cap_confidence_for_provenance
+    # A claimed score cannot exceed what the provenance class permits.
+    assert cap_confidence_for_provenance(0.95, "vendor_reported") == 0.60
+    assert cap_confidence_for_provenance(0.95, "measured") == 0.95
+    # Unknown provenance forces 0.0 regardless of any claimed score.
+    assert cap_confidence_for_provenance(0.95, "unknown") == 0.0
+    # No explicit score falls back to the provenance midpoint.
+    assert cap_confidence_for_provenance(None, "tool_estimated") == 0.72
 
 
 @pytest.mark.parametrize(
@@ -76,9 +89,10 @@ def test_band_from_score_boundaries(score, band):
 
 def test_get_confidence_band_from_source():
     assert get_confidence_band("hardware_telemetry") == "measured"
-    assert get_confidence_band("cloud_api") == "measured"
-    assert get_confidence_band("tool_estimated") == "estimated"
+    assert get_confidence_band("tool_estimated") == "measured"     # 0.60-0.85 midpoint 0.72
+    assert get_confidence_band("cloud_api") == "estimated"         # vendor-reported, 0.40-0.60
     assert get_confidence_band("vendor_reported") == "estimated"
+    assert get_confidence_band("manual") == "unknown"             # 0.20-0.40 midpoint 0.30
     assert get_confidence_band("unknown") == "unknown"
 
 
@@ -110,6 +124,27 @@ def test_impact_tier(phase, metric_key, value, tier):
 def test_impact_phase_aliases():
     assert impact_tier({"total_kg_co2e": 10.0}, "fine-tuning") == "low"
     assert impact_tier({"kg_co2e_per_1k_requests": 0.0005}, "batch") == "low"
+
+
+def test_impact_baseline_adjustment():
+    from src.domain.environmental.impact import adjust_impact_tier
+    # >1.25x baseline bumps the tier up (offsets/RECs cannot save it).
+    assert adjust_impact_tier("low", 1.5, 0.9) == "medium"
+    # <0.75x baseline downgrades only with measured-grade confidence.
+    assert adjust_impact_tier("high", 0.5, 0.9) == "medium"
+    assert adjust_impact_tier("high", 0.5, 0.4) == "high"   # low confidence: no downgrade
+    assert adjust_impact_tier("medium", None, 0.9) == "medium"
+
+
+def test_engine_applies_baseline_bump():
+    # Low raw tier (<100 kgCO2e) but 1.5x baseline -> bumped to medium.
+    result = run_assessment({
+        "lifecycle_phase": "training",
+        "source": "measured",
+        "metrics": {"total_kg_co2e_location": 40.0},
+        "intensity_vs_baseline": 1.5,
+    })
+    assert result.impact_tier == "medium"
 
 
 def test_impact_missing_metric_raises():
@@ -186,22 +221,22 @@ def _full_assessment():
         "lifecycle_phase": "training",
         "functional_unit": "one training run",
         "boundary": "training only, scope 2",
-        "source": "hardware_telemetry",
+        "source": "hardware_telemetry",  # -> measured provenance
         "evidence_confidence": 0.90,
+        "uncertainty_pct": 10.0,
         "recommendation": "go",
         "metrics": {
             "total_kwh": 120.0,
-            "total_kg_co2e": 60.0,
+            "total_kg_co2e_location": 60.0,
+            "total_kg_co2e_market": 55.0,
             "kg_co2e_per_1m_tokens": 0.4,
-            "wue_litres_per_kwh": 1.8,
-            "embodied_kg_co2e": 40.0,
-            "carbon_intensity_gco2e_kwh": 400.0,
         },
     }
 
 
 def test_coverage_full_assessment_all_present():
     statuses = coverage(_full_assessment())
+    assert set(statuses) == {"ENV-1", "ENV-2", "ENV-3", "ENV-4", "ENV-5", "ENV-6"}
     assert all(v == "present" for v in statuses.values())
     assert coverage_rate(_full_assessment()) == 1.0
 
@@ -212,54 +247,65 @@ def test_coverage_partial_assessment_rate():
         "functional_unit": "one run",
         "boundary": "scope 2",
         "source": "cloud_api",
-        "evidence_confidence": 0.78,
+        "evidence_confidence": 0.50,
         "recommendation": "go",
         "metrics": {"total_kwh": 120.0, "total_kg_co2e": 60.0},
     }
     statuses = coverage(partial)
     assert statuses["ENV-1"] == "present"
     assert statuses["ENV-2"] == "present"
-    assert statuses["ENV-3"] == "present"
+    assert statuses["ENV-3"] == "present"   # single total_kg_co2e satisfies both sides
     assert statuses["ENV-4"] == "missing"   # no per-unit efficiency metric
-    assert statuses["ENV-7"] == "missing"
-    # 5 of 9 applicable present (ENV-1,2,3,5,6) -> 5/9.
-    assert coverage_rate(partial) == round(5 / 9, 4)
+    assert statuses["ENV-5"] == "missing"   # no uncertainty_pct disclosed
+    assert statuses["ENV-6"] == "present"
+    # 4 of 6 present -> 4/6.
+    assert coverage_rate(partial) == round(4 / 6, 4)
 
 
-def test_coverage_not_applicable_excluded_from_rate():
-    partial = {
-        "lifecycle_phase": "training",
-        "functional_unit": "one run",
-        "boundary": "scope 2",
-        "source": "cloud_api",
-        "evidence_confidence": 0.78,
+def test_env3_requires_dual_carbon_or_total():
+    base = {
+        "lifecycle_phase": "training", "functional_unit": "one run", "boundary": "scope 2",
+        "source": "measured", "evidence_confidence": 0.9, "uncertainty_pct": 5.0,
         "recommendation": "go",
-        "metrics": {"total_kwh": 120.0, "total_kg_co2e": 60.0, "kg_co2e_per_1m_tokens": 0.4},
-        "not_applicable_controls": ["ENV-7", "ENV-8", "ENV-9"],
     }
-    statuses = coverage(partial)
-    assert statuses["ENV-7"] == "not_applicable"
-    # ENV-1..6 all present, ENV-7/8/9 waived -> 6/6 = 1.0.
-    assert coverage_rate(partial) == 1.0
+    # Location + market present -> ENV-3 present.
+    dual = {**base, "metrics": {"total_kg_co2e_location": 60.0, "total_kg_co2e_market": 55.0}}
+    assert coverage(dual)["ENV-3"] == "present"
+    # No carbon figure at all -> ENV-3 missing.
+    none = {**base, "metrics": {"total_kwh": 120.0}}
+    assert coverage(none)["ENV-3"] == "missing"
 
 
-def test_env6_flags_conditional_go_without_dated_mitigation():
+def test_env5_requires_uncertainty():
+    a = _full_assessment()
+    assert coverage(a)["ENV-5"] == "present"
+    a.pop("uncertainty_pct")
+    assert coverage(a)["ENV-5"] == "missing"
+
+
+def test_env6_conditional_go_mitigation_or_exception():
     assessment = {
         "lifecycle_phase": "training",
         "functional_unit": "one run",
         "boundary": "scope 2",
-        "source": "tool_estimated",
-        "evidence_confidence": 0.50,
+        "source": "measured",
+        "evidence_confidence": 0.90,
+        "uncertainty_pct": 8.0,
         "recommendation": "conditional_go",
         "metrics": {"total_kwh": 5000.0, "total_kg_co2e": 5000.0, "kg_co2e_per_1m_tokens": 5.0},
     }
-    # No mitigation -> ENV-6 missing.
+    # No mitigation / exception -> ENV-6 missing.
     assert coverage(assessment)["ENV-6"] == "missing"
-    # Add a dated mitigation -> ENV-6 present.
-    assessment["mitigations"] = [
+    # Dated mitigation -> present.
+    with_mit = {**assessment, "mitigations_json": [
         {"description": "Shift training to a low-carbon region", "target_date": "2026-09-01"}
-    ]
-    assert coverage(assessment)["ENV-6"] == "present"
+    ]}
+    assert coverage(with_mit)["ENV-6"] == "present"
+    # Owned, dated, justified exception -> present.
+    with_exc = {**assessment, "exception": {
+        "owner": "grc-lead", "expiry": "2026-12-31", "rationale": "One-off research run"
+    }}
+    assert coverage(with_exc)["ENV-6"] == "present"
 
 
 # ---------------------------------------------------------------------------
@@ -271,7 +317,7 @@ def test_engine_high_impact_estimated_confidence_is_no_go():
         "lifecycle_phase": "training",
         "boundary": "scope 2",
         "functional_unit": "one run",
-        "source": "tool_estimated",  # ~0.60 -> estimated
+        "source": "vendor_reported",  # midpoint 0.50 -> estimated
         "metrics": {"total_kg_co2e": 20_000.0},  # high
     })
     assert result.impact_tier == "high"
@@ -308,14 +354,25 @@ def test_engine_undisclosed_source_forced_no_go():
     })
     assert result.evidence_confidence == 0.0
     assert result.recommendation == "no_go"  # 0.0 forces no_go regardless of low impact
-    assert any("undisclosed" in w for w in result.warnings)
+    assert any("unknown provenance" in w for w in result.warnings)
 
 
-def test_engine_explicit_confidence_overrides_source():
+def test_engine_explicit_confidence_capped_by_provenance():
+    # A legitimate measured provenance honours a high explicit score.
     result = run_assessment({
         "lifecycle_phase": "training",
-        "source": "unknown",
-        "evidence_confidence": 0.95,  # explicit measured score wins over source
+        "source": "measured",
+        "evidence_confidence": 0.95,
         "metrics": {"total_kg_co2e": 10.0},  # low + measured -> go
     })
     assert result.recommendation == "go"
+
+    # An unknown provenance cannot be rescued by a claimed score -> forced no_go.
+    rescued = run_assessment({
+        "lifecycle_phase": "training",
+        "source": "unknown",
+        "evidence_confidence": 0.95,
+        "metrics": {"total_kg_co2e": 10.0},
+    })
+    assert rescued.evidence_confidence == 0.0
+    assert rescued.recommendation == "no_go"

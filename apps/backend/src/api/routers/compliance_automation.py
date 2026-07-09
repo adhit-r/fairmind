@@ -15,8 +15,11 @@ import asyncio
 from config.auth import get_current_user, require_admin
 from core.decorators.org_isolation import isolate_by_org
 from config.database import db_manager
-from src.infrastructure.db.database.models import ComplianceSchedule, ComplianceViolation
-from src.domain.compliance.services.compliance_automation_service import compliance_automation_service
+from src.application.services.api_boundary_dependencies import (
+    ComplianceSchedule,
+    ComplianceViolation,
+    compliance_automation_service,
+)
 from src.api.schemas.compliance_automation import (
     ScheduleCreateRequest,
     ScheduleUpdateRequest,

@@ -132,6 +132,23 @@ def _check_critical_remediation_gate(db: Session, ai_system_id: str) -> Optional
     return None
 
 
+def _check_environmental_impact_gate(db: Session, ai_system_id: str) -> Optional[str]:
+    """
+    Return a blocker message if the environmental release-gate does not pass for
+    the given AI system (no assessment, no_go, or an unmitigated conditional_go).
+    Returns None when the gate passes. Import is local so environmental support
+    stays optional and never breaks the core approval flow.
+    """
+    try:
+        from src.application.services.environmental_service import env_gate_status
+    except Exception:  # pragma: no cover - environmental module absent
+        return None
+    status = env_gate_status(db, ai_system_id)
+    if status.get("blocked"):
+        return f"Environmental gate ({status.get('code')}): {status.get('reason')}"
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Schemas
 # ---------------------------------------------------------------------------
@@ -333,6 +350,9 @@ async def approve_request(
         blocker = _check_critical_remediation_gate(db, ai_system_id)
         if blocker:
             raise HTTPException(status_code=409, detail=blocker)
+        env_blocker = _check_environmental_impact_gate(db, ai_system_id)
+        if env_blocker:
+            raise HTTPException(status_code=409, detail=env_blocker)
 
     now = _utc_now_iso()
     db.execute(

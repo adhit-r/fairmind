@@ -6,7 +6,7 @@ Replaces mock data with actual database operations
 import uuid
 import logging
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Mapping, Optional
 from sqlalchemy.orm import Session
 
 from database.repository import AIBOMRepository
@@ -24,6 +24,33 @@ from ..models.ai_bom import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _environmental_impact_metadata(metadata: Mapping[str, Any] | None) -> Dict[str, Any]:
+    """Ensure AI-BOM components expose FairMind-E environmental fields.
+
+    Legacy sustainability scores remain descriptive metadata only. Release
+    gating is driven by governance environmental assessments, not this score.
+    """
+    data = dict(metadata or {})
+    environmental = data.get("environmental_impact")
+    if not isinstance(environmental, Mapping):
+        environmental = {}
+    data["environmental_impact"] = {
+        "assessment_id": environmental.get("assessment_id"),
+        "evidence_id": environmental.get("evidence_id"),
+        "impact_type": environmental.get("impact_type", "carbon"),
+        "provenance_class": environmental.get("provenance_class", "unknown"),
+        "confidence_score": environmental.get("confidence_score"),
+        "recommendation": environmental.get("recommendation"),
+        "risk_tier": environmental.get("risk_tier"),
+        "total_kg_co2e_location": environmental.get("total_kg_co2e_location"),
+        "total_kg_co2e_market": environmental.get("total_kg_co2e_market"),
+        "kg_co2e_per_1000_requests": environmental.get("kg_co2e_per_1000_requests"),
+        "kg_co2e_per_1m_tokens": environmental.get("kg_co2e_per_1m_tokens"),
+        "legacy_sustainability_score": data.get("sustainability_score"),
+    }
+    return data
 
 class RealAIBOMService:
     """Real AI BOM service with database operations"""
@@ -75,7 +102,9 @@ class RealAIBOMService:
                         "risk_level": RiskLevel(component.risk_level),
                         "compliance_status": ComplianceStatus(component.compliance_status),
                         "dependencies": component.dependencies or [],
-                        "component_metadata": component.component_metadata or {}
+                        "component_metadata": _environmental_impact_metadata(
+                            component.component_metadata
+                        )
                     }
                     self.repository.create_component(component_data)
             
@@ -185,7 +214,7 @@ class RealAIBOMService:
             risk_level=db_component.risk_level.value,
             compliance_status=db_component.compliance_status.value,
             dependencies=db_component.dependencies or [],
-            component_metadata=db_component.component_metadata or {},
+            component_metadata=_environmental_impact_metadata(db_component.component_metadata),
             created_at=db_component.created_at,
             updated_at=db_component.updated_at
         )

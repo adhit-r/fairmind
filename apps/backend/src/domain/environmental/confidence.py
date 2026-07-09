@@ -1,65 +1,67 @@
 """
 Evidence-confidence scoring.
 
-Maps the *provenance* of an environmental measurement to a numeric confidence
-score in [0.0, 1.0] and a coarse band (measured / estimated / unknown). This is
-the distinguishing primitive of FairMind-E: we gate on whether the carbon number
-can be *trusted*, not just on its magnitude.
+Maps the *provenance class* of an environmental measurement to a numeric
+confidence score in [0.0, 1.0] and a coarse band (measured / estimated /
+unknown). Provenance is categorical and separate from quantified uncertainty.
 
 Confidence bands (used by the decision matrix columns):
     measured   score >= 0.70
     estimated  0.35 <= score < 0.70
     unknown    score < 0.35
 
-Provenance -> confidence ranges. The lower the human/assumption content of the
-measurement, the higher the trust:
+Provenance -> confidence ranges:
 
-    hardware telemetry (IPMI / RAPL / NVIDIA-SMI)        0.85 - 1.00
-    cloud billing API (AWS / GCP / Azure)               0.70 - 0.85
-    tool-estimated (CodeCarbon / EcoLogits / Green Algo) 0.50 - 0.70
-    vendor-reported (TDP x runtime)                      0.35 - 0.55
-    manual FLOP estimate                                 0.20 - 0.40
-    unknown / undisclosed                                0.00
+    measured        0.85 - 1.00
+    tool_estimated  0.60 - 0.85
+    vendor_reported 0.40 - 0.60
+    manual          0.20 - 0.40
+    unknown         0.00
 
-These ranges are part of the paper's confidence-mapping table; keep code and
-paper in sync.
+Vendor-reported evidence is capped at 0.60. Offsets and RECs never improve
+confidence.
 """
 
 from __future__ import annotations
 
-# Canonical measurement-source keys -> (min_confidence, max_confidence).
+# Canonical provenance class keys -> (min_confidence, max_confidence).
 CONFIDENCE_RANGES: dict[str, tuple[float, float]] = {
-    "hardware_telemetry": (0.85, 1.00),
-    "cloud_api": (0.70, 0.85),
-    "tool_estimated": (0.50, 0.70),
-    "vendor_reported": (0.35, 0.55),
-    "manual_estimate": (0.20, 0.40),
+    "measured": (0.85, 1.00),
+    "tool_estimated": (0.60, 0.85),
+    "vendor_reported": (0.40, 0.60),
+    "manual": (0.20, 0.40),
     "unknown": (0.0, 0.0),
 }
 
-# Common aliases callers may pass, normalised to a canonical source key.
+# Common aliases callers may pass, normalised to a canonical provenance class.
 _SOURCE_ALIASES: dict[str, str] = {
-    "hardware": "hardware_telemetry",
-    "telemetry": "hardware_telemetry",
-    "ipmi": "hardware_telemetry",
-    "rapl": "hardware_telemetry",
-    "nvidia_smi": "hardware_telemetry",
-    "nvidia-smi": "hardware_telemetry",
-    "cloud": "cloud_api",
-    "cloud_billing": "cloud_api",
-    "billing_api": "cloud_api",
-    "aws": "cloud_api",
-    "gcp": "cloud_api",
-    "azure": "cloud_api",
+    "hardware": "measured",
+    "hardware_telemetry": "measured",
+    "telemetry": "measured",
+    "metered": "measured",
+    "metered_feed": "measured",
+    "ipmi": "measured",
+    "rapl": "measured",
+    "nvidia_smi": "measured",
+    "nvidia-smi": "measured",
+    "cloud": "vendor_reported",
+    "cloud_api": "vendor_reported",
+    "cloud_billing": "vendor_reported",
+    "billing_api": "vendor_reported",
+    "aws": "vendor_reported",
+    "gcp": "vendor_reported",
+    "azure": "vendor_reported",
     "tool": "tool_estimated",
     "codecarbon": "tool_estimated",
     "ecologits": "tool_estimated",
     "green_algorithms": "tool_estimated",
     "vendor": "vendor_reported",
+    "provider": "vendor_reported",
+    "cloud_provider": "vendor_reported",
     "tdp": "vendor_reported",
-    "manual": "manual_estimate",
-    "flop_estimate": "manual_estimate",
-    "manual_flop": "manual_estimate",
+    "manual_estimate": "manual",
+    "flop_estimate": "manual",
+    "manual_flop": "manual",
     "undisclosed": "unknown",
     "none": "unknown",
     "": "unknown",
@@ -71,7 +73,7 @@ ESTIMATED_THRESHOLD = 0.35
 
 
 def normalize_source(source: str | None) -> str:
-    """Return the canonical source key for an arbitrary caller-supplied source."""
+    """Return the canonical provenance class for a caller-supplied source."""
     if source is None:
         return "unknown"
     key = str(source).strip().lower().replace(" ", "_").replace("-", "_")
@@ -80,8 +82,13 @@ def normalize_source(source: str | None) -> str:
     return _SOURCE_ALIASES.get(key, "unknown")
 
 
+def normalize_provenance(provenance_class: str | None) -> str:
+    """Return the canonical FairMind-E provenance class."""
+    return normalize_source(provenance_class)
+
+
 def confidence_range(source: str | None) -> tuple[float, float]:
-    """Return the (min, max) confidence range for a measurement source.
+    """Return the (min, max) confidence range for a provenance class.
 
     Unrecognised sources fall back to the ``unknown`` range (0.0, 0.0) — an
     undisclosed source is never given the benefit of the doubt.
@@ -90,14 +97,24 @@ def confidence_range(source: str | None) -> tuple[float, float]:
 
 
 def confidence_from_source(source: str | None) -> float:
-    """Map a measurement source to a single representative confidence score.
+    """Map a provenance class to a single representative confidence score.
 
-    Uses the midpoint of the provenance range, rounded to two decimals. Callers
-    that have a more precise score (e.g. a tool that reports its own uncertainty)
-    should pass that score directly to the decision matrix instead.
+    Uses the midpoint of the provenance range, rounded to two decimals.
     """
     low, high = confidence_range(source)
     return round((low + high) / 2, 2)
+
+
+def cap_confidence_for_provenance(score: float | None, provenance_class: str | None) -> float:
+    """Apply provenance caps to a caller-supplied confidence score."""
+    provenance = normalize_provenance(provenance_class)
+    if provenance == "unknown":
+        return 0.0
+    if score is None:
+        return confidence_from_source(provenance)
+    bounded = max(0.0, min(float(score), 1.0))
+    _, high = CONFIDENCE_RANGES[provenance]
+    return round(min(bounded, high), 4)
 
 
 def band_from_score(score: float) -> str:
@@ -110,5 +127,5 @@ def band_from_score(score: float) -> str:
 
 
 def get_confidence_band(source: str | None) -> str:
-    """Map a measurement source to its confidence band via its representative score."""
+    """Map a provenance class to its confidence band via its representative score."""
     return band_from_score(confidence_from_source(source))

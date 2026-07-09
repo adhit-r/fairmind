@@ -1,0 +1,52 @@
+{
+  "workload_id": "transformer_finetune",
+  "run_id": "smoke",
+  "functional_unit": "1000_finetune_examples",
+  "records": [
+    {
+      "method": "metered_gpu_power",
+      "duration_seconds": 180,
+      "energy_kwh": 1.850,
+      "location_carbon_intensity_g_co2e_per_kwh": 430.0,
+      "market_carbon_intensity_g_co2e_per_kwh": 300.0,
+      "carbon_intensity_basis": "average",
+      "provenance_class": "measured",
+      "uncertainty_pct": 8,
+      "impact_level": "high",
+      "intensity_vs_baseline": 2.40,
+      "mitigation_readiness": "documented",
+      "offsets_retired_kg_co2e": 0.0,
+      "notes": "High-impact measured run with documented mitigations remains conditional_go."
+    },
+    {
+      "method": "codecarbon_estimate",
+      "duration_seconds": 180,
+      "energy_kwh": 1.620,
+      "location_carbon_intensity_g_co2e_per_kwh": 430.0,
+      "market_carbon_intensity_g_co2e_per_kwh": 300.0,
+      "carbon_intensity_basis": "average",
+      "provenance_class": "tool_estimated",
+      "uncertainty_pct": 22,
+      "impact_level": "high",
+      "intensity_vs_baseline": 2.05,
+      "mitigation_readiness": "planned",
+      "offsets_retired_kg_co2e": 0.0,
+      "notes": "Tool-estimated high-impact run needs stronger evidence or mitigation."
+    },
+    {
+      "method": "manual_gpu_hour_estimate",
+      "duration_seconds": 180,
+      "energy_kwh": 1.900,
+      "location_carbon_intensity_g_co2e_per_kwh": 430.0,
+      "market_carbon_intensity_g_co2e_per_kwh": 300.0,
+      "carbon_intensity_basis": "average",
+      "provenance_class": "manual",
+      "uncertainty_pct": 55,
+      "impact_level": "high",
+      "intensity_vs_baseline": 2.50,
+      "mitigation_readiness": "none",
+      "offsets_retired_kg_co2e": 1.0,
+      "notes": "Manual high-impact evidence is blocked even with offset disclosure."
+    }
+  ]
+}
