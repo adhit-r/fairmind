@@ -16,6 +16,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     String,
@@ -138,7 +139,16 @@ class GovernanceWorkspace(Base):
     updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
 
     # Relationships
-    ai_systems = relationship("GovernanceAISystem", back_populates="workspace", cascade="all, delete-orphan")
+    ai_systems = relationship(
+        "GovernanceAISystem",
+        back_populates="workspace",
+        cascade="all, delete-orphan",
+        foreign_keys="GovernanceAISystem.workspace_id",
+    )
+
+    __table_args__ = (
+        UniqueConstraint("id", "org_id", name="uq_governance_workspace_org"),
+    )
 
     def __repr__(self) -> str:
         return f"<GovernanceWorkspace(id={self.id}, name={self.name})>"
@@ -219,11 +229,16 @@ class GovernanceFrameworkAssignment(Base):
     updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
 
     __table_args__ = (
+        UniqueConstraint("id", "system_id", "org_id", name="uq_governance_assignment_tenant"),
         UniqueConstraint(
             "org_id",
             "system_id",
             "framework_version_id",
             name="uq_governance_framework_assignment",
+        ),
+        ForeignKeyConstraint(
+            ["system_id", "org_id"],
+            ["governance_ai_systems.id", "governance_ai_systems.org_id"],
         ),
     )
 
@@ -260,10 +275,19 @@ class GovernanceControlAssessment(Base):
     updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
 
     __table_args__ = (
+        UniqueConstraint("id", "system_id", "org_id", name="uq_governance_assessment_tenant"),
         UniqueConstraint(
             "framework_assignment_id",
             "control_definition_id",
             name="uq_governance_control_assessment",
+        ),
+        ForeignKeyConstraint(
+            ["framework_assignment_id", "system_id", "org_id"],
+            [
+                "governance_framework_assignments.id",
+                "governance_framework_assignments.system_id",
+                "governance_framework_assignments.org_id",
+            ],
         ),
     )
 
@@ -275,6 +299,12 @@ class GovernanceEvidenceRun(Base):
 
     id = Column(String, primary_key=True, default=_new_id)
     org_id = Column(String, nullable=False, index=True)
+    system_id = Column(
+        String,
+        ForeignKey("governance_ai_systems.id"),
+        nullable=False,
+        index=True,
+    )
     source_type = Column(String, nullable=False)
     source_identifier = Column(String, nullable=False)
     run_id = Column(String, nullable=False)
@@ -282,6 +312,7 @@ class GovernanceEvidenceRun(Base):
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
 
     __table_args__ = (
+        UniqueConstraint("id", "system_id", "org_id", name="uq_governance_evidence_run_tenant"),
         UniqueConstraint(
             "org_id",
             "source_type",
@@ -289,6 +320,10 @@ class GovernanceEvidenceRun(Base):
             "run_id",
             "content_hash",
             name="uq_governance_evidence_run",
+        ),
+        ForeignKeyConstraint(
+            ["system_id", "org_id"],
+            ["governance_ai_systems.id", "governance_ai_systems.org_id"],
         ),
     )
 
@@ -300,6 +335,12 @@ class GovernanceControlEvidence(Base):
 
     id = Column(String, primary_key=True, default=_new_id)
     org_id = Column(String, nullable=False, index=True)
+    system_id = Column(
+        String,
+        ForeignKey("governance_ai_systems.id"),
+        nullable=False,
+        index=True,
+    )
     evidence_id = Column(
         String,
         ForeignKey("governance_evidence_runs.id"),
@@ -323,6 +364,26 @@ class GovernanceControlEvidence(Base):
             "control_assessment_id",
             name="uq_governance_control_evidence",
         ),
+        ForeignKeyConstraint(
+            ["system_id", "org_id"],
+            ["governance_ai_systems.id", "governance_ai_systems.org_id"],
+        ),
+        ForeignKeyConstraint(
+            ["evidence_id", "system_id", "org_id"],
+            [
+                "governance_evidence_runs.id",
+                "governance_evidence_runs.system_id",
+                "governance_evidence_runs.org_id",
+            ],
+        ),
+        ForeignKeyConstraint(
+            ["control_assessment_id", "system_id", "org_id"],
+            [
+                "governance_control_assessments.id",
+                "governance_control_assessments.system_id",
+                "governance_control_assessments.org_id",
+            ],
+        ),
     )
 
 
@@ -333,6 +394,7 @@ class GovernanceAISystem(Base):
 
     id = Column(String, primary_key=True, default=_new_id)
     workspace_id = Column(String, ForeignKey("governance_workspaces.id"), nullable=False, index=True)
+    org_id = Column(String, nullable=True, index=True)
     name = Column(String, nullable=False)
     system_type = Column(String, nullable=True)
     version = Column(String, nullable=True)
@@ -346,8 +408,17 @@ class GovernanceAISystem(Base):
     updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
 
     # Relationships
-    workspace = relationship("GovernanceWorkspace", back_populates="ai_systems")
-    evidence_items = relationship("GovernanceEvidence", back_populates="ai_system", cascade="all, delete-orphan")
+    workspace = relationship(
+        "GovernanceWorkspace",
+        back_populates="ai_systems",
+        foreign_keys=[workspace_id],
+    )
+    evidence_items = relationship(
+        "GovernanceEvidence",
+        back_populates="ai_system",
+        cascade="all, delete-orphan",
+        foreign_keys="GovernanceEvidence.system_id",
+    )
     environmental_assessments = relationship(
         "GovernanceEnvironmentalAssessment",
         back_populates="ai_system",
@@ -359,6 +430,11 @@ class GovernanceAISystem(Base):
 
     __table_args__ = (
         Index("idx_governance_ai_systems_workspace_id", "workspace_id"),
+        UniqueConstraint("id", "org_id", name="uq_governance_ai_system_tenant"),
+        ForeignKeyConstraint(
+            ["workspace_id", "org_id"],
+            ["governance_workspaces.id", "governance_workspaces.org_id"],
+        ),
     )
 
     def __repr__(self) -> str:
@@ -397,6 +473,7 @@ class GovernanceEvidence(Base):
 
     id = Column(String, primary_key=True, default=_new_id)
     system_id = Column(String, ForeignKey("governance_ai_systems.id"), nullable=False, index=True)
+    org_id = Column(String, nullable=True, index=True)
     control_id = Column(String, nullable=True, index=True)
     evidence_type = Column(String, nullable=False)
     title = Column(String, nullable=True)
@@ -410,12 +487,20 @@ class GovernanceEvidence(Base):
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
 
     # Relationships
-    ai_system = relationship("GovernanceAISystem", back_populates="evidence_items")
+    ai_system = relationship(
+        "GovernanceAISystem",
+        back_populates="evidence_items",
+        foreign_keys=[system_id],
+    )
     evidence_links = relationship("GovernanceEvidenceLink", back_populates="evidence", cascade="all, delete-orphan")
 
     __table_args__ = (
         Index("idx_governance_evidence_system_id", "system_id"),
         Index("idx_governance_evidence_control_id", "control_id"),
+        ForeignKeyConstraint(
+            ["system_id", "org_id"],
+            ["governance_ai_systems.id", "governance_ai_systems.org_id"],
+        ),
     )
 
     def __repr__(self) -> str:
