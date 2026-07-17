@@ -11,7 +11,7 @@
 
 ## Validation
 
-- `bun test src/lib/api/hooks/useGovernanceAssurance.test.ts` passes, 4 tests.
+- `bun test src/lib/api/hooks/useGovernanceAssurance.test.ts` passes, 6 tests.
 - `./node_modules/.bin/tsc --noEmit --pretty false` passes.
 - `npm run build` passes.
 
