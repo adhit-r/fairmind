@@ -15,7 +15,11 @@ from sqlalchemy.orm import Session
 from config.auth import TokenData, get_current_active_user
 from database.connection import get_db
 from src.application.services.framework_catalog_service import FrameworkCatalogService
-from src.application.services.governance_assurance_service import GovernanceAssuranceService, OrgMembership
+from src.application.services.governance_assurance_service import (
+    EvidenceRunConflictError,
+    GovernanceAssuranceService,
+    OrgMembership,
+)
 
 
 router = APIRouter(prefix="/organizations/{org_id}", tags=["governance-assurance"])
@@ -51,6 +55,50 @@ class AssessmentUpdateRequest(BaseModel):
     status: str | None = None
     applicability: str | None = None
     owner: str | None = None
+
+
+class EvidenceRunEnvelope(BaseModel):
+    """A compact, immutable evaluation or integration evidence envelope."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    source_type: str = Field(alias="sourceType", min_length=1)
+    source_identifier: str = Field(alias="sourceIdentifier", min_length=1)
+    run_id: str = Field(alias="runId", min_length=1)
+    result: str = Field(default="unknown", min_length=1)
+    captured_at: str | None = Field(default=None, alias="capturedAt")
+    expires_at: str | None = Field(default=None, alias="expiresAt")
+    suite_name: str | None = Field(default=None, alias="suiteName")
+    suite_version: str | None = Field(default=None, alias="suiteVersion")
+    trigger: str | None = None
+    subject_version: str | None = Field(default=None, alias="subjectVersion")
+    dataset_hash: str | None = Field(default=None, alias="datasetHash")
+    configuration_hash: str | None = Field(default=None, alias="configurationHash")
+    thresholds: dict[str, object] = Field(default_factory=dict)
+    seed: str | int | None = None
+    runner_version: str | None = Field(default=None, alias="runnerVersion")
+    runner_digest: str | None = Field(default=None, alias="runnerDigest")
+    summary: dict[str, object] = Field(default_factory=dict)
+    limitations: list[str] = Field(default_factory=list)
+    artifact_references: list[dict[str, str]] = Field(default_factory=list, alias="artifactReferences")
+    retention: str | None = None
+    assurance_source: str = Field(default="fairmind_internal", alias="assuranceSource")
+    third_party_assessor: dict[str, str] | None = Field(default=None, alias="thirdPartyAssessor")
+    control_external_ids: list[str] = Field(default_factory=list, alias="controlExternalIds")
+    evaluation_tags: list[str] = Field(default_factory=list, alias="evaluationTags")
+
+class EvidenceMappingRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    control_assessment_id: str = Field(alias="controlAssessmentId", min_length=1)
+    rationale: str | None = None
+
+
+class EvidenceMappingReviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    state: str = Field(pattern="^(accepted|rejected)$")
+    rationale: str | None = None
 
 
 def organization_membership(
@@ -235,3 +283,71 @@ def assignment_readiness(
     if readiness is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Framework assignment not found")
     return readiness
+
+
+@router.post("/systems/{system_id}/evidence-runs")
+def ingest_evidence_run(
+    system_id: str,
+    envelope: EvidenceRunEnvelope,
+    membership: OrgMembership = Depends(organization_membership),
+    db: Session = Depends(get_db),
+):
+    service = _service(db)
+    _require_mutation(membership, service)
+    try:
+        run, created = service.ingest_evidence_run(
+            membership.org_id, system_id, envelope.model_dump(), membership.user_id
+        )
+    except EvidenceRunConflictError as error:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)) from error
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="AI system not found")
+    return JSONResponse(run, status_code=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+
+@router.get("/systems/{system_id}/evidence-runs")
+def list_evidence_runs(
+    system_id: str,
+    membership: OrgMembership = Depends(organization_membership),
+    db: Session = Depends(get_db),
+) -> list[dict]:
+    runs = _service(db).list_evidence_runs(membership.org_id, system_id)
+    if runs is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="AI system not found")
+    return runs
+
+
+@router.post("/evidence/{evidence_id}/control-mappings")
+def create_evidence_mapping(
+    evidence_id: str,
+    request: EvidenceMappingRequest,
+    membership: OrgMembership = Depends(organization_membership),
+    db: Session = Depends(get_db),
+):
+    service = _service(db)
+    _require_mutation(membership, service)
+    mapping, created = service.create_evidence_mapping(
+        membership.org_id, evidence_id, request.control_assessment_id, request.rationale
+    )
+    if mapping is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evidence or control assessment not found")
+    return JSONResponse(mapping, status_code=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+
+@router.post("/evidence-mappings/{mapping_id}/review")
+def review_evidence_mapping(
+    mapping_id: str,
+    request: EvidenceMappingReviewRequest,
+    membership: OrgMembership = Depends(organization_membership),
+    db: Session = Depends(get_db),
+) -> dict:
+    service = _service(db)
+    _require_mutation(membership, service)
+    mapping = service.review_evidence_mapping(
+        membership.org_id, mapping_id, request.state, membership.user_id, request.rationale
+    )
+    if mapping is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evidence mapping not found")
+    return mapping

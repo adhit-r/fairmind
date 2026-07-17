@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+import re
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -15,6 +18,7 @@ from database.governance_models import (
     GovernanceControlAssessment,
     GovernanceControlDefinition,
     GovernanceControlEvidence,
+    GovernanceEvidence,
     GovernanceEvidenceRun,
     GovernanceFrameworkAssignment,
     GovernanceFrameworkVersion,
@@ -26,6 +30,14 @@ from database.models import OrganizationMember, OrganizationRole
 MUTATION_PERMISSION = "model:write"
 _CONTROL_STATUSES = {"not_started", "partial", "ready_for_review", "accepted", "rejected"}
 _APPLICABILITY = {"applicable", "not_applicable", "pending"}
+_MAPPING_STATES = {"candidate", "accepted", "rejected"}
+# Deliberately empty until a deployment declares stable evaluation tags.  This
+# avoids inferring controls from free-form result text.
+EVALUATION_TAG_CONTROL_IDS: dict[str, tuple[str, ...]] = {}
+
+
+class EvidenceRunConflictError(ValueError):
+    """Raised when an immutable source-run identity changes content."""
 
 
 @dataclass(frozen=True)
@@ -45,6 +57,10 @@ def _uuid(value: str) -> uuid.UUID | None:
         return uuid.UUID(value)
     except ValueError:
         return None
+
+
+def _canonical_json(value: object) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
 class GovernanceAssuranceService:
@@ -304,6 +320,162 @@ class GovernanceAssuranceService:
         self.db.commit()
         return dict(self.db.execute(select(assessments).where(assessments.c.id == assessment_id)).mappings().one())
 
+    def ingest_evidence_run(self, org_id: str, system_id: str, envelope: dict, actor_id: str) -> tuple[dict | None, bool]:
+        systems, runs, evidence, mappings = (
+            GovernanceAISystem.__table__,
+            GovernanceEvidenceRun.__table__,
+            GovernanceEvidence.__table__,
+            GovernanceControlEvidence.__table__,
+        )
+        if not self.db.execute(
+            select(systems.c.id).where(systems.c.id == system_id, systems.c.org_id == org_id)
+        ).scalar_one_or_none():
+            return None, False
+        if envelope.get("assurance_source") == "third_party":
+            assessor = envelope.get("third_party_assessor") or {}
+            if not assessor.get("identity") or not assessor.get("independence"):
+                raise ValueError("Third-party evidence requires assessor identity and independence")
+        canonical = _canonical_json(envelope)
+        content_hash = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        key = (
+            org_id,
+            envelope["source_type"],
+            envelope["source_identifier"],
+            envelope["run_id"],
+            content_hash,
+        )
+        source_run = self.db.execute(
+            select(runs.c.id, runs.c.content_hash).where(
+                runs.c.org_id == key[0], runs.c.source_type == key[1],
+                runs.c.source_identifier == key[2], runs.c.run_id == key[3],
+            )
+        ).mappings().one_or_none()
+        if source_run and source_run["content_hash"] != content_hash:
+            raise EvidenceRunConflictError("Evidence run content is immutable")
+        existing = self.db.execute(
+            select(runs.c.id).where(
+                runs.c.org_id == key[0], runs.c.source_type == key[1],
+                runs.c.source_identifier == key[2], runs.c.run_id == key[3], runs.c.content_hash == key[4],
+            )
+        ).scalar_one_or_none()
+        if existing:
+            return self._evidence_run(existing), False
+        now, run_id, evidence_id = _now(), str(uuid.uuid4()), str(uuid.uuid4())
+        try:
+            self.db.execute(
+                insert(runs).values(
+                    id=run_id, org_id=org_id, system_id=system_id,
+                    source_type=envelope["source_type"], source_identifier=envelope["source_identifier"],
+                    run_id=envelope["run_id"], content_hash=content_hash, result=envelope.get("result", "unknown"),
+                    provenance_json=canonical, artifact_refs_json=_canonical_json(envelope.get("artifact_references", [])),
+                    limitations_json=_canonical_json(envelope.get("limitations", [])),
+                    captured_at=envelope.get("captured_at"), expires_at=envelope.get("expires_at"),
+                    evidence_id=evidence_id, created_at=now,
+                )
+            )
+            self.db.execute(
+                insert(evidence).values(
+                    id=evidence_id, org_id=org_id, system_id=system_id, source_run_id=run_id,
+                    evidence_type="evaluation_run", title=f"{envelope['source_identifier']} {envelope['run_id']}",
+                    source=envelope["source_type"], content_json=_canonical_json(envelope.get("summary", {})),
+                    status=envelope.get("result", "unknown"), uploaded_by=actor_id,
+                    metadata_json=_canonical_json({"contentHash": content_hash, "artifactReferences": envelope.get("artifact_references", [])}),
+                    captured_at=envelope.get("captured_at"), created_at=now,
+                )
+            )
+            control_ids = set(envelope.get("control_external_ids", []))
+            for tag in envelope.get("evaluation_tags", []):
+                control_ids.update(EVALUATION_TAG_CONTROL_IDS.get(tag, ()))
+            if control_ids:
+                assessments, controls = GovernanceControlAssessment.__table__, GovernanceControlDefinition.__table__
+                candidates = list(self.db.execute(
+                    select(assessments.c.id).join(controls, controls.c.id == assessments.c.control_definition_id).where(
+                        assessments.c.org_id == org_id, assessments.c.system_id == system_id,
+                        controls.c.external_id.in_(control_ids),
+                    )
+                ).scalars())
+                mapping_values = [
+                    {
+                        "id": str(uuid.uuid4()), "org_id": org_id, "system_id": system_id,
+                        "evidence_id": run_id, "artifact_evidence_id": evidence_id,
+                        "control_assessment_id": assessment_id, "state": "candidate",
+                        "mapping_rationale": "Explicit evaluation control identifier.",
+                        "created_at": now, "updated_at": now,
+                    }
+                    for assessment_id in candidates
+                ]
+                if mapping_values:
+                    self.db.execute(insert(mappings), mapping_values)
+            self.db.commit()
+        except IntegrityError:
+            self.db.rollback()
+            existing = self.db.execute(
+                select(runs.c.id).where(
+                    runs.c.org_id == key[0], runs.c.source_type == key[1],
+                    runs.c.source_identifier == key[2], runs.c.run_id == key[3], runs.c.content_hash == key[4],
+                )
+            ).scalar_one_or_none()
+            return (self._evidence_run(existing), False) if existing else (None, False)
+        return self._evidence_run(run_id), True
+
+    def list_evidence_runs(self, org_id: str, system_id: str) -> list[dict] | None:
+        systems, runs = GovernanceAISystem.__table__, GovernanceEvidenceRun.__table__
+        if not self.db.execute(select(systems.c.id).where(systems.c.id == system_id, systems.c.org_id == org_id)).scalar_one_or_none():
+            return None
+        return [self._evidence_run(run_id) for run_id in self.db.execute(
+            select(runs.c.id).where(runs.c.org_id == org_id, runs.c.system_id == system_id).order_by(runs.c.created_at.desc())
+        ).scalars()]
+
+    def create_evidence_mapping(self, org_id: str, evidence_id: str, assessment_id: str, rationale: str | None) -> tuple[dict | None, bool]:
+        evidence, runs, assessments, mappings = (
+            GovernanceEvidence.__table__, GovernanceEvidenceRun.__table__, GovernanceControlAssessment.__table__, GovernanceControlEvidence.__table__)
+        artifact = self.db.execute(select(evidence).where(evidence.c.id == evidence_id, evidence.c.org_id == org_id)).mappings().one_or_none()
+        assessment = self.db.execute(select(assessments).where(assessments.c.id == assessment_id, assessments.c.org_id == org_id)).mappings().one_or_none()
+        if not artifact or not assessment or artifact["system_id"] != assessment["system_id"] or not artifact["source_run_id"]:
+            return None, False
+        run = self.db.execute(select(runs.c.id).where(runs.c.id == artifact["source_run_id"], runs.c.org_id == org_id)).scalar_one_or_none()
+        if not run:
+            return None, False
+        existing = self.db.execute(select(mappings.c.id).where(mappings.c.evidence_id == run, mappings.c.control_assessment_id == assessment_id)).scalar_one_or_none()
+        if existing:
+            return self._mapping(existing), False
+        mapping_id, now = str(uuid.uuid4()), _now()
+        self.db.execute(insert(mappings).values(id=mapping_id, org_id=org_id, system_id=artifact["system_id"], evidence_id=run, artifact_evidence_id=evidence_id, control_assessment_id=assessment_id, state="candidate", mapping_rationale=rationale, created_at=now, updated_at=now))
+        self.db.commit()
+        return self._mapping(mapping_id), True
+
+    def review_evidence_mapping(self, org_id: str, mapping_id: str, state: str, actor_id: str, rationale: str | None) -> dict | None:
+        if state not in _MAPPING_STATES - {"candidate"}:
+            raise ValueError("Review state must be accepted or rejected")
+        mappings = GovernanceControlEvidence.__table__
+        row = self.db.execute(select(mappings).where(mappings.c.id == mapping_id, mappings.c.org_id == org_id)).mappings().one_or_none()
+        if not row:
+            return None
+        history = json.loads(row["review_history_json"] or "[]")
+        reviewed_at = _now()
+        history.append({"state": state, "rationale": rationale, "reviewedBy": actor_id, "reviewedAt": reviewed_at})
+        self.db.execute(update(mappings).where(mappings.c.id == mapping_id).values(state=state, mapping_rationale=rationale, reviewed_by=actor_id, reviewed_at=reviewed_at, review_history_json=_canonical_json(history), updated_at=reviewed_at))
+        self.db.commit()
+        return self._mapping(mapping_id)
+
+    def _evidence_run(self, run_id: str) -> dict:
+        runs, mappings = GovernanceEvidenceRun.__table__, GovernanceControlEvidence.__table__
+        row = self.db.execute(select(runs).where(runs.c.id == run_id)).mappings().one()
+        return {
+            "id": row["id"], "runId": row["run_id"], "evidenceId": row["evidence_id"],
+            "contentHash": row["content_hash"], "result": row["result"], "sourceType": row["source_type"],
+            "sourceIdentifier": row["source_identifier"], "capturedAt": row["captured_at"],
+            "candidateMappings": [self._mapping(mapping_id) for mapping_id in self.db.execute(select(mappings.c.id).where(mappings.c.evidence_id == run_id)).scalars()],
+        }
+
+    def _mapping(self, mapping_id: str) -> dict:
+        row = self.db.execute(select(GovernanceControlEvidence.__table__).where(GovernanceControlEvidence.__table__.c.id == mapping_id)).mappings().one()
+        return {
+            "id": row["id"], "evidenceId": row["artifact_evidence_id"], "controlAssessmentId": row["control_assessment_id"],
+            "state": row["state"], "rationale": row["mapping_rationale"],
+            "reviewHistory": json.loads(row["review_history_json"] or "[]"),
+        }
+
     def readiness(self, org_id: str, assignment_id: str) -> dict | None:
         assignments, assessments = GovernanceFrameworkAssignment.__table__, GovernanceControlAssessment.__table__
         if not self.db.execute(
@@ -387,5 +559,11 @@ def _is_stale(created_at: str, frequency: str) -> bool:
         "quarterly": 92,
         "annual": 366,
     }
-    threshold = next((days for label, days in frequency_days.items() if label in (frequency or "").lower()), 366)
+    normalized = (frequency or "").lower()
+    interval = re.search(r"every\s+(\d+)\s+months?", normalized)
+    if interval:
+        months = int(interval.group(1))
+        threshold = {3: 92, 6: 183, 12: 366}.get(months, months * 31)
+    else:
+        threshold = next((days for label, days in frequency_days.items() if label in normalized), 366)
     return datetime.now(timezone.utc) - captured.astimezone(timezone.utc) > timedelta(days=threshold)

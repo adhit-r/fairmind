@@ -144,6 +144,13 @@ CREATE TABLE IF NOT EXISTS governance_evidence_runs (
     source_identifier TEXT NOT NULL,
     run_id TEXT NOT NULL,
     content_hash TEXT NOT NULL,
+    result TEXT NOT NULL DEFAULT 'unknown',
+    provenance_json TEXT NOT NULL DEFAULT '{}',
+    artifact_refs_json TEXT NOT NULL DEFAULT '[]',
+    limitations_json TEXT NOT NULL DEFAULT '[]',
+    captured_at TEXT,
+    expires_at TEXT,
+    evidence_id TEXT,
     created_at TEXT NOT NULL,
     CONSTRAINT uq_governance_evidence_run_tenant UNIQUE (id, system_id, org_id),
     CONSTRAINT uq_governance_evidence_run UNIQUE (org_id, source_type, source_identifier, run_id, content_hash),
@@ -161,6 +168,10 @@ CREATE TABLE IF NOT EXISTS governance_control_evidence (
     control_assessment_id TEXT NOT NULL REFERENCES governance_control_assessments(id),
     state TEXT NOT NULL DEFAULT 'candidate',
     mapping_rationale TEXT,
+    artifact_evidence_id TEXT,
+    reviewed_by TEXT,
+    reviewed_at TEXT,
+    review_history_json TEXT NOT NULL DEFAULT '[]',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     CONSTRAINT uq_governance_control_evidence UNIQUE (evidence_id, control_assessment_id),
@@ -176,3 +187,18 @@ CREATE INDEX IF NOT EXISTS idx_governance_control_evidence_system_id ON governan
 CREATE INDEX IF NOT EXISTS idx_governance_control_evidence_evidence_id ON governance_control_evidence(evidence_id);
 CREATE INDEX IF NOT EXISTS idx_governance_control_evidence_control_assessment_id
     ON governance_control_evidence(control_assessment_id);
+
+-- Evaluation provenance stays generic: one immutable envelope and one compact
+-- evidence artifact per run, with review history stored on each mapping.
+ALTER TABLE governance_evidence ADD COLUMN IF NOT EXISTS source_run_id TEXT;
+ALTER TABLE governance_evidence_runs ADD COLUMN IF NOT EXISTS result TEXT NOT NULL DEFAULT 'unknown';
+ALTER TABLE governance_evidence_runs ADD COLUMN IF NOT EXISTS provenance_json TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE governance_evidence_runs ADD COLUMN IF NOT EXISTS artifact_refs_json TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE governance_evidence_runs ADD COLUMN IF NOT EXISTS limitations_json TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE governance_evidence_runs ADD COLUMN IF NOT EXISTS captured_at TEXT;
+ALTER TABLE governance_evidence_runs ADD COLUMN IF NOT EXISTS expires_at TEXT;
+ALTER TABLE governance_evidence_runs ADD COLUMN IF NOT EXISTS evidence_id TEXT;
+ALTER TABLE governance_control_evidence ADD COLUMN IF NOT EXISTS artifact_evidence_id TEXT;
+ALTER TABLE governance_control_evidence ADD COLUMN IF NOT EXISTS reviewed_by TEXT;
+ALTER TABLE governance_control_evidence ADD COLUMN IF NOT EXISTS reviewed_at TEXT;
+ALTER TABLE governance_control_evidence ADD COLUMN IF NOT EXISTS review_history_json TEXT NOT NULL DEFAULT '[]';

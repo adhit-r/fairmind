@@ -329,6 +329,13 @@ class GovernanceEvidenceRun(Base):
     source_identifier = Column(String, nullable=False)
     run_id = Column(String, nullable=False)
     content_hash = Column(String, nullable=False)
+    result = Column(String, nullable=False, default="unknown")
+    provenance_json = Column(Text, nullable=False, default="{}")
+    artifact_refs_json = Column(Text, nullable=False, default="[]")
+    limitations_json = Column(Text, nullable=False, default="[]")
+    captured_at = Column(String, nullable=True)
+    expires_at = Column(String, nullable=True)
+    evidence_id = Column(String, nullable=True, index=True)
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
 
     __table_args__ = (
@@ -375,6 +382,10 @@ class GovernanceControlEvidence(Base):
     )
     state = Column(String, nullable=False, default="candidate")
     mapping_rationale = Column(Text, nullable=True)
+    artifact_evidence_id = Column(String, nullable=True, index=True)
+    reviewed_by = Column(String, nullable=True)
+    reviewed_at = Column(String, nullable=True)
+    review_history_json = Column(Text, nullable=False, default="[]")
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
     updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
 
@@ -503,6 +514,7 @@ class GovernanceEvidence(Base):
     status = Column(String, nullable=False, default="draft")
     uploaded_by = Column(String, nullable=True)
     metadata_json = Column(Text, nullable=False, default="{}")
+    source_run_id = Column(String, nullable=True, index=True)
     captured_at = Column(String, nullable=True)
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
 
