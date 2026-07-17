@@ -1,18 +1,16 @@
 'use client'
 
 import Link from 'next/link'
-import { useMemo } from 'react'
-import { IconAlertTriangle, IconArrowRight, IconRefresh } from '@tabler/icons-react'
+import { useEffect, useMemo, useState } from 'react'
+import { IconAlertTriangle, IconArrowRight, IconLeaf, IconLockCheck, IconRefresh } from '@tabler/icons-react'
 
 import { useSystemContext } from '@/components/workflow/SystemContext'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useOrg } from '@/context/OrgContext'
-import {
-  useFrameworkVersions,
-  useGovernanceAssurance,
-} from '@/lib/api/hooks/useGovernanceAssurance'
+import { useAIGovernance, useEnvironmentalImpact } from '@/lib/api/hooks/useAIGovernance'
+import { useGovernanceAssurance } from '@/lib/api/hooks/useGovernanceAssurance'
 
 function countLabel(value: number, singular: string, plural = `${singular}s`) {
   return `${value} ${value === 1 ? singular : plural}`
@@ -33,26 +31,62 @@ export default function AIGovernancePage() {
   const { selectedSystem } = useSystemContext()
   const orgId = selectedOrg?.id
   const assuranceBase = useGovernanceAssurance(orgId, selectedSystem.id)
-  const frameworkKey = assuranceBase.frameworks[0]?.frameworkKey
-  const versionState = useFrameworkVersions(orgId, frameworkKey)
-  const activeAssignment = useMemo(
-    () => assuranceBase.assignments.find((assignment) => assignment.systemId === selectedSystem.id),
-    [assuranceBase.assignments, selectedSystem.id],
+  const [selectedAssignmentId, setSelectedAssignmentId] = useState('')
+  useEffect(() => {
+    if (!assuranceBase.resolvedAssignments.some(({ assignment }) => assignment.id === selectedAssignmentId)) {
+      setSelectedAssignmentId(assuranceBase.resolvedAssignments[0]?.assignment.id || '')
+    }
+  }, [assuranceBase.resolvedAssignments, selectedAssignmentId])
+  const activeScope = assuranceBase.resolvedAssignments.find(
+    ({ assignment }) => assignment.id === selectedAssignmentId,
   )
+  const activeAssignment = activeScope?.assignment
   const assurance = useGovernanceAssurance(orgId, selectedSystem.id, activeAssignment?.id)
-  const assignedVersion = versionState.versions.find(
-    (version) => version.id === activeAssignment?.frameworkVersionId,
-  )
-  const assignedFramework = assurance.frameworks.find(
-    (framework) => framework.frameworkKey === assignedVersion?.frameworkKey,
-  )
+  const assignedVersion = activeScope?.version
+  const assignedFramework = activeScope?.framework
   const frameworkName = assignedFramework?.name || assignedVersion?.name || 'Framework'
   const readiness = assurance.readiness
-  const loading = assurance.loading || versionState.loading || assurance.readinessLoading
-  const error = assurance.error || versionState.error
+  const loading = assuranceBase.loading || assurance.loading || assurance.readinessLoading
+  const error = assuranceBase.error || assurance.error
+  const canDecide = selectedOrg?.role === 'admin'
+    || selectedOrg?.role === 'owner'
+    || selectedOrg?.permissions?.includes('model:write') === true
+  const {
+    approvalLoading,
+    getSystemApproval,
+    requestSystemApproval,
+    decideApprovalRequest,
+  } = useAIGovernance()
+  const environmental = useEnvironmentalImpact(selectedSystem.id)
+  const [approvalState, setApprovalState] = useState<Awaited<ReturnType<typeof getSystemApproval>> | null>(null)
+  const [approvalError, setApprovalError] = useState<string | null>(null)
+  const environmentalRecommendation = typeof environmental.data?.recommendation === 'string'
+    ? environmental.data.recommendation
+    : environmental.data?.recommendation?.status
+  const environmentalRecommendationLabel = environmentalRecommendation
+    ? `${environmentalRecommendation[0].toUpperCase()}${environmentalRecommendation.slice(1)}`
+    : 'Not recorded'
+
+  useEffect(() => {
+    let active = true
+    void getSystemApproval(selectedSystem.id)
+      .then((state) => {
+        if (active) setApprovalState(state)
+      })
+      .catch((reason) => {
+        if (active) setApprovalError(reason instanceof Error ? reason.message : 'Approval state unavailable')
+      })
+    return () => { active = false }
+  }, [getSystemApproval, selectedSystem.id])
 
   const refresh = async () => {
-    await Promise.all([assurance.refresh(), versionState.refresh()])
+    await Promise.all([assuranceBase.refresh(), assurance.refresh()])
+    try {
+      setApprovalState(await getSystemApproval(selectedSystem.id))
+      setApprovalError(null)
+    } catch (reason) {
+      setApprovalError(reason instanceof Error ? reason.message : 'Approval state unavailable')
+    }
   }
 
   return (
@@ -80,6 +114,22 @@ export default function AIGovernancePage() {
           Refresh overview
         </Button>
       </header>
+
+      {assuranceBase.resolvedAssignments.length > 0 ? (
+        <label className="flex flex-col gap-2 border-2 border-[#0F1412] bg-[#FCFDF8] p-3 text-xs font-black uppercase tracking-[0.1em] sm:flex-row sm:items-center">
+          Framework scope
+          <select
+            aria-label="Framework scope"
+            value={selectedAssignmentId}
+            onChange={(event) => setSelectedAssignmentId(event.target.value)}
+            className="min-h-11 flex-1 rounded-none border-2 border-[#0F1412] bg-[#FCFDF8] px-3 text-sm font-black normal-case"
+          >
+            {assuranceBase.resolvedAssignments.map(({ assignment, framework, version }) => (
+              <option key={assignment.id} value={assignment.id}>{framework.name} {version.versionLabel}</option>
+            ))}
+          </select>
+        </label>
+      ) : null}
 
       <section
         aria-label="Assurance scope"
@@ -140,8 +190,8 @@ export default function AIGovernancePage() {
                 <p className="text-2xl font-black text-[#D83A2E]">{readiness.blockingFindings}</p>
                 <p className="mt-1 text-sm font-bold">
                   {readiness.blockingFindings === 0
-                    ? 'No blocking findings reported'
-                    : countLabel(readiness.blockingFindings, 'blocking finding')}
+                    ? 'No rejected assessments reported'
+                    : countLabel(readiness.blockingFindings, 'rejected assessment')}
                 </p>
               </div>
               <div className="border-b-2 border-[#0F1412] p-5 md:border-b-0 md:border-r-2">
@@ -191,6 +241,127 @@ export default function AIGovernancePage() {
               ))}
             </dl>
           </section>
+
+          <div className="grid gap-5 xl:grid-cols-2">
+            <section aria-label="Approval decision" className="border-2 border-[#0F1412] bg-[#FCFDF8]">
+              <div className="flex items-center gap-3 border-b-2 border-[#0F1412] bg-[#F3F5F0] px-4 py-3">
+                <IconLockCheck aria-hidden="true" />
+                <div>
+                  <h2 className="font-black uppercase">Approval Decision</h2>
+                  <p className="mt-1 text-xs text-[#59615D]">Persisted request and reviewer decision for this AI system.</p>
+                </div>
+              </div>
+              <div className="space-y-4 p-5">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.1em] text-[#59615D]">Current state</p>
+                  <p className="mt-1 text-2xl font-black">
+                    {approvalState?.request?.status
+                      ? `${approvalState.request.status[0].toUpperCase()}${approvalState.request.status.slice(1)}`
+                      : 'Not submitted'}
+                  </p>
+                  {approvalState?.decisions?.at(-1) ? (
+                    <p className="mt-2 text-sm font-bold">Latest decision: <span className="capitalize">{approvalState.decisions.at(-1)?.decision}</span>. {approvalState.decisions.at(-1)?.notes || 'No decision rationale recorded.'}</p>
+                  ) : null}
+                </div>
+                {approvalError ? <p role="alert" className="border-2 border-[#D83A2E] bg-[#FFF0ED] p-3 text-sm font-bold">{approvalError}</p> : null}
+                {canDecide && approvalState?.request?.status === 'pending' ? (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Button
+                      type="button"
+                      disabled={approvalLoading}
+                      onClick={async () => {
+                        try {
+                          await decideApprovalRequest(approvalState.request!.id, 'approved', 'Approved after assurance review.', selectedSystem.owner)
+                          setApprovalState(await getSystemApproval(selectedSystem.id))
+                          setApprovalError(null)
+                        } catch (reason) {
+                          setApprovalError(reason instanceof Error ? reason.message : 'Approval decision failed')
+                        }
+                      }}
+                      className="rounded-none border-2 border-[#0F1412] bg-[oklch(0.60_0.13_163)] font-black uppercase text-[#0F1412]"
+                    >
+                      Approve request
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="neutral"
+                      disabled={approvalLoading}
+                      onClick={async () => {
+                        try {
+                          await decideApprovalRequest(approvalState.request!.id, 'rejected', 'Rejected pending assurance blockers.', selectedSystem.owner)
+                          setApprovalState(await getSystemApproval(selectedSystem.id))
+                          setApprovalError(null)
+                        } catch (reason) {
+                          setApprovalError(reason instanceof Error ? reason.message : 'Approval decision failed')
+                        }
+                      }}
+                      className="rounded-none border-2 border-[#0F1412] bg-[#FFF0ED] font-black uppercase"
+                    >
+                      Reject request
+                    </Button>
+                  </div>
+                ) : canDecide && approvalState?.request?.status !== 'pending' ? (
+                  <Button
+                    type="button"
+                    disabled={approvalLoading}
+                    onClick={async () => {
+                      try {
+                        setApprovalState(await requestSystemApproval(selectedSystem.id, selectedSystem.owner))
+                        setApprovalError(null)
+                      } catch (reason) {
+                        setApprovalError(reason instanceof Error ? reason.message : 'Approval request failed')
+                      }
+                    }}
+                    className="rounded-none border-2 border-[#0F1412] bg-[#E97522] font-black uppercase text-[#0F1412]"
+                  >
+                    Submit for approval
+                  </Button>
+                ) : (
+                  <p className="text-sm font-bold text-[#59615D]">Read-only access. Approval actions require organization mutation permission.</p>
+                )}
+              </div>
+            </section>
+
+            <section aria-label="Environmental governance" className="border-2 border-[#0F1412] bg-[#FCFDF8]">
+              <div className="flex items-center gap-3 border-b-2 border-[#0F1412] bg-[#E5F4EF] px-4 py-3">
+                <IconLeaf aria-hidden="true" />
+                <div>
+                  <h2 className="font-black uppercase">Environmental Governance</h2>
+                  <p className="mt-1 text-xs text-[#59615D]">Energy, carbon, provenance, and environmental evidence for the selected system.</p>
+                </div>
+              </div>
+              {environmental.loading ? (
+                <div aria-label="Loading environmental governance" className="grid grid-cols-2 gap-3 p-5">
+                  <Skeleton className="h-20 rounded-none" /><Skeleton className="h-20 rounded-none" />
+                </div>
+              ) : environmental.error ? (
+                <p role="alert" className="m-5 border-2 border-[#D83A2E] bg-[#FFF0ED] p-3 text-sm font-bold">{environmental.error.message}</p>
+              ) : !environmental.data ? (
+                <p className="p-5 text-sm font-bold text-[#59615D]">{environmental.emptyReason || 'No environmental impact packet is recorded.'}</p>
+              ) : (
+                <div className="space-y-4 p-5">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="border-2 border-[#0F1412] p-3"><p className="text-xs font-black uppercase text-[#59615D]">Energy</p><p className="mt-1 text-xl font-black">{environmental.data.totals?.energyKwh ?? 'Unknown'}{environmental.data.totals?.energyKwh != null ? ' kWh' : ''}</p></div>
+                    <div className="border-2 border-[#0F1412] p-3"><p className="text-xs font-black uppercase text-[#59615D]">Carbon</p><p className="mt-1 text-xl font-black">{environmental.data.totals?.carbonKgCo2e ?? 'Unknown'}{environmental.data.totals?.carbonKgCo2e != null ? ' kg CO2e' : ''}</p></div>
+                  </div>
+                  <div className="border-t-2 border-[#0F1412] pt-3">
+                    <p className="text-xs font-black uppercase text-[#59615D]">Recommendation</p>
+                    <p className="mt-1 font-black">{environmentalRecommendationLabel}</p>
+                    {typeof environmental.data.recommendation === 'object' ? <p className="mt-1 text-sm font-bold">{environmental.data.recommendation?.summary}</p> : null}
+                  </div>
+                  <div className="border-t-2 border-[#0F1412] pt-3 text-sm">
+                    <p><span className="font-black uppercase">Source:</span> {environmental.data.provenance?.source || 'Not recorded'}</p>
+                    <p><span className="font-black uppercase">Method:</span> {environmental.data.provenance?.methodology || 'Not recorded'}</p>
+                  </div>
+                  {environmental.data.evidenceLinks?.length ? (
+                    <ul className="border-t-2 border-[#0F1412] pt-3">
+                      {environmental.data.evidenceLinks.map((item) => <li key={item.id || item.title} className="text-sm font-bold">{item.title || 'Environmental evidence'} · {item.source || 'source unknown'}</li>)}
+                    </ul>
+                  ) : null}
+                </div>
+              )}
+            </section>
+          </div>
 
           <div className="flex flex-col gap-3 border-t-2 border-[#0F1412] pt-5 sm:flex-row">
             <Button asChild className="rounded-none border-2 border-[#0F1412] bg-[#E97522] font-black uppercase text-[#0F1412]">

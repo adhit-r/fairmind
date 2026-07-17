@@ -7,12 +7,16 @@ Task 8 replaces the AI Governance overview's inferred evidence/compliance scorin
 Implemented:
 
 - company, AI-system, immutable framework version, catalog hash, and evidence-period scope;
-- blocker-first Overview using `blockingFindings`, `missingEvidence`, and `staleEvidence` before readiness aggregates;
+- blocker-first Overview using the API's `blockingFindings` value, honestly labelled rejected assessments, plus `missingEvidence` and `staleEvidence` before readiness aggregates;
 - explicit accepted, applicable, ready-for-review, partial, not-started, and not-applicable counts;
 - Reports & Assurance evidence index with full content hashes and evaluation versions;
 - unresolved-finding disclosure that distinguishes known counts from incomplete control detail;
 - accepted/rejected mapping decision register with actor, time, and rationale;
 - evaluation limitations and tenant-scoped evidence-run history;
+- persisted approval request, approve, and reject actions retained on Overview;
+- environmental governance retained with the existing system environmental-impact hook;
+- cross-catalog assignment resolution and an explicit framework selector on Overview and Reports;
+- the existing report generator, preview, saved history, and JSON/PDF exports consolidated into `/reports`;
 - read-only auditor mode on the same `/reports` route, selected by permission or `mode=auditor`;
 - builder navigation back to control assessment and evidence mapping review;
 - preservation links to Evidence & Evaluations, Findings, and Remediation from Overview;
@@ -23,22 +27,22 @@ No certification or automatic-compliance claim is rendered. Unknown or unavailab
 
 ## TDD evidence
 
-The Task 8 Playwright tests were added before production changes. The initial three-test run failed at the new Overview heading, new Reports heading, and auditor-mode label because those surfaces did not exist. After implementation, the focused tests and complete assurance journey passed.
+The Task 8 Playwright tests were added before production changes. The initial three-test run failed at the new Overview heading, new Reports heading, and auditor-mode label because those surfaces did not exist. Review follow-up tests were also observed failing before implementation for missing approval/environmental regions, incorrect cross-framework resolution, and the absent report studio. The focused tests and complete assurance journey now pass.
 
 ## Verification
 
 | Check | Result |
 | --- | --- |
-| `RATE_LIMIT_REQUESTS=10000 uv run pytest tests/test_governance_assurance_models.py tests/test_framework_catalog_service.py tests/test_governance_assurance_routes.py tests/test_governance_evidence_runs.py -q` | 49 passed |
-| `bun test src/lib/api/hooks/useGovernanceAssurance.test.ts` | 6 passed |
+| `uv run pytest tests/test_governance_assurance_models.py tests/test_framework_catalog_service.py tests/test_governance_assurance_routes.py tests/test_governance_evidence_runs.py -q` | 49 passed |
+| `bun test src/lib/api/hooks/useGovernanceAssurance.test.ts` | 7 passed |
 | `./node_modules/.bin/tsc --noEmit --pretty false` | passed |
-| `npx playwright test tests/governance-assurance.spec.ts --project=chromium --workers=1 --reporter=line` | 15 passed |
+| `npx playwright test tests/governance-assurance.spec.ts --project=chromium --workers=1 --reporter=line` | 18 passed |
 | `npm run build` | passed; 54 routes generated |
 | `tooling/check_backend_layer_boundaries.sh` | passed |
 | `tooling/check_no_archive_imports.sh` | passed |
 | `git diff --check` | passed |
 
-The first integrated backend run used the application's default `RATE_LIMIT_REQUESTS=100`. After 40 passing tests, nine later HTTP validation tests received HTTP 429 instead of their expected 422 because the test suite crossed the shared middleware budget. The fresh verification run raised only the test-process request allowance to 10,000 and all 49 focused tests passed. Production defaults and source files were not changed.
+The first integrated backend run exposed shared in-memory fallback rate-limit state across independent tests. The test fixture now clears only `RateLimitMiddleware.fallback_clients` before and after each test. The exact documented command passes all 49 focused tests without an environment override, and production rate-limit behavior and settings are unchanged.
 
 The build continues to report existing metadata viewport, workspace-root inference, Browserslist age, and missing optional Authentik public-configuration warnings. None fails compilation or static generation.
 

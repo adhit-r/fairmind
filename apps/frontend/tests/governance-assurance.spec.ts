@@ -48,6 +48,15 @@ const previousVersion = {
   source_hash: 'sha256:catalog-january-2026',
   status: 'superseded',
 }
+const nistFramework = { framework_key: 'nist-ai-rmf', name: 'NIST AI RMF' }
+const nistVersion = {
+  id: 'version-nist-1',
+  framework_key: 'nist-ai-rmf',
+  name: 'NIST AI RMF',
+  version_label: '1.0',
+  source_hash: 'sha256:nist-ai-rmf-1',
+  status: 'active',
+}
 
 const initialControls = [
   {
@@ -168,6 +177,9 @@ type MockOptions = {
   secondEvidenceDelayMs?: number
   multipleAssignments?: boolean
   mappingConflictOnce?: boolean
+  multipleFrameworks?: boolean
+  environmentalImpact?: Record<string, unknown>
+  savedReports?: Array<Record<string, unknown>>
 }
 
 function evidenceRun(controlAssessmentId = 'assessment-a006-1', mappingId = 'mapping-418-a006-1') {
@@ -240,6 +252,9 @@ async function mockWorkbench(page: Page, options: MockOptions = {}) {
   const artifactEvidence = structuredClone(options.artifactEvidence ?? [])
   const secondArtifactEvidence = structuredClone(options.secondArtifactEvidence ?? [])
   let mappingConflictPending = options.mappingConflictOnce ?? false
+  let approvalRequest: Record<string, unknown> | null = null
+  let approvalDecisions: Array<Record<string, unknown>> = []
+  let savedReports = structuredClone(options.savedReports ?? [])
 
   await page.addInitScript(() => {
     window.localStorage.setItem('access_token', 'playwright-token')
@@ -277,10 +292,13 @@ async function mockWorkbench(page: Page, options: MockOptions = {}) {
       return fulfillJson(route, options.emptyCatalog ? [] : [{
         ...framework,
         name: options.frameworkName ?? framework.name,
-      }])
+      }, ...(options.multipleFrameworks ? [nistFramework] : [])])
     }
     if (path === '/api/v1/ai-governance/organizations/org-1/frameworks/aiuc-1/versions') {
       return fulfillJson(route, [version, previousVersion])
+    }
+    if (path === '/api/v1/ai-governance/organizations/org-1/frameworks/nist-ai-rmf/versions') {
+      return fulfillJson(route, [nistVersion])
     }
     if (path === '/api/v1/ai-governance/organizations/org-1/systems/system-1/framework-assignments') {
       if (request.method() === 'POST') {
@@ -292,7 +310,12 @@ async function mockWorkbench(page: Page, options: MockOptions = {}) {
           framework_version_id: version.id,
         }, 201)
       }
-      return fulfillJson(route, assigned ? [{
+      return fulfillJson(route, assigned ? [...(options.multipleFrameworks ? [{
+        id: 'assignment-nist',
+        org_id: 'org-1',
+        system_id: 'system-1',
+        framework_version_id: nistVersion.id,
+      }] : []), {
         id: 'assignment-1',
         org_id: 'org-1',
         system_id: 'system-1',
@@ -327,6 +350,14 @@ async function mockWorkbench(page: Page, options: MockOptions = {}) {
     if (path === '/api/v1/ai-governance/organizations/org-1/framework-assignments/assignment-1/controls') {
       return fulfillJson(route, controls)
     }
+    if (path === '/api/v1/ai-governance/organizations/org-1/framework-assignments/assignment-nist/controls') {
+      return fulfillJson(route, [{
+        ...additionalAssignmentControls[0],
+        id: 'assessment-nist-map-1',
+        external_id: 'GOVERN-1.1',
+        title: 'Establish AI governance accountability',
+      }])
+    }
     if (path === '/api/v1/ai-governance/organizations/org-1/framework-assignments/assignment-3/controls') {
       return fulfillJson(route, additionalAssignmentControls)
     }
@@ -344,6 +375,19 @@ async function mockWorkbench(page: Page, options: MockOptions = {}) {
         not_applicable: 0,
         blocking_findings: 1,
         missing_evidence: missingEvidence,
+        stale_evidence: 0,
+      })
+    }
+    if (path === '/api/v1/ai-governance/organizations/org-1/framework-assignments/assignment-nist/readiness') {
+      return fulfillJson(route, {
+        applicable: 1,
+        accepted: 1,
+        ready_for_review: 0,
+        partial: 0,
+        not_started: 0,
+        not_applicable: 0,
+        blocking_findings: 0,
+        missing_evidence: 0,
         stale_evidence: 0,
       })
     }
@@ -466,6 +510,55 @@ async function mockWorkbench(page: Page, options: MockOptions = {}) {
         entityId: link.entity_id,
         createdAt: '2026-07-17T12:30:00Z',
       }, 201)
+    }
+    if (path === '/api/v1/ai-governance/compliance/frameworks') {
+      return fulfillJson(route, [])
+    }
+    if (path === '/api/v1/ai-governance/approval/system/system-1') {
+      return fulfillJson(route, { systemId: system.id, request: approvalRequest, decisions: approvalDecisions })
+    }
+    if (path === '/api/v1/ai-governance/approval/system/system-1/request' && request.method() === 'POST') {
+      approvalRequest = {
+        id: 'approval-1',
+        status: 'pending',
+        requested_by: 'model-owner@acme.test',
+        createdAt: '2026-07-17T13:00:00Z',
+      }
+      return fulfillJson(route, { systemId: system.id, request: approvalRequest, decisions: approvalDecisions })
+    }
+    if (path === '/api/v1/ai-governance/approval-requests/approval-1/decision' && request.method() === 'POST') {
+      const decision = request.postDataJSON()
+      approvalDecisions = [...approvalDecisions, {
+        decision: decision.decision,
+        notes: decision.notes,
+        decidedBy: decision.decided_by,
+        decidedAt: '2026-07-17T13:15:00Z',
+      }]
+      approvalRequest = approvalRequest ? { ...approvalRequest, status: decision.decision } : null
+      return fulfillJson(route, approvalDecisions.at(-1))
+    }
+    if (path === '/api/v1/systems/system-1/environmental-impact') {
+      return fulfillJson(route, options.environmentalImpact ?? {})
+    }
+    if (path === '/api/v1/ai-governance/reports' && request.method() === 'GET') {
+      return fulfillJson(route, savedReports)
+    }
+    if (path === '/api/v1/ai-governance/reports/generate' && request.method() === 'POST') {
+      const generated = {
+        id: `report-${savedReports.length + 1}`,
+        systemId: system.id,
+        reportType: 'governance',
+        title: 'Governance Assurance Summary',
+        generatedBy: 'reviewer@acme.test',
+        config: request.postDataJSON(),
+        data: {
+          system: { name: system.name, owner: system.owner, riskTier: system.riskTier, lifecycleStage: system.lifecycleStage, readiness: system.readiness },
+          risks: [], evidence: [], remediation: [], approvals: [], generatedAt: '2026-07-17T14:00:00Z',
+        },
+        createdAt: '2026-07-17T14:00:00Z',
+      }
+      savedReports = [generated, ...savedReports]
+      return fulfillJson(route, generated, 201)
     }
 
     return fulfillJson(route, [])
@@ -789,7 +882,7 @@ test('shows framework scope and backend blockers before the overview readiness a
   await expect(scope).toContainText('April, 2026')
 
   const blockers = overview.getByRole('region', { name: 'Readiness blockers' })
-  await expect(blockers).toContainText('1 blocking finding')
+  await expect(blockers).toContainText('1 rejected assessment')
   await expect(blockers).toContainText('2 controls missing accepted evidence')
   await expect(blockers).toContainText('No stale evidence reported')
 
@@ -829,7 +922,7 @@ test('presents a version-pinned assurance summary with evidence hashes and revie
     '0f33e89a6d6e6eefecf4afc92c837bd259f036e599acc653f401b87eab30bf55',
   )
   await expect(report.getByRole('region', { name: 'Evidence index' })).toContainText('FairMind Bias Suite')
-  await expect(report.getByRole('region', { name: 'Unresolved findings' })).toContainText('1 blocking finding')
+  await expect(report.getByRole('region', { name: 'Unresolved findings' })).toContainText('1 rejected assessment')
   await expect(report.getByRole('region', { name: 'Decision register' })).toContainText('Accepted')
   await expect(report.getByRole('region', { name: 'Decision register' })).toContainText(
     'Accepted after checking the versioned limitation register.',
@@ -864,4 +957,81 @@ test('uses the reports route as a read-only auditor lens and redirects legacy bo
   await expect(page).toHaveURL(/\/compliance-dashboard$/)
   await page.goto('/remediation-wizard')
   await expect(page).toHaveURL(/\/remediation\?mode=guided$/)
+})
+
+test('retains persisted approval decisions and environmental governance on the assurance overview', async ({ page }) => {
+  await mockWorkbench(page, {
+    initiallyAssigned: true,
+    environmentalImpact: {
+      systemId: system.id,
+      generatedAt: '2026-07-16T08:00:00Z',
+      version: 'env-3',
+      totals: { energyKwh: 92.4, carbonKgCo2e: 31.8, computeHours: 14.2 },
+      recommendation: { status: 'conditional', summary: 'Reduce inference intensity before the next review.' },
+      provenance: { source: 'Cloud Carbon Footprint', methodology: 'location-based', boundary: 'training and inference' },
+      evidenceLinks: [{ id: 'env-evidence-1', title: 'Cloud energy export', source: 'company_integration' }],
+    },
+  })
+
+  await page.goto('/ai-governance')
+  const overview = page.getByTestId('governance-assurance-overview')
+  const approval = overview.getByRole('region', { name: 'Approval decision' })
+  await approval.getByRole('button', { name: 'Submit for approval' }).click()
+  await expect(approval).toContainText('Pending')
+  await expect(approval.getByRole('button', { name: 'Approve request' })).toBeVisible()
+  await expect(approval.getByRole('button', { name: 'Reject request' })).toBeVisible()
+  await approval.getByRole('button', { name: 'Approve request' }).click()
+  await expect(approval).toContainText('Approved')
+
+  const environmental = overview.getByRole('region', { name: 'Environmental governance' })
+  await expect(environmental.getByRole('heading', { name: 'Environmental Governance' })).toBeVisible()
+  await expect(environmental).toContainText('92.4 kWh')
+  await expect(environmental).toContainText('31.8 kg CO2e')
+  await expect(environmental).toContainText('Conditional')
+  await expect(environmental).toContainText('Cloud energy export')
+})
+
+test('matches each selected assignment to its own framework version across multiple catalogs', async ({ page }) => {
+  await mockWorkbench(page, { initiallyAssigned: true, multipleFrameworks: true })
+
+  await page.goto('/ai-governance')
+  const overview = page.getByTestId('governance-assurance-overview')
+  await expect(overview.getByRole('region', { name: 'Assurance scope' })).toContainText('NIST AI RMF 1.0')
+  await overview.getByRole('combobox', { name: 'Framework scope' }).selectOption('assignment-1')
+  await expect(overview.getByRole('region', { name: 'Assurance scope' })).toContainText('AIUC-1 April, 2026')
+
+  await page.goto('/reports?view=builder')
+  const report = page.getByTestId('assurance-report')
+  await expect(report.getByRole('region', { name: 'Assurance scope' })).toContainText('NIST AI RMF 1.0')
+  await report.getByRole('combobox', { name: 'Framework scope' }).selectOption('assignment-1')
+  await expect(report.getByRole('region', { name: 'Assurance scope' })).toContainText('AIUC-1 April, 2026')
+})
+
+test('keeps report generation, preview, saved history, and exports reachable on reports', async ({ page }) => {
+  await mockWorkbench(page, {
+    initiallyAssigned: true,
+    savedReports: [{
+      id: 'saved-report-1',
+      systemId: system.id,
+      reportType: 'governance',
+      title: 'July assurance snapshot',
+      generatedBy: 'reviewer@acme.test',
+      config: { frameworks: ['AIUC-1 April, 2026'], sections: [] },
+      data: { system: { name: system.name, owner: system.owner, riskTier: system.riskTier, lifecycleStage: system.lifecycleStage, readiness: 48 }, generatedAt: '2026-07-16T12:00:00Z' },
+      createdAt: '2026-07-16T12:00:00Z',
+    }],
+  })
+
+  await page.goto('/reports?view=builder')
+  const studio = page.getByRole('region', { name: 'Report builder and history' })
+  await expect(studio.getByRole('heading', { name: 'Assurance Report Studio' })).toBeVisible()
+  await expect(studio).toContainText('July assurance snapshot')
+  await expect(studio.getByRole('button', { name: 'JSON' })).toBeVisible()
+  await expect(studio.getByRole('button', { name: 'PDF' })).toBeVisible()
+  const downloadPromise = page.waitForEvent('download')
+  await studio.getByRole('button', { name: 'JSON' }).click()
+  expect((await downloadPromise).suggestedFilename()).toBe('July_assurance_snapshot.json')
+  await studio.getByRole('button', { name: 'Generate report' }).click()
+  await expect(studio.getByRole('heading', { name: 'Claims Review Agent' })).toBeVisible()
+  await expect(studio).toContainText('Governance Assurance Summary')
 })

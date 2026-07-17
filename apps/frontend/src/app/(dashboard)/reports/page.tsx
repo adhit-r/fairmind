@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import {
   IconAlertTriangle,
@@ -19,10 +19,10 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useOrg } from '@/context/OrgContext'
 import {
-  useFrameworkVersions,
   useGovernanceAssurance,
   type EvidenceMapping,
 } from '@/lib/api/hooks/useGovernanceAssurance'
+import { AssuranceReportStudio } from './components/AssuranceReportStudio'
 
 function formatDate(value: string | null) {
   if (!value) return 'Not recorded'
@@ -45,27 +45,27 @@ export default function ReportsPage() {
   const { selectedSystem } = useSystemContext()
   const orgId = selectedOrg?.id
   const assuranceBase = useGovernanceAssurance(orgId, selectedSystem.id)
-  const frameworkKey = assuranceBase.frameworks[0]?.frameworkKey
-  const versionState = useFrameworkVersions(orgId, frameworkKey)
-  const activeAssignment = useMemo(
-    () => assuranceBase.assignments.find((assignment) => assignment.systemId === selectedSystem.id),
-    [assuranceBase.assignments, selectedSystem.id],
+  const [selectedAssignmentId, setSelectedAssignmentId] = useState('')
+  useEffect(() => {
+    if (!assuranceBase.resolvedAssignments.some(({ assignment }) => assignment.id === selectedAssignmentId)) {
+      setSelectedAssignmentId(assuranceBase.resolvedAssignments[0]?.assignment.id || '')
+    }
+  }, [assuranceBase.resolvedAssignments, selectedAssignmentId])
+  const activeScope = assuranceBase.resolvedAssignments.find(
+    ({ assignment }) => assignment.id === selectedAssignmentId,
   )
+  const activeAssignment = activeScope?.assignment
   const assurance = useGovernanceAssurance(orgId, selectedSystem.id, activeAssignment?.id)
-  const assignedVersion = versionState.versions.find(
-    (version) => version.id === activeAssignment?.frameworkVersionId,
-  )
-  const assignedFramework = assurance.frameworks.find(
-    (framework) => framework.frameworkKey === assignedVersion?.frameworkKey,
-  )
+  const assignedVersion = activeScope?.version
+  const assignedFramework = activeScope?.framework
   const frameworkName = assignedFramework?.name || assignedVersion?.name || 'Framework'
   const canEdit = selectedOrg?.role === 'admin'
     || selectedOrg?.role === 'owner'
     || selectedOrg?.permissions?.includes('model:write') === true
   const auditorMode = searchParams.get('mode') === 'auditor' || !canEdit
   const readiness = assurance.readiness
-  const loading = assurance.loading || versionState.loading || assurance.readinessLoading
-  const error = assurance.error || versionState.error
+  const loading = assuranceBase.loading || assurance.loading || assurance.readinessLoading
+  const error = assuranceBase.error || assurance.error
 
   const evidencePeriod = useMemo(() => {
     const captured = assurance.evidenceRuns
@@ -100,7 +100,7 @@ export default function ReportsPage() {
   const knownControlFindings = knownControlFindingCounts.reduce((sum, count) => sum + count, 0)
 
   const refresh = async () => {
-    await Promise.all([assurance.refresh(), versionState.refresh()])
+    await Promise.all([assuranceBase.refresh(), assurance.refresh()])
   }
 
   return (
@@ -142,6 +142,22 @@ export default function ReportsPage() {
             <p className="mt-1 text-sm text-[#59615D]">The same assurance route is shown without control or evidence review actions.</p>
           </div>
         </section>
+      ) : null}
+
+      {assuranceBase.resolvedAssignments.length > 0 ? (
+        <label className="flex flex-col gap-2 border-2 border-[#0F1412] bg-[#FCFDF8] p-3 text-xs font-black uppercase tracking-[0.1em] sm:flex-row sm:items-center">
+          Framework scope
+          <select
+            aria-label="Framework scope"
+            value={selectedAssignmentId}
+            onChange={(event) => setSelectedAssignmentId(event.target.value)}
+            className="min-h-11 flex-1 rounded-none border-2 border-[#0F1412] bg-[#FCFDF8] px-3 text-sm font-black normal-case"
+          >
+            {assuranceBase.resolvedAssignments.map(({ assignment, framework, version }) => (
+              <option key={assignment.id} value={assignment.id}>{framework.name} {version.versionLabel}</option>
+            ))}
+          </select>
+        </label>
       ) : null}
 
       <section aria-label="Assurance scope" className="border-2 border-[#0F1412] bg-[#F3F5F0]">
@@ -244,7 +260,7 @@ export default function ReportsPage() {
               </div>
               <div className="p-5">
                 <p className="text-3xl font-black text-[#D83A2E]">{readiness?.blockingFindings ?? 'Unknown'}</p>
-                <p className="mt-1 font-black">{readiness ? countLabel(readiness.blockingFindings, 'blocking finding') : 'Blocking finding count unavailable'}</p>
+                <p className="mt-1 font-black">{readiness ? countLabel(readiness.blockingFindings, 'rejected assessment') : 'Rejected assessment count unavailable'}</p>
                 <div className="mt-5 border-t-2 border-[#0F1412] pt-4">
                   <p className="text-xs font-black uppercase text-[#59615D]">Control-linked detail</p>
                   <p className="mt-1 text-sm font-bold">
@@ -331,6 +347,19 @@ export default function ReportsPage() {
               </ol>
             )}
           </section>
+
+          <AssuranceReportStudio
+            system={{
+              id: selectedSystem.id,
+              name: selectedSystem.name,
+              owner: selectedSystem.owner,
+              riskTier: selectedSystem.riskTier,
+              lifecycleStage: selectedSystem.stage,
+              readiness: selectedSystem.readiness,
+            }}
+            frameworkLabel={`${frameworkName} ${assignedVersion.versionLabel}`}
+            readOnly={auditorMode}
+          />
 
           {!auditorMode ? (
             <nav aria-label="Assurance builder actions" className="flex flex-col gap-3 border-t-2 border-[#0F1412] pt-5 sm:flex-row">

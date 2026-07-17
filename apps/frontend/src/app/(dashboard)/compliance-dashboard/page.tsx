@@ -40,7 +40,7 @@ function ReadinessStrip({
     ['Accepted', readiness?.accepted],
     ['Ready for review', readiness?.readyForReview],
     ['Missing evidence', readiness?.missingEvidence],
-    ['Blocking findings', readiness?.blockingFindings],
+    ['Rejected assessments', readiness?.blockingFindings],
   ] as const
 
   return (

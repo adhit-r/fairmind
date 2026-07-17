@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { apiClient, type ApiResponse } from '../api-client'
 import { API_ENDPOINTS } from '../endpoints'
@@ -32,6 +32,12 @@ export interface FrameworkAssignment {
   orgId: string
   systemId: string
   frameworkVersionId: string
+}
+
+export interface ResolvedFrameworkAssignment {
+  assignment: FrameworkAssignment
+  framework: FrameworkCatalog
+  version: FrameworkVersion
 }
 
 export interface ControlAssessment {
@@ -282,6 +288,38 @@ export function useFrameworkVersions(orgId?: string, frameworkKey?: string) {
   return { ...versions, versions: versions.data }
 }
 
+export function resolveFrameworkAssignments(
+  frameworks: FrameworkCatalog[],
+  versions: FrameworkVersion[],
+  assignments: FrameworkAssignment[],
+): ResolvedFrameworkAssignment[] {
+  const versionById = new Map(versions.map((version) => [version.id, version]))
+  const frameworkByKey = new Map(frameworks.map((framework) => [framework.frameworkKey, framework]))
+
+  return assignments.flatMap((assignment) => {
+    const version = versionById.get(assignment.frameworkVersionId)
+    const framework = version ? frameworkByKey.get(version.frameworkKey) : undefined
+    return version && framework ? [{ assignment, framework, version }] : []
+  })
+}
+
+export function useAllFrameworkVersions(orgId?: string, frameworks: FrameworkCatalog[] = []) {
+  const frameworkKey = frameworks.map((framework) => framework.frameworkKey).sort().join(',')
+  const versions = useGovernanceResource(
+    Boolean(orgId && frameworkKey),
+    [] as FrameworkVersion[],
+    useCallback(async () => {
+      const keys = frameworkKey.split(',').filter(Boolean)
+      const responses = await Promise.all(keys.map((key) =>
+        apiClient.get<FrameworkVersion[]>(API_ENDPOINTS.aiGovernance.frameworkVersions(orgId!, key)),
+      ))
+      return responses.flatMap((response) => unwrapGovernanceResponse(response))
+    }, [frameworkKey, orgId]),
+  )
+
+  return { ...versions, versions: versions.data }
+}
+
 export function useFrameworkAssignments(orgId?: string, systemId?: string) {
   const {
     data: assignments,
@@ -441,6 +479,12 @@ export function useGovernanceAssurance(orgId?: string, systemId?: string, assign
     assign,
   } = useFrameworkAssignments(orgId, systemId)
   const {
+    versions,
+    loading: versionsLoading,
+    error: versionsError,
+    refresh: refreshVersions,
+  } = useAllFrameworkVersions(orgId, frameworks)
+  const {
     controls,
     readiness,
     readinessLoading,
@@ -464,18 +508,32 @@ export function useGovernanceAssurance(orgId?: string, systemId?: string, assign
   } = useEvidenceMappingReview(orgId)
 
   const refresh = useCallback(async () => {
-    await Promise.all([refreshCatalog(), refreshAssignments(), refreshAssessment(), refreshEvidence()])
-  }, [refreshAssessment, refreshAssignments, refreshCatalog, refreshEvidence])
+    await Promise.all([refreshCatalog(), refreshAssignments(), refreshVersions(), refreshAssessment(), refreshEvidence()])
+  }, [refreshAssessment, refreshAssignments, refreshCatalog, refreshEvidence, refreshVersions])
+
+  const resolvedAssignments = useMemo(
+    () => resolveFrameworkAssignments(frameworks, versions, assignments),
+    [assignments, frameworks, versions],
+  )
+  const unresolvedAssignments = useMemo(
+    () => assignments.filter((assignment) =>
+      !resolvedAssignments.some((resolved) => resolved.assignment.id === assignment.id),
+    ),
+    [assignments, resolvedAssignments],
+  )
 
   return {
     frameworks,
+    versions,
     assignments,
+    resolvedAssignments,
+    unresolvedAssignments,
     controls,
     readiness,
     readinessLoading,
     evidenceRuns,
-    loading: catalogLoading || assignmentsLoading || assessmentLoading || evidenceLoading || mappingsLoading,
-    error: catalogError || assignmentsError || assessmentError || evidenceError || mappingsError,
+    loading: catalogLoading || assignmentsLoading || versionsLoading || assessmentLoading || evidenceLoading || mappingsLoading,
+    error: catalogError || assignmentsError || versionsError || assessmentError || evidenceError || mappingsError,
     refresh,
     importFramework,
     assign,

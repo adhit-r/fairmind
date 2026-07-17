@@ -140,3 +140,29 @@ test('keeps Govern & Prove to the six assurance destinations', () => {
     ],
   )
 })
+
+test('resolves every system assignment to its matching framework version', async () => {
+  const { resolveFrameworkAssignments } = await governanceContract()
+  const resolved = resolveFrameworkAssignments(
+    [
+      { frameworkKey: 'aiuc-1', name: 'AIUC-1' },
+      { frameworkKey: 'nist-ai-rmf', name: 'NIST AI RMF' },
+    ],
+    [
+      { id: 'version-aiuc', frameworkKey: 'aiuc-1', name: 'AIUC-1', versionLabel: 'April, 2026', sourceHash: 'aiuc-hash', status: 'active' },
+      { id: 'version-nist', frameworkKey: 'nist-ai-rmf', name: 'NIST AI RMF', versionLabel: '1.0', sourceHash: 'nist-hash', status: 'active' },
+    ],
+    [
+      { id: 'assignment-nist', orgId: 'org-1', systemId: 'system-1', frameworkVersionId: 'version-nist' },
+      { id: 'assignment-aiuc', orgId: 'org-1', systemId: 'system-1', frameworkVersionId: 'version-aiuc' },
+    ],
+  )
+
+  assert.deepEqual(
+    resolved.map(({ assignment, framework, version }) => [assignment.id, framework.frameworkKey, version.id]),
+    [
+      ['assignment-nist', 'nist-ai-rmf', 'version-nist'],
+      ['assignment-aiuc', 'aiuc-1', 'version-aiuc'],
+    ],
+  )
+})

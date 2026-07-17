@@ -8,12 +8,12 @@ The dashboard keeps one company and AI-system context across six tasks:
 
 | Task | Route | Purpose |
 | --- | --- | --- |
-| Overview | `/ai-governance` | Shows pinned scope and backend-derived blockers before readiness counts. |
+| Overview | `/ai-governance` | Shows pinned scope and backend-derived blockers before readiness counts, then persisted approval and environmental governance. |
 | AI Systems | `/model-inventory` | Registers models, agents, and composite applications. |
 | Frameworks & Controls | `/compliance-dashboard` | Activates an immutable framework version and reviews system control assessments. |
 | Evidence & Evaluations | `/evidence` | Inspects artifacts, evaluation provenance, and candidate evidence mappings. |
 | Findings | `/risks` | Tracks findings, risks, and linked remediation work. |
-| Reports & Assurance | `/reports` | Presents a version-pinned evidence index, decisions, unresolved findings, limitations, and history. |
+| Reports & Assurance | `/reports` | Presents a version-pinned evidence index, decisions, unresolved findings, limitations, report generation, exports, and saved history. |
 
 Users without mutation permission see the same `/reports` route in read-only auditor mode. Authorized users can also request it explicitly with `/reports?mode=auditor`. Auditor mode is a lens on the same tenant-scoped data, not a separate portal or copy.
 
@@ -44,15 +44,23 @@ The importer records the source hash, imported actor, source fields, requirement
 
 Activation is system-specific and requires an organization owner, administrator, or member with `model:write`. Select the company and AI system, open Frameworks & Controls, choose the required immutable version, and activate it. FairMind creates one assessment for every active control definition in a transaction.
 
+If a system has multiple assigned frameworks, Overview and Reports & Assurance load every catalog's versions, resolve each assignment by its `frameworkVersionId`, and expose a framework-scope selector. Readiness and evidence mapping detail always follow the selected assignment; the UI never pairs an assignment with a framework merely because both occupy the first position in separate API responses.
+
 The Overview and Reports pages do not infer a score from artifact counts. They read the assignment's transparent readiness contract:
 
 - applicable and not-applicable controls;
 - accepted, ready-for-review, partial, and not-started states;
 - controls missing accepted evidence;
 - controls with stale evidence; and
-- blocking findings.
+- rejected control assessments (returned by the current API field `blockingFindings`).
 
 If assignment, readiness, or a control-level finding count is absent, the UI says that it is unknown or incomplete. It does not substitute zero.
+
+## Record approval and environmental governance
+
+Overview retains the system approval workflow beside transparent readiness. Users with organization mutation permission can submit a persisted approval request and approve or reject a pending request. Read-only users see the recorded request and latest decision without mutation actions. Rejected-assessment and evidence-gap counts inform the review but are not silently converted into an approval decision.
+
+The Environmental Governance panel continues to read the selected system's environmental-impact packet. It shows energy, carbon, recommendation, provenance, and linked environmental evidence when recorded, and an explicit pending or unavailable state otherwise. Environmental values are not included in the framework readiness numerator unless the active framework's controls and reviewed mappings explicitly cover them.
 
 ## Ingest an evidence run
 
@@ -104,7 +112,9 @@ Reports & Assurance pins the company, AI system, framework name, immutable versi
 - evaluation limitations; and
 - evidence-run history retained for the scoped system.
 
-The summary is a live review surface, not a signed assurance opinion. Preserve exported evidence and decision records under the organization's records policy if an immutable review package is required.
+Below the assurance summary, the Report Studio keeps the existing operational-report workflow reachable on `/reports`: authorized builders can generate a stored governance snapshot, preview it, revisit saved report history, and export JSON or PDF. Auditor mode can preview and export saved reports but cannot generate a new snapshot. The operational preview is kept separate because its legacy system-readiness field is not the framework readiness calculation above.
+
+The assurance summary is a live review surface, not a signed assurance opinion. Preserve exported evidence, saved reports, and decision records under the organization's records policy if an immutable review package is required.
 
 ## Claim boundaries
 

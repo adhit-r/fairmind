@@ -47,7 +47,7 @@ const TYPE_LABELS: Record<string, string> = {
 
 const TYPE_COLORS: Record<string, string> = {
   compliance: 'border-blue-500 bg-blue-50 text-blue-800',
-  bias: 'border-purple-500 bg-purple-50 text-purple-800',
+  bias: 'border-orange-500 bg-orange-50 text-orange-900',
   governance: 'border-emerald-500 bg-emerald-50 text-emerald-800',
 }
 
