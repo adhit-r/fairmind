@@ -36,6 +36,7 @@ interface AppSidebarProps {
 const itemBaseClass = "flex items-center gap-3 px-3 py-3 w-full border-2 border-transparent transition-all duration-200 ease-in-out rounded-none font-bold text-sm uppercase tracking-tight"
 const itemHoverClass = "hover:border-black hover:bg-orange hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-[2px] hover:-translate-x-[2px]"
 const itemActiveClass = "bg-black text-white border-black shadow-[4px_4px_0px_0px_rgba(255,107,53,1)] translate-x-[0px] translate-y-[0px]" // Orange shadow for active black item
+const isNavigationItemActive = (pathname: string, href: string) => pathname === href || pathname.startsWith(`${href}/`)
 
 export function AppSidebar({ className }: AppSidebarProps) {
   const pathname = usePathname()
@@ -46,7 +47,7 @@ export function AppSidebar({ className }: AppSidebarProps) {
   // Automatically expand categories that contain the active pathname
   useEffect(() => {
     const activeCategoryIds = navigationCategories
-      .filter((category) => category.items?.some((item) => pathname === item.href))
+      .filter((category) => category.items?.some((item) => isNavigationItemActive(pathname, item.href)))
       .map((category) => category.id)
 
     if (activeCategoryIds.length > 0) {
@@ -77,7 +78,7 @@ export function AppSidebar({ className }: AppSidebarProps) {
           {navigationCategories.map((category) => {
             const CategoryIcon = category.icon ?? (() => null)
             const isExpanded = expandedCategories.includes(category.id)
-            const hasActiveItem = category.items?.some((item) => pathname === item.href) ?? false
+            const hasActiveItem = category.items?.some((item) => isNavigationItemActive(pathname, item.href)) ?? false
 
             // When collapsed, show all items as icons directly (no categories)
             if (isCollapsed) {
@@ -112,7 +113,7 @@ export function AppSidebar({ className }: AppSidebarProps) {
                 <div key={category.id} className="space-y-2">
                   {category.items.map((item) => {
                     const ItemIcon = item.icon ?? (() => null)
-                    const isActive = pathname === item.href
+                    const isActive = isNavigationItemActive(pathname, item.href)
                     return (
                       <TooltipProvider key={item.href}>
                         <Tooltip>
@@ -199,7 +200,7 @@ export function AppSidebar({ className }: AppSidebarProps) {
                   <SidebarMenu>
                     {category.items?.map((item) => {
                       const ItemIcon = item.icon ?? (() => null);
-                      const isActive = pathname === item.href;
+                      const isActive = isNavigationItemActive(pathname, item.href);
                       return (
                         <SidebarMenuItem key={item.href}>
                           <SidebarMenuButton
