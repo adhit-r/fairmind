@@ -20,6 +20,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -130,6 +131,7 @@ class GovernanceWorkspace(Base):
     __tablename__ = "governance_workspaces"
 
     id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=True, index=True)
     name = Column(String, nullable=False)
     owner = Column(String, nullable=True)
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
@@ -140,6 +142,188 @@ class GovernanceWorkspace(Base):
 
     def __repr__(self) -> str:
         return f"<GovernanceWorkspace(id={self.id}, name={self.name})>"
+
+
+class GovernanceFrameworkVersion(Base):
+    """An immutable version of a governance framework."""
+
+    __tablename__ = "governance_framework_versions"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    framework_key = Column(String, nullable=False)
+    name = Column(String, nullable=False)
+    version_label = Column(String, nullable=False)
+    source_hash = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="draft")
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+    __table_args__ = (
+        UniqueConstraint(
+            "framework_key",
+            "version_label",
+            "source_hash",
+            name="uq_governance_framework_version",
+        ),
+    )
+
+
+class GovernanceControlDefinition(Base):
+    """A control defined by a specific framework version."""
+
+    __tablename__ = "governance_control_definitions"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    framework_version_id = Column(
+        String,
+        ForeignKey("governance_framework_versions.id"),
+        nullable=False,
+        index=True,
+    )
+    external_id = Column(String, nullable=False)
+    title = Column(String, nullable=False)
+    statement = Column(Text, nullable=False)
+    active = Column(Integer, nullable=False, default=1)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+    __table_args__ = (
+        UniqueConstraint(
+            "framework_version_id",
+            "external_id",
+            name="uq_governance_control_definition",
+        ),
+    )
+
+
+class GovernanceFrameworkAssignment(Base):
+    """A framework version assigned to an AI system within an organization."""
+
+    __tablename__ = "governance_framework_assignments"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    system_id = Column(
+        String,
+        ForeignKey("governance_ai_systems.id"),
+        nullable=False,
+        index=True,
+    )
+    framework_version_id = Column(
+        String,
+        ForeignKey("governance_framework_versions.id"),
+        nullable=False,
+        index=True,
+    )
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+    __table_args__ = (
+        UniqueConstraint(
+            "org_id",
+            "system_id",
+            "framework_version_id",
+            name="uq_governance_framework_assignment",
+        ),
+    )
+
+
+class GovernanceControlAssessment(Base):
+    """The organization-specific assessment state for a control."""
+
+    __tablename__ = "governance_control_assessments"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    system_id = Column(
+        String,
+        ForeignKey("governance_ai_systems.id"),
+        nullable=False,
+        index=True,
+    )
+    framework_assignment_id = Column(
+        String,
+        ForeignKey("governance_framework_assignments.id"),
+        nullable=False,
+        index=True,
+    )
+    control_definition_id = Column(
+        String,
+        ForeignKey("governance_control_definitions.id"),
+        nullable=False,
+        index=True,
+    )
+    applicability = Column(String, nullable=False, default="applicable")
+    status = Column(String, nullable=False, default="not_started")
+    owner = Column(String, nullable=True)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+    __table_args__ = (
+        UniqueConstraint(
+            "framework_assignment_id",
+            "control_definition_id",
+            name="uq_governance_control_assessment",
+        ),
+    )
+
+
+class GovernanceEvidenceRun(Base):
+    """A deduplicated evidence-collection run for an organization."""
+
+    __tablename__ = "governance_evidence_runs"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    source_type = Column(String, nullable=False)
+    source_identifier = Column(String, nullable=False)
+    run_id = Column(String, nullable=False)
+    content_hash = Column(String, nullable=False)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+    __table_args__ = (
+        UniqueConstraint(
+            "org_id",
+            "source_type",
+            "source_identifier",
+            "run_id",
+            "content_hash",
+            name="uq_governance_evidence_run",
+        ),
+    )
+
+
+class GovernanceControlEvidence(Base):
+    """A reviewable mapping between evidence and a control assessment."""
+
+    __tablename__ = "governance_control_evidence"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    evidence_id = Column(
+        String,
+        ForeignKey("governance_evidence_runs.id"),
+        nullable=False,
+        index=True,
+    )
+    control_assessment_id = Column(
+        String,
+        ForeignKey("governance_control_assessments.id"),
+        nullable=False,
+        index=True,
+    )
+    state = Column(String, nullable=False, default="candidate")
+    mapping_rationale = Column(Text, nullable=True)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+    __table_args__ = (
+        UniqueConstraint(
+            "evidence_id",
+            "control_assessment_id",
+            name="uq_governance_control_evidence",
+        ),
+    )
 
 
 class GovernanceAISystem(Base):
