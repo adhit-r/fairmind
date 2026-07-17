@@ -47,6 +47,14 @@ def test_organization_list_supplies_effective_custom_role_permissions(monkeypatc
         route.path == "/api/v1/organizations" and "GET" in route.methods
         for route in production_app.routes
     )
+    assert not any(
+        route.path == "/api/v1/register" and "POST" in route.methods
+        for route in production_app.routes
+    )
+    assert not any(
+        route.path == "/api/v1/compliance/schedules" and "POST" in route.methods
+        for route in production_app.routes
+    )
 
     database = OrganizationListDatabase()
 

@@ -26,7 +26,6 @@ from pydantic import BaseModel, EmailStr
 from config.database import get_db_connection, get_database
 from config.settings import settings
 from config.auth import get_current_active_user, TokenData
-from src.application.services.api_boundary_dependencies import email_service
 from core.decorators.org_permissions import require_org_admin, require_org_member
 
 logger = logging.getLogger("fairmind.org_management")
@@ -467,6 +466,8 @@ async def invite_member(
             # Send invitation email asynchronously
             try:
                 import asyncio
+                from src.application.services.api_boundary_dependencies import email_service
+
                 asyncio.create_task(
                     email_service.send_org_invitation(
                         email=payload.email,
