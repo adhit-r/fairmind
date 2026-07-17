@@ -34,11 +34,15 @@ class GateEvaluationTest(unittest.TestCase):
             self.assertEqual(exit_code, 0)
 
             csv_path = output_root / "results" / "paper_gate_eval.csv"
+            baseline_path = output_root / "results" / "paper_baseline_comparison.csv"
             summary_path = output_root / "results" / "paper_gate_summary.md"
             svg_path = output_root / "plots" / "paper_gate_decisions.svg"
+            baseline_svg_path = output_root / "plots" / "paper_baseline_accuracy.svg"
             self.assertTrue(csv_path.exists())
+            self.assertTrue(baseline_path.exists())
             self.assertTrue(summary_path.exists())
             self.assertTrue(svg_path.exists())
+            self.assertTrue(baseline_svg_path.exists())
 
             with csv_path.open(newline="", encoding="utf-8") as handle:
                 rows = list(csv.DictReader(handle))
@@ -59,8 +63,33 @@ class GateEvaluationTest(unittest.TestCase):
                 "false",
             )
 
+            with baseline_path.open(newline="", encoding="utf-8") as handle:
+                baseline_rows = list(csv.DictReader(handle))
+            self.assertEqual(len(baseline_rows), 56)
+            by_baseline = {}
+            for row in baseline_rows:
+                by_baseline.setdefault(row["baseline"], []).append(row)
+            self.assertEqual(
+                sum(1 for row in by_baseline["fairmind_e"] if row["exact_match"] == "true"),
+                14,
+            )
+            self.assertEqual(
+                sum(1 for row in by_baseline["no_environmental_gate"] if row["exact_match"] == "true"),
+                3,
+            )
+            self.assertEqual(
+                sum(1 for row in by_baseline["carbon_only_gate"] if row["exact_match"] == "true"),
+                7,
+            )
+            self.assertEqual(
+                sum(1 for row in by_baseline["generic_sustainability_score"] if row["exact_match"] == "true"),
+                6,
+            )
+
             summary = summary_path.read_text(encoding="utf-8")
             self.assertIn("Exact label accuracy: 14/14 (100.0%)", summary)
+            self.assertIn("| fairmind_e | 14/14 | 100.0% | 14/14 | 14/14 |", summary)
+            self.assertIn("| no_environmental_gate | 3/14 | 21.4% | 3/14 | 6/14 |", summary)
             self.assertIn("None.", summary)
 
 
