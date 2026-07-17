@@ -392,6 +392,7 @@ _include_router("api.routes.core", prefix="/api/v1", tags=["core"], required=Tru
 _include_router("api.routes.database", prefix="/api/v1", tags=["database"], attr="router", required=True)
 _include_router("api.routes.database", prefix="/api/v1", tags=["main-api"], attr="main_router", required=True)
 _include_router("api.routes.ai_governance", prefix="/api/v1/ai-governance", tags=["ai-governance"], required=True)
+_include_router("api.routes.governance_assurance", prefix="/api/v1/ai-governance", tags=["governance-assurance"], required=True)
 _include_router("api.routes.environmental", tags=["environmental"], required=False)
 _include_router("api.routes.settings", prefix="/api/v1", tags=["settings"], required=False)
 
