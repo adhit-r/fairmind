@@ -1,9 +1,11 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 import uuid
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, func, select
+from openpyxl import Workbook
+from sqlalchemy import create_engine, event, func, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -14,6 +16,8 @@ from database.governance_models import (
     GovernanceAISystem,
     GovernanceControlAssessment,
     GovernanceControlDefinition,
+    GovernanceControlEvidence,
+    GovernanceEvidenceRun,
     GovernanceFrameworkAssignment,
     GovernanceFrameworkVersion,
     GovernanceWorkspace,
@@ -121,13 +125,39 @@ def _seed_catalog_and_system(session) -> tuple[str, str, str]:
     session.execute(
         GovernanceControlDefinition.__table__.insert(),
         [
-            {"id": "control-1", "framework_version_id": "version-a", "external_id": "A001.1", "title": "Active control one", "statement": "Test control", "active": True},
-            {"id": "control-2", "framework_version_id": "version-a", "external_id": "A001.2", "title": "Active control two", "statement": "Test control", "active": True},
-            {"id": "control-retired", "framework_version_id": "version-a", "external_id": "A001.3", "title": "Retired control", "statement": "Test control", "active": False},
+            {"id": "control-1", "framework_version_id": "version-a", "external_id": "A001.1", "title": "Active control one", "statement": "Test control", "frequency": "Annual", "active": True},
+            {"id": "control-2", "framework_version_id": "version-a", "external_id": "A001.2", "title": "Active control two", "statement": "Test control", "frequency": "Quarterly", "active": True},
+            {"id": "control-retired", "framework_version_id": "version-a", "external_id": "A001.3", "title": "Retired control", "statement": "Test control", "frequency": "", "active": False},
         ],
     )
     session.commit()
     return "system-a", "system-b", "version-a"
+
+
+@pytest.fixture
+def import_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    root = tmp_path / "framework-imports"
+    root.mkdir()
+    monkeypatch.setenv("GOVERNANCE_FRAMEWORK_IMPORT_ROOT", str(root))
+    monkeypatch.setenv("GOVERNANCE_FRAMEWORK_IMPORT_STRICT", "false")
+    return root
+
+
+def _write_small_workbook(path: Path) -> None:
+    workbook = Workbook()
+    instructions = workbook.active
+    instructions.title = "Instructions"
+    instructions.append(["AIUC-1 | Version: April, 2026"])
+    requirements = workbook.create_sheet("AIUC-1 requirements")
+    requirements.append(["Principle", "Requirement title", "Full requirement", "Application", "Frequency", "Capabilities"])
+    requirements.append(["Data", "A001: Input policy", "Keep source text.", "Mandatory", "Annual", "Universal"])
+    requirements.append(["Data", "A002: Output policy", "Keep second text.", "Optional", "Quarterly", "Universal"])
+    controls = workbook.create_sheet("AIUC-1 Controls & Evidence")
+    controls.append(["Requirement Information"])
+    controls.append(["Requirement title", "Mandatory / Optional", "Full requirement", "Control application", "Control", "Evidence title", "Typical evidence", "Category", "Typical Location", "Capabilities", "Category", "Typical Location", "Capabilities", "Type of change", "Change - priority area", "Change - control", "Change - evidence title", "Change - typical evidence", "Change - other (control type, category, typical location, capabilities)", "Reasoning for change", "Changelog specification"])
+    controls.append(["A001: Input policy", "Mandatory", "Keep source text.", "Core", "Input safeguard.", "A001.1 Documentation: Input policy", "Source evidence.", "Policy", "Policy store", "Universal"])
+    controls.append(["A002: Output policy", "Optional", "Keep second text.", "Supplemental", "Output safeguard.", "A002.1 Documentation: Output policy", "Source evidence.", "Policy", "Policy store", "Universal"])
+    workbook.save(path)
 
 
 def test_framework_routes_bind_path_organization_to_active_membership(assurance_client) -> None:
@@ -150,10 +180,55 @@ def test_framework_import_requires_owner_or_admin(assurance_client) -> None:
 
     response = client.post(
         f"/api/v1/ai-governance/organizations/{ORG_A}/frameworks/import",
-        json={"workbookPath": "/not/a/workbook.xlsx"},
+        json={"workbookPath": "catalog.xlsx"},
     )
 
     assert response.status_code == 403
+
+
+def test_owner_imports_only_managed_xlsx_files_and_exposes_catalog_routes(
+    assurance_client, import_root: Path
+) -> None:
+    client, session_factory, _ = assurance_client
+    session = session_factory()
+    _seed_org(session, ORG_A, USER_A, role="owner")
+    session.close()
+    workbook = import_root / "catalog.xlsx"
+    _write_small_workbook(workbook)
+    outside = import_root.parent / "outside.xlsx"
+    _write_small_workbook(outside)
+
+    imported = client.post(
+        f"/api/v1/ai-governance/organizations/{ORG_A}/frameworks/import",
+        json={"workbookPath": workbook.name},
+    )
+    versions = client.get(f"/api/v1/ai-governance/organizations/{ORG_A}/frameworks/aiuc-1/versions")
+    controls = client.get(
+        f"/api/v1/ai-governance/organizations/{ORG_A}/framework-versions/{imported.json()['version_id']}/controls"
+    )
+    traversal = client.post(
+        f"/api/v1/ai-governance/organizations/{ORG_A}/frameworks/import",
+        json={"workbookPath": "../outside.xlsx"},
+    )
+    absolute = client.post(
+        f"/api/v1/ai-governance/organizations/{ORG_A}/frameworks/import",
+        json={"workbookPath": str(outside)},
+    )
+    invalid_type = client.post(
+        f"/api/v1/ai-governance/organizations/{ORG_A}/frameworks/import",
+        json={"workbookPath": "catalog.txt"},
+    )
+
+    assert imported.status_code == 201, imported.text
+    assert imported.json()["created"] is True
+    assert versions.status_code == 200
+    assert versions.json()[0]["id"] == imported.json()["version_id"]
+    assert controls.status_code == 200
+    assert len(controls.json()) == 2
+    assert traversal.status_code == absolute.status_code == invalid_type.status_code == 422
+    session = session_factory()
+    assert session.execute(select(func.count()).select_from(GovernanceFrameworkVersion.__table__)).scalar_one() == 1
+    session.close()
 
 
 def test_scoped_workspace_and_system_creation_bind_organization(assurance_client) -> None:
@@ -195,15 +270,73 @@ def test_assignment_is_org_scoped_idempotent_and_initializes_active_controls(ass
         f"/api/v1/ai-governance/organizations/{ORG_A}/systems/{foreign_system_id}/framework-assignments",
         json={"frameworkVersionId": version_id},
     )
+    listed = client.get(
+        f"/api/v1/ai-governance/organizations/{ORG_A}/systems/{system_id}/framework-assignments"
+    )
 
     assert first.status_code == 201
     assert second.status_code == 200
     assert first.json()["id"] == second.json()["id"]
     assert foreign.status_code == 404
+    assert listed.status_code == 200
+    assert listed.json()[0]["id"] == first.json()["id"]
     session = session_factory()
     assert session.execute(select(func.count()).select_from(GovernanceFrameworkAssignment.__table__)).scalar_one() == 1
     assert session.execute(select(func.count()).select_from(GovernanceControlAssessment.__table__)).scalar_one() == 2
     session.close()
+
+
+def test_assignment_rolls_back_when_assessment_creation_fails(assurance_client) -> None:
+    client, session_factory, _ = assurance_client
+    session = session_factory()
+    _seed_org(session, ORG_A, USER_A, role="admin")
+    system_id, _, version_id = _seed_catalog_and_system(session)
+    engine = session.get_bind()
+    session.close()
+
+    @event.listens_for(engine, "before_cursor_execute")
+    def fail_assessment_insert(_connection, _cursor, statement, _parameters, _context, _executemany):
+        if "INSERT INTO governance_control_assessments" in statement:
+            raise RuntimeError("injected assessment failure")
+
+    try:
+        failed = client.post(
+            f"/api/v1/ai-governance/organizations/{ORG_A}/systems/{system_id}/framework-assignments",
+            json={"frameworkVersionId": version_id},
+        )
+    finally:
+        event.remove(engine, "before_cursor_execute", fail_assessment_insert)
+
+    session = session_factory()
+    assert failed.status_code == 500
+    assert session.execute(select(func.count()).select_from(GovernanceFrameworkAssignment.__table__)).scalar_one() == 0
+    session.close()
+
+
+def test_assignment_with_no_active_controls_is_created_with_zero_readiness(assurance_client) -> None:
+    client, session_factory, _ = assurance_client
+    session = session_factory()
+    _seed_org(session, ORG_A, USER_A, role="admin")
+    system_id, _, _ = _seed_catalog_and_system(session)
+    session.execute(
+        GovernanceFrameworkVersion.__table__.insert().values(
+            id="version-empty", framework_key="empty", name="Empty", version_label="1", source_hash="empty"
+        )
+    )
+    session.commit()
+    session.close()
+
+    assignment = client.post(
+        f"/api/v1/ai-governance/organizations/{ORG_A}/systems/{system_id}/framework-assignments",
+        json={"frameworkVersionId": "version-empty"},
+    )
+    readiness = client.get(
+        f"/api/v1/ai-governance/organizations/{ORG_A}/framework-assignments/{assignment.json()['id']}/readiness"
+    )
+
+    assert assignment.status_code == 201, assignment.text
+    assert readiness.status_code == 200
+    assert all(value == 0 for value in readiness.json().values())
 
 
 def test_assignment_and_assessment_ids_cannot_cross_organizations(assurance_client) -> None:
@@ -280,6 +413,36 @@ def test_assessment_update_allows_existing_org_role_permission_and_readiness_is_
         f"/api/v1/ai-governance/organizations/{ORG_A}/control-assessments/{controls[0]['id']}",
         json={"status": "accepted"},
     )
+    second_updated = client.patch(
+        f"/api/v1/ai-governance/organizations/{ORG_A}/control-assessments/{controls[1]['id']}",
+        json={"status": "accepted"},
+    )
+    session = session_factory()
+    old_run = (datetime.now(timezone.utc) - timedelta(days=400)).isoformat()
+    session.execute(
+        GovernanceEvidenceRun.__table__.insert().values(
+            id="run-a",
+            org_id=ORG_A,
+            system_id=system_id,
+            source_type="evaluation",
+            source_identifier="suite-a",
+            run_id="run-a",
+            content_hash="hash-a",
+            created_at=old_run,
+        )
+    )
+    session.execute(
+        GovernanceControlEvidence.__table__.insert().values(
+            id="mapping-a",
+            org_id=ORG_A,
+            system_id=system_id,
+            evidence_id="run-a",
+            control_assessment_id=controls[0]["id"],
+            state="accepted",
+        )
+    )
+    session.commit()
+    session.close()
     readiness = client.get(
         f"/api/v1/ai-governance/organizations/{ORG_A}/framework-assignments/{assignment['id']}/readiness"
     )
@@ -288,15 +451,16 @@ def test_assessment_update_allows_existing_org_role_permission_and_readiness_is_
     assert permission_assignment.status_code == 201
     assert permitted.status_code == 200
     assert updated.status_code == 200
+    assert second_updated.status_code == 200
     assert readiness.status_code == 200
     assert readiness.json() == {
         "applicable": 2,
-        "accepted": 1,
+        "accepted": 2,
         "readyForReview": 0,
         "partial": 0,
-        "notStarted": 1,
+        "notStarted": 0,
         "notApplicable": 0,
         "blockingFindings": 0,
         "missingEvidence": 1,
-        "staleEvidence": 0,
+        "staleEvidence": 1,
     }

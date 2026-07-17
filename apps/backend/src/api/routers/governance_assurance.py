@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+import os
 from pathlib import Path
+import tempfile
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
@@ -17,6 +19,7 @@ from src.application.services.governance_assurance_service import GovernanceAssu
 
 
 router = APIRouter(prefix="/organizations/{org_id}", tags=["governance-assurance"])
+MAX_WORKBOOK_BYTES = 50 * 1024 * 1024
 
 
 class WorkspaceRequest(BaseModel):
@@ -75,6 +78,29 @@ def _require_import(membership: OrgMembership, service: GovernanceAssuranceServi
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Organization admin permission required")
 
 
+def _managed_workbook_path(workbook_path: str) -> Path:
+    root = Path(
+        os.getenv("GOVERNANCE_FRAMEWORK_IMPORT_ROOT", str(Path(tempfile.gettempdir()) / "fairmind-framework-imports"))
+    ).resolve()
+    requested = Path(workbook_path)
+    if requested.is_absolute() or requested.suffix.lower() != ".xlsx":
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Workbook must be a managed .xlsx file")
+    try:
+        path = (root / requested).resolve()
+        path.relative_to(root)
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Workbook path is outside the managed import root") from error
+    if not path.is_file():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workbook not found")
+    if path.stat().st_size > MAX_WORKBOOK_BYTES:
+        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Workbook exceeds import size limit")
+    return path
+
+
+def _strict_imports() -> bool:
+    return os.getenv("GOVERNANCE_FRAMEWORK_IMPORT_STRICT", "true").lower() not in {"0", "false", "no"}
+
+
 @router.get("/frameworks")
 def list_frameworks(
     _membership: OrgMembership = Depends(organization_membership), db: Session = Depends(get_db)
@@ -90,10 +116,8 @@ def import_framework(
 ) -> dict:
     service = _service(db)
     _require_import(membership, service)
-    path = Path(request.workbook_path)
-    if not path.is_file():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workbook not found")
-    return asdict(FrameworkCatalogService(db).import_workbook(path, membership.user_id))
+    path = _managed_workbook_path(request.workbook_path)
+    return asdict(FrameworkCatalogService(db, strict=_strict_imports()).import_workbook(path, membership.user_id))
 
 
 @router.get("/frameworks/{framework_key}/versions")

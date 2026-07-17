@@ -253,8 +253,12 @@ class FrameworkCatalogService:
     def import_workbook(self, path: Path, actor_id: str) -> FrameworkImportResult:
         catalog = parse_aiuc_workbook(path, strict=self.strict, expected_counts=self.expected_counts)
         try:
-            with self.db.begin():
-                return self._persist(catalog, Path(path), actor_id)
+            already_active = self.db.in_transaction()
+            with (self.db.begin_nested() if already_active else self.db.begin()):
+                result = self._persist(catalog, Path(path), actor_id)
+            if already_active:
+                self.db.commit()
+            return result
         except IntegrityError:
             self.db.rollback()
             versions = GovernanceFrameworkVersion.__table__

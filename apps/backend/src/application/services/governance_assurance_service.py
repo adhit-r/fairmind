@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import insert, select, update
 from sqlalchemy.exc import IntegrityError
@@ -14,6 +14,8 @@ from database.governance_models import (
     GovernanceAISystem,
     GovernanceControlAssessment,
     GovernanceControlDefinition,
+    GovernanceControlEvidence,
+    GovernanceEvidenceRun,
     GovernanceFrameworkAssignment,
     GovernanceFrameworkVersion,
     GovernanceWorkspace,
@@ -195,21 +197,20 @@ class GovernanceAssuranceService:
                     controls.c.framework_version_id == version_id, controls.c.active == 1
                 )
             ).scalars()
-            self.db.execute(
-                insert(assessments),
-                [
-                    {
-                        "id": str(uuid.uuid4()),
-                        "org_id": org_id,
-                        "system_id": system_id,
-                        "framework_assignment_id": assignment_id,
-                        "control_definition_id": control_id,
-                        "created_at": now,
-                        "updated_at": now,
-                    }
-                    for control_id in active_controls
-                ],
-            )
+            assessment_values = [
+                {
+                    "id": str(uuid.uuid4()),
+                    "org_id": org_id,
+                    "system_id": system_id,
+                    "framework_assignment_id": assignment_id,
+                    "control_definition_id": control_id,
+                    "created_at": now,
+                    "updated_at": now,
+                }
+                for control_id in active_controls
+            ]
+            if assessment_values:
+                self.db.execute(insert(assessments), assessment_values)
             self.db.commit()
         except IntegrityError:
             self.db.rollback()
@@ -221,6 +222,9 @@ class GovernanceAssuranceService:
                 )
             ).scalar_one_or_none()
             return (self._assignment(existing), False) if existing else (None, False)
+        except Exception:
+            self.db.rollback()
+            raise
         return self._assignment(assignment_id), True
 
     def _assignment(self, assignment_id: str) -> dict:
@@ -306,11 +310,33 @@ class GovernanceAssuranceService:
             select(assignments.c.id).where(assignments.c.id == assignment_id, assignments.c.org_id == org_id)
         ).scalar_one_or_none():
             return None
+        controls, mappings, evidence_runs = (
+            GovernanceControlDefinition.__table__,
+            GovernanceControlEvidence.__table__,
+            GovernanceEvidenceRun.__table__,
+        )
         rows = self.db.execute(
-            select(assessments.c.applicability, assessments.c.status).where(
+            select(
+                assessments.c.id,
+                assessments.c.applicability,
+                assessments.c.status,
+                controls.c.frequency,
+            )
+            .join(controls, controls.c.id == assessments.c.control_definition_id)
+            .where(
                 assessments.c.framework_assignment_id == assignment_id, assessments.c.org_id == org_id
             )
         ).mappings()
+        evidence_by_assessment: dict[str, list[str]] = {}
+        for row in self.db.execute(
+            select(mappings.c.control_assessment_id, evidence_runs.c.created_at)
+            .join(evidence_runs, evidence_runs.c.id == mappings.c.evidence_id)
+            .where(
+                mappings.c.org_id == org_id,
+                mappings.c.state == "accepted",
+            )
+        ).mappings():
+            evidence_by_assessment.setdefault(row["control_assessment_id"], []).append(row["created_at"])
         counts = {
             "applicable": 0,
             "accepted": 0,
@@ -340,6 +366,26 @@ class GovernanceAssuranceService:
                 counts["notStarted"] += 1
             elif status == "rejected":
                 counts["blockingFindings"] += 1
-            if status != "accepted":
+            evidence_times = evidence_by_assessment.get(row["id"], [])
+            if not evidence_times:
                 counts["missingEvidence"] += 1
+            elif all(_is_stale(timestamp, row["frequency"]) for timestamp in evidence_times):
+                counts["staleEvidence"] += 1
         return counts
+
+
+def _is_stale(created_at: str, frequency: str) -> bool:
+    try:
+        captured = datetime.fromisoformat(str(created_at).replace("Z", "+00:00"))
+    except ValueError:
+        return True
+    if captured.tzinfo is None:
+        captured = captured.replace(tzinfo=timezone.utc)
+    frequency_days = {
+        "weekly": 8,
+        "monthly": 31,
+        "quarterly": 92,
+        "annual": 366,
+    }
+    threshold = next((days for label, days in frequency_days.items() if label in (frequency or "").lower()), 366)
+    return datetime.now(timezone.utc) - captured.astimezone(timezone.utc) > timedelta(days=threshold)
