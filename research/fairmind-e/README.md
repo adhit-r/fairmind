@@ -52,3 +52,17 @@ Offsets are never subtracted from emissions and never improve confidence, tier, 
 ## Claim Boundaries
 
 The checked-in results are synthetic smoke artifacts for reproducibility and paper-method development. They should not be presented as production measurements, benchmark results, regulatory compliance evidence, or reviewer-study data.
+
+## Paper Gate Evaluation
+
+The `evaluation/` folder contains a minimal hand-labeled paper fixture set that runs against the production FairMind-E domain gate.
+
+Run from the backend environment:
+
+```bash
+cd apps/backend
+uv run python ../../research/fairmind-e/evaluation/evaluate_gate.py --output-root ../../research/fairmind-e/evaluation
+uv run python ../../research/fairmind-e/tests/test_gate_evaluation.py
+```
+
+The output is a deterministic CSV, Markdown summary, and SVG plot. This validates gate-label behavior only; it is not a real emissions measurement study.

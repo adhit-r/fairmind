@@ -95,6 +95,7 @@ class EnvironmentalAssessment(BaseModel):
 
     mitigations_json: list[Mitigation] = Field(default_factory=list)
     evidence_refs_json: list[str] = Field(default_factory=list)
+    offsets_json: dict[str, Any] = Field(default_factory=dict)
     not_applicable_controls: list[str] = Field(default_factory=list)
     reviewer_state: str = "draft"
     exception: EnvironmentalException | None = None

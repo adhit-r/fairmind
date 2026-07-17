@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="330" viewBox="0 0 720 330" role="img" aria-label="FairMind-E paper gate decision counts">
+<rect width="100%" height="100%" fill="#FFFFFF"/>
+<text x="36" y="38" font-size="24" font-family="Arial, sans-serif" font-weight="700" fill="#111111">FairMind-E paper gate decisions</text>
+<text x="36" y="64" font-size="13" font-family="Arial, sans-serif" fill="#333333">Expected versus actual gate labels; exact accuracy 100.0%.</text>
+<rect x="36" y="82" width="16" height="16" fill="#0F766E" stroke="#111111" stroke-width="2"/>
+<text x="60" y="95" font-size="12" font-family="Arial, sans-serif" fill="#111111">expected</text>
+<rect x="136" y="82" width="16" height="16" fill="#F97316" stroke="#111111" stroke-width="2"/>
+<text x="160" y="95" font-size="12" font-family="Arial, sans-serif" fill="#111111">actual</text>
+<line x1="42" y1="252" x2="678" y2="252" stroke="#111111" stroke-width="3"/>
+<rect x="80" y="165" width="52" height="85" fill="#0F766E" stroke="#111111" stroke-width="2"/>
+<text x="80" y="288" font-size="12" font-family="Arial, sans-serif" fill="#111111">expected go</text>
+<rect x="144" y="165" width="52" height="85" fill="#F97316" stroke="#111111" stroke-width="2"/>
+<text x="144" y="288" font-size="12" font-family="Arial, sans-serif" fill="#111111">actual go</text>
+<text x="80" y="153" font-size="12" font-family="Arial, sans-serif" fill="#111111">3</text>
+<text x="144" y="153" font-size="12" font-family="Arial, sans-serif" fill="#111111">3</text>
+<rect x="270" y="80" width="52" height="170" fill="#0F766E" stroke="#111111" stroke-width="2"/>
+<text x="270" y="288" font-size="12" font-family="Arial, sans-serif" fill="#111111">expected conditional_go</text>
+<rect x="334" y="80" width="52" height="170" fill="#F97316" stroke="#111111" stroke-width="2"/>
+<text x="334" y="288" font-size="12" font-family="Arial, sans-serif" fill="#111111">actual conditional_go</text>
+<text x="270" y="68" font-size="12" font-family="Arial, sans-serif" fill="#111111">6</text>
+<text x="334" y="68" font-size="12" font-family="Arial, sans-serif" fill="#111111">6</text>
+<rect x="460" y="109" width="52" height="141" fill="#0F766E" stroke="#111111" stroke-width="2"/>
+<text x="460" y="288" font-size="12" font-family="Arial, sans-serif" fill="#111111">expected no_go</text>
+<rect x="524" y="109" width="52" height="141" fill="#F97316" stroke="#111111" stroke-width="2"/>
+<text x="524" y="288" font-size="12" font-family="Arial, sans-serif" fill="#111111">actual no_go</text>
+<text x="460" y="97" font-size="12" font-family="Arial, sans-serif" fill="#111111">5</text>
+<text x="524" y="97" font-size="12" font-family="Arial, sans-serif" fill="#111111">5</text>
+</svg>
