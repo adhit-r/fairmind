@@ -59,6 +59,15 @@ class AssessmentUpdateRequest(BaseModel):
     owner: str | None = None
 
 
+class ArtifactReference(BaseModel):
+    """A bounded pointer to external evidence; artifact contents are never accepted."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    uri: str = Field(min_length=1, max_length=2048)
+    sha256: str = Field(min_length=64, max_length=64, pattern=r"^[0-9a-fA-F]{64}$")
+
+
 class EvidenceRunEnvelope(BaseModel):
     """A compact, immutable evaluation or integration evidence envelope."""
 
@@ -82,7 +91,9 @@ class EvidenceRunEnvelope(BaseModel):
     runner_digest: str | None = Field(default=None, alias="runnerDigest")
     summary: dict[str, object] = Field(default_factory=dict)
     limitations: list[str] = Field(default_factory=list)
-    artifact_references: list[dict[str, str]] = Field(default_factory=list, alias="artifactReferences")
+    artifact_references: list[ArtifactReference] = Field(
+        default_factory=list, alias="artifactReferences", max_length=50
+    )
     retention: str | None = None
     assurance_source: Literal["fairmind_internal", "company_integration", "manual", "third_party"] = Field(default="fairmind_internal", alias="assuranceSource")
     third_party_assessor: "ThirdPartyAssessor | None" = Field(default=None, alias="thirdPartyAssessor")

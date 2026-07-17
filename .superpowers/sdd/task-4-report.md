@@ -49,3 +49,14 @@ tooling/check_no_archive_imports.sh
 git diff --check
 # all passed
 ```
+
+## Payload-boundary follow-up
+
+- Recursive sensitive-key detection now removes every non-alphanumeric character before matching, covering spacing, punctuation, and casing variations.
+- Artifact references are typed external pointers only: each requires a bounded URI and SHA-256 digest, disallows extra fields, caps the list at 50, and has a 64 KiB canonical aggregate limit before storage.
+
+```text
+cd apps/backend
+uv run pytest tests/test_governance_evidence_runs.py tests/test_governance_assurance_models.py tests/test_framework_catalog_service.py tests/test_governance_assurance_routes.py -q --disable-warnings
+# 39 passed
+```

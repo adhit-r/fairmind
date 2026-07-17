@@ -34,6 +34,7 @@ _MAPPING_STATES = {"candidate", "accepted", "rejected"}
 _ASSURANCE_SOURCES = {"fairmind_internal", "company_integration", "manual", "third_party"}
 _SENSITIVE_OUTPUT_KEYS = {"rawoutput", "rawoutputs", "prompt", "prompts", "completion", "completions", "reasoning", "chainofthought"}
 MAX_SUMMARY_BYTES = 64 * 1024
+MAX_ARTIFACT_REFERENCES_BYTES = 64 * 1024
 # Deliberately empty until a deployment declares stable evaluation tags.  This
 # avoids inferring controls from free-form result text.
 EVALUATION_TAG_CONTROL_IDS: dict[str, tuple[str, ...]] = {}
@@ -73,7 +74,8 @@ def _canonical_json(value: object) -> str:
 def _reject_raw_outputs(value: object) -> None:
     if isinstance(value, dict):
         for key, child in value.items():
-            if str(key).replace("_", "").replace("-", "").lower() in _SENSITIVE_OUTPUT_KEYS:
+            normalized_key = re.sub(r"[^a-z0-9]", "", str(key).lower())
+            if normalized_key in _SENSITIVE_OUTPUT_KEYS:
                 raise ValueError("Raw outputs and reasoning traces are not accepted")
             _reject_raw_outputs(child)
     elif isinstance(value, list):
@@ -353,6 +355,9 @@ class GovernanceAssuranceService:
         summary_json = _canonical_json(envelope.get("summary", {}))
         if len(summary_json.encode("utf-8")) > MAX_SUMMARY_BYTES:
             raise ValueError("Evidence summary exceeds the size limit")
+        artifact_refs_json = _canonical_json(envelope.get("artifact_references", []))
+        if len(artifact_refs_json.encode("utf-8")) > MAX_ARTIFACT_REFERENCES_BYTES:
+            raise ValueError("Artifact references exceed the size limit")
         if envelope.get("assurance_source") not in _ASSURANCE_SOURCES:
             raise ValueError("Unsupported assurance source")
         if envelope.get("assurance_source") == "third_party":
@@ -385,7 +390,7 @@ class GovernanceAssuranceService:
                     id=run_id, org_id=org_id, system_id=system_id,
                     source_type=envelope["source_type"], source_identifier=envelope["source_identifier"],
                     run_id=envelope["run_id"], content_hash=content_hash, result=envelope.get("result", "unknown"),
-                    provenance_json=canonical, artifact_refs_json=_canonical_json(envelope.get("artifact_references", [])),
+                    provenance_json=canonical, artifact_refs_json=artifact_refs_json,
                     limitations_json=_canonical_json(envelope.get("limitations", [])),
                     captured_at=envelope.get("captured_at"), expires_at=envelope.get("expires_at"),
                     evidence_id=evidence_id, created_at=now,

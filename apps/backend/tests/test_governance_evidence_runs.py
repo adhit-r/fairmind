@@ -113,7 +113,7 @@ def _envelope(**overrides) -> dict:
         "capturedAt": "2026-07-17T00:00:00Z",
         "summary": {"score": 0.2, "passed": False},
         "limitations": ["Synthetic test-set only"],
-        "artifactReferences": [{"uri": "s3://customer/evaluations/run-1.json", "sha256": "artifact-hash"}],
+        "artifactReferences": [{"uri": "s3://customer/evaluations/run-1.json", "sha256": "a" * 64}],
         "controlExternalIds": ["CTRL-1"],
     }
     envelope.update(overrides)
@@ -270,6 +270,24 @@ def test_third_party_assertion_requires_assessor_identity_and_independence(assur
     assert malformed_source.status_code == unknown_source.status_code == 422
 
 
+@pytest.mark.parametrize("sensitive_key", ["raw output", "raw.output", "CHAIN of Thought", "CoMpLeTiOn!!"])
+def test_raw_outputs_are_rejected_recursively_with_punctuation_normalization(
+    assurance_client, sensitive_key: str
+) -> None:
+    client, session_factory, _ = assurance_client
+    session = session_factory()
+    _seed_org(session, ORG_A, USER_A)
+    system_id, _ = _seed_system_and_control(session)
+    session.close()
+
+    response = client.post(
+        f"/api/v1/ai-governance/organizations/{ORG_A}/systems/{system_id}/evidence-runs",
+        json=_envelope(summary={"metric": 0.2, "findings": [{sensitive_key: "do not store"}]}),
+    )
+
+    assert response.status_code == 422
+
+
 def test_raw_outputs_are_rejected_recursively_and_workbook_frequencies_are_parsed(assurance_client) -> None:
     with pytest.raises(Exception):
         EvidenceRunEnvelope(**_envelope(rawOutput={"prompt": "do not store"}))
@@ -289,6 +307,46 @@ def test_raw_outputs_are_rejected_recursively_and_workbook_frequencies_are_parse
     assert _is_stale(captured, "Every 3 months")
     assert not _is_stale(captured, "Every 6 months")
     assert not _is_stale(captured, "Every 12 months")
+
+
+@pytest.mark.parametrize(
+    "artifact_references",
+    [
+        [{"uri": "x" * 2049, "sha256": "a" * 64}],
+        [{"uri": "reference", "sha256": "not-a-digest"}],
+        [{"uri": "reference", "sha256": "a" * 64}] * 51,
+    ],
+    ids=["oversized-uri", "invalid-digest", "too-many-references"],
+)
+def test_artifact_references_have_strict_shape_and_count_limits(assurance_client, artifact_references: list[dict[str, str]]) -> None:
+    client, session_factory, _ = assurance_client
+    session = session_factory()
+    _seed_org(session, ORG_A, USER_A)
+    system_id, _ = _seed_system_and_control(session)
+    session.close()
+
+    response = client.post(
+        f"/api/v1/ai-governance/organizations/{ORG_A}/systems/{system_id}/evidence-runs",
+        json=_envelope(artifactReferences=artifact_references),
+    )
+
+    assert response.status_code == 422
+
+
+def test_artifact_references_have_an_aggregate_size_limit(assurance_client) -> None:
+    client, session_factory, _ = assurance_client
+    session = session_factory()
+    _seed_org(session, ORG_A, USER_A)
+    system_id, _ = _seed_system_and_control(session)
+    session.close()
+    references = [{"uri": "s3://" + "a" * 1800, "sha256": "a" * 64}] * 50
+
+    response = client.post(
+        f"/api/v1/ai-governance/organizations/{ORG_A}/systems/{system_id}/evidence-runs",
+        json=_envelope(artifactReferences=references),
+    )
+
+    assert response.status_code == 422
 
 
 def test_readiness_uses_captured_time_and_evidence_source_run_is_a_foreign_key(assurance_client) -> None:
