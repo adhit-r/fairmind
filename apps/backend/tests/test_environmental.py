@@ -346,6 +346,28 @@ def test_engine_conditional_go_blocks_without_dated_mitigation():
     assert result2.mitigation_blocking is False
 
 
+def test_engine_exception_unblocks_without_relabeling_mitigation():
+    result = run_assessment({
+        "lifecycle_phase": "training",
+        "boundary": "scope 2",
+        "functional_unit": "one run",
+        "source": "hardware_telemetry",
+        "mitigation_readiness": "missing",
+        "exception": {
+            "owner": "grc-lead",
+            "expiry": "2026-12-31",
+            "rationale": "One-off research run",
+        },
+        "metrics": {"total_kg_co2e": 20_000.0},
+    })
+    assert result.recommendation == "conditional_go"
+    assert result.has_exception is True
+    assert result.mitigation_blocking is False
+    assert result.approval_blocking is False
+    assert result.mitigation_readiness == "missing"
+    assert result.coverage["ENV-6"] == "present"
+
+
 def test_engine_undisclosed_source_forced_no_go():
     result = run_assessment({
         "lifecycle_phase": "inference",
