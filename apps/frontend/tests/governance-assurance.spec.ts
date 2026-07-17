@@ -145,6 +145,8 @@ type MockOptions = {
   readinessDelayMs?: number
   role?: string
   secondSystemDelayMs?: number
+  evidenceRuns?: Array<Record<string, unknown>>
+  artifactEvidence?: Array<Record<string, unknown>>
 }
 
 async function fulfillJson(route: Route, body: unknown, status = 200) {
@@ -157,6 +159,8 @@ async function mockWorkbench(page: Page, options: MockOptions = {}) {
   let controls = structuredClone(initialControls)
   let otherControls = structuredClone(secondSystemControls)
   const patchedAssessmentIds: string[] = []
+  let evidenceRuns = structuredClone(options.evidenceRuns ?? [])
+  const artifactEvidence = structuredClone(options.artifactEvidence ?? [])
 
   await page.addInitScript(() => {
     window.localStorage.setItem('access_token', 'playwright-token')
@@ -291,10 +295,62 @@ async function mockWorkbench(page: Page, options: MockOptions = {}) {
       })
     }
     if (path === '/api/v1/ai-governance/organizations/org-1/systems/system-1/evidence-runs') {
-      return fulfillJson(route, [])
+      return fulfillJson(route, evidenceRuns)
     }
     if (path === '/api/v1/ai-governance/organizations/org-1/systems/system-2/evidence-runs') {
       return fulfillJson(route, [])
+    }
+    if (path.startsWith('/api/v1/ai-governance/organizations/org-1/evidence-mappings/') && path.endsWith('/review')) {
+      const mappingId = path.split('/').at(-2)
+      const review = request.postDataJSON()
+      let reviewed: Record<string, unknown> | undefined
+      evidenceRuns = evidenceRuns.map((run) => ({
+        ...run,
+        candidate_mappings: (run.candidate_mappings as Array<Record<string, unknown>> | undefined)?.map((mapping) => {
+          if (mapping.id !== mappingId) return mapping
+          reviewed = {
+            ...mapping,
+            state: review.state,
+            rationale: review.rationale,
+            review_version: Number(mapping.review_version) + 1,
+            review_history: [{
+              state: review.state,
+              rationale: review.rationale,
+              reviewed_by: 'user-1',
+              reviewed_at: '2026-07-17T12:15:00Z',
+            }],
+          }
+          return reviewed
+        }),
+      }))
+      return fulfillJson(route, reviewed)
+    }
+    if (path === '/api/v1/ai-governance/evidence-v2/system-1') {
+      return fulfillJson(route, artifactEvidence)
+    }
+    if (path === '/api/v1/ai-governance/evidence/system-1/summary') {
+      return fulfillJson(route, {
+        systemId: 'system-1',
+        totalEvidence: artifactEvidence.length,
+        linkedEvidence: 0,
+        averageConfidence: 0.9,
+        highConfidenceEvidence: artifactEvidence.length,
+        evidenceTypes: [],
+        metadataSources: [],
+        workflowState: artifactEvidence.length ? 'collected' : 'empty',
+        decisionReadiness: 'needs_evidence',
+        missingSignals: ['Independent reviewer sign-off'],
+        recommendedNextStep: 'Review evaluation mappings before assurance reporting.',
+      })
+    }
+    if (path === '/api/v1/ai-governance/evidence-item/artifact-1/links' && request.method() === 'POST') {
+      const link = request.postDataJSON()
+      return fulfillJson(route, {
+        id: 'link-1',
+        entityType: link.entity_type,
+        entityId: link.entity_id,
+        createdAt: '2026-07-17T12:30:00Z',
+      }, 201)
     }
 
     return fulfillJson(route, [])
@@ -440,4 +496,91 @@ test('keeps the expanded trace inline in the mobile stacked record', async ({ pa
   await expect(record.getByText('Accepted evidence', { exact: true })).toBeVisible()
   await expect(record.getByRole('region', { name: 'Trace for A006.1' })).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+})
+
+test('reviews a provenance-rich evaluation mapping and links artifacts through a real control picker', async ({ page }) => {
+  await mockWorkbench(page, {
+    initiallyAssigned: true,
+    evidenceRuns: [{
+      id: 'evidence-run-418',
+      run_id: 'bias-418',
+      evidence_id: 'artifact-run-418',
+      content_hash: '0f33e89a6d6e6eefecf4afc92c837bd259f036e599acc653f401b87eab30bf55',
+      result: 'passed_with_limitations',
+      source_type: 'fairmind_evaluation',
+      source_identifier: 'FairMind Bias Suite',
+      captured_at: '2026-07-15T10:30:00Z',
+      suite_name: 'Bias and subgroup parity',
+      suite_version: '2026.07',
+      subject_version: '2.4.1',
+      runner_version: 'fairmind-runner 1.8.0',
+      assurance_source: 'fairmind_internal',
+      limitations: ['Sparse intersectional cohorts were excluded below n=30.'],
+      candidate_mappings: [{
+        id: 'mapping-418-a006-1',
+        evidence_id: 'artifact-run-418',
+        control_assessment_id: 'assessment-a006-1',
+        state: 'candidate',
+        rationale: 'Evaluation limitations and version metadata support documentation review.',
+        review_version: 0,
+        review_history: [],
+      }],
+    }],
+    artifactEvidence: [{
+      id: 'artifact-1',
+      systemId: 'system-1',
+      type: 'policy',
+      title: 'Model limitation register',
+      source: 'manual',
+      status: 'draft',
+      uploadedBy: 'reviewer@acme.test',
+      capturedAt: '2026-07-14T08:00:00Z',
+      content: {},
+      confidence: 0.9,
+      metadata: {},
+      tags: ['limitations'],
+      folder: 'AIUC-1',
+      artifactKind: 'narrative',
+      fileUrl: '',
+      fileName: '',
+      fileSize: 0,
+      timestamp: '2026-07-14T08:00:00Z',
+      stale: false,
+      linkedEntityCount: 0,
+      linkedEntities: [],
+      metadataSummary: {},
+      workflowState: 'collected',
+    }],
+  })
+
+  await page.goto('/evidence?view=evaluations')
+  const surface = page.getByTestId('evidence-evaluations-surface')
+  await expect(surface.getByRole('heading', { name: 'Evidence & Evaluations' })).toBeVisible()
+  await expect(page).toHaveURL(/view=evaluations/)
+
+  const run = surface.getByRole('article', { name: 'Evaluation run Bias and subgroup parity' })
+  await expect(run).toContainText('FairMind Bias Suite')
+  await expect(run).toContainText('System version 2.4.1')
+  await expect(run).toContainText('Runner version fairmind-runner 1.8.0')
+  await expect(run).toContainText('Captured Jul 15, 2026')
+  await expect(run).toContainText('passed with limitations')
+  await expect(run).toContainText('Sparse intersectional cohorts were excluded below n=30.')
+  await expect(run).toContainText('0f33e89a6d6e6eefecf4afc92c837bd259f036e599acc653f401b87eab30bf55')
+
+  const mapping = run.getByRole('region', { name: 'Mapping review for A006.1' })
+  await expect(mapping).toContainText('Evaluation limitations and version metadata support documentation review.')
+  await mapping.getByLabel('Review rationale for A006.1').fill('Accepted after checking the versioned limitation register.')
+  await mapping.getByRole('button', { name: 'Accept mapping to A006.1' }).click()
+  await expect(mapping).toContainText('Accepted')
+  await expect(mapping).toContainText('Accepted after checking the versioned limitation register.')
+
+  await surface.getByRole('link', { name: 'Artifacts' }).click()
+  await expect(page).toHaveURL(/view=artifacts/)
+  await surface.getByRole('button', { name: /Model limitation register/i }).click()
+  await page.getByRole('button', { name: 'Link entity' }).click()
+  await expect(page.getByLabel('Entity ID')).toHaveCount(0)
+  await page.getByLabel('Search framework controls').fill('A006.1')
+  await page.getByRole('button', { name: /Select A006.1 Document model limitations/i }).click()
+  await page.getByRole('button', { name: 'Add link' }).click()
+  await expect(page.getByText('A006.1 — Document model limitations')).toBeVisible()
 })

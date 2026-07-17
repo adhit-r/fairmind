@@ -141,6 +141,34 @@ def test_ingestion_canonicalizes_hashes_is_idempotent_and_keeps_failed_run(assur
     session.close()
 
 
+def test_evidence_run_response_exposes_stored_provenance_without_raw_outputs(assurance_client) -> None:
+    client, session_factory, _ = assurance_client
+    session = session_factory()
+    _seed_org(session, ORG_A, USER_A)
+    system_id, _ = _seed_system_and_control(session)
+    session.close()
+
+    response = client.post(
+        f"/api/v1/ai-governance/organizations/{ORG_A}/systems/{system_id}/evidence-runs",
+        json=_envelope(
+            suiteName="Bias and subgroup parity",
+            suiteVersion="2026.07",
+            subjectVersion="2.4.1",
+            runnerVersion="fairmind-runner 1.8.0",
+            assuranceSource="fairmind_internal",
+        ),
+    )
+
+    assert response.status_code == 201, response.text
+    payload = response.json()
+    assert payload["suiteName"] == "Bias and subgroup parity"
+    assert payload["suiteVersion"] == "2026.07"
+    assert payload["subjectVersion"] == "2.4.1"
+    assert payload["runnerVersion"] == "fairmind-runner 1.8.0"
+    assert payload["assuranceSource"] == "fairmind_internal"
+    assert payload["limitations"] == ["Synthetic test-set only"]
+    assert "summary" not in payload
+
 def test_source_run_cannot_be_reingested_with_different_content(assurance_client) -> None:
     client, session_factory, _ = assurance_client
     session = session_factory()

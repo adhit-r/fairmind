@@ -122,6 +122,12 @@ export interface EvidenceRun {
   sourceType: string
   sourceIdentifier: string
   capturedAt: string | null
+  suiteName: string | null
+  suiteVersion: string | null
+  subjectVersion: string | null
+  runnerVersion: string | null
+  assuranceSource: 'fairmind_internal' | 'company_integration' | 'manual' | 'third_party' | null
+  limitations: string[]
   candidateMappings: EvidenceMapping[]
 }
 

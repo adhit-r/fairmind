@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import {
   IconAlertTriangle,
   IconArrowRight,
@@ -12,7 +13,6 @@ import {
   IconSearch,
   IconShieldCheck,
   IconShieldOff,
-  IconSparkles,
   IconX,
 } from '@tabler/icons-react'
 import Link from 'next/link'
@@ -25,12 +25,20 @@ import { Progress } from '@/components/ui/progress'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
 import { useSystemContext } from '@/components/workflow/SystemContext'
+import { useOrg } from '@/context/OrgContext'
 import { useEvidence, type Evidence } from '@/lib/api/hooks/useEvidence'
+import {
+  useEvidenceMappingReview,
+  useEvidenceRuns,
+  useFrameworkAssignmentControls,
+  useFrameworkAssignments,
+} from '@/lib/api/hooks/useGovernanceAssurance'
 
 import { EvidenceFolderTree } from './components/EvidenceFolderTree'
 import { EvidenceTagFilter } from './components/EvidenceTagFilter'
 import { EvidenceUploader } from './components/EvidenceUploader'
 import { EvidenceDetailDrawer } from './components/EvidenceDetailDrawer'
+import { EvaluationRunList } from './components/EvaluationRunList'
 
 function formatDate(ts: string) {
   if (!ts) return '—'
@@ -115,7 +123,22 @@ function EvidenceCard({
 }
 
 export default function EvidencePage() {
+  const searchParams = useSearchParams()
+  const requestedView = searchParams.get('view')
+  const activeView: 'gaps' | 'evaluations' | 'artifacts' = requestedView === 'evaluations' || requestedView === 'artifacts'
+    ? requestedView
+    : 'gaps'
+  const { selectedOrg } = useOrg()
   const { selectedSystem } = useSystemContext()
+  const orgId = selectedOrg?.id
+  const assignments = useFrameworkAssignments(orgId, selectedSystem.id)
+  const activeAssignment = assignments.assignments[0]
+  const assessmentState = useFrameworkAssignmentControls(orgId, activeAssignment?.id)
+  const evaluationState = useEvidenceRuns(orgId, selectedSystem.id)
+  const mappingReview = useEvidenceMappingReview(orgId)
+  const canReview = selectedOrg?.role === 'admin'
+    || selectedOrg?.role === 'owner'
+    || selectedOrg?.permissions?.includes('model:write') === true
   const {
     data,
     summary,
@@ -199,39 +222,62 @@ export default function EvidencePage() {
   }
 
   return (
-    <div className="flex min-h-0 flex-col gap-6">
+    <div data-testid="evidence-evaluations-surface" className="flex min-h-0 flex-col gap-6">
       {/* Header */}
-      <Card className="border-4 border-black bg-gradient-to-br from-[#fff4de] via-white to-[#e9f7f0] p-6 shadow-[10px_10px_0px_0px_rgba(0,0,0,1)]">
+      <Card className="rounded-none border-4 border-[#0F1412] bg-[#FCFDF8] p-6 shadow-[8px_8px_0px_0px_#0F1412]">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge className="border-2 border-black bg-black px-3 py-1 font-black uppercase text-white">
-                <IconSparkles className="mr-2 h-4 w-4" />
-                Evidence Hub V2
+              <Badge className="rounded-none border-2 border-[#0F1412] bg-[#0B7659] px-3 py-1 font-black uppercase text-white">
+                Assurance evidence
               </Badge>
               <Badge variant="outline" className="border-2 border-black bg-white px-3 py-1 font-black uppercase">
                 {selectedSystem.name}
               </Badge>
             </div>
             <h1 className="text-3xl font-black uppercase tracking-tight">
-              Evidence Hub
+              Evidence &amp; Evaluations
             </h1>
             <p className="max-w-2xl text-sm text-muted-foreground">
-              Organize, tag, and link governance artifacts for {selectedSystem.name}. Upload files, link external sources, attest controls, and connect evidence to frameworks.
+              Review evaluation provenance and control mappings, resolve evidence gaps, and manage artifacts for {selectedSystem.name}.
             </p>
           </div>
 
-          <Button
-            className="border-2 border-black font-black uppercase shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
-            onClick={() => setUploaderOpen(true)}
-          >
-            <IconPlus className="mr-2 h-4 w-4" />
-            Add evidence
-          </Button>
+          {canReview ? (
+            <Button
+              className="rounded-none border-2 border-black font-black uppercase shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
+              onClick={() => setUploaderOpen(true)}
+            >
+              <IconPlus className="mr-2 h-4 w-4" />
+              Add evidence
+            </Button>
+          ) : (
+            <Badge variant="outline" className="rounded-none border-2 border-[#0F1412] bg-[#F3F5F0] px-3 py-2 font-black uppercase">
+              Read-only evidence access
+            </Badge>
+          )}
         </div>
       </Card>
 
+      <nav aria-label="Evidence views" className="grid border-2 border-[#0F1412] bg-[#FCFDF8] sm:grid-cols-3">
+        {([
+          ['gaps', 'Evidence gaps'],
+          ['evaluations', 'Evaluations'],
+          ['artifacts', 'Artifacts'],
+        ] as const).map(([view, label]) => (
+          <Link
+            key={view}
+            href={`/evidence?view=${view}`}
+            aria-current={activeView === view ? 'page' : undefined}
+            className={`min-h-12 border-b-2 border-[#0F1412] px-4 py-3 text-center text-sm font-black uppercase outline-none last:border-b-0 hover:bg-[#DDF4EA] focus-visible:ring-2 focus-visible:ring-[#0B7659] focus-visible:ring-inset sm:border-b-0 sm:border-r-2 sm:last:border-r-0 ${activeView === view ? 'bg-[#0F1412] text-[#FCFDF8] hover:bg-[#0F1412]' : ''}`}
+          >
+            {label}
+          </Link>
+        ))}
+      </nav>
+
       {/* Stats row */}
+      {activeView === 'artifacts' ? (
       <div className="grid gap-4 sm:grid-cols-4">
         <Card className="border-2 border-black p-4 shadow-brutal">
           <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Total artifacts</p>
@@ -250,8 +296,10 @@ export default function EvidencePage() {
           <p className={`mt-1 text-3xl font-black ${staleCount > 0 ? 'text-amber-700' : ''}`}>{staleCount}</p>
         </Card>
       </div>
+      ) : null}
 
       {/* Approval gate */}
+      {activeView === 'gaps' ? (
       <Card className={`border-4 p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] ${
         completeness.gate === 'green' ? 'border-emerald-600 bg-emerald-50' :
         completeness.gate === 'yellow' ? 'border-amber-500 bg-amber-50' :
@@ -286,9 +334,10 @@ export default function EvidencePage() {
           )}
         </div>
       </Card>
+      ) : null}
 
       {/* Evidence gaps */}
-      {summary.missingSignals.length > 0 && (
+      {activeView === 'gaps' && summary.missingSignals.length > 0 && (
         <Card className="border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
           <div className="mb-3 flex items-center gap-2">
             <IconX className="h-5 w-5 text-red-600" />
@@ -324,7 +373,30 @@ export default function EvidencePage() {
         </Card>
       )}
 
+      {activeView === 'gaps' && !loading && !error && summary.missingSignals.length === 0 ? (
+        <Card className="rounded-none border-2 border-[#0F1412] bg-[#DDF4EA] p-8 text-center shadow-[5px_5px_0_0_#0F1412]">
+          <IconShieldCheck className="mx-auto h-8 w-8 text-[#0B7659]" />
+          <h2 className="mt-3 text-lg font-black uppercase">No evidence gaps reported</h2>
+          <p className="mt-2 text-sm text-[#59615D]">This reflects the current evidence summary, not a certification or compliance decision.</p>
+        </Card>
+      ) : null}
+
+      {activeView === 'evaluations' ? (
+        <EvaluationRunList
+          runs={evaluationState.runs}
+          controls={assessmentState.controls}
+          loading={evaluationState.loading || assignments.loading || assessmentState.loading}
+          error={evaluationState.error || assignments.error || assessmentState.error}
+          canReview={canReview}
+          onReview={mappingReview.reviewMapping}
+          onRefresh={async () => {
+            await Promise.all([evaluationState.refresh(), assignments.refresh(), assessmentState.refresh()])
+          }}
+        />
+      ) : null}
+
       {/* Main content: sidebar + list */}
+      {activeView === 'artifacts' ? (
       <div className="flex min-h-0 gap-5">
         {/* Sidebar */}
         {data.length > 0 && (
@@ -436,6 +508,7 @@ export default function EvidencePage() {
               <Button
                 className="mt-5 border-2 border-black font-black uppercase"
                 onClick={() => setUploaderOpen(true)}
+                disabled={!canReview}
               >
                 <IconPlus className="mr-2 h-4 w-4" />
                 Add first evidence
@@ -474,6 +547,7 @@ export default function EvidencePage() {
           )}
         </div>
       </div>
+      ) : null}
 
       {/* Add evidence dialog */}
       <Dialog open={uploaderOpen} onOpenChange={setUploaderOpen}>
@@ -517,6 +591,8 @@ export default function EvidencePage() {
             return { ...prev, linkedEntities: newLinks, linkedEntityCount: newLinks.length, workflowState: newLinks.length > 0 ? 'linked' : 'collected' }
           })
         }}
+        controlOptions={assessmentState.controls}
+        canEdit={canReview}
       />
     </div>
   )

@@ -604,10 +604,15 @@ class GovernanceAssuranceService:
     def _evidence_run(self, run_id: str) -> dict:
         runs, mappings = GovernanceEvidenceRun.__table__, GovernanceControlEvidence.__table__
         row = self.db.execute(select(runs).where(runs.c.id == run_id)).mappings().one()
+        provenance = json.loads(row["provenance_json"] or "{}")
+        limitations = json.loads(row["limitations_json"] or "[]")
         return {
             "id": row["id"], "runId": row["run_id"], "evidenceId": row["evidence_id"],
             "contentHash": row["content_hash"], "result": row["result"], "sourceType": row["source_type"],
             "sourceIdentifier": row["source_identifier"], "capturedAt": row["captured_at"],
+            "suiteName": provenance.get("suite_name"), "suiteVersion": provenance.get("suite_version"),
+            "subjectVersion": provenance.get("subject_version"), "runnerVersion": provenance.get("runner_version"),
+            "assuranceSource": provenance.get("assurance_source"), "limitations": limitations,
             "candidateMappings": [self._mapping(mapping_id) for mapping_id in self.db.execute(select(mappings.c.id).where(mappings.c.evidence_id == run_id)).scalars()],
         }
 

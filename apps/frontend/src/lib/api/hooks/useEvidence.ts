@@ -127,9 +127,16 @@ export function useEvidence(systemId?: string) {
 
       if (recordsResponse.success && recordsResponse.data) {
         setData(sortEvidence(recordsResponse.data))
-        setSummary(summaryResponse.success && summaryResponse.data ? summaryResponse.data : {
+        const returnedSummary = summaryResponse.success && summaryResponse.data
+          ? summaryResponse.data
+          : null
+        setSummary({
           ...EMPTY_SUMMARY,
-          systemId: targetSystemId,
+          ...(returnedSummary || {}),
+          systemId: returnedSummary?.systemId || targetSystemId,
+          missingSignals: Array.isArray(returnedSummary?.missingSignals) ? returnedSummary.missingSignals : [],
+          evidenceTypes: Array.isArray(returnedSummary?.evidenceTypes) ? returnedSummary.evidenceTypes : [],
+          metadataSources: Array.isArray(returnedSummary?.metadataSources) ? returnedSummary.metadataSources : [],
         })
       } else {
         throw new Error(recordsResponse.error || 'Failed to fetch evidence')

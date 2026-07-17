@@ -24,6 +24,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
 import type { Evidence, EvidenceLink, EvidenceUpdateInput } from '@/lib/api/hooks/useEvidence'
+import type { ControlAssessment } from '@/lib/api/hooks/useGovernanceAssurance'
 
 interface EvidenceDetailDrawerProps {
   evidence: Evidence | null
@@ -32,6 +33,8 @@ interface EvidenceDetailDrawerProps {
   onUpdate: (id: string, updates: EvidenceUpdateInput) => Promise<Evidence>
   onAddLink: (evidenceId: string, entityType: string, entityId: string) => Promise<EvidenceLink>
   onRemoveLink: (evidenceId: string, linkId: string) => Promise<void>
+  controlOptions?: ControlAssessment[]
+  canEdit?: boolean
 }
 
 const STATUS_OPTIONS = [
@@ -61,6 +64,8 @@ export function EvidenceDetailDrawer({
   onUpdate,
   onAddLink,
   onRemoveLink,
+  controlOptions = [],
+  canEdit = false,
 }: EvidenceDetailDrawerProps) {
   const { toast } = useToast()
   const [editMode, setEditMode] = useState(false)
@@ -77,6 +82,7 @@ export function EvidenceDetailDrawer({
   const [addingLink, setAddingLink] = useState(false)
   const [linkEntityType, setLinkEntityType] = useState('control')
   const [linkEntityId, setLinkEntityId] = useState('')
+  const [controlQuery, setControlQuery] = useState('')
   const [linkSaving, setLinkSaving] = useState(false)
 
   const startEdit = () => {
@@ -123,6 +129,7 @@ export function EvidenceDetailDrawer({
     try {
       await onAddLink(evidence.id, linkEntityType, linkEntityId.trim())
       setLinkEntityId('')
+      setControlQuery('')
       setAddingLink(false)
       toast({ title: 'Link added', description: `Linked to ${linkEntityType}: ${linkEntityId}` })
     } catch {
@@ -145,6 +152,10 @@ export function EvidenceDetailDrawer({
   if (!evidence) return null
 
   const displayTitle = evidence.title || evidence.type
+  const matchingControls = controlOptions.filter((control) => {
+    const query = controlQuery.trim().toLowerCase()
+    return !query || `${control.externalId} ${control.title}`.toLowerCase().includes(query)
+  }).slice(0, 8)
 
   return (
     <Sheet open={open} onOpenChange={(o) => { if (!o) onClose() }}>
@@ -174,7 +185,7 @@ export function EvidenceDetailDrawer({
                 </Badge>
               </div>
             </div>
-            {!editMode && (
+            {!editMode && canEdit && (
               <Button size="sm" variant="neutral" className="shrink-0 border-2 border-black font-bold" onClick={startEdit}>
                 <IconPencil className="mr-1.5 h-3.5 w-3.5" />
                 Edit
@@ -363,15 +374,19 @@ export function EvidenceDetailDrawer({
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">
                 Linked entities ({evidence.linkedEntityCount})
               </p>
-              <Button
-                size="sm"
-                variant="neutral"
-                className="border-2 border-black text-[11px] font-bold uppercase"
-                onClick={() => setAddingLink((v) => !v)}
-              >
-                <IconPlus className="mr-1 h-3 w-3" />
-                Link entity
-              </Button>
+              {canEdit ? (
+                <Button
+                  size="sm"
+                  variant="neutral"
+                  className="border-2 border-black text-[11px] font-bold uppercase"
+                  onClick={() => setAddingLink((v) => !v)}
+                >
+                  <IconPlus className="mr-1 h-3 w-3" />
+                  Link entity
+                </Button>
+              ) : (
+                <span className="text-[11px] font-bold uppercase text-muted-foreground">Read-only</span>
+              )}
             </div>
 
             {addingLink && (
@@ -390,17 +405,54 @@ export function EvidenceDetailDrawer({
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="space-y-1">
-                    <Label className="text-[10px] font-bold uppercase">Entity ID</Label>
-                    <Input
-                      value={linkEntityId}
-                      onChange={(e) => setLinkEntityId(e.target.value)}
-                      className="border-2 border-black font-mono text-sm"
-                      placeholder="ID or reference"
-                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleAddLink() } }}
-                    />
-                  </div>
+                  {linkEntityType === 'control' ? (
+                    <div className="space-y-1">
+                      <Label htmlFor="framework-control-search" className="text-[10px] font-bold uppercase">Search framework controls</Label>
+                      <Input
+                        id="framework-control-search"
+                        type="search"
+                        value={controlQuery}
+                        onChange={(event) => {
+                          setControlQuery(event.target.value)
+                          setLinkEntityId('')
+                        }}
+                        className="rounded-none border-2 border-black text-sm"
+                        placeholder="Search control ID or title"
+                      />
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <Label className="text-[10px] font-bold uppercase">Entity ID</Label>
+                      <Input
+                        value={linkEntityId}
+                        onChange={(e) => setLinkEntityId(e.target.value)}
+                        className="border-2 border-black font-mono text-sm"
+                        placeholder="ID or reference"
+                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleAddLink() } }}
+                      />
+                    </div>
+                  )}
                 </div>
+                {linkEntityType === 'control' ? (
+                  <div className="max-h-48 space-y-1 overflow-y-auto border-2 border-black bg-white p-2">
+                    {matchingControls.length > 0 ? matchingControls.map((control) => (
+                      <button
+                        key={control.id}
+                        type="button"
+                        aria-label={`Select ${control.externalId} ${control.title}`}
+                        onClick={() => {
+                          setLinkEntityId(control.id)
+                          setControlQuery(`${control.externalId} — ${control.title}`)
+                        }}
+                        className={`block w-full border-2 border-black px-3 py-2 text-left text-xs font-bold ${linkEntityId === control.id ? 'bg-[#DDF4EA]' : 'bg-white hover:bg-[#F3F5F0]'}`}
+                      >
+                        {control.externalId} — {control.title}
+                      </button>
+                    )) : (
+                      <p className="p-2 text-xs font-bold text-muted-foreground">No assigned controls match this search.</p>
+                    )}
+                  </div>
+                ) : null}
                 <div className="flex gap-2">
                   <Button size="sm" className="border-2 border-black font-black uppercase" onClick={handleAddLink} disabled={linkSaving || !linkEntityId.trim()}>
                     {linkSaving ? <IconLoader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <IconLink className="mr-1.5 h-3.5 w-3.5" />}
@@ -427,15 +479,25 @@ export function EvidenceDetailDrawer({
                   <div key={link.id} className="flex items-center gap-3 rounded-lg border-2 border-black bg-white p-3">
                     <div className="flex-1 min-w-0">
                       <p className="text-[10px] font-bold uppercase text-muted-foreground">{link.entityType}</p>
-                      <p className="truncate text-sm font-bold font-mono">{link.entityId}</p>
+                      <p className="truncate text-sm font-bold">
+                        {link.entityType === 'control'
+                          ? (() => {
+                              const control = controlOptions.find((item) => item.id === link.entityId)
+                              return control ? `${control.externalId} — ${control.title}` : link.entityId
+                            })()
+                          : link.entityId}
+                      </p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => void handleRemoveLink(link)}
-                      className="shrink-0 rounded p-1 text-muted-foreground hover:bg-red-50 hover:text-red-600"
-                    >
-                      <IconTrash className="h-3.5 w-3.5" />
-                    </button>
+                    {canEdit ? (
+                      <button
+                        type="button"
+                        aria-label={`Remove link to ${link.entityType}`}
+                        onClick={() => void handleRemoveLink(link)}
+                        className="shrink-0 rounded p-1 text-muted-foreground hover:bg-red-50 hover:text-red-600"
+                      >
+                        <IconTrash className="h-3.5 w-3.5" />
+                      </button>
+                    ) : null}
                   </div>
                 ))}
               </div>
