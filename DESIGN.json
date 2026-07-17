@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-17T00:00:00Z",
+  "title": "Design System: FairMind",
+  "extensions": {
+    "colorMeta": {
+      "assurance-teal": {
+        "role": "primary",
+        "displayName": "Assurance Teal",
+        "canonical": "oklch(0.60 0.13 163)",
+        "tonalRamp": ["oklch(0.20 0.05 163)", "oklch(0.30 0.07 163)", "oklch(0.40 0.09 163)", "oklch(0.50 0.11 163)", "oklch(0.60 0.13 163)", "oklch(0.72 0.10 163)", "oklch(0.84 0.06 163)", "oklch(0.94 0.03 163)"]
+      },
+      "action-orange": {
+        "role": "secondary",
+        "displayName": "Action Orange",
+        "canonical": "#FF6B35",
+        "tonalRamp": ["#3B1609", "#6A260F", "#993817", "#C94B20", "#FF6B35", "#FF916A", "#FFB79C", "#FFE7DC"]
+      },
+      "deep-ink": {
+        "role": "neutral",
+        "displayName": "Deep Ink",
+        "canonical": "#0F1412",
+        "tonalRamp": ["#0F1412", "#242A27", "#3B423E", "#555D58", "#737C76", "#9CA49F", "#CBD0CC", "#F0F2EF"]
+      }
+    },
+    "typographyMeta": {
+      "headline": { "displayName": "Headline", "purpose": "Page and major section headings." },
+      "title": { "displayName": "Title", "purpose": "Controls, evidence, and panel headings." },
+      "body": { "displayName": "Body", "purpose": "Guidance, findings, and rationale." },
+      "label": { "displayName": "Label", "purpose": "Compact metadata and action labels." }
+    },
+    "shadows": [
+      { "name": "action-lift", "value": "6px 6px 0 0 #0F1412", "purpose": "Primary actions and active work surfaces." },
+      { "name": "panel-lift", "value": "8px 8px 0 0 #0F1412", "purpose": "One dominant work panel per task region." }
+    ],
+    "motion": [
+      { "name": "state-fast", "value": "180ms cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Button, filter, and row state feedback." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The main deliberate action on a governance screen.",
+      "html": "<button class=\"ds-button-primary\">RUN EVALUATION</button>",
+      "css": ".ds-button-primary { min-height: 44px; padding: 12px 16px; border: 2px solid #0F1412; border-radius: 0; background: #FF6B35; color: #0F1412; font: 800 12px/1.2 Raleway, system-ui, sans-serif; letter-spacing: .06em; box-shadow: 6px 6px 0 #0F1412; transition: transform 180ms cubic-bezier(.16,1,.3,1), box-shadow 180ms cubic-bezier(.16,1,.3,1); } .ds-button-primary:hover, .ds-button-primary:active { transform: translate(6px, 6px); box-shadow: none; } .ds-button-primary:focus-visible { outline: 2px solid #0F1412; outline-offset: 3px; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "A secondary action with the same tactile vocabulary.",
+      "html": "<button class=\"ds-button-secondary\">VIEW EVIDENCE</button>",
+      "css": ".ds-button-secondary { min-height: 44px; padding: 12px 16px; border: 2px solid #0F1412; border-radius: 0; background: #FCFDF8; color: #0F1412; font: 800 12px/1.2 Raleway, system-ui, sans-serif; letter-spacing: .06em; } .ds-button-secondary:hover { background: #F3F5F0; } .ds-button-secondary:focus-visible { outline: 2px solid oklch(0.60 0.13 163); outline-offset: 3px; }"
+    },
+    {
+      "name": "Governance Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "A labelled, square field for filters and review metadata.",
+      "html": "<label class=\"ds-field\"><span>CONTROL OWNER</span><input value=\"Governance Team\" /></label>",
+      "css": ".ds-field { display: grid; gap: 6px; color: #0F1412; font: 800 12px/1.2 Raleway, system-ui, sans-serif; letter-spacing: .06em; } .ds-field input { min-height: 44px; padding: 10px 12px; border: 2px solid #0F1412; border-radius: 0; background: #FCFDF8; color: #0F1412; font: 500 14px/1.5 Raleway, system-ui, sans-serif; } .ds-field input:focus-visible { outline: 2px solid oklch(0.60 0.13 163); outline-offset: 2px; }"
+    },
+    {
+      "name": "Status Chip",
+      "kind": "chip",
+      "description": "A non-color-only control or evidence state.",
+      "html": "<span class=\"ds-status-chip\">READY FOR REVIEW</span>",
+      "css": ".ds-status-chip { display: inline-flex; align-items: center; min-height: 28px; padding: 4px 8px; border: 2px solid #0F1412; border-radius: 0; background: #F3F5F0; color: #0F1412; font: 800 11px/1.2 Raleway, system-ui, sans-serif; letter-spacing: .05em; }"
+    },
+    {
+      "name": "Control Trace Row",
+      "kind": "custom",
+      "description": "The signature scan line for control, evidence, and finding traceability.",
+      "html": "<div class=\"ds-control-row\"><strong>A006.1</strong><span>PII detection and filtering</span><span class=\"ds-control-state\">PARTIAL</span><span>2 evidence</span></div>",
+      "css": ".ds-control-row { display: grid; grid-template-columns: 90px minmax(220px,1fr) 130px 100px; gap: 12px; align-items: center; min-height: 52px; padding: 10px 12px; border-bottom: 2px solid #0F1412; background: #FCFDF8; color: #0F1412; font: 500 14px/1.4 Raleway, system-ui, sans-serif; } .ds-control-row:hover { background: #F3F5F0; } .ds-control-row:focus-within { outline: 2px solid oklch(0.60 0.13 163); outline-offset: -2px; } .ds-control-state { font-weight: 800; font-size: 11px; letter-spacing: .05em; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Assurance Workbench",
+    "overview": "FairMind is a shared technical workbench for engineers, compliance leads, and auditors. It is dense enough for evidence review, calm enough for sustained work, and explicit about what is observed, inferred, accepted, failed, or unknown.",
+    "keyCharacteristics": ["System-first navigation with a framework lens.", "Compact scope and decision context.", "Visible provenance, freshness, ownership, and review status.", "Strong borders and selective hard shadows."],
+    "rules": [
+      { "name": "The Evidence Color Rule", "body": "Color may reinforce a labelled state, but color alone never carries readiness, severity, freshness, or review meaning.", "section": "colors" },
+      { "name": "The Orange Action Rule", "body": "Orange identifies an action or active task. If orange covers an entire dashboard region, it has been overused.", "section": "colors" },
+      { "name": "The Scan First Rule", "body": "A reviewer must identify scope, status, owner, and next action without reading paragraph text.", "section": "typography" },
+      { "name": "The Flat By Default Rule", "body": "Tables, toolbars, filters, and nested content remain flat. A shadow must explain interaction or hierarchy.", "section": "elevation" }
+    ],
+    "dos": ["Do show company, AI system, framework version, and review period before readiness information.", "Do use shared controls and reviewed evidence links across frameworks.", "Do use tables and split views for dense governance work."],
+    "donts": ["Don't use purple gradients, gradient text, glassmorphism, neon glow, or generic AI product styling.", "Don't place marketing heroes inside the authenticated dashboard.", "Don't imply that a score, accepted artifact, or FairMind evaluation automatically proves compliance or certification."]
+  }
+}
