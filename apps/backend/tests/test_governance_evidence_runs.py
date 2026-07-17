@@ -409,6 +409,67 @@ def test_legacy_evidence_rejects_control_link_from_another_system(assurance_clie
 
     assert linked.status_code == 404
 
+    direct = client.post(
+        f"/api/v1/ai-governance/systems/{other_system_id}/evidence",
+        json={
+            "control_id": assessment_id,
+            "evidence_type": "policy",
+            "content": {},
+        },
+    )
+
+    assert direct.status_code == 404
+
+
+def test_artifact_creation_routes_persist_system_organization(assurance_client) -> None:
+    client, session_factory, _ = assurance_client
+    session = session_factory()
+    _seed_org(session, ORG_A, USER_A)
+    system_id, assessment_id = _seed_system_and_control(session)
+    session.close()
+
+    v2 = client.post(
+        "/api/v1/ai-governance/evidence/collect-v2",
+        json={
+            "system_id": system_id,
+            "type": "policy",
+            "content": {},
+            "confidence": 0.9,
+        },
+    )
+    legacy = client.post(
+        "/api/v1/ai-governance/evidence/collect",
+        json={
+            "system_id": system_id,
+            "type": "log",
+            "content": {},
+            "confidence": 0.8,
+        },
+    )
+    direct = client.post(
+        f"/api/v1/ai-governance/systems/{system_id}/evidence",
+        json={
+            "control_id": assessment_id,
+            "evidence_type": "attestation",
+            "content": {},
+        },
+    )
+
+    assert v2.status_code == legacy.status_code == direct.status_code == 200
+    evidence_ids = {v2.json()["id"], legacy.json()["id"], direct.json()["id"]}
+    session = session_factory()
+    rows = session.execute(
+        select(
+            GovernanceEvidence.__table__.c.id,
+            GovernanceEvidence.__table__.c.org_id,
+        ).where(GovernanceEvidence.__table__.c.id.in_(evidence_ids))
+    ).all()
+    session.close()
+
+    assert {row.id for row in rows} == evidence_ids
+    assert {row.org_id for row in rows} == {ORG_A}
+
+
 def test_source_run_cannot_be_reingested_with_different_content(assurance_client) -> None:
     client, session_factory, _ = assurance_client
     session = session_factory()

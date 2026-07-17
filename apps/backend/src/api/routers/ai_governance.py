@@ -1273,21 +1273,28 @@ async def create_system_evidence(
 ):
     """Create an evidence item directly linked to an AI system."""
     _ensure_tables(db)
-    _require_evidence_system_access(db, system_id, current_user, mutate=True)
+    membership = _require_evidence_system_access(
+        db, system_id, current_user, mutate=True
+    )
+    if request.control_id:
+        _validate_control_link_scope(
+            db, membership, system_id, "control", request.control_id
+        )
 
     evidence_id = str(uuid.uuid4())
     now = _utc_now_iso()
     db.execute(
         text(
             "INSERT INTO governance_evidence "
-            "(id, system_id, control_id, evidence_type, title, source, content_json, "
+            "(id, system_id, org_id, control_id, evidence_type, title, source, content_json, "
             "confidence, status, uploaded_by, metadata_json, captured_at, created_at) "
-            "VALUES (:id, :system_id, :control_id, :evidence_type, :title, :source, "
+            "VALUES (:id, :system_id, :org_id, :control_id, :evidence_type, :title, :source, "
             ":content_json, :confidence, :status, :uploaded_by, :metadata_json, :captured_at, :created_at)"
         ),
         {
             "id": evidence_id,
             "system_id": system_id,
+            "org_id": membership.org_id,
             "control_id": request.control_id,
             "evidence_type": request.evidence_type,
             "title": request.title,
@@ -2314,7 +2321,9 @@ async def collect_evidence_v2(
 ):
     """Collect evidence with V2 schema support (tags, folder, artifact_kind, file_url)."""
     _ensure_tables(db)
-    _require_evidence_system_access(db, request.system_id, current_user, mutate=True)
+    membership = _require_evidence_system_access(
+        db, request.system_id, current_user, mutate=True
+    )
     evidence_id = str(uuid.uuid4())
     now = _utc_now_iso()
     metadata: Dict[str, Any] = {
@@ -2328,12 +2337,13 @@ async def collect_evidence_v2(
     db.execute(
         text(
             "INSERT INTO governance_evidence "
-            "(id, system_id, evidence_type, title, content_json, confidence, status, uploaded_by, metadata_json, captured_at, created_at) "
-            "VALUES (:id, :system_id, :evidence_type, :title, :content_json, :confidence, :status, :uploaded_by, :metadata_json, :captured_at, :created_at)"
+            "(id, system_id, org_id, evidence_type, title, content_json, confidence, status, uploaded_by, metadata_json, captured_at, created_at) "
+            "VALUES (:id, :system_id, :org_id, :evidence_type, :title, :content_json, :confidence, :status, :uploaded_by, :metadata_json, :captured_at, :created_at)"
         ),
         {
             "id": evidence_id,
             "system_id": request.system_id,
+            "org_id": membership.org_id,
             "evidence_type": request.type,
             "title": request.title or "",
             "content_json": json.dumps(request.content),
@@ -2357,20 +2367,23 @@ async def collect_evidence(
     db: Session = Depends(get_db),
 ):
     _ensure_tables(db)
-    _require_evidence_system_access(db, request.system_id, current_user, mutate=True)
+    membership = _require_evidence_system_access(
+        db, request.system_id, current_user, mutate=True
+    )
     evidence_id = str(uuid.uuid4())
     now = _utc_now_iso()
     db.execute(
         text(
             "INSERT INTO governance_evidence "
-            "(id, system_id, evidence_type, content_json, confidence, status, uploaded_by, "
+            "(id, system_id, org_id, evidence_type, content_json, confidence, status, uploaded_by, "
             "metadata_json, captured_at, created_at) "
-            "VALUES (:id, :system_id, :evidence_type, :content_json, :confidence, :status, "
+            "VALUES (:id, :system_id, :org_id, :evidence_type, :content_json, :confidence, :status, "
             ":uploaded_by, :metadata_json, :captured_at, :created_at)"
         ),
         {
             "id": evidence_id,
             "system_id": request.system_id,
+            "org_id": membership.org_id,
             "evidence_type": request.type,
             "content_json": json.dumps(request.content),
             "confidence": request.confidence,
