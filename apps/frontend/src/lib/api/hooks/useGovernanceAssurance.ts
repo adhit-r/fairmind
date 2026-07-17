@@ -17,6 +17,16 @@ export interface FrameworkVersion {
   status: string
 }
 
+export interface FrameworkImportResult {
+  versionId: string
+  frameworkKey: string
+  versionLabel: string
+  requirementCount: number
+  controlCount: number
+  sourceHash: string
+  created: boolean
+}
+
 export interface FrameworkAssignment {
   id: string
   orgId: string
@@ -32,6 +42,19 @@ export interface ControlAssessment {
   applicability: string
   status: string
   owner: string | null
+}
+
+export interface ControlAssessmentUpdateResult {
+  id: string
+  orgId: string
+  systemId: string
+  frameworkAssignmentId: string
+  controlDefinitionId: string
+  applicability: string
+  status: string
+  owner: string | null
+  createdAt: string
+  updatedAt: string
 }
 
 export interface ReadinessSummary {
@@ -51,6 +74,12 @@ export interface EvidenceMappingReview {
   rationale?: string | null
   reviewedBy?: string
   reviewedAt?: string
+}
+
+export interface EvidenceMappingReviewInput {
+  state: EvidenceMappingReview['state']
+  rationale?: string | null
+  reviewVersion: number
 }
 
 export interface EvidenceMapping {
@@ -175,7 +204,12 @@ function useGovernanceResource<T>(
 }
 
 export function useGovernanceCatalog(orgId?: string) {
-  const frameworks = useGovernanceResource(
+  const {
+    data: frameworks,
+    loading,
+    error,
+    refresh: refreshFrameworks,
+  } = useGovernanceResource(
     Boolean(orgId),
     [] as FrameworkCatalog[],
     useCallback(async () => unwrapGovernanceResponse(await apiClient.get<FrameworkCatalog[]>(API_ENDPOINTS.aiGovernance.frameworks(orgId!))), [orgId]),
@@ -183,12 +217,12 @@ export function useGovernanceCatalog(orgId?: string) {
 
   const importFramework = useCallback(async (workbookPath: string) => {
     if (!orgId) throw new Error('An organization is required to import a framework')
-    const imported = unwrapGovernanceResponse(await apiClient.post<FrameworkVersion>(API_ENDPOINTS.aiGovernance.importFramework(orgId), { workbookPath }))
-    await frameworks.refresh()
+    const imported = unwrapGovernanceResponse(await apiClient.post<FrameworkImportResult>(API_ENDPOINTS.aiGovernance.importFramework(orgId), { workbookPath }))
+    await refreshFrameworks()
     return imported
-  }, [frameworks, orgId])
+  }, [orgId, refreshFrameworks])
 
-  return { ...frameworks, frameworks: frameworks.data, importFramework }
+  return { data: frameworks, loading, error, refresh: refreshFrameworks, frameworks, importFramework }
 }
 
 export function useFrameworkVersions(orgId?: string, frameworkKey?: string) {
@@ -202,7 +236,12 @@ export function useFrameworkVersions(orgId?: string, frameworkKey?: string) {
 }
 
 export function useFrameworkAssignments(orgId?: string, systemId?: string) {
-  const assignments = useGovernanceResource(
+  const {
+    data: assignments,
+    loading,
+    error,
+    refresh: refreshAssignments,
+  } = useGovernanceResource(
     Boolean(orgId && systemId),
     [] as FrameworkAssignment[],
     useCallback(async () => unwrapGovernanceResponse(await apiClient.get<FrameworkAssignment[]>(API_ENDPOINTS.aiGovernance.frameworkAssignments(orgId!, systemId!))), [orgId, systemId]),
@@ -211,20 +250,30 @@ export function useFrameworkAssignments(orgId?: string, systemId?: string) {
   const assign = useCallback(async (frameworkVersionId: string) => {
     if (!orgId || !systemId) throw new Error('An organization and AI system are required to assign a framework')
     const assignment = unwrapGovernanceResponse(await apiClient.post<FrameworkAssignment>(API_ENDPOINTS.aiGovernance.frameworkAssignments(orgId, systemId), { frameworkVersionId }))
-    await assignments.refresh()
+    await refreshAssignments()
     return assignment
-  }, [assignments, orgId, systemId])
+  }, [orgId, refreshAssignments, systemId])
 
-  return { ...assignments, assignments: assignments.data, assign }
+  return { data: assignments, loading, error, refresh: refreshAssignments, assignments, assign }
 }
 
 export function useFrameworkAssignmentControls(orgId?: string, assignmentId?: string) {
-  const controls = useGovernanceResource(
+  const {
+    data: controls,
+    loading: controlsLoading,
+    error: controlsError,
+    refresh: refreshControls,
+  } = useGovernanceResource(
     Boolean(orgId && assignmentId),
     [] as ControlAssessment[],
     useCallback(async () => unwrapGovernanceResponse(await apiClient.get<ControlAssessment[]>(API_ENDPOINTS.aiGovernance.assignmentControls(orgId!, assignmentId!))), [assignmentId, orgId]),
   )
-  const readiness = useGovernanceResource(
+  const {
+    data: readiness,
+    loading: readinessLoading,
+    error: readinessError,
+    refresh: refreshReadiness,
+  } = useGovernanceResource(
     Boolean(orgId && assignmentId),
     null as ReadinessSummary | null,
     useCallback(async () => unwrapGovernanceResponse(await apiClient.get<ReadinessSummary>(API_ENDPOINTS.aiGovernance.assignmentReadiness(orgId!, assignmentId!))), [assignmentId, orgId]),
@@ -235,23 +284,32 @@ export function useFrameworkAssignmentControls(orgId?: string, assignmentId?: st
     update: Partial<Pick<ControlAssessment, 'applicability' | 'status' | 'owner'>>,
   ) => {
     if (!orgId) throw new Error('An organization is required to update a control assessment')
-    const assessment = unwrapGovernanceResponse(await apiClient.patch<ControlAssessment>(API_ENDPOINTS.aiGovernance.controlAssessment(orgId, assessmentId), update))
-    await Promise.all([controls.refresh(), readiness.refresh()])
+    const assessment = unwrapGovernanceResponse(await apiClient.patch<ControlAssessmentUpdateResult>(API_ENDPOINTS.aiGovernance.controlAssessment(orgId, assessmentId), update))
+    await Promise.all([refreshControls(), refreshReadiness()])
     return assessment
-  }, [controls, orgId, readiness])
+  }, [orgId, refreshControls, refreshReadiness])
+
+  const refresh = useCallback(async () => {
+    await Promise.all([refreshControls(), refreshReadiness()])
+  }, [refreshControls, refreshReadiness])
 
   return {
-    controls: controls.data,
-    readiness: readiness.data,
-    loading: controls.loading || readiness.loading,
-    error: controls.error || readiness.error,
-    refresh: async () => { await Promise.all([controls.refresh(), readiness.refresh()]) },
+    controls,
+    readiness,
+    loading: controlsLoading || readinessLoading,
+    error: controlsError || readinessError,
+    refresh,
     updateAssessment,
   }
 }
 
 export function useEvidenceRuns(orgId?: string, systemId?: string) {
-  const runs = useGovernanceResource(
+  const {
+    data: runs,
+    loading,
+    error,
+    refresh: refreshRuns,
+  } = useGovernanceResource(
     Boolean(orgId && systemId),
     [] as EvidenceRun[],
     useCallback(async () => unwrapGovernanceResponse(await apiClient.get<EvidenceRun[]>(API_ENDPOINTS.aiGovernance.evidenceRuns(orgId!, systemId!))), [orgId, systemId]),
@@ -260,11 +318,11 @@ export function useEvidenceRuns(orgId?: string, systemId?: string) {
   const ingestRun = useCallback(async (run: EvidenceRunInput) => {
     if (!orgId || !systemId) throw new Error('An organization and AI system are required to ingest evidence')
     const evidenceRun = unwrapGovernanceResponse(await apiClient.post<EvidenceRun>(API_ENDPOINTS.aiGovernance.evidenceRuns(orgId, systemId), run))
-    await runs.refresh()
+    await refreshRuns()
     return evidenceRun
-  }, [orgId, runs, systemId])
+  }, [orgId, refreshRuns, systemId])
 
-  return { ...runs, runs: runs.data, ingestRun }
+  return { data: runs, loading, error, refresh: refreshRuns, runs, ingestRun }
 }
 
 export function useEvidenceMappingReview(orgId?: string) {
@@ -293,7 +351,7 @@ export function useEvidenceMappingReview(orgId?: string) {
 
   const reviewMapping = useCallback(async (
     mappingId: string,
-    review: Pick<EvidenceMapping, 'reviewVersion'> & Pick<EvidenceMappingReview, 'state' | 'rationale'>,
+    review: EvidenceMappingReviewInput,
   ) => {
     if (!orgId) throw new Error('An organization is required to review evidence mappings')
     return execute(() => apiClient.post<EvidenceMapping>(API_ENDPOINTS.aiGovernance.reviewEvidenceMapping(orgId, mappingId), review))
@@ -303,26 +361,60 @@ export function useEvidenceMappingReview(orgId?: string) {
 }
 
 export function useGovernanceAssurance(orgId?: string, systemId?: string, assignmentId?: string) {
-  const catalog = useGovernanceCatalog(orgId)
-  const assignments = useFrameworkAssignments(orgId, systemId)
-  const assessment = useFrameworkAssignmentControls(orgId, assignmentId)
-  const evidence = useEvidenceRuns(orgId, systemId)
-  const mappings = useEvidenceMappingReview(orgId)
+  const {
+    frameworks,
+    loading: catalogLoading,
+    error: catalogError,
+    refresh: refreshCatalog,
+    importFramework,
+  } = useGovernanceCatalog(orgId)
+  const {
+    assignments,
+    loading: assignmentsLoading,
+    error: assignmentsError,
+    refresh: refreshAssignments,
+    assign,
+  } = useFrameworkAssignments(orgId, systemId)
+  const {
+    controls,
+    readiness,
+    loading: assessmentLoading,
+    error: assessmentError,
+    refresh: refreshAssessment,
+    updateAssessment,
+  } = useFrameworkAssignmentControls(orgId, assignmentId)
+  const {
+    runs: evidenceRuns,
+    loading: evidenceLoading,
+    error: evidenceError,
+    refresh: refreshEvidence,
+    ingestRun,
+  } = useEvidenceRuns(orgId, systemId)
+  const {
+    loading: mappingsLoading,
+    error: mappingsError,
+    createMapping,
+    reviewMapping,
+  } = useEvidenceMappingReview(orgId)
+
+  const refresh = useCallback(async () => {
+    await Promise.all([refreshCatalog(), refreshAssignments(), refreshAssessment(), refreshEvidence()])
+  }, [refreshAssessment, refreshAssignments, refreshCatalog, refreshEvidence])
 
   return {
-    frameworks: catalog.frameworks,
-    assignments: assignments.assignments,
-    controls: assessment.controls,
-    readiness: assessment.readiness,
-    evidenceRuns: evidence.runs,
-    loading: catalog.loading || assignments.loading || assessment.loading || evidence.loading || mappings.loading,
-    error: catalog.error || assignments.error || assessment.error || evidence.error || mappings.error,
-    refresh: async () => { await Promise.all([catalog.refresh(), assignments.refresh(), assessment.refresh(), evidence.refresh()]) },
-    importFramework: catalog.importFramework,
-    assign: assignments.assign,
-    updateAssessment: assessment.updateAssessment,
-    ingestRun: evidence.ingestRun,
-    createMapping: mappings.createMapping,
-    reviewMapping: mappings.reviewMapping,
+    frameworks,
+    assignments,
+    controls,
+    readiness,
+    evidenceRuns,
+    loading: catalogLoading || assignmentsLoading || assessmentLoading || evidenceLoading || mappingsLoading,
+    error: catalogError || assignmentsError || assessmentError || evidenceError || mappingsError,
+    refresh,
+    importFramework,
+    assign,
+    updateAssessment,
+    ingestRun,
+    createMapping,
+    reviewMapping,
   }
 }

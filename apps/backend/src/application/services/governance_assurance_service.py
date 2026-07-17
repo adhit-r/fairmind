@@ -328,7 +328,9 @@ class GovernanceAssuranceService:
         ).mappings().one_or_none()
         if not row:
             return None
-        updates = {key: value for key, value in values.items() if value is not None}
+        updates = {key: values[key] for key in ("status", "applicability") if values.get(key) is not None}
+        if "owner" in values:
+            updates["owner"] = values["owner"]
         if not updates:
             return dict(row)
         if "status" in updates and updates["status"] not in _CONTROL_STATUSES:

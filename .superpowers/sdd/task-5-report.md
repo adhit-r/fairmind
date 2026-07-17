@@ -19,3 +19,11 @@
 
 - Next.js reports the existing multi-lockfile workspace-root warning.
 - The build reports existing Browserslist, Authentik configuration, and metadata viewport warnings. No dependency or unrelated configuration changes were made.
+
+## Review follow-up
+
+- Corrected the framework-import contract to the backend import-result payload.
+- Added the distinct raw control-assessment update-result contract and refreshed joined controls after mutation.
+- Preserved an explicit `owner: null` update while continuing to ignore null status and applicability values.
+- Stabilized assurance refresh and mutation callbacks with their individual refresh dependencies.
+- Added focused frontend contract coverage and a backend regression test for owner clearing.

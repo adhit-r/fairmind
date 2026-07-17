@@ -367,6 +367,34 @@ def test_assignment_and_assessment_ids_cannot_cross_organizations(assurance_clie
     assert foreign_assessment.status_code == 404
 
 
+def test_assessment_update_clears_owner_when_explicitly_null(assurance_client) -> None:
+    client, session_factory, _ = assurance_client
+    session = session_factory()
+    _seed_org(session, ORG_A, USER_A, role="admin")
+    system_id, _, version_id = _seed_catalog_and_system(session)
+    session.close()
+
+    assignment = client.post(
+        f"/api/v1/ai-governance/organizations/{ORG_A}/systems/{system_id}/framework-assignments",
+        json={"frameworkVersionId": version_id},
+    ).json()
+    assessment_id = client.get(
+        f"/api/v1/ai-governance/organizations/{ORG_A}/framework-assignments/{assignment['id']}/controls"
+    ).json()[0]["id"]
+
+    assigned = client.patch(
+        f"/api/v1/ai-governance/organizations/{ORG_A}/control-assessments/{assessment_id}",
+        json={"owner": "governance-lead"},
+    )
+    cleared = client.patch(
+        f"/api/v1/ai-governance/organizations/{ORG_A}/control-assessments/{assessment_id}",
+        json={"owner": None},
+    )
+
+    assert assigned.status_code == cleared.status_code == 200
+    assert cleared.json()["owner"] is None
+
+
 def test_assessment_update_allows_existing_org_role_permission_and_readiness_is_counts_only(
     assurance_client,
 ) -> None:
