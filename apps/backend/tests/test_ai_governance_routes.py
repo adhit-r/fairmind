@@ -315,7 +315,7 @@ def test_ai_governance_system_approval_request_flow():
     assert latest_payload["decisions"][-1]["decision"] == "approved"
 
 
-def test_ai_governance_evidence_collect_and_list():
+def test_ai_governance_evidence_endpoints_require_authentication():
     system_id = f"model-abc-{uuid.uuid4().hex[:8]}"
     collect_resp = client.post(
         "/api/v1/ai-governance/evidence/collect",
@@ -327,42 +327,13 @@ def test_ai_governance_evidence_collect_and_list():
             "metadata": {"source": "monitoring"},
         },
     )
-    assert collect_resp.status_code == 200
-    evidence = collect_resp.json()
-    assert evidence["workflowState"] == "collected"
-    assert evidence["linkedEntityCount"] == 0
-    assert evidence["metadataSummary"]["source"] == "monitoring"
-
-    list_resp = client.get(f"/api/v1/ai-governance/evidence/{system_id}")
-    assert list_resp.status_code == 200
-    items = list_resp.json()
-    assert any(item["id"] == evidence["id"] for item in items)
-    listed = next(item for item in items if item["id"] == evidence["id"])
-    assert listed["metadataSummary"]["source"] == "monitoring"
-    assert listed["workflowState"] == "collected"
-    assert listed["linkedEntityCount"] == 0
-
-    link_resp = client.post(
-        "/api/v1/ai-governance/evidence/collections",
-        json={
-            "evidence_id": evidence["id"],
-            "entity_type": "policy",
-            "entity_id": "policy-xyz",
-        },
-    )
-    assert link_resp.status_code == 200
-    link_data = link_resp.json()
-    assert link_data["evidence_id"] == evidence["id"]
-
-    summary_resp = client.get(f"/api/v1/ai-governance/evidence/{system_id}/summary")
-    assert summary_resp.status_code == 200
-    summary = summary_resp.json()
-    assert summary["systemId"] == system_id
-    assert summary["totalEvidence"] == 1
-    assert summary["linkedEvidence"] == 1
-    assert summary["decisionReadiness"] == "review_ready"
-    assert summary["workflowState"] == "review_ready"
-    assert summary["metadataSources"][0]["source"] == "monitoring"
+    assert collect_resp.status_code == 401
+    assert client.get(f"/api/v1/ai-governance/evidence-v2/{system_id}").status_code == 401
+    assert client.get(f"/api/v1/ai-governance/evidence/{system_id}/summary").status_code == 401
+    assert client.post(
+        f"/api/v1/ai-governance/systems/{system_id}/evidence",
+        json={"evidence_type": "policy", "content": {}},
+    ).status_code == 401
 
 
 def test_ai_governance_risk_dashboard_and_assessment():

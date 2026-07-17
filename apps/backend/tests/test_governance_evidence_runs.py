@@ -23,7 +23,7 @@ from database.governance_models import (
     GovernanceFrameworkVersion,
     GovernanceWorkspace,
 )
-from database.models import Organization, OrganizationMember, User
+from database.models import Organization, OrganizationMember, OrganizationRole, User
 from src.application.services.governance_assurance_service import GovernanceAssuranceService, _is_stale
 from migrations.governance_assurance_migration import sql_for
 
@@ -76,11 +76,11 @@ def assurance_client():
         engine.dispose()
 
 
-def _seed_org(session, org_id: str, user_id: str) -> None:
+def _seed_org(session, org_id: str, user_id: str, role: str = "admin") -> None:
     user_uuid = uuid.UUID(user_id)
     session.execute(User.__table__.insert().values(id=user_uuid, email=f"{user_id}@example.test", username=user_id))
     session.execute(Organization.__table__.insert().values(id=uuid.UUID(org_id), name=org_id, slug=org_id, owner_id=user_uuid))
-    session.execute(OrganizationMember.__table__.insert().values(id=uuid.uuid4(), org_id=uuid.UUID(org_id), user_id=user_uuid, role="admin", status="active"))
+    session.execute(OrganizationMember.__table__.insert().values(id=uuid.uuid4(), org_id=uuid.UUID(org_id), user_id=user_uuid, role=role, status="active"))
 
 
 def _seed_system_and_control(session) -> tuple[str, str]:
@@ -168,6 +168,246 @@ def test_evidence_run_response_exposes_stored_provenance_without_raw_outputs(ass
     assert payload["assuranceSource"] == "fairmind_internal"
     assert payload["limitations"] == ["Synthetic test-set only"]
     assert "summary" not in payload
+
+
+def test_legacy_evidence_v2_denies_viewer_mutation(assurance_client) -> None:
+    client, session_factory, _ = assurance_client
+    session = session_factory()
+    _seed_org(session, ORG_A, USER_A, role="viewer")
+    system_id, _ = _seed_system_and_control(session)
+    session.close()
+
+    response = client.post(
+        "/api/v1/ai-governance/evidence/collect-v2",
+        json={
+            "system_id": system_id,
+            "type": "policy",
+            "title": "Viewer should not write",
+            "content": {},
+            "confidence": 0.9,
+        },
+    )
+
+    assert response.status_code == 403
+
+
+def test_legacy_evidence_v2_hides_cross_org_system_and_evidence(assurance_client) -> None:
+    client, session_factory, active_user = assurance_client
+    session = session_factory()
+    _seed_org(session, ORG_A, USER_A)
+    _seed_org(session, ORG_B, USER_B)
+    system_id, _ = _seed_system_and_control(session)
+    session.close()
+    created = client.post(
+        "/api/v1/ai-governance/evidence/collect-v2",
+        json={"system_id": system_id, "type": "policy", "title": "Scoped", "content": {}, "confidence": 0.9},
+    )
+    assert created.status_code == 200, created.text
+    evidence_id = created.json()["id"]
+    active_user["value"] = _token(USER_B)
+
+    assert client.get(f"/api/v1/ai-governance/evidence-v2/{system_id}").status_code == 404
+    assert client.get(f"/api/v1/ai-governance/evidence-item/{evidence_id}").status_code == 404
+    assert client.get(f"/api/v1/ai-governance/evidence/{system_id}/summary").status_code == 404
+    assert client.get(f"/api/v1/ai-governance/evidence/{system_id}").status_code == 404
+    assert client.get(f"/api/v1/ai-governance/systems/{system_id}/evidence").status_code == 404
+    assert client.patch(f"/api/v1/ai-governance/evidence-item/{evidence_id}", json={"title": "Cross-org edit"}).status_code == 404
+    assert client.post(
+        "/api/v1/ai-governance/evidence/collect-v2",
+        json={"system_id": system_id, "type": "policy", "content": {}, "confidence": 0.9},
+    ).status_code == 404
+    assert client.post(
+        f"/api/v1/ai-governance/systems/{system_id}/evidence",
+        json={"evidence_type": "policy", "content": {}},
+    ).status_code == 404
+
+
+def test_legacy_evidence_v2_authorizes_mutations_and_uses_authenticated_actor(assurance_client) -> None:
+    client, session_factory, _ = assurance_client
+    session = session_factory()
+    _seed_org(session, ORG_A, USER_A)
+    system_id, assessment_id = _seed_system_and_control(session)
+    session.close()
+
+    created = client.post(
+        "/api/v1/ai-governance/evidence/collect-v2",
+        json={
+            "system_id": system_id,
+            "type": "policy",
+            "title": "Limitation register",
+            "content": {},
+            "confidence": 0.9,
+            "uploaded_by": "spoofed@example.test",
+        },
+    )
+    assert created.status_code == 200, created.text
+    evidence_id = created.json()["id"]
+    assert created.json()["uploadedBy"] == "evidence@example.test"
+    assert client.get(f"/api/v1/ai-governance/evidence-v2/{system_id}").status_code == 200
+    updated = client.patch(
+        f"/api/v1/ai-governance/evidence-item/{evidence_id}", json={"status": "submitted"}
+    )
+    assert updated.status_code == 200, updated.text
+    link = client.post(
+        f"/api/v1/ai-governance/evidence-item/{evidence_id}/links",
+        json={"entity_type": "control", "entity_id": assessment_id},
+    )
+    assert link.status_code == 200, link.text
+    assert client.get(f"/api/v1/ai-governance/evidence/{system_id}/summary").status_code == 200
+    removed = client.delete(
+        f"/api/v1/ai-governance/evidence-item/{evidence_id}/links/{link.json()['id']}"
+    )
+    assert removed.status_code == 200, removed.text
+
+    legacy_collected = client.post(
+        "/api/v1/ai-governance/evidence/collect",
+        json={"system_id": system_id, "type": "log", "content": {}, "confidence": 0.8},
+    )
+    assert legacy_collected.status_code == 200, legacy_collected.text
+    legacy_uploaded = client.post(
+        "/api/v1/ai-governance/evidence/upload",
+        json={"system_id": system_id, "type": "file", "content": {}, "confidence": 0.8},
+    )
+    assert legacy_uploaded.status_code == 200, legacy_uploaded.text
+    system_created = client.post(
+        f"/api/v1/ai-governance/systems/{system_id}/evidence",
+        json={"evidence_type": "attestation", "content": {}, "uploaded_by": "spoofed@example.test"},
+    )
+    assert system_created.status_code == 200, system_created.text
+    assert system_created.json()["uploadedBy"] == "evidence@example.test"
+    assert client.get(f"/api/v1/ai-governance/systems/{system_id}/evidence").status_code == 200
+
+
+def test_legacy_evidence_viewer_can_read_but_all_mutation_routes_deny(assurance_client) -> None:
+    client, session_factory, active_user = assurance_client
+    session = session_factory()
+    _seed_org(session, ORG_A, USER_A)
+    system_id, assessment_id = _seed_system_and_control(session)
+    viewer_uuid = uuid.UUID(USER_B)
+    session.execute(
+        User.__table__.insert().values(
+            id=viewer_uuid, email="viewer@example.test", username="viewer"
+        )
+    )
+    session.execute(
+        OrganizationMember.__table__.insert().values(
+            id=uuid.uuid4(),
+            org_id=uuid.UUID(ORG_A),
+            user_id=viewer_uuid,
+            role="viewer",
+            status="active",
+        )
+    )
+    session.commit()
+    session.close()
+    created = client.post(
+        "/api/v1/ai-governance/evidence/collect-v2",
+        json={"system_id": system_id, "type": "policy", "content": {}, "confidence": 0.9},
+    )
+    evidence_id = created.json()["id"]
+    created_link = client.post(
+        f"/api/v1/ai-governance/evidence-item/{evidence_id}/links",
+        json={"entity_type": "control", "entity_id": assessment_id},
+    )
+    link_id = created_link.json()["id"]
+    active_user["value"] = _token(USER_B)
+
+    read_paths = [
+        f"/api/v1/ai-governance/evidence-v2/{system_id}",
+        f"/api/v1/ai-governance/evidence-item/{evidence_id}",
+        f"/api/v1/ai-governance/evidence/{system_id}/summary",
+        f"/api/v1/ai-governance/evidence/{system_id}",
+        f"/api/v1/ai-governance/systems/{system_id}/evidence",
+    ]
+    for path in read_paths:
+        response = client.get(path)
+        assert response.status_code == 200, (path, response.text)
+
+    mutation_responses = [
+        client.patch(f"/api/v1/ai-governance/evidence-item/{evidence_id}", json={"title": "Denied"}),
+        client.post(
+            f"/api/v1/ai-governance/evidence-item/{evidence_id}/links",
+            json={"entity_type": "control", "entity_id": assessment_id},
+        ),
+        client.delete(f"/api/v1/ai-governance/evidence-item/{evidence_id}/links/{link_id}"),
+        client.post(
+            "/api/v1/ai-governance/evidence/collect-v2",
+            json={"system_id": system_id, "type": "policy", "content": {}, "confidence": 0.9},
+        ),
+        client.post(
+            "/api/v1/ai-governance/evidence/collect",
+            json={"system_id": system_id, "type": "policy", "content": {}, "confidence": 0.9},
+        ),
+        client.post(
+            "/api/v1/ai-governance/evidence/upload",
+            json={"system_id": system_id, "type": "policy", "content": {}, "confidence": 0.9},
+        ),
+        client.post(
+            "/api/v1/ai-governance/evidence/collections",
+            json={"evidence_id": evidence_id, "entity_type": "control", "entity_id": assessment_id},
+        ),
+        client.post(
+            f"/api/v1/ai-governance/systems/{system_id}/evidence",
+            json={"evidence_type": "policy", "content": {}},
+        ),
+    ]
+    assert [response.status_code for response in mutation_responses] == [403] * len(mutation_responses)
+
+
+def test_legacy_evidence_v2_allows_custom_role_with_model_write(assurance_client) -> None:
+    client, session_factory, _ = assurance_client
+    session = session_factory()
+    _seed_org(session, ORG_A, USER_A, role="assessor")
+    session.execute(
+        OrganizationRole.__table__.insert().values(
+            id=uuid.uuid4(),
+            org_id=uuid.UUID(ORG_A),
+            name="assessor",
+            permissions=["model:write"],
+        )
+    )
+    system_id, _ = _seed_system_and_control(session)
+    session.close()
+
+    created = client.post(
+        "/api/v1/ai-governance/evidence/collect-v2",
+        json={
+            "system_id": system_id,
+            "type": "policy",
+            "title": "Assessor evidence",
+            "content": {},
+            "confidence": 0.9,
+        },
+    )
+
+    assert created.status_code == 200, created.text
+
+
+def test_legacy_evidence_rejects_control_link_from_another_system(assurance_client) -> None:
+    client, session_factory, _ = assurance_client
+    session = session_factory()
+    _seed_org(session, ORG_A, USER_A)
+    _, assessment_id = _seed_system_and_control(session)
+    other_system_id = _seed_second_system(session)
+    session.close()
+    created = client.post(
+        "/api/v1/ai-governance/evidence/collect-v2",
+        json={
+            "system_id": other_system_id,
+            "type": "policy",
+            "title": "Other system evidence",
+            "content": {},
+            "confidence": 0.9,
+        },
+    )
+    assert created.status_code == 200, created.text
+
+    linked = client.post(
+        f"/api/v1/ai-governance/evidence-item/{created.json()['id']}/links",
+        json={"entity_type": "control", "entity_id": assessment_id},
+    )
+
+    assert linked.status_code == 404
 
 def test_source_run_cannot_be_reingested_with_different_content(assurance_client) -> None:
     client, session_factory, _ = assurance_client

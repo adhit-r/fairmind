@@ -351,6 +351,23 @@ export function useFrameworkAssignmentControls(orgId?: string, assignmentId?: st
   }
 }
 
+export function useAllFrameworkAssignmentControls(orgId?: string, assignmentIds: string[] = []) {
+  const assignmentKey = [...assignmentIds].sort().join(',')
+  const controls = useGovernanceResource(
+    Boolean(orgId && assignmentKey),
+    [] as ControlAssessment[],
+    useCallback(async () => {
+      const ids = assignmentKey.split(',').filter(Boolean)
+      const responses = await Promise.all(ids.map((assignmentId) =>
+        apiClient.get<ControlAssessment[]>(API_ENDPOINTS.aiGovernance.assignmentControls(orgId!, assignmentId)),
+      ))
+      return responses.flatMap((response) => unwrapGovernanceResponse(response))
+    }, [assignmentKey, orgId]),
+  )
+
+  return { ...controls, controls: controls.data }
+}
+
 export function useEvidenceRuns(orgId?: string, systemId?: string) {
   const {
     data: runs,

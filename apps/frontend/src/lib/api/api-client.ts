@@ -77,6 +77,15 @@ const classifyError = (error: any, response?: Response): ApiError => {
       }
     }
 
+    if (response.status === 409) {
+      return {
+        message: 'The record changed while you were editing it',
+        status: 409,
+        type: 'client',
+        canRetry: false,
+      }
+    }
+
     if (response.status >= 500) {
       return {
         message: 'Server error occurred',

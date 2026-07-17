@@ -113,9 +113,9 @@ export function EvaluationRunList({ runs, controls, loading, error, canReview, o
 
               <section aria-label="Evaluation limitations" className="border-l-4 border-[#E76F2E] bg-[#FFF4DE] p-4">
                 <h3 className="text-xs font-black uppercase tracking-[0.1em]">Limitations</h3>
-                {run.limitations.length > 0 ? (
+                {(run.limitations ?? []).length > 0 ? (
                   <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
-                    {run.limitations.map((limitation) => <li key={limitation}>{limitation}</li>)}
+                    {(run.limitations ?? []).map((limitation) => <li key={limitation}>{limitation}</li>)}
                   </ul>
                 ) : (
                   <p className="mt-2 text-sm text-[#59615D]">No limitations were supplied with this run.</p>
@@ -139,6 +139,7 @@ export function EvaluationRunList({ runs, controls, loading, error, canReview, o
                     control={controlsByAssessment.get(mapping.controlAssessmentId)}
                     canReview={canReview}
                     onReview={onReview}
+                    onRefresh={onRefresh}
                   />
                 )) : (
                   <p className="border-2 border-dashed border-[#0F1412] bg-[#F3F5F0] p-4 text-sm text-[#59615D]">

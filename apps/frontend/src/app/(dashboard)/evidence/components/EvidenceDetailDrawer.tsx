@@ -16,7 +16,7 @@ import {
   IconX,
 } from '@tabler/icons-react'
 
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -166,6 +166,9 @@ export function EvidenceDetailDrawer({
               <SheetTitle className="text-xl font-black uppercase leading-tight">
                 {displayTitle}
               </SheetTitle>
+              <SheetDescription>
+                Evidence details and scoped governance links for {displayTitle}.
+              </SheetDescription>
               <div className="flex flex-wrap items-center gap-1.5">
                 <Badge className="border-2 border-black bg-black px-2 py-0.5 text-[11px] font-black uppercase text-white">
                   {evidence.type}

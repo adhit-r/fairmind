@@ -104,6 +104,7 @@ function sortEvidence(records: Evidence[]) {
 export function useEvidence(systemId?: string) {
   const [data, setData] = useState<Evidence[]>([])
   const [summary, setSummary] = useState<EvidenceSummary>(EMPTY_SUMMARY)
+  const [dataSystemId, setDataSystemId] = useState(systemId || '')
   const [loading, setLoading] = useState(true)
   const [collecting, setCollecting] = useState(false)
   const [error, setError] = useState<Error | null>(null)
@@ -112,6 +113,9 @@ export function useEvidence(systemId?: string) {
   const loadEvidence = useCallback(async (targetSystemId: string) => {
     const currentRequest = ++requestVersion.current
 
+    setDataSystemId(targetSystemId)
+    setData([])
+    setSummary({ ...EMPTY_SUMMARY, systemId: targetSystemId })
     setLoading(true)
     setError(null)
 
@@ -158,6 +162,7 @@ export function useEvidence(systemId?: string) {
   useEffect(() => {
     if (!systemId) {
       requestVersion.current += 1
+      setDataSystemId('')
       setData([])
       setSummary(EMPTY_SUMMARY)
       setError(null)
@@ -170,6 +175,7 @@ export function useEvidence(systemId?: string) {
   const refreshEvidence = useCallback(() => {
     if (!systemId) {
       requestVersion.current += 1
+      setDataSystemId('')
       setData([])
       setSummary(EMPTY_SUMMARY)
       setError(null)
@@ -276,9 +282,11 @@ export function useEvidence(systemId?: string) {
     throw new Error(response.error || 'Failed to remove link')
   }, [])
 
+  const scopeMatches = dataSystemId === (systemId || '')
+
   return {
-    data,
-    summary,
+    data: scopeMatches ? data : [],
+    summary: scopeMatches ? summary : { ...EMPTY_SUMMARY, systemId: systemId || '' },
     loading,
     collecting,
     error,

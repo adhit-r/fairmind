@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import {
   IconAlertTriangle,
@@ -22,7 +22,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
 import { useSystemContext } from '@/components/workflow/SystemContext'
 import { useOrg } from '@/context/OrgContext'
@@ -30,7 +30,7 @@ import { useEvidence, type Evidence } from '@/lib/api/hooks/useEvidence'
 import {
   useEvidenceMappingReview,
   useEvidenceRuns,
-  useFrameworkAssignmentControls,
+  useAllFrameworkAssignmentControls,
   useFrameworkAssignments,
 } from '@/lib/api/hooks/useGovernanceAssurance'
 
@@ -132,8 +132,13 @@ export default function EvidencePage() {
   const { selectedSystem } = useSystemContext()
   const orgId = selectedOrg?.id
   const assignments = useFrameworkAssignments(orgId, selectedSystem.id)
-  const activeAssignment = assignments.assignments[0]
-  const assessmentState = useFrameworkAssignmentControls(orgId, activeAssignment?.id)
+  const assignmentIds = useMemo(
+    () => assignments.assignments
+      .filter((assignment) => assignment.systemId === selectedSystem.id)
+      .map((assignment) => assignment.id),
+    [assignments.assignments, selectedSystem.id],
+  )
+  const assessmentState = useAllFrameworkAssignmentControls(orgId, assignmentIds)
   const evaluationState = useEvidenceRuns(orgId, selectedSystem.id)
   const mappingReview = useEvidenceMappingReview(orgId)
   const canReview = selectedOrg?.role === 'admin'
@@ -159,6 +164,18 @@ export default function EvidencePage() {
   const [uploaderOpen, setUploaderOpen] = useState(false)
   const [selectedEvidence, setSelectedEvidence] = useState<Evidence | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
+
+  useEffect(() => {
+    setActiveFolder(null)
+    setActiveTags([])
+    setSearch('')
+    setSelectedEvidence(null)
+    setDrawerOpen(false)
+  }, [orgId, selectedSystem.id])
+
+  const scopedSelectedEvidence = selectedEvidence?.systemId === selectedSystem.id
+    ? selectedEvidence
+    : null
 
   const filteredData = useMemo(() => {
     let result = data
@@ -194,12 +211,8 @@ export default function EvidencePage() {
     const totalRequired = summary.linkedEvidence + summary.missingSignals.length
     const linked = summary.linkedEvidence
     const gaps = summary.missingSignals.length
-    const readiness = summary.decisionReadiness
-    let gate: 'green' | 'yellow' | 'red' = 'green'
-    if (readiness !== 'review_ready') {
-      gate = gaps > 2 ? 'red' : 'yellow'
-    }
-    return { totalRequired, linked, gaps, gate, readiness }
+    const gate: 'green' | 'yellow' | 'red' = gaps === 0 ? 'green' : gaps > 2 ? 'red' : 'yellow'
+    return { totalRequired, linked, gaps, gate }
   }, [summary])
 
   const handleTagToggle = (tag: string) => {
@@ -298,7 +311,7 @@ export default function EvidencePage() {
       </div>
       ) : null}
 
-      {/* Approval gate */}
+      {/* Artifact coverage summary */}
       {activeView === 'gaps' ? (
       <Card className={`border-4 p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] ${
         completeness.gate === 'green' ? 'border-emerald-600 bg-emerald-50' :
@@ -315,18 +328,18 @@ export default function EvidencePage() {
           )}
           <div className="flex-1">
             <p className="font-black uppercase">
-              {completeness.gate === 'green' ? 'Evidence complete — approval gate: ready' :
-               completeness.gate === 'yellow' ? 'Evidence gaps present — conditional' :
-               'Critical gaps — approval blocked'}
+              {completeness.gate === 'green' ? 'Artifact coverage recorded' :
+               completeness.gate === 'yellow' ? 'Artifact coverage gaps identified' :
+               'Multiple artifact coverage gaps identified'}
             </p>
-            {summary.recommendedNextStep && (
-              <p className="text-xs text-muted-foreground">{summary.recommendedNextStep}</p>
-            )}
+            <p className="text-xs text-muted-foreground">
+              This summary counts collected artifacts and entity links only. Control support still requires reviewer decisions.
+            </p>
           </div>
           {completeness.totalRequired > 0 && (
             <div className="min-w-[120px] space-y-1">
               <div className="flex justify-between text-[10px] font-bold uppercase text-muted-foreground">
-                <span>Coverage</span>
+                <span>Artifact links</span>
                 <span>{Math.round((completeness.linked / completeness.totalRequired) * 100)}%</span>
               </div>
               <Progress value={Math.round((completeness.linked / completeness.totalRequired) * 100)} className="h-2 border border-black" />
@@ -341,7 +354,7 @@ export default function EvidencePage() {
         <Card className="border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
           <div className="mb-3 flex items-center gap-2">
             <IconX className="h-5 w-5 text-red-600" />
-            <h2 className="font-black uppercase">Evidence gaps blocking approval</h2>
+            <h2 className="font-black uppercase">Artifact coverage gaps</h2>
             <Badge className="border-2 border-red-600 bg-red-100 px-2 font-black uppercase text-red-800">
               {summary.missingSignals.length}
             </Badge>
@@ -554,6 +567,9 @@ export default function EvidencePage() {
         <DialogContent className="max-w-lg border-4 border-black">
           <DialogHeader>
             <DialogTitle className="font-black uppercase">Add evidence</DialogTitle>
+            <DialogDescription>
+              Add a scoped evidence artifact for {selectedSystem.name}.
+            </DialogDescription>
           </DialogHeader>
           <EvidenceUploader
             systemId={selectedSystem.id}
@@ -565,8 +581,8 @@ export default function EvidencePage() {
 
       {/* Evidence detail drawer */}
       <EvidenceDetailDrawer
-        evidence={selectedEvidence}
-        open={drawerOpen}
+        evidence={scopedSelectedEvidence}
+        open={drawerOpen && Boolean(scopedSelectedEvidence)}
         onClose={() => { setDrawerOpen(false); setSelectedEvidence(null) }}
         onUpdate={async (id, updates) => {
           const updated = await updateEvidence(id, updates)

@@ -14,16 +14,18 @@ type EvidenceMappingReviewProps = {
   control?: ControlAssessment
   canReview: boolean
   onReview: (mappingId: string, review: EvidenceMappingReviewInput) => Promise<EvidenceMapping>
+  onRefresh: () => Promise<void>
 }
 
 function stateLabel(state: EvidenceMapping['state']) {
   return state.charAt(0).toUpperCase() + state.slice(1)
 }
 
-export function EvidenceMappingReview({ mapping, control, canReview, onReview }: EvidenceMappingReviewProps) {
+export function EvidenceMappingReview({ mapping, control, canReview, onReview, onRefresh }: EvidenceMappingReviewProps) {
   const [current, setCurrent] = useState(mapping)
   const [rationale, setRationale] = useState(mapping.rationale || '')
   const [saving, setSaving] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -50,6 +52,18 @@ export function EvidenceMappingReview({ mapping, control, canReview, onReview }:
       setError(reason instanceof Error ? reason.message : 'Mapping review failed')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const refresh = async () => {
+    setRefreshing(true)
+    try {
+      await onRefresh()
+      setError(null)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Mapping refresh failed')
+    } finally {
+      setRefreshing(false)
     }
   }
 
@@ -91,9 +105,18 @@ export function EvidenceMappingReview({ mapping, control, canReview, onReview }:
             placeholder="Record why this evidence does or does not support the control."
           />
           {error ? (
-            <p role="alert" className="border-2 border-[#B3261E] bg-[#FFF0ED] p-2 text-sm font-bold text-[#7B1D18]">
-              {error}. Refresh the run before retrying if another reviewer changed it.
-            </p>
+            <div role="alert" className="border-2 border-[#B3261E] bg-[#FFF0ED] p-3 text-sm font-bold text-[#7B1D18]">
+              <p>{error}. Reload the mapping before retrying if another reviewer changed it.</p>
+              <Button
+                type="button"
+                disabled={refreshing}
+                onClick={() => void refresh()}
+                variant="neutral"
+                className="mt-3 rounded-none border-2 border-[#0F1412] bg-white font-black uppercase shadow-[2px_2px_0_0_#0F1412]"
+              >
+                {refreshing ? 'Reloading mapping' : 'Reload mapping'}
+              </Button>
+            </div>
           ) : null}
           <div className="flex flex-wrap gap-2">
             <Button

@@ -21,7 +21,12 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from config.auth import TokenData, get_current_active_user
 from database.connection import get_db
+from src.application.services.governance_assurance_service import (
+    GovernanceAssuranceService,
+    OrgMembership,
+)
 
 
 router = APIRouter(tags=["ai-governance"])
@@ -1211,9 +1216,14 @@ async def create_framework_control(
 
 
 @router.get("/systems/{system_id}/evidence")
-async def list_system_evidence(system_id: str, db: Session = Depends(get_db)):
+async def list_system_evidence(
+    system_id: str,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
     """List all evidence items linked to an AI system."""
     _ensure_tables(db)
+    _require_evidence_system_access(db, system_id, current_user)
     rows = db.execute(
         text(
             "SELECT id, system_id, control_id, evidence_type, title, source, content_json, "
@@ -1258,17 +1268,12 @@ class SystemEvidenceCreateRequest(BaseModel):
 async def create_system_evidence(
     system_id: str,
     request: SystemEvidenceCreateRequest,
+    current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
     """Create an evidence item directly linked to an AI system."""
     _ensure_tables(db)
-    # Verify AI system exists
-    row = db.execute(
-        text("SELECT id FROM governance_ai_systems WHERE id = :id"),
-        {"id": system_id},
-    ).fetchone()
-    if not row:
-        raise HTTPException(status_code=404, detail="AI system not found")
+    _require_evidence_system_access(db, system_id, current_user, mutate=True)
 
     evidence_id = str(uuid.uuid4())
     now = _utc_now_iso()
@@ -1290,7 +1295,7 @@ async def create_system_evidence(
             "content_json": json.dumps(request.content),
             "confidence": request.confidence,
             "status": request.status,
-            "uploaded_by": request.uploaded_by,
+            "uploaded_by": current_user.email or current_user.user_id,
             "metadata_json": "{}",
             "captured_at": request.captured_at or now,
             "created_at": now,
@@ -1306,7 +1311,7 @@ async def create_system_evidence(
         "source": request.source,
         "confidence": request.confidence,
         "status": request.status,
-        "uploadedBy": request.uploaded_by,
+        "uploadedBy": current_user.email or current_user.user_id,
         "capturedAt": request.captured_at or now,
         "createdAt": now,
     }
@@ -1972,6 +1977,72 @@ async def create_system_approval_request(
 # Evidence Hub V2 — item-level CRUD and link management
 # ---------------------------------------------------------------------------
 
+def _require_evidence_system_access(
+    db: Session,
+    system_id: str,
+    current_user: TokenData,
+    *,
+    mutate: bool = False,
+) -> OrgMembership:
+    """Resolve the tenant from the system and fail closed for legacy unscoped rows."""
+    row = db.execute(
+        text("SELECT org_id FROM governance_ai_systems WHERE id = :id"),
+        {"id": system_id},
+    ).fetchone()
+    if not row or not row[0]:
+        raise HTTPException(status_code=404, detail="AI system not found")
+    service = GovernanceAssuranceService(db)
+    membership = service.membership(str(row[0]), current_user.user_id)
+    if not membership:
+        raise HTTPException(status_code=404, detail="AI system not found")
+    if mutate and not service.may_mutate(membership):
+        raise HTTPException(status_code=403, detail="Organization mutation permission required")
+    return membership
+
+
+def _require_evidence_item_access(
+    db: Session,
+    evidence_id: str,
+    current_user: TokenData,
+    *,
+    mutate: bool = False,
+) -> tuple[str, OrgMembership]:
+    row = db.execute(
+        text("SELECT system_id FROM governance_evidence WHERE id = :id"),
+        {"id": evidence_id},
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Evidence not found")
+    system_id = str(row[0])
+    return system_id, _require_evidence_system_access(
+        db, system_id, current_user, mutate=mutate
+    )
+
+
+def _validate_control_link_scope(
+    db: Session,
+    membership: OrgMembership,
+    system_id: str,
+    entity_type: str,
+    entity_id: str,
+) -> None:
+    if entity_type != "control":
+        return
+    assessment = db.execute(
+        text(
+            "SELECT id FROM governance_control_assessments "
+            "WHERE id = :id AND org_id = :org_id AND system_id = :system_id"
+        ),
+        {
+            "id": entity_id,
+            "org_id": membership.org_id,
+            "system_id": system_id,
+        },
+    ).fetchone()
+    if not assessment:
+        raise HTTPException(status_code=404, detail="Control assessment not found")
+
+
 def _serialize_evidence_item_v2(row: Any, link_rows: List[Any]) -> Dict[str, Any]:
     """Serialize a full evidence row (V2 schema with title, status, tags, folder)."""
     content = _load_json_value(row[3], {})
@@ -2107,16 +2178,26 @@ class EvidenceCollectV2Request(BaseModel):
 
 
 @router.get("/evidence-v2/{system_id}")
-async def list_evidence_v2(system_id: str, db: Session = Depends(get_db)):
+async def list_evidence_v2(
+    system_id: str,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
     """List evidence for a system with V2 schema (tags, folder, stale, full links)."""
     _ensure_tables(db)
+    _require_evidence_system_access(db, system_id, current_user)
     return _fetch_evidence_records_v2(db, system_id)
 
 
 @router.get("/evidence-item/{evidence_id}")
-async def get_evidence_item(evidence_id: str, db: Session = Depends(get_db)):
+async def get_evidence_item(
+    evidence_id: str,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
     """Fetch a single evidence item by ID."""
     _ensure_tables(db)
+    _require_evidence_item_access(db, evidence_id, current_user)
     item = _fetch_evidence_item_v2(db, evidence_id)
     if not item:
         raise HTTPException(status_code=404, detail="Evidence not found")
@@ -2125,10 +2206,14 @@ async def get_evidence_item(evidence_id: str, db: Session = Depends(get_db)):
 
 @router.patch("/evidence-item/{evidence_id}")
 async def update_evidence_item(
-    evidence_id: str, request: EvidenceUpdateRequest, db: Session = Depends(get_db)
+    evidence_id: str,
+    request: EvidenceUpdateRequest,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
     """Update evidence title, status, tags, folder, or artifact metadata."""
     _ensure_tables(db)
+    _require_evidence_item_access(db, evidence_id, current_user, mutate=True)
     row = db.execute(
         text("SELECT id, metadata_json FROM governance_evidence WHERE id = :id"),
         {"id": evidence_id},
@@ -2169,15 +2254,19 @@ async def update_evidence_item(
 
 @router.post("/evidence-item/{evidence_id}/links")
 async def add_evidence_item_link(
-    evidence_id: str, request: EvidenceLinkItemRequest, db: Session = Depends(get_db)
+    evidence_id: str,
+    request: EvidenceLinkItemRequest,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
     """Add a cross-entity link to an evidence item."""
     _ensure_tables(db)
-    exists = db.execute(
-        text("SELECT id FROM governance_evidence WHERE id = :id"), {"id": evidence_id}
-    ).fetchone()
-    if not exists:
-        raise HTTPException(status_code=404, detail="Evidence not found")
+    system_id, membership = _require_evidence_item_access(
+        db, evidence_id, current_user, mutate=True
+    )
+    _validate_control_link_scope(
+        db, membership, system_id, request.entity_type, request.entity_id
+    )
     link_id = str(uuid.uuid4())
     now = _utc_now_iso()
     db.execute(
@@ -2199,10 +2288,14 @@ async def add_evidence_item_link(
 
 @router.delete("/evidence-item/{evidence_id}/links/{link_id}")
 async def remove_evidence_item_link(
-    evidence_id: str, link_id: str, db: Session = Depends(get_db)
+    evidence_id: str,
+    link_id: str,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
     """Remove a cross-entity link from an evidence item."""
     _ensure_tables(db)
+    _require_evidence_item_access(db, evidence_id, current_user, mutate=True)
     result = db.execute(
         text("DELETE FROM governance_evidence_links WHERE id = :link_id AND evidence_id = :evidence_id"),
         {"link_id": link_id, "evidence_id": evidence_id},
@@ -2214,9 +2307,14 @@ async def remove_evidence_item_link(
 
 
 @router.post("/evidence/collect-v2")
-async def collect_evidence_v2(request: EvidenceCollectV2Request, db: Session = Depends(get_db)):
+async def collect_evidence_v2(
+    request: EvidenceCollectV2Request,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
     """Collect evidence with V2 schema support (tags, folder, artifact_kind, file_url)."""
     _ensure_tables(db)
+    _require_evidence_system_access(db, request.system_id, current_user, mutate=True)
     evidence_id = str(uuid.uuid4())
     now = _utc_now_iso()
     metadata: Dict[str, Any] = {
@@ -2241,7 +2339,7 @@ async def collect_evidence_v2(request: EvidenceCollectV2Request, db: Session = D
             "content_json": json.dumps(request.content),
             "confidence": request.confidence,
             "status": "draft",
-            "uploaded_by": request.uploaded_by or "",
+            "uploaded_by": current_user.email or current_user.user_id,
             "metadata_json": json.dumps(metadata),
             "captured_at": now,
             "created_at": now,
@@ -2253,14 +2351,22 @@ async def collect_evidence_v2(request: EvidenceCollectV2Request, db: Session = D
 
 
 @router.post("/evidence/collect")
-async def collect_evidence(request: EvidenceCollectRequest, db: Session = Depends(get_db)):
+async def collect_evidence(
+    request: EvidenceCollectRequest,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
     _ensure_tables(db)
+    _require_evidence_system_access(db, request.system_id, current_user, mutate=True)
     evidence_id = str(uuid.uuid4())
     now = _utc_now_iso()
     db.execute(
         text(
-            "INSERT INTO governance_evidence (id, system_id, evidence_type, content_json, confidence, metadata_json, created_at) "
-            "VALUES (:id, :system_id, :evidence_type, :content_json, :confidence, :metadata_json, :created_at)"
+            "INSERT INTO governance_evidence "
+            "(id, system_id, evidence_type, content_json, confidence, status, uploaded_by, "
+            "metadata_json, captured_at, created_at) "
+            "VALUES (:id, :system_id, :evidence_type, :content_json, :confidence, :status, "
+            ":uploaded_by, :metadata_json, :captured_at, :created_at)"
         ),
         {
             "id": evidence_id,
@@ -2268,7 +2374,10 @@ async def collect_evidence(request: EvidenceCollectRequest, db: Session = Depend
             "evidence_type": request.type,
             "content_json": json.dumps(request.content),
             "confidence": request.confidence,
+            "status": "draft",
+            "uploaded_by": current_user.email or current_user.user_id,
             "metadata_json": json.dumps(request.metadata),
+            "captured_at": now,
             "created_at": now,
         },
     )
@@ -2289,21 +2398,28 @@ async def collect_evidence(request: EvidenceCollectRequest, db: Session = Depend
 
 
 @router.post("/evidence/upload")
-async def upload_evidence(request: EvidenceCollectRequest, db: Session = Depends(get_db)):
+async def upload_evidence(
+    request: EvidenceCollectRequest,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
     # Alias to keep frontend contract compatibility.
-    return await collect_evidence(request, db)
+    return await collect_evidence(request, current_user, db)
 
 
 @router.post("/evidence/collections")
-async def link_evidence_to_entity(request: EvidenceLinkRequest, db: Session = Depends(get_db)):
+async def link_evidence_to_entity(
+    request: EvidenceLinkRequest,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
     _ensure_tables(db)
-
-    exists = db.execute(
-        text("SELECT id FROM governance_evidence WHERE id = :id"),
-        {"id": request.evidence_id},
-    ).fetchone()
-    if not exists:
-        raise HTTPException(status_code=404, detail="Evidence not found")
+    system_id, membership = _require_evidence_item_access(
+        db, request.evidence_id, current_user, mutate=True
+    )
+    _validate_control_link_scope(
+        db, membership, system_id, request.entity_type, request.entity_id
+    )
 
     link_id = str(uuid.uuid4())
     now = _utc_now_iso()
@@ -2332,15 +2448,25 @@ async def link_evidence_to_entity(request: EvidenceLinkRequest, db: Session = De
 
 
 @router.get("/evidence/{system_id}/summary")
-async def get_evidence_summary(system_id: str, db: Session = Depends(get_db)):
+async def get_evidence_summary(
+    system_id: str,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
     _ensure_tables(db)
+    _require_evidence_system_access(db, system_id, current_user)
     records = _fetch_evidence_records(db, system_id)
     return _summarize_evidence(records, system_id)
 
 
 @router.get("/evidence/{system_id}")
-async def list_evidence(system_id: str, db: Session = Depends(get_db)):
+async def list_evidence(
+    system_id: str,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
     _ensure_tables(db)
+    _require_evidence_system_access(db, system_id, current_user)
     return _fetch_evidence_records(db, system_id)
 
 

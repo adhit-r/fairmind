@@ -135,6 +135,23 @@ const secondSystemControls = [{
   evidence_trace: null,
 }]
 
+const additionalAssignmentControls = [{
+  id: 'assessment-a020-1',
+  external_id: 'A020.1',
+  title: 'Review agent tool boundaries',
+  statement: 'Evaluate and document tool-use boundaries for deployed agents.',
+  obligation: 'mandatory',
+  application: 'agent',
+  applicability: 'applicable',
+  status: 'not_started',
+  owner: null,
+  accepted_evidence_count: 0,
+  latest_evaluation: null,
+  latest_evaluation_at: null,
+  freshness: 'missing',
+  open_findings: 0,
+}]
+
 type MockOptions = {
   catalogDelayMs?: number
   catalogError?: boolean
@@ -147,6 +164,66 @@ type MockOptions = {
   secondSystemDelayMs?: number
   evidenceRuns?: Array<Record<string, unknown>>
   artifactEvidence?: Array<Record<string, unknown>>
+  secondArtifactEvidence?: Array<Record<string, unknown>>
+  secondEvidenceDelayMs?: number
+  multipleAssignments?: boolean
+  mappingConflictOnce?: boolean
+}
+
+function evidenceRun(controlAssessmentId = 'assessment-a006-1', mappingId = 'mapping-418-a006-1') {
+  return {
+    id: 'evidence-run-418',
+    run_id: 'bias-418',
+    evidence_id: 'artifact-run-418',
+    content_hash: '0f33e89a6d6e6eefecf4afc92c837bd259f036e599acc653f401b87eab30bf55',
+    result: 'passed_with_limitations',
+    source_type: 'fairmind_evaluation',
+    source_identifier: 'FairMind Bias Suite',
+    captured_at: '2026-07-15T10:30:00Z',
+    suite_name: 'Bias and subgroup parity',
+    suite_version: '2026.07',
+    subject_version: '2.4.1',
+    runner_version: 'fairmind-runner 1.8.0',
+    assurance_source: 'fairmind_internal',
+    limitations: ['Sparse intersectional cohorts were excluded below n=30.'],
+    candidate_mappings: [{
+      id: mappingId,
+      evidence_id: 'artifact-run-418',
+      control_assessment_id: controlAssessmentId,
+      state: 'candidate',
+      rationale: 'Evaluation limitations and version metadata support documentation review.',
+      review_version: 0,
+      review_history: [],
+    }],
+  }
+}
+
+function evidenceArtifact(id: string, systemId: string, title: string) {
+  return {
+    id,
+    systemId,
+    type: 'policy',
+    title,
+    source: 'manual',
+    status: 'draft',
+    uploadedBy: 'reviewer@acme.test',
+    capturedAt: '2026-07-14T08:00:00Z',
+    content: {},
+    confidence: 0.9,
+    metadata: {},
+    tags: ['limitations'],
+    folder: 'AIUC-1',
+    artifactKind: 'narrative',
+    fileUrl: '',
+    fileName: '',
+    fileSize: 0,
+    timestamp: '2026-07-14T08:00:00Z',
+    stale: false,
+    linkedEntityCount: 0,
+    linkedEntities: [],
+    metadataSummary: {},
+    workflowState: 'collected',
+  }
 }
 
 async function fulfillJson(route: Route, body: unknown, status = 200) {
@@ -161,6 +238,8 @@ async function mockWorkbench(page: Page, options: MockOptions = {}) {
   const patchedAssessmentIds: string[] = []
   let evidenceRuns = structuredClone(options.evidenceRuns ?? [])
   const artifactEvidence = structuredClone(options.artifactEvidence ?? [])
+  const secondArtifactEvidence = structuredClone(options.secondArtifactEvidence ?? [])
+  let mappingConflictPending = options.mappingConflictOnce ?? false
 
   await page.addInitScript(() => {
     window.localStorage.setItem('access_token', 'playwright-token')
@@ -218,7 +297,12 @@ async function mockWorkbench(page: Page, options: MockOptions = {}) {
         org_id: 'org-1',
         system_id: 'system-1',
         framework_version_id: version.id,
-      }] : [])
+      }, ...(options.multipleAssignments ? [{
+        id: 'assignment-3',
+        org_id: 'org-1',
+        system_id: 'system-1',
+        framework_version_id: previousVersion.id,
+      }] : [])] : [])
     }
     if (path === '/api/v1/ai-governance/organizations/org-1/systems/system-2/framework-assignments') {
       if (options.secondSystemDelayMs) {
@@ -242,6 +326,9 @@ async function mockWorkbench(page: Page, options: MockOptions = {}) {
     }
     if (path === '/api/v1/ai-governance/organizations/org-1/framework-assignments/assignment-1/controls') {
       return fulfillJson(route, controls)
+    }
+    if (path === '/api/v1/ai-governance/organizations/org-1/framework-assignments/assignment-3/controls') {
+      return fulfillJson(route, additionalAssignmentControls)
     }
     if (path === '/api/v1/ai-governance/organizations/org-1/framework-assignments/assignment-1/readiness') {
       if (options.readinessDelayMs) {
@@ -301,6 +388,10 @@ async function mockWorkbench(page: Page, options: MockOptions = {}) {
       return fulfillJson(route, [])
     }
     if (path.startsWith('/api/v1/ai-governance/organizations/org-1/evidence-mappings/') && path.endsWith('/review')) {
+      if (mappingConflictPending) {
+        mappingConflictPending = false
+        return fulfillJson(route, { detail: 'Mapping review changed by another reviewer' }, 409)
+      }
       const mappingId = path.split('/').at(-2)
       const review = request.postDataJSON()
       let reviewed: Record<string, unknown> | undefined
@@ -328,6 +419,12 @@ async function mockWorkbench(page: Page, options: MockOptions = {}) {
     if (path === '/api/v1/ai-governance/evidence-v2/system-1') {
       return fulfillJson(route, artifactEvidence)
     }
+    if (path === '/api/v1/ai-governance/evidence-v2/system-2') {
+      if (options.secondEvidenceDelayMs) {
+        await new Promise((resolve) => setTimeout(resolve, options.secondEvidenceDelayMs))
+      }
+      return fulfillJson(route, secondArtifactEvidence)
+    }
     if (path === '/api/v1/ai-governance/evidence/system-1/summary') {
       return fulfillJson(route, {
         systemId: 'system-1',
@@ -341,6 +438,24 @@ async function mockWorkbench(page: Page, options: MockOptions = {}) {
         decisionReadiness: 'needs_evidence',
         missingSignals: ['Independent reviewer sign-off'],
         recommendedNextStep: 'Review evaluation mappings before assurance reporting.',
+      })
+    }
+    if (path === '/api/v1/ai-governance/evidence/system-2/summary') {
+      if (options.secondEvidenceDelayMs) {
+        await new Promise((resolve) => setTimeout(resolve, options.secondEvidenceDelayMs))
+      }
+      return fulfillJson(route, {
+        systemId: 'system-2',
+        totalEvidence: secondArtifactEvidence.length,
+        linkedEvidence: 0,
+        averageConfidence: 0.8,
+        highConfidenceEvidence: secondArtifactEvidence.length,
+        evidenceTypes: [],
+        metadataSources: [],
+        workflowState: secondArtifactEvidence.length ? 'collected' : 'empty',
+        decisionReadiness: 'needs_evidence',
+        missingSignals: [],
+        recommendedNextStep: '',
       })
     }
     if (path === '/api/v1/ai-governance/evidence-item/artifact-1/links' && request.method() === 'POST') {
@@ -583,4 +698,76 @@ test('reviews a provenance-rich evaluation mapping and links artifacts through a
   await page.getByRole('button', { name: /Select A006.1 Document model limitations/i }).click()
   await page.getByRole('button', { name: 'Add link' }).click()
   await expect(page.getByText('A006.1 — Document model limitations')).toBeVisible()
+})
+
+test('aggregates controls from every framework assignment for evaluation mappings', async ({ page }) => {
+  await mockWorkbench(page, {
+    initiallyAssigned: true,
+    multipleAssignments: true,
+    evidenceRuns: [evidenceRun('assessment-a020-1', 'mapping-418-a020-1')],
+    artifactEvidence: [evidenceArtifact('artifact-1', 'system-1', 'Agent tool boundary register')],
+  })
+
+  await page.goto('/evidence?view=evaluations')
+  const mapping = page.getByRole('region', { name: 'Mapping review for A020.1' })
+  await expect(mapping).toContainText('Review agent tool boundaries')
+
+  await page.getByRole('link', { name: 'Artifacts' }).click()
+  await page.getByRole('button', { name: /Agent tool boundary register/i }).click()
+  await page.getByRole('button', { name: 'Link entity' }).click()
+  await page.getByLabel('Search framework controls').fill('A020.1')
+  await expect(page.getByRole('button', { name: /Select A020.1 Review agent tool boundaries/i })).toBeVisible()
+})
+
+test('clears evidence artifacts and stale drawer state when system scope changes', async ({ page }) => {
+  await mockWorkbench(page, {
+    initiallyAssigned: true,
+    artifactEvidence: [evidenceArtifact('artifact-1', 'system-1', 'Claims limitation register')],
+    secondArtifactEvidence: [evidenceArtifact('artifact-2', 'system-2', 'Underwriting escalation log')],
+    secondEvidenceDelayMs: 500,
+  })
+
+  await page.goto('/evidence?view=artifacts')
+  await page.getByRole('button', { name: /Claims limitation register/i }).click()
+  await expect(page.getByRole('heading', { name: 'Claims limitation register' })).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('heading', { name: 'Claims limitation register' })).toHaveCount(0)
+
+  await page.getByRole('combobox', { name: 'System scope' }).click()
+  await page.getByRole('option', { name: secondSystem.name }).click()
+
+  await expect(page.getByRole('button', { name: /Claims limitation register/i })).toHaveCount(0)
+  await expect(page.getByText(`Loading evidence for ${secondSystem.name}`)).toBeVisible()
+  await expect(page.getByRole('button', { name: /Underwriting escalation log/i })).toBeVisible()
+})
+
+test('keeps evaluation mapping review controls read-only for viewers', async ({ page }) => {
+  await mockWorkbench(page, {
+    initiallyAssigned: true,
+    role: 'viewer',
+    permissions: ['model:read'],
+    evidenceRuns: [evidenceRun()],
+  })
+
+  await page.goto('/evidence?view=evaluations')
+  const mapping = page.getByRole('region', { name: 'Mapping review for A006.1' })
+  await expect(page.getByText('Read-only evidence access')).toBeVisible()
+  await expect(mapping).toContainText('Read-only access')
+  await expect(mapping.getByRole('button', { name: /Accept mapping/i })).toHaveCount(0)
+  await expect(mapping.getByLabel(/Review rationale/i)).toHaveCount(0)
+})
+
+test('offers a mapping reload action after an optimistic review conflict', async ({ page }) => {
+  await mockWorkbench(page, {
+    initiallyAssigned: true,
+    mappingConflictOnce: true,
+    evidenceRuns: [evidenceRun()],
+  })
+
+  await page.goto('/evidence?view=evaluations')
+  const mapping = page.getByRole('region', { name: 'Mapping review for A006.1' })
+  await mapping.getByRole('button', { name: 'Accept mapping to A006.1' }).click()
+  await expect(mapping.getByRole('alert')).toContainText('another reviewer')
+  await mapping.getByRole('button', { name: 'Reload mapping' }).click()
+  await expect(mapping.getByRole('alert')).toHaveCount(0)
 })
