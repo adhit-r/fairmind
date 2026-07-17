@@ -6,32 +6,13 @@ import { IconCheck, IconLink } from '@tabler/icons-react'
 import { Button } from '@/components/ui/button'
 import type { ControlAssessment } from '@/lib/api/hooks/useGovernanceAssurance'
 
-export interface EvidenceTraceItem {
-  id: string
-  label: string
-  kind: string
-  state: string
-  capturedAt: string | null
-}
-
-export interface WorkbenchControl extends ControlAssessment {
-  obligation?: 'mandatory' | 'optional' | string
-  application?: 'core' | 'supplemental' | string
-  acceptedEvidenceCount?: number
-  latestEvaluation?: string | null
-  latestEvaluationAt?: string | null
-  freshness?: 'current' | 'stale' | 'expired' | 'missing' | string
-  openFindings?: number
-  parentRequirementId?: string | null
-  parentRequirementTitle?: string | null
-  mappingRationale?: string | null
-  evidenceTrace?: EvidenceTraceItem[]
-}
+export type WorkbenchControl = ControlAssessment
 
 type ControlUpdate = Pick<ControlAssessment, 'applicability' | 'status' | 'owner'>
 
 type ControlTracePanelProps = {
   control: WorkbenchControl
+  canEdit: boolean
   onUpdate: (control: WorkbenchControl, update: ControlUpdate) => Promise<void>
 }
 
@@ -46,7 +27,7 @@ function formatDate(value: string | null) {
   return new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short' }).format(date)
 }
 
-export function ControlTracePanel({ control, onUpdate }: ControlTracePanelProps) {
+export function ControlTracePanel({ control, canEdit, onUpdate }: ControlTracePanelProps) {
   const [owner, setOwner] = useState(control.owner || '')
   const [applicability, setApplicability] = useState(control.applicability)
   const [status, setStatus] = useState(control.status)
@@ -123,15 +104,16 @@ export function ControlTracePanel({ control, onUpdate }: ControlTracePanelProps)
           </div>
         </div>
 
-        <form
-          className="border-2 border-[#0F1412] bg-[#FCFDF8] p-4"
-          onSubmit={(event) => {
-            event.preventDefault()
-            void save()
-          }}
-        >
-          <h3 className="font-black uppercase">Assessment update</h3>
-          <div className="mt-4 space-y-4">
+        {canEdit ? (
+          <form
+            className="border-2 border-[#0F1412] bg-[#FCFDF8] p-4"
+            onSubmit={(event) => {
+              event.preventDefault()
+              void save()
+            }}
+          >
+            <h3 className="font-black uppercase">Assessment update</h3>
+            <div className="mt-4 space-y-4">
             <label className="block text-sm font-black" htmlFor={`owner-${control.id}`}>
               Control owner
               <input
@@ -172,23 +154,31 @@ export function ControlTracePanel({ control, onUpdate }: ControlTracePanelProps)
                 <option value="rejected">Rejected</option>
               </select>
             </label>
-          </div>
+            </div>
 
-          {error ? <p role="alert" className="mt-3 text-sm font-bold text-[#B3261E]">{error}</p> : null}
-          <p aria-live="polite" className="mt-3 min-h-5 text-sm font-bold text-[#0B7659]">
-            {saved ? <span className="inline-flex items-center gap-1"><IconCheck aria-hidden="true" /> Changes saved</span> : null}
-          </p>
-          <Button
-            type="submit"
-            disabled={saving}
-            className="mt-2 w-full rounded-none border-[#0F1412] bg-[#FF6B35] font-black uppercase text-[#0F1412]"
-          >
-            {saving ? 'Saving changes' : 'Save control changes'}
-          </Button>
-          <p className="mt-3 text-xs text-[#59615D]">
-            State labels record reviewer workflow. Evidence acceptance remains a separate decision.
-          </p>
-        </form>
+            {error ? <p role="alert" className="mt-3 text-sm font-bold text-[#B3261E]">{error}</p> : null}
+            <p aria-live="polite" className="mt-3 min-h-5 text-sm font-bold text-[#0B7659]">
+              {saved ? <span className="inline-flex items-center gap-1"><IconCheck aria-hidden="true" /> Changes saved</span> : null}
+            </p>
+            <Button
+              type="submit"
+              disabled={saving}
+              className="mt-2 w-full rounded-none border-[#0F1412] bg-[#FF6B35] font-black uppercase text-[#0F1412]"
+            >
+              {saving ? 'Saving changes' : 'Save control changes'}
+            </Button>
+            <p className="mt-3 text-xs text-[#59615D]">
+              State labels record reviewer workflow. Evidence acceptance remains a separate decision.
+            </p>
+          </form>
+        ) : (
+          <aside className="border-2 border-[#0F1412] bg-[#FCFDF8] p-4">
+            <h3 className="font-black uppercase">Read-only access</h3>
+            <p className="mt-2 text-sm text-[#59615D]">
+              You can inspect this assessment and its evidence trace, but your organization role cannot change control state.
+            </p>
+          </aside>
+        )}
       </div>
     </section>
   )

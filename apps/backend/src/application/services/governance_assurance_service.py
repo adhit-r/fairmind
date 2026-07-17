@@ -285,10 +285,13 @@ class GovernanceAssuranceService:
         return [self._assignment(item) for item in ids]
 
     def assignment_controls(self, org_id: str, assignment_id: str) -> list[dict] | None:
-        assignments, assessments, controls = (
+        assignments, assessments, controls, mappings, runs, evidence = (
             GovernanceFrameworkAssignment.__table__,
             GovernanceControlAssessment.__table__,
             GovernanceControlDefinition.__table__,
+            GovernanceControlEvidence.__table__,
+            GovernanceEvidenceRun.__table__,
+            GovernanceEvidence.__table__,
         )
         if not self.db.execute(
             select(assignments.c.id).where(assignments.c.id == assignment_id, assignments.c.org_id == org_id)
@@ -303,23 +306,119 @@ class GovernanceAssuranceService:
                 controls.c.external_id,
                 controls.c.title,
                 controls.c.statement,
+                controls.c.obligation,
+                controls.c.application,
+                controls.c.parent_requirement_id,
+                controls.c.parent_requirement_title,
+                controls.c.frequency,
             )
             .join(controls, controls.c.id == assessments.c.control_definition_id)
             .where(assessments.c.framework_assignment_id == assignment_id, assessments.c.org_id == org_id)
             .order_by(controls.c.external_id)
-        ).mappings()
-        return [
-            {
-                "id": row["id"],
-                "externalId": row["external_id"],
-                "title": row["title"],
-                "statement": row["statement"],
-                "applicability": row["applicability"],
-                "status": row["status"],
-                "owner": row["owner"],
-            }
-            for row in rows
-        ]
+        ).mappings().all()
+
+        assessment_ids = [row["id"] for row in rows]
+        evidence_by_assessment: dict[str, list[dict]] = {}
+        if assessment_ids:
+            evidence_rows = self.db.execute(
+                select(
+                    mappings.c.id,
+                    mappings.c.control_assessment_id,
+                    mappings.c.state,
+                    mappings.c.mapping_rationale,
+                    mappings.c.reviewed_at,
+                    mappings.c.created_at.label("mapping_created_at"),
+                    mappings.c.updated_at.label("mapping_updated_at"),
+                    runs.c.source_type,
+                    runs.c.source_identifier,
+                    runs.c.captured_at.label("run_captured_at"),
+                    runs.c.created_at.label("run_created_at"),
+                    evidence.c.title.label("artifact_title"),
+                    evidence.c.captured_at.label("artifact_captured_at"),
+                )
+                .select_from(
+                    mappings.join(runs, runs.c.id == mappings.c.evidence_id).outerjoin(
+                        evidence, evidence.c.id == mappings.c.artifact_evidence_id
+                    )
+                )
+                .where(
+                    mappings.c.org_id == org_id,
+                    mappings.c.control_assessment_id.in_(assessment_ids),
+                )
+            ).mappings().all()
+            for evidence_row in evidence_rows:
+                evidence_by_assessment.setdefault(evidence_row["control_assessment_id"], []).append(
+                    dict(evidence_row)
+                )
+
+        result = []
+        for row in rows:
+            linked_evidence = evidence_by_assessment.get(row["id"], [])
+            linked_evidence.sort(
+                key=lambda item: str(
+                    item["artifact_captured_at"]
+                    or item["run_captured_at"]
+                    or item["run_created_at"]
+                    or item["mapping_updated_at"]
+                    or item["mapping_created_at"]
+                    or ""
+                ),
+                reverse=True,
+            )
+            accepted = [item for item in linked_evidence if item["state"] == "accepted"]
+            latest = linked_evidence[0] if linked_evidence else None
+            latest_accepted = accepted[0] if accepted else None
+
+            def captured_at(item: dict | None) -> str | None:
+                if not item:
+                    return None
+                return item["artifact_captured_at"] or item["run_captured_at"] or item["run_created_at"]
+
+            latest_accepted_at = captured_at(latest_accepted)
+            freshness = "missing" if not accepted else (
+                "stale" if _is_stale(latest_accepted_at or "", row["frequency"]) else "current"
+            )
+            rationale = next(
+                (item["mapping_rationale"] for item in linked_evidence if item["mapping_rationale"]),
+                None,
+            )
+            result.append(
+                {
+                    "id": row["id"],
+                    "externalId": row["external_id"],
+                    "title": row["title"],
+                    "statement": row["statement"],
+                    "obligation": row["obligation"].lower() if row["obligation"] else None,
+                    "application": row["application"].lower() if row["application"] else None,
+                    "parentRequirementId": row["parent_requirement_id"] or None,
+                    "parentRequirementTitle": row["parent_requirement_title"] or None,
+                    "applicability": row["applicability"],
+                    "status": row["status"],
+                    "owner": row["owner"],
+                    "acceptedEvidenceCount": len(accepted),
+                    "latestEvaluation": (
+                        latest["artifact_title"] or latest["source_identifier"]
+                    ) if latest else None,
+                    "latestEvaluationSource": latest["source_identifier"] if latest else None,
+                    "latestEvaluationAt": captured_at(latest),
+                    "freshness": freshness,
+                    # Findings are not linked to control assessments in the current schema.
+                    "openFindings": None,
+                    "mappingRationale": rationale,
+                    "evidenceTrace": [
+                        {
+                            "id": item["id"],
+                            "label": item["artifact_title"] or item["source_identifier"],
+                            "kind": item["source_type"],
+                            "source": item["source_identifier"],
+                            "state": item["state"],
+                            "capturedAt": captured_at(item),
+                        }
+                        for item in linked_evidence
+                    ],
+                }
+            )
+        return result
 
     def update_assessment(self, org_id: str, assessment_id: str, values: dict[str, str | None]) -> dict | None:
         assessments = GovernanceControlAssessment.__table__

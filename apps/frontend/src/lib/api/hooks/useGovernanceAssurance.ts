@@ -42,6 +42,27 @@ export interface ControlAssessment {
   applicability: string
   status: string
   owner: string | null
+  obligation: string | null
+  application: string | null
+  acceptedEvidenceCount: number | null
+  latestEvaluation: string | null
+  latestEvaluationSource: string | null
+  latestEvaluationAt: string | null
+  freshness: string | null
+  openFindings: number | null
+  parentRequirementId: string | null
+  parentRequirementTitle: string | null
+  mappingRationale: string | null
+  evidenceTrace: EvidenceTraceItem[] | null
+}
+
+export interface EvidenceTraceItem {
+  id: string
+  label: string
+  kind: string
+  source: string
+  state: string
+  capturedAt: string | null
 }
 
 export interface ControlAssessmentUpdateResult {
@@ -173,34 +194,54 @@ function useGovernanceResource<T>(
   load: () => Promise<T>,
 ): GovernanceAssuranceState<T> {
   const emptyRef = useRef(empty)
-  const [data, setData] = useState<T>(emptyRef.current)
-  const [loading, setLoading] = useState(enabled)
-  const [error, setError] = useState<Error | null>(null)
+  const requestIdRef = useRef(0)
+  const [snapshot, setSnapshot] = useState<{
+    load: () => Promise<T>
+    data: T
+    loading: boolean
+    error: Error | null
+  }>({ load, data: emptyRef.current, loading: enabled, error: null })
 
   const refresh = useCallback(async () => {
+    const requestId = ++requestIdRef.current
     if (!enabled) {
-      setData(emptyRef.current)
-      setError(null)
-      setLoading(false)
+      setSnapshot({ load, data: emptyRef.current, error: null, loading: false })
       return
     }
-    setLoading(true)
+    setSnapshot((current) => current.load === load
+      ? { ...current, error: null, loading: true }
+      : { load, data: emptyRef.current, error: null, loading: true })
     try {
-      setData(await load())
-      setError(null)
+      const data = await load()
+      if (requestId === requestIdRef.current) {
+        setSnapshot({ load, data, error: null, loading: false })
+      }
     } catch (reason) {
-      setData(emptyRef.current)
-      setError(reason instanceof Error ? reason : new Error('Governance assurance request failed'))
-    } finally {
-      setLoading(false)
+      if (requestId === requestIdRef.current) {
+        setSnapshot({
+          load,
+          data: emptyRef.current,
+          error: reason instanceof Error ? reason : new Error('Governance assurance request failed'),
+          loading: false,
+        })
+      }
     }
   }, [enabled, load])
 
   useEffect(() => {
     void refresh()
+    return () => {
+      requestIdRef.current += 1
+    }
   }, [refresh])
 
-  return { data, loading, error, refresh }
+  const currentScope = snapshot.load === load
+  return {
+    data: currentScope ? snapshot.data : emptyRef.current,
+    loading: enabled && (!currentScope || snapshot.loading),
+    error: currentScope ? snapshot.error : null,
+    refresh,
+  }
 }
 
 export function useGovernanceCatalog(orgId?: string) {

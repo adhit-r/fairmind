@@ -19,9 +19,11 @@ import { FrameworkCatalog } from './components/FrameworkCatalog'
 import type { WorkbenchControl } from './components/ControlTracePanel'
 
 function ReadinessStrip({
+  frameworkName,
   versionLabel,
   readiness,
 }: {
+  frameworkName: string
   versionLabel: string
   readiness: {
     applicable: number
@@ -43,7 +45,7 @@ function ReadinessStrip({
     <section aria-labelledby="readiness-heading" className="border-2 border-[#0F1412] bg-[#FCFDF8]">
       <div className="flex flex-col gap-1 border-b-2 border-[#0F1412] bg-[oklch(0.60_0.13_163)] px-4 py-3 text-[#0F1412] sm:flex-row sm:items-center sm:justify-between">
         <h2 id="readiness-heading" className="text-base font-black uppercase tracking-tight">
-          AIUC-1 readiness
+          {frameworkName} readiness
         </h2>
         <p className="text-xs font-black uppercase tracking-[0.12em]">Version {versionLabel}</p>
       </div>
@@ -80,10 +82,13 @@ export default function ComplianceDashboardPage() {
 
   const [frameworkKey, setFrameworkKey] = useState('')
   const [selectedVersionId, setSelectedVersionId] = useState('')
-  const [activeAssignmentId, setActiveAssignmentId] = useState<string>()
+  const [activeAssignment, setActiveAssignment] = useState<{ id: string; systemId: string }>()
   const [activating, setActivating] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
 
+  const activeAssignmentId = activeAssignment?.systemId === selectedSystem.id
+    ? activeAssignment.id
+    : undefined
   const assurance = useGovernanceAssurance(orgId, selectedSystem.id, activeAssignmentId)
   const versionState = useFrameworkVersions(orgId, frameworkKey || undefined)
 
@@ -99,19 +104,25 @@ export default function ComplianceDashboardPage() {
       return
     }
     const assignedVersion = versionState.versions.find((version) =>
-      assurance.assignments.some((assignment) => assignment.frameworkVersionId === version.id),
+      assurance.assignments.some((assignment) =>
+        assignment.systemId === selectedSystem.id && assignment.frameworkVersionId === version.id,
+      ),
     )
     const selectionExists = versionState.versions.some((version) => version.id === selectedVersionId)
     if (!selectionExists) {
       setSelectedVersionId(assignedVersion?.id || versionState.versions[0].id)
     }
-  }, [assurance.assignments, selectedVersionId, versionState.versions])
+  }, [assurance.assignments, selectedSystem.id, selectedVersionId, versionState.versions])
 
   useEffect(() => {
     const selectedAssignment = assurance.assignments.find(
-      (assignment) => assignment.frameworkVersionId === selectedVersionId,
+      (assignment) =>
+        assignment.systemId === selectedSystem.id
+        && assignment.frameworkVersionId === selectedVersionId,
     )
-    setActiveAssignmentId(selectedAssignment?.id)
+    setActiveAssignment(selectedAssignment
+      ? { id: selectedAssignment.id, systemId: selectedAssignment.systemId }
+      : undefined)
   }, [assurance.assignments, selectedSystem.id, selectedVersionId])
 
   const selectedVersion = versionState.versions.find((version) => version.id === selectedVersionId)
@@ -120,17 +131,25 @@ export default function ComplianceDashboardPage() {
     () => assurance.assignments.map((assignment) => assignment.frameworkVersionId),
     [assurance.assignments],
   )
-  const canActivate = selectedOrg?.role === 'admin' || selectedOrg?.role === 'owner'
-  const catalogLoading = assurance.loading && assurance.frameworks.length === 0 && !assurance.error
+  const canEdit = selectedOrg?.role === 'admin'
+    || selectedOrg?.role === 'owner'
+    || selectedOrg?.permissions?.includes('model:write') === true
+  const catalogLoading = assurance.loading
+    && (assurance.frameworks.length === 0 || assurance.assignments.length === 0)
+    && !assurance.error
   const error = actionError || assurance.error?.message || versionState.error?.message || null
 
   const activateFramework = async () => {
     if (!selectedVersionId) return
+    if (!canEdit) {
+      setActionError('Your organization role cannot activate framework versions')
+      return
+    }
     setActivating(true)
     setActionError(null)
     try {
       const assignment = await assurance.assign(selectedVersionId)
-      setActiveAssignmentId(assignment.id)
+      setActiveAssignment({ id: assignment.id, systemId: assignment.systemId })
     } catch (reason) {
       setActionError(reason instanceof Error ? reason.message : 'Framework activation failed')
     } finally {
@@ -147,6 +166,7 @@ export default function ComplianceDashboardPage() {
     control: WorkbenchControl,
     update: Pick<ControlAssessment, 'applicability' | 'status' | 'owner'>,
   ) => {
+    if (!canEdit) throw new Error('Your organization role cannot update control assessments')
     await assurance.updateAssessment(control.id, update)
   }
 
@@ -196,16 +216,16 @@ export default function ComplianceDashboardPage() {
         </Alert>
       ) : null}
 
-      {catalogLoading ? (
+      {!error && catalogLoading ? (
         <WorkbenchLoading />
-      ) : assurance.frameworks.length === 0 ? (
+      ) : !error && assurance.frameworks.length === 0 ? (
         <section className="border-4 border-[#0F1412] bg-[#F3F5F0] p-8 text-center shadow-[8px_8px_0_0_#0F1412]">
           <h2 className="text-xl font-black uppercase">No framework versions available</h2>
           <p className="mx-auto mt-2 max-w-[60ch] text-sm text-[#59615D]">
             An organization administrator must import a versioned catalog before it can be activated for this AI system.
           </p>
         </section>
-      ) : (
+      ) : !error ? (
         <FrameworkCatalog
           frameworks={assurance.frameworks}
           versions={versionState.versions}
@@ -214,20 +234,25 @@ export default function ComplianceDashboardPage() {
           assignedVersionIds={assignedVersionIds}
           loading={versionState.loading}
           activating={activating}
-          canActivate={canActivate}
+          canActivate={canEdit}
           systemName={selectedSystem.name}
           onFrameworkChange={setFrameworkKey}
           onVersionChange={setSelectedVersionId}
           onActivate={() => void activateFramework()}
         />
-      )}
+      ) : null}
 
-      {activeAssignmentId && selectedVersion ? (
+      {!error && activeAssignmentId && selectedVersion ? (
         <>
-          <ReadinessStrip versionLabel={selectedVersion.versionLabel} readiness={assurance.readiness} />
+          <ReadinessStrip
+            frameworkName={selectedFramework?.name || selectedVersion.name}
+            versionLabel={selectedVersion.versionLabel}
+            readiness={assurance.readiness}
+          />
           <ControlAssessmentTable
-            controls={assurance.controls as WorkbenchControl[]}
+            controls={assurance.controls}
             loading={assurance.loading}
+            canEdit={canEdit}
             frameworkName={selectedFramework?.name || selectedVersion.name}
             versionLabel={selectedVersion.versionLabel}
             onUpdate={updateControl}

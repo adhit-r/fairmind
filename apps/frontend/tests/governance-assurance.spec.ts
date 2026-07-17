@@ -20,6 +20,17 @@ const system = {
   metadata: { system_type: 'agent', system_version: '2.4.1' },
 }
 
+const secondSystem = {
+  id: 'system-2',
+  workspaceId: 'workspace-1',
+  name: 'Underwriting Copilot',
+  owner: 'underwriting-owner@acme.test',
+  riskTier: 'medium',
+  lifecycleStage: 'govern',
+  readiness: 39,
+  metadata: { system_type: 'copilot', system_version: '1.2.0' },
+}
+
 const framework = { framework_key: 'aiuc-1', name: 'AIUC-1' }
 const version = {
   id: 'version-aiuc-apr-2026',
@@ -28,6 +39,14 @@ const version = {
   version_label: 'April, 2026',
   source_hash: 'sha256:catalog-april-2026',
   status: 'active',
+}
+const previousVersion = {
+  id: 'version-aiuc-jan-2026',
+  framework_key: 'aiuc-1',
+  name: 'AIUC-1',
+  version_label: 'January, 2026',
+  source_hash: 'sha256:catalog-january-2026',
+  status: 'superseded',
 }
 
 const initialControls = [
@@ -54,7 +73,8 @@ const initialControls = [
         id: 'trace-1',
         label: 'Bias suite run 418',
         kind: 'FairMind evaluation',
-        state: 'Candidate',
+        source: 'bias-suite',
+        state: 'candidate',
         captured_at: '2026-07-15T10:30:00Z',
       },
     ],
@@ -93,10 +113,37 @@ const initialControls = [
   },
 ]
 
+const secondSystemControls = [{
+  id: 'assessment-a010-1',
+  external_id: 'A010.1',
+  title: 'Maintain human escalation',
+  statement: 'Document the escalation path for consequential decisions.',
+  obligation: null,
+  application: null,
+  applicability: 'applicable',
+  status: 'not_started',
+  owner: null,
+  accepted_evidence_count: null,
+  latest_evaluation: null,
+  latest_evaluation_source: null,
+  latest_evaluation_at: null,
+  freshness: null,
+  open_findings: null,
+  parent_requirement_id: null,
+  parent_requirement_title: null,
+  mapping_rationale: null,
+  evidence_trace: null,
+}]
+
 type MockOptions = {
   catalogDelayMs?: number
   catalogError?: boolean
   emptyCatalog?: boolean
+  frameworkName?: string
+  initiallyAssigned?: boolean
+  permissions?: string[]
+  role?: string
+  secondSystemDelayMs?: number
 }
 
 async function fulfillJson(route: Route, body: unknown, status = 200) {
@@ -104,8 +151,11 @@ async function fulfillJson(route: Route, body: unknown, status = 200) {
 }
 
 async function mockWorkbench(page: Page, options: MockOptions = {}) {
-  let assigned = false
+  let assigned = options.initiallyAssigned ?? false
+  let secondAssigned = true
   let controls = structuredClone(initialControls)
+  let otherControls = structuredClone(secondSystemControls)
+  const patchedAssessmentIds: string[] = []
 
   await page.addInitScript(() => {
     window.localStorage.setItem('access_token', 'playwright-token')
@@ -122,10 +172,16 @@ async function mockWorkbench(page: Page, options: MockOptions = {}) {
       return fulfillJson(route, { id: 'user-1', username: 'reviewer', email: 'reviewer@acme.test' })
     }
     if (path === '/api/v1/organizations') {
-      return fulfillJson(route, { organizations: [organization] })
+      return fulfillJson(route, {
+        organizations: [{
+          ...organization,
+          role: options.role ?? organization.role,
+          permissions: options.permissions,
+        }],
+      })
     }
     if (path === '/api/v1/ai-governance/systems') {
-      return fulfillJson(route, [system])
+      return fulfillJson(route, [system, secondSystem])
     }
     if (path === '/api/v1/ai-governance/organizations/org-1/frameworks') {
       if (options.catalogDelayMs) {
@@ -134,10 +190,13 @@ async function mockWorkbench(page: Page, options: MockOptions = {}) {
       if (options.catalogError) {
         return fulfillJson(route, { detail: 'Framework catalog unavailable' }, 404)
       }
-      return fulfillJson(route, options.emptyCatalog ? [] : [framework])
+      return fulfillJson(route, options.emptyCatalog ? [] : [{
+        ...framework,
+        name: options.frameworkName ?? framework.name,
+      }])
     }
     if (path === '/api/v1/ai-governance/organizations/org-1/frameworks/aiuc-1/versions') {
-      return fulfillJson(route, [version])
+      return fulfillJson(route, [version, previousVersion])
     }
     if (path === '/api/v1/ai-governance/organizations/org-1/systems/system-1/framework-assignments') {
       if (request.method() === 'POST') {
@@ -153,6 +212,26 @@ async function mockWorkbench(page: Page, options: MockOptions = {}) {
         id: 'assignment-1',
         org_id: 'org-1',
         system_id: 'system-1',
+        framework_version_id: version.id,
+      }] : [])
+    }
+    if (path === '/api/v1/ai-governance/organizations/org-1/systems/system-2/framework-assignments') {
+      if (options.secondSystemDelayMs) {
+        await new Promise((resolve) => setTimeout(resolve, options.secondSystemDelayMs))
+      }
+      if (request.method() === 'POST') {
+        secondAssigned = true
+        return fulfillJson(route, {
+          id: 'assignment-2',
+          org_id: 'org-1',
+          system_id: 'system-2',
+          framework_version_id: version.id,
+        }, 201)
+      }
+      return fulfillJson(route, secondAssigned ? [{
+        id: 'assignment-2',
+        org_id: 'org-1',
+        system_id: 'system-2',
         framework_version_id: version.id,
       }] : [])
     }
@@ -173,16 +252,35 @@ async function mockWorkbench(page: Page, options: MockOptions = {}) {
         stale_evidence: 0,
       })
     }
+    if (path === '/api/v1/ai-governance/organizations/org-1/framework-assignments/assignment-2/controls') {
+      return fulfillJson(route, otherControls)
+    }
+    if (path === '/api/v1/ai-governance/organizations/org-1/framework-assignments/assignment-2/readiness') {
+      return fulfillJson(route, {
+        applicable: 1,
+        accepted: 0,
+        ready_for_review: 0,
+        partial: 0,
+        not_started: 1,
+        not_applicable: 0,
+        blocking_findings: 0,
+        missing_evidence: 0,
+        stale_evidence: 0,
+      })
+    }
     if (path.startsWith('/api/v1/ai-governance/organizations/org-1/control-assessments/')) {
       const id = path.split('/').at(-1)
+      patchedAssessmentIds.push(id || '')
       const update = request.postDataJSON()
       controls = controls.map((control) => control.id === id ? { ...control, ...update } : control)
+      otherControls = otherControls.map((control) => control.id === id ? { ...control, ...update } : control)
       const updated = controls.find((control) => control.id === id)
+        || otherControls.find((control) => control.id === id)
       return fulfillJson(route, {
         ...updated,
         org_id: 'org-1',
-        system_id: 'system-1',
-        framework_assignment_id: 'assignment-1',
+        system_id: id === 'assessment-a010-1' ? 'system-2' : 'system-1',
+        framework_assignment_id: id === 'assessment-a010-1' ? 'assignment-2' : 'assignment-1',
         control_definition_id: `definition-${id}`,
         created_at: '2026-07-17T00:00:00Z',
         updated_at: '2026-07-17T12:00:00Z',
@@ -191,9 +289,14 @@ async function mockWorkbench(page: Page, options: MockOptions = {}) {
     if (path === '/api/v1/ai-governance/organizations/org-1/systems/system-1/evidence-runs') {
       return fulfillJson(route, [])
     }
+    if (path === '/api/v1/ai-governance/organizations/org-1/systems/system-2/evidence-runs') {
+      return fulfillJson(route, [])
+    }
 
     return fulfillJson(route, [])
   })
+
+  return { patchedAssessmentIds }
 }
 
 test('activates a framework and completes the control review journey by keyboard', async ({ page }) => {
@@ -204,9 +307,12 @@ test('activates a framework and completes the control review journey by keyboard
   await expect(workbench.getByRole('heading', { name: 'Frameworks & Controls' })).toBeVisible()
   await expect(workbench).toContainText('Activate a framework version for this AI system')
 
+  const januaryVersion = workbench.getByRole('radio', { name: /AIUC-1 January, 2026/i })
   const aprilVersion = workbench.getByRole('radio', { name: /AIUC-1 April, 2026/i })
-  await aprilVersion.focus()
+  await januaryVersion.focus()
   await page.keyboard.press('Space')
+  await expect(januaryVersion).toBeChecked()
+  await page.keyboard.press('ArrowUp')
   await expect(aprilVersion).toBeChecked()
 
   const activate = workbench.getByRole('button', { name: /Activate AIUC-1 April, 2026/i })
@@ -228,12 +334,13 @@ test('activates a framework and completes the control review journey by keyboard
   const trace = workbench.getByRole('region', { name: 'Trace for A006.1' })
   await expect(trace).toBeVisible()
   await expect(trace).toContainText('Bias suite run 418')
-  await expect(trace).toContainText('Candidate')
+  await expect(trace).toContainText('candidate')
 
   await trace.getByLabel('Control owner').fill('assurance-lead@acme.test')
   await trace.getByLabel('Applicability').selectOption('not_applicable')
   await trace.getByLabel('Assessment state').selectOption('ready_for_review')
-  await trace.getByRole('button', { name: 'Save control changes' }).click()
+  await trace.getByRole('button', { name: 'Save control changes' }).focus()
+  await page.keyboard.press('Enter')
 
   await expect(trace.getByText('Changes saved')).toBeVisible()
   await expect(trace.getByLabel('Control owner')).toHaveValue('assurance-lead@acme.test')
@@ -255,6 +362,52 @@ test('shows loading, empty, and recoverable catalog states', async ({ page }) =>
   await page.reload()
   await expect(workbench.getByRole('alert')).toContainText('Framework catalog unavailable')
   await expect(workbench.getByRole('button', { name: 'Retry loading frameworks' })).toBeVisible()
+  await expect(workbench.getByRole('heading', { name: 'No framework versions available' })).toHaveCount(0)
+})
+
+test('clears the previous assignment before loading another system scope', async ({ page }) => {
+  const mocks = await mockWorkbench(page, { initiallyAssigned: true, secondSystemDelayMs: 650 })
+  await page.goto('/compliance-dashboard')
+  const workbench = page.getByTestId('framework-controls-workbench')
+
+  await expect(workbench.getByText('A006.1', { exact: true })).toBeVisible()
+  await page.getByRole('combobox', { name: 'System scope' }).click()
+  await page.getByRole('option', { name: secondSystem.name }).click()
+
+  await expect(workbench.getByText('A006.1', { exact: true })).toHaveCount(0)
+  await expect(workbench.getByLabel('Loading framework catalog')).toBeVisible()
+  await expect(workbench.getByText('A010.1', { exact: true })).toBeVisible()
+  expect(mocks.patchedAssessmentIds).not.toContain('assessment-a006-1')
+})
+
+test('uses framework names dynamically and enforces read-only governance access', async ({ page }) => {
+  await mockWorkbench(page, {
+    frameworkName: 'Review Standard',
+    initiallyAssigned: true,
+    role: 'viewer',
+    permissions: ['model:read'],
+  })
+  await page.goto('/compliance-dashboard')
+  const workbench = page.getByTestId('framework-controls-workbench')
+
+  await expect(workbench.getByRole('heading', { name: 'Review Standard readiness' })).toBeVisible()
+  await workbench.getByRole('button', { name: /Expand control A006\.1/i }).click()
+  const trace = workbench.getByRole('region', { name: 'Trace for A006.1' })
+  await expect(trace.getByText('Read-only access')).toBeVisible()
+  await expect(trace.getByLabel('Control owner')).toHaveCount(0)
+
+  await workbench.getByRole('radio', { name: /AIUC-1 January, 2026/i }).check()
+  await expect(workbench.getByRole('button', { name: /Activate AIUC-1 January, 2026/i })).toBeDisabled()
+})
+
+test('permits model writers to activate and edit controls', async ({ page }) => {
+  await mockWorkbench(page, { role: 'member', permissions: ['model:write'] })
+  await page.goto('/compliance-dashboard')
+  const workbench = page.getByTestId('framework-controls-workbench')
+
+  await workbench.getByRole('button', { name: /Activate AIUC-1 April, 2026/i }).click()
+  await workbench.getByRole('button', { name: /Expand control A006\.1/i }).click()
+  await expect(workbench.getByLabel('Control owner')).toBeEditable()
 })
 
 test('keeps the expanded trace inline in the mobile stacked record', async ({ page }) => {
@@ -271,4 +424,5 @@ test('keeps the expanded trace inline in the mobile stacked record', async ({ pa
   await expect(record.getByText('Owner', { exact: true })).toBeVisible()
   await expect(record.getByText('Accepted evidence', { exact: true })).toBeVisible()
   await expect(record.getByRole('region', { name: 'Trace for A006.1' })).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 })

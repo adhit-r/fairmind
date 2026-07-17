@@ -17,6 +17,7 @@ from database.governance_models import (
     GovernanceControlAssessment,
     GovernanceControlDefinition,
     GovernanceControlEvidence,
+    GovernanceEvidence,
     GovernanceEvidenceRun,
     GovernanceFrameworkAssignment,
     GovernanceFrameworkVersion,
@@ -491,4 +492,119 @@ def test_assessment_update_allows_existing_org_role_permission_and_readiness_is_
         "blockingFindings": 0,
         "missingEvidence": 1,
         "staleEvidence": 1,
+    }
+
+
+def test_assignment_controls_return_real_definition_and_evidence_trace(assurance_client) -> None:
+    client, session_factory, _ = assurance_client
+    session = session_factory()
+    _seed_org(session, ORG_A, USER_A, role="admin")
+    system_id, _, version_id = _seed_catalog_and_system(session)
+    session.execute(
+        GovernanceControlDefinition.__table__.update()
+        .where(GovernanceControlDefinition.__table__.c.id == "control-1")
+        .values(
+            external_id="A006.1",
+            obligation="Mandatory",
+            application="Core",
+            parent_requirement_id="A006",
+            parent_requirement_title="Documentation and transparency",
+            frequency="Quarterly",
+        )
+    )
+    session.commit()
+    session.close()
+
+    assignment = client.post(
+        f"/api/v1/ai-governance/organizations/{ORG_A}/systems/{system_id}/framework-assignments",
+        json={"frameworkVersionId": version_id},
+    ).json()
+    controls = client.get(
+        f"/api/v1/ai-governance/organizations/{ORG_A}/framework-assignments/{assignment['id']}/controls"
+    ).json()
+    assessment_id = next(control["id"] for control in controls if control["externalId"] == "A006.1")
+    captured_at = datetime.now(timezone.utc).isoformat()
+
+    session = session_factory()
+    session.execute(
+        GovernanceEvidenceRun.__table__.insert().values(
+            id="run-a006",
+            org_id=ORG_A,
+            system_id=system_id,
+            source_type="evaluation",
+            source_identifier="bias-suite",
+            run_id="bias-run-418",
+            content_hash="hash-a006",
+            result="passed",
+            captured_at=captured_at,
+            evidence_id="artifact-a006",
+            created_at=captured_at,
+        )
+    )
+    session.execute(
+        GovernanceEvidence.__table__.insert().values(
+            id="artifact-a006",
+            org_id=ORG_A,
+            system_id=system_id,
+            evidence_type="evaluation_result",
+            title="Bias suite run 418",
+            source="fairmind",
+            source_run_id="run-a006",
+            captured_at=captured_at,
+            created_at=captured_at,
+        )
+    )
+    session.execute(
+        GovernanceControlEvidence.__table__.insert().values(
+            id="mapping-a006",
+            org_id=ORG_A,
+            system_id=system_id,
+            evidence_id="run-a006",
+            artifact_evidence_id="artifact-a006",
+            control_assessment_id=assessment_id,
+            state="accepted",
+            mapping_rationale="Reviewed limitations evidence.",
+            reviewed_by=USER_A,
+            reviewed_at=captured_at,
+            created_at=captured_at,
+            updated_at=captured_at,
+        )
+    )
+    session.commit()
+    session.close()
+
+    enriched = client.get(
+        f"/api/v1/ai-governance/organizations/{ORG_A}/framework-assignments/{assignment['id']}/controls"
+    )
+    assert enriched.status_code == 200, enriched.text
+    control = next(item for item in enriched.json() if item["externalId"] == "A006.1")
+    assert control == {
+        "id": assessment_id,
+        "externalId": "A006.1",
+        "title": "Active control one",
+        "statement": "Test control",
+        "obligation": "mandatory",
+        "application": "core",
+        "parentRequirementId": "A006",
+        "parentRequirementTitle": "Documentation and transparency",
+        "applicability": "applicable",
+        "status": "not_started",
+        "owner": None,
+        "acceptedEvidenceCount": 1,
+        "latestEvaluation": "Bias suite run 418",
+        "latestEvaluationSource": "bias-suite",
+        "latestEvaluationAt": captured_at,
+        "freshness": "current",
+        "openFindings": None,
+        "mappingRationale": "Reviewed limitations evidence.",
+        "evidenceTrace": [
+            {
+                "id": "mapping-a006",
+                "label": "Bias suite run 418",
+                "kind": "evaluation",
+                "source": "bias-suite",
+                "state": "accepted",
+                "capturedAt": captured_at,
+            }
+        ],
     }

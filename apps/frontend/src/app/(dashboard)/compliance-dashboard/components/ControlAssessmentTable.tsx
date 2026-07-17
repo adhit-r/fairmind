@@ -10,6 +10,7 @@ import { ControlTracePanel, readable, type WorkbenchControl } from './ControlTra
 type ControlAssessmentTableProps = {
   controls: WorkbenchControl[]
   loading: boolean
+  canEdit: boolean
   frameworkName: string
   versionLabel: string
   onUpdate: (
@@ -21,20 +22,22 @@ type ControlAssessmentTableProps = {
 const cellClass = 'flex min-h-11 items-center justify-between gap-3 border-b border-[#CCD2CE] px-3 py-2 text-sm md:table-cell md:border-b-0 md:align-middle'
 const mobileLabelClass = 'text-[10px] font-black uppercase tracking-[0.1em] text-[#59615D] md:hidden'
 
-function valueOrUnavailable(value?: string) {
+function valueOrUnavailable(value: string | null) {
   return value ? readable(value) : 'Not specified'
 }
 
 function FreshnessLabel({ control }: { control: WorkbenchControl }) {
-  const value = control.freshness || (control.acceptedEvidenceCount ? 'current' : 'missing')
+  const value = control.freshness
   const color = value === 'current'
     ? 'bg-[#DDF4EA]'
     : value === 'stale'
       ? 'bg-[#FFF4DE]'
-      : 'bg-[#FFF0ED]'
+      : value === 'missing' || value === 'expired'
+        ? 'bg-[#FFF0ED]'
+        : 'bg-[#F3F5F0]'
   return (
     <span className={`inline-flex border-2 border-[#0F1412] px-2 py-1 text-[11px] font-black uppercase ${color}`}>
-      {readable(value)}
+      {value ? readable(value) : 'Not evaluated'}
     </span>
   )
 }
@@ -52,6 +55,7 @@ function TableLoading() {
 export function ControlAssessmentTable({
   controls,
   loading,
+  canEdit,
   frameworkName,
   versionLabel,
   onUpdate,
@@ -66,7 +70,7 @@ export function ControlAssessmentTable({
       .toLowerCase()
       .includes(query.trim().toLowerCase())
     const matchesMandatory = !mandatoryOnly || control.obligation === 'mandatory'
-    const matchesEvidence = !missingEvidenceOnly || (control.acceptedEvidenceCount ?? 0) === 0
+    const matchesEvidence = !missingEvidenceOnly || control.acceptedEvidenceCount === 0
     return matchesQuery && matchesMandatory && matchesEvidence
   }), [controls, mandatoryOnly, missingEvidenceOnly, query])
 
@@ -173,14 +177,14 @@ export function ControlAssessmentTable({
                     </td>
                     <td className={cellClass}>
                       <span className={mobileLabelClass}>Accepted evidence</span>
-                      <span className="font-black">{control.acceptedEvidenceCount ?? 0}</span>
+                      <span className="font-black">{control.acceptedEvidenceCount ?? 'Not evaluated'}</span>
                     </td>
                     <td className={`${cellClass} md:max-w-[200px]`}>
                       <span className={mobileLabelClass}>Latest evaluation</span>
                       <span className="text-right md:text-left">
-                        <span className="block font-bold">{control.latestEvaluation || 'Not run'}</span>
+                        <span className="block font-bold">{control.latestEvaluation || 'Not evaluated'}</span>
                         <span className="block text-xs text-[#59615D]">
-                          {control.latestEvaluationAt ? new Date(control.latestEvaluationAt).toLocaleDateString('en') : 'No capture date'}
+                          {control.latestEvaluationAt ? new Date(control.latestEvaluationAt).toLocaleDateString('en') : 'Capture date unavailable'}
                         </span>
                       </span>
                     </td>
@@ -190,15 +194,15 @@ export function ControlAssessmentTable({
                     </td>
                     <td className={cellClass}>
                       <span className={mobileLabelClass}>Findings</span>
-                      <span className={`font-black ${(control.openFindings ?? 0) > 0 ? 'text-[#B3261E]' : ''}`}>
-                        {control.openFindings ?? 0} open
+                      <span className={`font-black ${control.openFindings !== null && control.openFindings > 0 ? 'text-[#B3261E]' : ''}`}>
+                        {control.openFindings === null ? 'Not linked' : `${control.openFindings} open`}
                       </span>
                     </td>
                   </tr>
                   {expanded ? (
                     <tr className="block border-t-2 border-[#0F1412] md:table-row">
                       <td colSpan={9} className="block p-3 md:table-cell md:p-4">
-                        <ControlTracePanel control={control} onUpdate={onUpdate} />
+                        <ControlTracePanel control={control} canEdit={canEdit} onUpdate={onUpdate} />
                       </td>
                     </tr>
                   ) : null}

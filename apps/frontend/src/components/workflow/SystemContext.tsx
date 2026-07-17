@@ -146,11 +146,21 @@ type SystemContextValue = {
 
 const SystemContext = createContext<SystemContextValue | null>(null)
 
-function getStoredSystemId(fallbackId: string) {
+function getStoredSystemId() {
   if (typeof window === "undefined") {
-    return fallbackId
+    return null
   }
-  return window.localStorage.getItem("fairmind:selected-ai-system") || fallbackId
+  return window.localStorage.getItem("fairmind:selected-ai-system")
+}
+
+export function chooseSelectedSystemId(
+  systemIds: string[],
+  currentId: string,
+  storedId: string | null,
+) {
+  if (storedId && systemIds.includes(storedId)) return storedId
+  if (systemIds.includes(currentId)) return currentId
+  return systemIds[0]
 }
 
 function estimateReadiness(stage: AISystemSummary["stage"]) {
@@ -308,18 +318,19 @@ export function SystemContextProvider({ children }: { children: React.ReactNode 
         const nextSystems = response.data.map(normalizeSystem)
         setSystems(nextSystems)
         setSelectedSystemId((currentId) => {
-          const storedId = getStoredSystemId(nextSystems[0].id)
-          const preferredId = currentId || storedId
-          const exists = nextSystems.some((system) => system.id === preferredId)
-          return exists ? preferredId : nextSystems[0].id
+          return chooseSelectedSystemId(
+            nextSystems.map((system) => system.id),
+            currentId,
+            getStoredSystemId(),
+          )
         })
       } else {
         setSystems(FALLBACK_SYSTEMS)
-        setSelectedSystemId(getStoredSystemId(FALLBACK_SYSTEMS[0].id))
+        setSelectedSystemId(getStoredSystemId() || FALLBACK_SYSTEMS[0].id)
       }
     } catch {
       setSystems(FALLBACK_SYSTEMS)
-      setSelectedSystemId(getStoredSystemId(FALLBACK_SYSTEMS[0].id))
+      setSelectedSystemId(getStoredSystemId() || FALLBACK_SYSTEMS[0].id)
     } finally {
       setLoading(false)
     }
@@ -476,7 +487,7 @@ export function SystemContextBar() {
             <p className="text-xs font-bold uppercase text-muted-foreground">System Scope</p>
             {systems.length > 0 ? (
               <Select onValueChange={setSelectedSystemId} value={selectedSystem.id}>
-                <SelectTrigger className="border-2 border-black bg-white font-bold">
+                <SelectTrigger aria-label="System scope" className="border-2 border-black bg-white font-bold">
                   <SelectValue placeholder={loading ? "Loading systems..." : "Select system"} />
                 </SelectTrigger>
                 <SelectContent>
