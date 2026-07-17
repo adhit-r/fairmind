@@ -25,4 +25,9 @@
 
 ## Concern
 
-The existing Task 1 ORM tables only store framework-version identity and a leaf control's ID, title, statement, and active state. All additional source strings and normalized arrays are preserved by `ParsedFrameworkCatalog` during import but cannot be persisted without expanding the Task 1 schema, which was deliberately kept outside this Task 2-only change.
+## Review remediation
+
+- Extended the generic framework version and control-definition schema with provenance, `requirements_json`, and catalog fields needed by later framework/control views. The SQLite migration selector omits PostgreSQL's idempotent catalog-column upgrades after creating the complete SQLite schema.
+- Added semantic header validation against the workbook's documented row-one requirement headers and row-two 21-column control headers. Merged group cells are intentionally not used as parsing contracts.
+- Added SQLite round-trip assertions for provenance, requirements, control parent/principle, normalized capabilities, and metadata. An injected control insert failure proves the version insert is rolled back with the controls.
+- `actor_id` is now persisted as `imported_by`. Serial idempotence remains covered. An `IntegrityError` re-queries the unique version key after rollback and returns the existing version when a concurrent importer won the race; no true concurrent SQLite race was exercised because SQLite's write locking does not provide a reliable equivalent to the deployment database behavior.

@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import re
 import uuid
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 from openpyxl import load_workbook
 from sqlalchemy import insert, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from database.governance_models import GovernanceControlDefinition, GovernanceFrameworkVersion
@@ -21,6 +24,17 @@ DEFAULT_COUNTS = (51, 135)
 REQUIREMENT_ID = re.compile(r"^([A-Z]\d{3}):")
 CONTROL_ID = re.compile(r"^([A-Z]\d{3}\.\d+)")
 VERSION = re.compile(r"\bVersion:\s*([^|\n]+)", re.IGNORECASE)
+REQUIREMENT_HEADERS = (
+    "Principle", "Requirement title", "Full requirement", "Application", "Frequency", "Capabilities"
+)
+CONTROL_HEADERS = (
+    "Requirement title", "Mandatory / Optional", "Full requirement", "Control application", "Control",
+    "Evidence title", "Typical evidence", "Category", "Typical Location", "Capabilities", "Category",
+    "Typical Location", "Capabilities", "Type of change", "Change - priority area", "Change - control",
+    "Change - evidence title", "Change - typical evidence",
+    "Change - other (control type, category, typical location, capabilities)", "Reasoning for change",
+    "Changelog specification",
+)
 
 
 class WorkbookValidationError(ValueError):
@@ -35,6 +49,7 @@ class ParsedRequirement:
     principle: str
     application: str
     frequency: str
+    source_capabilities: str
     capabilities: tuple[str, ...]
     active: bool
 
@@ -46,15 +61,20 @@ class ParsedControl:
     source_parent_title: str
     source_statement: str
     source_evidence_title: str
-    evidence: str
+    source_evidence_guidance: str
     category: str
+    source_locations: str
     locations: tuple[str, ...]
+    source_capabilities: str
     capabilities: tuple[str, ...]
     additional_category: str
+    source_additional_locations: str
     additional_locations: tuple[str, ...]
+    source_additional_capabilities: str
     additional_capabilities: tuple[str, ...]
     application: str
     active: bool
+    source_cell: str
 
 
 @dataclass(frozen=True)
@@ -98,6 +118,12 @@ def _active(*values: str) -> bool:
     return not any("retired" in value.lower() for value in values)
 
 
+def _validate_headers(sheet: object, row: int, expected: tuple[str, ...], label: str) -> None:
+    actual = tuple(_text(value) for value in next(sheet.iter_rows(min_row=row, max_row=row, values_only=True)))
+    if actual[: len(expected)] != expected:
+        raise WorkbookValidationError(f"unexpected {label} header")
+
+
 def _version_label(sheet: object) -> str:
     for row in sheet.iter_rows(values_only=True):
         for value in row:
@@ -108,6 +134,7 @@ def _version_label(sheet: object) -> str:
 
 
 def _requirement_records(sheet: object) -> tuple[ParsedRequirement, ...]:
+    _validate_headers(sheet, 1, REQUIREMENT_HEADERS, "requirements")
     rows = sheet.iter_rows(min_row=2, values_only=True)
     records: list[ParsedRequirement] = []
     seen: set[str] = set()
@@ -130,6 +157,7 @@ def _requirement_records(sheet: object) -> tuple[ParsedRequirement, ...]:
                 principle=_text(row[0] if row else None),
                 application=_text(row[3] if len(row) > 3 else None),
                 frequency=_text(row[4] if len(row) > 4 else None),
+                source_capabilities=_text(row[5] if len(row) > 5 else None),
                 capabilities=_array(row[5] if len(row) > 5 else None),
                 active=_active(title),
             )
@@ -138,9 +166,10 @@ def _requirement_records(sheet: object) -> tuple[ParsedRequirement, ...]:
 
 
 def _control_records(sheet: object, requirement_ids: set[str]) -> tuple[ParsedControl, ...]:
+    _validate_headers(sheet, 2, CONTROL_HEADERS, "controls")
     records: list[ParsedControl] = []
     seen: set[str] = set()
-    for row in sheet.iter_rows(min_row=3, values_only=True):
+    for source_row, row in enumerate(sheet.iter_rows(min_row=3, values_only=True), start=3):
         parent_title = _text(row[0] if row else None)
         evidence_title = _text(row[5] if len(row) > 5 else None)
         if not parent_title and not evidence_title:
@@ -162,15 +191,20 @@ def _control_records(sheet: object, requirement_ids: set[str]) -> tuple[ParsedCo
                 source_parent_title=parent_title,
                 source_statement=_text(row[4] if len(row) > 4 else None),
                 source_evidence_title=evidence_title,
-                evidence=_text(row[6] if len(row) > 6 else None),
+                source_evidence_guidance=_text(row[6] if len(row) > 6 else None),
                 category=_text(row[7] if len(row) > 7 else None),
+                source_locations=_text(row[8] if len(row) > 8 else None),
                 locations=_array(row[8] if len(row) > 8 else None),
+                source_capabilities=_text(row[9] if len(row) > 9 else None),
                 capabilities=_array(row[9] if len(row) > 9 else None),
                 additional_category=_text(row[10] if len(row) > 10 else None),
+                source_additional_locations=_text(row[11] if len(row) > 11 else None),
                 additional_locations=_array(row[11] if len(row) > 11 else None),
+                source_additional_capabilities=_text(row[12] if len(row) > 12 else None),
                 additional_capabilities=_array(row[12] if len(row) > 12 else None),
                 application=_text(row[3] if len(row) > 3 else None),
                 active=_active(parent_title, evidence_title),
+                source_cell=f"A{source_row}",
             )
         )
     return tuple(records)
@@ -218,9 +252,12 @@ class FrameworkCatalogService:
 
     def import_workbook(self, path: Path, actor_id: str) -> FrameworkImportResult:
         catalog = parse_aiuc_workbook(path, strict=self.strict, expected_counts=self.expected_counts)
-        with self.db.begin():
+        try:
+            with self.db.begin():
+                return self._persist(catalog, Path(path), actor_id)
+        except IntegrityError:
+            self.db.rollback()
             versions = GovernanceFrameworkVersion.__table__
-            controls = GovernanceControlDefinition.__table__
             existing = self.db.execute(
                 select(versions.c.id).where(
                     versions.c.framework_key == catalog.framework_key,
@@ -230,32 +267,86 @@ class FrameworkCatalogService:
             ).scalar_one_or_none()
             if existing:
                 return self._result(existing, catalog, created=False)
-            version_id = str(uuid.uuid4())
-            self.db.execute(
-                insert(versions).values(
-                    id=version_id,
-                    framework_key=catalog.framework_key,
-                    name=catalog.name,
-                    version_label=catalog.version_label,
-                    source_hash=catalog.source_hash,
-                    status="active",
-                )
+            raise
+
+    def _persist(self, catalog: ParsedFrameworkCatalog, path: Path, actor_id: str) -> FrameworkImportResult:
+        versions = GovernanceFrameworkVersion.__table__
+        controls = GovernanceControlDefinition.__table__
+        existing = self.db.execute(
+            select(versions.c.id).where(
+                versions.c.framework_key == catalog.framework_key,
+                versions.c.version_label == catalog.version_label,
+                versions.c.source_hash == catalog.source_hash,
             )
-            self.db.execute(
-                insert(controls),
-                [
-                    {
-                        "id": str(uuid.uuid4()),
-                        "framework_version_id": version_id,
-                        "external_id": control.external_id,
-                        "title": control.source_evidence_title,
-                        "statement": control.source_statement,
-                        "active": control.active,
-                    }
-                    for control in catalog.controls
-                ],
+        ).scalar_one_or_none()
+        if existing:
+            return self._result(existing, catalog, created=False)
+        version_id = str(uuid.uuid4())
+        self.db.execute(
+            insert(versions).values(
+                id=version_id,
+                framework_key=catalog.framework_key,
+                name=catalog.name,
+                version_label=catalog.version_label,
+                source_hash=catalog.source_hash,
+                source_filename=path.name,
+                source_uri=str(path),
+                imported_by=actor_id,
+                imported_at=datetime.now(timezone.utc).isoformat(),
+                requirements_json=json.dumps([asdict(requirement) for requirement in catalog.requirements]),
+                metadata_json=json.dumps({"parser": "aiuc-1-workbook"}),
+                status="active",
             )
+        )
+        requirements = {requirement.external_id: requirement for requirement in catalog.requirements}
+        self.db.execute(
+            insert(controls),
+            [self._control_values(version_id, control, requirements[control.parent_requirement_id]) for control in catalog.controls],
+        )
         return self._result(version_id, catalog, created=True)
+
+    @staticmethod
+    def _control_values(
+        version_id: str, control: ParsedControl, requirement: ParsedRequirement
+    ) -> dict[str, object]:
+        label = control.source_evidence_title.removeprefix(control.external_id).strip(" :")
+        evidence_kind, _, evidence_label = label.partition(":")
+        return {
+            "id": str(uuid.uuid4()),
+            "framework_version_id": version_id,
+            "external_id": control.external_id,
+            "title": evidence_label.strip() or label,
+            "statement": control.source_statement,
+            "parent_requirement_id": control.parent_requirement_id,
+            "parent_requirement_title": control.source_parent_title,
+            "principle": requirement.principle,
+            "obligation": requirement.application,
+            "application": control.application,
+            "frequency": requirement.frequency,
+            "capabilities_json": json.dumps(control.capabilities),
+            "evidence_kind": evidence_kind.strip(),
+            "evidence_title": control.source_evidence_title,
+            "evidence_guidance": control.source_evidence_guidance,
+            "evidence_category": control.category,
+            "locations_json": json.dumps(control.locations),
+            "source_cell": control.source_cell,
+            "metadata_json": json.dumps(
+                {
+                    "source_parent_title": control.source_parent_title,
+                    "source_statement": control.source_statement,
+                    "source_evidence_title": control.source_evidence_title,
+                    "source_evidence_guidance": control.source_evidence_guidance,
+                    "source_locations": control.source_locations,
+                    "source_capabilities": control.source_capabilities,
+                    "additional_category": control.additional_category,
+                    "source_additional_locations": control.source_additional_locations,
+                    "additional_locations": control.additional_locations,
+                    "source_additional_capabilities": control.source_additional_capabilities,
+                    "additional_capabilities": control.additional_capabilities,
+                }
+            ),
+            "active": control.active,
+        }
 
     @staticmethod
     def _result(version_id: str, catalog: ParsedFrameworkCatalog, *, created: bool) -> FrameworkImportResult:

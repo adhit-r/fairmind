@@ -71,5 +71,10 @@ def sql_for(dialect: str) -> str:
         sqlite_sql,
         flags=re.MULTILINE,
     )
+    sqlite_sql = re.sub(
+        r"ALTER TABLE governance_(?:framework_versions|control_definitions) ADD COLUMN [^;]+;\n",
+        "",
+        sqlite_sql,
+    )
     insertion_point = "CREATE TABLE IF NOT EXISTS governance_framework_versions"
     return sqlite_sql.replace(insertion_point, _SQLITE_TENANT_TRIGGERS + "\n" + insertion_point)

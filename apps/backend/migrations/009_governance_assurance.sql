@@ -29,6 +29,12 @@ CREATE TABLE IF NOT EXISTS governance_framework_versions (
     name TEXT NOT NULL,
     version_label TEXT NOT NULL,
     source_hash TEXT NOT NULL,
+    source_filename TEXT NOT NULL DEFAULT '',
+    source_uri TEXT,
+    imported_by TEXT NOT NULL DEFAULT '',
+    imported_at TEXT NOT NULL,
+    requirements_json TEXT NOT NULL DEFAULT '[]',
+    metadata_json TEXT NOT NULL DEFAULT '{}',
     status TEXT NOT NULL DEFAULT 'draft',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
@@ -41,6 +47,20 @@ CREATE TABLE IF NOT EXISTS governance_control_definitions (
     external_id TEXT NOT NULL,
     title TEXT NOT NULL,
     statement TEXT NOT NULL,
+    parent_requirement_id TEXT NOT NULL DEFAULT '',
+    parent_requirement_title TEXT NOT NULL DEFAULT '',
+    principle TEXT NOT NULL DEFAULT '',
+    obligation TEXT NOT NULL DEFAULT '',
+    application TEXT NOT NULL DEFAULT '',
+    frequency TEXT NOT NULL DEFAULT '',
+    capabilities_json TEXT NOT NULL DEFAULT '[]',
+    evidence_kind TEXT NOT NULL DEFAULT '',
+    evidence_title TEXT NOT NULL DEFAULT '',
+    evidence_guidance TEXT NOT NULL DEFAULT '',
+    evidence_category TEXT NOT NULL DEFAULT '',
+    locations_json TEXT NOT NULL DEFAULT '[]',
+    source_cell TEXT NOT NULL DEFAULT '',
+    metadata_json TEXT NOT NULL DEFAULT '{}',
     active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
@@ -48,6 +68,31 @@ CREATE TABLE IF NOT EXISTS governance_control_definitions (
 );
 CREATE INDEX IF NOT EXISTS idx_governance_control_definitions_framework_version_id
     ON governance_control_definitions(framework_version_id);
+
+-- Existing installations may have created these catalog tables before their
+-- source/provenance payload was added. PostgreSQL applies these idempotently;
+-- the SQLite test adapter omits them because its catalog tables are created
+-- from the complete definition above.
+ALTER TABLE governance_framework_versions ADD COLUMN IF NOT EXISTS source_filename TEXT NOT NULL DEFAULT '';
+ALTER TABLE governance_framework_versions ADD COLUMN IF NOT EXISTS source_uri TEXT;
+ALTER TABLE governance_framework_versions ADD COLUMN IF NOT EXISTS imported_by TEXT NOT NULL DEFAULT '';
+ALTER TABLE governance_framework_versions ADD COLUMN IF NOT EXISTS imported_at TEXT;
+ALTER TABLE governance_framework_versions ADD COLUMN IF NOT EXISTS requirements_json TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE governance_framework_versions ADD COLUMN IF NOT EXISTS metadata_json TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE governance_control_definitions ADD COLUMN IF NOT EXISTS parent_requirement_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE governance_control_definitions ADD COLUMN IF NOT EXISTS parent_requirement_title TEXT NOT NULL DEFAULT '';
+ALTER TABLE governance_control_definitions ADD COLUMN IF NOT EXISTS principle TEXT NOT NULL DEFAULT '';
+ALTER TABLE governance_control_definitions ADD COLUMN IF NOT EXISTS obligation TEXT NOT NULL DEFAULT '';
+ALTER TABLE governance_control_definitions ADD COLUMN IF NOT EXISTS application TEXT NOT NULL DEFAULT '';
+ALTER TABLE governance_control_definitions ADD COLUMN IF NOT EXISTS frequency TEXT NOT NULL DEFAULT '';
+ALTER TABLE governance_control_definitions ADD COLUMN IF NOT EXISTS capabilities_json TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE governance_control_definitions ADD COLUMN IF NOT EXISTS evidence_kind TEXT NOT NULL DEFAULT '';
+ALTER TABLE governance_control_definitions ADD COLUMN IF NOT EXISTS evidence_title TEXT NOT NULL DEFAULT '';
+ALTER TABLE governance_control_definitions ADD COLUMN IF NOT EXISTS evidence_guidance TEXT NOT NULL DEFAULT '';
+ALTER TABLE governance_control_definitions ADD COLUMN IF NOT EXISTS evidence_category TEXT NOT NULL DEFAULT '';
+ALTER TABLE governance_control_definitions ADD COLUMN IF NOT EXISTS locations_json TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE governance_control_definitions ADD COLUMN IF NOT EXISTS source_cell TEXT NOT NULL DEFAULT '';
+ALTER TABLE governance_control_definitions ADD COLUMN IF NOT EXISTS metadata_json TEXT NOT NULL DEFAULT '{}';
 
 CREATE TABLE IF NOT EXISTS governance_framework_assignments (
     id TEXT PRIMARY KEY,
