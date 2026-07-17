@@ -58,7 +58,7 @@ If assignment, readiness, or a control-level finding count is absent, the UI say
 
 ## Record approval and environmental governance
 
-Overview retains the system approval workflow beside transparent readiness. Users with organization mutation permission can submit a persisted approval request and approve or reject a pending request. Read-only users see the recorded request and latest decision without mutation actions. Rejected-assessment and evidence-gap counts inform the review but are not silently converted into an approval decision.
+Overview retains the system approval workflow beside transparent readiness. Authenticated active organization members can read system-scoped approval and report records. Owners, admins, and members granted organization mutation permission can submit a persisted approval request, generate a report, and approve or reject a pending request. Actor identity is derived from the authenticated session, decisions are single-transition, and cross-organization record identifiers fail closed. The duplicate legacy approval router is not mounted. Read-only users see the recorded request and latest decision without mutation actions. Rejected-assessment and evidence-gap counts inform the review but are not silently converted into an approval decision.
 
 The Environmental Governance panel continues to read the selected system's environmental-impact packet. It shows energy, carbon, recommendation, provenance, and linked environmental evidence when recorded, and an explicit pending or unavailable state otherwise. Environmental values are not included in the framework readiness numerator unless the active framework's controls and reviewed mappings explicitly cover them.
 

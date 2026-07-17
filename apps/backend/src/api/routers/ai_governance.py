@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from config.auth import TokenData, get_current_active_user
+from config.auth import TokenData, UserRole, get_current_active_user
 from database.connection import get_db
 from src.application.services.governance_assurance_service import (
     GovernanceAssuranceService,
@@ -30,6 +30,11 @@ from src.application.services.governance_assurance_service import (
 
 
 router = APIRouter(tags=["ai-governance"])
+
+SYSTEM_APPROVAL_WORKFLOW_ID = "fairmind-system-release-v1"
+SYSTEM_APPROVAL_WORKFLOW_STEPS = [
+    {"order": 1, "role": "organization_mutator", "permission": "model:write"}
+]
 
 
 FRAMEWORKS: List[Dict[str, Any]] = [
@@ -204,6 +209,123 @@ def _ensure_tables(db: Session) -> None:
 
     Base.metadata.create_all(bind=db_manager.engine)
     _tables_ready = True
+
+
+def _authenticated_actor(current_user: TokenData) -> str:
+    return current_user.email.strip() if current_user.email else current_user.user_id
+
+
+def _require_platform_workflow_admin(current_user: TokenData) -> None:
+    """Global workflow definitions are trusted platform configuration."""
+    if (
+        current_user.role != UserRole.ADMIN
+        and "*" not in current_user.permissions
+        and "governance:workflow:manage" not in current_user.permissions
+    ):
+        raise HTTPException(status_code=403, detail="Platform workflow permission required")
+
+
+def _ensure_system_approval_workflow(db: Session, now: str) -> str:
+    """Restore the immutable catalog workflow before assigning it to a system."""
+    steps_json = json.dumps(SYSTEM_APPROVAL_WORKFLOW_STEPS)
+    result = db.execute(
+        text(
+            "UPDATE governance_approval_workflows "
+            "SET name = :name, entity_type = 'ai_system', steps_json = :steps_json, "
+            "is_active = 1, updated_at = :updated_at WHERE id = :id"
+        ),
+        {
+            "id": SYSTEM_APPROVAL_WORKFLOW_ID,
+            "name": "AI System Release Approval",
+            "steps_json": steps_json,
+            "updated_at": now,
+        },
+    )
+    if result.rowcount == 0:
+        db.execute(
+            text(
+                "INSERT INTO governance_approval_workflows "
+                "(id, name, entity_type, steps_json, is_active, created_by, created_at, updated_at) "
+                "VALUES (:id, :name, 'ai_system', :steps_json, 1, :created_by, :created_at, :updated_at)"
+            ),
+            {
+                "id": SYSTEM_APPROVAL_WORKFLOW_ID,
+                "name": "AI System Release Approval",
+                "steps_json": steps_json,
+                "created_by": "fairmind-catalog",
+                "created_at": now,
+                "updated_at": now,
+            },
+        )
+    return SYSTEM_APPROVAL_WORKFLOW_ID
+
+
+def _require_system_access(
+    db: Session,
+    system_id: str,
+    current_user: TokenData,
+    *,
+    mutate: bool = False,
+) -> OrgMembership:
+    """Resolve a system's tenant and fail closed for missing or legacy unscoped rows."""
+    row = db.execute(
+        text("SELECT org_id FROM governance_ai_systems WHERE id = :id"),
+        {"id": system_id},
+    ).fetchone()
+    if not row or not row[0]:
+        raise HTTPException(status_code=404, detail="AI system not found")
+    service = GovernanceAssuranceService(db)
+    membership = service.membership(str(row[0]), current_user.user_id)
+    if not membership:
+        raise HTTPException(status_code=404, detail="AI system not found")
+    if mutate and not service.may_mutate(membership):
+        raise HTTPException(status_code=403, detail="Organization mutation permission required")
+    return membership
+
+
+def _require_approval_request_access(
+    db: Session,
+    request_id: str,
+    current_user: TokenData,
+    *,
+    mutate: bool = False,
+) -> str:
+    row = db.execute(
+        text(
+            "SELECT entity_type, entity_id, ai_system_id "
+            "FROM governance_approval_requests WHERE id = :id"
+        ),
+        {"id": request_id},
+    ).fetchone()
+    if not row or row[0] != "ai_system":
+        raise HTTPException(status_code=404, detail="Approval request not found")
+    entity_system_id = str(row[1]) if row[1] else ""
+    linked_system_id = str(row[2]) if row[2] else ""
+    if linked_system_id and entity_system_id and linked_system_id != entity_system_id:
+        raise HTTPException(status_code=404, detail="Approval request not found")
+    system_id = linked_system_id or entity_system_id
+    if not system_id:
+        raise HTTPException(status_code=404, detail="Approval request not found")
+    _require_system_access(db, system_id, current_user, mutate=mutate)
+    return system_id
+
+
+def _require_report_access(
+    db: Session,
+    report_id: str,
+    current_user: TokenData,
+) -> Any:
+    row = db.execute(
+        text(
+            "SELECT id, system_id, report_type, title, generated_by, config_json, data_json, created_at "
+            "FROM governance_audit_reports WHERE id = :id"
+        ),
+        {"id": report_id},
+    ).fetchone()
+    if not row or not row.system_id:
+        raise HTTPException(status_code=404, detail="Report not found")
+    _require_system_access(db, str(row.system_id), current_user)
+    return row
 
 
 class PolicyCreateRequest(BaseModel):
@@ -1325,20 +1447,27 @@ async def create_system_evidence(
 
 
 @router.get("/systems/{system_id}/approvals")
-async def list_system_approvals(system_id: str, db: Session = Depends(get_db)):
+async def list_system_approvals(
+    system_id: str,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
     """List all approval requests linked to an AI system."""
     _ensure_tables(db)
+    _require_system_access(db, system_id, current_user)
     rows = db.execute(
         text(
             "SELECT id, workflow_id, entity_type, entity_id, ai_system_id, requested_by, "
             "status, current_step, decision, decision_notes, decided_by, decided_at, created_at, updated_at "
             "FROM governance_approval_requests "
-            "WHERE entity_type = 'ai_system' AND entity_id = :system_id "
-            "   OR ai_system_id = :system_id "
+            "WHERE entity_type = 'ai_system' "
+            "AND (entity_id = :system_id OR ai_system_id = :system_id) "
             "ORDER BY created_at DESC"
         ),
         {"system_id": system_id},
     ).fetchall()
+    for row in rows:
+        _require_approval_request_access(db, str(row[0]), current_user)
     return [
         {
             "id": row[0],
@@ -1364,55 +1493,17 @@ async def list_system_approvals(system_id: str, db: Session = Depends(get_db)):
 async def create_system_approval(
     system_id: str,
     request: SystemApprovalRequestCreateRequest,
+    current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
     """Create an approval request for an AI system, using the default system workflow."""
     _ensure_tables(db)
-    # Verify system exists
-    system_row = db.execute(
-        text("SELECT id FROM governance_ai_systems WHERE id = :id"),
-        {"id": system_id},
-    ).fetchone()
-    if not system_row:
-        raise HTTPException(status_code=404, detail="AI system not found")
+    _require_system_access(db, system_id, current_user, mutate=True)
+    actor = _authenticated_actor(current_user)
 
-    # Find or create a default workflow for ai_system entity type
-    workflow_row = db.execute(
-        text(
-            "SELECT id FROM governance_approval_workflows "
-            "WHERE entity_type = 'ai_system' AND is_active = 1 LIMIT 1"
-        )
-    ).fetchone()
-
-    if not workflow_row:
-        workflow_id = str(uuid.uuid4())
-        now = _utc_now_iso()
-        db.execute(
-            text(
-                "INSERT INTO governance_approval_workflows "
-                "(id, name, entity_type, steps_json, is_active, created_by, created_at, updated_at) "
-                "VALUES (:id, :name, :entity_type, :steps_json, :is_active, :created_by, :created_at, :updated_at)"
-            ),
-            {
-                "id": workflow_id,
-                "name": "AI System Release Approval",
-                "entity_type": "ai_system",
-                "steps_json": json.dumps([
-                    {"step": 1, "name": "Technical Review", "approver_role": "tech_lead"},
-                    {"step": 2, "name": "Compliance Review", "approver_role": "compliance_officer"},
-                    {"step": 3, "name": "Final Approval", "approver_role": "governance_lead"},
-                ]),
-                "is_active": 1,
-                "created_by": "system",
-                "created_at": now,
-                "updated_at": now,
-            },
-        )
-    else:
-        workflow_id = workflow_row[0]
-
-    request_id = str(uuid.uuid4())
     now = _utc_now_iso()
+    workflow_id = _ensure_system_approval_workflow(db, now)
+    request_id = str(uuid.uuid4())
     db.execute(
         text(
             "INSERT INTO governance_approval_requests "
@@ -1427,7 +1518,7 @@ async def create_system_approval(
             "entity_type": "ai_system",
             "entity_id": system_id,
             "ai_system_id": system_id,
-            "requested_by": request.requested_by,
+            "requested_by": actor,
             "status": "pending",
             "current_step": 0,
             "created_at": now,
@@ -1441,7 +1532,7 @@ async def create_system_approval(
         "entityType": "ai_system",
         "entityId": system_id,
         "aiSystemId": system_id,
-        "requestedBy": request.requested_by,
+        "requestedBy": actor,
         "status": "pending",
         "currentStep": 0,
         "createdAt": now,
@@ -1492,8 +1583,9 @@ async def create_policy(request: PolicyCreateRequest, db: Session = Depends(get_
     now = _utc_now_iso()
     db.execute(
         text(
-            "INSERT INTO governance_policies (id, name, framework, description, rules_json, status, created_at, updated_at) "
-            "VALUES (:id, :name, :framework, :description, :rules_json, :status, :created_at, :updated_at)"
+            "INSERT INTO governance_policies "
+            "(id, name, framework, description, rules_json, status, version, created_at, updated_at) "
+            "VALUES (:id, :name, :framework, :description, :rules_json, :status, 1, :created_at, :updated_at)"
         ),
         {
             "id": policy_id,
@@ -1620,15 +1712,18 @@ async def submit_policy_for_approval(policy_id: str, db: Session = Depends(get_d
 @router.post("/approval-workflows")
 async def create_approval_workflow(
     request: ApprovalWorkflowCreateRequest,
+    current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
     _ensure_tables(db)
+    _require_platform_workflow_admin(current_user)
     workflow_id = str(uuid.uuid4())
     now = _utc_now_iso()
     db.execute(
         text(
-            "INSERT INTO governance_approval_workflows (id, name, entity_type, steps_json, is_active, created_at, updated_at) "
-            "VALUES (:id, :name, :entity_type, :steps_json, :is_active, :created_at, :updated_at)"
+            "INSERT INTO governance_approval_workflows "
+            "(id, name, entity_type, steps_json, is_active, created_by, created_at, updated_at) "
+            "VALUES (:id, :name, :entity_type, :steps_json, :is_active, :created_by, :created_at, :updated_at)"
         ),
         {
             "id": workflow_id,
@@ -1636,6 +1731,7 @@ async def create_approval_workflow(
             "entity_type": request.entity_type,
             "steps_json": json.dumps(request.steps),
             "is_active": 1,
+            "created_by": _authenticated_actor(current_user),
             "created_at": now,
             "updated_at": now,
         },
@@ -1654,6 +1750,7 @@ async def create_approval_workflow(
 @router.get("/approval-workflows")
 async def list_approval_workflows(
     entity_type: Optional[str] = Query(default=None),
+    current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
     _ensure_tables(db)
@@ -1690,9 +1787,13 @@ async def list_approval_workflows(
 async def create_approval_request(
     workflow_id: str,
     request: ApprovalRequestCreateRequest,
+    current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
     _ensure_tables(db)
+    if request.entity_type != "ai_system":
+        raise HTTPException(status_code=404, detail="Approval target not found")
+    _require_system_access(db, request.entity_id, current_user, mutate=True)
     workflow = db.execute(
         text("SELECT id FROM governance_approval_workflows WHERE id = :id AND is_active = 1"),
         {"id": workflow_id},
@@ -1705,15 +1806,16 @@ async def create_approval_request(
     db.execute(
         text(
             "INSERT INTO governance_approval_requests "
-            "(id, workflow_id, entity_type, entity_id, requested_by, status, current_step, decision_notes, created_at, updated_at) "
-            "VALUES (:id, :workflow_id, :entity_type, :entity_id, :requested_by, :status, :current_step, :decision_notes, :created_at, :updated_at)"
+            "(id, workflow_id, entity_type, entity_id, ai_system_id, requested_by, status, current_step, decision_notes, created_at, updated_at) "
+            "VALUES (:id, :workflow_id, :entity_type, :entity_id, :ai_system_id, :requested_by, :status, :current_step, :decision_notes, :created_at, :updated_at)"
         ),
         {
             "id": request_id,
             "workflow_id": workflow_id,
             "entity_type": request.entity_type,
             "entity_id": request.entity_id,
-            "requested_by": request.requested_by,
+            "ai_system_id": request.entity_id,
+            "requested_by": _authenticated_actor(current_user),
             "status": "pending",
             "current_step": 1,
             "decision_notes": "",
@@ -1737,9 +1839,11 @@ async def create_approval_request(
 async def make_approval_decision(
     request_id: str,
     request: ApprovalDecisionRequest,
+    current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
     _ensure_tables(db)
+    _require_approval_request_access(db, request_id, current_user, mutate=True)
     new_status = "approved" if request.decision == "approved" else "rejected"
     now = _utc_now_iso()
     existing = db.execute(
@@ -1762,21 +1866,33 @@ async def make_approval_decision(
                     "environmentalGate": environmental_gate,
                 },
             )
+    actor = _authenticated_actor(current_user)
     result = db.execute(
         text(
             "UPDATE governance_approval_requests "
-            "SET status = :status, decision_notes = :notes, updated_at = :updated_at "
-            "WHERE id = :id"
+            "SET status = :status, decision = :status, decision_notes = :notes, "
+            "decided_by = :decided_by, decided_at = :updated_at, updated_at = :updated_at "
+            "WHERE id = :id AND status = 'pending'"
         ),
         {
             "status": new_status,
             "notes": request.notes,
+            "decided_by": actor,
             "updated_at": now,
             "id": request_id,
         },
     )
     if result.rowcount == 0:
-        raise HTTPException(status_code=404, detail="Approval request not found")
+        current = db.execute(
+            text("SELECT status FROM governance_approval_requests WHERE id = :id"),
+            {"id": request_id},
+        ).fetchone()
+        if not current:
+            raise HTTPException(status_code=404, detail="Approval request not found")
+        raise HTTPException(
+            status_code=409,
+            detail=f"Request is already '{current[0]}'; only pending requests can be decided",
+        )
 
     db.execute(
         text(
@@ -1788,7 +1904,7 @@ async def make_approval_decision(
             "request_id": request_id,
             "decision": new_status,
             "notes": request.notes,
-            "decided_by": request.decided_by,
+            "decided_by": actor,
             "created_at": now,
         },
     )
@@ -1803,8 +1919,13 @@ async def make_approval_decision(
 
 
 @router.get("/approval-requests/{request_id}")
-async def get_approval_request(request_id: str, db: Session = Depends(get_db)):
+async def get_approval_request(
+    request_id: str,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
     _ensure_tables(db)
+    _require_approval_request_access(db, request_id, current_user)
     row = db.execute(
         text(
             "SELECT id, workflow_id, entity_type, entity_id, requested_by, status, current_step, decision_notes, created_at, updated_at "
@@ -1822,9 +1943,13 @@ async def get_approval_request(request_id: str, db: Session = Depends(get_db)):
 async def list_approval_requests(
     entity_type: str = Query(min_length=1),
     entity_id: Optional[str] = Query(default=None),
+    current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
     _ensure_tables(db)
+    if entity_type != "ai_system" or not entity_id:
+        raise HTTPException(status_code=404, detail="Approval requests not found")
+    _require_system_access(db, entity_id, current_user)
     if entity_id:
         rows = db.execute(
             text(
@@ -1844,18 +1969,30 @@ async def list_approval_requests(
             {"entity_type": entity_type},
         ).fetchall()
 
+    for row in rows:
+        _require_approval_request_access(db, str(row[0]), current_user)
     return [_serialize_approval_request_row(row) for row in rows]
 
 
 @router.get("/approval-requests/{request_id}/decisions")
-async def list_approval_decisions(request_id: str, db: Session = Depends(get_db)):
+async def list_approval_decisions(
+    request_id: str,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
     _ensure_tables(db)
+    _require_approval_request_access(db, request_id, current_user)
     return _fetch_approval_decisions(db, request_id)
 
 
 @router.get("/approval/system/{system_id}")
-async def get_system_approval_status(system_id: str, db: Session = Depends(get_db)):
+async def get_system_approval_status(
+    system_id: str,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
     _ensure_tables(db)
+    _require_system_access(db, system_id, current_user)
     row = db.execute(
         text(
             "SELECT id, workflow_id, entity_type, entity_id, requested_by, status, current_step, decision_notes, created_at, updated_at "
@@ -1872,6 +2009,7 @@ async def get_system_approval_status(system_id: str, db: Session = Depends(get_d
             "decisions": [],
         }
 
+    _require_approval_request_access(db, str(row[0]), current_user)
     request = _serialize_approval_request_row(row)
     return {
         "systemId": system_id,
@@ -1884,9 +2022,12 @@ async def get_system_approval_status(system_id: str, db: Session = Depends(get_d
 async def create_system_approval_request(
     system_id: str,
     request: SystemApprovalRequestCreateRequest,
+    current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
     _ensure_tables(db)
+    _require_system_access(db, system_id, current_user, mutate=True)
+    actor = _authenticated_actor(current_user)
     existing_request = db.execute(
         text(
             "SELECT id, workflow_id, entity_type, entity_id, requested_by, status, current_step, decision_notes, created_at, updated_at "
@@ -1896,6 +2037,7 @@ async def create_system_approval_request(
         {"entity_type": "ai_system", "entity_id": system_id, "status": "pending"},
     ).fetchone()
     if existing_request:
+        _require_approval_request_access(db, str(existing_request[0]), current_user, mutate=True)
         serialized = _serialize_approval_request_row(existing_request)
         return {
             "systemId": system_id,
@@ -1903,55 +2045,23 @@ async def create_system_approval_request(
             "decisions": _fetch_approval_decisions(db, serialized["id"]),
         }
 
-    workflow = db.execute(
-        text(
-            "SELECT id FROM governance_approval_workflows "
-            "WHERE entity_type = :entity_type AND is_active = 1 "
-            "ORDER BY created_at DESC LIMIT 1"
-        ),
-        {"entity_type": "ai_system"},
-    ).fetchone()
-
-    workflow_id: str
     now = _utc_now_iso()
-    if workflow:
-        workflow_id = workflow[0]
-    else:
-        workflow_id = str(uuid.uuid4())
-        db.execute(
-            text(
-                "INSERT INTO governance_approval_workflows (id, name, entity_type, steps_json, is_active, created_at, updated_at) "
-                "VALUES (:id, :name, :entity_type, :steps_json, :is_active, :created_at, :updated_at)"
-            ),
-            {
-                "id": workflow_id,
-                "name": "AI System Release Approval",
-                "entity_type": "ai_system",
-                "steps_json": json.dumps(
-                    [
-                        {"order": 1, "role": "risk_reviewer"},
-                        {"order": 2, "role": "approver"},
-                    ]
-                ),
-                "is_active": 1,
-                "created_at": now,
-                "updated_at": now,
-            },
-        )
+    workflow_id = _ensure_system_approval_workflow(db, now)
 
     request_id = str(uuid.uuid4())
     db.execute(
         text(
             "INSERT INTO governance_approval_requests "
-            "(id, workflow_id, entity_type, entity_id, requested_by, status, current_step, decision_notes, created_at, updated_at) "
-            "VALUES (:id, :workflow_id, :entity_type, :entity_id, :requested_by, :status, :current_step, :decision_notes, :created_at, :updated_at)"
+            "(id, workflow_id, entity_type, entity_id, ai_system_id, requested_by, status, current_step, decision_notes, created_at, updated_at) "
+            "VALUES (:id, :workflow_id, :entity_type, :entity_id, :ai_system_id, :requested_by, :status, :current_step, :decision_notes, :created_at, :updated_at)"
         ),
         {
             "id": request_id,
             "workflow_id": workflow_id,
             "entity_type": "ai_system",
             "entity_id": system_id,
-            "requested_by": request.requested_by,
+            "ai_system_id": system_id,
+            "requested_by": actor,
             "status": "pending",
             "current_step": 1,
             "decision_notes": "",
@@ -1966,7 +2076,7 @@ async def create_system_approval_request(
         "workflow_id": workflow_id,
         "entity_type": "ai_system",
         "entity_id": system_id,
-        "requested_by": request.requested_by,
+        "requested_by": actor,
         "status": "pending",
         "current_step": 1,
         "decision_notes": "",
@@ -1991,20 +2101,7 @@ def _require_evidence_system_access(
     *,
     mutate: bool = False,
 ) -> OrgMembership:
-    """Resolve the tenant from the system and fail closed for legacy unscoped rows."""
-    row = db.execute(
-        text("SELECT org_id FROM governance_ai_systems WHERE id = :id"),
-        {"id": system_id},
-    ).fetchone()
-    if not row or not row[0]:
-        raise HTTPException(status_code=404, detail="AI system not found")
-    service = GovernanceAssuranceService(db)
-    membership = service.membership(str(row[0]), current_user.user_id)
-    if not membership:
-        raise HTTPException(status_code=404, detail="AI system not found")
-    if mutate and not service.may_mutate(membership):
-        raise HTTPException(status_code=403, detail="Organization mutation permission required")
-    return membership
+    return _require_system_access(db, system_id, current_user, mutate=mutate)
 
 
 def _require_evidence_item_access(
@@ -2664,6 +2761,7 @@ class AuditReportGenerateRequest(BaseModel):
 @router.post("/reports/generate")
 async def generate_audit_report(
     request: AuditReportGenerateRequest,
+    current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
     """Generate and persist a governance audit report snapshot."""
@@ -2671,6 +2769,7 @@ async def generate_audit_report(
     _ensure_audit_report_table(db)
 
     system_id = request.system_id
+    _require_system_access(db, system_id, current_user, mutate=True)
 
     # --- collect data snapshot ---
     # Risks
@@ -2739,9 +2838,10 @@ async def generate_audit_report(
     approval_rows = db.execute(
         text(
             "SELECT id, status, requested_by, decision_notes, created_at "
-            "FROM governance_approval_requests WHERE system_id = :sid ORDER BY created_at DESC"
+            "FROM governance_approval_requests "
+            "WHERE entity_type = :entity_type AND entity_id = :sid ORDER BY created_at DESC"
         ),
-        {"sid": system_id},
+        {"entity_type": "ai_system", "sid": system_id},
     ).fetchall()
     approvals_data = [
         {
@@ -2757,7 +2857,7 @@ async def generate_audit_report(
     # System info
     sys_row = db.execute(
         text(
-            "SELECT id, name, owner, risk_tier, lifecycle_stage, readiness, created_at, updated_at "
+            "SELECT id, name, owner, risk_tier, lifecycle_stage, created_at, updated_at "
             "FROM governance_ai_systems WHERE id = :sid"
         ),
         {"sid": system_id},
@@ -2770,7 +2870,7 @@ async def generate_audit_report(
             "owner": sys_row.owner or "",
             "riskTier": sys_row.risk_tier,
             "lifecycleStage": sys_row.lifecycle_stage,
-            "readiness": sys_row.readiness or 0,
+            "readiness": None,
         }
 
     data_snapshot = {
@@ -2808,7 +2908,7 @@ async def generate_audit_report(
             "system_id": system_id,
             "report_type": request.report_type,
             "title": title,
-            "generated_by": request.generated_by or "",
+            "generated_by": _authenticated_actor(current_user),
             "config_json": json.dumps(config_snapshot),
             "data_json": json.dumps(data_snapshot),
             "created_at": now,
@@ -2825,19 +2925,18 @@ async def generate_audit_report(
 
 @router.get("/reports")
 async def list_audit_reports(
-    system_id: Optional[str] = Query(None),
+    system_id: str = Query(min_length=1),
     report_type: Optional[str] = Query(None),
+    current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
     """List previously generated audit reports."""
     _ensure_tables(db)
     _ensure_audit_report_table(db)
+    _require_system_access(db, system_id, current_user)
 
-    conditions = []
-    params: Dict[str, Any] = {}
-    if system_id:
-        conditions.append("system_id = :system_id")
-        params["system_id"] = system_id
+    conditions = ["system_id = :system_id"]
+    params: Dict[str, Any] = {"system_id": system_id}
     if report_type:
         conditions.append("report_type = :report_type")
         params["report_type"] = report_type
@@ -2854,15 +2953,14 @@ async def list_audit_reports(
 
 
 @router.get("/reports/{report_id}")
-async def get_audit_report(report_id: str, db: Session = Depends(get_db)):
+async def get_audit_report(
+    report_id: str,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
     """Get a specific audit report with full data snapshot."""
     _ensure_tables(db)
     _ensure_audit_report_table(db)
 
-    row = db.execute(
-        text("SELECT id, system_id, report_type, title, generated_by, config_json, data_json, created_at FROM governance_audit_reports WHERE id = :id"),
-        {"id": report_id},
-    ).fetchone()
-    if not row:
-        raise HTTPException(status_code=404, detail="Report not found")
+    row = _require_report_access(db, report_id, current_user)
     return _serialize_audit_report_row(row)

@@ -29,13 +29,13 @@ No certification or automatic-compliance claim is rendered. Unknown or unavailab
 
 ## TDD evidence
 
-The Task 8 Playwright tests were added before production changes. The initial three-test run failed at the new Overview heading, new Reports heading, and auditor-mode label because those surfaces did not exist. Review follow-up tests were also observed failing before implementation for missing approval/environmental regions, incorrect cross-framework resolution, the absent report studio, stale approval actions during system switches, and the missing content-level PDF builder. The focused tests and complete assurance journey now pass.
+The Task 8 Playwright tests were added before production changes. The initial three-test run failed at the new Overview heading, new Reports heading, and auditor-mode label because those surfaces did not exist. Review follow-up tests were also observed failing before implementation for missing approval/environmental regions, incorrect cross-framework resolution, the absent report studio, stale approval actions during system switches, and the missing content-level PDF builder. Authorization tests were then observed failing for viewer mutations, cross-organization reads, spoofed actors, repeated approval decisions, global workflow mutation, and the mounted legacy approval bypass. The focused tests and complete assurance journey now pass.
 
 ## Verification
 
 | Check | Result |
 | --- | --- |
-| `uv run pytest tests/test_governance_assurance_models.py tests/test_framework_catalog_service.py tests/test_governance_assurance_routes.py tests/test_governance_evidence_runs.py -q` | 49 passed |
+| `uv run pytest tests/test_governance_assurance_models.py tests/test_framework_catalog_service.py tests/test_governance_assurance_routes.py tests/test_governance_evidence_runs.py -q` | 54 passed |
 | `bun test src/lib/api/hooks/useGovernanceAssurance.test.ts 'src/app/(dashboard)/reports/components/AssuranceReportStudio.test.ts'` | 9 passed |
 | `./node_modules/.bin/tsc --noEmit --pretty false` | passed |
 | `npx playwright test tests/governance-assurance.spec.ts --project=chromium --workers=1 --reporter=line` | 21 passed |

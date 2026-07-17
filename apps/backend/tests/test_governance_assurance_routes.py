@@ -608,3 +608,148 @@ def test_assignment_controls_return_real_definition_and_evidence_trace(assurance
             }
         ],
     }
+
+
+def test_viewer_cannot_mutate_system_approvals_or_generate_reports(assurance_client) -> None:
+    client, session_factory, _ = assurance_client
+    session = session_factory()
+    _seed_org(session, ORG_A, USER_A, role="member")
+    system_id, _, _ = _seed_catalog_and_system(session)
+    session.close()
+
+    approval = client.post(
+        f"/api/v1/ai-governance/approval/system/{system_id}/request",
+        json={"requested_by": "spoofed@example.test"},
+    )
+    inventory_approval = client.post(
+        f"/api/v1/ai-governance/systems/{system_id}/approvals",
+        json={"requested_by": "spoofed@example.test"},
+    )
+    report = client.post(
+        "/api/v1/ai-governance/reports/generate",
+        json={
+            "system_id": system_id,
+            "report_type": "governance",
+            "generated_by": "spoofed@example.test",
+        },
+    )
+
+    assert approval.status_code == 403, approval.text
+    assert inventory_approval.status_code == 403, inventory_approval.text
+    assert report.status_code == 403, report.text
+
+
+def test_approval_and_report_reads_cannot_cross_organizations(assurance_client) -> None:
+    client, session_factory, active_user = assurance_client
+    session = session_factory()
+    _seed_org(session, ORG_A, USER_A, role="owner")
+    _seed_org(session, ORG_B, USER_B, role="owner")
+    system_id, _, _ = _seed_catalog_and_system(session)
+    session.close()
+
+    approval = client.post(
+        f"/api/v1/ai-governance/approval/system/{system_id}/request",
+        json={"requested_by": "spoofed@example.test"},
+    )
+    report = client.post(
+        "/api/v1/ai-governance/reports/generate",
+        json={"system_id": system_id, "report_type": "governance"},
+    )
+    assert approval.status_code == report.status_code == 200
+    request_id = approval.json()["request"]["id"]
+    report_id = report.json()["id"]
+
+    active_user["value"] = _token(USER_B)
+    responses = [
+        client.get(f"/api/v1/ai-governance/approval/system/{system_id}"),
+        client.get(f"/api/v1/ai-governance/systems/{system_id}/approvals"),
+        client.get(f"/api/v1/ai-governance/approval-requests/{request_id}"),
+        client.get(f"/api/v1/ai-governance/approval-requests/{request_id}/decisions"),
+        client.get(f"/api/v1/ai-governance/reports?system_id={system_id}"),
+        client.get(f"/api/v1/ai-governance/reports/{report_id}"),
+    ]
+
+    assert all(response.status_code == 404 for response in responses), [
+        (response.status_code, response.text) for response in responses
+    ]
+
+
+def test_owner_generates_report_and_decides_with_authenticated_actor(assurance_client) -> None:
+    client, session_factory, _ = assurance_client
+    session = session_factory()
+    _seed_org(session, ORG_A, USER_A, role="owner")
+    system_id, _, _ = _seed_catalog_and_system(session)
+    session.close()
+
+    approval = client.post(
+        f"/api/v1/ai-governance/approval/system/{system_id}/request",
+        json={"requested_by": "spoofed@example.test"},
+    )
+    assert approval.status_code == 200, approval.text
+    request_id = approval.json()["request"]["id"]
+    assert approval.json()["request"]["requested_by"] == "governance@example.test"
+
+    decision = client.post(
+        f"/api/v1/ai-governance/approval-requests/{request_id}/decision",
+        json={
+            "decision": "rejected",
+            "notes": "Evidence gap remains.",
+            "decided_by": "spoofed@example.test",
+        },
+    )
+    report = client.post(
+        "/api/v1/ai-governance/reports/generate",
+        json={
+            "system_id": system_id,
+            "report_type": "governance",
+            "frameworks": ["AIUC-1 April, 2026"],
+            "generated_by": "spoofed@example.test",
+        },
+    )
+    assert decision.status_code == 200, decision.text
+    assert report.status_code == 200, report.text
+    assert report.json()["generatedBy"] == "governance@example.test"
+
+    state = client.get(f"/api/v1/ai-governance/approval/system/{system_id}")
+    history = client.get(f"/api/v1/ai-governance/reports?system_id={system_id}")
+    detail = client.get(f"/api/v1/ai-governance/reports/{report.json()['id']}")
+    assert state.status_code == history.status_code == detail.status_code == 200
+    assert state.json()["decisions"][-1]["decided_by"] == "governance@example.test"
+    assert history.json()[0]["id"] == detail.json()["id"] == report.json()["id"]
+
+    repeated = client.post(
+        f"/api/v1/ai-governance/approval-requests/{request_id}/decision",
+        json={"decision": "approved", "notes": "Attempted reversal."},
+    )
+    assert repeated.status_code == 409, repeated.text
+    unchanged = client.get(f"/api/v1/ai-governance/approval/system/{system_id}")
+    assert unchanged.json()["request"]["status"] == "rejected"
+    assert len(unchanged.json()["decisions"]) == 1
+
+
+def test_legacy_approval_bypass_is_not_mounted(assurance_client) -> None:
+    client, _, _ = assurance_client
+
+    assert client.get("/api/approvals/requests").status_code >= 400
+    assert client.post(
+        "/api/approvals/requests",
+        json={"ai_system_id": "system-a", "requested_by": "spoofed@example.test"},
+    ).status_code >= 400
+
+
+def test_tenant_user_cannot_create_global_approval_workflow(assurance_client) -> None:
+    client, session_factory, _ = assurance_client
+    session = session_factory()
+    _seed_org(session, ORG_A, USER_A, role="owner")
+    session.close()
+
+    response = client.post(
+        "/api/v1/ai-governance/approval-workflows",
+        json={
+            "name": "Tenant supplied global workflow",
+            "entity_type": "ai_system",
+            "steps": [{"order": 1, "role": "attacker"}],
+        },
+    )
+
+    assert response.status_code == 403, response.text

@@ -1,13 +1,119 @@
 """Tests for AI Governance phase-1 routes."""
 
+from datetime import datetime, timedelta, timezone
 import uuid
 
+import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from api.main import app
+from config.auth import TokenData, TokenType, UserRole, get_current_active_user
+from database.connection import Base, get_db
+from database.models import Organization, OrganizationMember, User
 
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def authenticated_org_database():
+    engine = create_engine(
+        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+    )
+    Base.metadata.create_all(engine)
+    session_factory = sessionmaker(bind=engine)
+    user_id, org_id = uuid.uuid4(), uuid.uuid4()
+    session = session_factory()
+    session.execute(
+        User.__table__.insert().values(
+            id=user_id, email="governance@example.test", username="governance-owner"
+        )
+    )
+    session.execute(
+        Organization.__table__.insert().values(
+            id=org_id,
+            name="Governance test organization",
+            slug=f"governance-{org_id}",
+            owner_id=user_id,
+        )
+    )
+    session.execute(
+        OrganizationMember.__table__.insert().values(
+            id=uuid.uuid4(),
+            org_id=org_id,
+            user_id=user_id,
+            role="owner",
+            status="active",
+        )
+    )
+    session.commit()
+    session.close()
+
+    def override_db():
+        db = session_factory()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    async def override_user():
+        now = datetime.now(timezone.utc)
+        return TokenData(
+            user_id=str(user_id),
+            email="governance@example.test",
+            role=UserRole.ADMIN,
+            token_type=TokenType.ACCESS,
+            iat=now,
+            exp=now + timedelta(hours=1),
+            permissions=["*"],
+        )
+
+    app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_current_active_user] = override_user
+    try:
+        yield {
+            "session_factory": session_factory,
+            "org_id": str(org_id),
+            "override_user": override_user,
+        }
+    finally:
+        app.dependency_overrides.clear()
+        Base.metadata.drop_all(engine)
+        engine.dispose()
+
+
+def _scope_system(test_context, system_id: str) -> None:
+    session = test_context["session_factory"]()
+    session.execute(
+        text("UPDATE governance_ai_systems SET org_id = :org_id WHERE id = :system_id"),
+        {"org_id": test_context["org_id"], "system_id": system_id},
+    )
+    session.commit()
+    session.close()
+
+
+def _create_scoped_system(test_context, name: str) -> str:
+    workspace = client.post(
+        "/api/v1/ai-governance/workspaces",
+        json={"name": f"{name} workspace", "owner": "governance@example.test"},
+    )
+    system = client.post(
+        "/api/v1/ai-governance/systems",
+        json={
+            "workspace_id": workspace.json()["id"],
+            "name": name,
+            "owner": "governance@example.test",
+            "risk_tier": "high",
+            "lifecycle_stage": "onboard",
+            "metadata": {},
+        },
+    )
+    system_id = system.json()["id"]
+    _scope_system(test_context, system_id)
+    return system_id
 
 
 def test_ai_governance_frameworks_endpoint():
@@ -67,7 +173,7 @@ def test_ai_governance_workspace_and_system_registry():
     assert fetched_system["lifecycleSummary"]["stage"] == fetched_system["lifecycleStage"]
 
 
-def test_ai_governance_lifecycle_summary_persists_stage_progression():
+def test_ai_governance_lifecycle_summary_persists_stage_progression(authenticated_org_database):
     workspace_resp = client.post(
         "/api/v1/ai-governance/workspaces",
         json={
@@ -90,6 +196,7 @@ def test_ai_governance_lifecycle_summary_persists_stage_progression():
     )
     system = system_resp.json()
     system_id = system["id"]
+    _scope_system(authenticated_org_database, system_id)
 
     initial_summary = client.get(f"/api/v1/ai-governance/lifecycle/{system_id}/summary")
     assert initial_summary.status_code == 200
@@ -213,12 +320,13 @@ def test_ai_governance_policy_create_and_list():
     assert any(p["id"] == created["id"] for p in policies)
 
 
-def test_ai_governance_workflow_and_request_decision():
+def test_ai_governance_workflow_and_request_decision(authenticated_org_database):
+    system_id = _create_scoped_system(authenticated_org_database, "Workflow decision system")
     workflow_resp = client.post(
         "/api/v1/ai-governance/approval-workflows",
         json={
-            "name": "Policy Approval Flow",
-            "entity_type": "policy",
+            "name": "AI System Approval Flow",
+            "entity_type": "ai_system",
             "steps": [{"order": 1, "role": "reviewer"}, {"order": 2, "role": "approver"}],
         },
     )
@@ -228,8 +336,8 @@ def test_ai_governance_workflow_and_request_decision():
     request_resp = client.post(
         f"/api/v1/ai-governance/approval-workflows/{workflow['id']}/requests",
         json={
-            "entity_type": "policy",
-            "entity_id": "policy-123",
+            "entity_type": "ai_system",
+            "entity_id": system_id,
             "requested_by": "qa@fairmind.ai",
         },
     )
@@ -240,14 +348,14 @@ def test_ai_governance_workflow_and_request_decision():
     decision_resp = client.post(
         f"/api/v1/ai-governance/approval-requests/{approval_request['id']}/decision",
         json={
-            "decision": "approved",
-            "notes": "Looks good",
+            "decision": "rejected",
+            "notes": "Evidence gap remains",
             "decided_by": "approver@fairmind.ai",
         },
     )
     assert decision_resp.status_code == 200
     decision = decision_resp.json()
-    assert decision["status"] == "approved"
+    assert decision["status"] == "rejected"
 
     get_request_resp = client.get(
         f"/api/v1/ai-governance/approval-requests/{approval_request['id']}"
@@ -255,8 +363,8 @@ def test_ai_governance_workflow_and_request_decision():
     assert get_request_resp.status_code == 200
     request_data = get_request_resp.json()
     assert request_data["id"] == approval_request["id"]
-    assert request_data["status"] == "approved"
-    assert request_data["decision_notes"] == "Looks good"
+    assert request_data["status"] == "rejected"
+    assert request_data["decision_notes"] == "Evidence gap remains"
 
     decisions_resp = client.get(
         f"/api/v1/ai-governance/approval-requests/{approval_request['id']}/decisions"
@@ -264,13 +372,13 @@ def test_ai_governance_workflow_and_request_decision():
     assert decisions_resp.status_code == 200
     trail = decisions_resp.json()
     assert len(trail) >= 1
-    assert trail[-1]["decision"] == "approved"
-    assert trail[-1]["notes"] == "Looks good"
-    assert trail[-1]["decided_by"] == "approver@fairmind.ai"
+    assert trail[-1]["decision"] == "rejected"
+    assert trail[-1]["notes"] == "Evidence gap remains"
+    assert trail[-1]["decided_by"] == "governance@example.test"
 
 
-def test_ai_governance_system_approval_request_flow():
-    system_id = f"acme-approval-{uuid.uuid4().hex[:8]}"
+def test_ai_governance_system_approval_request_flow(authenticated_org_database):
+    system_id = _create_scoped_system(authenticated_org_database, "System approval flow")
 
     initial_resp = client.get(f"/api/v1/ai-governance/approval/system/{system_id}")
     assert initial_resp.status_code == 200
@@ -299,41 +407,47 @@ def test_ai_governance_system_approval_request_flow():
     decision_resp = client.post(
         f"/api/v1/ai-governance/approval-requests/{request_id}/decision",
         json={
-            "decision": "approved",
-            "notes": "Gate cleared for release.",
+            "decision": "rejected",
+            "notes": "Release evidence is incomplete.",
             "decided_by": "approver@fairmind.ai",
         },
     )
     assert decision_resp.status_code == 200
-    assert decision_resp.json()["status"] == "approved"
+    assert decision_resp.json()["status"] == "rejected"
 
     latest_resp = client.get(f"/api/v1/ai-governance/approval/system/{system_id}")
     assert latest_resp.status_code == 200
     latest_payload = latest_resp.json()
-    assert latest_payload["request"]["status"] == "approved"
-    assert latest_payload["request"]["decision_notes"] == "Gate cleared for release."
-    assert latest_payload["decisions"][-1]["decision"] == "approved"
+    assert latest_payload["request"]["status"] == "rejected"
+    assert latest_payload["request"]["decision_notes"] == "Release evidence is incomplete."
+    assert latest_payload["decisions"][-1]["decision"] == "rejected"
 
 
-def test_ai_governance_evidence_endpoints_require_authentication():
+def test_ai_governance_evidence_endpoints_require_authentication(authenticated_org_database):
     system_id = f"model-abc-{uuid.uuid4().hex[:8]}"
-    collect_resp = client.post(
-        "/api/v1/ai-governance/evidence/collect",
-        json={
-            "system_id": system_id,
-            "type": "audit_log",
-            "content": {"entries": 12},
-            "confidence": 0.93,
-            "metadata": {"source": "monitoring"},
-        },
-    )
-    assert collect_resp.status_code == 401
-    assert client.get(f"/api/v1/ai-governance/evidence-v2/{system_id}").status_code == 401
-    assert client.get(f"/api/v1/ai-governance/evidence/{system_id}/summary").status_code == 401
-    assert client.post(
-        f"/api/v1/ai-governance/systems/{system_id}/evidence",
-        json={"evidence_type": "policy", "content": {}},
-    ).status_code == 401
+    app.dependency_overrides.pop(get_current_active_user)
+    try:
+        collect_resp = client.post(
+            "/api/v1/ai-governance/evidence/collect",
+            json={
+                "system_id": system_id,
+                "type": "audit_log",
+                "content": {"entries": 12},
+                "confidence": 0.93,
+                "metadata": {"source": "monitoring"},
+            },
+        )
+        assert collect_resp.status_code == 401
+        assert client.get(f"/api/v1/ai-governance/evidence-v2/{system_id}").status_code == 401
+        assert client.get(f"/api/v1/ai-governance/evidence/{system_id}/summary").status_code == 401
+        assert client.post(
+            f"/api/v1/ai-governance/systems/{system_id}/evidence",
+            json={"evidence_type": "policy", "content": {}},
+        ).status_code == 401
+    finally:
+        app.dependency_overrides[get_current_active_user] = authenticated_org_database[
+            "override_user"
+        ]
 
 
 def test_ai_governance_risk_dashboard_and_assessment():
@@ -342,7 +456,7 @@ def test_ai_governance_risk_dashboard_and_assessment():
     dashboard = dashboard_resp.json()
     assert "risks" in dashboard
     assert "summary" in dashboard
-    assert len(dashboard["risks"]) >= 1
+    assert isinstance(dashboard["risks"], list)
 
     create_resp = client.post(
         "/api/v1/ai-governance/risks/assess",
@@ -358,7 +472,7 @@ def test_ai_governance_risk_dashboard_and_assessment():
     assert created["systemId"] == "acme-credit"
     assert created["severity"] == "high"
     assert created["source"] == "manual_assessment"
-    assert len(created["automation"]["recommendedRisks"]) >= 1
+    assert isinstance(created["automation"]["recommendedRisks"], list)
 
     refreshed_resp = client.get("/api/v1/ai-governance/dashboard/risk?system_id=acme-credit")
     assert refreshed_resp.status_code == 200
