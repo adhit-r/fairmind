@@ -13,9 +13,15 @@ except Exception:
     settings_service = None
 
 from src.domain.compliance.services.compliance_audit_engine import ComplianceAuditEngine
-from src.domain.compliance.services.compliance_automation_service import compliance_automation_service
+try:
+    from src.domain.compliance.services.compliance_automation_service import compliance_automation_service
+except ImportError:
+    compliance_automation_service = None
 from src.infrastructure.db.database.models import ComplianceSchedule, ComplianceViolation
-from src.infrastructure.email.resend_service import email_service
+try:
+    from src.infrastructure.email.resend_service import email_service
+except ImportError:
+    email_service = None
 
 __all__ = [
     "ComplianceAuditEngine",

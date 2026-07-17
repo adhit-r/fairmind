@@ -55,6 +55,22 @@ class MembersListResponse(BaseModel):
     total: int
 
 
+class OrganizationSummaryResponse(BaseModel):
+    """Organization membership details used to bootstrap the frontend context."""
+    id: str
+    name: str
+    slug: str
+    domain: Optional[str]
+    owner_id: str
+    created_at: str
+    role: str
+    permissions: List[str]
+
+
+class OrganizationsListResponse(BaseModel):
+    organizations: List[OrganizationSummaryResponse]
+
+
 class InviteMemberRequest(BaseModel):
     """Request to invite a new member to organization."""
     email: EmailStr
@@ -210,7 +226,72 @@ async def _count_org_admins(org_id: str, db):
     return result["count"] if result else 0
 
 
+def _permission_list(value) -> List[str]:
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except (TypeError, ValueError):
+            return []
+    if not isinstance(value, list):
+        return []
+    return [permission for permission in value if isinstance(permission, str)]
+
+
 # ── Endpoints ────────────────────────────────────────────────────────────────
+
+@router.get("", response_model=OrganizationsListResponse)
+async def list_organizations(
+    current_user: TokenData = Depends(get_current_active_user),
+):
+    """List the active organizations and effective role permissions for the current user."""
+    try:
+        async with get_db_connection() as db:
+            organizations = await db.fetch_all(
+                """
+                SELECT
+                    o.id,
+                    o.name,
+                    o.slug,
+                    o.domain,
+                    o.owner_id,
+                    o.created_at,
+                    om.role,
+                    org_role.permissions
+                FROM organizations o
+                JOIN org_members om
+                    ON om.org_id = o.id
+                    AND om.user_id = :user_id
+                    AND om.status = 'active'
+                LEFT JOIN org_roles org_role
+                    ON org_role.org_id = om.org_id
+                    AND org_role.name = om.role
+                WHERE o.is_active = TRUE
+                ORDER BY o.name
+                """,
+                {"user_id": current_user.user_id},
+            )
+        return {
+            "organizations": [
+                {
+                    "id": str(organization["id"]),
+                    "name": organization["name"],
+                    "slug": organization["slug"],
+                    "domain": organization["domain"],
+                    "owner_id": str(organization["owner_id"]),
+                    "created_at": (
+                        organization["created_at"].isoformat()
+                        if hasattr(organization["created_at"], "isoformat")
+                        else str(organization["created_at"])
+                    ),
+                    "role": organization["role"],
+                    "permissions": _permission_list(organization["permissions"]),
+                }
+                for organization in organizations
+            ]
+        }
+    except Exception as error:
+        logger.error("Error listing organizations: %s", error, exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to list organizations")
 
 @router.get("/{org_id}/members", response_model=MembersListResponse)
 async def list_org_members(

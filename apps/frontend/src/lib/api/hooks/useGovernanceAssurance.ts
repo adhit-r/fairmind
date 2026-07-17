@@ -337,6 +337,7 @@ export function useFrameworkAssignmentControls(orgId?: string, assignmentId?: st
   return {
     controls,
     readiness,
+    readinessLoading,
     loading: controlsLoading || readinessLoading,
     error: controlsError || readinessError,
     refresh,
@@ -419,6 +420,7 @@ export function useGovernanceAssurance(orgId?: string, systemId?: string, assign
   const {
     controls,
     readiness,
+    readinessLoading,
     loading: assessmentLoading,
     error: assessmentError,
     refresh: refreshAssessment,
@@ -447,6 +449,7 @@ export function useGovernanceAssurance(orgId?: string, systemId?: string, assign
     assignments,
     controls,
     readiness,
+    readinessLoading,
     evidenceRuns,
     loading: catalogLoading || assignmentsLoading || assessmentLoading || evidenceLoading || mappingsLoading,
     error: catalogError || assignmentsError || assessmentError || evidenceError || mappingsError,

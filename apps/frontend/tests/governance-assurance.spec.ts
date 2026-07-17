@@ -142,6 +142,7 @@ type MockOptions = {
   frameworkName?: string
   initiallyAssigned?: boolean
   permissions?: string[]
+  readinessDelayMs?: number
   role?: string
   secondSystemDelayMs?: number
 }
@@ -176,7 +177,7 @@ async function mockWorkbench(page: Page, options: MockOptions = {}) {
         organizations: [{
           ...organization,
           role: options.role ?? organization.role,
-          permissions: options.permissions,
+          permissions: options.permissions ?? [],
         }],
       })
     }
@@ -239,6 +240,9 @@ async function mockWorkbench(page: Page, options: MockOptions = {}) {
       return fulfillJson(route, controls)
     }
     if (path === '/api/v1/ai-governance/organizations/org-1/framework-assignments/assignment-1/readiness') {
+      if (options.readinessDelayMs) {
+        await new Promise((resolve) => setTimeout(resolve, options.readinessDelayMs))
+      }
       const missingEvidence = controls.filter((control) => control.accepted_evidence_count === 0).length
       return fulfillJson(route, {
         applicable: 2,
@@ -398,6 +402,17 @@ test('uses framework names dynamically and enforces read-only governance access'
 
   await workbench.getByRole('radio', { name: /AIUC-1 January, 2026/i }).check()
   await expect(workbench.getByRole('button', { name: /Activate AIUC-1 January, 2026/i })).toBeDisabled()
+})
+
+test('does not present unresolved readiness counts as zero', async ({ page }) => {
+  await mockWorkbench(page, { initiallyAssigned: true, readinessDelayMs: 650 })
+  await page.goto('/compliance-dashboard')
+  const readiness = page.getByRole('region', { name: 'AIUC-1 readiness' })
+
+  await expect(readiness.getByLabel('Loading readiness summary')).toBeVisible()
+  await expect(readiness.locator('dd', { hasText: /^0$/ })).toHaveCount(0)
+  await expect(readiness.getByLabel('Loading readiness summary')).toHaveCount(0)
+  await expect(readiness.locator('dd').first()).toHaveText('2')
 })
 
 test('permits model writers to activate and edit controls', async ({ page }) => {

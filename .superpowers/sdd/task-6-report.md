@@ -12,11 +12,13 @@ The workbench uses the existing Organization and AI-system contexts plus the Tas
 - Authorized AIUC-1 April, 2026 activation for the currently selected AI system.
 - Exact first-run guidance: `Activate a framework version for this AI system`.
 - Readiness summary strip with transparent counts rather than an unexplained score.
+- Readiness counts remain skeletons or explicit unknowns until the scoped summary request resolves; unresolved data is never rendered as zero.
 - Dense control table showing framework ID, requirement, obligation, application, owner, assessment state, accepted evidence count, latest evaluation, freshness, and open findings when provided by the assurance payload.
 - Backend enrichment from persisted control definitions, evidence mappings, evidence runs, and evidence artifacts; fields without a schema link, including control-specific findings, remain explicitly unknown.
 - Mandatory-control, missing-accepted-evidence, and text filters.
 - Inline A006.1 trace with parent requirement, mapping rationale, evidence timeline, and owner/applicability/state updates.
 - Organization owner/admin and `model:write` authorization for activation and assessment mutations, with an inspection-only trace for read-only roles.
+- The existing organization bootstrap route now supplies effective custom-role permissions from `org_roles`; owner/admin authorization remains role-based.
 - Scope-keyed request state and stale-response suppression so changing AI systems clears the prior assignment before the next fetch resolves.
 - Persisted AI-system selection precedence over the initialized fallback system.
 - Keyboard activation, expansion, filtering, and native form controls with visible focus states.
@@ -36,16 +38,20 @@ The focused Playwright spec was written first and observed failing three tests a
 6. Loading, empty, recoverable error, desktop, and mobile behavior.
 7. A delayed two-system switch with no stale controls or stale assessment mutation.
 8. Dynamic framework names plus admin, read-only, and `model:write` access modes.
+9. Delayed readiness resolution without provisional zero counts.
 
-The backend route regression seeds a real accepted evidence mapping and asserts the full enriched A006.1 response. A focused system-selection test asserts that a valid persisted selection wins over the initialized fallback.
+The backend route regression seeds a real accepted evidence mapping and asserts the full enriched A006.1 response. An organization-list contract test asserts effective custom-role permissions and owner role preservation through the real bootstrap route. A focused system-selection test asserts that a valid persisted selection wins over the initialized fallback.
 
 ## Validation
 
 - `cd apps/frontend && npx tsc --noEmit`
 - `cd apps/backend && uv run pytest tests/test_governance_assurance_routes.py -q` — 11 passed
+- `cd apps/backend && uv run pytest tests/test_organization_list_contract.py -q` — 1 passed
 - `cd apps/frontend && bun test src/components/workflow/SystemContext.test.ts` — 2 passed
-- `cd apps/frontend && npx playwright test tests/governance-assurance.spec.ts --reporter=line` — 6 passed
+- `cd apps/frontend && npx playwright test tests/governance-assurance.spec.ts --reporter=line` — 7 passed
 - `cd apps/frontend && npm run build`
+- `tooling/check_backend_layer_boundaries.sh`
+- `tooling/check_no_archive_imports.sh`
 - `git diff --check`
 - Desktop and 390 px mobile screenshots inspected from the route-mocked journey.
 

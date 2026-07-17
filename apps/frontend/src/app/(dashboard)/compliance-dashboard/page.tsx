@@ -22,6 +22,7 @@ function ReadinessStrip({
   frameworkName,
   versionLabel,
   readiness,
+  loading,
 }: {
   frameworkName: string
   versionLabel: string
@@ -32,13 +33,14 @@ function ReadinessStrip({
     missingEvidence: number
     blockingFindings: number
   } | null
+  loading: boolean
 }) {
   const measures = [
-    ['Applicable', readiness?.applicable ?? 0],
-    ['Accepted', readiness?.accepted ?? 0],
-    ['Ready for review', readiness?.readyForReview ?? 0],
-    ['Missing evidence', readiness?.missingEvidence ?? 0],
-    ['Blocking findings', readiness?.blockingFindings ?? 0],
+    ['Applicable', readiness?.applicable],
+    ['Accepted', readiness?.accepted],
+    ['Ready for review', readiness?.readyForReview],
+    ['Missing evidence', readiness?.missingEvidence],
+    ['Blocking findings', readiness?.blockingFindings],
   ] as const
 
   return (
@@ -49,11 +51,16 @@ function ReadinessStrip({
         </h2>
         <p className="text-xs font-black uppercase tracking-[0.12em]">Version {versionLabel}</p>
       </div>
-      <dl className="grid grid-cols-2 divide-x-2 divide-y-2 divide-[#0F1412] sm:grid-cols-5 sm:divide-y-0">
+      <dl
+        aria-label={loading ? 'Loading readiness summary' : undefined}
+        className="grid grid-cols-2 divide-x-2 divide-y-2 divide-[#0F1412] sm:grid-cols-5 sm:divide-y-0"
+      >
         {measures.map(([label, value]) => (
           <div key={label} className="min-h-[76px] px-3 py-3 first:col-span-2 sm:first:col-span-1">
             <dt className="text-[11px] font-black uppercase tracking-[0.1em] text-[#59615D]">{label}</dt>
-            <dd className="mt-1 text-xl font-black text-[#0F1412]">{value}</dd>
+            <dd className="mt-1 text-xl font-black text-[#0F1412]">
+              {loading ? <Skeleton className="h-7 w-10 rounded-none" /> : value ?? 'Unknown'}
+            </dd>
           </div>
         ))}
       </dl>
@@ -248,6 +255,7 @@ export default function ComplianceDashboardPage() {
             frameworkName={selectedFramework?.name || selectedVersion.name}
             versionLabel={selectedVersion.versionLabel}
             readiness={assurance.readiness}
+            loading={assurance.readinessLoading}
           />
           <ControlAssessmentTable
             controls={assurance.controls}
