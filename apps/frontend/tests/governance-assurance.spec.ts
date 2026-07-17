@@ -180,6 +180,13 @@ type MockOptions = {
   multipleFrameworks?: boolean
   environmentalImpact?: Record<string, unknown>
   savedReports?: Array<Record<string, unknown>>
+  secondSavedReports?: Array<Record<string, unknown>>
+  initialApprovalRequest?: Record<string, unknown>
+  firstApprovalDelayMs?: number
+  refreshApprovalDelayMs?: number
+  secondApprovalDelayMs?: number
+  firstReportHistoryDelayMs?: number
+  secondReportHistoryDelayMs?: number
 }
 
 function evidenceRun(controlAssessmentId = 'assessment-a006-1', mappingId = 'mapping-418-a006-1') {
@@ -252,9 +259,11 @@ async function mockWorkbench(page: Page, options: MockOptions = {}) {
   const artifactEvidence = structuredClone(options.artifactEvidence ?? [])
   const secondArtifactEvidence = structuredClone(options.secondArtifactEvidence ?? [])
   let mappingConflictPending = options.mappingConflictOnce ?? false
-  let approvalRequest: Record<string, unknown> | null = null
+  let approvalRequest: Record<string, unknown> | null = structuredClone(options.initialApprovalRequest ?? null)
   let approvalDecisions: Array<Record<string, unknown>> = []
+  let firstSystemApprovalLoads = 0
   let savedReports = structuredClone(options.savedReports ?? [])
+  let secondSavedReports = structuredClone(options.secondSavedReports ?? [])
 
   await page.addInitScript(() => {
     window.localStorage.setItem('access_token', 'playwright-token')
@@ -515,7 +524,20 @@ async function mockWorkbench(page: Page, options: MockOptions = {}) {
       return fulfillJson(route, [])
     }
     if (path === '/api/v1/ai-governance/approval/system/system-1') {
+      firstSystemApprovalLoads += 1
+      const delay = firstSystemApprovalLoads > 1
+        ? options.refreshApprovalDelayMs
+        : options.firstApprovalDelayMs
+      if (delay) {
+        await new Promise((resolve) => setTimeout(resolve, delay))
+      }
       return fulfillJson(route, { systemId: system.id, request: approvalRequest, decisions: approvalDecisions })
+    }
+    if (path === '/api/v1/ai-governance/approval/system/system-2') {
+      if (options.secondApprovalDelayMs) {
+        await new Promise((resolve) => setTimeout(resolve, options.secondApprovalDelayMs))
+      }
+      return fulfillJson(route, { systemId: secondSystem.id, request: null, decisions: [] })
     }
     if (path === '/api/v1/ai-governance/approval/system/system-1/request' && request.method() === 'POST') {
       approvalRequest = {
@@ -541,6 +563,16 @@ async function mockWorkbench(page: Page, options: MockOptions = {}) {
       return fulfillJson(route, options.environmentalImpact ?? {})
     }
     if (path === '/api/v1/ai-governance/reports' && request.method() === 'GET') {
+      const systemId = url.searchParams.get('system_id')
+      if (systemId === secondSystem.id) {
+        if (options.secondReportHistoryDelayMs) {
+          await new Promise((resolve) => setTimeout(resolve, options.secondReportHistoryDelayMs))
+        }
+        return fulfillJson(route, secondSavedReports)
+      }
+      if (options.firstReportHistoryDelayMs) {
+        await new Promise((resolve) => setTimeout(resolve, options.firstReportHistoryDelayMs))
+      }
       return fulfillJson(route, savedReports)
     }
     if (path === '/api/v1/ai-governance/reports/generate' && request.method() === 'POST') {
@@ -1034,4 +1066,96 @@ test('keeps report generation, preview, saved history, and exports reachable on 
   await studio.getByRole('button', { name: 'Generate report' }).click()
   await expect(studio.getByRole('heading', { name: 'Claims Review Agent' })).toBeVisible()
   await expect(studio).toContainText('Governance Assurance Summary')
+})
+
+test('clears approval actions while a newly selected system approval is loading', async ({ page }) => {
+  await mockWorkbench(page, {
+    initiallyAssigned: true,
+    initialApprovalRequest: {
+      id: 'approval-1',
+      status: 'pending',
+      requested_by: 'model-owner@acme.test',
+      createdAt: '2026-07-17T13:00:00Z',
+    },
+    secondApprovalDelayMs: 650,
+  })
+
+  await page.goto('/ai-governance')
+  const approval = page.getByRole('region', { name: 'Approval decision' })
+  await expect(approval.getByRole('button', { name: 'Approve request' })).toBeVisible()
+
+  await page.getByRole('combobox', { name: 'System scope' }).click()
+  await page.getByRole('option', { name: secondSystem.name }).click()
+
+  await expect(approval.getByLabel('Loading approval decision')).toBeVisible()
+  await expect(approval.getByRole('button', { name: 'Approve request' })).toHaveCount(0)
+  await expect(approval.getByRole('button', { name: 'Reject request' })).toHaveCount(0)
+  await expect(approval.getByText('Not submitted', { exact: true })).toBeVisible()
+  await expect(approval.getByRole('button', { name: 'Submit for approval' })).toBeVisible()
+})
+
+test('does not let an old-system refresh strand the newly selected approval scope', async ({ page }) => {
+  await mockWorkbench(page, {
+    initiallyAssigned: true,
+    refreshApprovalDelayMs: 650,
+    secondApprovalDelayMs: 100,
+  })
+
+  await page.goto('/ai-governance')
+  const approval = page.getByRole('region', { name: 'Approval decision' })
+  await expect(approval.getByText('Not submitted', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Refresh overview' }).click()
+  await page.getByRole('combobox', { name: 'System scope' }).click()
+  await page.getByRole('option', { name: secondSystem.name }).click()
+
+  await page.waitForTimeout(850)
+  await expect(approval.getByLabel('Loading approval decision')).toHaveCount(0)
+  await expect(approval.getByText('Not submitted', { exact: true })).toBeVisible()
+  await expect(approval.getByRole('button', { name: 'Submit for approval' })).toBeVisible()
+})
+
+test('keeps report history and preview pinned to the current system across delayed responses', async ({ page }) => {
+  await mockWorkbench(page, {
+    initiallyAssigned: true,
+    firstReportHistoryDelayMs: 650,
+    savedReports: [{
+      id: 'claims-report',
+      systemId: system.id,
+      reportType: 'governance',
+      title: 'Claims assurance snapshot',
+      generatedBy: 'reviewer@acme.test',
+      config: { frameworks: ['AIUC-1 April, 2026'], sections: [] },
+      data: { system: { name: system.name }, generatedAt: '2026-07-17T10:00:00Z' },
+      createdAt: '2026-07-17T10:00:00Z',
+    }],
+    secondSavedReports: [{
+      id: 'underwriting-report',
+      systemId: secondSystem.id,
+      reportType: 'governance',
+      title: 'Underwriting assurance snapshot',
+      generatedBy: 'reviewer@acme.test',
+      config: { frameworks: ['AIUC-1 April, 2026'], sections: [] },
+      data: { system: { name: secondSystem.name }, generatedAt: '2026-07-17T11:00:00Z' },
+      createdAt: '2026-07-17T11:00:00Z',
+    }],
+  })
+
+  await page.goto('/reports?view=builder')
+  const studio = page.getByRole('region', { name: 'Report builder and history' })
+  await expect(studio.getByRole('heading', { name: 'Assurance Report Studio' })).toBeVisible()
+  await page.getByRole('combobox', { name: 'System scope' }).click()
+  await page.getByRole('option', { name: secondSystem.name }).click()
+
+  await expect(studio).toContainText('Underwriting assurance snapshot')
+  await expect(studio).not.toContainText('Claims assurance snapshot')
+  await page.waitForTimeout(800)
+  await expect(studio).toContainText('Underwriting assurance snapshot')
+  await expect(studio).not.toContainText('Claims assurance snapshot')
+
+  await studio.getByRole('button', { name: 'Preview' }).click()
+  await expect(studio).toContainText('Selected preview · Underwriting assurance snapshot')
+  await page.getByRole('combobox', { name: 'System scope' }).click()
+  await page.getByRole('option', { name: system.name }).click()
+  await expect(studio).not.toContainText('Selected preview · Underwriting assurance snapshot')
+  await expect(studio).not.toContainText('Underwriting assurance snapshot')
 })

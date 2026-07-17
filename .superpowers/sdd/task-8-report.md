@@ -17,6 +17,8 @@ Implemented:
 - environmental governance retained with the existing system environmental-impact hook;
 - cross-catalog assignment resolution and an explicit framework selector on Overview and Reports;
 - the existing report generator, preview, saved history, and JSON/PDF exports consolidated into `/reports`;
+- system- and framework-scoped request sequencing that clears stale approval actions, report previews, and report history during scope changes;
+- content-rich PDF exports containing readiness, rejected assessments, evidence hashes, unresolved findings, risks, remediation, decisions, limitations, and the certification boundary;
 - read-only auditor mode on the same `/reports` route, selected by permission or `mode=auditor`;
 - builder navigation back to control assessment and evidence mapping review;
 - preservation links to Evidence & Evaluations, Findings, and Remediation from Overview;
@@ -27,16 +29,16 @@ No certification or automatic-compliance claim is rendered. Unknown or unavailab
 
 ## TDD evidence
 
-The Task 8 Playwright tests were added before production changes. The initial three-test run failed at the new Overview heading, new Reports heading, and auditor-mode label because those surfaces did not exist. Review follow-up tests were also observed failing before implementation for missing approval/environmental regions, incorrect cross-framework resolution, and the absent report studio. The focused tests and complete assurance journey now pass.
+The Task 8 Playwright tests were added before production changes. The initial three-test run failed at the new Overview heading, new Reports heading, and auditor-mode label because those surfaces did not exist. Review follow-up tests were also observed failing before implementation for missing approval/environmental regions, incorrect cross-framework resolution, the absent report studio, stale approval actions during system switches, and the missing content-level PDF builder. The focused tests and complete assurance journey now pass.
 
 ## Verification
 
 | Check | Result |
 | --- | --- |
 | `uv run pytest tests/test_governance_assurance_models.py tests/test_framework_catalog_service.py tests/test_governance_assurance_routes.py tests/test_governance_evidence_runs.py -q` | 49 passed |
-| `bun test src/lib/api/hooks/useGovernanceAssurance.test.ts` | 7 passed |
+| `bun test src/lib/api/hooks/useGovernanceAssurance.test.ts 'src/app/(dashboard)/reports/components/AssuranceReportStudio.test.ts'` | 9 passed |
 | `./node_modules/.bin/tsc --noEmit --pretty false` | passed |
-| `npx playwright test tests/governance-assurance.spec.ts --project=chromium --workers=1 --reporter=line` | 18 passed |
+| `npx playwright test tests/governance-assurance.spec.ts --project=chromium --workers=1 --reporter=line` | 21 passed |
 | `npm run build` | passed; 54 routes generated |
 | `tooling/check_backend_layer_boundaries.sh` | passed |
 | `tooling/check_no_archive_imports.sh` | passed |

@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { IconAlertTriangle, IconArrowRight, IconLeaf, IconLockCheck, IconRefresh } from '@tabler/icons-react'
 
 import { useSystemContext } from '@/components/workflow/SystemContext'
@@ -58,8 +58,19 @@ export default function AIGovernancePage() {
     decideApprovalRequest,
   } = useAIGovernance()
   const environmental = useEnvironmentalImpact(selectedSystem.id)
-  const [approvalState, setApprovalState] = useState<Awaited<ReturnType<typeof getSystemApproval>> | null>(null)
-  const [approvalError, setApprovalError] = useState<string | null>(null)
+  type ApprovalState = Awaited<ReturnType<typeof getSystemApproval>>
+  const approvalRequestIdRef = useRef(0)
+  const approvalSystemIdRef = useRef(selectedSystem.id)
+  approvalSystemIdRef.current = selectedSystem.id
+  const [approvalSnapshot, setApprovalSnapshot] = useState<{
+    systemId: string
+    state: ApprovalState | null
+    loading: boolean
+    error: string | null
+  }>({ systemId: selectedSystem.id, state: null, loading: true, error: null })
+  const approvalState = approvalSnapshot.systemId === selectedSystem.id ? approvalSnapshot.state : null
+  const approvalError = approvalSnapshot.systemId === selectedSystem.id ? approvalSnapshot.error : null
+  const approvalScopeLoading = approvalSnapshot.systemId !== selectedSystem.id || approvalSnapshot.loading
   const environmentalRecommendation = typeof environmental.data?.recommendation === 'string'
     ? environmental.data.recommendation
     : environmental.data?.recommendation?.status
@@ -67,25 +78,85 @@ export default function AIGovernancePage() {
     ? `${environmentalRecommendation[0].toUpperCase()}${environmentalRecommendation.slice(1)}`
     : 'Not recorded'
 
+  const loadApproval = useCallback(async (systemId: string) => {
+    const requestId = ++approvalRequestIdRef.current
+    setApprovalSnapshot({ systemId, state: null, loading: true, error: null })
+    try {
+      const state = await getSystemApproval(systemId)
+      if (requestId === approvalRequestIdRef.current && approvalSystemIdRef.current === systemId) {
+        setApprovalSnapshot({ systemId, state, loading: false, error: null })
+      }
+    } catch (reason) {
+      if (requestId === approvalRequestIdRef.current && approvalSystemIdRef.current === systemId) {
+        setApprovalSnapshot({
+          systemId,
+          state: null,
+          loading: false,
+          error: reason instanceof Error ? reason.message : 'Approval state unavailable',
+        })
+      }
+    }
+  }, [getSystemApproval])
+
   useEffect(() => {
-    let active = true
-    void getSystemApproval(selectedSystem.id)
-      .then((state) => {
-        if (active) setApprovalState(state)
-      })
-      .catch((reason) => {
-        if (active) setApprovalError(reason instanceof Error ? reason.message : 'Approval state unavailable')
-      })
-    return () => { active = false }
-  }, [getSystemApproval, selectedSystem.id])
+    void loadApproval(selectedSystem.id)
+  }, [loadApproval, selectedSystem.id])
 
   const refresh = async () => {
+    const systemId = selectedSystem.id
     await Promise.all([assuranceBase.refresh(), assurance.refresh()])
+    if (approvalSystemIdRef.current === systemId) {
+      await loadApproval(systemId)
+    }
+  }
+
+  const decideApproval = async (decision: 'approved' | 'rejected') => {
+    const systemId = selectedSystem.id
+    const requestId = approvalState?.request?.id
+    if (!requestId || approvalSnapshot.systemId !== systemId || approvalSnapshot.loading) return
+    const actionId = ++approvalRequestIdRef.current
+    setApprovalSnapshot((current) => ({ ...current, loading: true, error: null }))
     try {
-      setApprovalState(await getSystemApproval(selectedSystem.id))
-      setApprovalError(null)
+      await decideApprovalRequest(
+        requestId,
+        decision,
+        decision === 'approved'
+          ? 'Approved after assurance review.'
+          : 'Rejected pending assurance blockers.',
+        selectedSystem.owner,
+      )
+      if (actionId === approvalRequestIdRef.current && approvalSystemIdRef.current === systemId) {
+        await loadApproval(systemId)
+      }
     } catch (reason) {
-      setApprovalError(reason instanceof Error ? reason.message : 'Approval state unavailable')
+      if (actionId === approvalRequestIdRef.current && approvalSystemIdRef.current === systemId) {
+        setApprovalSnapshot((current) => ({
+          ...current,
+          loading: false,
+          error: reason instanceof Error ? reason.message : 'Approval decision failed',
+        }))
+      }
+    }
+  }
+
+  const submitApproval = async () => {
+    const systemId = selectedSystem.id
+    if (approvalSnapshot.systemId !== systemId || approvalSnapshot.loading) return
+    const actionId = ++approvalRequestIdRef.current
+    setApprovalSnapshot((current) => ({ ...current, loading: true, error: null }))
+    try {
+      const state = await requestSystemApproval(systemId, selectedSystem.owner)
+      if (actionId === approvalRequestIdRef.current && approvalSystemIdRef.current === systemId) {
+        setApprovalSnapshot({ systemId, state, loading: false, error: null })
+      }
+    } catch (reason) {
+      if (actionId === approvalRequestIdRef.current && approvalSystemIdRef.current === systemId) {
+        setApprovalSnapshot((current) => ({
+          ...current,
+          loading: false,
+          error: reason instanceof Error ? reason.message : 'Approval request failed',
+        }))
+      }
     }
   }
 
@@ -252,7 +323,12 @@ export default function AIGovernancePage() {
                 </div>
               </div>
               <div className="space-y-4 p-5">
-                <div>
+                {approvalScopeLoading ? (
+                  <div aria-label="Loading approval decision" className="space-y-2">
+                    <Skeleton className="h-4 w-28 rounded-none" />
+                    <Skeleton className="h-9 w-44 rounded-none" />
+                  </div>
+                ) : <div>
                   <p className="text-xs font-black uppercase tracking-[0.1em] text-[#59615D]">Current state</p>
                   <p className="mt-1 text-2xl font-black">
                     {approvalState?.request?.status
@@ -262,22 +338,14 @@ export default function AIGovernancePage() {
                   {approvalState?.decisions?.at(-1) ? (
                     <p className="mt-2 text-sm font-bold">Latest decision: <span className="capitalize">{approvalState.decisions.at(-1)?.decision}</span>. {approvalState.decisions.at(-1)?.notes || 'No decision rationale recorded.'}</p>
                   ) : null}
-                </div>
+                </div>}
                 {approvalError ? <p role="alert" className="border-2 border-[#D83A2E] bg-[#FFF0ED] p-3 text-sm font-bold">{approvalError}</p> : null}
-                {canDecide && approvalState?.request?.status === 'pending' ? (
+                {!approvalScopeLoading && canDecide && approvalState?.request?.status === 'pending' ? (
                   <div className="grid gap-3 sm:grid-cols-2">
                     <Button
                       type="button"
-                      disabled={approvalLoading}
-                      onClick={async () => {
-                        try {
-                          await decideApprovalRequest(approvalState.request!.id, 'approved', 'Approved after assurance review.', selectedSystem.owner)
-                          setApprovalState(await getSystemApproval(selectedSystem.id))
-                          setApprovalError(null)
-                        } catch (reason) {
-                          setApprovalError(reason instanceof Error ? reason.message : 'Approval decision failed')
-                        }
-                      }}
+                      disabled={approvalLoading || approvalSnapshot.loading}
+                      onClick={() => void decideApproval('approved')}
                       className="rounded-none border-2 border-[#0F1412] bg-[oklch(0.60_0.13_163)] font-black uppercase text-[#0F1412]"
                     >
                       Approve request
@@ -285,40 +353,25 @@ export default function AIGovernancePage() {
                     <Button
                       type="button"
                       variant="neutral"
-                      disabled={approvalLoading}
-                      onClick={async () => {
-                        try {
-                          await decideApprovalRequest(approvalState.request!.id, 'rejected', 'Rejected pending assurance blockers.', selectedSystem.owner)
-                          setApprovalState(await getSystemApproval(selectedSystem.id))
-                          setApprovalError(null)
-                        } catch (reason) {
-                          setApprovalError(reason instanceof Error ? reason.message : 'Approval decision failed')
-                        }
-                      }}
+                      disabled={approvalLoading || approvalSnapshot.loading}
+                      onClick={() => void decideApproval('rejected')}
                       className="rounded-none border-2 border-[#0F1412] bg-[#FFF0ED] font-black uppercase"
                     >
                       Reject request
                     </Button>
                   </div>
-                ) : canDecide && approvalState?.request?.status !== 'pending' ? (
+                ) : !approvalScopeLoading && canDecide && approvalState?.request?.status !== 'pending' ? (
                   <Button
                     type="button"
-                    disabled={approvalLoading}
-                    onClick={async () => {
-                      try {
-                        setApprovalState(await requestSystemApproval(selectedSystem.id, selectedSystem.owner))
-                        setApprovalError(null)
-                      } catch (reason) {
-                        setApprovalError(reason instanceof Error ? reason.message : 'Approval request failed')
-                      }
-                    }}
+                    disabled={approvalLoading || approvalSnapshot.loading}
+                    onClick={() => void submitApproval()}
                     className="rounded-none border-2 border-[#0F1412] bg-[#E97522] font-black uppercase text-[#0F1412]"
                   >
                     Submit for approval
                   </Button>
-                ) : (
+                ) : !approvalScopeLoading ? (
                   <p className="text-sm font-bold text-[#59615D]">Read-only access. Approval actions require organization mutation permission.</p>
-                )}
+                ) : null}
               </div>
             </section>
 

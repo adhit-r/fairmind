@@ -358,6 +358,29 @@ export default function ReportsPage() {
               readiness: selectedSystem.readiness,
             }}
             frameworkLabel={`${frameworkName} ${assignedVersion.versionLabel}`}
+            assurance={{
+              frameworkLabel: `${frameworkName} ${assignedVersion.versionLabel}`,
+              readiness: readiness ? {
+                applicable: readiness.applicable,
+                accepted: readiness.accepted,
+                blockingFindings: readiness.blockingFindings,
+                missingEvidence: readiness.missingEvidence,
+                staleEvidence: readiness.staleEvidence,
+              } : null,
+              evidenceRuns: assurance.evidenceRuns.map((run) => ({
+                sourceIdentifier: run.sourceIdentifier,
+                suiteName: run.suiteName,
+                contentHash: run.contentHash,
+                result: run.result,
+                capturedAt: run.capturedAt,
+              })),
+              controls: assurance.controls.map((control) => ({
+                externalId: control.externalId,
+                title: control.title,
+                openFindings: control.openFindings,
+              })),
+              limitations,
+            }}
             readOnly={auditorMode}
           />
 

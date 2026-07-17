@@ -112,7 +112,9 @@ Reports & Assurance pins the company, AI system, framework name, immutable versi
 - evaluation limitations; and
 - evidence-run history retained for the scoped system.
 
-Below the assurance summary, the Report Studio keeps the existing operational-report workflow reachable on `/reports`: authorized builders can generate a stored governance snapshot, preview it, revisit saved report history, and export JSON or PDF. Auditor mode can preview and export saved reports but cannot generate a new snapshot. The operational preview is kept separate because its legacy system-readiness field is not the framework readiness calculation above.
+Below the assurance summary, the Report Studio keeps the existing operational-report workflow reachable on `/reports`: authorized builders can generate a stored governance snapshot, preview it, revisit saved report history, and export JSON or PDF. History, previews, generation responses, and export actions are pinned to the selected system and framework scope; switching scope clears the prior records while the new history loads. Auditor mode can preview and export saved reports but cannot generate a new snapshot. The operational preview is kept separate because its legacy system-readiness field is not the framework readiness calculation above.
+
+PDF exports are labelled as current assurance packages with their export time and the historical operational report used as their risk, remediation, and approval source. They include the selected framework scope, transparent readiness and rejected-assessment counts, the evidence index with full hashes, open control findings, recorded risks, remediation, approval records, limitations, and the certification-boundary disclaimer. Missing sections remain explicit rather than being represented as successful or complete. Only reports pinned to exactly one matching system/framework scope are offered for scoped preview or export.
 
 The assurance summary is a live review surface, not a signed assurance opinion. Preserve exported evidence, saved reports, and decision records under the organization's records policy if an immutable review package is required.
 
