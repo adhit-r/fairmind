@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="330" viewBox="0 0 760 330" role="img" aria-label="FairMind-E baseline exact-match comparison">
+<rect width="100%" height="100%" fill="#FFFFFF"/>
+<text x="36" y="38" font-size="24" font-family="Arial, sans-serif" font-weight="700" fill="#111111">FairMind-E baseline comparison</text>
+<text x="36" y="64" font-size="13" font-family="Arial, sans-serif" fill="#333333">Exact gate-label matches against the 14-case paper fixture.</text>
+<line x1="42" y1="252" x2="710" y2="252" stroke="#111111" stroke-width="3"/>
+<rect x="62" y="165" width="84" height="85" fill="#0F766E" stroke="#111111" stroke-width="2"/>
+<text x="62" y="157" font-size="12" font-family="Arial, sans-serif" fill="#111111">7/14</text>
+<text x="62" y="286" font-size="11" font-family="Arial, sans-serif" fill="#111111">carbon only gate</text>
+<rect x="216" y="80" width="84" height="170" fill="#F97316" stroke="#111111" stroke-width="2"/>
+<text x="216" y="72" font-size="12" font-family="Arial, sans-serif" fill="#111111">14/14</text>
+<text x="216" y="286" font-size="11" font-family="Arial, sans-serif" fill="#111111">fairmind e</text>
+<rect x="370" y="178" width="84" height="72" fill="#111111" stroke="#111111" stroke-width="2"/>
+<text x="370" y="170" font-size="12" font-family="Arial, sans-serif" fill="#111111">6/14</text>
+<text x="370" y="286" font-size="11" font-family="Arial, sans-serif" fill="#111111">generic sustainability score</text>
+<rect x="524" y="214" width="84" height="36" fill="#14B8A6" stroke="#111111" stroke-width="2"/>
+<text x="524" y="206" font-size="12" font-family="Arial, sans-serif" fill="#111111">3/14</text>
+<text x="524" y="286" font-size="11" font-family="Arial, sans-serif" fill="#111111">no environmental gate</text>
+</svg>

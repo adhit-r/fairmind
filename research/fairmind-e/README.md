@@ -65,4 +65,4 @@ uv run python ../../research/fairmind-e/evaluation/evaluate_gate.py --output-roo
 uv run python ../../research/fairmind-e/tests/test_gate_evaluation.py
 ```
 
-The output is a deterministic CSV, Markdown summary, and SVG plot. This validates gate-label behavior only; it is not a real emissions measurement study.
+The output is deterministic FairMind-E and baseline CSVs, a Markdown summary, and SVG plots. This validates gate-label behavior only; it is not a real emissions measurement study.

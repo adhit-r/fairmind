@@ -43,6 +43,19 @@ CSV_COLUMNS = [
     "failure_reason",
 ]
 
+BASELINE_COLUMNS = [
+    "baseline",
+    "case_id",
+    "expected_recommendation",
+    "actual_recommendation",
+    "expected_approval_blocking",
+    "actual_approval_blocking",
+    "recommendation_match",
+    "approval_blocking_match",
+    "exact_match",
+    "notes",
+]
+
 
 def bool_text(value: bool) -> str:
     return "true" if bool(value) else "false"
@@ -107,6 +120,106 @@ def evaluate_cases(cases: list[dict[str, Any]]) -> list[dict[str, str]]:
     return [evaluate_case(case) for case in cases]
 
 
+def carbon_only_prediction(impact_tier: str) -> tuple[str, bool, str]:
+    """Impact-only gate: no provenance, uncertainty, mitigation, or exception state."""
+    if impact_tier == "low":
+        return "go", False, "Low impact passes without evidence-quality checks."
+    if impact_tier == "medium":
+        return "conditional_go", True, "Medium impact is blocked pending generic mitigation."
+    return "no_go", True, "High impact is blocked based on carbon tier alone."
+
+
+def generic_sustainability_prediction(impact_tier: str) -> tuple[str, bool, str]:
+    """Single-score gate that cannot represent provenance or mitigation readiness."""
+    scores = {"low": 0.85, "medium": 0.55, "high": 0.25}
+    score = scores[impact_tier]
+    if score >= 0.70:
+        return "go", False, f"Generic sustainability score {score:.2f} passes."
+    if score >= 0.45:
+        return "conditional_go", False, f"Generic sustainability score {score:.2f} warns but does not block."
+    return "no_go", True, f"Generic sustainability score {score:.2f} blocks."
+
+
+def baseline_row(
+    *,
+    baseline: str,
+    case_id: str,
+    expected: dict[str, Any],
+    recommendation: str,
+    approval_blocking: bool,
+    notes: str,
+) -> dict[str, str]:
+    recommendation_match = str(expected["recommendation"]) == recommendation
+    blocking_match = bool(expected["approval_blocking"]) == approval_blocking
+    return {
+        "baseline": baseline,
+        "case_id": case_id,
+        "expected_recommendation": str(expected["recommendation"]),
+        "actual_recommendation": recommendation,
+        "expected_approval_blocking": bool_text(bool(expected["approval_blocking"])),
+        "actual_approval_blocking": bool_text(approval_blocking),
+        "recommendation_match": bool_text(recommendation_match),
+        "approval_blocking_match": bool_text(blocking_match),
+        "exact_match": bool_text(recommendation_match and blocking_match),
+        "notes": notes,
+    }
+
+
+def evaluate_baselines(cases: list[dict[str, Any]]) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    for case in cases:
+        expected = case["expected"]
+        assessment = normalize_assessment(case["assessment"])
+        result = run_assessment(assessment)
+        case_id = str(case["id"])
+
+        rows.append(
+            baseline_row(
+                baseline="fairmind_e",
+                case_id=case_id,
+                expected=expected,
+                recommendation=result.recommendation,
+                approval_blocking=bool(result.approval_blocking),
+                notes="Full provenance, confidence, impact, mitigation, exception, and offset-aware gate.",
+            )
+        )
+        rows.append(
+            baseline_row(
+                baseline="no_environmental_gate",
+                case_id=case_id,
+                expected=expected,
+                recommendation="go",
+                approval_blocking=False,
+                notes="Always approves; no environmental release gate.",
+            )
+        )
+
+        recommendation, approval_blocking, notes = carbon_only_prediction(result.impact_tier)
+        rows.append(
+            baseline_row(
+                baseline="carbon_only_gate",
+                case_id=case_id,
+                expected=expected,
+                recommendation=recommendation,
+                approval_blocking=approval_blocking,
+                notes=notes,
+            )
+        )
+
+        recommendation, approval_blocking, notes = generic_sustainability_prediction(result.impact_tier)
+        rows.append(
+            baseline_row(
+                baseline="generic_sustainability_score",
+                case_id=case_id,
+                expected=expected,
+                recommendation=recommendation,
+                approval_blocking=approval_blocking,
+                notes=notes,
+            )
+        )
+    return rows
+
+
 def count_by(rows: list[dict[str, str]], key: str) -> dict[str, int]:
     counts: dict[str, int] = {}
     for row in rows:
@@ -135,6 +248,31 @@ def summarize(rows: list[dict[str, str]]) -> dict[str, Any]:
     }
 
 
+def summarize_baselines(rows: list[dict[str, str]]) -> list[dict[str, Any]]:
+    by_name: dict[str, list[dict[str, str]]] = {}
+    for row in rows:
+        by_name.setdefault(row["baseline"], []).append(row)
+
+    summaries = []
+    for name in sorted(by_name):
+        baseline_rows = by_name[name]
+        total = len(baseline_rows)
+        exact = sum(1 for row in baseline_rows if row["exact_match"] == "true")
+        recommendations = sum(1 for row in baseline_rows if row["recommendation_match"] == "true")
+        blocking = sum(1 for row in baseline_rows if row["approval_blocking_match"] == "true")
+        summaries.append(
+            {
+                "baseline": name,
+                "total": total,
+                "exact": exact,
+                "accuracy": exact / total if total else 0.0,
+                "recommendation_matches": recommendations,
+                "approval_blocking_matches": blocking,
+            }
+        )
+    return summaries
+
+
 def write_csv(path: pathlib.Path, rows: list[dict[str, str]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as handle:
@@ -143,11 +281,28 @@ def write_csv(path: pathlib.Path, rows: list[dict[str, str]]) -> None:
         writer.writerows(rows)
 
 
-def write_summary(path: pathlib.Path, rows: list[dict[str, str]], fixture: dict[str, Any]) -> None:
+def write_baseline_csv(path: pathlib.Path, rows: list[dict[str, str]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=BASELINE_COLUMNS, lineterminator="\n")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def write_summary(
+    path: pathlib.Path,
+    rows: list[dict[str, str]],
+    baseline_rows: list[dict[str, str]],
+    fixture: dict[str, Any],
+) -> None:
     summary = summarize(rows)
     expected = summary["expected_recommendations"]
     actual = summary["actual_recommendations"]
     failures = summary["failures"]
+    baseline_table = "\n".join(
+        "| {baseline} | {exact}/{total} | {accuracy:.1%} | {recommendation_matches}/{total} | {approval_blocking_matches}/{total} |".format(**item)
+        for item in summarize_baselines(baseline_rows)
+    )
     failure_text = "None." if not failures else "\n".join(
         f"- `{row['case_id']}`: {row['failure_reason']}" for row in failures
     )
@@ -175,6 +330,12 @@ Claim under test: {fixture.get("claim", "")}
 - `go`: {actual.get("go", 0)}
 - `conditional_go`: {actual.get("conditional_go", 0)}
 - `no_go`: {actual.get("no_go", 0)}
+
+## Baseline Comparison
+
+| Gate | Exact Matches | Exact Accuracy | Recommendation Matches | Approval-Blocking Matches |
+| --- | ---: | ---: | ---: | ---: |
+{baseline_table}
 
 ## Failures
 
@@ -236,12 +397,47 @@ def write_svg(path: pathlib.Path, rows: list[dict[str, str]]) -> None:
     path.write_text(svg, encoding="utf-8")
 
 
+def write_baseline_svg(path: pathlib.Path, baseline_rows: list[dict[str, str]]) -> None:
+    summaries = summarize_baselines(baseline_rows)
+    max_total = max([1, *(item["total"] for item in summaries)])
+    colors = ["#0F766E", "#F97316", "#111111", "#14B8A6"]
+    bars: list[str] = []
+    for index, item in enumerate(summaries):
+        height = int(170 * item["exact"] / max_total)
+        x = 62 + index * 154
+        y = 250 - height
+        label = item["baseline"].replace("_", " ")
+        bars.append(
+            f'<rect x="{x}" y="{y}" width="84" height="{height}" fill="{colors[index % len(colors)]}" stroke="#111111" stroke-width="2"/>'
+        )
+        bars.append(
+            f'<text x="{x}" y="{max(22, y - 8)}" font-size="12" font-family="Arial, sans-serif" fill="#111111">{item["exact"]}/{item["total"]}</text>'
+        )
+        bars.append(
+            f'<text x="{x}" y="286" font-size="11" font-family="Arial, sans-serif" fill="#111111">{html.escape(label)}</text>'
+        )
+
+    svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="760" height="330" viewBox="0 0 760 330" role="img" aria-label="FairMind-E baseline exact-match comparison">
+<rect width="100%" height="100%" fill="#FFFFFF"/>
+<text x="36" y="38" font-size="24" font-family="Arial, sans-serif" font-weight="700" fill="#111111">FairMind-E baseline comparison</text>
+<text x="36" y="64" font-size="13" font-family="Arial, sans-serif" fill="#333333">Exact gate-label matches against the 14-case paper fixture.</text>
+<line x1="42" y1="252" x2="710" y2="252" stroke="#111111" stroke-width="3"/>
+{chr(10).join(bars)}
+</svg>
+"""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(svg, encoding="utf-8")
+
+
 def run(fixture_path: pathlib.Path, output_root: pathlib.Path) -> dict[str, Any]:
     fixture = load_fixture(fixture_path)
     rows = evaluate_cases(fixture["cases"])
+    baseline_rows = evaluate_baselines(fixture["cases"])
     write_csv(output_root / "results" / "paper_gate_eval.csv", rows)
-    write_summary(output_root / "results" / "paper_gate_summary.md", rows, fixture)
+    write_baseline_csv(output_root / "results" / "paper_baseline_comparison.csv", baseline_rows)
+    write_summary(output_root / "results" / "paper_gate_summary.md", rows, baseline_rows, fixture)
     write_svg(output_root / "plots" / "paper_gate_decisions.svg", rows)
+    write_baseline_svg(output_root / "plots" / "paper_baseline_accuracy.svg", baseline_rows)
     return summarize(rows)
 
 

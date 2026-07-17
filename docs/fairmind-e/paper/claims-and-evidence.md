@@ -7,6 +7,7 @@ FairMind-E can encode environmental release decisions as machine-checkable gover
 Evidence:
 - `research/fairmind-e/evaluation/fixtures/paper_gate_cases.json`
 - `research/fairmind-e/evaluation/results/paper_gate_eval.csv`
+- `research/fairmind-e/evaluation/results/paper_baseline_comparison.csv`
 - `research/fairmind-e/evaluation/results/paper_gate_summary.md`
 
 Current status: supported only for the hand-labeled fixture set.
@@ -21,6 +22,12 @@ Evidence:
 - Manual evidence below the estimated band is blocked for medium impact.
 
 Current status: demonstrated by fixtures, not yet by an external benchmark.
+
+Baseline comparison:
+- FairMind-E exact matches: 14/14.
+- carbon-only gate exact matches: 7/14.
+- generic sustainability-score gate exact matches: 6/14.
+- no environmental gate exact matches: 3/14.
 
 ## Claim 3
 

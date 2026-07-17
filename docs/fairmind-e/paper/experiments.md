@@ -13,13 +13,21 @@ uv run python ../../research/fairmind-e/evaluation/evaluate_gate.py --output-roo
 
 Outputs:
 - `research/fairmind-e/evaluation/results/paper_gate_eval.csv`
+- `research/fairmind-e/evaluation/results/paper_baseline_comparison.csv`
 - `research/fairmind-e/evaluation/results/paper_gate_summary.md`
 - `research/fairmind-e/evaluation/plots/paper_gate_decisions.svg`
+- `research/fairmind-e/evaluation/plots/paper_baseline_accuracy.svg`
 
 Current result:
 - Exact label accuracy: 14/14
 - Recommendation matches: 14/14
 - Approval-blocking matches: 14/14
+
+Baseline exact matches:
+- FairMind-E: 14/14
+- carbon-only gate: 7/14
+- generic sustainability score: 6/14
+- no environmental gate: 3/14
 
 ## Cases Covered
 
@@ -34,9 +42,4 @@ Current result:
 
 ## Next Experiment
 
-Add baseline evaluators:
-- no environmental gate,
-- carbon-only gate,
-- generic sustainability score gate.
-
-Do this only after the fixture labels are stable.
+Add a small ablation table that separates provenance, mitigation, exception, and offset handling one at a time. Keep it fixture-based until real workload measurements are available.

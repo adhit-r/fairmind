@@ -1,0 +1,57 @@
+baseline,case_id,expected_recommendation,actual_recommendation,expected_approval_blocking,actual_approval_blocking,recommendation_match,approval_blocking_match,exact_match,notes
+fairmind_e,measured_training_low_go,go,go,false,false,true,true,true,"Full provenance, confidence, impact, mitigation, exception, and offset-aware gate."
+no_environmental_gate,measured_training_low_go,go,go,false,false,true,true,true,Always approves; no environmental release gate.
+carbon_only_gate,measured_training_low_go,go,go,false,false,true,true,true,Low impact passes without evidence-quality checks.
+generic_sustainability_score,measured_training_low_go,go,go,false,false,true,true,true,Generic sustainability score 0.85 passes.
+fairmind_e,measured_training_medium_conditioned,conditional_go,conditional_go,true,true,true,true,true,"Full provenance, confidence, impact, mitigation, exception, and offset-aware gate."
+no_environmental_gate,measured_training_medium_conditioned,conditional_go,go,true,false,false,false,false,Always approves; no environmental release gate.
+carbon_only_gate,measured_training_medium_conditioned,conditional_go,conditional_go,true,true,true,true,true,Medium impact is blocked pending generic mitigation.
+generic_sustainability_score,measured_training_medium_conditioned,conditional_go,conditional_go,true,false,true,false,false,Generic sustainability score 0.55 warns but does not block.
+fairmind_e,measured_training_high_documented,conditional_go,conditional_go,false,false,true,true,true,"Full provenance, confidence, impact, mitigation, exception, and offset-aware gate."
+no_environmental_gate,measured_training_high_documented,conditional_go,go,false,false,false,true,false,Always approves; no environmental release gate.
+carbon_only_gate,measured_training_high_documented,conditional_go,no_go,false,true,false,false,false,High impact is blocked based on carbon tier alone.
+generic_sustainability_score,measured_training_high_documented,conditional_go,no_go,false,true,false,false,false,Generic sustainability score 0.25 blocks.
+fairmind_e,measured_training_high_missing_mitigation,conditional_go,conditional_go,true,true,true,true,true,"Full provenance, confidence, impact, mitigation, exception, and offset-aware gate."
+no_environmental_gate,measured_training_high_missing_mitigation,conditional_go,go,true,false,false,false,false,Always approves; no environmental release gate.
+carbon_only_gate,measured_training_high_missing_mitigation,conditional_go,no_go,true,true,false,true,false,High impact is blocked based on carbon tier alone.
+generic_sustainability_score,measured_training_high_missing_mitigation,conditional_go,no_go,true,true,false,true,false,Generic sustainability score 0.25 blocks.
+fairmind_e,vendor_low_inference_go,go,go,false,false,true,true,true,"Full provenance, confidence, impact, mitigation, exception, and offset-aware gate."
+no_environmental_gate,vendor_low_inference_go,go,go,false,false,true,true,true,Always approves; no environmental release gate.
+carbon_only_gate,vendor_low_inference_go,go,go,false,false,true,true,true,Low impact passes without evidence-quality checks.
+generic_sustainability_score,vendor_low_inference_go,go,go,false,false,true,true,true,Generic sustainability score 0.85 passes.
+fairmind_e,vendor_medium_inference_conditioned,conditional_go,conditional_go,true,true,true,true,true,"Full provenance, confidence, impact, mitigation, exception, and offset-aware gate."
+no_environmental_gate,vendor_medium_inference_conditioned,conditional_go,go,true,false,false,false,false,Always approves; no environmental release gate.
+carbon_only_gate,vendor_medium_inference_conditioned,conditional_go,conditional_go,true,true,true,true,true,Medium impact is blocked pending generic mitigation.
+generic_sustainability_score,vendor_medium_inference_conditioned,conditional_go,conditional_go,true,false,true,false,false,Generic sustainability score 0.55 warns but does not block.
+fairmind_e,tool_high_llm_no_go,no_go,no_go,true,true,true,true,true,"Full provenance, confidence, impact, mitigation, exception, and offset-aware gate."
+no_environmental_gate,tool_high_llm_no_go,no_go,go,true,false,false,false,false,Always approves; no environmental release gate.
+carbon_only_gate,tool_high_llm_no_go,no_go,no_go,true,true,true,true,true,High impact is blocked based on carbon tier alone.
+generic_sustainability_score,tool_high_llm_no_go,no_go,no_go,true,true,true,true,true,Generic sustainability score 0.25 blocks.
+fairmind_e,manual_medium_training_no_go,no_go,no_go,true,true,true,true,true,"Full provenance, confidence, impact, mitigation, exception, and offset-aware gate."
+no_environmental_gate,manual_medium_training_no_go,no_go,go,true,false,false,false,false,Always approves; no environmental release gate.
+carbon_only_gate,manual_medium_training_no_go,no_go,conditional_go,true,true,false,true,false,Medium impact is blocked pending generic mitigation.
+generic_sustainability_score,manual_medium_training_no_go,no_go,conditional_go,true,false,false,false,false,Generic sustainability score 0.55 warns but does not block.
+fairmind_e,unknown_low_inference_no_go,no_go,no_go,true,true,true,true,true,"Full provenance, confidence, impact, mitigation, exception, and offset-aware gate."
+no_environmental_gate,unknown_low_inference_no_go,no_go,go,true,false,false,false,false,Always approves; no environmental release gate.
+carbon_only_gate,unknown_low_inference_no_go,no_go,go,true,false,false,false,false,Low impact passes without evidence-quality checks.
+generic_sustainability_score,unknown_low_inference_no_go,no_go,go,true,false,false,false,false,Generic sustainability score 0.85 passes.
+fairmind_e,baseline_bump_low_to_medium,conditional_go,conditional_go,false,false,true,true,true,"Full provenance, confidence, impact, mitigation, exception, and offset-aware gate."
+no_environmental_gate,baseline_bump_low_to_medium,conditional_go,go,false,false,false,true,false,Always approves; no environmental release gate.
+carbon_only_gate,baseline_bump_low_to_medium,conditional_go,conditional_go,false,true,true,false,false,Medium impact is blocked pending generic mitigation.
+generic_sustainability_score,baseline_bump_low_to_medium,conditional_go,conditional_go,false,false,true,true,true,Generic sustainability score 0.55 warns but does not block.
+fairmind_e,baseline_lower_medium_to_low,go,go,false,false,true,true,true,"Full provenance, confidence, impact, mitigation, exception, and offset-aware gate."
+no_environmental_gate,baseline_lower_medium_to_low,go,go,false,false,true,true,true,Always approves; no environmental release gate.
+carbon_only_gate,baseline_lower_medium_to_low,go,go,false,false,true,true,true,Low impact passes without evidence-quality checks.
+generic_sustainability_score,baseline_lower_medium_to_low,go,go,false,false,true,true,true,Generic sustainability score 0.85 passes.
+fairmind_e,offsets_do_not_rescue_unknown,no_go,no_go,true,true,true,true,true,"Full provenance, confidence, impact, mitigation, exception, and offset-aware gate."
+no_environmental_gate,offsets_do_not_rescue_unknown,no_go,go,true,false,false,false,false,Always approves; no environmental release gate.
+carbon_only_gate,offsets_do_not_rescue_unknown,no_go,conditional_go,true,true,false,true,false,Medium impact is blocked pending generic mitigation.
+generic_sustainability_score,offsets_do_not_rescue_unknown,no_go,conditional_go,true,false,false,false,false,Generic sustainability score 0.55 warns but does not block.
+fairmind_e,exception_allows_conditional_review,conditional_go,conditional_go,false,false,true,true,true,"Full provenance, confidence, impact, mitigation, exception, and offset-aware gate."
+no_environmental_gate,exception_allows_conditional_review,conditional_go,go,false,false,false,true,false,Always approves; no environmental release gate.
+carbon_only_gate,exception_allows_conditional_review,conditional_go,no_go,false,true,false,false,false,High impact is blocked based on carbon tier alone.
+generic_sustainability_score,exception_allows_conditional_review,conditional_go,no_go,false,true,false,false,false,Generic sustainability score 0.25 blocks.
+fairmind_e,vendor_claimed_high_confidence_capped,no_go,no_go,true,true,true,true,true,"Full provenance, confidence, impact, mitigation, exception, and offset-aware gate."
+no_environmental_gate,vendor_claimed_high_confidence_capped,no_go,go,true,false,false,false,false,Always approves; no environmental release gate.
+carbon_only_gate,vendor_claimed_high_confidence_capped,no_go,no_go,true,true,true,true,true,High impact is blocked based on carbon tier alone.
+generic_sustainability_score,vendor_claimed_high_confidence_capped,no_go,no_go,true,true,true,true,true,Generic sustainability score 0.25 blocks.
