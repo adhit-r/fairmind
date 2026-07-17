@@ -153,7 +153,7 @@ CREATE TABLE IF NOT EXISTS governance_evidence_runs (
     evidence_id TEXT,
     created_at TEXT NOT NULL,
     CONSTRAINT uq_governance_evidence_run_tenant UNIQUE (id, system_id, org_id),
-    CONSTRAINT uq_governance_evidence_run UNIQUE (org_id, source_type, source_identifier, run_id, content_hash),
+    CONSTRAINT uq_governance_evidence_run UNIQUE (org_id, system_id, source_type, source_identifier, run_id),
     FOREIGN KEY (system_id) REFERENCES governance_ai_systems(id),
     FOREIGN KEY (system_id, org_id) REFERENCES governance_ai_systems(id, org_id)
 );
@@ -172,6 +172,7 @@ CREATE TABLE IF NOT EXISTS governance_control_evidence (
     reviewed_by TEXT,
     reviewed_at TEXT,
     review_history_json TEXT NOT NULL DEFAULT '[]',
+    review_version INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     CONSTRAINT uq_governance_control_evidence UNIQUE (evidence_id, control_assessment_id),
@@ -202,3 +203,11 @@ ALTER TABLE governance_control_evidence ADD COLUMN IF NOT EXISTS artifact_eviden
 ALTER TABLE governance_control_evidence ADD COLUMN IF NOT EXISTS reviewed_by TEXT;
 ALTER TABLE governance_control_evidence ADD COLUMN IF NOT EXISTS reviewed_at TEXT;
 ALTER TABLE governance_control_evidence ADD COLUMN IF NOT EXISTS review_history_json TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE governance_control_evidence ADD COLUMN IF NOT EXISTS review_version INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE governance_evidence_runs DROP CONSTRAINT IF EXISTS uq_governance_evidence_run;
+ALTER TABLE governance_evidence_runs ADD CONSTRAINT uq_governance_evidence_run
+    UNIQUE (org_id, system_id, source_type, source_identifier, run_id);
+ALTER TABLE governance_evidence DROP CONSTRAINT IF EXISTS fk_governance_evidence_source_run;
+ALTER TABLE governance_evidence ADD CONSTRAINT fk_governance_evidence_source_run
+    FOREIGN KEY (source_run_id) REFERENCES governance_evidence_runs(id);

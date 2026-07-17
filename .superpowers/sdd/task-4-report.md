@@ -29,3 +29,23 @@ git diff --check
 ## Concern
 
 The focused suite emits pre-existing dependency deprecation warnings. No new failures were observed.
+
+## Review remediation
+
+- Source-run identity is now scoped by organization, system, source type, source identifier, and run ID. Repeated identical content is idempotent; changed content conflicts.
+- Mapping reviews use an integer compare-and-swap version, retain the full review history, and reject stale updates with HTTP 409.
+- Evidence ingestion recursively rejects raw prompts, completions, reasoning, chain-of-thought, and raw-output fields. Compact summaries are size-bounded.
+- Assurance provenance is limited to FairMind internal, company integration, manual, or third-party sources; third-party evidence requires an assessor identity and explicit independence assertion.
+- Readiness freshness uses captured time when available, falling back to creation time. Evidence artifacts now reference evidence runs with a database foreign key; SQLite migration tests exercise the compatibility trigger.
+
+```text
+cd apps/backend
+uv run pytest tests/test_governance_evidence_runs.py tests/test_governance_assurance_models.py tests/test_framework_catalog_service.py tests/test_governance_assurance_routes.py -q --disable-warnings
+# 31 passed
+
+cd ../..
+tooling/check_backend_layer_boundaries.sh
+tooling/check_no_archive_imports.sh
+git diff --check
+# all passed
+```

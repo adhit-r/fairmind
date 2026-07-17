@@ -31,6 +31,9 @@ MUTATION_PERMISSION = "model:write"
 _CONTROL_STATUSES = {"not_started", "partial", "ready_for_review", "accepted", "rejected"}
 _APPLICABILITY = {"applicable", "not_applicable", "pending"}
 _MAPPING_STATES = {"candidate", "accepted", "rejected"}
+_ASSURANCE_SOURCES = {"fairmind_internal", "company_integration", "manual", "third_party"}
+_SENSITIVE_OUTPUT_KEYS = {"rawoutput", "rawoutputs", "prompt", "prompts", "completion", "completions", "reasoning", "chainofthought"}
+MAX_SUMMARY_BYTES = 64 * 1024
 # Deliberately empty until a deployment declares stable evaluation tags.  This
 # avoids inferring controls from free-form result text.
 EVALUATION_TAG_CONTROL_IDS: dict[str, tuple[str, ...]] = {}
@@ -38,6 +41,10 @@ EVALUATION_TAG_CONTROL_IDS: dict[str, tuple[str, ...]] = {}
 
 class EvidenceRunConflictError(ValueError):
     """Raised when an immutable source-run identity changes content."""
+
+
+class EvidenceMappingConflictError(ValueError):
+    """Raised when a reviewer submits a stale mapping version."""
 
 
 @dataclass(frozen=True)
@@ -61,6 +68,17 @@ def _uuid(value: str) -> uuid.UUID | None:
 
 def _canonical_json(value: object) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def _reject_raw_outputs(value: object) -> None:
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if str(key).replace("_", "").replace("-", "").lower() in _SENSITIVE_OUTPUT_KEYS:
+                raise ValueError("Raw outputs and reasoning traces are not accepted")
+            _reject_raw_outputs(child)
+    elif isinstance(value, list):
+        for child in value:
+            _reject_raw_outputs(child)
 
 
 class GovernanceAssuranceService:
@@ -331,9 +349,15 @@ class GovernanceAssuranceService:
             select(systems.c.id).where(systems.c.id == system_id, systems.c.org_id == org_id)
         ).scalar_one_or_none():
             return None, False
+        _reject_raw_outputs(envelope)
+        summary_json = _canonical_json(envelope.get("summary", {}))
+        if len(summary_json.encode("utf-8")) > MAX_SUMMARY_BYTES:
+            raise ValueError("Evidence summary exceeds the size limit")
+        if envelope.get("assurance_source") not in _ASSURANCE_SOURCES:
+            raise ValueError("Unsupported assurance source")
         if envelope.get("assurance_source") == "third_party":
             assessor = envelope.get("third_party_assessor") or {}
-            if not assessor.get("identity") or not assessor.get("independence"):
+            if not assessor.get("identity") or assessor.get("independence_assertion") is not True:
                 raise ValueError("Third-party evidence requires assessor identity and independence")
         canonical = _canonical_json(envelope)
         content_hash = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
@@ -347,19 +371,13 @@ class GovernanceAssuranceService:
         source_run = self.db.execute(
             select(runs.c.id, runs.c.content_hash).where(
                 runs.c.org_id == key[0], runs.c.source_type == key[1],
-                runs.c.source_identifier == key[2], runs.c.run_id == key[3],
+                runs.c.system_id == system_id, runs.c.source_identifier == key[2], runs.c.run_id == key[3],
             )
         ).mappings().one_or_none()
         if source_run and source_run["content_hash"] != content_hash:
             raise EvidenceRunConflictError("Evidence run content is immutable")
-        existing = self.db.execute(
-            select(runs.c.id).where(
-                runs.c.org_id == key[0], runs.c.source_type == key[1],
-                runs.c.source_identifier == key[2], runs.c.run_id == key[3], runs.c.content_hash == key[4],
-            )
-        ).scalar_one_or_none()
-        if existing:
-            return self._evidence_run(existing), False
+        if source_run:
+            return self._evidence_run(source_run["id"]), False
         now, run_id, evidence_id = _now(), str(uuid.uuid4()), str(uuid.uuid4())
         try:
             self.db.execute(
@@ -377,7 +395,7 @@ class GovernanceAssuranceService:
                 insert(evidence).values(
                     id=evidence_id, org_id=org_id, system_id=system_id, source_run_id=run_id,
                     evidence_type="evaluation_run", title=f"{envelope['source_identifier']} {envelope['run_id']}",
-                    source=envelope["source_type"], content_json=_canonical_json(envelope.get("summary", {})),
+                    source=envelope["source_type"], content_json=summary_json,
                     status=envelope.get("result", "unknown"), uploaded_by=actor_id,
                     metadata_json=_canonical_json({"contentHash": content_hash, "artifactReferences": envelope.get("artifact_references", [])}),
                     captured_at=envelope.get("captured_at"), created_at=now,
@@ -409,13 +427,17 @@ class GovernanceAssuranceService:
             self.db.commit()
         except IntegrityError:
             self.db.rollback()
-            existing = self.db.execute(
-                select(runs.c.id).where(
+            source_run = self.db.execute(
+                select(runs.c.id, runs.c.content_hash).where(
                     runs.c.org_id == key[0], runs.c.source_type == key[1],
-                    runs.c.source_identifier == key[2], runs.c.run_id == key[3], runs.c.content_hash == key[4],
+                    runs.c.system_id == system_id, runs.c.source_identifier == key[2], runs.c.run_id == key[3],
                 )
-            ).scalar_one_or_none()
-            return (self._evidence_run(existing), False) if existing else (None, False)
+            ).mappings().one_or_none()
+            if source_run:
+                if source_run["content_hash"] == content_hash:
+                    return self._evidence_run(source_run["id"]), False
+                raise EvidenceRunConflictError("Evidence run content is immutable")
+            raise
         return self._evidence_run(run_id), True
 
     def list_evidence_runs(self, org_id: str, system_id: str) -> list[dict] | None:
@@ -444,17 +466,32 @@ class GovernanceAssuranceService:
         self.db.commit()
         return self._mapping(mapping_id), True
 
-    def review_evidence_mapping(self, org_id: str, mapping_id: str, state: str, actor_id: str, rationale: str | None) -> dict | None:
+    def review_evidence_mapping(self, org_id: str, mapping_id: str, state: str, actor_id: str, rationale: str | None, review_version: int) -> dict | None:
         if state not in _MAPPING_STATES - {"candidate"}:
             raise ValueError("Review state must be accepted or rejected")
         mappings = GovernanceControlEvidence.__table__
         row = self.db.execute(select(mappings).where(mappings.c.id == mapping_id, mappings.c.org_id == org_id)).mappings().one_or_none()
         if not row:
             return None
+        if row["review_version"] != review_version:
+            raise EvidenceMappingConflictError("Evidence mapping was reviewed by another user")
         history = json.loads(row["review_history_json"] or "[]")
         reviewed_at = _now()
         history.append({"state": state, "rationale": rationale, "reviewedBy": actor_id, "reviewedAt": reviewed_at})
-        self.db.execute(update(mappings).where(mappings.c.id == mapping_id).values(state=state, mapping_rationale=rationale, reviewed_by=actor_id, reviewed_at=reviewed_at, review_history_json=_canonical_json(history), updated_at=reviewed_at))
+        updated = self.db.execute(
+            update(mappings).where(
+                mappings.c.id == mapping_id,
+                mappings.c.org_id == org_id,
+                mappings.c.review_version == review_version,
+            ).values(
+                state=state, mapping_rationale=rationale, reviewed_by=actor_id, reviewed_at=reviewed_at,
+                review_history_json=_canonical_json(history), review_version=review_version + 1,
+                updated_at=reviewed_at,
+            )
+        )
+        if updated.rowcount != 1:
+            self.db.rollback()
+            raise EvidenceMappingConflictError("Evidence mapping was reviewed by another user")
         self.db.commit()
         return self._mapping(mapping_id)
 
@@ -473,6 +510,7 @@ class GovernanceAssuranceService:
         return {
             "id": row["id"], "evidenceId": row["artifact_evidence_id"], "controlAssessmentId": row["control_assessment_id"],
             "state": row["state"], "rationale": row["mapping_rationale"],
+            "reviewVersion": row["review_version"],
             "reviewHistory": json.loads(row["review_history_json"] or "[]"),
         }
 
@@ -501,14 +539,14 @@ class GovernanceAssuranceService:
         ).mappings()
         evidence_by_assessment: dict[str, list[str]] = {}
         for row in self.db.execute(
-            select(mappings.c.control_assessment_id, evidence_runs.c.created_at)
+            select(mappings.c.control_assessment_id, evidence_runs.c.captured_at, evidence_runs.c.created_at)
             .join(evidence_runs, evidence_runs.c.id == mappings.c.evidence_id)
             .where(
                 mappings.c.org_id == org_id,
                 mappings.c.state == "accepted",
             )
         ).mappings():
-            evidence_by_assessment.setdefault(row["control_assessment_id"], []).append(row["created_at"])
+            evidence_by_assessment.setdefault(row["control_assessment_id"], []).append(row["captured_at"] or row["created_at"])
         counts = {
             "applicable": 0,
             "accepted": 0,

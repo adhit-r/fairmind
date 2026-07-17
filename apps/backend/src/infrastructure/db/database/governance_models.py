@@ -342,10 +342,10 @@ class GovernanceEvidenceRun(Base):
         UniqueConstraint("id", "system_id", "org_id", name="uq_governance_evidence_run_tenant"),
         UniqueConstraint(
             "org_id",
+            "system_id",
             "source_type",
             "source_identifier",
             "run_id",
-            "content_hash",
             name="uq_governance_evidence_run",
         ),
         ForeignKeyConstraint(
@@ -386,6 +386,7 @@ class GovernanceControlEvidence(Base):
     reviewed_by = Column(String, nullable=True)
     reviewed_at = Column(String, nullable=True)
     review_history_json = Column(Text, nullable=False, default="[]")
+    review_version = Column(Integer, nullable=False, default=0)
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
     updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
 
@@ -514,7 +515,7 @@ class GovernanceEvidence(Base):
     status = Column(String, nullable=False, default="draft")
     uploaded_by = Column(String, nullable=True)
     metadata_json = Column(Text, nullable=False, default="{}")
-    source_run_id = Column(String, nullable=True, index=True)
+    source_run_id = Column(String, ForeignKey("governance_evidence_runs.id"), nullable=True, index=True)
     captured_at = Column(String, nullable=True)
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
 

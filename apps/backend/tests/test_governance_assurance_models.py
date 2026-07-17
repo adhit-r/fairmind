@@ -335,6 +335,21 @@ def test_migration_selector_applies_sqlite_schema_and_exposes_postgresql_sql() -
             "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?", (table_name,)
         ).fetchone()
 
+    connection.execute(
+        "INSERT INTO governance_workspaces (id, org_id, name, created_at, updated_at) "
+        "VALUES ('workspace-1', 'org-1', 'Workspace', 'now', 'now')"
+    )
+    connection.execute(
+        "INSERT INTO governance_ai_systems (id, workspace_id, org_id, name, created_at, updated_at) "
+        "VALUES ('system-1', 'workspace-1', 'org-1', 'System', 'now', 'now')"
+    )
+    with pytest.raises(sqlite3.IntegrityError, match="source run must exist"):
+        connection.execute(
+            "INSERT INTO governance_evidence "
+            "(id, system_id, org_id, source_run_id, evidence_type, content_json, created_at) "
+            "VALUES ('evidence-1', 'system-1', 'org-1', 'missing-run', 'evaluation_run', '{}', 'now')"
+        )
+
     postgresql_sql = sql_for("postgresql")
     assert "ADD COLUMN IF NOT EXISTS" in postgresql_sql
     assert "ADD CONSTRAINT fk_governance_system_workspace_tenant" in postgresql_sql

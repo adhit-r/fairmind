@@ -6,6 +6,7 @@ from dataclasses import asdict
 import os
 from pathlib import Path
 import tempfile
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
@@ -17,6 +18,7 @@ from database.connection import get_db
 from src.application.services.framework_catalog_service import FrameworkCatalogService
 from src.application.services.governance_assurance_service import (
     EvidenceRunConflictError,
+    EvidenceMappingConflictError,
     GovernanceAssuranceService,
     OrgMembership,
 )
@@ -82,10 +84,17 @@ class EvidenceRunEnvelope(BaseModel):
     limitations: list[str] = Field(default_factory=list)
     artifact_references: list[dict[str, str]] = Field(default_factory=list, alias="artifactReferences")
     retention: str | None = None
-    assurance_source: str = Field(default="fairmind_internal", alias="assuranceSource")
-    third_party_assessor: dict[str, str] | None = Field(default=None, alias="thirdPartyAssessor")
+    assurance_source: Literal["fairmind_internal", "company_integration", "manual", "third_party"] = Field(default="fairmind_internal", alias="assuranceSource")
+    third_party_assessor: "ThirdPartyAssessor | None" = Field(default=None, alias="thirdPartyAssessor")
     control_external_ids: list[str] = Field(default_factory=list, alias="controlExternalIds")
     evaluation_tags: list[str] = Field(default_factory=list, alias="evaluationTags")
+
+
+class ThirdPartyAssessor(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    identity: str = Field(min_length=1)
+    independence_assertion: bool = Field(alias="independenceAssertion")
 
 class EvidenceMappingRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
@@ -95,10 +104,11 @@ class EvidenceMappingRequest(BaseModel):
 
 
 class EvidenceMappingReviewRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
     state: str = Field(pattern="^(accepted|rejected)$")
     rationale: str | None = None
+    review_version: int = Field(alias="reviewVersion", ge=0)
 
 
 def organization_membership(
@@ -345,9 +355,13 @@ def review_evidence_mapping(
 ) -> dict:
     service = _service(db)
     _require_mutation(membership, service)
-    mapping = service.review_evidence_mapping(
-        membership.org_id, mapping_id, request.state, membership.user_id, request.rationale
-    )
+    try:
+        mapping = service.review_evidence_mapping(
+            membership.org_id, mapping_id, request.state, membership.user_id,
+            request.rationale, request.review_version,
+        )
+    except EvidenceMappingConflictError as error:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
     if mapping is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evidence mapping not found")
     return mapping

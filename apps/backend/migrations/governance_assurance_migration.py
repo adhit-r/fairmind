@@ -54,6 +54,26 @@ BEGIN
 END;
 """
 
+_SQLITE_SOURCE_RUN_TRIGGERS = """
+CREATE TRIGGER governance_evidence_source_run_insert
+BEFORE INSERT ON governance_evidence
+WHEN NEW.source_run_id IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM governance_evidence_runs WHERE id = NEW.source_run_id
+)
+BEGIN
+    SELECT RAISE(ABORT, 'governance evidence source run must exist');
+END;
+
+CREATE TRIGGER governance_evidence_source_run_update
+BEFORE UPDATE OF source_run_id ON governance_evidence
+WHEN NEW.source_run_id IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM governance_evidence_runs WHERE id = NEW.source_run_id
+)
+BEGIN
+    SELECT RAISE(ABORT, 'governance evidence source run must exist');
+END;
+"""
+
 
 def sql_for(dialect: str) -> str:
     """Return the migration SQL suitable for ``postgresql`` or ``sqlite``."""
@@ -81,5 +101,20 @@ def sql_for(dialect: str) -> str:
         "",
         sqlite_sql,
     )
+    sqlite_sql = re.sub(
+        r"ALTER TABLE governance_evidence_runs (?:DROP|ADD) CONSTRAINT[\s\S]*?;\n",
+        "",
+        sqlite_sql,
+    )
+    sqlite_sql = re.sub(
+        r"ALTER TABLE governance_evidence ADD CONSTRAINT fk_governance_evidence_source_run\n"
+        r"    FOREIGN KEY \(source_run_id\) REFERENCES governance_evidence_runs\(id\);\n",
+        "",
+        sqlite_sql,
+    )
+    sqlite_sql = sqlite_sql.replace(
+        "ALTER TABLE governance_evidence DROP CONSTRAINT IF EXISTS fk_governance_evidence_source_run;\n",
+        "",
+    )
     insertion_point = "CREATE TABLE IF NOT EXISTS governance_framework_versions"
-    return sqlite_sql.replace(insertion_point, _SQLITE_TENANT_TRIGGERS + "\n" + insertion_point)
+    return sqlite_sql.replace(insertion_point, _SQLITE_TENANT_TRIGGERS + "\n" + insertion_point) + _SQLITE_SOURCE_RUN_TRIGGERS
