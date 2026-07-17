@@ -13,6 +13,7 @@ from pathlib import Path
 
 from api.main import app
 from config.settings import Settings
+from middleware.security import RateLimitMiddleware
 
 
 class TestSettings(Settings):
@@ -33,6 +34,23 @@ class TestSettings(Settings):
 def test_settings() -> TestSettings:
     """Get test settings."""
     return TestSettings()
+
+
+def _reset_in_memory_rate_limit() -> None:
+    middleware = app.middleware_stack
+    while middleware is not None:
+        if isinstance(middleware, RateLimitMiddleware):
+            middleware.fallback_clients.clear()
+            return
+        middleware = getattr(middleware, "app", None)
+
+
+@pytest.fixture(autouse=True)
+def reset_in_memory_rate_limit() -> Generator[None, None, None]:
+    """Keep request histories isolated between function-scoped API clients."""
+    _reset_in_memory_rate_limit()
+    yield
+    _reset_in_memory_rate_limit()
 
 
 @pytest.fixture(scope="session")
