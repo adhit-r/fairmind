@@ -193,7 +193,7 @@ function evidenceRun(controlAssessmentId = 'assessment-a006-1', mappingId = 'map
       state: 'candidate',
       rationale: 'Evaluation limitations and version metadata support documentation review.',
       review_version: 0,
-      review_history: [],
+      review_history: [] as Array<Record<string, unknown>>,
     }],
   }
 }
@@ -770,4 +770,98 @@ test('offers a mapping reload action after an optimistic review conflict', async
   await expect(mapping.getByRole('alert')).toContainText('another reviewer')
   await mapping.getByRole('button', { name: 'Reload mapping' }).click()
   await expect(mapping.getByRole('alert')).toHaveCount(0)
+})
+
+test('shows framework scope and backend blockers before the overview readiness aggregate', async ({ page }) => {
+  await mockWorkbench(page, {
+    initiallyAssigned: true,
+    evidenceRuns: [evidenceRun()],
+  })
+
+  await page.goto('/ai-governance')
+  const overview = page.getByTestId('governance-assurance-overview')
+
+  await expect(overview.getByRole('heading', { name: 'AI Governance Assurance' })).toBeVisible()
+  const scope = overview.getByRole('region', { name: 'Assurance scope' })
+  await expect(scope).toContainText('Acme Assurance')
+  await expect(scope).toContainText('Claims Review Agent')
+  await expect(scope).toContainText('AIUC-1')
+  await expect(scope).toContainText('April, 2026')
+
+  const blockers = overview.getByRole('region', { name: 'Readiness blockers' })
+  await expect(blockers).toContainText('1 blocking finding')
+  await expect(blockers).toContainText('2 controls missing accepted evidence')
+  await expect(blockers).toContainText('No stale evidence reported')
+
+  const readiness = overview.getByRole('region', { name: 'AIUC-1 readiness' })
+  await expect(readiness).toContainText('2 applicable')
+  await expect(readiness).toContainText('0 accepted')
+  await expect(readiness).toContainText('1 partial')
+  await expect(readiness).toContainText('1 not started')
+
+  const text = await overview.innerText()
+  expect(text.indexOf('READINESS BLOCKERS')).toBeLessThan(text.indexOf('AIUC-1 READINESS'))
+  await expect(overview).not.toContainText(/compliance rate|evidence completeness|go$|certif/i)
+})
+
+test('presents a version-pinned assurance summary with evidence hashes and review decisions', async ({ page }) => {
+  const acceptedRun = evidenceRun()
+  acceptedRun.candidate_mappings[0] = {
+    ...acceptedRun.candidate_mappings[0],
+    state: 'accepted',
+    review_version: 1,
+    review_history: [{
+      state: 'accepted',
+      rationale: 'Accepted after checking the versioned limitation register.',
+      reviewed_by: 'user-1',
+      reviewed_at: '2026-07-17T12:15:00Z',
+    }],
+  }
+  await mockWorkbench(page, { initiallyAssigned: true, evidenceRuns: [acceptedRun] })
+
+  await page.goto('/reports?view=builder')
+  const report = page.getByTestId('assurance-report')
+
+  await expect(report.getByRole('heading', { name: 'Reports & Assurance' })).toBeVisible()
+  await expect(report.getByText('Builder mode', { exact: true })).toBeVisible()
+  await expect(report.getByRole('region', { name: 'Assurance scope' })).toContainText('AIUC-1 April, 2026')
+  await expect(report.getByRole('region', { name: 'Evidence index' })).toContainText(
+    '0f33e89a6d6e6eefecf4afc92c837bd259f036e599acc653f401b87eab30bf55',
+  )
+  await expect(report.getByRole('region', { name: 'Evidence index' })).toContainText('FairMind Bias Suite')
+  await expect(report.getByRole('region', { name: 'Unresolved findings' })).toContainText('1 blocking finding')
+  await expect(report.getByRole('region', { name: 'Decision register' })).toContainText('Accepted')
+  await expect(report.getByRole('region', { name: 'Decision register' })).toContainText(
+    'Accepted after checking the versioned limitation register.',
+  )
+  await expect(report.getByRole('region', { name: 'Limitations' })).toContainText(
+    'Sparse intersectional cohorts were excluded below n=30.',
+  )
+  await expect(report.getByRole('link', { name: 'Review control assessments' })).toBeVisible()
+  await expect(report).not.toContainText(/certified|compliant/i)
+})
+
+test('uses the reports route as a read-only auditor lens and redirects legacy bookmarks', async ({ page }) => {
+  await mockWorkbench(page, {
+    initiallyAssigned: true,
+    evidenceRuns: [evidenceRun()],
+    role: 'viewer',
+    permissions: ['model:read'],
+  })
+
+  await page.goto('/reports')
+  const report = page.getByTestId('assurance-report')
+  await expect(report.getByText('Auditor mode', { exact: true })).toBeVisible()
+  await expect(report).toContainText('Read-only auditor view')
+  await expect(report.getByRole('link', { name: 'Review control assessments' })).toHaveCount(0)
+  await expect(report.getByRole('link', { name: 'Review evidence mappings' })).toHaveCount(0)
+
+  await page.goto('/audit-reports')
+  await expect(page).toHaveURL(/\/reports\?view=builder$/)
+  await page.goto('/compliance')
+  await expect(page).toHaveURL(/\/compliance-dashboard$/)
+  await page.goto('/compliance/dashboard')
+  await expect(page).toHaveURL(/\/compliance-dashboard$/)
+  await page.goto('/remediation-wizard')
+  await expect(page).toHaveURL(/\/remediation\?mode=guided$/)
 })

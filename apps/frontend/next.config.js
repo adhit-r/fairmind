@@ -1,5 +1,30 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  async redirects() {
+    return [
+      {
+        source: '/audit-reports',
+        destination: '/reports?view=builder',
+        permanent: false,
+      },
+      {
+        source: '/compliance',
+        destination: '/compliance-dashboard',
+        permanent: false,
+      },
+      {
+        source: '/compliance/dashboard',
+        destination: '/compliance-dashboard',
+        permanent: false,
+      },
+      {
+        source: '/remediation-wizard',
+        destination: '/remediation?mode=guided',
+        permanent: false,
+      },
+    ]
+  },
+
   // Performance optimizations
   compress: true,
   
