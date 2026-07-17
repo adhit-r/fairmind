@@ -1,11 +1,10 @@
 import sqlite3
 from collections.abc import Generator
-from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine, event
+from sqlalchemy import MetaData, create_engine, event
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session, registry, sessionmaker
 
 from database.governance_models import (
     GovernanceAISystem,
@@ -17,6 +16,68 @@ from database.governance_models import (
     GovernanceFrameworkVersion,
     GovernanceWorkspace,
 )
+from migrations.governance_assurance_migration import sql_for
+
+
+PRODUCTION_TABLES = (
+    GovernanceWorkspace.__table__,
+    GovernanceAISystem.__table__,
+    GovernanceFrameworkVersion.__table__,
+    GovernanceControlDefinition.__table__,
+    GovernanceFrameworkAssignment.__table__,
+    GovernanceControlAssessment.__table__,
+    GovernanceEvidenceRun.__table__,
+    GovernanceControlEvidence.__table__,
+)
+
+test_metadata = MetaData()
+test_tables = {table.name: table.to_metadata(test_metadata) for table in PRODUCTION_TABLES}
+test_registry = registry(metadata=test_metadata)
+
+
+class Workspace:
+    pass
+
+
+class AISystem:
+    pass
+
+
+class FrameworkVersion:
+    pass
+
+
+class ControlDefinition:
+    pass
+
+
+class FrameworkAssignment:
+    pass
+
+
+class ControlAssessment:
+    pass
+
+
+class EvidenceRun:
+    pass
+
+
+class ControlEvidence:
+    pass
+
+
+for model, table_name in (
+    (Workspace, "governance_workspaces"),
+    (AISystem, "governance_ai_systems"),
+    (FrameworkVersion, "governance_framework_versions"),
+    (ControlDefinition, "governance_control_definitions"),
+    (FrameworkAssignment, "governance_framework_assignments"),
+    (ControlAssessment, "governance_control_assessments"),
+    (EvidenceRun, "governance_evidence_runs"),
+    (ControlEvidence, "governance_control_evidence"),
+):
+    test_registry.map_imperatively(model, test_tables[table_name])
 
 
 @pytest.fixture
@@ -27,43 +88,43 @@ def db_session() -> Generator[Session, None, None]:
     def enable_foreign_keys(dbapi_connection, _connection_record) -> None:
         dbapi_connection.execute("PRAGMA foreign_keys = ON")
 
-    tables = (
-        GovernanceWorkspace.__table__,
-        GovernanceAISystem.__table__,
-        GovernanceFrameworkVersion.__table__,
-        GovernanceControlDefinition.__table__,
-        GovernanceFrameworkAssignment.__table__,
-        GovernanceControlAssessment.__table__,
-        GovernanceEvidenceRun.__table__,
-        GovernanceControlEvidence.__table__,
-    )
-    for table in tables:
-        table.create(engine)
+    test_metadata.create_all(engine)
     session = sessionmaker(bind=engine)()
     try:
         yield session
     finally:
         session.close()
-        for table in reversed(tables):
-            table.drop(engine)
+        test_metadata.drop_all(engine)
 
 
-def add_system(session: Session, org_id: str, system_id: str) -> GovernanceAISystem:
-    workspace = GovernanceWorkspace(id=f"workspace-{org_id}", org_id=org_id, name=org_id)
-    system = GovernanceAISystem(
+def add_system(session: Session, org_id: str, system_id: str) -> AISystem:
+    workspace = Workspace(id=f"workspace-{org_id}", org_id=org_id, name=org_id)
+    session.add(workspace)
+    session.commit()
+    system = AISystem(
         id=system_id,
         workspace_id=workspace.id,
         org_id=org_id,
         name=system_id,
     )
-    session.add_all((workspace, system))
+    session.add(system)
+    session.commit()
     return system
+
+
+def test_production_schema_has_tenant_aware_control_evidence_columns() -> None:
+    assert GovernanceAISystem.__table__.c.org_id.nullable
+    assert GovernanceControlEvidence.__table__.c.system_id.nullable is False
+    assert GovernanceControlEvidence.__table__.c.mapping_rationale.nullable
+    assert any(
+        tuple(constraint.column_keys) == ("evidence_id", "system_id", "org_id")
+        for constraint in GovernanceControlEvidence.__table__.foreign_key_constraints
+    )
 
 
 def test_framework_definition_state_is_separate_from_system_assessment(db_session: Session) -> None:
     system = add_system(db_session, "org-1", "sys-1")
-    db_session.commit()
-    version = GovernanceFrameworkVersion(
+    version = FrameworkVersion(
         id="fv-1",
         framework_key="aiuc-1",
         name="AIUC-1",
@@ -71,7 +132,7 @@ def test_framework_definition_state_is_separate_from_system_assessment(db_sessio
         source_hash="abc",
         status="active",
     )
-    definition = GovernanceControlDefinition(
+    definition = ControlDefinition(
         id="cd-1",
         framework_version_id=version.id,
         external_id="A001.1",
@@ -79,13 +140,13 @@ def test_framework_definition_state_is_separate_from_system_assessment(db_sessio
         statement="Maintain an input data policy.",
         active=True,
     )
-    assignment = GovernanceFrameworkAssignment(
+    assignment = FrameworkAssignment(
         id="fa-1",
         org_id="org-1",
         system_id=system.id,
         framework_version_id=version.id,
     )
-    assessment = GovernanceControlAssessment(
+    assessment = ControlAssessment(
         id="ca-1",
         org_id="org-1",
         system_id=system.id,
@@ -104,16 +165,15 @@ def test_framework_definition_state_is_separate_from_system_assessment(db_sessio
     db_session.commit()
 
     assert not hasattr(definition, "owner")
-    assert db_session.get(GovernanceControlAssessment, assessment.id).owner == "owner@example.com"
+    assert db_session.get(ControlAssessment, assessment.id).owner == "owner@example.com"
 
 
-def test_assurance_constraints_reject_duplicate_and_cross_org_associations(
+def test_assurance_constraints_reject_cross_org_associations_and_persist_mapping(
     db_session: Session,
 ) -> None:
     system_a = add_system(db_session, "org-a", "sys-a")
     system_b = add_system(db_session, "org-b", "sys-b")
-    db_session.commit()
-    version = GovernanceFrameworkVersion(
+    version = FrameworkVersion(
         id="fv-1",
         framework_key="aiuc-1",
         name="AIUC-1",
@@ -121,7 +181,7 @@ def test_assurance_constraints_reject_duplicate_and_cross_org_associations(
         source_hash="abc",
         status="active",
     )
-    definition = GovernanceControlDefinition(
+    definition = ControlDefinition(
         id="cd-1",
         framework_version_id=version.id,
         external_id="A001.1",
@@ -129,26 +189,26 @@ def test_assurance_constraints_reject_duplicate_and_cross_org_associations(
         statement="Maintain an input data policy.",
         active=True,
     )
-    assignment_a = GovernanceFrameworkAssignment(
+    assignment_a = FrameworkAssignment(
         id="fa-a",
         org_id="org-a",
         system_id=system_a.id,
         framework_version_id=version.id,
     )
-    assignment_b = GovernanceFrameworkAssignment(
+    assignment_b = FrameworkAssignment(
         id="fa-b",
         org_id="org-b",
         system_id=system_b.id,
         framework_version_id=version.id,
     )
-    assessment_a = GovernanceControlAssessment(
+    assessment_a = ControlAssessment(
         id="ca-a",
         org_id="org-a",
         system_id=system_a.id,
         framework_assignment_id=assignment_a.id,
         control_definition_id=definition.id,
     )
-    evidence_a = GovernanceEvidenceRun(
+    evidence_a = EvidenceRun(
         id="ev-a",
         org_id="org-a",
         system_id=system_a.id,
@@ -157,7 +217,7 @@ def test_assurance_constraints_reject_duplicate_and_cross_org_associations(
         run_id="run-a",
         content_hash="hash-a",
     )
-    evidence_b = GovernanceEvidenceRun(
+    evidence_b = EvidenceRun(
         id="ev-b",
         org_id="org-b",
         system_id=system_b.id,
@@ -175,8 +235,25 @@ def test_assurance_constraints_reject_duplicate_and_cross_org_associations(
     db_session.add(assessment_a)
     db_session.commit()
 
+    mapping = ControlEvidence(
+        id="map-a",
+        org_id="org-a",
+        system_id=system_a.id,
+        evidence_id=evidence_a.id,
+        control_assessment_id=assessment_a.id,
+        state="candidate",
+        mapping_rationale="Evaluation tag matches control evidence kind.",
+    )
+    db_session.add(mapping)
+    db_session.commit()
+    db_session.expire_all()
+
+    persisted = db_session.get(ControlEvidence, mapping.id)
+    assert persisted.state == "candidate"
+    assert persisted.mapping_rationale == "Evaluation tag matches control evidence kind."
+
     db_session.add(
-        GovernanceFrameworkAssignment(
+        FrameworkAssignment(
             id="fa-duplicate",
             org_id="org-a",
             system_id=system_a.id,
@@ -188,7 +265,7 @@ def test_assurance_constraints_reject_duplicate_and_cross_org_associations(
     db_session.rollback()
 
     db_session.add(
-        GovernanceControlAssessment(
+        ControlAssessment(
             id="ca-cross-org",
             org_id="org-a",
             system_id=system_a.id,
@@ -201,7 +278,7 @@ def test_assurance_constraints_reject_duplicate_and_cross_org_associations(
     db_session.rollback()
 
     db_session.add(
-        GovernanceControlEvidence(
+        ControlEvidence(
             id="map-cross-org",
             org_id="org-a",
             system_id=system_a.id,
@@ -216,7 +293,7 @@ def test_assurance_constraints_reject_duplicate_and_cross_org_associations(
     db_session.rollback()
 
 
-def test_migration_applies_to_pre_009_sqlite_schema() -> None:
+def test_migration_selector_applies_sqlite_schema_and_exposes_postgresql_sql() -> None:
     connection = sqlite3.connect(":memory:")
     connection.execute("PRAGMA foreign_keys = ON")
     connection.executescript(
@@ -244,15 +321,25 @@ def test_migration_applies_to_pre_009_sqlite_schema() -> None:
         );
         """
     )
-    migration = Path(__file__).parents[1] / "migrations" / "009_governance_assurance.sql"
-    connection.executescript(migration.read_text())
+    connection.executescript(sql_for("sqlite"))
 
-    workspace_columns = {row[1] for row in connection.execute("PRAGMA table_info(governance_workspaces)")}
-    system_columns = {row[1] for row in connection.execute("PRAGMA table_info(governance_ai_systems)")}
-    evidence_columns = {row[1] for row in connection.execute("PRAGMA table_info(governance_evidence)")}
+    for table_name in (
+        "governance_framework_versions",
+        "governance_control_definitions",
+        "governance_framework_assignments",
+        "governance_control_assessments",
+        "governance_evidence_runs",
+        "governance_control_evidence",
+    ):
+        assert connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?", (table_name,)
+        ).fetchone()
 
-    assert "org_id" in workspace_columns
-    assert "org_id" in system_columns
-    assert "org_id" in evidence_columns
-
+    postgresql_sql = sql_for("postgresql")
+    assert "ADD COLUMN IF NOT EXISTS" in postgresql_sql
+    assert "ADD CONSTRAINT fk_governance_system_workspace_tenant" in postgresql_sql
+    assert "ADD CONSTRAINT fk_governance_evidence_system_tenant" in postgresql_sql
+    assert "CREATE TRIGGER" not in postgresql_sql
+    assert "RAISE(ABORT" not in postgresql_sql
+    assert "FOREIGN KEY (evidence_id, system_id, org_id)" in postgresql_sql
     connection.close()
