@@ -6,7 +6,7 @@ from dataclasses import asdict
 import os
 from pathlib import Path
 import tempfile
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
@@ -28,6 +28,7 @@ from src.application.ports.evidence_ingestion import (
 from src.application.services.evidence_ingestion_service import (
     EvidencePassportValidationError,
     build_evidence_ingestion_service,
+    canonical_evidence_passport_schema,
     parse_strict_json_object,
 )
 from src.application.services.governance_assurance_service import (
@@ -84,6 +85,95 @@ class EvidenceMappingReviewRequest(BaseModel):
     state: str = Field(pattern="^(accepted|rejected)$")
     rationale: str | None = None
     review_version: int = Field(alias="reviewVersion", ge=0)
+
+
+class EvidencePassportErrorResponse(BaseModel):
+    detail: str
+
+
+class EvidenceArtifactResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    artifact_id: str = Field(alias="artifactId")
+    ordinal: int
+    role: str
+    uri: str
+    sha256: str
+    media_type: str = Field(alias="mediaType")
+    size_bytes: int | None = Field(alias="sizeBytes")
+    contains_sensitive_data: bool = Field(alias="containsSensitiveData")
+    retention_policy: str | None = Field(alias="retentionPolicy")
+    redaction_note: str | None = Field(alias="redactionNote")
+
+
+class EvidenceCandidateMappingResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str
+    evidence_id: str | None = Field(alias="evidenceId")
+    control_assessment_id: str = Field(alias="controlAssessmentId")
+    source_mapping_id: str = Field(alias="sourceMappingId")
+    state: Literal["candidate", "accepted", "rejected"]
+    relation: Literal["supports", "contradicts", "limits", "supersedes"]
+    rationale: str | None
+    review_version: int = Field(alias="reviewVersion")
+    review_history: list[dict[str, Any]] = Field(alias="reviewHistory")
+
+
+class EvidenceIngestionResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    disposition: Literal["created", "replayed"]
+    id: str
+    evidence_id: str | None = Field(alias="evidenceId")
+    run_id: str = Field(alias="runId")
+    run_content_hash: str = Field(alias="runContentHash")
+    content_hash: str = Field(alias="contentHash")
+    passport_id: str = Field(alias="passportId")
+    latest_revision: int = Field(alias="latestRevision")
+    latest_canonical_content_hash: str = Field(alias="latestCanonicalContentHash")
+    result: str
+    capability_state: str = Field(alias="capabilityState")
+    limitations: list[str]
+    artifacts: list[EvidenceArtifactResponse]
+    candidate_mappings: list[EvidenceCandidateMappingResponse] = Field(alias="candidateMappings")
+    source_type: str = Field(alias="sourceType")
+    source_identifier: str = Field(alias="sourceIdentifier")
+    captured_at: str | None = Field(alias="capturedAt")
+    suite_name: str | None = Field(alias="suiteName")
+    suite_version: str | None = Field(alias="suiteVersion")
+    subject_version: str | None = Field(alias="subjectVersion")
+    runner_version: str | None = Field(alias="runnerVersion")
+    assurance_source: str | None = Field(alias="assuranceSource")
+
+
+_EVIDENCE_PASSPORT_ERROR_RESPONSES = {
+    code: {"model": EvidencePassportErrorResponse, "description": description}
+    for code, description in {
+        401: "Authentication required",
+        403: "Organization membership or mutation permission required",
+        404: "Scoped AI system not found",
+        409: "Immutable run or revision conflict",
+        415: "Unsupported request media type",
+        422: "Invalid Evidence Passport or scoped mapping reference",
+        500: "Evidence persistence or audit failure",
+    }.items()
+}
+
+
+def _is_json_compatible_content_type(value: str | None) -> bool:
+    if not value:
+        return False
+    media_type = value.partition(";")[0].strip().lower()
+    type_name, separator, subtype = media_type.partition("/")
+    if (
+        not separator
+        or not type_name
+        or not subtype
+        or any(character.isspace() for character in media_type)
+    ):
+        return False
+    return media_type == "application/json" or subtype.endswith("+json")
 
 
 def organization_membership(
@@ -315,7 +405,24 @@ def assignment_readiness(
     return readiness
 
 
-@router.post("/systems/{system_id}/evidence-runs")
+@router.post(
+    "/systems/{system_id}/evidence-runs",
+    response_model=EvidenceIngestionResponse,
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        200: {
+            "model": EvidenceIngestionResponse,
+            "description": "Idempotent replay of the stored Evidence Passport",
+        },
+        **_EVIDENCE_PASSPORT_ERROR_RESPONSES,
+    },
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "content": {"application/json": {"schema": canonical_evidence_passport_schema()}},
+        }
+    },
+)
 async def ingest_evidence_run(
     system_id: str,
     request: Request,
@@ -324,6 +431,11 @@ async def ingest_evidence_run(
 ):
     authorization_service = _service(db)
     _require_mutation(membership, authorization_service)
+    if not _is_json_compatible_content_type(request.headers.get("content-type")):
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Evidence Passport requires application/json or a +json media type",
+        )
     try:
         passport = parse_strict_json_object(await request.body())
     except EvidencePassportValidationError as error:

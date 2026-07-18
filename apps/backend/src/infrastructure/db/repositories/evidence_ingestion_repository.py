@@ -7,6 +7,7 @@ import json
 import threading
 import uuid
 from typing import Any
+from weakref import WeakValueDictionary
 
 from sqlalchemy import insert, select, update
 from sqlalchemy.exc import IntegrityError
@@ -59,7 +60,7 @@ def _uuid_or_none(value: str | None) -> uuid.UUID | None:
 
 
 _REVISION_LOCKS_GUARD = threading.Lock()
-_REVISION_LOCKS: dict[str, threading.Lock] = {}
+_REVISION_LOCKS: WeakValueDictionary[str, threading.Lock] = WeakValueDictionary()
 
 
 def _revision_lock(run_id: str) -> threading.Lock:

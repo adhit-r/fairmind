@@ -161,8 +161,7 @@ type JsonScalar = string | number | boolean | null
 export interface EvidencePassportInput {
   schemaVersion: '1.0.0'
   passportId: string
-  passportRevision: number
-  previousRevisionHash?: string
+  passportRevision: 1
   claimBoundary: 'supporting_evidence_only'
   organizationId: string
   workspaceId: string
@@ -219,19 +218,17 @@ export interface EvidencePassportInput {
     mappingId: string
     framework: { key: string; versionLabel: string; sourceHash: string; sourceUri?: string }
     control: { externalId: string; assessmentId: string }
-    state: 'candidate' | 'accepted' | 'rejected'
+    state: 'candidate'
     relation: 'supports' | 'contradicts' | 'limits' | 'supersedes'
     rationale: string
     suggestedBy: { actorType: 'user' | 'service' | 'adapter' | 'external_assessor'; actorId: string; displayName?: string }
     createdAt: string
-    review?: { decision: 'accepted' | 'rejected'; reviewer: { actorType: 'user' | 'service' | 'adapter' | 'external_assessor'; actorId: string; displayName?: string }; reviewedAt: string; rationale: string; reviewVersion: number }
   }>
-  review: { status: 'pending' | 'accepted' | 'rejected'; reviewVersion: number; reviewer?: { actorType: 'user' | 'service' | 'adapter' | 'external_assessor'; actorId: string; displayName?: string }; reviewedAt?: string; rationale?: string }
+  review: { status: 'pending'; reviewVersion: number }
   findings: Array<{ findingId: string; severity: 'informational' | 'low' | 'medium' | 'high' | 'critical'; status: 'open' | 'accepted_risk' | 'in_remediation' | 'resolved' | 'false_positive'; title: string; description: string; artifactIds: string[]; createdAt: string }>
-  remediation: Array<{ remediationId: string; findingIds: string[]; status: 'planned' | 'in_progress' | 'blocked' | 'completed' | 'verified'; ownerId?: string; action: string; dueAt?: string; completedAt?: string; verificationPassportId?: string }>
+  remediation: Array<{ remediationId: string; findingIds: string[]; status: 'planned' | 'in_progress' | 'blocked' | 'completed' | 'verified'; ownerId: string; action: string; dueAt?: string; completedAt?: string; verificationPassportId?: string }>
   freshness: { status: 'current' | 'expiring' | 'stale' | 'superseded'; policy: string; assessedAt: string; expiresAt?: string; staleReasons: string[]; invalidationKeys: string[]; supersededByPassportId?: string }
   lineage: { predecessorPassportIds: string[]; retestOfPassportIds: string[] }
-  signatures?: Array<{ algorithm: 'Ed25519' | 'ES256' | 'RS256'; keyId: string; signedAt: string; value: string }>
   createdAt: string
   canonicalContentHash: string
 }

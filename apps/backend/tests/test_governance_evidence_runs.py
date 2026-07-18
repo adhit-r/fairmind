@@ -5,12 +5,14 @@ from __future__ import annotations
 from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
+import gc
 import hashlib
 import json
 from pathlib import Path
 import sqlite3
 import threading
 import uuid
+import weakref
 
 import pytest
 import rfc8785
@@ -48,6 +50,9 @@ from src.application.ports.evidence_ingestion import EvidenceRevisionConflict
 from src.application.services.governance_assurance_service import GovernanceAssuranceService
 from src.domain.assurance.evidence_passport import EvidencePassport, with_server_hashes
 from src.infrastructure.db.repositories.evidence_ingestion_repository import (
+    _REVISION_LOCKS,
+    _REVISION_LOCKS_GUARD,
+    _revision_lock,
     SqlAlchemyEvidenceIngestionStore,
 )
 
@@ -383,6 +388,135 @@ def _post(
         f"/api/v1/ai-governance/organizations/{path_org}/systems/{path_system}/evidence-runs",
         json=passport,
     )
+
+
+def test_evidence_passport_openapi_uses_canonical_schema_and_all_runtime_responses() -> None:
+    openapi = app.openapi()
+    operation = openapi["paths"][
+        "/api/v1/ai-governance/organizations/{org_id}/systems/{system_id}/evidence-runs"
+    ]["post"]
+    checked_in_schema = json.loads(
+        (REPO_ROOT / "apps/backend/src/domain/assurance/evidence-passport.schema.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    assert operation["requestBody"] == {
+        "required": True,
+        "content": {"application/json": {"schema": checked_in_schema}},
+    }
+    assert set(operation["responses"]) == {
+        "200",
+        "201",
+        "401",
+        "403",
+        "404",
+        "409",
+        "415",
+        "422",
+        "500",
+    }
+    for response_status in ("200", "201"):
+        schema = operation["responses"][response_status]["content"]["application/json"]["schema"]
+        assert schema["$ref"].endswith("/EvidenceIngestionResponse")
+    for response_status in ("401", "403", "404", "409", "415", "422", "500"):
+        schema = operation["responses"][response_status]["content"]["application/json"]["schema"]
+        assert schema["$ref"].endswith("/EvidencePassportErrorResponse")
+    success_schema = openapi["components"]["schemas"]["EvidenceIngestionResponse"]
+    assert {
+        "disposition",
+        "id",
+        "runId",
+        "runContentHash",
+        "contentHash",
+        "passportId",
+        "latestRevision",
+        "latestCanonicalContentHash",
+        "result",
+        "capabilityState",
+        "limitations",
+        "artifacts",
+        "candidateMappings",
+        "sourceType",
+        "sourceIdentifier",
+    } <= set(success_schema["required"])
+    assert success_schema["properties"]["disposition"]["enum"] == ["created", "replayed"]
+    error_schema = openapi["components"]["schemas"]["EvidencePassportErrorResponse"]
+    assert error_schema["required"] == ["detail"]
+    assert error_schema["properties"]["detail"]["type"] == "string"
+
+
+@pytest.mark.parametrize(
+    "content_type",
+    [
+        "application/json",
+        "application/json; charset=utf-8",
+        "application/vnd.fairmind.evidence-passport+json; charset=UTF-8",
+    ],
+)
+def test_evidence_passport_accepts_json_compatible_media_types(
+    assurance_client, content_type: str
+) -> None:
+    client, session_factory, _ = assurance_client
+    _seed_default(session_factory)
+
+    response = client.post(
+        f"/api/v1/ai-governance/organizations/{ORG_A}/systems/system-001/evidence-runs",
+        content=json.dumps(_passport()).encode("utf-8"),
+        headers={"content-type": content_type},
+    )
+
+    assert response.status_code == 201, response.text
+    session = session_factory()
+    assert _count(session, GovernanceEvidenceRun) == 1
+    session.close()
+
+
+@pytest.mark.parametrize(
+    "content_type",
+    [None, "text/plain", "application/xml", "application/jsonp"],
+)
+def test_evidence_passport_rejects_non_json_media_types_as_415_before_body_parse(
+    assurance_client, content_type: str | None
+) -> None:
+    client, session_factory, _ = assurance_client
+    _seed_default(session_factory)
+    headers = {"content-type": content_type} if content_type else {}
+
+    response = client.post(
+        f"/api/v1/ai-governance/organizations/{ORG_A}/systems/system-001/evidence-runs",
+        content=b"not-json",
+        headers=headers,
+    )
+
+    assert response.status_code == 415, response.text
+    assert response.json() == {
+        "detail": "Evidence Passport requires application/json or a +json media type"
+    }
+    session = session_factory()
+    assert _count(session, GovernanceEvidenceRun) == 0
+    session.close()
+
+
+def test_evidence_passport_authorizes_before_media_type_or_body_checks(
+    assurance_client,
+) -> None:
+    client, session_factory, _ = assurance_client
+    session = session_factory()
+    _seed_org(session, ORG_A, USER_A, role="viewer")
+    _seed_system_and_control(session)
+    session.close()
+
+    response = client.post(
+        f"/api/v1/ai-governance/organizations/{ORG_A}/systems/system-001/evidence-runs",
+        content=b"not-json",
+        headers={"content-type": "text/plain"},
+    )
+
+    assert response.status_code == 403, response.text
+    session = session_factory()
+    assert _count(session, GovernanceEvidenceRun) == 0
+    session.close()
 
 
 @pytest.mark.parametrize(
@@ -1044,8 +1178,9 @@ def _race_reviews(factory, mapping_ids: list[str]):
         return list(executor.map(review, mapping_ids))
 
 
+@pytest.mark.parametrize("_race_iteration", range(20))
 def test_two_sessions_racing_same_mapping_yield_one_revision_and_one_stale_conflict(
-    tmp_path: Path,
+    tmp_path: Path, _race_iteration: int
 ) -> None:
     engine, factory, mapping_ids = _concurrent_review_database(tmp_path, two_mappings=False)
 
@@ -1065,8 +1200,9 @@ def test_two_sessions_racing_same_mapping_yield_one_revision_and_one_stale_confl
     engine.dispose()
 
 
+@pytest.mark.parametrize("_race_iteration", range(20))
 def test_two_sessions_racing_different_mappings_allocate_unique_run_wide_revisions(
-    tmp_path: Path,
+    tmp_path: Path, _race_iteration: int
 ) -> None:
     engine, factory, mapping_ids = _concurrent_review_database(tmp_path, two_mappings=True)
 
@@ -1085,6 +1221,48 @@ def test_two_sessions_racing_different_mappings_allocate_unique_run_wide_revisio
     assert revisions[2]["previous_revision_hash"] == revisions[1]["canonical_content_hash"]
     session.close()
     engine.dispose()
+
+
+def test_revision_lock_registry_preserves_concurrent_identity_then_releases_entries() -> None:
+    with _REVISION_LOCKS_GUARD:
+        _REVISION_LOCKS.clear()
+    worker_count = 12
+    rendezvous = threading.Barrier(worker_count)
+    identities: list[int] = []
+    references: list[weakref.ReferenceType[threading.Lock]] = []
+    results_guard = threading.Lock()
+
+    def use_shared_lock() -> None:
+        lock = _revision_lock("shared-run")
+        with results_guard:
+            identities.append(id(lock))
+            references.append(weakref.ref(lock))
+        rendezvous.wait(timeout=5)
+        with lock:
+            pass
+
+    with ThreadPoolExecutor(max_workers=worker_count) as executor:
+        futures = [executor.submit(use_shared_lock) for _ in range(worker_count)]
+        for future in futures:
+            future.result(timeout=10)
+
+    assert len(set(identities)) == 1
+    gc.collect()
+    assert all(reference() is None for reference in references)
+    with _REVISION_LOCKS_GUARD:
+        assert not _REVISION_LOCKS
+
+
+def test_revision_lock_registry_does_not_retain_high_cardinality_run_ids() -> None:
+    with _REVISION_LOCKS_GUARD:
+        _REVISION_LOCKS.clear()
+
+    for index in range(10_000):
+        _revision_lock(f"completed-run-{index}")
+
+    gc.collect()
+    with _REVISION_LOCKS_GUARD:
+        assert not _REVISION_LOCKS
 
 
 def test_original_public_revision_replays_after_server_review_without_new_writes(

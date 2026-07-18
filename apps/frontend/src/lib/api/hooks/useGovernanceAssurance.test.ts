@@ -159,6 +159,39 @@ test('posts the complete Evidence Passport without a compact-envelope conversion
   assert.equal('artifactReferences' in body, false)
   assert.equal('controlExternalIds' in body, false)
   assert.deepEqual(review, { state: 'accepted', rationale: 'Coverage verified.', reviewVersion: 2 })
+
+  const publicRevision: EvidencePassportInput['passportRevision'] = 1
+  const publicReview: EvidencePassportInput['review']['status'] = 'pending'
+  const publicMappingState: EvidencePassportInput['frameworkMappings'][number]['state'] = 'candidate'
+  assert.equal(publicRevision, 1)
+  assert.equal(publicReview, 'pending')
+  assert.equal(publicMappingState, 'candidate')
+
+  // @ts-expect-error Public evaluator ingestion cannot submit later revisions.
+  const laterRevision: EvidencePassportInput['passportRevision'] = 2
+  // @ts-expect-error Public evaluator ingestion cannot submit reviewed passports.
+  const reviewedPassport: EvidencePassportInput['review']['status'] = 'accepted'
+  // @ts-expect-error Public evaluator ingestion accepts candidate mappings only.
+  const acceptedMapping: EvidencePassportInput['frameworkMappings'][number]['state'] = 'accepted'
+  // @ts-expect-error Public evaluator ingestion has no predecessor field.
+  const predecessorKey: keyof EvidencePassportInput = 'previousRevisionHash'
+  // @ts-expect-error Public evaluator ingestion has no signature field.
+  const signaturesKey: keyof EvidencePassportInput = 'signatures'
+  void laterRevision
+  void reviewedPassport
+  void acceptedMapping
+  void predecessorKey
+  void signaturesKey
+
+  type RemediationInput = EvidencePassportInput['remediation'][number]
+  // @ts-expect-error ownerId is required by the canonical Evidence Passport schema.
+  const ownerlessRemediation: RemediationInput = {
+    remediationId: 'remediation-1',
+    findingIds: ['finding-1'],
+    status: 'planned',
+    action: 'Resolve the bounded finding.',
+  }
+  void ownerlessRemediation
 })
 
 test('the evaluation-list consumer renders the backward-compatible GET DTO', async () => {

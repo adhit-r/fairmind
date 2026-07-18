@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from functools import cache
 import json
 from pathlib import Path
@@ -28,8 +29,8 @@ from src.domain.assurance.evidence_passport import (
 
 
 @cache
-def _canonical_schema_validator() -> Draft202012Validator:
-    """Compile the checked-in exchange contract once per process."""
+def _loaded_evidence_passport_schema() -> dict[str, Any]:
+    """Read and validate the checked-in exchange contract once per process."""
     schema_path = (
         Path(__file__).resolve().parents[2]
         / "domain"
@@ -38,7 +39,18 @@ def _canonical_schema_validator() -> Draft202012Validator:
     )
     schema = json.loads(schema_path.read_text(encoding="utf-8"))
     Draft202012Validator.check_schema(schema)
-    return Draft202012Validator(schema, format_checker=FormatChecker())
+    return schema
+
+
+def canonical_evidence_passport_schema() -> dict[str, Any]:
+    """Return an isolated copy of the canonical schema for API publication."""
+    return deepcopy(_loaded_evidence_passport_schema())
+
+
+@cache
+def _canonical_schema_validator() -> Draft202012Validator:
+    """Compile the checked-in exchange contract once per process."""
+    return Draft202012Validator(_loaded_evidence_passport_schema(), format_checker=FormatChecker())
 
 
 def _validate_raw_passport(passport: dict[str, Any]) -> None:
@@ -156,6 +168,7 @@ __all__ = [
     "EvidenceMappingReferenceError",
     "EvidencePassportValidationError",
     "build_evidence_ingestion_service",
+    "canonical_evidence_passport_schema",
     "parse_strict_json_object",
     "review_evidence_mapping_revision",
 ]
