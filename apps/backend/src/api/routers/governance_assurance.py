@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict
 import os
 from pathlib import Path
+from string import ascii_letters, digits
 import tempfile
 from typing import Any, Literal
 
@@ -160,20 +161,117 @@ _EVIDENCE_PASSPORT_ERROR_RESPONSES = {
     }.items()
 }
 
+_ASCII_ALNUM = frozenset(ascii_letters + digits)
+_RESTRICTED_NAME_CHARS = _ASCII_ALNUM | frozenset("!#$&-^_.+")
+_HTTP_TOKEN_CHARS = _ASCII_ALNUM | frozenset("!#$%&'*+-.^_`|~")
+
+
+def _is_restricted_media_name(value: str) -> bool:
+    return (
+        1 <= len(value) <= 127
+        and value[0] in _ASCII_ALNUM
+        and all(character in _RESTRICTED_NAME_CHARS for character in value)
+    )
+
+
+def _is_http_token(value: str) -> bool:
+    return bool(value) and all(character in _HTTP_TOKEN_CHARS for character in value)
+
+
+def _is_http_quoted_string(value: str) -> bool:
+    if len(value) < 2 or value[0] != '"' or value[-1] != '"':
+        return False
+    index = 1
+    final_quote = len(value) - 1
+    while index < final_quote:
+        character = value[index]
+        codepoint = ord(character)
+        if character == "\\":
+            index += 1
+            if index >= final_quote:
+                return False
+            quoted_codepoint = ord(value[index])
+            if not (
+                value[index] in "\t "
+                or 0x21 <= quoted_codepoint <= 0x7E
+                or 0x80 <= quoted_codepoint <= 0xFF
+            ):
+                return False
+        elif not (
+            character in "\t "
+            or codepoint == 0x21
+            or 0x23 <= codepoint <= 0x5B
+            or 0x5D <= codepoint <= 0x7E
+            or 0x80 <= codepoint <= 0xFF
+        ):
+            return False
+        index += 1
+    return True
+
+
+def _media_type_parts(value: str) -> list[str] | None:
+    """Split semicolon parameters without splitting inside quoted strings."""
+    value = value.strip(" \t")
+    if not value:
+        return None
+    parts: list[str] = []
+    start = 0
+    quoted = False
+    escaped = False
+    for index, character in enumerate(value):
+        if quoted:
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == '"':
+                quoted = False
+        elif character == '"':
+            quoted = True
+        elif character == ";":
+            parts.append(value[start:index].strip(" \t"))
+            start = index + 1
+    if quoted or escaped:
+        return None
+    parts.append(value[start:].strip(" \t"))
+    return parts
+
 
 def _is_json_compatible_content_type(value: str | None) -> bool:
     if not value:
         return False
-    media_type = value.partition(";")[0].strip().lower()
-    type_name, separator, subtype = media_type.partition("/")
+    parts = _media_type_parts(value)
+    if not parts:
+        return False
+    type_name, separator, subtype = parts[0].partition("/")
     if (
         not separator
-        or not type_name
-        or not subtype
-        or any(character.isspace() for character in media_type)
+        or not _is_restricted_media_name(type_name)
+        or not _is_restricted_media_name(subtype)
     ):
         return False
-    return media_type == "application/json" or subtype.endswith("+json")
+
+    parameter_names: set[str] = set()
+    for raw_parameter in parts[1:]:
+        parameter_name, equals, parameter_value = raw_parameter.partition("=")
+        normalized_name = parameter_name.lower()
+        if (
+            not equals
+            or not _is_http_token(parameter_name)
+            or normalized_name in parameter_names
+            or not (_is_http_token(parameter_value) or _is_http_quoted_string(parameter_value))
+        ):
+            return False
+        parameter_names.add(normalized_name)
+
+    normalized_type = type_name.lower()
+    normalized_subtype = subtype.lower()
+    if normalized_type == "application" and normalized_subtype == "json":
+        return True
+    if not normalized_subtype.endswith("+json"):
+        return False
+    structured_base = subtype[:-5]
+    return _is_restricted_media_name(structured_base)
 
 
 def organization_membership(
@@ -431,7 +529,10 @@ async def ingest_evidence_run(
 ):
     authorization_service = _service(db)
     _require_mutation(membership, authorization_service)
-    if not _is_json_compatible_content_type(request.headers.get("content-type")):
+    content_type_values = request.headers.getlist("content-type")
+    if len(content_type_values) != 1 or not _is_json_compatible_content_type(
+        content_type_values[0]
+    ):
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
             detail="Evidence Passport requires application/json or a +json media type",

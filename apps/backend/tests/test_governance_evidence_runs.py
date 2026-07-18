@@ -452,6 +452,14 @@ def test_evidence_passport_openapi_uses_canonical_schema_and_all_runtime_respons
         "application/json",
         "application/json; charset=utf-8",
         "application/vnd.fairmind.evidence-passport+json; charset=UTF-8",
+        "application/vnd.fairmind++json",
+        "Application/JSON \t; \tcharset=UTF-8",
+        (
+            'application/vnd.fairmind.evidence-passport+json; charset="UTF-8"; '
+            'profile="https://fairmind.ai/passport;v=1,stable"'
+        ),
+        "application/json; profile*=UTF-8''https%3A%2F%2Ffairmind.ai%2Fpassport",
+        'application/json; note="bounded \\"passport\\""',
     ],
 )
 def test_evidence_passport_accepts_json_compatible_media_types(
@@ -474,7 +482,27 @@ def test_evidence_passport_accepts_json_compatible_media_types(
 
 @pytest.mark.parametrize(
     "content_type",
-    [None, "text/plain", "application/xml", "application/jsonp"],
+    [
+        None,
+        "text/plain",
+        "application/xml",
+        "application/jsonp",
+        "application/+json",
+        "application/*+json",
+        "application/@+json",
+        "application/foo,bar+json",
+        "application/json; charset",
+        "application/json; charset=",
+        "application/json; =utf-8",
+        "application/json; charset =utf-8",
+        "application/json; charset= utf-8",
+        'application/json; charset="utf-8',
+        'application/json; charset="utf-8"junk',
+        "application/json; charset=utf-8;",
+        "application/json;;charset=utf-8",
+        "application/json; charset=utf-8; CHARSET=utf-8",
+        "application/json; charset=utf-8,application/json",
+    ],
 )
 def test_evidence_passport_rejects_non_json_media_types_as_415_before_body_parse(
     assurance_client, content_type: str | None
@@ -485,8 +513,32 @@ def test_evidence_passport_rejects_non_json_media_types_as_415_before_body_parse
 
     response = client.post(
         f"/api/v1/ai-governance/organizations/{ORG_A}/systems/system-001/evidence-runs",
-        content=b"not-json",
+        content=json.dumps(_passport()).encode("utf-8"),
         headers=headers,
+    )
+
+    assert response.status_code == 415, response.text
+    assert response.json() == {
+        "detail": "Evidence Passport requires application/json or a +json media type"
+    }
+    session = session_factory()
+    assert _count(session, GovernanceEvidenceRun) == 0
+    session.close()
+
+
+def test_evidence_passport_rejects_duplicate_content_type_fields(
+    assurance_client,
+) -> None:
+    client, session_factory, _ = assurance_client
+    _seed_default(session_factory)
+
+    response = client.post(
+        f"/api/v1/ai-governance/organizations/{ORG_A}/systems/system-001/evidence-runs",
+        content=json.dumps(_passport()).encode("utf-8"),
+        headers=[
+            ("content-type", "application/json"),
+            ("content-type", "text/plain"),
+        ],
     )
 
     assert response.status_code == 415, response.text
