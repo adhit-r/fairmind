@@ -158,6 +158,22 @@
       "minLength": 1,
       "maxLength": 500
     },
+    "absoluteNonLocalUri": {
+      "type": "string",
+      "format": "uri",
+      "minLength": 1,
+      "maxLength": 2048,
+      "not": {
+        "anyOf": [
+          {
+            "pattern": "^[A-Za-z]:[\\\\/]"
+          },
+          {
+            "pattern": "^(//|\\\\\\\\)"
+          }
+        ]
+      }
+    },
     "aiSystem": {
       "type": "object",
       "additionalProperties": false,
@@ -536,9 +552,7 @@
           "$ref": "#/$defs/shortText"
         },
         "endpoint": {
-          "type": "string",
-          "format": "uri",
-          "maxLength": 2048
+          "$ref": "#/$defs/absoluteNonLocalUri"
         }
       }
     },
@@ -763,7 +777,8 @@
           "type": "number"
         },
         {
-          "type": "string"
+          "type": "string",
+          "maxLength": 10000
         },
         {
           "type": "boolean"
@@ -780,7 +795,8 @@
                 "type": "number"
               },
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 10000
               },
               {
                 "type": "boolean"
@@ -821,10 +837,7 @@
           ]
         },
         "uri": {
-          "type": "string",
-          "format": "uri",
-          "minLength": 1,
-          "maxLength": 2048
+          "$ref": "#/$defs/absoluteNonLocalUri"
         },
         "sha256": {
           "$ref": "#/$defs/sha256"
@@ -977,9 +990,7 @@
           "$ref": "#/$defs/sha256"
         },
         "sourceUri": {
-          "type": "string",
-          "format": "uri",
-          "maxLength": 2048
+          "$ref": "#/$defs/absoluteNonLocalUri"
         }
       }
     },

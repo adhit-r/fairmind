@@ -1,0 +1,151 @@
+{
+  "schemaVersion": "1.0.0",
+  "passportId": "passport-example",
+  "passportRevision": 1,
+  "claimBoundary": "supporting_evidence_only",
+  "organizationId": "11111111-1111-4111-8111-111111111111",
+  "workspaceId": "workspace-example",
+  "aiSystem": {
+    "systemId": "system-example",
+    "name": "System 001 supplied name",
+    "kind": "model",
+    "version": "2026.07",
+    "identityHash": "1111111111111111111111111111111111111111111111111111111111111111",
+    "ownerId": "owner-001"
+  },
+  "evaluation": {
+    "sourceType": "fairmind_evaluation",
+    "sourceIdentifier": "fairmind-bias-suite",
+    "runId": "run-example",
+    "capabilityState": "validated",
+    "assuranceSource": "fairmind_internal",
+    "evaluator": {
+      "name": "FairMind evaluator",
+      "version": "2.0.0",
+      "adapterName": "passport-adapter",
+      "adapterVersion": "1.0.0",
+      "runnerVersion": "3.0.0"
+    },
+    "suite": {
+      "name": "Bias suite",
+      "version": "2026.07",
+      "trigger": "release_gate"
+    },
+    "subject": {
+      "kind": "model",
+      "subjectId": "subject-001",
+      "name": "System 001",
+      "version": "2026.07",
+      "digest": "2222222222222222222222222222222222222222222222222222222222222222"
+    },
+    "scope": {
+      "intendedUse": "Bounded synthetic evaluation.",
+      "inputFingerprint": "3333333333333333333333333333333333333333333333333333333333333333",
+      "datasetName": "Synthetic data",
+      "datasetVersion": "1",
+      "datasetHash": "4444444444444444444444444444444444444444444444444444444444444444",
+      "sampleCount": 100,
+      "protectedGroups": [
+        "age"
+      ],
+      "locales": [
+        "en-IN"
+      ],
+      "exclusions": [
+        "Production data."
+      ]
+    },
+    "configurationHash": "5555555555555555555555555555555555555555555555555555555555555555",
+    "thresholds": [
+      {
+        "metric": "parity",
+        "operator": "lte",
+        "value": 0.1,
+        "rationale": "Preregistered threshold."
+      }
+    ],
+    "result": {
+      "status": "passed",
+      "summary": "Bounded passed result.",
+      "metrics": [
+        {
+          "name": "parity",
+          "value": 0.05,
+          "thresholdMet": true
+        }
+      ],
+      "startedAt": "2026-07-18T00:00:00Z",
+      "endedAt": "2026-07-18T00:05:00Z"
+    },
+    "runContentHash": "0674a18efff474b167789452ec78df33282576a3863ffde69c18bf3c8421ea24",
+    "capturedAt": "2026-07-18T00:05:00Z",
+    "limitations": [
+      "Synthetic test set only."
+    ]
+  },
+  "artifacts": [
+    {
+      "artifactId": "artifact-report",
+      "role": "report",
+      "uri": "s3://evidence/run-example/report.json",
+      "sha256": "6666666666666666666666666666666666666666666666666666666666666666",
+      "mediaType": "application/json",
+      "sizeBytes": 1024,
+      "containsSensitiveData": false
+    },
+    {
+      "artifactId": "artifact-log",
+      "role": "log",
+      "uri": "s3://evidence/run-example/diagnostic.log",
+      "sha256": "7777777777777777777777777777777777777777777777777777777777777777",
+      "mediaType": "text/plain",
+      "sizeBytes": 512,
+      "containsSensitiveData": false
+    }
+  ],
+  "frameworkMappings": [
+    {
+      "mappingId": "mapping-001",
+      "framework": {
+        "key": "generic",
+        "versionLabel": "1",
+        "sourceHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "control": {
+        "externalId": "CTRL-1",
+        "assessmentId": "assessment-example"
+      },
+      "state": "candidate",
+      "relation": "supports",
+      "rationale": "Explicit evaluator mapping for review.",
+      "suggestedBy": {
+        "actorType": "adapter",
+        "actorId": "adapter-001"
+      },
+      "createdAt": "2026-07-18T00:05:00Z"
+    }
+  ],
+  "review": {
+    "status": "pending",
+    "reviewVersion": 0
+  },
+  "findings": [],
+  "remediation": [],
+  "freshness": {
+    "status": "current",
+    "policy": "Re-evaluate on material change.",
+    "assessedAt": "2026-07-18T00:05:00Z",
+    "staleReasons": [],
+    "invalidationKeys": [
+      "system_version",
+      "dataset_hash"
+    ]
+  },
+  "lineage": {
+    "predecessorPassportIds": [],
+    "retestOfPassportIds": []
+  },
+  "signatures": [],
+  "createdAt": "2026-07-18T00:05:00Z",
+  "canonicalContentHash": "fbb460f273dcf642a9bb099969e007b07bf7cbda44564937d6fea5f7a2adffce"
+}

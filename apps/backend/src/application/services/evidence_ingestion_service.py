@@ -86,7 +86,7 @@ def parse_strict_json_object(raw: bytes) -> dict[str, Any]:
         )
     except EvidencePassportValidationError:
         raise
-    except (json.JSONDecodeError, UnicodeDecodeError) as error:
+    except (ValueError, RecursionError) as error:
         raise EvidencePassportValidationError(f"invalid JSON request body: {error}") from error
     if not isinstance(value, dict):
         raise EvidencePassportValidationError("Evidence Passport body must be a JSON object")

@@ -76,6 +76,17 @@ def _count(session, model) -> int:
     return len(_rows(session, model))
 
 
+def _assert_no_ingestion_writes(session) -> None:
+    for model in (
+        GovernanceEvidenceRun,
+        GovernanceEvidenceArtifact,
+        GovernanceEvidencePassportRevision,
+        GovernanceControlEvidence,
+        OrganizationAuditLog,
+    ):
+        assert _count(session, model) == 0, model.__tablename__
+
+
 def _audit_rows(session, action: str):
     audits = OrganizationAuditLog.__table__
     return session.execute(select(audits).where(audits.c.action == action)).mappings().all()
@@ -412,6 +423,7 @@ def test_evidence_passport_openapi_uses_canonical_schema_and_all_runtime_respons
         "403",
         "404",
         "409",
+        "413",
         "415",
         "422",
         "500",
@@ -419,7 +431,7 @@ def test_evidence_passport_openapi_uses_canonical_schema_and_all_runtime_respons
     for response_status in ("200", "201"):
         schema = operation["responses"][response_status]["content"]["application/json"]["schema"]
         assert schema["$ref"].endswith("/EvidenceIngestionResponse")
-    for response_status in ("401", "403", "404", "409", "415", "422", "500"):
+    for response_status in ("401", "403", "404", "409", "413", "415", "422", "500"):
         schema = operation["responses"][response_status]["content"]["application/json"]["schema"]
         assert schema["$ref"].endswith("/EvidencePassportErrorResponse")
     success_schema = openapi["components"]["schemas"]["EvidenceIngestionResponse"]
@@ -451,6 +463,11 @@ def test_evidence_passport_openapi_uses_canonical_schema_and_all_runtime_respons
     [
         "application/json",
         "application/json; charset=utf-8",
+        "application/json;",
+        "application/json;;",
+        "application/json; charset=utf-8;",
+        "application/json;;charset=utf-8",
+        "application/vnd.foo+json; ; charset=utf-8",
         "application/vnd.fairmind.evidence-passport+json; charset=UTF-8",
         "application/vnd.fairmind++json",
         "Application/JSON \t; \tcharset=UTF-8",
@@ -498,8 +515,6 @@ def test_evidence_passport_accepts_json_compatible_media_types(
         "application/json; charset= utf-8",
         'application/json; charset="utf-8',
         'application/json; charset="utf-8"junk',
-        "application/json; charset=utf-8;",
-        "application/json;;charset=utf-8",
         "application/json; charset=utf-8; CHARSET=utf-8",
         "application/json; charset=utf-8,application/json",
     ],
@@ -550,24 +565,113 @@ def test_evidence_passport_rejects_duplicate_content_type_fields(
     session.close()
 
 
-def test_evidence_passport_authorizes_before_media_type_or_body_checks(
-    assurance_client,
+def test_evidence_passport_authorizes_before_media_type_size_or_body_checks(
+    assurance_client, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     client, session_factory, _ = assurance_client
     session = session_factory()
     _seed_org(session, ORG_A, USER_A, role="viewer")
     _seed_system_and_control(session)
     session.close()
+    monkeypatch.setenv("GOVERNANCE_EVIDENCE_PASSPORT_MAX_BYTES", "1")
 
     response = client.post(
         f"/api/v1/ai-governance/organizations/{ORG_A}/systems/system-001/evidence-runs",
         content=b"not-json",
-        headers={"content-type": "text/plain"},
+        headers={"content-type": "text/plain", "content-length": "1000"},
     )
 
     assert response.status_code == 403, response.text
     session = session_factory()
     assert _count(session, GovernanceEvidenceRun) == 0
+    session.close()
+
+
+def test_evidence_passport_media_type_precedes_size_check(
+    assurance_client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, session_factory, _ = assurance_client
+    _seed_default(session_factory)
+    monkeypatch.setenv("GOVERNANCE_EVIDENCE_PASSPORT_MAX_BYTES", "1")
+
+    response = client.post(
+        f"/api/v1/ai-governance/organizations/{ORG_A}/systems/system-001/evidence-runs",
+        content=b"not-json",
+        headers={"content-type": "text/plain", "content-length": "1000"},
+    )
+
+    assert response.status_code == 415, response.text
+    session = session_factory()
+    _assert_no_ingestion_writes(session)
+    session.close()
+
+
+def test_declared_oversized_evidence_passport_is_413_before_parse_or_write(
+    assurance_client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, session_factory, _ = assurance_client
+    _seed_default(session_factory)
+    raw = json.dumps(_passport()).encode("utf-8")
+    limit = len(raw) - 1
+    monkeypatch.setenv("GOVERNANCE_EVIDENCE_PASSPORT_MAX_BYTES", str(limit))
+
+    response = client.post(
+        f"/api/v1/ai-governance/organizations/{ORG_A}/systems/system-001/evidence-runs",
+        content=raw,
+        headers={
+            "content-type": "application/json",
+            "content-length": str(len(raw)),
+        },
+    )
+
+    assert response.status_code == 413, response.text
+    assert response.json() == {"detail": f"Evidence Passport request body exceeds {limit} bytes"}
+    session = session_factory()
+    _assert_no_ingestion_writes(session)
+    session.close()
+
+
+def test_evidence_passport_at_configured_byte_limit_is_accepted(
+    assurance_client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, session_factory, _ = assurance_client
+    _seed_default(session_factory)
+    raw = json.dumps(_passport()).encode("utf-8")
+    monkeypatch.setenv("GOVERNANCE_EVIDENCE_PASSPORT_MAX_BYTES", str(len(raw)))
+
+    response = client.post(
+        f"/api/v1/ai-governance/organizations/{ORG_A}/systems/system-001/evidence-runs",
+        content=raw,
+        headers={
+            "content-type": "application/json",
+            "content-length": str(len(raw)),
+        },
+    )
+
+    assert response.status_code == 201, response.text
+
+
+def test_streamed_oversized_evidence_passport_without_length_is_413_and_stops_writes(
+    assurance_client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, session_factory, _ = assurance_client
+    _seed_default(session_factory)
+    limit = 64
+    monkeypatch.setenv("GOVERNANCE_EVIDENCE_PASSPORT_MAX_BYTES", str(limit))
+
+    response = client.post(
+        f"/api/v1/ai-governance/organizations/{ORG_A}/systems/system-001/evidence-runs",
+        content=iter((b'{"padding":"', b"x" * limit, b'"}')),
+        headers={
+            "content-type": "application/json",
+            "transfer-encoding": "chunked",
+        },
+    )
+
+    assert response.status_code == 413, response.text
+    assert response.json() == {"detail": f"Evidence Passport request body exceeds {limit} bytes"}
+    session = session_factory()
+    _assert_no_ingestion_writes(session)
     session.close()
 
 
@@ -639,12 +743,122 @@ def test_ijson_lone_surrogate_request_is_rejected_as_422(assurance_client) -> No
     session.close()
 
 
+@pytest.mark.parametrize(
+    "raw",
+    [
+        b'{"value":' + (b"1" * 5000) + b"}",
+        b'{"value":' + (b"[" * 10_000) + b"0" + (b"]" * 10_000) + b"}",
+    ],
+    ids=["python-integer-digit-limit", "python-json-recursion-limit"],
+)
+def test_json_decoder_resource_limits_are_bounded_422_before_storage(
+    assurance_client, raw: bytes
+) -> None:
+    _, session_factory, _ = assurance_client
+    _seed_default(session_factory)
+
+    with TestClient(app, raise_server_exceptions=False) as client:
+        response = client.post(
+            f"/api/v1/ai-governance/organizations/{ORG_A}/systems/system-001/evidence-runs",
+            content=raw,
+            headers={"content-type": "application/json"},
+        )
+
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"].startswith("invalid JSON request body:")
+    session = session_factory()
+    _assert_no_ingestion_writes(session)
+    session.close()
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        ("artifacts", 0, "uri"),
+        ("frameworkMappings", 0, "framework", "sourceUri"),
+        ("evaluation", "subject", "endpoint"),
+    ],
+)
+@pytest.mark.parametrize(
+    "value",
+    [
+        "C:/Users/evaluator/private/report.json",
+        "c:/users/evaluator/private/report.json",
+        r"C:\Users\evaluator\private\report.json",
+        r"\\server\share\private\report.json",
+        "//server/share/private/report.json",
+    ],
+)
+def test_windows_and_unc_local_paths_are_422_with_no_ingestion_writes(
+    assurance_client, path: tuple, value: str
+) -> None:
+    client, session_factory, _ = assurance_client
+    _seed_default(session_factory)
+    passport = _passport()
+    target = passport
+    for part in path[:-1]:
+        target = target[part]
+    target[path[-1]] = value
+    passport = _independently_hash_passport(passport)
+
+    response = _post(client, passport)
+
+    assert response.status_code == 422, response.text
+    session = session_factory()
+    _assert_no_ingestion_writes(session)
+    session.close()
+
+
+def test_unambiguous_one_letter_opaque_uris_remain_ingestible(assurance_client) -> None:
+    client, session_factory, _ = assurance_client
+    _seed_default(session_factory)
+    passport = _passport()
+    passport["artifacts"][0]["uri"] = "x:artifact-report-001"
+    passport["frameworkMappings"][0]["framework"]["sourceUri"] = "x:framework-source-001"
+    passport["evaluation"]["subject"]["endpoint"] = "x:subject-endpoint-001"
+    passport = _independently_hash_passport(passport)
+
+    response = _post(client, passport)
+
+    assert response.status_code == 201, response.text
+
+
 def _seed_default(session_factory) -> tuple[str, str]:
     session = session_factory()
     _seed_org(session, ORG_A, USER_A)
     identifiers = _seed_system_and_control(session)
     session.close()
     return identifiers
+
+
+def test_checked_in_evidence_passport_example_posts_through_real_scoped_route(
+    assurance_client,
+) -> None:
+    client, session_factory, _ = assurance_client
+    passport = json.loads(
+        (REPO_ROOT / "docs/product/evidence-passport.example.json").read_text(encoding="utf-8")
+    )
+    org_id = passport["organizationId"]
+    system_id = passport["aiSystem"]["systemId"]
+    workspace_id = passport["workspaceId"]
+    session = session_factory()
+    _seed_org(session, org_id, USER_A)
+    _seed_system_and_control(
+        session,
+        org_id=org_id,
+        workspace_id=workspace_id,
+        system_id=system_id,
+        suffix="example",
+    )
+    session.close()
+
+    response = client.post(
+        f"/api/v1/ai-governance/organizations/{org_id}/systems/{system_id}/evidence-runs",
+        content=json.dumps(passport).encode("utf-8"),
+        headers={"content-type": "application/json"},
+    )
+
+    assert response.status_code == 201, response.text
 
 
 def test_new_passport_writes_run_ordered_artifacts_revision_candidates_and_audit(

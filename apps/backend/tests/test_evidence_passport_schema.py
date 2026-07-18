@@ -27,10 +27,13 @@ from src.domain.assurance.evidence_passport import (
     with_server_hashes,
 )
 
-SCHEMA_PATH = Path(__file__).parents[3] / "docs/product/evidence-passport.schema.json"
+REPO_ROOT = Path(__file__).parents[3]
+SCHEMA_PATH = REPO_ROOT / "docs/product/evidence-passport.schema.json"
 PACKAGED_SCHEMA_PATH = (
     Path(__file__).parents[1] / "src/domain/assurance/evidence-passport.schema.json"
 )
+EXAMPLE_PATH = REPO_ROOT / "docs/product/evidence-passport.example.json"
+ASSURANCE_DOC_PATH = REPO_ROOT / "docs/ai-governance/assurance-module.md"
 
 
 def golden_passport() -> dict:
@@ -267,6 +270,27 @@ def test_packaged_runtime_schema_is_byte_identical_to_published_contract() -> No
     assert PACKAGED_SCHEMA_PATH.read_bytes() == SCHEMA_PATH.read_bytes()
 
 
+def test_checked_in_example_matches_schema_and_both_canonical_hashes(schema: dict) -> None:
+    payload = json.loads(EXAMPLE_PATH.read_text(encoding="utf-8"))
+    Draft202012Validator(schema, format_checker=FormatChecker()).validate(payload)
+    passport = EvidencePassport.model_validate(payload)
+
+    assert payload["evaluation"]["runContentHash"] == calculate_run_content_hash(passport)
+    assert payload["canonicalContentHash"] == calculate_canonical_content_hash(passport)
+    assert verify_client_hashes(passport) == passport
+
+
+def test_operator_docs_execute_the_checked_in_example_instead_of_obsolete_envelope() -> None:
+    documentation = ASSURANCE_DOC_PATH.read_text(encoding="utf-8")
+    example_reference = EXAMPLE_PATH.relative_to(REPO_ROOT).as_posix()
+
+    assert f"--data-binary @{example_reference}" in documentation
+    assert "GOVERNANCE_EVIDENCE_PASSPORT_MAX_BYTES" in documentation
+    assert "16 MiB" in documentation
+    assert '"artifactReferences"' not in documentation
+    assert '"controlExternalIds"' not in documentation
+
+
 @pytest.mark.parametrize(
     ("path", "value"),
     [
@@ -350,6 +374,82 @@ def test_every_uri_field_rejects_inline_and_local_locations(path: tuple, value: 
     for part in path[:-1]:
         target = target[part]
     target[path[-1]] = value
+    with pytest.raises(ValidationError):
+        EvidencePassport.model_validate(payload)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        ("artifacts", 0, "uri"),
+        ("frameworkMappings", 0, "framework", "sourceUri"),
+        ("evaluation", "subject", "endpoint"),
+    ],
+)
+@pytest.mark.parametrize(
+    "value",
+    [
+        "C:/Users/evaluator/private/report.json",
+        "c:/users/evaluator/private/report.json",
+        r"C:\Users\evaluator\private\report.json",
+        r"z:\users\evaluator\private\report.json",
+        r"\\server\share\private\report.json",
+        "//server/share/private/report.json",
+    ],
+)
+def test_every_uri_field_rejects_windows_and_unc_local_paths_in_schema_and_domain(
+    schema: dict, path: tuple, value: str
+) -> None:
+    payload = golden_passport()
+    target = payload
+    for part in path[:-1]:
+        target = target[part]
+    target[path[-1]] = value
+
+    validator = Draft202012Validator(schema, format_checker=FormatChecker())
+    assert list(validator.iter_errors(payload)), f"schema accepted local path {value!r}"
+    with pytest.raises(ValidationError):
+        EvidencePassport.model_validate(payload)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        ("artifacts", 0, "uri"),
+        ("frameworkMappings", 0, "framework", "sourceUri"),
+        ("evaluation", "subject", "endpoint"),
+    ],
+)
+def test_every_uri_field_preserves_unambiguous_one_letter_opaque_uri_scheme(
+    schema: dict, path: tuple
+) -> None:
+    payload = golden_passport()
+    target = payload
+    for part in path[:-1]:
+        target = target[part]
+    target[path[-1]] = "x:opaque-resource-001"
+
+    Draft202012Validator(schema, format_checker=FormatChecker()).validate(payload)
+    EvidencePassport.model_validate(payload)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        ("evaluation", "thresholds", 0, "value"),
+        ("evaluation", "result", "metrics", 0, "value", 0),
+    ],
+)
+def test_json_scalar_strings_are_bounded_in_schema_and_domain(schema: dict, path: tuple) -> None:
+    payload = golden_passport()
+    payload["evaluation"]["result"]["metrics"][0]["value"] = ["bounded"]
+    target = payload
+    for part in path[:-1]:
+        target = target[part]
+    target[path[-1]] = "x" * 10_001
+
+    validator = Draft202012Validator(schema, format_checker=FormatChecker())
+    assert list(validator.iter_errors(payload)), "schema accepted an oversized scalar string"
     with pytest.raises(ValidationError):
         EvidencePassport.model_validate(payload)
 

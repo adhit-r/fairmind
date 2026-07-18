@@ -64,36 +64,28 @@ The Environmental Governance panel continues to read the selected system's envir
 
 ## Ingest an evidence run
 
-Use the organization- and system-scoped evidence-run endpoint for FairMind evaluations, company integration snapshots, manual evidence envelopes, or third-party results. Send compact metrics, hashes, limitations, and bounded artifact references. Do not send raw model weights, unrestricted prompts, private reasoning traces, or artifact bodies.
+Use the organization- and system-scoped evidence-run endpoint for FairMind evaluations, company integration snapshots, manual evidence passports, or third-party results. The request body is the canonical Evidence Passport defined by [`docs/product/evidence-passport.schema.json`](../product/evidence-passport.schema.json). Send compact metrics, hashes, limitations, and bounded artifact pointers. Do not send raw model weights, unrestricted prompts, private reasoning traces, or artifact bodies.
+
+The checked-in example is a strict Draft 2020-12-valid Passport whose `evaluation.runContentHash` and `canonicalContentHash` match the service's canonical projections. Its identity is synthetic, so the referenced organization, workspace, system, and assessment must already exist for the request to succeed; production adapters must emit their real registered identities and recompute both hashes. Its organization and system identifiers must match the scoped route:
 
 ```bash
+export FAIRMIND_ORG_ID="$(jq -r '.organizationId' docs/product/evidence-passport.example.json)"
+export FAIRMIND_SYSTEM_ID="$(jq -r '.aiSystem.systemId' docs/product/evidence-passport.example.json)"
+
 curl --fail-with-body \
   -H "Authorization: Bearer $FAIRMIND_ACCESS_TOKEN" \
   -H 'Content-Type: application/json' \
-  -d '{
-    "sourceType": "fairmind_evaluation",
-    "sourceIdentifier": "FairMind Bias Suite",
-    "runId": "bias-418",
-    "result": "passed_with_limitations",
-    "capturedAt": "2026-07-15T10:30:00Z",
-    "suiteName": "Bias and subgroup parity",
-    "suiteVersion": "2026.07",
-    "subjectVersion": "2.4.1",
-    "runnerVersion": "fairmind-runner 1.8.0",
-    "assuranceSource": "fairmind_internal",
-    "limitations": ["Sparse intersectional cohorts were excluded below n=30."],
-    "artifactReferences": [{
-      "uri": "s3://acme-assurance/bias-418/report.json",
-      "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-    }],
-    "controlExternalIds": ["A006.1"]
-  }' \
+  --data-binary @docs/product/evidence-passport.example.json \
   "$FAIRMIND_API_URL/api/v1/ai-governance/organizations/$FAIRMIND_ORG_ID/systems/$FAIRMIND_SYSTEM_ID/evidence-runs"
 ```
 
-Run identity is immutable within the selected AI system. Repeating the same envelope is idempotent. Reusing the same run identity with different canonical content returns HTTP 409. The content hash shown in Reports & Assurance is derived from the canonical envelope; it is not a user-entered display value.
+Recompute both hashes whenever any covered example field changes. `evaluation.runContentHash` covers the canonical evaluation-run projection, while `canonicalContentHash` covers the complete canonical Passport projection excluding signatures and the hash field itself. The service verifies both values rather than accepting user-entered display hashes.
 
-Artifact references are limited to 50 pointers, require a 64-character hexadecimal SHA-256 hash, and are size bounded. For third-party evidence, include the assessor identity and an explicit independence assertion. Configure evidence retention outside the envelope according to the organization's retention policy.
+Passport identity and revision are immutable within the selected AI system. Repeating the same canonical Passport is idempotent. Reusing an identity and revision with different canonical content returns HTTP 409. The initial public ingestion boundary accepts revision `1`, a `pending` review, and `candidate` framework mappings only; reviewer decisions remain a separate workflow.
+
+Canonical Passport requests default to a 16 MiB byte ceiling. Set `GOVERNANCE_EVIDENCE_PASSPORT_MAX_BYTES` to a positive byte count to configure a different deployment limit. FairMind checks a declared `Content-Length` and also stops streamed accumulation as soon as the request exceeds the ceiling; either case returns HTTP 413 before JSON parsing or persistence. Authentication and media-type checks still run first.
+
+Artifact references are limited to 50 pointers, require a 64-character hexadecimal SHA-256 hash, and are size bounded. Their URIs must identify non-local resources: POSIX paths, Windows drive paths, and UNC paths are rejected. For third-party evidence, include the assessor identity and an explicit independence assertion. Configure evidence retention outside the Passport according to the organization's retention policy.
 
 ## Review evidence mappings
 

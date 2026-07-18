@@ -55,6 +55,10 @@ MediaType = Annotated[
     str,
     StringConstraints(min_length=3, max_length=255, pattern=r"^[^/\s]+/[^/\s]+$"),
 ]
+JsonScalarText = Annotated[str, StringConstraints(max_length=10_000)]
+
+_WINDOWS_DRIVE_ABSOLUTE = re.compile(r"^[A-Za-z]:[\\/]")
+_WINDOWS_UNC_PATH = re.compile(r"^(?://|\\\\)")
 
 
 def _validate_datetime(value: str) -> str:
@@ -71,6 +75,12 @@ def _validate_datetime(value: str) -> str:
 
 
 def _validate_uri(value: str) -> str:
+    if (
+        PurePath(value).is_absolute()
+        or _WINDOWS_DRIVE_ABSOLUTE.match(value)
+        or _WINDOWS_UNC_PATH.match(value)
+    ):
+        raise ValueError("local paths are not permitted as URIs")
     parsed = urlsplit(value)
     if not parsed.scheme or any(character.isspace() for character in value):
         raise ValueError("must be an absolute URI")
@@ -85,7 +95,7 @@ DateTimeText = Annotated[str, AfterValidator(_validate_datetime)]
 UriText = Annotated[
     str, StringConstraints(min_length=1, max_length=2048), AfterValidator(_validate_uri)
 ]
-JsonScalar: TypeAlias = str | bool | int | float | None
+JsonScalar: TypeAlias = JsonScalarText | bool | int | float | None
 JsonScalarOrArray: TypeAlias = JsonScalar | tuple[JsonScalar, ...]
 
 

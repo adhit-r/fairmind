@@ -40,6 +40,8 @@ from src.application.services.governance_assurance_service import (
 
 router = APIRouter(prefix="/organizations/{org_id}", tags=["governance-assurance"])
 MAX_WORKBOOK_BYTES = 50 * 1024 * 1024
+DEFAULT_EVIDENCE_PASSPORT_MAX_BYTES = 16 * 1024 * 1024
+EVIDENCE_PASSPORT_MAX_BYTES_ENV = "GOVERNANCE_EVIDENCE_PASSPORT_MAX_BYTES"
 
 
 class WorkspaceRequest(BaseModel):
@@ -155,6 +157,7 @@ _EVIDENCE_PASSPORT_ERROR_RESPONSES = {
         403: "Organization membership or mutation permission required",
         404: "Scoped AI system not found",
         409: "Immutable run or revision conflict",
+        413: "Evidence Passport request body exceeds the configured byte limit",
         415: "Unsupported request media type",
         422: "Invalid Evidence Passport or scoped mapping reference",
         500: "Evidence persistence or audit failure",
@@ -253,6 +256,8 @@ def _is_json_compatible_content_type(value: str | None) -> bool:
 
     parameter_names: set[str] = set()
     for raw_parameter in parts[1:]:
+        if not raw_parameter:
+            continue
         parameter_name, equals, parameter_value = raw_parameter.partition("=")
         normalized_name = parameter_name.lower()
         if (
@@ -272,6 +277,49 @@ def _is_json_compatible_content_type(value: str | None) -> bool:
         return False
     structured_base = subtype[:-5]
     return _is_restricted_media_name(structured_base)
+
+
+def _evidence_passport_max_bytes() -> int:
+    raw_limit = os.getenv(
+        EVIDENCE_PASSPORT_MAX_BYTES_ENV,
+        str(DEFAULT_EVIDENCE_PASSPORT_MAX_BYTES),
+    )
+    try:
+        limit = int(raw_limit)
+    except ValueError as error:
+        raise RuntimeError(
+            f"{EVIDENCE_PASSPORT_MAX_BYTES_ENV} must be a positive integer"
+        ) from error
+    if limit <= 0:
+        raise RuntimeError(f"{EVIDENCE_PASSPORT_MAX_BYTES_ENV} must be a positive integer")
+    return limit
+
+
+def _evidence_passport_too_large(limit: int) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+        detail=f"Evidence Passport request body exceeds {limit} bytes",
+    )
+
+
+async def _read_evidence_passport_body(request: Request, limit: int) -> bytes:
+    """Read at most ``limit`` bytes, including when Content-Length is absent or false."""
+    declared_length = request.headers.get("content-length")
+    if declared_length is not None:
+        try:
+            if int(declared_length) > limit:
+                raise _evidence_passport_too_large(limit)
+        except ValueError:
+            # Framing validation belongs to the ASGI server; still enforce the
+            # actual byte count if a non-canonical field reaches the app.
+            pass
+
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > limit:
+            raise _evidence_passport_too_large(limit)
+        body.extend(chunk)
+    return bytes(body)
 
 
 def organization_membership(
@@ -537,8 +585,9 @@ async def ingest_evidence_run(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
             detail="Evidence Passport requires application/json or a +json media type",
         )
+    raw_body = await _read_evidence_passport_body(request, _evidence_passport_max_bytes())
     try:
-        passport = parse_strict_json_object(await request.body())
+        passport = parse_strict_json_object(raw_body)
     except EvidencePassportValidationError as error:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)
