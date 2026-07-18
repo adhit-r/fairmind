@@ -1,120 +1,22 @@
-"""Dialect-aware SQL selection for the governance assurance migration.
+"""Dialect-aware SQL selection for governance assurance migration 011.
 
-``009_governance_assurance.sql`` is the PostgreSQL deployment migration.  The
-SQLite adaptation exists only for the repository's isolated schema tests: it
-keeps the same new-table constraints while replacing PostgreSQL-only additive
-DDL and legacy-table composite constraints with equivalent SQLite triggers.
+PostgreSQL and SQLite use explicit migration files. Keeping SQLite DDL direct
+avoids deriving executable SQL through formatting-sensitive regex rewrites.
 """
 
 from pathlib import Path
-import re
 
-
-_POSTGRESQL_PATH = Path(__file__).with_name("009_governance_assurance.sql")
-
-_SQLITE_TENANT_TRIGGERS = """
-CREATE TRIGGER governance_ai_systems_org_insert
-BEFORE INSERT ON governance_ai_systems
-WHEN NEW.org_id IS NOT NULL AND NOT EXISTS (
-    SELECT 1 FROM governance_workspaces
-    WHERE id = NEW.workspace_id AND org_id = NEW.org_id
-)
-BEGIN
-    SELECT RAISE(ABORT, 'governance system organization must match workspace');
-END;
-
-CREATE TRIGGER governance_ai_systems_org_update
-BEFORE UPDATE OF workspace_id, org_id ON governance_ai_systems
-WHEN NEW.org_id IS NOT NULL AND NOT EXISTS (
-    SELECT 1 FROM governance_workspaces
-    WHERE id = NEW.workspace_id AND org_id = NEW.org_id
-)
-BEGIN
-    SELECT RAISE(ABORT, 'governance system organization must match workspace');
-END;
-
-CREATE TRIGGER governance_evidence_org_insert
-BEFORE INSERT ON governance_evidence
-WHEN NEW.org_id IS NOT NULL AND NOT EXISTS (
-    SELECT 1 FROM governance_ai_systems
-    WHERE id = NEW.system_id AND org_id = NEW.org_id
-)
-BEGIN
-    SELECT RAISE(ABORT, 'governance evidence organization must match system');
-END;
-
-CREATE TRIGGER governance_evidence_org_update
-BEFORE UPDATE OF system_id, org_id ON governance_evidence
-WHEN NEW.org_id IS NOT NULL AND NOT EXISTS (
-    SELECT 1 FROM governance_ai_systems
-    WHERE id = NEW.system_id AND org_id = NEW.org_id
-)
-BEGIN
-    SELECT RAISE(ABORT, 'governance evidence organization must match system');
-END;
-"""
-
-_SQLITE_SOURCE_RUN_TRIGGERS = """
-CREATE TRIGGER governance_evidence_source_run_insert
-BEFORE INSERT ON governance_evidence
-WHEN NEW.source_run_id IS NOT NULL AND NOT EXISTS (
-    SELECT 1 FROM governance_evidence_runs WHERE id = NEW.source_run_id
-)
-BEGIN
-    SELECT RAISE(ABORT, 'governance evidence source run must exist');
-END;
-
-CREATE TRIGGER governance_evidence_source_run_update
-BEFORE UPDATE OF source_run_id ON governance_evidence
-WHEN NEW.source_run_id IS NOT NULL AND NOT EXISTS (
-    SELECT 1 FROM governance_evidence_runs WHERE id = NEW.source_run_id
-)
-BEGIN
-    SELECT RAISE(ABORT, 'governance evidence source run must exist');
-END;
-"""
+_MIGRATIONS_DIR = Path(__file__).parent
+_POSTGRESQL_PATH = _MIGRATIONS_DIR / "011_governance_assurance.sql"
+_SQLITE_PATH = _MIGRATIONS_DIR / "011_governance_assurance.sqlite.sql"
 
 
 def sql_for(dialect: str) -> str:
-    """Return the migration SQL suitable for ``postgresql`` or ``sqlite``."""
-    postgresql_sql = _POSTGRESQL_PATH.read_text(encoding="utf-8")
+    """Return the direct migration SQL for ``postgresql`` or ``sqlite``."""
     if dialect == "postgresql":
-        return postgresql_sql
-    if dialect != "sqlite":
+        path = _POSTGRESQL_PATH
+    elif dialect == "sqlite":
+        path = _SQLITE_PATH
+    else:
         raise ValueError(f"Unsupported migration dialect: {dialect}")
-
-    sqlite_sql = postgresql_sql.replace(" ADD COLUMN IF NOT EXISTS ", " ADD COLUMN ")
-    sqlite_sql = re.sub(
-        r"ALTER TABLE governance_(?:ai_systems|evidence)\n"
-        r"    ADD CONSTRAINT [^;]+;\n",
-        "",
-        sqlite_sql,
-        flags=re.MULTILINE,
-    )
-    sqlite_sql = re.sub(
-        r"ALTER TABLE governance_(?:framework_versions|control_definitions) ADD COLUMN [^;]+;\n",
-        "",
-        sqlite_sql,
-    )
-    sqlite_sql = re.sub(
-        r"ALTER TABLE governance_(?:evidence_runs|control_evidence) ADD COLUMN [^;]+;\n",
-        "",
-        sqlite_sql,
-    )
-    sqlite_sql = re.sub(
-        r"ALTER TABLE governance_evidence_runs (?:DROP|ADD) CONSTRAINT[\s\S]*?;\n",
-        "",
-        sqlite_sql,
-    )
-    sqlite_sql = re.sub(
-        r"ALTER TABLE governance_evidence ADD CONSTRAINT fk_governance_evidence_source_run\n"
-        r"    FOREIGN KEY \(source_run_id\) REFERENCES governance_evidence_runs\(id\);\n",
-        "",
-        sqlite_sql,
-    )
-    sqlite_sql = sqlite_sql.replace(
-        "ALTER TABLE governance_evidence DROP CONSTRAINT IF EXISTS fk_governance_evidence_source_run;\n",
-        "",
-    )
-    insertion_point = "CREATE TABLE IF NOT EXISTS governance_framework_versions"
-    return sqlite_sql.replace(insertion_point, _SQLITE_TENANT_TRIGGERS + "\n" + insertion_point) + _SQLITE_SOURCE_RUN_TRIGGERS
+    return path.read_text(encoding="utf-8")

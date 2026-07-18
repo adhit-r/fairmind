@@ -6,23 +6,34 @@ from dataclasses import asdict
 import os
 from pathlib import Path
 import tempfile
-from typing import Literal
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy.orm import Session
 
 from config.auth import TokenData, get_current_active_user
 from database.connection import get_db
 from src.application.services.framework_catalog_service import FrameworkCatalogService
+from src.application.ports.evidence_ingestion import (
+    EvidenceAuditWriteError,
+    EvidenceMappingReferenceError,
+    EvidencePersistenceError,
+    EvidenceRevisionConflict,
+    EvidenceRunConflict,
+    EvidenceScopeMismatch,
+    EvidenceSystemNotFound,
+)
+from src.application.services.evidence_ingestion_service import (
+    EvidencePassportValidationError,
+    build_evidence_ingestion_service,
+)
 from src.application.services.governance_assurance_service import (
-    EvidenceRunConflictError,
     EvidenceMappingConflictError,
     GovernanceAssuranceService,
     OrgMembership,
 )
-
 
 router = APIRouter(prefix="/organizations/{org_id}", tags=["governance-assurance"])
 MAX_WORKBOOK_BYTES = 50 * 1024 * 1024
@@ -59,54 +70,6 @@ class AssessmentUpdateRequest(BaseModel):
     owner: str | None = None
 
 
-class ArtifactReference(BaseModel):
-    """A bounded pointer to external evidence; artifact contents are never accepted."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    uri: str = Field(min_length=1, max_length=2048)
-    sha256: str = Field(min_length=64, max_length=64, pattern=r"^[0-9a-fA-F]{64}$")
-
-
-class EvidenceRunEnvelope(BaseModel):
-    """A compact, immutable evaluation or integration evidence envelope."""
-
-    model_config = ConfigDict(populate_by_name=True, extra="forbid")
-
-    source_type: str = Field(alias="sourceType", min_length=1)
-    source_identifier: str = Field(alias="sourceIdentifier", min_length=1)
-    run_id: str = Field(alias="runId", min_length=1)
-    result: str = Field(default="unknown", min_length=1)
-    captured_at: str | None = Field(default=None, alias="capturedAt")
-    expires_at: str | None = Field(default=None, alias="expiresAt")
-    suite_name: str | None = Field(default=None, alias="suiteName")
-    suite_version: str | None = Field(default=None, alias="suiteVersion")
-    trigger: str | None = None
-    subject_version: str | None = Field(default=None, alias="subjectVersion")
-    dataset_hash: str | None = Field(default=None, alias="datasetHash")
-    configuration_hash: str | None = Field(default=None, alias="configurationHash")
-    thresholds: dict[str, object] = Field(default_factory=dict)
-    seed: str | int | None = None
-    runner_version: str | None = Field(default=None, alias="runnerVersion")
-    runner_digest: str | None = Field(default=None, alias="runnerDigest")
-    summary: dict[str, object] = Field(default_factory=dict)
-    limitations: list[str] = Field(default_factory=list)
-    artifact_references: list[ArtifactReference] = Field(
-        default_factory=list, alias="artifactReferences", max_length=50
-    )
-    retention: str | None = None
-    assurance_source: Literal["fairmind_internal", "company_integration", "manual", "third_party"] = Field(default="fairmind_internal", alias="assuranceSource")
-    third_party_assessor: "ThirdPartyAssessor | None" = Field(default=None, alias="thirdPartyAssessor")
-    control_external_ids: list[str] = Field(default_factory=list, alias="controlExternalIds")
-    evaluation_tags: list[str] = Field(default_factory=list, alias="evaluationTags")
-
-
-class ThirdPartyAssessor(BaseModel):
-    model_config = ConfigDict(populate_by_name=True, extra="forbid")
-
-    identity: str = Field(min_length=1)
-    independence_assertion: bool = Field(alias="independenceAssertion")
-
 class EvidenceMappingRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -129,7 +92,9 @@ def organization_membership(
 ) -> OrgMembership:
     membership = GovernanceAssuranceService(db).membership(org_id, current_user.user_id)
     if not membership:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Organization membership required")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Organization membership required"
+        )
     return membership
 
 
@@ -139,35 +104,56 @@ def _service(db: Session) -> GovernanceAssuranceService:
 
 def _require_mutation(membership: OrgMembership, service: GovernanceAssuranceService) -> None:
     if not service.may_mutate(membership):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Organization mutation permission required")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Organization mutation permission required",
+        )
 
 
 def _require_import(membership: OrgMembership, service: GovernanceAssuranceService) -> None:
     if not service.may_import(membership):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Organization admin permission required")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Organization admin permission required"
+        )
 
 
 def _managed_workbook_path(workbook_path: str) -> Path:
     root = Path(
-        os.getenv("GOVERNANCE_FRAMEWORK_IMPORT_ROOT", str(Path(tempfile.gettempdir()) / "fairmind-framework-imports"))
+        os.getenv(
+            "GOVERNANCE_FRAMEWORK_IMPORT_ROOT",
+            str(Path(tempfile.gettempdir()) / "fairmind-framework-imports"),
+        )
     ).resolve()
     requested = Path(workbook_path)
     if requested.is_absolute() or requested.suffix.lower() != ".xlsx":
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Workbook must be a managed .xlsx file")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Workbook must be a managed .xlsx file",
+        )
     try:
         path = (root / requested).resolve()
         path.relative_to(root)
     except ValueError as error:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Workbook path is outside the managed import root") from error
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Workbook path is outside the managed import root",
+        ) from error
     if not path.is_file():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workbook not found")
     if path.stat().st_size > MAX_WORKBOOK_BYTES:
-        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Workbook exceeds import size limit")
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Workbook exceeds import size limit",
+        )
     return path
 
 
 def _strict_imports() -> bool:
-    return os.getenv("GOVERNANCE_FRAMEWORK_IMPORT_STRICT", "true").lower() not in {"0", "false", "no"}
+    return os.getenv("GOVERNANCE_FRAMEWORK_IMPORT_STRICT", "true").lower() not in {
+        "0",
+        "false",
+        "no",
+    }
 
 
 @router.get("/frameworks")
@@ -186,7 +172,11 @@ def import_framework(
     service = _service(db)
     _require_import(membership, service)
     path = _managed_workbook_path(request.workbook_path)
-    return asdict(FrameworkCatalogService(db, strict=_strict_imports()).import_workbook(path, membership.user_id))
+    return asdict(
+        FrameworkCatalogService(db, strict=_strict_imports()).import_workbook(
+            path, membership.user_id
+        )
+    )
 
 
 @router.get("/frameworks/{framework_key}/versions")
@@ -206,7 +196,9 @@ def list_framework_controls(
 ) -> list[dict]:
     controls = _service(db).list_controls(version_id)
     if controls is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Framework version not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Framework version not found"
+        )
     return controls
 
 
@@ -229,7 +221,9 @@ def create_system(
 ) -> dict:
     service = _service(db)
     _require_mutation(membership, service)
-    system = service.create_system(membership.org_id, request.workspace_id, request.name, request.owner)
+    system = service.create_system(
+        membership.org_id, request.workspace_id, request.name, request.owner
+    )
     if system is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
     return system
@@ -244,10 +238,16 @@ def assign_framework(
 ):
     service = _service(db)
     _require_mutation(membership, service)
-    assignment, created = service.assign_framework(membership.org_id, system_id, request.framework_version_id)
+    assignment, created = service.assign_framework(
+        membership.org_id, system_id, request.framework_version_id
+    )
     if assignment is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="System or framework version not found")
-    return JSONResponse(assignment, status_code=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="System or framework version not found"
+        )
+    return JSONResponse(
+        assignment, status_code=status.HTTP_201_CREATED if created else status.HTTP_200_OK
+    )
 
 
 @router.get("/systems/{system_id}/framework-assignments")
@@ -270,7 +270,9 @@ def list_assignment_controls(
 ) -> list[dict]:
     controls = _service(db).assignment_controls(membership.org_id, assignment_id)
     if controls is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Framework assignment not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Framework assignment not found"
+        )
     return controls
 
 
@@ -288,9 +290,13 @@ def update_control_assessment(
             membership.org_id, assessment_id, request.model_dump(exclude_unset=True)
         )
     except ValueError as error:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)) from error
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)
+        ) from error
     if assessment is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Control assessment not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Control assessment not found"
+        )
     return assessment
 
 
@@ -302,30 +308,59 @@ def assignment_readiness(
 ) -> dict:
     readiness = _service(db).readiness(membership.org_id, assignment_id)
     if readiness is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Framework assignment not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Framework assignment not found"
+        )
     return readiness
 
 
 @router.post("/systems/{system_id}/evidence-runs")
 def ingest_evidence_run(
     system_id: str,
-    envelope: EvidenceRunEnvelope,
+    passport: dict[str, Any],
     membership: OrgMembership = Depends(organization_membership),
     db: Session = Depends(get_db),
 ):
-    service = _service(db)
-    _require_mutation(membership, service)
-    try:
-        run, created = service.ingest_evidence_run(
-            membership.org_id, system_id, envelope.model_dump(), membership.user_id
+    authorization_service = _service(db)
+    _require_mutation(membership, authorization_service)
+    ai_system = passport.get("aiSystem")
+    if not isinstance(ai_system, dict) or ai_system.get("systemId") != system_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Path system does not match passport AI system",
         )
-    except EvidenceRunConflictError as error:
+    try:
+        result = build_evidence_ingestion_service(db).ingest(
+            passport,
+            membership.org_id,
+            membership.user_id,
+        )
+    except EvidenceSystemNotFound as error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+    except (EvidenceRunConflict, EvidenceRevisionConflict) as error:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
-    except ValueError as error:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)) from error
-    if run is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="AI system not found")
-    return JSONResponse(run, status_code=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+    except (
+        ValidationError,
+        EvidencePassportValidationError,
+        EvidenceScopeMismatch,
+        EvidenceMappingReferenceError,
+    ) as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)
+        ) from error
+    except (EvidenceAuditWriteError, EvidencePersistenceError) as error:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(error),
+        ) from error
+    return JSONResponse(
+        result.as_dict(),
+        status_code=(
+            status.HTTP_200_OK
+            if result.disposition.value == "replayed"
+            else status.HTTP_201_CREATED
+        ),
+    )
 
 
 @router.get("/systems/{system_id}/evidence-runs")
@@ -334,10 +369,10 @@ def list_evidence_runs(
     membership: OrgMembership = Depends(organization_membership),
     db: Session = Depends(get_db),
 ) -> list[dict]:
-    runs = _service(db).list_evidence_runs(membership.org_id, system_id)
+    runs = build_evidence_ingestion_service(db).list_runs(membership.org_id, system_id)
     if runs is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="AI system not found")
-    return runs
+    return [run.as_dict() for run in runs]
 
 
 @router.post("/evidence/{evidence_id}/control-mappings")
@@ -353,8 +388,12 @@ def create_evidence_mapping(
         membership.org_id, evidence_id, request.control_assessment_id, request.rationale
     )
     if mapping is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evidence or control assessment not found")
-    return JSONResponse(mapping, status_code=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Evidence or control assessment not found"
+        )
+    return JSONResponse(
+        mapping, status_code=status.HTTP_201_CREATED if created else status.HTTP_200_OK
+    )
 
 
 @router.post("/evidence-mappings/{mapping_id}/review")
@@ -368,11 +407,17 @@ def review_evidence_mapping(
     _require_mutation(membership, service)
     try:
         mapping = service.review_evidence_mapping(
-            membership.org_id, mapping_id, request.state, membership.user_id,
-            request.rationale, request.review_version,
+            membership.org_id,
+            mapping_id,
+            request.state,
+            membership.user_id,
+            request.rationale,
+            request.review_version,
         )
     except EvidenceMappingConflictError as error:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
     if mapping is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evidence mapping not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Evidence mapping not found"
+        )
     return mapping

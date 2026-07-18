@@ -457,6 +457,8 @@ def test_assessment_update_allows_existing_org_role_permission_and_readiness_is_
             source_identifier="suite-a",
             run_id="run-a",
             content_hash="hash-a",
+            result="passed",
+            capability_state="validated",
             created_at=old_run,
         )
     )

@@ -12,6 +12,7 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import (
+    CheckConstraint,
     Column,
     DateTime,
     Float,
@@ -40,6 +41,7 @@ def _utc_now() -> datetime:
 # ---------------------------------------------------------------------------
 # Enums
 # ---------------------------------------------------------------------------
+
 
 class RiskTier(str, enum.Enum):
     UNACCEPTABLE = "unacceptable"
@@ -126,6 +128,7 @@ class IncidentSource(str, enum.Enum):
 # Models
 # ---------------------------------------------------------------------------
 
+
 class GovernanceWorkspace(Base):
     """Tenant-level container (org/team workspace)."""
 
@@ -146,9 +149,7 @@ class GovernanceWorkspace(Base):
         foreign_keys="GovernanceAISystem.workspace_id",
     )
 
-    __table_args__ = (
-        UniqueConstraint("id", "org_id", name="uq_governance_workspace_org"),
-    )
+    __table_args__ = (UniqueConstraint("id", "org_id", name="uq_governance_workspace_org"),)
 
     def __repr__(self) -> str:
         return f"<GovernanceWorkspace(id={self.id}, name={self.name})>"
@@ -329,6 +330,11 @@ class GovernanceEvidenceRun(Base):
     source_identifier = Column(String, nullable=False)
     run_id = Column(String, nullable=False)
     content_hash = Column(String, nullable=False)
+    workspace_id = Column(String, nullable=True, index=True)
+    passport_id = Column(String, nullable=True, index=True)
+    schema_version = Column(String, nullable=True, index=True)
+    capability_state = Column(String, nullable=True, index=True)
+    assurance_source = Column(String, nullable=True, index=True)
     result = Column(String, nullable=False, default="unknown")
     provenance_json = Column(Text, nullable=False, default="{}")
     artifact_refs_json = Column(Text, nullable=False, default="[]")
@@ -351,6 +357,109 @@ class GovernanceEvidenceRun(Base):
         ForeignKeyConstraint(
             ["system_id", "org_id"],
             ["governance_ai_systems.id", "governance_ai_systems.org_id"],
+        ),
+    )
+
+
+class GovernanceEvidenceArtifact(Base):
+    """Ordered immutable metadata pointer for one evidence run artifact."""
+
+    __tablename__ = "governance_evidence_artifacts"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    system_id = Column(String, nullable=False, index=True)
+    evidence_run_id = Column(String, nullable=False, index=True)
+    artifact_id = Column(String, nullable=False)
+    ordinal = Column(Integer, nullable=False)
+    role = Column(String, nullable=False)
+    uri = Column(Text, nullable=False)
+    sha256 = Column(String, nullable=False)
+    media_type = Column(String, nullable=False)
+    size_bytes = Column(Integer, nullable=True)
+    contains_sensitive_data = Column(Integer, nullable=False, default=0)
+    retention_policy = Column(String, nullable=True)
+    redaction_note = Column(Text, nullable=True)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+    __table_args__ = (
+        UniqueConstraint(
+            "evidence_run_id", "artifact_id", name="uq_governance_evidence_artifact_id"
+        ),
+        UniqueConstraint(
+            "evidence_run_id", "ordinal", name="uq_governance_evidence_artifact_ordinal"
+        ),
+        CheckConstraint(
+            "ordinal >= 0 AND ordinal <= 49", name="ck_governance_evidence_artifact_ordinal"
+        ),
+        CheckConstraint(
+            "size_bytes IS NULL OR size_bytes >= 0", name="ck_governance_evidence_artifact_size"
+        ),
+        ForeignKeyConstraint(
+            ["evidence_run_id", "system_id", "org_id"],
+            [
+                "governance_evidence_runs.id",
+                "governance_evidence_runs.system_id",
+                "governance_evidence_runs.org_id",
+            ],
+        ),
+    )
+
+
+class GovernanceEvidencePassportRevision(Base):
+    """Append-only complete canonical Evidence Passport snapshot."""
+
+    __tablename__ = "governance_evidence_passport_revisions"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    system_id = Column(String, nullable=False, index=True)
+    evidence_run_id = Column(String, nullable=False, index=True)
+    passport_id = Column(String, nullable=False, index=True)
+    passport_revision = Column(Integer, nullable=False)
+    previous_revision_hash = Column(String, nullable=True)
+    canonical_content_hash = Column(String, nullable=False)
+    snapshot_json = Column(Text, nullable=False)
+    created_by = Column(String, nullable=False)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+    __table_args__ = (
+        UniqueConstraint(
+            "id",
+            "evidence_run_id",
+            "system_id",
+            "org_id",
+            name="uq_governance_passport_revision_tenant",
+        ),
+        UniqueConstraint(
+            "org_id",
+            "passport_id",
+            "passport_revision",
+            name="uq_governance_passport_revision",
+        ),
+        UniqueConstraint(
+            "evidence_run_id",
+            "passport_revision",
+            name="uq_governance_passport_run_revision",
+        ),
+        UniqueConstraint(
+            "evidence_run_id",
+            "canonical_content_hash",
+            name="uq_governance_passport_run_hash",
+        ),
+        CheckConstraint("passport_revision >= 1", name="ck_governance_passport_revision_positive"),
+        CheckConstraint(
+            "(passport_revision = 1 AND previous_revision_hash IS NULL) OR "
+            "(passport_revision > 1 AND previous_revision_hash IS NOT NULL)",
+            name="ck_governance_passport_revision_link",
+        ),
+        ForeignKeyConstraint(
+            ["evidence_run_id", "system_id", "org_id"],
+            [
+                "governance_evidence_runs.id",
+                "governance_evidence_runs.system_id",
+                "governance_evidence_runs.org_id",
+            ],
         ),
     )
 
@@ -383,6 +492,10 @@ class GovernanceControlEvidence(Base):
     state = Column(String, nullable=False, default="candidate")
     mapping_rationale = Column(Text, nullable=True)
     artifact_evidence_id = Column(String, nullable=True, index=True)
+    passport_revision_id = Column(String, nullable=True, index=True)
+    source_mapping_id = Column(String, nullable=True)
+    relation = Column(String, nullable=False, default="supports")
+    suggested_by_json = Column(Text, nullable=False, default="{}")
     reviewed_by = Column(String, nullable=True)
     reviewed_at = Column(String, nullable=True)
     review_history_json = Column(Text, nullable=False, default="[]")
@@ -395,6 +508,11 @@ class GovernanceControlEvidence(Base):
             "evidence_id",
             "control_assessment_id",
             name="uq_governance_control_evidence",
+        ),
+        UniqueConstraint(
+            "evidence_id",
+            "source_mapping_id",
+            name="uq_governance_control_evidence_source_mapping",
         ),
         ForeignKeyConstraint(
             ["system_id", "org_id"],
@@ -416,6 +534,15 @@ class GovernanceControlEvidence(Base):
                 "governance_control_assessments.org_id",
             ],
         ),
+        ForeignKeyConstraint(
+            ["passport_revision_id", "evidence_id", "system_id", "org_id"],
+            [
+                "governance_evidence_passport_revisions.id",
+                "governance_evidence_passport_revisions.evidence_run_id",
+                "governance_evidence_passport_revisions.system_id",
+                "governance_evidence_passport_revisions.org_id",
+            ],
+        ),
     )
 
 
@@ -425,7 +552,9 @@ class GovernanceAISystem(Base):
     __tablename__ = "governance_ai_systems"
 
     id = Column(String, primary_key=True, default=_new_id)
-    workspace_id = Column(String, ForeignKey("governance_workspaces.id"), nullable=False, index=True)
+    workspace_id = Column(
+        String, ForeignKey("governance_workspaces.id"), nullable=False, index=True
+    )
     org_id = Column(String, nullable=True, index=True)
     name = Column(String, nullable=False)
     system_type = Column(String, nullable=True)
@@ -457,8 +586,12 @@ class GovernanceAISystem(Base):
         cascade="all, delete-orphan",
     )
     risks = relationship("GovernanceRisk", back_populates="ai_system", cascade="all, delete-orphan")
-    remediation_tasks = relationship("GovernanceRemediationTask", back_populates="ai_system", cascade="all, delete-orphan")
-    incidents = relationship("GovernanceIncident", back_populates="ai_system", cascade="all, delete-orphan")
+    remediation_tasks = relationship(
+        "GovernanceRemediationTask", back_populates="ai_system", cascade="all, delete-orphan"
+    )
+    incidents = relationship(
+        "GovernanceIncident", back_populates="ai_system", cascade="all, delete-orphan"
+    )
 
     __table_args__ = (
         Index("idx_governance_ai_systems_workspace_id", "workspace_id"),
@@ -515,7 +648,9 @@ class GovernanceEvidence(Base):
     status = Column(String, nullable=False, default="draft")
     uploaded_by = Column(String, nullable=True)
     metadata_json = Column(Text, nullable=False, default="{}")
-    source_run_id = Column(String, ForeignKey("governance_evidence_runs.id"), nullable=True, index=True)
+    source_run_id = Column(
+        String, ForeignKey("governance_evidence_runs.id"), nullable=True, index=True
+    )
     captured_at = Column(String, nullable=True)
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
 
@@ -525,7 +660,9 @@ class GovernanceEvidence(Base):
         back_populates="evidence_items",
         foreign_keys=[system_id],
     )
-    evidence_links = relationship("GovernanceEvidenceLink", back_populates="evidence", cascade="all, delete-orphan")
+    evidence_links = relationship(
+        "GovernanceEvidenceLink", back_populates="evidence", cascade="all, delete-orphan"
+    )
 
     __table_args__ = (
         Index("idx_governance_evidence_system_id", "system_id"),
@@ -626,7 +763,9 @@ class GovernancePolicy(Base):
     updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
 
     # Relationships
-    versions = relationship("GovernancePolicyVersion", back_populates="policy", cascade="all, delete-orphan")
+    versions = relationship(
+        "GovernancePolicyVersion", back_populates="policy", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         return f"<GovernancePolicy(id={self.id}, name={self.name})>"
@@ -652,9 +791,7 @@ class GovernancePolicyVersion(Base):
     # Relationships
     policy = relationship("GovernancePolicy", back_populates="versions")
 
-    __table_args__ = (
-        Index("idx_gpv_policy_id", "policy_id"),
-    )
+    __table_args__ = (Index("idx_gpv_policy_id", "policy_id"),)
 
     def __repr__(self) -> str:
         return f"<GovernancePolicyVersion(policy_id={self.policy_id}, version={self.version})>"
@@ -675,7 +812,9 @@ class GovernanceApprovalWorkflow(Base):
     updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
 
     # Relationships
-    requests = relationship("GovernanceApprovalRequest", back_populates="workflow", cascade="all, delete-orphan")
+    requests = relationship(
+        "GovernanceApprovalRequest", back_populates="workflow", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         return f"<GovernanceApprovalWorkflow(id={self.id}, name={self.name})>"
@@ -687,7 +826,9 @@ class GovernanceApprovalRequest(Base):
     __tablename__ = "governance_approval_requests"
 
     id = Column(String, primary_key=True, default=_new_id)
-    workflow_id = Column(String, ForeignKey("governance_approval_workflows.id"), nullable=False, index=True)
+    workflow_id = Column(
+        String, ForeignKey("governance_approval_workflows.id"), nullable=False, index=True
+    )
     entity_type = Column(String, nullable=False)
     entity_id = Column(String, nullable=False, index=True)
     ai_system_id = Column(String, ForeignKey("governance_ai_systems.id"), nullable=True, index=True)
@@ -703,7 +844,9 @@ class GovernanceApprovalRequest(Base):
 
     # Relationships
     workflow = relationship("GovernanceApprovalWorkflow", back_populates="requests")
-    decisions = relationship("GovernanceApprovalDecision", back_populates="request", cascade="all, delete-orphan")
+    decisions = relationship(
+        "GovernanceApprovalDecision", back_populates="request", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         return f"<GovernanceApprovalRequest(id={self.id}, status={self.status})>"
@@ -715,7 +858,9 @@ class GovernanceApprovalDecision(Base):
     __tablename__ = "governance_approval_decisions"
 
     id = Column(String, primary_key=True, default=_new_id)
-    request_id = Column(String, ForeignKey("governance_approval_requests.id"), nullable=False, index=True)
+    request_id = Column(
+        String, ForeignKey("governance_approval_requests.id"), nullable=False, index=True
+    )
     decision = Column(String, nullable=False)
     notes = Column(Text, nullable=True)
     decided_by = Column(String, nullable=True)
@@ -790,7 +935,9 @@ class GovernanceIncident(Base):
     __tablename__ = "governance_incidents"
 
     id = Column(String, primary_key=True, default=_new_id)
-    ai_system_id = Column(String, ForeignKey("governance_ai_systems.id"), nullable=False, index=True)
+    ai_system_id = Column(
+        String, ForeignKey("governance_ai_systems.id"), nullable=False, index=True
+    )
     title = Column(String, nullable=False)
     description = Column(Text, nullable=False, default="")
     severity = Column(String, nullable=False, default="medium")
@@ -803,13 +950,17 @@ class GovernanceIncident(Base):
     reporter = Column(String, nullable=True)
     reported_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
     resolved_at = Column(String, nullable=True)
-    remediation_task_id = Column(String, ForeignKey("governance_remediation_tasks.id"), nullable=True)
+    remediation_task_id = Column(
+        String, ForeignKey("governance_remediation_tasks.id"), nullable=True
+    )
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
     updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
 
     # Relationships
     ai_system = relationship("GovernanceAISystem", back_populates="incidents")
-    history = relationship("GovernanceIncidentHistory", back_populates="incident", cascade="all, delete-orphan")
+    history = relationship(
+        "GovernanceIncidentHistory", back_populates="incident", cascade="all, delete-orphan"
+    )
 
     __table_args__ = (
         Index("idx_governance_incidents_ai_system_id", "ai_system_id"),
@@ -837,9 +988,7 @@ class GovernanceIncidentHistory(Base):
     # Relationships
     incident = relationship("GovernanceIncident", back_populates="history")
 
-    __table_args__ = (
-        Index("idx_governance_incident_history_incident_id", "incident_id"),
-    )
+    __table_args__ = (Index("idx_governance_incident_history_incident_id", "incident_id"),)
 
     def __repr__(self) -> str:
         return f"<GovernanceIncidentHistory(id={self.id}, incident_id={self.incident_id})>"
@@ -856,8 +1005,8 @@ class GovernanceAuditReport(Base):
     report_type = Column(String, nullable=False)  # compliance | bias | governance
     title = Column(String, nullable=False)
     generated_by = Column(String, nullable=True)
-    config_json = Column(Text, nullable=True)   # JSON: frameworks, date_range, sections
-    data_json = Column(Text, nullable=True)     # Full snapshot of report data at generation time
+    config_json = Column(Text, nullable=True)  # JSON: frameworks, date_range, sections
+    data_json = Column(Text, nullable=True)  # Full snapshot of report data at generation time
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
 
     __table_args__ = (

@@ -11,13 +11,14 @@ from database.governance_models import (
     GovernanceControlAssessment,
     GovernanceControlDefinition,
     GovernanceControlEvidence,
+    GovernanceEvidenceArtifact,
+    GovernanceEvidencePassportRevision,
     GovernanceEvidenceRun,
     GovernanceFrameworkAssignment,
     GovernanceFrameworkVersion,
     GovernanceWorkspace,
 )
 from migrations.governance_assurance_migration import sql_for
-
 
 PRODUCTION_TABLES = (
     GovernanceWorkspace.__table__,
@@ -27,6 +28,8 @@ PRODUCTION_TABLES = (
     GovernanceFrameworkAssignment.__table__,
     GovernanceControlAssessment.__table__,
     GovernanceEvidenceRun.__table__,
+    GovernanceEvidenceArtifact.__table__,
+    GovernanceEvidencePassportRevision.__table__,
     GovernanceControlEvidence.__table__,
 )
 
@@ -296,8 +299,7 @@ def test_assurance_constraints_reject_cross_org_associations_and_persist_mapping
 def test_migration_selector_applies_sqlite_schema_and_exposes_postgresql_sql() -> None:
     connection = sqlite3.connect(":memory:")
     connection.execute("PRAGMA foreign_keys = ON")
-    connection.executescript(
-        """
+    connection.executescript("""
         CREATE TABLE governance_workspaces (
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
@@ -319,8 +321,7 @@ def test_migration_selector_applies_sqlite_schema_and_exposes_postgresql_sql() -
             content_json TEXT NOT NULL DEFAULT '{}',
             created_at TEXT NOT NULL
         );
-        """
-    )
+        """)
     connection.executescript(sql_for("sqlite"))
 
     for table_name in (
@@ -354,7 +355,9 @@ def test_migration_selector_applies_sqlite_schema_and_exposes_postgresql_sql() -
     assert "ADD COLUMN IF NOT EXISTS" in postgresql_sql
     assert "ADD CONSTRAINT fk_governance_system_workspace_tenant" in postgresql_sql
     assert "ADD CONSTRAINT fk_governance_evidence_system_tenant" in postgresql_sql
-    assert "CREATE TRIGGER" not in postgresql_sql
+    assert "CREATE TRIGGER governance_evidence_runs_no_mutation" in postgresql_sql
+    assert "CREATE TRIGGER governance_evidence_artifacts_no_mutation" in postgresql_sql
+    assert "CREATE TRIGGER governance_evidence_passport_revisions_no_mutation" in postgresql_sql
     assert "RAISE(ABORT" not in postgresql_sql
     assert "FOREIGN KEY (evidence_id, system_id, org_id)" in postgresql_sql
     connection.close()

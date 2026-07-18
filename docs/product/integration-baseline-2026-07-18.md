@@ -76,12 +76,10 @@ Final results:
 
 ## Follow-on blockers
 
-These are explicitly outside S1.1 and remain unresolved:
+S1.2 resolved the duplicate migration number by renaming the assurance migration
+to `011_governance_assurance.sql` and aligning its SQLite adapter. The remaining
+follow-on blockers are:
 
-- The duplicate `009` migrations (`009_policy_versions.sql` and
-  `009_governance_assurance.sql`) and the governance SQLite adapter's hardcoded
-  `009_governance_assurance.sql` filename. The assurance migration rename is
-  owned by S1.3.
 - The unsafe ledgerless migration runner in `apps/backend/scripts/migrate.py`,
   which executes every SQL file without recording applied migrations.
 - Unscoped environmental evidence paths, which still need tenant enforcement

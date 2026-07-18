@@ -573,33 +573,21 @@ class GovernanceAssuranceService:
         return self._mapping(mapping_id), True
 
     def review_evidence_mapping(self, org_id: str, mapping_id: str, state: str, actor_id: str, rationale: str | None, review_version: int) -> dict | None:
-        if state not in _MAPPING_STATES - {"candidate"}:
-            raise ValueError("Review state must be accepted or rejected")
-        mappings = GovernanceControlEvidence.__table__
-        row = self.db.execute(select(mappings).where(mappings.c.id == mapping_id, mappings.c.org_id == org_id)).mappings().one_or_none()
-        if not row:
-            return None
-        if row["review_version"] != review_version:
-            raise EvidenceMappingConflictError("Evidence mapping was reviewed by another user")
-        history = json.loads(row["review_history_json"] or "[]")
-        reviewed_at = _now()
-        history.append({"state": state, "rationale": rationale, "reviewedBy": actor_id, "reviewedAt": reviewed_at})
-        updated = self.db.execute(
-            update(mappings).where(
-                mappings.c.id == mapping_id,
-                mappings.c.org_id == org_id,
-                mappings.c.review_version == review_version,
-            ).values(
-                state=state, mapping_rationale=rationale, reviewed_by=actor_id, reviewed_at=reviewed_at,
-                review_history_json=_canonical_json(history), review_version=review_version + 1,
-                updated_at=reviewed_at,
+        from src.application.ports.evidence_ingestion import EvidenceRevisionConflict
+        from src.application.services.evidence_ingestion_service import review_evidence_mapping_revision
+
+        try:
+            return review_evidence_mapping_revision(
+                self.db,
+                org_id=org_id,
+                mapping_id=mapping_id,
+                state=state,
+                actor_id=actor_id,
+                rationale=rationale,
+                review_version=review_version,
             )
-        )
-        if updated.rowcount != 1:
-            self.db.rollback()
-            raise EvidenceMappingConflictError("Evidence mapping was reviewed by another user")
-        self.db.commit()
-        return self._mapping(mapping_id)
+        except EvidenceRevisionConflict as error:
+            raise EvidenceMappingConflictError(str(error)) from error
 
     def _evidence_run(self, run_id: str) -> dict:
         runs, mappings = GovernanceEvidenceRun.__table__, GovernanceControlEvidence.__table__
@@ -655,6 +643,7 @@ class GovernanceAssuranceService:
             .where(
                 mappings.c.org_id == org_id,
                 mappings.c.state == "accepted",
+                evidence_runs.c.result.in_(("passed", "passed_with_limitations")),
             )
         ).mappings():
             evidence_by_assessment.setdefault(row["control_assessment_id"], []).append(row["captured_at"] or row["created_at"])
