@@ -7,19 +7,20 @@ the approvals workflow.
 """
 
 import pytest
+from fastapi.testclient import TestClient
 
 pytestmark = pytest.mark.integration
 
 
-def _seed_system(client, name: str = "env-test-system") -> str:
-    """Create a governance AI system through the public governance API."""
+def _seed_system(client: TestClient, org_id: str, name: str = "env-test-system") -> str:
+    """Create a governance AI system through the canonical tenant-scoped API."""
     workspace = client.post(
-        "/api/v1/ai-governance/workspaces",
+        f"/api/v1/ai-governance/organizations/{org_id}/workspaces",
         json={"name": f"{name}-ws", "owner": "owner@fairmind.ai"},
     )
-    assert workspace.status_code == 200, workspace.text
+    assert workspace.status_code == 201, workspace.text
     system = client.post(
-        "/api/v1/ai-governance/systems",
+        f"/api/v1/ai-governance/organizations/{org_id}/systems",
         json={
             "workspace_id": workspace.json()["id"],
             "name": name,
@@ -29,7 +30,7 @@ def _seed_system(client, name: str = "env-test-system") -> str:
             "metadata": {},
         },
     )
-    assert system.status_code == 200, system.text
+    assert system.status_code == 201, system.text
     return system.json()["id"]
 
 
@@ -49,7 +50,8 @@ def _assessment_body(system_id: str, *, source: str, phase: str, metrics: dict, 
     return body
 
 
-def test_benchmarks_and_controls_are_public(client):
+def test_benchmarks_and_controls_are_public(environmental_governance_client):
+    client, _ = environmental_governance_client
     r = client.get("/api/v1/environment/benchmarks")
     assert r.status_code == 200
     data = r.json()["data"]
@@ -62,8 +64,9 @@ def test_benchmarks_and_controls_are_public(client):
     assert codes[:6] == ["ENV-1", "ENV-2", "ENV-3", "ENV-4", "ENV-5", "ENV-6"]
 
 
-def test_assess_low_impact_measured_is_go(client):
-    system_id = _seed_system(client)
+def test_assess_low_impact_measured_is_go(environmental_governance_client):
+    client, org_id = environmental_governance_client
+    system_id = _seed_system(client, org_id)
     body = _assessment_body(
         system_id,
         source="hardware_telemetry",  # measured
@@ -83,8 +86,9 @@ def test_assess_low_impact_measured_is_go(client):
     assert r.json()["data"]["latest"]["result"]["recommendation"] == "go"
 
 
-def test_assess_undisclosed_source_is_no_go(client):
-    system_id = _seed_system(client)
+def test_assess_undisclosed_source_is_no_go(environmental_governance_client):
+    client, org_id = environmental_governance_client
+    system_id = _seed_system(client, org_id)
     body = _assessment_body(
         system_id, source="unknown", phase="inference",
         metrics={"kg_co2e_per_1000_requests": 0.0001},  # low impact, but no disclosure
@@ -95,8 +99,9 @@ def test_assess_undisclosed_source_is_no_go(client):
     assert r.json()["evidence_confidence"] == 0.0
 
 
-def test_export_csrd_shape(client):
-    system_id = _seed_system(client)
+def test_export_csrd_shape(environmental_governance_client):
+    client, org_id = environmental_governance_client
+    system_id = _seed_system(client, org_id)
     client.post(
         "/api/v1/ai-governance/environment/assess",
         json=_assessment_body(
@@ -111,8 +116,9 @@ def test_export_csrd_shape(client):
     assert exp["governance_recommendation"] == "go"
 
 
-def test_conditional_go_mitigation_flow(client):
-    system_id = _seed_system(client)
+def test_conditional_go_mitigation_flow(environmental_governance_client):
+    client, org_id = environmental_governance_client
+    system_id = _seed_system(client, org_id)
     # High impact + measured -> conditional_go, blocked until a dated mitigation.
     body = _assessment_body(
         system_id, source="hardware_telemetry", phase="training",
@@ -144,9 +150,10 @@ def test_conditional_go_mitigation_flow(client):
     assert r.json()["data"]["reviewerState"] == "accepted"
 
 
-def test_environmental_gate_blocks_deployment_approval(client):
+def test_environmental_gate_blocks_deployment_approval(environmental_governance_client):
     """The env gate must block the deployment-approval workflow on no_go."""
-    system_id = _seed_system(client, "gate-system")
+    client, org_id = environmental_governance_client
+    system_id = _seed_system(client, org_id, "gate-system")
     # Record a no_go assessment (undisclosed source).
     client.post(
         "/api/v1/ai-governance/environment/assess",
@@ -157,10 +164,16 @@ def test_environmental_gate_blocks_deployment_approval(client):
     )
 
     # Create an approval request for this system and try to approve it.
-    r = client.post("/api/approvals/requests", json={"ai_system_id": system_id})
-    assert r.status_code in (200, 201), r.text
-    request_id = r.json()["id"]
+    r = client.post(
+        f"/api/v1/ai-governance/approval/system/{system_id}/request",
+        json={"requested_by": "spoofed@fairmind.ai"},
+    )
+    assert r.status_code == 200, r.text
+    request_id = r.json()["request"]["id"]
 
-    r = client.post(f"/api/approvals/requests/{request_id}/approve", json={"comment": "ship it"})
+    r = client.post(
+        f"/api/v1/ai-governance/approval-requests/{request_id}/decision",
+        json={"decision": "approved", "notes": "ship it"},
+    )
     assert r.status_code == 409
-    assert "Environmental gate" in r.json()["detail"]
+    assert r.json()["detail"]["environmentalGate"]["code"] == "environmental_no_go"

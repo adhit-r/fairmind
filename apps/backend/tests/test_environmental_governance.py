@@ -4,25 +4,21 @@ import uuid
 
 from fastapi.testclient import TestClient
 
-from api.main import app
 from src.domain.environmental import run_assessment
 
 
-client = TestClient(app)
-
-
-def _create_system() -> str:
+def _create_system(client: TestClient, org_id: str) -> str:
     workspace_resp = client.post(
-        "/api/v1/ai-governance/workspaces",
+        f"/api/v1/ai-governance/organizations/{org_id}/workspaces",
         json={
             "name": f"FairMind-E Workspace {uuid.uuid4().hex[:8]}",
             "owner": "owner@fairmind.ai",
         },
     )
-    assert workspace_resp.status_code == 200
+    assert workspace_resp.status_code == 201, workspace_resp.text
     workspace = workspace_resp.json()
     system_resp = client.post(
-        "/api/v1/ai-governance/systems",
+        f"/api/v1/ai-governance/organizations/{org_id}/systems",
         json={
             "workspace_id": workspace["id"],
             "name": f"FairMind-E System {uuid.uuid4().hex[:8]}",
@@ -32,7 +28,7 @@ def _create_system() -> str:
             "metadata": {},
         },
     )
-    assert system_resp.status_code == 200
+    assert system_resp.status_code == 201, system_resp.text
     return system_resp.json()["id"]
 
 
@@ -116,8 +112,9 @@ def test_domain_import_and_environmental_gate_invariants():
     assert with_offsets.recommendation == no_offsets.recommendation
 
 
-def test_assessment_post_appends_versions_and_mirrors_evidence():
-    system_id = _create_system()
+def test_assessment_post_appends_versions_and_mirrors_evidence(environmental_governance_client):
+    client, org_id = environmental_governance_client
+    system_id = _create_system(client, org_id)
     first = client.post(
         "/api/v1/ai-governance/environment/assess",
         json={"system_id": system_id, "assessment": _assessment()},
@@ -144,8 +141,11 @@ def test_assessment_post_appends_versions_and_mirrors_evidence():
     assert data["latest"]["evidenceId"] == second.json()["evidence_id"]
 
 
-def test_evidence_ingest_creates_no_go_risk_remediation_and_blocks_approval():
-    system_id = _create_system()
+def test_evidence_ingest_creates_no_go_risk_remediation_and_blocks_approval(
+    environmental_governance_client,
+):
+    client, org_id = environmental_governance_client
+    system_id = _create_system(client, org_id)
     ingest = client.post(
         f"/api/v1/systems/{system_id}/environmental-impact/evidence",
         json={
@@ -185,8 +185,11 @@ def test_evidence_ingest_creates_no_go_risk_remediation_and_blocks_approval():
     assert decision.json()["detail"]["environmentalGate"]["code"] == "environmental_no_go"
 
 
-def test_approval_blocks_missing_environmental_evidence_for_registered_system():
-    system_id = _create_system()
+def test_approval_blocks_missing_environmental_evidence_for_registered_system(
+    environmental_governance_client,
+):
+    client, org_id = environmental_governance_client
+    system_id = _create_system(client, org_id)
     approval_req = client.post(
         f"/api/v1/ai-governance/approval/system/{system_id}/request",
         json={"requested_by": "owner@fairmind.ai"},
@@ -204,8 +207,9 @@ def test_approval_blocks_missing_environmental_evidence_for_registered_system():
     assert decision.json()["detail"]["environmentalGate"]["code"] == "missing_environmental_evidence"
 
 
-def test_documented_conditional_go_allows_system_approval():
-    system_id = _create_system()
+def test_documented_conditional_go_allows_system_approval(environmental_governance_client):
+    client, org_id = environmental_governance_client
+    system_id = _create_system(client, org_id)
     assessed = client.post(
         "/api/v1/ai-governance/environment/assess",
         json={"system_id": system_id, "assessment": _assessment()},
