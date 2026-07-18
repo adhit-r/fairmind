@@ -65,7 +65,7 @@ class GateEvaluationTest(unittest.TestCase):
 
             with baseline_path.open(newline="", encoding="utf-8") as handle:
                 baseline_rows = list(csv.DictReader(handle))
-            self.assertEqual(len(baseline_rows), 56)
+            self.assertEqual(len(baseline_rows), 98)
             by_baseline = {}
             for row in baseline_rows:
                 by_baseline.setdefault(row["baseline"], []).append(row)
@@ -85,11 +85,26 @@ class GateEvaluationTest(unittest.TestCase):
                 sum(1 for row in by_baseline["generic_sustainability_score"] if row["exact_match"] == "true"),
                 6,
             )
+            self.assertEqual(
+                sum(1 for row in by_baseline["no_mitigation_review_gate"] if row["exact_match"] == "true"),
+                11,
+            )
+            self.assertEqual(
+                sum(1 for row in by_baseline["no_exception_path"] if row["exact_match"] == "true"),
+                13,
+            )
+            self.assertEqual(
+                sum(1 for row in by_baseline["offset_credit_gate"] if row["exact_match"] == "true"),
+                13,
+            )
 
             summary = summary_path.read_text(encoding="utf-8")
             self.assertIn("Exact label accuracy: 14/14 (100.0%)", summary)
             self.assertIn("| fairmind_e | 14/14 | 100.0% | 14/14 | 14/14 |", summary)
             self.assertIn("| no_environmental_gate | 3/14 | 21.4% | 3/14 | 6/14 |", summary)
+            self.assertIn("| no_mitigation_review_gate | 11/14 | 78.6% | 14/14 | 11/14 |", summary)
+            self.assertIn("| no_exception_path | 13/14 | 92.9% | 14/14 | 13/14 |", summary)
+            self.assertIn("| offset_credit_gate | 13/14 | 92.9% | 13/14 | 13/14 |", summary)
             self.assertIn("None.", summary)
 
 
