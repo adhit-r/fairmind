@@ -28,6 +28,9 @@ Baseline comparison:
 - carbon-only gate exact matches: 7/14.
 - generic sustainability-score gate exact matches: 6/14.
 - no environmental gate exact matches: 3/14.
+- no mitigation review gate exact matches: 11/14.
+- no exception path exact matches: 13/14.
+- offset credit gate exact matches: 13/14.
 
 ## Claim 3
 
@@ -35,6 +38,7 @@ Offsets and RECs can be disclosed without improving gate confidence, tier, or re
 
 Evidence:
 - `offsets_do_not_rescue_unknown` case remains `no_go`.
+- `offset_credit_gate` changes the offset case to an incorrect `go`, showing why offsets cannot rescue weak evidence.
 - Existing backend invariants verify offsets do not change confidence or recommendation.
 
 Current status: implemented and fixture-tested.
@@ -47,6 +51,7 @@ Evidence:
 - High measured impact can produce `conditional_go`.
 - The gate still blocks approval when mitigation is missing.
 - Documented mitigation or an owned exception makes the conditional case approvable.
+- `no_mitigation_review_gate` drops to 11/14 exact matches; `no_exception_path` drops to 13/14.
 
 Current status: implemented and fixture-tested.
 

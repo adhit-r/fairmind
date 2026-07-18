@@ -56,6 +56,16 @@ BASELINE_COLUMNS = [
     "notes",
 ]
 
+BASELINE_LABELS = {
+    "fairmind_e": "FairMind-E",
+    "no_environmental_gate": "no env gate",
+    "carbon_only_gate": "carbon only",
+    "generic_sustainability_score": "generic score",
+    "no_mitigation_review_gate": "no mitigation",
+    "no_exception_path": "no exception",
+    "offset_credit_gate": "offset credit",
+}
+
 
 def bool_text(value: bool) -> str:
     return "true" if bool(value) else "false"
@@ -140,6 +150,33 @@ def generic_sustainability_prediction(impact_tier: str) -> tuple[str, bool, str]
     return "no_go", True, f"Generic sustainability score {score:.2f} blocks."
 
 
+def no_mitigation_review_prediction(result: Any) -> tuple[str, bool, str]:
+    """Ablation: conditional outcomes warn but never block approval."""
+    return (
+        result.recommendation,
+        result.recommendation == "no_go",
+        "Ignores mitigation readiness; conditional_go is never approval-blocking.",
+    )
+
+
+def no_exception_path_prediction(result: Any) -> tuple[str, bool, str]:
+    """Ablation: dated mitigation is required; owned exceptions are ignored."""
+    documented = result.has_dated_mitigation or result.mitigation_readiness == "documented"
+    return (
+        result.recommendation,
+        result.recommendation == "no_go" or (result.recommendation == "conditional_go" and not documented),
+        "Ignores owned exceptions; conditional_go requires documented mitigation only.",
+    )
+
+
+def offset_credit_prediction(assessment: dict[str, Any], result: Any) -> tuple[str, bool, str]:
+    """Ablation: disclosed offsets can override the gate."""
+    offsets = assessment.get("offsets_json")
+    if isinstance(offsets, dict) and any(float(value or 0) > 0 for value in offsets.values()):
+        return "go", False, "Treats disclosed offsets or RECs as enough to clear the gate."
+    return result.recommendation, bool(result.approval_blocking), "No offset credit disclosed; uses FairMind-E output."
+
+
 def baseline_row(
     *,
     baseline: str,
@@ -210,6 +247,42 @@ def evaluate_baselines(cases: list[dict[str, Any]]) -> list[dict[str, str]]:
         rows.append(
             baseline_row(
                 baseline="generic_sustainability_score",
+                case_id=case_id,
+                expected=expected,
+                recommendation=recommendation,
+                approval_blocking=approval_blocking,
+                notes=notes,
+            )
+        )
+
+        recommendation, approval_blocking, notes = no_mitigation_review_prediction(result)
+        rows.append(
+            baseline_row(
+                baseline="no_mitigation_review_gate",
+                case_id=case_id,
+                expected=expected,
+                recommendation=recommendation,
+                approval_blocking=approval_blocking,
+                notes=notes,
+            )
+        )
+
+        recommendation, approval_blocking, notes = no_exception_path_prediction(result)
+        rows.append(
+            baseline_row(
+                baseline="no_exception_path",
+                case_id=case_id,
+                expected=expected,
+                recommendation=recommendation,
+                approval_blocking=approval_blocking,
+                notes=notes,
+            )
+        )
+
+        recommendation, approval_blocking, notes = offset_credit_prediction(assessment, result)
+        rows.append(
+            baseline_row(
+                baseline="offset_credit_gate",
                 case_id=case_id,
                 expected=expected,
                 recommendation=recommendation,
@@ -401,14 +474,15 @@ def write_baseline_svg(path: pathlib.Path, baseline_rows: list[dict[str, str]]) 
     summaries = summarize_baselines(baseline_rows)
     max_total = max([1, *(item["total"] for item in summaries)])
     colors = ["#0F766E", "#F97316", "#111111", "#14B8A6"]
+    width = max(760, 80 + len(summaries) * 128)
     bars: list[str] = []
     for index, item in enumerate(summaries):
         height = int(170 * item["exact"] / max_total)
-        x = 62 + index * 154
+        x = 62 + index * 128
         y = 250 - height
-        label = item["baseline"].replace("_", " ")
+        label = BASELINE_LABELS.get(item["baseline"], item["baseline"].replace("_", " "))
         bars.append(
-            f'<rect x="{x}" y="{y}" width="84" height="{height}" fill="{colors[index % len(colors)]}" stroke="#111111" stroke-width="2"/>'
+            f'<rect x="{x}" y="{y}" width="72" height="{height}" fill="{colors[index % len(colors)]}" stroke="#111111" stroke-width="2"/>'
         )
         bars.append(
             f'<text x="{x}" y="{max(22, y - 8)}" font-size="12" font-family="Arial, sans-serif" fill="#111111">{item["exact"]}/{item["total"]}</text>'
@@ -417,11 +491,11 @@ def write_baseline_svg(path: pathlib.Path, baseline_rows: list[dict[str, str]]) 
             f'<text x="{x}" y="286" font-size="11" font-family="Arial, sans-serif" fill="#111111">{html.escape(label)}</text>'
         )
 
-    svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="760" height="330" viewBox="0 0 760 330" role="img" aria-label="FairMind-E baseline exact-match comparison">
+    svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="330" viewBox="0 0 {width} 330" role="img" aria-label="FairMind-E baseline exact-match comparison">
 <rect width="100%" height="100%" fill="#FFFFFF"/>
 <text x="36" y="38" font-size="24" font-family="Arial, sans-serif" font-weight="700" fill="#111111">FairMind-E baseline comparison</text>
 <text x="36" y="64" font-size="13" font-family="Arial, sans-serif" fill="#333333">Exact gate-label matches against the 14-case paper fixture.</text>
-<line x1="42" y1="252" x2="710" y2="252" stroke="#111111" stroke-width="3"/>
+<line x1="42" y1="252" x2="{width - 50}" y2="252" stroke="#111111" stroke-width="3"/>
 {chr(10).join(bars)}
 </svg>
 """

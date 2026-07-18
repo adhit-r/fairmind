@@ -31,6 +31,9 @@ Claim under test: FairMind-E makes environmental release decisions machine-check
 | fairmind_e | 14/14 | 100.0% | 14/14 | 14/14 |
 | generic_sustainability_score | 6/14 | 42.9% | 8/14 | 7/14 |
 | no_environmental_gate | 3/14 | 21.4% | 3/14 | 6/14 |
+| no_exception_path | 13/14 | 92.9% | 14/14 | 13/14 |
+| no_mitigation_review_gate | 11/14 | 78.6% | 14/14 | 11/14 |
+| offset_credit_gate | 13/14 | 92.9% | 13/14 | 13/14 |
 
 ## Failures
 
