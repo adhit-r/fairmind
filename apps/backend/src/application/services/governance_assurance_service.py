@@ -643,7 +643,7 @@ class GovernanceAssuranceService:
             .where(
                 mappings.c.org_id == org_id,
                 mappings.c.state == "accepted",
-                evidence_runs.c.result.in_(("passed", "passed_with_limitations")),
+                evidence_runs.c.result == "passed",
             )
         ).mappings():
             evidence_by_assessment.setdefault(row["control_assessment_id"], []).append(row["captured_at"] or row["created_at"])

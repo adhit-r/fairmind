@@ -21,6 +21,7 @@ from src.application.ports.evidence_ingestion import (
 from src.domain.assurance.evidence_passport import (
     EvidencePassport,
     EvidencePassportValidationError,
+    validate_ijson_domain,
     validate_public_ingestion,
     verify_client_hashes,
 )
@@ -48,6 +49,36 @@ def _validate_raw_passport(passport: dict[str, Any]) -> None:
         raise EvidencePassportValidationError(
             f"Evidence Passport schema validation failed at {location}: {error.message}"
         ) from error
+    validate_ijson_domain(passport)
+
+
+def parse_strict_json_object(raw: bytes) -> dict[str, Any]:
+    """Parse one JSON object while rejecting duplicate names at every depth."""
+
+    def unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in result:
+                raise EvidencePassportValidationError(f"duplicate JSON object name: {key}")
+            result[key] = value
+        return result
+
+    def reject_constant(value: str) -> None:
+        raise EvidencePassportValidationError(f"non-finite JSON number is forbidden: {value}")
+
+    try:
+        value = json.loads(
+            raw,
+            object_pairs_hook=unique_object,
+            parse_constant=reject_constant,
+        )
+    except EvidencePassportValidationError:
+        raise
+    except (json.JSONDecodeError, UnicodeDecodeError) as error:
+        raise EvidencePassportValidationError(f"invalid JSON request body: {error}") from error
+    if not isinstance(value, dict):
+        raise EvidencePassportValidationError("Evidence Passport body must be a JSON object")
+    return value
 
 
 class EvidenceIngestionService:
@@ -125,5 +156,6 @@ __all__ = [
     "EvidenceMappingReferenceError",
     "EvidencePassportValidationError",
     "build_evidence_ingestion_service",
+    "parse_strict_json_object",
     "review_evidence_mapping_revision",
 ]

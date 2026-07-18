@@ -38,6 +38,14 @@ def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _lower_hex64(column: str) -> str:
+    """Portable SQLite/PostgreSQL predicate for exactly 64 lower-hex characters."""
+    stripped = column
+    for character in "0123456789abcdef":
+        stripped = f"replace({stripped}, '{character}', '')"
+    return f"length({column}) = 64 AND length({stripped}) = 0"
+
+
 # ---------------------------------------------------------------------------
 # Enums
 # ---------------------------------------------------------------------------
@@ -330,11 +338,11 @@ class GovernanceEvidenceRun(Base):
     source_identifier = Column(String, nullable=False)
     run_id = Column(String, nullable=False)
     content_hash = Column(String, nullable=False)
-    workspace_id = Column(String, nullable=True, index=True)
-    passport_id = Column(String, nullable=True, index=True)
-    schema_version = Column(String, nullable=True, index=True)
-    capability_state = Column(String, nullable=True, index=True)
-    assurance_source = Column(String, nullable=True, index=True)
+    workspace_id = Column(String, nullable=False, index=True)
+    passport_id = Column(String, nullable=False, index=True)
+    schema_version = Column(String, nullable=False, index=True)
+    capability_state = Column(String, nullable=False, index=True)
+    assurance_source = Column(String, nullable=False, index=True)
     result = Column(String, nullable=False, default="unknown")
     provenance_json = Column(Text, nullable=False, default="{}")
     artifact_refs_json = Column(Text, nullable=False, default="[]")
@@ -357,6 +365,13 @@ class GovernanceEvidenceRun(Base):
         ForeignKeyConstraint(
             ["system_id", "org_id"],
             ["governance_ai_systems.id", "governance_ai_systems.org_id"],
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "org_id"],
+            ["governance_workspaces.id", "governance_workspaces.org_id"],
+        ),
+        CheckConstraint(
+            _lower_hex64("content_hash"), name="ck_governance_evidence_run_content_hash"
         ),
     )
 
@@ -395,6 +410,7 @@ class GovernanceEvidenceArtifact(Base):
         CheckConstraint(
             "size_bytes IS NULL OR size_bytes >= 0", name="ck_governance_evidence_artifact_size"
         ),
+        CheckConstraint(_lower_hex64("sha256"), name="ck_governance_evidence_artifact_sha256"),
         ForeignKeyConstraint(
             ["evidence_run_id", "system_id", "org_id"],
             [
@@ -450,8 +466,13 @@ class GovernanceEvidencePassportRevision(Base):
         CheckConstraint("passport_revision >= 1", name="ck_governance_passport_revision_positive"),
         CheckConstraint(
             "(passport_revision = 1 AND previous_revision_hash IS NULL) OR "
-            "(passport_revision > 1 AND previous_revision_hash IS NOT NULL)",
+            f"(passport_revision > 1 AND previous_revision_hash IS NOT NULL AND "
+            f"{_lower_hex64('previous_revision_hash')})",
             name="ck_governance_passport_revision_link",
+        ),
+        CheckConstraint(
+            _lower_hex64("canonical_content_hash"),
+            name="ck_governance_passport_canonical_hash",
         ),
         ForeignKeyConstraint(
             ["evidence_run_id", "system_id", "org_id"],

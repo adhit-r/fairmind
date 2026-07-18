@@ -1,12 +1,16 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
 
 import { API_ENDPOINTS } from '../endpoints'
 import { NAVIGATION_ITEMS } from '../../constants/navigation'
+import { EvaluationRunList } from '../../../app/(dashboard)/evidence/components/EvaluationRunList'
 import type {
   ControlAssessmentUpdateResult,
   EvidenceMappingReviewInput,
-  EvidenceRunInput,
+  EvidencePassportInput,
+  EvidenceRun,
   FrameworkImportResult,
 } from './useGovernanceAssurance'
 
@@ -108,21 +112,79 @@ test('normalizes framework imports and raw assessment update results', async () 
   )
 })
 
-test('keeps evidence artifact references and mapping review versions in request contracts', () => {
-  const evidenceRun: EvidenceRunInput = {
-    sourceType: 'evaluation',
-    sourceIdentifier: 'bias-suite',
-    runId: 'run-1',
-    artifactReferences: [{ uri: 's3://customer/evaluations/run-1.json', sha256: 'a'.repeat(64) }],
+test('posts the complete Evidence Passport without a compact-envelope conversion', async () => {
+  const { evidencePassportRequestBody } = await governanceContract()
+  const passport: EvidencePassportInput = {
+    schemaVersion: '1.0.0',
+    passportId: 'passport-1',
+    passportRevision: 1,
+    claimBoundary: 'supporting_evidence_only',
+    organizationId: 'org-1',
+    workspaceId: 'workspace-1',
+    aiSystem: {
+      systemId: 'system-1', name: 'System one', kind: 'model', version: '1', identityHash: '1'.repeat(64),
+    },
+    evaluation: {
+      sourceType: 'fairmind_evaluation', sourceIdentifier: 'bias-suite', runId: 'run-1',
+      capabilityState: 'validated', assuranceSource: 'fairmind_internal',
+      evaluator: { name: 'Evaluator', version: '1', adapterName: 'adapter', adapterVersion: '1', runnerVersion: '1' },
+      suite: { name: 'Bias suite', version: '1' },
+      subject: { kind: 'model', subjectId: 'subject-1', name: 'Subject', version: '1', digest: '2'.repeat(64) },
+      scope: { intendedUse: 'Bounded test', inputFingerprint: '3'.repeat(64), sampleCount: 10, exclusions: [] },
+      configurationHash: '4'.repeat(64), thresholds: [],
+      result: { status: 'passed', summary: 'Passed bounded test', metrics: [], startedAt: '2026-07-18T00:00:00Z', endedAt: '2026-07-18T00:01:00Z' },
+      runContentHash: '5'.repeat(64), capturedAt: '2026-07-18T00:01:00Z', limitations: [],
+    },
+    artifacts: [{
+      artifactId: 'artifact-1', role: 'report', uri: 's3://customer/evaluations/run-1.json',
+      sha256: '6'.repeat(64), mediaType: 'application/json', containsSensitiveData: false,
+    }],
+    frameworkMappings: [],
+    review: { status: 'pending', reviewVersion: 0 },
+    findings: [], remediation: [],
+    freshness: { status: 'current', policy: 'Retest on change', assessedAt: '2026-07-18T00:01:00Z', staleReasons: [], invalidationKeys: [] },
+    lineage: { predecessorPassportIds: [], retestOfPassportIds: [] },
+    createdAt: '2026-07-18T00:01:00Z', canonicalContentHash: '7'.repeat(64),
   }
+  const body = evidencePassportRequestBody(passport)
   const review: EvidenceMappingReviewInput = {
     state: 'accepted',
     rationale: 'Coverage verified.',
     reviewVersion: 2,
   }
 
-  assert.equal(evidenceRun.artifactReferences?.[0]?.sha256.length, 64)
+  assert.equal(body.artifacts[0]?.sha256.length, 64)
+  assert.equal(body.evaluation.runContentHash.length, 64)
+  assert.equal(body.canonicalContentHash.length, 64)
+  assert.equal('artifactReferences' in body, false)
+  assert.equal('controlExternalIds' in body, false)
   assert.deepEqual(review, { state: 'accepted', rationale: 'Coverage verified.', reviewVersion: 2 })
+})
+
+test('the evaluation-list consumer renders the backward-compatible GET DTO', async () => {
+  const { evidenceRunDisplayName } = await governanceContract()
+  const run: EvidenceRun = {
+    id: 'stored-run-1', runId: 'run-1', evidenceId: null,
+    contentHash: 'a'.repeat(64), runContentHash: 'a'.repeat(64),
+    passportId: 'passport-1', latestRevision: 2, latestCanonicalContentHash: 'b'.repeat(64),
+    capabilityState: 'validated', result: 'passed', sourceType: 'fairmind_evaluation',
+    sourceIdentifier: 'bias-suite', capturedAt: '2026-07-18T00:01:00Z',
+    suiteName: 'Bias suite', suiteVersion: '1', subjectVersion: '1', runnerVersion: '1',
+    assuranceSource: 'fairmind_internal', limitations: [], artifacts: [], candidateMappings: [],
+  }
+
+  assert.equal(evidenceRunDisplayName(run), 'Bias suite')
+  assert.equal(run.contentHash, run.runContentHash)
+  assert.equal(run.latestRevision, 2)
+  assert.equal(run.passportId, 'passport-1')
+  const markup = renderToStaticMarkup(createElement(EvaluationRunList, {
+    runs: [run], controls: [], loading: false, error: null, canReview: false,
+    onReview: async () => { throw new Error('No mapping is rendered in this fixture') },
+    onRefresh: async () => {},
+  }))
+  assert.match(markup, /Evaluation run Bias suite/)
+  assert.match(markup, /bias-suite/)
+  assert.match(markup, /Content hash/)
 })
 
 test('keeps Govern & Prove to the six assurance destinations', () => {

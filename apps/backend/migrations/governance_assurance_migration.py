@@ -8,7 +8,7 @@ from pathlib import Path
 
 _MIGRATIONS_DIR = Path(__file__).parent
 _POSTGRESQL_PATH = _MIGRATIONS_DIR / "011_governance_assurance.sql"
-_SQLITE_PATH = _MIGRATIONS_DIR / "011_governance_assurance.sqlite.sql"
+_SQLITE_PATH = _MIGRATIONS_DIR / "fixtures" / "011_governance_assurance.sqlite.sql"
 
 
 def sql_for(dialect: str) -> str:

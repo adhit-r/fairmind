@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
+import threading
 import uuid
 from typing import Any
 
@@ -55,6 +56,16 @@ def _uuid_or_none(value: str | None) -> uuid.UUID | None:
         return uuid.UUID(value)
     except ValueError:
         return None
+
+
+_REVISION_LOCKS_GUARD = threading.Lock()
+_REVISION_LOCKS: dict[str, threading.Lock] = {}
+
+
+def _revision_lock(run_id: str) -> threading.Lock:
+    """Serialize SQLite/in-process reviews; PostgreSQL also takes a row lock."""
+    with _REVISION_LOCKS_GUARD:
+        return _REVISION_LOCKS.setdefault(run_id, threading.Lock())
 
 
 class SqlAlchemyEvidenceIngestionStore:
@@ -121,9 +132,51 @@ class SqlAlchemyEvidenceIngestionStore:
             )
             .order_by(runs.c.created_at.desc())
         ).scalars()
-        return [self._result(run_id, IngestionDisposition.REPLAYED) for run_id in run_ids]
+        return [self._result(run_id, None) for run_id in run_ids]
 
     def review_mapping(
+        self,
+        org_id: str,
+        mapping_id: str,
+        state: str,
+        actor_id: str,
+        rationale: str | None,
+        review_version: int,
+    ) -> dict[str, Any] | None:
+        mappings = GovernanceControlEvidence.__table__
+        row = (
+            self.db.execute(
+                select(mappings).where(mappings.c.id == mapping_id, mappings.c.org_id == org_id)
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if not row:
+            return None
+        if not row["source_mapping_id"] or not row["passport_revision_id"]:
+            return self._review_mapping_unserialized(
+                org_id, mapping_id, state, actor_id, rationale, review_version
+            )
+
+        # End any read transaction opened by membership/lookup before waiting.
+        # Once inside the process lock, PostgreSQL's FOR UPDATE provides the
+        # cross-worker run-wide serialization boundary; SQLite uses this lock
+        # and a fresh transaction so it cannot retain a stale revision view.
+        run_id = row["evidence_id"]
+        self.db.rollback()
+        lock = _revision_lock(run_id)
+        with lock:
+            runs = GovernanceEvidenceRun.__table__
+            self.db.execute(
+                select(runs.c.id)
+                .where(runs.c.id == run_id, runs.c.org_id == org_id)
+                .with_for_update()
+            ).scalar_one()
+            return self._review_mapping_unserialized(
+                org_id, mapping_id, state, actor_id, rationale, review_version
+            )
+
+    def _review_mapping_unserialized(
         self,
         org_id: str,
         mapping_id: str,
@@ -185,7 +238,9 @@ class SqlAlchemyEvidenceIngestionStore:
         snapshot["passportRevision"] = latest["passport_revision"] + 1
         snapshot["previousRevisionHash"] = latest["canonical_content_hash"]
         normalized = with_server_hashes(EvidencePassport.model_validate(snapshot))
-        protocol = normalized.model_dump(by_alias=True, mode="json", exclude_none=True)
+        protocol = normalized.model_dump(
+            by_alias=True, mode="json", exclude_none=True, exclude_unset=True
+        )
         revision_id = str(uuid.uuid4())
         history = json.loads(row["review_history_json"] or "[]")
         history.append(
@@ -253,6 +308,7 @@ class SqlAlchemyEvidenceIngestionStore:
             self.db.rollback()
             raise EvidencePersistenceError("passport revision transaction failed") from error
         result = self._mapping(mapping_id)
+        result["disposition"] = IngestionDisposition.REVISION_CREATED.value
         result["passportRevision"] = latest["passport_revision"] + 1
         result["canonicalContentHash"] = protocol["canonicalContentHash"]
         return result
@@ -387,6 +443,7 @@ class SqlAlchemyEvidenceIngestionStore:
                     versions.c.framework_key == mapping.framework.key,
                     versions.c.version_label == mapping.framework.version_label,
                     versions.c.source_hash == mapping.framework.source_hash,
+                    controls.c.framework_version_id == versions.c.id,
                     controls.c.external_id == mapping.control.external_id,
                 )
             ).scalar_one_or_none()
@@ -394,6 +451,13 @@ class SqlAlchemyEvidenceIngestionStore:
                 self.db.rollback()
                 raise EvidenceMappingReferenceError(
                     f"candidate mapping {mapping.mapping_id} does not resolve in scoped framework assignment"
+                )
+            if any(
+                existing_assessment_id == assessment_id for _, existing_assessment_id in resolved
+            ):
+                self.db.rollback()
+                raise EvidenceMappingReferenceError(
+                    "duplicate candidate mappings resolve to the same control assessment"
                 )
             resolved.append((mapping, assessment_id))
         return resolved
@@ -407,7 +471,9 @@ class SqlAlchemyEvidenceIngestionStore:
         now = _now()
         run_pk = str(uuid.uuid4())
         revision_pk = str(uuid.uuid4())
-        protocol = passport.model_dump(by_alias=True, mode="json", exclude_none=True)
+        protocol = passport.model_dump(
+            by_alias=True, mode="json", exclude_none=True, exclude_unset=True
+        )
         runs = GovernanceEvidenceRun.__table__
         artifacts = GovernanceEvidenceArtifact.__table__
         revisions = GovernanceEvidencePassportRevision.__table__
@@ -569,12 +635,17 @@ class SqlAlchemyEvidenceIngestionStore:
             "reviewHistory": json.loads(row["review_history_json"] or "[]"),
         }
 
-    def _result(self, run_id: str, disposition: IngestionDisposition) -> IngestionResult:
+    def _result(self, run_id: str, disposition: IngestionDisposition | None) -> IngestionResult:
         runs = GovernanceEvidenceRun.__table__
         revisions = GovernanceEvidencePassportRevision.__table__
         evidence_artifacts = GovernanceEvidenceArtifact.__table__
         evidence_mappings = GovernanceControlEvidence.__table__
         run = self.db.execute(select(runs).where(runs.c.id == run_id)).mappings().one()
+        provenance = json.loads(run["provenance_json"] or "{}")
+        evaluation = provenance.get("evaluation", {})
+        suite = evaluation.get("suite", {})
+        subject = evaluation.get("subject", {})
+        evaluator = evaluation.get("evaluator", {})
         latest = (
             self.db.execute(
                 select(revisions)
@@ -630,4 +701,12 @@ class SqlAlchemyEvidenceIngestionStore:
                 for artifact in artifacts
             ),
             candidate_mappings=tuple(self._mapping(mapping_id) for mapping_id in mappings),
+            source_type=run["source_type"],
+            source_identifier=run["source_identifier"],
+            captured_at=run["captured_at"],
+            suite_name=suite.get("name"),
+            suite_version=suite.get("version"),
+            subject_version=subject.get("version"),
+            runner_version=evaluator.get("runnerVersion"),
+            assurance_source=run["assurance_source"],
         )

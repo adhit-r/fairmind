@@ -89,7 +89,7 @@ class CandidateMappingRecord:
 
 @dataclass(frozen=True)
 class IngestionResult:
-    disposition: IngestionDisposition
+    disposition: IngestionDisposition | None
     id: str
     evidence_id: str | None
     run_id: str
@@ -102,14 +102,22 @@ class IngestionResult:
     limitations: tuple[str, ...]
     artifacts: tuple[dict[str, Any], ...]
     candidate_mappings: tuple[dict[str, Any], ...]
+    source_type: str
+    source_identifier: str
+    captured_at: str | None
+    suite_name: str | None
+    suite_version: str | None
+    subject_version: str | None
+    runner_version: str | None
+    assurance_source: str | None
 
     def as_dict(self) -> dict[str, Any]:
-        return {
-            "disposition": self.disposition.value,
+        result = {
             "id": self.id,
             "evidenceId": self.evidence_id,
             "runId": self.run_id,
             "runContentHash": self.run_content_hash,
+            "contentHash": self.run_content_hash,
             "passportId": self.passport_id,
             "latestRevision": self.latest_revision,
             "latestCanonicalContentHash": self.latest_canonical_content_hash,
@@ -118,7 +126,21 @@ class IngestionResult:
             "limitations": list(self.limitations),
             "artifacts": list(self.artifacts),
             "candidateMappings": list(self.candidate_mappings),
+            "sourceType": self.source_type,
+            "sourceIdentifier": self.source_identifier,
+            "capturedAt": self.captured_at,
+            "suiteName": self.suite_name,
+            "suiteVersion": self.suite_version,
+            "subjectVersion": self.subject_version,
+            "runnerVersion": self.runner_version,
+            "assuranceSource": self.assurance_source,
         }
+        if self.disposition is not None:
+            result["disposition"] = self.disposition.value
+        return result
+
+    def as_read_dict(self) -> dict[str, Any]:
+        return self.as_dict()
 
 
 class EvidenceIngestionPort(Protocol):

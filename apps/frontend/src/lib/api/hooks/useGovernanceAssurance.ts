@@ -111,7 +111,7 @@ export interface EvidenceMappingReviewInput {
 
 export interface EvidenceMapping {
   id: string
-  evidenceId: string
+  evidenceId: string | null
   controlAssessmentId: string
   state: 'candidate' | 'accepted' | 'rejected'
   rationale: string | null
@@ -122,8 +122,13 @@ export interface EvidenceMapping {
 export interface EvidenceRun {
   id: string
   runId: string
-  evidenceId: string
+  evidenceId: string | null
   contentHash: string
+  runContentHash: string
+  passportId: string
+  latestRevision: number
+  latestCanonicalContentHash: string
+  capabilityState: string
   result: string
   sourceType: string
   sourceIdentifier: string
@@ -134,34 +139,109 @@ export interface EvidenceRun {
   runnerVersion: string | null
   assuranceSource: 'fairmind_internal' | 'company_integration' | 'manual' | 'third_party' | null
   limitations: string[]
+  artifacts: EvidenceArtifact[]
   candidateMappings: EvidenceMapping[]
 }
 
-export interface EvidenceRunInput {
-  sourceType: string
-  sourceIdentifier: string
-  runId: string
-  result?: string
-  capturedAt?: string
-  expiresAt?: string
-  suiteName?: string
-  suiteVersion?: string
-  trigger?: string
-  subjectVersion?: string
-  datasetHash?: string
-  configurationHash?: string
-  thresholds?: Record<string, unknown>
-  seed?: string | number
-  runnerVersion?: string
-  runnerDigest?: string
-  summary?: Record<string, unknown>
-  limitations?: string[]
-  artifactReferences?: Array<{ uri: string; sha256: string }>
-  retention?: string
-  assuranceSource?: 'fairmind_internal' | 'company_integration' | 'manual' | 'third_party'
-  thirdPartyAssessor?: { identity: string; independenceAssertion: boolean }
-  controlExternalIds?: string[]
-  evaluationTags?: string[]
+export interface EvidenceArtifact {
+  artifactId: string
+  ordinal: number
+  role: string
+  uri: string
+  sha256: string
+  mediaType: string
+  sizeBytes: number | null
+  containsSensitiveData: boolean
+  retentionPolicy: string | null
+  redactionNote: string | null
+}
+
+type JsonScalar = string | number | boolean | null
+
+export interface EvidencePassportInput {
+  schemaVersion: '1.0.0'
+  passportId: string
+  passportRevision: number
+  previousRevisionHash?: string
+  claimBoundary: 'supporting_evidence_only'
+  organizationId: string
+  workspaceId: string
+  aiSystem: {
+    systemId: string
+    name: string
+    kind: 'model' | 'agent' | 'composite_application'
+    version: string
+    identityHash: string
+    deploymentId?: string
+    ownerId?: string
+    intendedUse?: string
+  }
+  evaluation: {
+    sourceType: 'fairmind_evaluation' | 'external_tool_import' | 'company_integration' | 'manual_registration' | 'third_party_assessment'
+    sourceIdentifier: string
+    runId: string
+    capabilityState: 'validated' | 'metadata_only' | 'external_provider' | 'unavailable' | 'insufficient_data'
+    assuranceSource: 'fairmind_internal' | 'company_integration' | 'manual' | 'third_party'
+    thirdPartyAssessor?: { identity: string; qualifications?: string[]; independenceAssertion: boolean }
+    evaluator: {
+      name: string; version: string; adapterName: string; adapterVersion: string; runnerVersion: string
+      runnerDigest?: string; codeCommit?: string
+    }
+    suite: { name: string; version: string; taxonomy?: string; trigger?: 'manual' | 'ci' | 'scheduled' | 'release_gate' | 'incident' | 'integration_sync' }
+    subject: {
+      kind: 'model' | 'agent' | 'composite_application' | 'dataset' | 'prompt_set' | 'pipeline' | 'deployment'
+      subjectId: string; name: string; version: string; digest: string; provider?: string; endpoint?: string
+    }
+    scope: {
+      intendedUse: string; inputFingerprint: string; sampleCount: number; exclusions: string[]
+      datasetName?: string; datasetVersion?: string; datasetHash?: string; protectedGroups?: string[]; locales?: string[]
+    }
+    configurationHash: string
+    seed?: string | number
+    thresholds: Array<{ metric: string; operator: 'lt' | 'lte' | 'eq' | 'gte' | 'gt' | 'between' | 'in'; value: JsonScalar | JsonScalar[]; unit?: string; preRegisteredAt?: string; rationale: string }>
+    environment?: { operatingSystem?: string; architecture?: string; runtime?: string; containerDigest?: string; region?: string; hardware?: string }
+    result: {
+      status: 'passed' | 'passed_with_limitations' | 'failed' | 'informational' | 'error' | 'unavailable' | 'insufficient_data' | 'unknown'
+      summary: string
+      metrics: Array<{ name: string; value: JsonScalar | JsonScalar[]; unit?: string; slice?: string; thresholdMet?: boolean; confidenceInterval?: { lower: number; upper: number; level: number } }>
+      confidence?: number; startedAt: string; endedAt: string; errorCode?: string; errorMessage?: string
+    }
+    runContentHash: string
+    capturedAt: string
+    expiresAt?: string
+    limitations: string[]
+  }
+  artifacts: Array<{
+    artifactId: string; role: 'raw_output' | 'report' | 'log' | 'dataset_manifest' | 'model_manifest' | 'prompt_manifest' | 'configuration' | 'other'
+    uri: string; sha256: string; mediaType: string; sizeBytes?: number; containsSensitiveData: boolean; retentionPolicy?: string; redactionNote?: string
+  }>
+  frameworkMappings: Array<{
+    mappingId: string
+    framework: { key: string; versionLabel: string; sourceHash: string; sourceUri?: string }
+    control: { externalId: string; assessmentId: string }
+    state: 'candidate' | 'accepted' | 'rejected'
+    relation: 'supports' | 'contradicts' | 'limits' | 'supersedes'
+    rationale: string
+    suggestedBy: { actorType: 'user' | 'service' | 'adapter' | 'external_assessor'; actorId: string; displayName?: string }
+    createdAt: string
+    review?: { decision: 'accepted' | 'rejected'; reviewer: { actorType: 'user' | 'service' | 'adapter' | 'external_assessor'; actorId: string; displayName?: string }; reviewedAt: string; rationale: string; reviewVersion: number }
+  }>
+  review: { status: 'pending' | 'accepted' | 'rejected'; reviewVersion: number; reviewer?: { actorType: 'user' | 'service' | 'adapter' | 'external_assessor'; actorId: string; displayName?: string }; reviewedAt?: string; rationale?: string }
+  findings: Array<{ findingId: string; severity: 'informational' | 'low' | 'medium' | 'high' | 'critical'; status: 'open' | 'accepted_risk' | 'in_remediation' | 'resolved' | 'false_positive'; title: string; description: string; artifactIds: string[]; createdAt: string }>
+  remediation: Array<{ remediationId: string; findingIds: string[]; status: 'planned' | 'in_progress' | 'blocked' | 'completed' | 'verified'; ownerId?: string; action: string; dueAt?: string; completedAt?: string; verificationPassportId?: string }>
+  freshness: { status: 'current' | 'expiring' | 'stale' | 'superseded'; policy: string; assessedAt: string; expiresAt?: string; staleReasons: string[]; invalidationKeys: string[]; supersededByPassportId?: string }
+  lineage: { predecessorPassportIds: string[]; retestOfPassportIds: string[] }
+  signatures?: Array<{ algorithm: 'Ed25519' | 'ES256' | 'RS256'; keyId: string; signedAt: string; value: string }>
+  createdAt: string
+  canonicalContentHash: string
+}
+
+export function evidencePassportRequestBody(passport: EvidencePassportInput): EvidencePassportInput {
+  return passport
+}
+
+export function evidenceRunDisplayName(run: EvidenceRun): string {
+  return run.suiteName || run.sourceIdentifier || run.runId
 }
 
 export interface GovernanceAssuranceState<T> {
@@ -418,9 +498,9 @@ export function useEvidenceRuns(orgId?: string, systemId?: string) {
     useCallback(async () => unwrapGovernanceResponse(await apiClient.get<EvidenceRun[]>(API_ENDPOINTS.aiGovernance.evidenceRuns(orgId!, systemId!))), [orgId, systemId]),
   )
 
-  const ingestRun = useCallback(async (run: EvidenceRunInput) => {
+  const ingestRun = useCallback(async (passport: EvidencePassportInput) => {
     if (!orgId || !systemId) throw new Error('An organization and AI system are required to ingest evidence')
-    const evidenceRun = unwrapGovernanceResponse(await apiClient.post<EvidenceRun>(API_ENDPOINTS.aiGovernance.evidenceRuns(orgId, systemId), run))
+    const evidenceRun = unwrapGovernanceResponse(await apiClient.post<EvidenceRun>(API_ENDPOINTS.aiGovernance.evidenceRuns(orgId, systemId), evidencePassportRequestBody(passport)))
     await refreshRuns()
     return evidenceRun
   }, [orgId, refreshRuns, systemId])

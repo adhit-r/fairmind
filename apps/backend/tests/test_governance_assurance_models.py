@@ -218,7 +218,12 @@ def test_assurance_constraints_reject_cross_org_associations_and_persist_mapping
         source_type="evaluation",
         source_identifier="eval-a",
         run_id="run-a",
-        content_hash="hash-a",
+        content_hash="a" * 64,
+        workspace_id=system_a.workspace_id,
+        passport_id="passport-a",
+        schema_version="1.0.0",
+        capability_state="validated",
+        assurance_source="fairmind_internal",
     )
     evidence_b = EvidenceRun(
         id="ev-b",
@@ -227,7 +232,12 @@ def test_assurance_constraints_reject_cross_org_associations_and_persist_mapping
         source_type="evaluation",
         source_identifier="eval-b",
         run_id="run-b",
-        content_hash="hash-b",
+        content_hash="b" * 64,
+        workspace_id=system_b.workspace_id,
+        passport_id="passport-b",
+        schema_version="1.0.0",
+        capability_state="validated",
+        assurance_source="fairmind_internal",
     )
     db_session.add(version)
     db_session.commit()

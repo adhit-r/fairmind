@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import hashlib
 import json
 from pathlib import Path
 
@@ -22,6 +23,7 @@ from src.domain.assurance.evidence_passport import (
     rfc8785_sha256,
     run_content_projection,
     validate_public_ingestion,
+    verify_client_hashes,
     with_server_hashes,
 )
 
@@ -218,6 +220,31 @@ def server_hashed_passport(**updates: object) -> dict:
     return with_server_hashes(EvidencePassport.model_validate(payload)).model_dump(
         by_alias=True, mode="json", exclude_none=True
     )
+
+
+def independently_hashed_payload(payload: dict) -> dict:
+    """Hash raw protocol data without calling any production projection helper."""
+    result = deepcopy(payload)
+    run_projection = {
+        "schemaVersion": result["schemaVersion"],
+        "aiSystem": deepcopy(result["aiSystem"]),
+        "evaluation": {
+            key: deepcopy(value)
+            for key, value in result["evaluation"].items()
+            if key != "runContentHash"
+        },
+        "artifacts": deepcopy(result["artifacts"]),
+    }
+    result["evaluation"]["runContentHash"] = hashlib.sha256(
+        rfc8785.dumps(run_projection)
+    ).hexdigest()
+    snapshot = {
+        key: deepcopy(value)
+        for key, value in result.items()
+        if key not in {"canonicalContentHash", "signatures"}
+    }
+    result["canonicalContentHash"] = hashlib.sha256(rfc8785.dumps(snapshot)).hexdigest()
+    return result
 
 
 @pytest.fixture(scope="module")
@@ -548,6 +575,83 @@ def test_rfc8785_official_style_number_and_unicode_vectors() -> None:
         '{"a":"\u20ac","z":"\u00e9"}'.encode("utf-8")
     )
     assert rfc8785_sha256({"b": 2, "a": 1}) == rfc8785_sha256({"a": 1, "b": 2})
+
+
+def test_optional_protocol_field_absence_is_preserved_in_hashes_and_snapshot() -> None:
+    payload = golden_passport()
+    del payload["evaluation"]["scope"]["protectedGroups"]
+    del payload["evaluation"]["scope"]["locales"]
+    payload["evaluation"]["thirdPartyAssessor"] = {
+        "identity": "Independent Assurance Co.",
+        "independenceAssertion": True,
+    }
+    payload = independently_hashed_payload(payload)
+
+    parsed = EvidencePassport.model_validate(payload)
+    normalized = with_server_hashes(parsed)
+    protocol = normalized.model_dump(
+        by_alias=True, mode="json", exclude_none=True, exclude_unset=True
+    )
+
+    assert normalized.evaluation.run_content_hash == payload["evaluation"]["runContentHash"]
+    assert normalized.canonical_content_hash == payload["canonicalContentHash"]
+    assert "protectedGroups" not in protocol["evaluation"]["scope"]
+    assert "locales" not in protocol["evaluation"]["scope"]
+    assert "qualifications" not in protocol["evaluation"]["thirdPartyAssessor"]
+    assert "runContentHash" in protocol["evaluation"]
+    assert "canonicalContentHash" in protocol
+
+
+def test_rfc8785_boundary_vectors_have_independently_specified_bytes_and_hashes() -> None:
+    vector = {
+        "rounding": 333333333.33333329,
+        "negativeZero": -0.0,
+        "small": 2e-3,
+        "astral": "\U0001f600",
+        "composed": "\u00e9",
+        "decomposed": "e\u0301",
+        "\U0001f600": "astral-key",
+        "\ufffd": "bmp-key",
+    }
+    expected = (
+        '{"astral":"\U0001f600","composed":"\u00e9","decomposed":"e\u0301",'
+        '"negativeZero":0,"rounding":333333333.3333333,"small":0.002,'
+        '"\U0001f600":"astral-key","\ufffd":"bmp-key"}'
+    ).encode()
+    assert rfc8785.dumps(vector) == expected
+    assert rfc8785_sha256(vector) == hashlib.sha256(expected).hexdigest()
+    assert vector["composed"] != vector["decomposed"]
+
+
+@pytest.mark.parametrize("seed", [2**53, -(2**53)])
+def test_ijson_unsafe_integer_boundaries_are_422_domain_errors_before_storage(seed: int) -> None:
+    payload = golden_passport()
+    payload["evaluation"]["seed"] = seed
+    store = _HashMismatchStore()
+
+    with pytest.raises(EvidencePassportValidationError, match="I-JSON|integer"):
+        EvidenceIngestionService(store).ingest(payload, org_id="org-001", actor_id="user-001")
+
+    assert store.calls == 0
+
+
+@pytest.mark.parametrize("seed", [2**53 - 1, -(2**53) + 1])
+def test_ijson_safe_integer_boundaries_hash_and_validate(seed: int) -> None:
+    payload = golden_passport()
+    payload["evaluation"]["seed"] = seed
+    payload = independently_hashed_payload(payload)
+    assert verify_client_hashes(EvidencePassport.model_validate(payload)).evaluation.seed == seed
+
+
+def test_ijson_lone_surrogate_is_a_bounded_validation_error_before_storage() -> None:
+    payload = golden_passport()
+    payload["evaluation"]["result"]["summary"] = "bad \ud800 string"
+    store = _HashMismatchStore()
+
+    with pytest.raises(EvidencePassportValidationError, match="I-JSON|surrogate"):
+        EvidenceIngestionService(store).ingest(payload, org_id="org-001", actor_id="user-001")
+
+    assert store.calls == 0
 
 
 @pytest.mark.parametrize(

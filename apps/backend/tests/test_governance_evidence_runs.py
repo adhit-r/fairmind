@@ -3,15 +3,20 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
+import hashlib
 import json
 from pathlib import Path
 import sqlite3
+import threading
 import uuid
 
 import pytest
+import rfc8785
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -39,6 +44,7 @@ from database.models import (
 )
 from migrations.governance_assurance_migration import sql_for
 from src.application.ports.evidence_ingestion import EvidenceRunConflict
+from src.application.ports.evidence_ingestion import EvidenceRevisionConflict
 from src.application.services.governance_assurance_service import GovernanceAssuranceService
 from src.domain.assurance.evidence_passport import EvidencePassport, with_server_hashes
 from src.infrastructure.db.repositories.evidence_ingestion_repository import (
@@ -346,6 +352,30 @@ def _passport(
     )
 
 
+def _independently_hash_passport(payload: dict) -> dict:
+    result = deepcopy(payload)
+    run_projection = {
+        "schemaVersion": result["schemaVersion"],
+        "aiSystem": deepcopy(result["aiSystem"]),
+        "evaluation": {
+            key: deepcopy(value)
+            for key, value in result["evaluation"].items()
+            if key != "runContentHash"
+        },
+        "artifacts": deepcopy(result["artifacts"]),
+    }
+    result["evaluation"]["runContentHash"] = hashlib.sha256(
+        rfc8785.dumps(run_projection)
+    ).hexdigest()
+    snapshot = {
+        key: deepcopy(value)
+        for key, value in result.items()
+        if key not in {"canonicalContentHash", "signatures"}
+    }
+    result["canonicalContentHash"] = hashlib.sha256(rfc8785.dumps(snapshot)).hexdigest()
+    return result
+
+
 def _post(
     client: TestClient, passport: dict, *, path_org: str = ORG_A, path_system: str = "system-001"
 ):
@@ -353,6 +383,74 @@ def _post(
         f"/api/v1/ai-governance/organizations/{path_org}/systems/{path_system}/evidence-runs",
         json=passport,
     )
+
+
+@pytest.mark.parametrize(
+    "raw_fragment",
+    [
+        '"organizationId":"%s","organizationId":"%s"' % (ORG_A, ORG_A),
+        '"aiSystem":{"systemId":"system-001","systemId":"system-001"}',
+    ],
+)
+def test_duplicate_json_names_are_rejected_at_root_and_nested_levels(
+    assurance_client, raw_fragment: str
+) -> None:
+    client, session_factory, _ = assurance_client
+    _seed_default(session_factory)
+    if raw_fragment.startswith('"organizationId"'):
+        raw = "{" + raw_fragment + "}"
+    else:
+        raw = "{" + raw_fragment + "}"
+
+    response = client.post(
+        f"/api/v1/ai-governance/organizations/{ORG_A}/systems/system-001/evidence-runs",
+        content=raw.encode(),
+        headers={"content-type": "application/json"},
+    )
+
+    assert response.status_code == 422, response.text
+    assert "duplicate" in response.text.lower()
+    session = session_factory()
+    assert _count(session, GovernanceEvidenceRun) == 0
+    session.close()
+
+
+@pytest.mark.parametrize("unsafe_integer", [2**53, -(2**53)])
+def test_ijson_unsafe_integer_request_is_rejected_as_422(
+    assurance_client, unsafe_integer: int
+) -> None:
+    client, session_factory, _ = assurance_client
+    _seed_default(session_factory)
+    passport = _passport()
+    passport["evaluation"]["thresholds"][0]["value"] = unsafe_integer
+
+    response = _post(client, passport)
+
+    assert response.status_code == 422, response.text
+    assert "I-JSON" in response.text or "integer" in response.text
+    session = session_factory()
+    assert _count(session, GovernanceEvidenceRun) == 0
+    session.close()
+
+
+def test_ijson_lone_surrogate_request_is_rejected_as_422(assurance_client) -> None:
+    client, session_factory, _ = assurance_client
+    _seed_default(session_factory)
+    passport = _passport()
+    passport["evaluation"]["result"]["summary"] = "\ud800"
+    raw = json.dumps(passport, ensure_ascii=True).encode("ascii")
+
+    response = client.post(
+        f"/api/v1/ai-governance/organizations/{ORG_A}/systems/system-001/evidence-runs",
+        content=raw,
+        headers={"content-type": "application/json"},
+    )
+
+    assert response.status_code == 422, response.text
+    assert "surrogate" in response.text.lower()
+    session = session_factory()
+    assert _count(session, GovernanceEvidenceRun) == 0
+    session.close()
 
 
 def _seed_default(session_factory) -> tuple[str, str]:
@@ -411,6 +509,33 @@ def test_new_passport_writes_run_ordered_artifacts_revision_candidates_and_audit
     assert mappings[0]["source_mapping_id"] == "mapping-001"
     audits = _audit_rows(session, "evidence_passport.ingested")
     assert len(audits) == 1
+    session.close()
+
+
+def test_absent_optional_protocol_fields_remain_absent_in_stored_snapshot(
+    assurance_client,
+) -> None:
+    client, session_factory, _ = assurance_client
+    _seed_default(session_factory)
+    passport = _passport()
+    passport["evaluation"]["scope"].pop("protectedGroups")
+    passport["evaluation"]["scope"].pop("locales")
+    passport["evaluation"]["thirdPartyAssessor"] = {
+        "identity": "Independent Assurance Co.",
+        "independenceAssertion": True,
+    }
+    passport = _independently_hash_passport(passport)
+
+    response = _post(client, passport)
+
+    assert response.status_code == 201, response.text
+    session = session_factory()
+    snapshot = json.loads(_rows(session, GovernanceEvidencePassportRevision)[0]["snapshot_json"])
+    assert "protectedGroups" not in snapshot["evaluation"]["scope"]
+    assert "locales" not in snapshot["evaluation"]["scope"]
+    assert "qualifications" not in snapshot["evaluation"]["thirdPartyAssessor"]
+    assert snapshot["evaluation"]["runContentHash"] == passport["evaluation"]["runContentHash"]
+    assert snapshot["canonicalContentHash"] == passport["canonicalContentHash"]
     session.close()
 
 
@@ -590,6 +715,7 @@ def test_organization_workspace_path_and_passport_system_scope_fail_closed(
 @pytest.mark.parametrize(
     ("status", "capability"),
     [
+        ("passed_with_limitations", "validated"),
         ("failed", "validated"),
         ("error", "validated"),
         ("unavailable", "unavailable"),
@@ -702,6 +828,70 @@ def test_unresolved_or_cross_system_candidate_rejects_entire_write(
     session.close()
 
 
+def test_candidate_control_must_belong_to_the_assigned_framework_version(
+    assurance_client,
+) -> None:
+    client, session_factory, _ = assurance_client
+    _seed_default(session_factory)
+    session = session_factory()
+    session.execute(
+        GovernanceFrameworkVersion.__table__.insert().values(
+            id="version-foreign",
+            framework_key="foreign",
+            name="Foreign",
+            version_label="9",
+            source_hash="b" * 64,
+        )
+    )
+    session.execute(
+        GovernanceControlDefinition.__table__.insert().values(
+            id="control-foreign",
+            framework_version_id="version-foreign",
+            external_id="CTRL-1",
+            title="Foreign control",
+            statement="Not part of the assigned version",
+            frequency="Annual",
+            active=True,
+        )
+    )
+    session.execute(
+        GovernanceControlAssessment.__table__.update()
+        .where(GovernanceControlAssessment.__table__.c.id == "assessment-001")
+        .values(control_definition_id="control-foreign")
+    )
+    session.commit()
+    session.close()
+
+    response = _post(client, _passport())
+
+    assert response.status_code == 422, response.text
+    session = session_factory()
+    assert _count(session, GovernanceEvidenceRun) == 0
+    session.close()
+
+
+def test_duplicate_mapping_ids_resolving_to_one_assessment_are_rejected_as_422(
+    assurance_client,
+) -> None:
+    client, session_factory, _ = assurance_client
+    _seed_default(session_factory)
+    passport = _passport()
+    duplicate_target = deepcopy(passport["frameworkMappings"][0])
+    duplicate_target["mappingId"] = "mapping-002"
+    passport["frameworkMappings"].append(duplicate_target)
+    passport = with_server_hashes(EvidencePassport.model_validate(passport)).model_dump(
+        by_alias=True, mode="json", exclude_none=True
+    )
+
+    response = _post(client, passport)
+
+    assert response.status_code == 422, response.text
+    assert "duplicate" in response.text.lower() or "assessment" in response.text.lower()
+    session = session_factory()
+    assert _count(session, GovernanceEvidenceRun) == 0
+    session.close()
+
+
 @pytest.mark.parametrize(
     ("stage", "table"),
     [
@@ -761,6 +951,7 @@ def test_mapping_review_atomically_appends_hash_linked_snapshot_and_stale_review
     )
 
     assert accepted.status_code == 200, accepted.text
+    assert accepted.json()["disposition"] == "revision_created"
     assert accepted.json()["passportRevision"] == 2
     assert stale.status_code == 409
     session = session_factory()
@@ -780,6 +971,120 @@ def test_mapping_review_atomically_appends_hash_linked_snapshot_and_stale_review
     assert stored_mapping["review_version"] == 1
     assert stored_mapping["passport_revision_id"] == revisions[1]["id"]
     session.close()
+
+
+def _concurrent_review_database(tmp_path: Path, *, two_mappings: bool):
+    engine = create_engine(
+        f"sqlite:///{tmp_path / 'revision-race.db'}",
+        connect_args={"check_same_thread": False, "timeout": 10},
+    )
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+    session = factory()
+    _seed_org(session, ORG_A, USER_A)
+    _seed_system_and_control(session)
+    passport = _passport()
+    if two_mappings:
+        session.execute(
+            GovernanceControlDefinition.__table__.insert().values(
+                id="control-002",
+                framework_version_id="version-001",
+                external_id="CTRL-2",
+                title="Control two",
+                statement="Second independently reviewable control",
+                frequency="Annual",
+                active=True,
+            )
+        )
+        session.execute(
+            GovernanceControlAssessment.__table__.insert().values(
+                id="assessment-002",
+                org_id=ORG_A,
+                system_id="system-001",
+                framework_assignment_id="assignment-001",
+                control_definition_id="control-002",
+            )
+        )
+        second = deepcopy(passport["frameworkMappings"][0])
+        second["mappingId"] = "mapping-002"
+        second["control"] = {"externalId": "CTRL-2", "assessmentId": "assessment-002"}
+        passport["frameworkMappings"].append(second)
+        passport = with_server_hashes(EvidencePassport.model_validate(passport)).model_dump(
+            by_alias=True, mode="json", exclude_none=True
+        )
+    created = SqlAlchemyEvidenceIngestionStore(session).ingest(
+        EvidencePassport.model_validate(passport), USER_A
+    )
+    mapping_ids = [mapping["id"] for mapping in created.candidate_mappings]
+    session.close()
+    return engine, factory, mapping_ids
+
+
+def _race_reviews(factory, mapping_ids: list[str]):
+    barrier = threading.Barrier(len(mapping_ids))
+
+    def review(mapping_id: str):
+        session = factory()
+        try:
+            barrier.wait(timeout=5)
+            return SqlAlchemyEvidenceIngestionStore(session).review_mapping(
+                ORG_A,
+                mapping_id,
+                "accepted",
+                USER_A,
+                "Concurrent bounded review",
+                0,
+            )
+        except Exception as error:  # returned for exact race classification assertions
+            return error
+        finally:
+            session.close()
+
+    with ThreadPoolExecutor(max_workers=len(mapping_ids)) as executor:
+        return list(executor.map(review, mapping_ids))
+
+
+def test_two_sessions_racing_same_mapping_yield_one_revision_and_one_stale_conflict(
+    tmp_path: Path,
+) -> None:
+    engine, factory, mapping_ids = _concurrent_review_database(tmp_path, two_mappings=False)
+
+    outcomes = _race_reviews(factory, [mapping_ids[0], mapping_ids[0]])
+
+    assert sum(isinstance(outcome, EvidenceRevisionConflict) for outcome in outcomes) == 1
+    success = [outcome for outcome in outcomes if isinstance(outcome, dict)]
+    assert len(success) == 1 and success[0]["disposition"] == "revision_created"
+    session = factory()
+    revisions = _rows(
+        session,
+        GovernanceEvidencePassportRevision,
+        order_by=GovernanceEvidencePassportRevision.__table__.c.passport_revision,
+    )
+    assert [revision["passport_revision"] for revision in revisions] == [1, 2]
+    session.close()
+    engine.dispose()
+
+
+def test_two_sessions_racing_different_mappings_allocate_unique_run_wide_revisions(
+    tmp_path: Path,
+) -> None:
+    engine, factory, mapping_ids = _concurrent_review_database(tmp_path, two_mappings=True)
+
+    outcomes = _race_reviews(factory, mapping_ids)
+
+    assert all(isinstance(outcome, dict) for outcome in outcomes), outcomes
+    assert {outcome["passportRevision"] for outcome in outcomes} == {2, 3}
+    session = factory()
+    revisions = _rows(
+        session,
+        GovernanceEvidencePassportRevision,
+        order_by=GovernanceEvidencePassportRevision.__table__.c.passport_revision,
+    )
+    assert [revision["passport_revision"] for revision in revisions] == [1, 2, 3]
+    assert revisions[1]["previous_revision_hash"] == revisions[0]["canonical_content_hash"]
+    assert revisions[2]["previous_revision_hash"] == revisions[1]["canonical_content_hash"]
+    session.close()
+    engine.dispose()
 
 
 def test_original_public_revision_replays_after_server_review_without_new_writes(
@@ -855,15 +1160,125 @@ def test_get_evidence_runs_exposes_passport_provenance_without_raw_outputs(
 
     assert response.status_code == 200
     item = response.json()[0]
+    assert "disposition" not in item
     assert item["passportId"] == "passport-001"
     assert item["latestRevision"] == 1
     assert item["runContentHash"]
     assert item["latestCanonicalContentHash"]
     assert item["capabilityState"] == "validated"
     assert item["result"] == "passed"
+    assert item["contentHash"] == item["runContentHash"]
+    assert item["sourceType"] == "fairmind_evaluation"
+    assert item["sourceIdentifier"] == "fairmind-bias-suite"
+    assert item["capturedAt"] == "2026-07-18T00:05:00Z"
+    assert item["suiteName"] == "Bias suite"
+    assert item["suiteVersion"] == "2026.07"
+    assert item["subjectVersion"] == "2026.07"
+    assert item["runnerVersion"] == "3.0.0"
+    assert item["assuranceSource"] == "fairmind_internal"
     assert item["limitations"] == ["Synthetic test set only."]
     assert [value["ordinal"] for value in item["artifacts"]] == [0, 1]
     assert "snapshot" not in item and "summary" not in item
+
+
+def test_orm_create_all_enforces_s12_required_scope_digests_and_revision_links(
+    assurance_client,
+) -> None:
+    _, session_factory, _ = assurance_client
+    _seed_default(session_factory)
+    session = session_factory()
+    session.execute(text("PRAGMA foreign_keys = ON"))
+    assert session.execute(text("PRAGMA foreign_keys")).scalar_one() == 1
+    runs = GovernanceEvidenceRun.__table__
+    valid_run = {
+        "id": "orm-run-1",
+        "org_id": ORG_A,
+        "system_id": "system-001",
+        "workspace_id": "workspace-001",
+        "passport_id": "passport-orm",
+        "schema_version": "1.0.0",
+        "capability_state": "validated",
+        "assurance_source": "fairmind_internal",
+        "source_type": "fairmind_evaluation",
+        "source_identifier": "orm-suite",
+        "run_id": "orm-run-1",
+        "content_hash": "a" * 64,
+        "result": "passed",
+        "provenance_json": "{}",
+        "artifact_refs_json": "[]",
+        "limitations_json": "[]",
+        "created_at": "now",
+    }
+
+    for mutation in (
+        {"workspace_id": None},
+        {"workspace_id": "missing-workspace"},
+        {"passport_id": None},
+        {"schema_version": None},
+        {"capability_state": None},
+        {"assurance_source": None},
+        {"content_hash": "A" * 64},
+        {"content_hash": "a" * 63},
+    ):
+        invalid = {**valid_run, **mutation, "id": f"bad-{len(mutation)}-{mutation!s}"}
+        invalid["run_id"] = invalid["id"]
+        with pytest.raises(IntegrityError):
+            session.execute(runs.insert().values(**invalid))
+            session.commit()
+        session.rollback()
+
+    session.execute(runs.insert().values(**valid_run))
+    session.commit()
+    artifacts = GovernanceEvidenceArtifact.__table__
+    artifact = {
+        "id": "orm-artifact-1",
+        "org_id": ORG_A,
+        "system_id": "system-001",
+        "evidence_run_id": "orm-run-1",
+        "artifact_id": "artifact-orm",
+        "ordinal": 0,
+        "role": "report",
+        "uri": "s3://evidence/orm",
+        "sha256": "B" * 64,
+        "media_type": "application/json",
+        "contains_sensitive_data": 0,
+        "created_at": "now",
+    }
+    with pytest.raises(IntegrityError):
+        session.execute(artifacts.insert().values(**artifact))
+        session.commit()
+    session.rollback()
+
+    revisions = GovernanceEvidencePassportRevision.__table__
+    revision = {
+        "id": "orm-revision-1",
+        "org_id": ORG_A,
+        "system_id": "system-001",
+        "evidence_run_id": "orm-run-1",
+        "passport_id": "passport-orm",
+        "passport_revision": 1,
+        "previous_revision_hash": "b" * 64,
+        "canonical_content_hash": "C" * 64,
+        "snapshot_json": "{}",
+        "created_by": USER_A,
+        "created_at": "now",
+    }
+    with pytest.raises(IntegrityError):
+        session.execute(revisions.insert().values(**revision))
+        session.commit()
+    session.rollback()
+    revision.update(
+        previous_revision_hash=None,
+        canonical_content_hash="c" * 64,
+        passport_revision=2,
+        id="orm-revision-2",
+    )
+    with pytest.raises(IntegrityError):
+        session.execute(revisions.insert().values(**revision))
+        session.commit()
+    session.rollback()
+    session.execute(text("PRAGMA foreign_keys = OFF"))
+    session.close()
 
 
 def test_migration_011_creates_normalized_tenant_scoped_append_only_schema() -> None:
@@ -986,10 +1401,36 @@ def test_migration_011_creates_normalized_tenant_scoped_append_only_schema() -> 
     ).read_text(encoding="utf-8")
     assert "011_governance_assurance.sql" in adapter_source
     assert "import re" not in adapter_source and "re.sub" not in adapter_source
-    assert (migrations / "011_governance_assurance.sqlite.sql").exists()
+    sqlite_fixture = migrations / "fixtures/011_governance_assurance.sqlite.sql"
+    assert sqlite_fixture.exists()
+    assert sqlite_fixture not in migrations.glob("*.sql")
+    assert not (migrations / "011_governance_assurance.sqlite.sql").exists()
     assert "governance_evidence_artifacts" in postgresql_sql
     assert "governance_evidence_passport_revisions" in postgresql_sql
     assert "CHECK (content_hash ~ '^[0-9a-f]{64}$')" in postgresql_sql
     assert "FOREIGN KEY (evidence_run_id, system_id, org_id)" in postgresql_sql
     assert "FOREIGN KEY (passport_revision_id, evidence_id, system_id, org_id)" in postgresql_sql
     assert "CREATE TRIGGER governance_evidence_passport_revisions_no_mutation" in postgresql_sql
+
+
+def test_old_009_postgresql_installation_has_explicit_ledgered_s12_upgrade_path() -> None:
+    migrations = REPO_ROOT / "apps/backend/migrations"
+    upgrade = migrations / "upgrade_paths/009_to_011_evidence_passport.sql"
+    instructions = migrations / "upgrade_paths/README.md"
+    assert upgrade.exists() and instructions.exists()
+    assert upgrade not in migrations.glob("*.sql")
+    sql = upgrade.read_text(encoding="utf-8")
+    assert "BEGIN;" in sql and sql.rstrip().endswith("COMMIT;")
+    assert "pg_advisory_xact_lock" in sql
+    assert "fairmind_operator_migration_ledger" in sql
+    assert "009-to-011-evidence-passport-v1" in sql
+    assert "SELECT 1 FROM pg_constraint" in sql
+    assert "to_regclass('governance_evidence_runs') IS NULL" in sql
+    assert "old 009 governance assurance schema is not installed" in sql
+    assert "conrelid = 'governance_evidence_runs'::regclass" in sql
+    assert "conrelid = 'governance_control_evidence'::regclass" in sql
+    assert "CREATE TABLE IF NOT EXISTS governance_evidence_artifacts" in sql
+    assert "CREATE TABLE IF NOT EXISTS governance_evidence_passport_revisions" in sql
+    assert "ADD CONSTRAINT uq_governance_evidence_run" not in sql
+    assert "ADD CONSTRAINT fk_governance_evidence_source_run" not in sql
+    assert "scripts/migrate.py" in instructions.read_text(encoding="utf-8")

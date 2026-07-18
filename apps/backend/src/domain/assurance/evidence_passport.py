@@ -666,7 +666,48 @@ class EvidencePassport(PassportModel):
 
 
 def _protocol(passport: EvidencePassport) -> dict[str, Any]:
-    return passport.model_dump(by_alias=True, mode="json", exclude_none=True)
+    # RFC 8785 hashes the submitted JSON data model. Optional fields that were
+    # absent on the wire must stay absent; serializing Pydantic defaults here
+    # would change both the run projection and the stored snapshot.
+    return passport.model_dump(
+        by_alias=True,
+        mode="json",
+        exclude_none=True,
+        exclude_unset=True,
+    )
+
+
+_IJSON_MAX_INTEGER = 2**53 - 1
+
+
+def validate_ijson_domain(value: Any, *, path: str = "passport") -> None:
+    """Reject values outside the I-JSON/RFC 8785 interoperable domain."""
+    if isinstance(value, bool) or value is None:
+        return
+    if isinstance(value, int):
+        if value < -_IJSON_MAX_INTEGER or value > _IJSON_MAX_INTEGER:
+            raise EvidencePassportValidationError(
+                f"{path} integer is outside the I-JSON safe integer domain"
+            )
+        return
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise EvidencePassportValidationError(f"{path} contains a non-finite number")
+        return
+    if isinstance(value, str):
+        if any(0xD800 <= ord(character) <= 0xDFFF for character in value):
+            raise EvidencePassportValidationError(
+                f"{path} contains an unpaired Unicode surrogate outside the I-JSON domain"
+            )
+        return
+    if isinstance(value, dict):
+        for key, item in value.items():
+            validate_ijson_domain(key, path=f"{path} object name")
+            validate_ijson_domain(item, path=f"{path}.{key}")
+        return
+    if isinstance(value, (list, tuple)):
+        for index, item in enumerate(value):
+            validate_ijson_domain(item, path=f"{path}[{index}]")
 
 
 def run_content_projection(passport: EvidencePassport) -> dict[str, Any]:
@@ -704,7 +745,14 @@ def immutable_passport_projection(passport: EvidencePassport) -> dict[str, Any]:
 
 
 def rfc8785_sha256(value: Any) -> str:
-    return hashlib.sha256(rfc8785.dumps(value)).hexdigest()
+    validate_ijson_domain(value)
+    try:
+        canonical = rfc8785.dumps(value)
+    except (rfc8785.CanonicalizationError, UnicodeError, ValueError) as error:
+        raise EvidencePassportValidationError(
+            "value cannot be represented in the RFC 8785 canonical domain"
+        ) from error
+    return hashlib.sha256(canonical).hexdigest()
 
 
 def calculate_run_content_hash(passport: EvidencePassport) -> str:

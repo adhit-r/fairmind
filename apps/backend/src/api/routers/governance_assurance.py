@@ -8,7 +8,7 @@ from pathlib import Path
 import tempfile
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy.orm import Session
@@ -28,6 +28,7 @@ from src.application.ports.evidence_ingestion import (
 from src.application.services.evidence_ingestion_service import (
     EvidencePassportValidationError,
     build_evidence_ingestion_service,
+    parse_strict_json_object,
 )
 from src.application.services.governance_assurance_service import (
     EvidenceMappingConflictError,
@@ -315,14 +316,20 @@ def assignment_readiness(
 
 
 @router.post("/systems/{system_id}/evidence-runs")
-def ingest_evidence_run(
+async def ingest_evidence_run(
     system_id: str,
-    passport: dict[str, Any],
+    request: Request,
     membership: OrgMembership = Depends(organization_membership),
     db: Session = Depends(get_db),
 ):
     authorization_service = _service(db)
     _require_mutation(membership, authorization_service)
+    try:
+        passport = parse_strict_json_object(await request.body())
+    except EvidencePassportValidationError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)
+        ) from error
     ai_system = passport.get("aiSystem")
     if not isinstance(ai_system, dict) or ai_system.get("systemId") != system_id:
         raise HTTPException(
@@ -357,7 +364,7 @@ def ingest_evidence_run(
         result.as_dict(),
         status_code=(
             status.HTTP_200_OK
-            if result.disposition.value == "replayed"
+            if result.disposition is not None and result.disposition.value == "replayed"
             else status.HTTP_201_CREATED
         ),
     )
@@ -372,7 +379,7 @@ def list_evidence_runs(
     runs = build_evidence_ingestion_service(db).list_runs(membership.org_id, system_id)
     if runs is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="AI system not found")
-    return [run.as_dict() for run in runs]
+    return [run.as_read_dict() for run in runs]
 
 
 @router.post("/evidence/{evidence_id}/control-mappings")

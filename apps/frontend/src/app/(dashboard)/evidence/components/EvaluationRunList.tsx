@@ -6,6 +6,7 @@ import type {
   EvidenceMappingReviewInput,
   EvidenceRun,
 } from '@/lib/api/hooks/useGovernanceAssurance'
+import { evidenceRunDisplayName } from '@/lib/api/hooks/useGovernanceAssurance'
 
 import { EvidenceMappingReview } from './EvidenceMappingReview'
 
@@ -71,7 +72,7 @@ export function EvaluationRunList({ runs, controls, loading, error, canReview, o
   return (
     <div className="space-y-5">
       {runs.map((run) => {
-        const name = run.suiteName || run.sourceIdentifier || run.runId
+        const name = evidenceRunDisplayName(run)
         return (
           <article
             key={run.id}
