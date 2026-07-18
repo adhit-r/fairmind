@@ -530,7 +530,7 @@ class SqlAlchemyEvidenceIngestionStore:
                         "sha256": artifact.sha256,
                         "media_type": artifact.media_type,
                         "size_bytes": artifact.size_bytes,
-                        "contains_sensitive_data": int(artifact.contains_sensitive_data),
+                        "contains_sensitive_data": bool(artifact.contains_sensitive_data),
                         "retention_policy": artifact.retention_policy,
                         "redaction_note": artifact.redaction_note,
                         "created_at": now,

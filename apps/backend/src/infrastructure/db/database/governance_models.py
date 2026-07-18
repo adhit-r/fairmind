@@ -12,6 +12,7 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Column,
     DateTime,
@@ -392,7 +393,7 @@ class GovernanceEvidenceArtifact(Base):
     sha256 = Column(String, nullable=False)
     media_type = Column(String, nullable=False)
     size_bytes = Column(Integer, nullable=True)
-    contains_sensitive_data = Column(Integer, nullable=False, default=0)
+    contains_sensitive_data = Column(Boolean, nullable=False, default=False)
     retention_policy = Column(String, nullable=True)
     redaction_note = Column(Text, nullable=True)
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())

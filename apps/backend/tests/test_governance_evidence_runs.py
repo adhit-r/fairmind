@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 import gc
 import hashlib
 import json
+import os
 from pathlib import Path
 import sqlite3
 import threading
@@ -17,7 +18,7 @@ import weakref
 import pytest
 import rfc8785
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, select, text
+from sqlalchemy import Boolean, create_engine, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -42,6 +43,7 @@ from database.models import (
     Organization,
     OrganizationAuditLog,
     OrganizationMember,
+    OrganizationRole,
     User,
 )
 from migrations.governance_assurance_migration import sql_for
@@ -136,6 +138,80 @@ def assurance_client():
         engine.dispose()
 
 
+@pytest.fixture
+def postgresql_assurance_client():
+    database_url = os.getenv("FAIRMIND_TEST_POSTGRES_URL")
+    if not database_url:
+        pytest.skip("FAIRMIND_TEST_POSTGRES_URL is required for PostgreSQL ingestion coverage")
+
+    import psycopg2
+    from psycopg2 import sql
+
+    schema_name = f"fairmind_s12_{uuid.uuid4().hex}"
+    migration_connection = psycopg2.connect(database_url)
+    try:
+        with migration_connection.cursor() as cursor:
+            cursor.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(schema_name)))
+            cursor.execute(sql.SQL("SET search_path TO {}").format(sql.Identifier(schema_name)))
+            for migration_name in (
+                "008_governance_canonical.sql",
+                "011_governance_assurance.sql",
+            ):
+                cursor.execute(
+                    (REPO_ROOT / "apps/backend/migrations" / migration_name).read_text(
+                        encoding="utf-8"
+                    )
+                )
+        migration_connection.commit()
+    finally:
+        migration_connection.close()
+
+    engine = create_engine(
+        database_url,
+        connect_args={"options": f"-csearch_path={schema_name}"},
+    )
+    Base.metadata.create_all(
+        engine,
+        tables=[
+            User.__table__,
+            Organization.__table__,
+            OrganizationMember.__table__,
+            OrganizationRole.__table__,
+            OrganizationAuditLog.__table__,
+        ],
+    )
+    session_factory = sessionmaker(bind=engine)
+    active_user = {"value": _token(USER_A)}
+
+    def override_db():
+        session = session_factory()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    async def override_user():
+        return active_user["value"]
+
+    app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_current_active_user] = override_user
+    try:
+        with TestClient(app) as client:
+            yield client, session_factory, active_user
+    finally:
+        app.dependency_overrides.clear()
+        engine.dispose()
+        cleanup_connection = psycopg2.connect(database_url)
+        cleanup_connection.autocommit = True
+        try:
+            with cleanup_connection.cursor() as cursor:
+                cursor.execute(
+                    sql.SQL("DROP SCHEMA {} CASCADE").format(sql.Identifier(schema_name))
+                )
+        finally:
+            cleanup_connection.close()
+
+
 def _seed_org(session, org_id: str, user_id: str, role: str = "admin") -> None:
     user_uuid = uuid.UUID(user_id)
     session.execute(
@@ -208,7 +284,7 @@ def _seed_system_and_control(
             title="Control",
             statement="Statement",
             frequency="Every 3 months",
-            active=True,
+            active=1,
         )
     )
     session.execute(
@@ -399,6 +475,103 @@ def _post(
         f"/api/v1/ai-governance/organizations/{path_org}/systems/{path_system}/evidence-runs",
         json=passport,
     )
+
+
+def test_evidence_artifact_orm_matches_postgresql_boolean_contract() -> None:
+    column = GovernanceEvidenceArtifact.__table__.c.contains_sensitive_data
+
+    assert isinstance(column.type, Boolean)
+    assert column.default is not None and column.default.arg is False
+    for migration_path in (
+        REPO_ROOT / "apps/backend/migrations/011_governance_assurance.sql",
+        REPO_ROOT / "apps/backend/migrations/upgrade_paths/009_to_011_evidence_passport.sql",
+    ):
+        assert "contains_sensitive_data BOOLEAN NOT NULL DEFAULT FALSE" in migration_path.read_text(
+            encoding="utf-8"
+        )
+
+
+def test_fresh_postgresql_migrations_ingest_complete_passport_atomically_and_round_trip_boolean(
+    postgresql_assurance_client,
+) -> None:
+    client, session_factory, _ = postgresql_assurance_client
+    system_id, _ = _seed_default(session_factory)
+    passport = _passport()
+    passport["artifacts"][1]["containsSensitiveData"] = True
+    passport = with_server_hashes(EvidencePassport.model_validate(passport)).model_dump(
+        by_alias=True, mode="json", exclude_none=True
+    )
+
+    response = _post(client, passport)
+
+    assert response.status_code == 201, response.text
+    created = response.json()
+    assert created["disposition"] == "created"
+    assert [artifact["containsSensitiveData"] for artifact in created["artifacts"]] == [
+        False,
+        True,
+    ]
+
+    listed = client.get(
+        f"/api/v1/ai-governance/organizations/{ORG_A}/systems/{system_id}/evidence-runs"
+    )
+    assert listed.status_code == 200, listed.text
+    assert listed.json()[0]["artifacts"] == created["artifacts"]
+
+    session = session_factory()
+    try:
+        artifact_rows = _rows(
+            session,
+            GovernanceEvidenceArtifact,
+            order_by=GovernanceEvidenceArtifact.__table__.c.ordinal,
+        )
+        assert [row["contains_sensitive_data"] for row in artifact_rows] == [False, True]
+        assert all(type(row["contains_sensitive_data"]) is bool for row in artifact_rows)
+        assert _count(session, GovernanceEvidenceRun) == 1
+        assert _count(session, GovernanceEvidenceArtifact) == 2
+        assert _count(session, GovernanceEvidencePassportRevision) == 1
+        assert _count(session, GovernanceControlEvidence) == 1
+        assert len(_audit_rows(session, "evidence_passport.ingested")) == 1
+        session.execute(text("""
+                CREATE FUNCTION fail_evidence_ingestion_audit() RETURNS trigger AS $$
+                BEGIN
+                    IF NEW.action = 'evidence_passport.ingested' THEN
+                        RAISE EXCEPTION 'forced evidence ingestion audit failure';
+                    END IF;
+                    RETURN NEW;
+                END;
+                $$ LANGUAGE plpgsql
+                """))
+        session.execute(text("""
+                CREATE TRIGGER fail_evidence_ingestion_audit
+                BEFORE INSERT ON org_audit_logs
+                FOR EACH ROW EXECUTE FUNCTION fail_evidence_ingestion_audit()
+                """))
+        session.commit()
+    finally:
+        session.close()
+
+    failed_passport = _passport(
+        run_id="run-postgresql-rollback",
+        passport_id="passport-postgresql-rollback",
+    )
+    failed_passport["frameworkMappings"][0]["mappingId"] = "mapping-postgresql-rollback"
+    failed_passport = with_server_hashes(
+        EvidencePassport.model_validate(failed_passport)
+    ).model_dump(by_alias=True, mode="json", exclude_none=True)
+
+    failed_response = _post(client, failed_passport)
+
+    assert failed_response.status_code == 500, failed_response.text
+    session = session_factory()
+    try:
+        assert _count(session, GovernanceEvidenceRun) == 1
+        assert _count(session, GovernanceEvidenceArtifact) == 2
+        assert _count(session, GovernanceEvidencePassportRevision) == 1
+        assert _count(session, GovernanceControlEvidence) == 1
+        assert len(_audit_rows(session, "evidence_passport.ingested")) == 1
+    finally:
+        session.close()
 
 
 def test_evidence_passport_openapi_uses_canonical_schema_and_all_runtime_responses() -> None:
