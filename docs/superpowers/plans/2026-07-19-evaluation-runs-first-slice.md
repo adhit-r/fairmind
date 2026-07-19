@@ -15,6 +15,7 @@
 - Keep technical execution status separate from governance judgment. A technically successful run is not automatically approved.
 - Use the exact overall and layer verdict vocabulary: `approved`, `conditional`, `review`, `blocked`, `insufficient`.
 - Use the exact technical run status vocabulary: `awaiting_evidence`, `running`, `succeeded`, `failed`, `cancelled`.
+- Use the exact trigger vocabulary: `manual`, `ci`, `scheduled`, `release_gate`, `incident`, `integration_sync`.
 - Use the exact plan status vocabulary: `draft`, `active`, `archived`.
 - Support one target kind per plan from: `predictive_model`, `llm_application`, `agent`, `code_generator`, `image_generator`, `audio_model`, `video_model`, `multimodal_system`.
 - Support one or more lifecycle phases per plan from: `pre_deploy`, `realtime`, `post_deploy`.
@@ -54,7 +55,7 @@
 ```text
 id, org_id, workspace_id, system_id, name, target_kind,
 lifecycle_phases_json, execution_depth, enforcement_mode, delivery_mode,
-suite_refs_json, status, created_by, created_at, updated_at
+suite_refs_json, status, created_by, updated_by, created_at, updated_at
 ```
 
 `GovernanceEvaluationRun` columns:
@@ -63,7 +64,8 @@ suite_refs_json, status, created_by, created_at, updated_at
 id, org_id, workspace_id, system_id, plan_id, trigger,
 technical_status, overall_verdict, layer_verdicts_json,
 linked_evidence_run_id, linked_passport_revision_id,
-requested_by, started_at, completed_at, failure_code, failure_message,
+linked_by, linked_at, requested_by, started_at, completed_at,
+failure_code, failure_message,
 created_at, updated_at
 ```
 
@@ -98,12 +100,13 @@ def test_sqlite_migration_rejects_cross_tenant_plan_run_link(sqlite_connection):
 
 Also assert:
 
-- PostgreSQL SQL uses native `BOOLEAN` where relevant and contains composite foreign keys.
+- PostgreSQL SQL contains the same named check and composite foreign-key contracts as the ORM and direct SQLite fixture.
 - SQLite SQL uses direct executable DDL rather than regex-transformed PostgreSQL.
 - unsupported migration dialects raise `ValueError`.
 - the plan has a tenant identity unique key `(id, workspace_id, system_id, org_id)`.
 - the run has a tenant identity unique key `(id, workspace_id, system_id, org_id)`.
 - the existing AI-system table gains the additive unique tenant key `(id, workspace_id, org_id)` required by the new composite references.
+- the existing Evidence Passport run table gains the additive unique tenant key `(id, workspace_id, system_id, org_id)` required to reject cross-workspace links even when organization and system match.
 - the exact passport revision FK covers `(linked_passport_revision_id, linked_evidence_run_id, system_id, org_id)`.
 
 - [ ] **Step 2: Run focused tests and verify RED**
@@ -123,6 +126,7 @@ Add these constraints:
 
 ```python
 UniqueConstraint("id", "workspace_id", "org_id", name="uq_governance_ai_system_workspace_tenant")
+UniqueConstraint("id", "workspace_id", "system_id", "org_id", name="uq_governance_evidence_run_workspace_tenant")
 UniqueConstraint("id", "workspace_id", "system_id", "org_id", name="uq_governance_evaluation_plan_tenant")
 ForeignKeyConstraint(
     ["workspace_id", "org_id"],
@@ -147,6 +151,15 @@ ForeignKeyConstraint(
     ],
 )
 ForeignKeyConstraint(
+    ["linked_evidence_run_id", "workspace_id", "system_id", "org_id"],
+    [
+        "governance_evidence_runs.id",
+        "governance_evidence_runs.workspace_id",
+        "governance_evidence_runs.system_id",
+        "governance_evidence_runs.org_id",
+    ],
+)
+ForeignKeyConstraint(
     ["linked_passport_revision_id", "linked_evidence_run_id", "system_id", "org_id"],
     [
         "governance_evidence_passport_revisions.id",
@@ -160,13 +173,28 @@ CheckConstraint(
     "(linked_passport_revision_id IS NOT NULL AND linked_evidence_run_id IS NOT NULL)",
     name="ck_governance_evaluation_run_complete_passport_link",
 )
+CheckConstraint(
+    "(technical_status = 'succeeded' AND linked_passport_revision_id IS NOT NULL "
+    "AND linked_evidence_run_id IS NOT NULL AND linked_by IS NOT NULL AND linked_at IS NOT NULL "
+    "AND started_at IS NOT NULL AND completed_at IS NOT NULL) OR "
+    "(technical_status <> 'succeeded' AND linked_passport_revision_id IS NULL "
+    "AND linked_evidence_run_id IS NULL AND linked_by IS NULL AND linked_at IS NULL)",
+    name="ck_governance_evaluation_run_succeeded_link",
+)
+CheckConstraint(
+    "(technical_status = 'awaiting_evidence' AND started_at IS NULL AND completed_at IS NULL) OR "
+    "(technical_status = 'running' AND started_at IS NOT NULL AND completed_at IS NULL) OR "
+    "(technical_status = 'succeeded' AND started_at IS NOT NULL AND completed_at IS NOT NULL) OR "
+    "(technical_status IN ('failed', 'cancelled') AND completed_at IS NOT NULL)",
+    name="ck_governance_evaluation_run_timestamps",
+)
 ```
 
 Add `CheckConstraint`s for the exact plan status, target kind, execution depth, enforcement mode, delivery mode, technical status, overall verdict, and trigger vocabularies. JSON array/member validation remains in the application service.
 
 - [ ] **Step 4: Add direct PostgreSQL and SQLite migration 012 files**
 
-Create only the two new tables and indexes, plus the additive unique index on `governance_ai_systems(id, workspace_id, org_id)` required by their composite references. Do not rewrite migration 011 or the Evidence Passport tables. PostgreSQL and SQLite files must both be idempotent at table/index level and preserve composite tenant FKs. Index `(org_id, system_id, status)` for plans and `(org_id, system_id, created_at)` plus `(org_id, technical_status, overall_verdict)` for runs.
+Create only the two new tables and indexes, plus additive unique indexes on `governance_ai_systems(id, workspace_id, org_id)` and `governance_evidence_runs(id, workspace_id, system_id, org_id)` required by their composite references. Do not rewrite migration 011 or the Evidence Passport tables. PostgreSQL and SQLite files must both be idempotent at table/index level and preserve composite tenant FKs. Index `(org_id, system_id, status)` for plans and `(org_id, system_id, created_at)` plus `(org_id, technical_status, overall_verdict)` for runs.
 
 - [ ] **Step 5: Run Task 1 tests and verify GREEN**
 
@@ -208,12 +236,12 @@ Endpoints:
 ```text
 POST /systems/{system_id}/evaluation-plans
 GET  /systems/{system_id}/evaluation-plans
-POST /evaluation-plans/{plan_id}/activate
-GET  /evaluation-plans/{plan_id}/preflight
-POST /evaluation-plans/{plan_id}/runs
+POST /systems/{system_id}/evaluation-plans/{plan_id}/activate
+GET  /systems/{system_id}/evaluation-plans/{plan_id}/preflight
+POST /systems/{system_id}/evaluation-plans/{plan_id}/runs
 GET  /systems/{system_id}/evaluation-runs
-GET  /evaluation-runs/{run_id}
-POST /evaluation-runs/{run_id}/evidence-passport-link
+GET  /systems/{system_id}/evaluation-runs/{run_id}
+POST /systems/{system_id}/evaluation-runs/{run_id}/evidence-passport-link
 ```
 
 - [ ] **Step 1: Write failing service and route tests**
@@ -222,18 +250,22 @@ Cover these behaviors through the FastAPI test client:
 
 1. member reads are org-scoped; non-members receive the repository's established 403/404 behavior.
 2. mutation requires the same organization role used by the existing assurance endpoints.
-3. plan creation validates target kind, one-or-more distinct lifecycle phases, execution depth, enforcement mode, delivery mode, and non-empty immutable suite refs.
-4. suite refs must match `^[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9._-]*$`.
+3. plan creation validates a 1–120 character name; target kind; one-to-three distinct lifecycle phases; execution depth; enforcement mode; delivery mode; and one-to-32 distinct immutable suite refs.
+4. each suite ref is at most 160 characters and must match `^[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9._-]*$`.
 5. plan creation rejects system/workspace/org scope mismatches.
-6. activation archives any other active plan for the same system only when explicitly requested; it never changes plans in another system or organization.
-7. preflight for `fairmind_worker` returns `ready=false`, `code=executor_unavailable`, and a human-readable next action in this slice.
-8. preflight for `external_provider` and `imported_report` returns `ready=true`, `code=evidence_link_required`.
+6. activation changes only the selected plan; draft→active succeeds, active replay is idempotent, archived→active returns `409`, the transition and its organization audit event commit atomically, and multiple active plans for different modalities/versioned suites may coexist on one system.
+7. preflight for `fairmind_worker` returns `canPrepareRun=false`, `fairmindExecutionAvailable=false`, `code=executor_unavailable`, and a human-readable next action in this slice.
+8. preflight for `external_provider` and `imported_report` returns `canPrepareRun=true`, `fairmindExecutionAvailable=false`, `code=evidence_link_required`; it never calls those plans execution-ready.
 9. run creation for an unavailable `fairmind_worker` plan returns `409` and does not create a run.
 10. run creation for an active external/imported plan returns `201`, `technicalStatus=awaiting_evidence`, `overallVerdict=insufficient`, and `layerVerdicts={}`.
 11. listing and detail retrieval never leak cross-org records.
-12. linking an exact Passport revision rejects a mismatched org, workspace, system, evidence run, or revision.
-13. linking succeeds idempotently for the same exact revision, sets technical status to `succeeded`, sets overall verdict to `review`, and never changes the immutable Passport row.
-14. linking a different revision after a link returns `409`; replacement is a later, audited workflow.
+12. linking an exact Passport revision rejects a mismatched org, workspace, system, evidence run, revision, suite identity/version, or verifiably incompatible target kind.
+13. a suite is compatible only when the Passport's exact canonical `evaluation.suite.name@evaluation.suite.version` equals one of the plan's immutable `suite_refs`; no fuzzy or display-name matching is allowed.
+14. Evidence Passport 1.0 can verify only `predictive_model` via `aiSystem.kind=model` and `agent` via `aiSystem.kind=agent`. For `llm_application`, `code_generator`, `image_generator`, `audio_model`, `video_model`, and `multimodal_system`, linking returns `422 target_kind_unverifiable` until a versioned Passport contract can bind that modality explicitly; the plan and `awaiting_evidence` run remain usable and insufficient.
+15. linking succeeds idempotently for the same exact revision, records `linked_by` and `linked_at`, copies the Passport evaluation's `startedAt` and `endedAt` to run timestamps, sets technical status to `succeeded`, sets overall verdict to `review`, writes an organization audit event in the same transaction, and never changes the immutable Passport row.
+16. linking a different revision after a link returns `409`; replacement is a later, audited workflow.
+17. two concurrent link attempts use an atomic compare-and-set from unlinked `awaiting_evidence` to linked `succeeded`; only one distinct revision may win, while replaying the winner is idempotent.
+18. plan creation and external/imported run preparation write minimal organization audit events in the same transaction; an injected audit failure rolls back the domain row rather than returning partial success.
 
 - [ ] **Step 2: Run Task 2 tests and verify RED**
 
@@ -246,30 +278,34 @@ Expected: endpoint requests return 404 or import fails because the service is ab
 
 - [ ] **Step 3: Implement validation and service methods**
 
-Use typed dataclasses or Pydantic request models at the API boundary. Store canonical JSON with deterministic separators and sorted keys. Return camel-case-neutral Python dictionaries consistent with the existing assurance router; the frontend normalizer handles snake case.
+Use typed dataclasses or Pydantic request models at the API boundary. Store canonical JSON with deterministic separators and sorted keys. Service-internal rows use snake_case; every public request and success response uses one exact camelCase Pydantic contract. Do not rely on the frontend to guess whether a new endpoint returned snake_case or camelCase.
 
 Required service surface:
 
 ```python
 class EvaluationRunsService:
     def create_plan(self, *, org_id: str, system_id: str, actor_id: str, payload: dict) -> dict: ...
-    def list_plans(self, *, org_id: str, system_id: str) -> list[dict]: ...
-    def activate_plan(self, *, org_id: str, plan_id: str) -> dict | None: ...
-    def preflight(self, *, org_id: str, plan_id: str) -> dict | None: ...
-    def create_run(self, *, org_id: str, plan_id: str, actor_id: str, trigger: str) -> dict: ...
+    def list_plans(self, *, org_id: str, system_id: str) -> list[dict] | None: ...
+    def activate_plan(self, *, org_id: str, system_id: str, plan_id: str, actor_id: str) -> dict | None: ...
+    def preflight(self, *, org_id: str, system_id: str, plan_id: str) -> dict | None: ...
+    def create_run(self, *, org_id: str, system_id: str, plan_id: str, actor_id: str, trigger: str) -> dict: ...
     def list_runs(self, *, org_id: str, system_id: str) -> list[dict] | None: ...
-    def get_run(self, *, org_id: str, run_id: str) -> dict | None: ...
+    def get_run(self, *, org_id: str, system_id: str, run_id: str) -> dict | None: ...
     def link_passport_revision(
         self,
         *,
         org_id: str,
+        system_id: str,
         run_id: str,
         evidence_run_id: str,
         passport_revision_id: str,
+        actor_id: str,
     ) -> dict | None: ...
 ```
 
-Transactions must either commit the complete state change or roll back. Do not catch broad exceptions and return success.
+Every opaque plan/run lookup must join or filter through the selected system and its workspace as well as `org_id`. Transactions must either commit the complete state change, including its audit row, or roll back. Do not catch broad exceptions and return success. Implement Passport linking with a conditional update whose predicate requires `technical_status='awaiting_evidence'` and both link columns null; inspect `rowcount`, then distinguish same-link replay from a conflicting winner.
+
+For list methods, return `[]` only when the scoped system exists but has no records; return `None` so the router emits `404` when the `(org_id, system_id)` scope itself does not exist.
 
 - [ ] **Step 4: Add the organization-scoped API routes**
 
@@ -280,6 +316,22 @@ Use explicit request and response models. Return:
 - `404` for tenant-scoped missing plan/run/system.
 - `409` for unavailable execution, inactive plan run requests, and conflicting Passport relinks.
 - `422` for malformed vocabulary, suite refs, duplicate lifecycle phases, or invalid exact Passport scope.
+
+All non-validation evaluation workflow errors use this exact FastAPI-standard nested envelope:
+
+```json
+{
+  "detail": {
+    "code": "executor_unavailable",
+    "message": "No FairMind worker is installed for this plan.",
+    "nextAction": "Select an external provider or imported report, or install a compatible worker."
+  }
+}
+```
+
+The API client must preserve HTTP status plus nested `code`, `message`, and `nextAction`. Plain-string legacy `detail` responses remain backward compatible.
+
+Stable workflow codes for this slice are: `executor_unavailable`, `plan_inactive`, `plan_archived`, `passport_link_conflict`, `passport_scope_mismatch`, `suite_mismatch`, `target_kind_mismatch`, `target_kind_unverifiable`, `passport_snapshot_invalid`, and `evaluation_persistence_failed`.
 
 Do not create an alias under legacy model-only bias routes.
 
@@ -306,6 +358,7 @@ git commit -m "feat(evaluations): expose evidence-backed run workflow"
 **Files:**
 
 - Modify: `apps/frontend/src/lib/api/endpoints.ts`
+- Modify: `apps/frontend/src/lib/api/api-client.ts`
 - Create: `apps/frontend/src/lib/api/hooks/useEvaluationRuns.ts`
 - Create: `apps/frontend/src/lib/api/hooks/useEvaluationRuns.test.ts`
 - Modify: `apps/frontend/src/lib/api/hooks/index.ts`
@@ -315,6 +368,7 @@ git commit -m "feat(evaluations): expose evidence-backed run workflow"
 - Produces typed `EvaluationPlan`, `EvaluationPreflight`, `EvaluationRun`, `EvaluationTargetKind`, `LifecyclePhase`, `DeliveryMode`, `TechnicalStatus`, and `GovernanceVerdict` contracts.
 - Produces endpoint builders matching Task 2.
 - Produces a focused hook that loads plans and runs for the selected `(orgId, systemId)` and exposes mutation methods without optimistic green states.
+- Produces a backward-compatible structured `ApiError` path preserving HTTP status, stable API `code`, `detail`, and `nextAction` for callers that need actionable preflight failures.
 
 - [ ] **Step 1: Write failing hook tests**
 
@@ -326,20 +380,49 @@ Mock the existing API client and assert:
 - loading, empty, and server-error states remain distinguishable.
 - `createPlan`, `activatePlan`, `loadPreflight`, `createRun`, and `linkPassportRevision` call the exact Task 2 endpoints and refresh only after success.
 - a `409 executor_unavailable` remains an actionable error and never inserts a fake run.
-- unknown backend vocabularies are surfaced as errors rather than coerced to approved or succeeded.
+- run detail requests remain scoped to both organization and selected system and ignore stale responses after scope/run changes.
+- unknown backend vocabularies are rejected by runtime schemas rather than being trusted because a TypeScript union compiled.
 
 - [ ] **Step 2: Run hook tests and verify RED**
 
 ```bash
 cd apps/frontend
-npm run test:unit -- --run src/lib/api/hooks/useEvaluationRuns.test.ts
+bun test src/lib/api/hooks/useEvaluationRuns.test.ts
 ```
 
-If the repository script has a different Vitest invocation, inspect `package.json`, use the narrow equivalent, and record the exact command in the task report. Expected: import failure because the hook is absent.
+Expected: import failure because the hook is absent.
 
 - [ ] **Step 3: Add endpoint builders and exact TypeScript unions**
 
-Keep transport types separate from display labels. The exact unions must match backend vocabularies. `layerVerdicts` is `Partial<Record<EvaluationLayer, GovernanceVerdict>>`; define initial layers as `safety`, `security`, `fairness`, `privacy`, `reliability`, and `governance`, but allow the server to omit all layers when evidence has not been normalized.
+Keep transport types separate from display labels. The exact unions must match backend vocabularies. Use Zod or equivalent explicit runtime guards for plans, preflight, runs, lists, and structured errors.
+
+Keep the two verdict axes separate rather than conflating system components with risk dimensions:
+
+```typescript
+type EvaluationComponent =
+  | 'model'
+  | 'prompts_rag'
+  | 'output'
+  | 'tools'
+  | 'trajectory'
+  | 'application_controls'
+  | 'deployment_context'
+
+type EvaluationRiskDimension =
+  | 'safety'
+  | 'security'
+  | 'fairness'
+  | 'privacy'
+  | 'reliability'
+  | 'governance'
+
+interface EvaluationLayerVerdicts {
+  components?: Partial<Record<EvaluationComponent, GovernanceVerdict>>
+  dimensions?: Partial<Record<EvaluationRiskDimension, GovernanceVerdict>>
+}
+```
+
+The server may return both maps absent when linked evidence has not been normalized.
 
 - [ ] **Step 4: Implement the minimum scoped hook**
 
@@ -356,6 +439,7 @@ useEvaluationRuns(orgId?: string, systemId?: string): {
   activatePlan(planId: string): Promise<EvaluationPlan>
   loadPreflight(planId: string): Promise<EvaluationPreflight>
   createRun(planId: string, trigger?: EvaluationTrigger): Promise<EvaluationRun>
+  getRun(runId: string): Promise<EvaluationRun>
   linkPassportRevision(runId: string, input: PassportRevisionLinkInput): Promise<EvaluationRun>
 }
 ```
@@ -364,16 +448,14 @@ useEvaluationRuns(orgId?: string, systemId?: string): {
 
 ```bash
 cd apps/frontend
-npm run test:unit -- --run src/lib/api/hooks/useEvaluationRuns.test.ts
-npm run type-check
+bun test src/lib/api/hooks/useEvaluationRuns.test.ts
+bunx tsc --noEmit
 ```
-
-Use the repository's exact equivalent if either script is absent; do not modify package scripts solely to match this plan wording.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add apps/frontend/src/lib/api/endpoints.ts apps/frontend/src/lib/api/hooks/useEvaluationRuns.ts apps/frontend/src/lib/api/hooks/useEvaluationRuns.test.ts apps/frontend/src/lib/api/hooks/index.ts
+git add apps/frontend/src/lib/api/endpoints.ts apps/frontend/src/lib/api/api-client.ts apps/frontend/src/lib/api/hooks/useEvaluationRuns.ts apps/frontend/src/lib/api/hooks/useEvaluationRuns.test.ts apps/frontend/src/lib/api/hooks/index.ts
 git commit -m "feat(evaluations): add typed evaluation runs client"
 ```
 
@@ -409,12 +491,12 @@ Required assertions:
 2. The route is not treated as auth/shell-less; only `/test` and `/test/...` keep any legacy exception, not `/tests`.
 3. the illustrated profile identity remains visible in the desktop header and collapsed/mobile shell with a labelled fallback when the image fails.
 4. navigation/action icons are framed, have accessible names, 44px hit areas, visible keyboard focus, and text labels when expanded.
-5. no selected system shows an explicit “Choose an AI system” state and makes no evaluation request.
+5. no real selected system shows an explicit “Choose an AI system” state and makes no evaluation request. Until the shared SystemContext fallback is removed in a separately validated refactor, any system with `metadata.source === 'fallback'` must be treated as missing rather than queried or presented as real; the Evaluation Runs page must omit `SystemContextBar`, and the rendered shell must not contain the fallback name “Acme Pricing Lab”.
 6. no plan shows a compact create-plan form with target kind, lifecycle phase multi-select, execution depth, enforcement mode, delivery mode, and versioned suite refs.
-7. a FairMind-worker plan displays “Executor unavailable” and disables run creation.
-8. an external/imported plan displays “Evidence link required” and can prepare an `awaiting_evidence` run.
+7. a FairMind-worker plan displays “Executor unavailable”, `canPrepareRun=false`, and disables run creation.
+8. an external/imported plan displays “Evidence link required”, `canPrepareRun=true`, `fairmindExecutionAvailable=false`, and can prepare an `awaiting_evidence` run without claiming the evaluation is ready.
 9. the recent-runs table shows technical status and overall verdict in separate columns; `insufficient` and `review` are never styled or labelled as passed/approved.
-10. layer verdicts are shown only when supplied; absent layers read “Not assessed”.
+10. component-layer and risk-dimension verdicts are distinct, shown only when supplied, and absent axes read “Not assessed”.
 11. loading, empty, server-error, and action-error states are distinct and keyboard reachable.
 12. run detail links use `/tests/{runId}`, not `/dashboard/tests/{runId}`.
 13. the detail page no longer renders stray import/comment source text inside JSX.
@@ -424,7 +506,7 @@ Required assertions:
 
 ```bash
 cd apps/frontend
-npx playwright test tests/evaluation-runs.spec.ts --project=chromium
+bun run test tests/evaluation-runs.spec.ts --project=chromium
 ```
 
 If the Playwright config starts Bun, confirm Bun exists before changing configuration. Expected: assertions fail because `/tests` is the legacy Test History page and the route is currently shell-less.
@@ -479,9 +561,9 @@ Keep all existing FairMind visual foundations and explicitly prohibit purple gra
 
 ```bash
 cd apps/frontend
-npx playwright test tests/evaluation-runs.spec.ts --project=chromium
-npm run type-check
-npm run build
+bun run test tests/evaluation-runs.spec.ts --project=chromium
+bunx tsc --noEmit
+bun run build
 ```
 
 The production build may require network access for the existing Google Raleway import. Existing Authentik and viewport warnings are baseline warnings unless this task changes their source.
@@ -520,9 +602,9 @@ Use the repository's migration-test harness and the existing local PostgreSQL te
 
 ```bash
 cd apps/frontend
-npx playwright test tests/evaluation-runs.spec.ts --project=chromium
-npm run type-check
-npm run build
+bun run test tests/evaluation-runs.spec.ts --project=chromium
+bunx tsc --noEmit
+bun run build
 ```
 
 Capture at least one desktop and one mobile screenshot in Playwright test output or `/tmp`; do not commit generated screenshots unless the repository already tracks that artifact class.
