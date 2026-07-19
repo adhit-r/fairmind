@@ -28,12 +28,16 @@ from database.governance_models import (
     GovernanceWorkspace,
 )
 from database.models import Organization, OrganizationMember, User
+import src.application.services.evaluation_workbench_service as evaluation_service_module
 from src.application.services.evaluation_workbench_service import (
     EvaluationWorkbenchError,
     EvaluationWorkbenchService,
     assurance_request_hash,
 )
-from src.domain.assurance.evaluation_v2 import canonical_sha256, normalize_target_create
+from src.domain.assurance.evaluation_v2 import (
+    AssuranceContractValidationError,
+    canonical_sha256,
+)
 from src.infrastructure.db.repositories.evaluation_workbench_repository import (
     SqlAlchemyEvaluationWorkbenchRepository,
     SqlAlchemyEvaluationWorkbenchUnitOfWork,
@@ -140,7 +144,12 @@ def _target_payload(key: str = "agent-prod") -> dict:
         "subjectDigest": "b" * 64,
         "deploymentId": "deploy-1",
         "connectorBindingId": "connector-1",
-        "manifest": {"inputs": {"scenario_set": {"sha256": "c" * 64}}},
+        "manifest": {
+            "schemaVersion": "2.0.0",
+            "inputs": {
+                "scenario_set": {"kind": "content_digest", "sha256": "c" * 64}
+            },
+        },
     }
 
 
@@ -160,7 +169,9 @@ def _suite_payload(name: str = "agent-safety") -> dict:
         "configurationSchema": {
             "type": "object",
             "required": ["threshold"],
-            "properties": {"threshold": {"type": "number"}},
+            "properties": {
+                "threshold": {"type": "number", "minimum": 0, "maximum": 1}
+            },
             "additionalProperties": False,
         },
         "configurationDefaults": {"threshold": 0.5},
@@ -264,6 +275,201 @@ def test_plan_and_run_are_bound_atomically_to_exact_suite_versions(repository_fi
     )
     assert stored_run["contract_version"] == "2.0.0"
     assert stored_run["linked_passport_revision_id"] is None
+
+
+def test_envelope_size_preflight_blocks_activation_and_run_before_persistence(
+    repository_fixture,
+) -> None:
+    session, _ = repository_fixture
+    service = _service(session)
+    roles = [f"input_{index:02d}" for index in range(32)]
+    target_payload = _target_payload("large-envelope-agent")
+    target_payload["manifest"]["inputs"] = {
+        role: {
+            "kind": "content_digest",
+            "sha256": "c" * 64,
+            "mediaType": "video/mp4",
+            "sizeBytes": 2**53 - 1,
+        }
+        for role in roles
+    }
+    target = service.create_target_version(
+        org_id=ORG,
+        system_id="system-a",
+        actor_id=USER,
+        idempotency_key="large-envelope-target",
+        payload=target_payload,
+    ).body
+    schema = {
+        "type": "object",
+        "properties": {
+            "checks": {
+                "type": "array",
+                "maxItems": 1360,
+                "items": {"type": "boolean"},
+            }
+        },
+        "required": ["checks"],
+        "additionalProperties": False,
+    }
+    configuration = {"checks": [False] * 1360}
+    suite_ids = []
+    for index in range(32):
+        suite_payload = _suite_payload(f"large-envelope-{index}")
+        suite_payload.update(
+            {
+                "configurationSchema": schema,
+                "configurationDefaults": {"checks": []},
+                "requiredInputRoles": roles,
+            }
+        )
+        suite = service.create_suite_version(
+            org_id=ORG,
+            actor_id=USER,
+            idempotency_key=f"large-envelope-suite-{index}",
+            payload=suite_payload,
+        ).body
+        service.activate_suite_version(
+            org_id=ORG,
+            suite_version_id=suite["id"],
+            actor_id=USER,
+            idempotency_key=f"large-envelope-suite-activate-{index}",
+        )
+        suite_ids.append(suite["id"])
+
+    plan_payload = _plan_payload(target["id"], suite_ids)
+    plan_payload["suites"] = [
+        {"suiteVersionId": suite_id, "configuration": configuration}
+        for suite_id in suite_ids
+    ]
+    plan = service.create_plan(
+        org_id=ORG,
+        system_id="system-a",
+        actor_id=USER,
+        idempotency_key="large-envelope-plan",
+        payload=plan_payload,
+    ).body
+    idempotency_before_activation = session.scalar(
+        select(func.count()).select_from(GovernanceIdempotencyRecord)
+    )
+
+    with pytest.raises(EvaluationWorkbenchError) as activation_error:
+        service.activate_plan(
+            org_id=ORG,
+            system_id="system-a",
+            plan_id=plan["id"],
+            actor_id=USER,
+            idempotency_key="large-envelope-plan-activate",
+        )
+    assert activation_error.value.code == "preflight_failed"
+    assert "execution_envelope_size_exceeded" in {
+        blocker["code"] for blocker in activation_error.value.details["blockers"]
+    }
+    assert session.scalar(
+        select(GovernanceEvaluationPlan.__table__.c.status).where(
+            GovernanceEvaluationPlan.__table__.c.id == plan["id"]
+        )
+    ) == "draft"
+    assert session.scalar(
+        select(func.count()).select_from(GovernanceIdempotencyRecord)
+    ) == idempotency_before_activation
+
+    session.execute(
+        GovernanceEvaluationPlan.__table__.update()
+        .where(GovernanceEvaluationPlan.__table__.c.id == plan["id"])
+        .values(status="active")
+    )
+    session.commit()
+    idempotency_before_run = session.scalar(
+        select(func.count()).select_from(GovernanceIdempotencyRecord)
+    )
+    with pytest.raises(EvaluationWorkbenchError) as run_error:
+        service.create_run(
+            org_id=ORG,
+            system_id="system-a",
+            plan_id=plan["id"],
+            actor_id=USER,
+            idempotency_key="large-envelope-run",
+            payload={"trigger": "manual", "lifecyclePhase": "pre_deploy"},
+        )
+    assert run_error.value.code == "preflight_failed"
+    assert "execution_envelope_size_exceeded" in {
+        blocker["code"] for blocker in run_error.value.details["blockers"]
+    }
+    assert (
+        session.scalar(
+            select(func.count()).select_from(GovernanceEvaluationRun.__table__)
+        )
+        == 0
+    )
+    assert session.scalar(
+        select(func.count()).select_from(GovernanceIdempotencyRecord)
+    ) == idempotency_before_run
+
+
+def test_actual_envelope_overflow_returns_compact_409_without_persistence(
+    repository_fixture,
+    monkeypatch,
+) -> None:
+    session, _ = repository_fixture
+    service = _service(session)
+    target, suite_ids = _create_bound_catalog(service)
+    plan = service.create_plan(
+        org_id=ORG,
+        system_id="system-a",
+        actor_id=USER,
+        idempotency_key="actual-overflow-plan",
+        payload=_plan_payload(target["id"], suite_ids),
+    ).body
+    service.activate_plan(
+        org_id=ORG,
+        system_id="system-a",
+        plan_id=plan["id"],
+        actor_id=USER,
+        idempotency_key="actual-overflow-activate",
+    )
+    idempotency_before = session.scalar(
+        select(func.count()).select_from(GovernanceIdempotencyRecord.__table__)
+    )
+
+    def reject_actual_overflow(**_kwargs):
+        raise AssuranceContractValidationError(
+            "execution_envelope_too_large",
+            "sensitive internal size detail",
+        )
+
+    monkeypatch.setattr(
+        evaluation_service_module,
+        "build_execution_envelope_v2",
+        reject_actual_overflow,
+    )
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        service.create_run(
+            org_id=ORG,
+            system_id="system-a",
+            plan_id=plan["id"],
+            actor_id=USER,
+            idempotency_key="actual-overflow-run",
+            payload={"trigger": "manual", "lifecyclePhase": "pre_deploy"},
+        )
+
+    assert caught.value.detail() == {
+        "code": "execution_envelope_size_exceeded",
+        "message": "The execution envelope exceeds the bounded assurance contract.",
+    }
+    assert caught.value.status_code == 409
+    assert (
+        session.scalar(
+            select(func.count()).select_from(GovernanceEvaluationRun.__table__)
+        )
+        == 0
+    )
+    assert (
+        session.scalar(
+            select(func.count()).select_from(GovernanceIdempotencyRecord.__table__)
+        )
+        == idempotency_before
+    )
 
 
 def test_exact_idempotency_replay_returns_original_and_conflict_is_rejected(
@@ -532,13 +738,12 @@ def test_live_and_expired_idempotency_records_are_handled_transactionally(
     session, _ = repository_fixture
     repository = SqlAlchemyEvaluationWorkbenchRepository(session)
     service = _service(session, repository)
-    normalized = normalize_target_create(_target_payload())
     operation = "evaluation-v2.target.create"
     request_hash = assurance_request_hash(
         method="POST",
         operation=operation,
         scope={"organizationId": ORG, "systemId": "system-a"},
-        body=normalized,
+        body=_target_payload(),
     )
     now = datetime.now(timezone.utc)
 

@@ -83,7 +83,12 @@ def _target_payload() -> dict:
         "subjectDigest": "b" * 64,
         "deploymentId": "postgres-deployment",
         "connectorBindingId": "postgres-connector",
-        "manifest": {"inputs": {"scenario_set": {"sha256": "c" * 64}}},
+        "manifest": {
+            "schemaVersion": "2.0.0",
+            "inputs": {
+                "scenario_set": {"kind": "content_digest", "sha256": "c" * 64}
+            },
+        },
     }
 
 
@@ -103,7 +108,9 @@ def _suite_payload(name: str) -> dict:
         "configurationSchema": {
             "type": "object",
             "required": ["threshold"],
-            "properties": {"threshold": {"type": "number"}},
+            "properties": {
+                "threshold": {"type": "number", "minimum": 0, "maximum": 1}
+            },
             "additionalProperties": False,
         },
         "configurationDefaults": {"threshold": 0.5},

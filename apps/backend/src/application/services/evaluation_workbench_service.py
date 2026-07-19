@@ -31,6 +31,12 @@ from src.application.ports.evaluation_workbench import (
 )
 from src.domain.assurance.evaluation_v2 import (
     AssuranceContractValidationError,
+    MAX_CONFIGURATION_DEFAULTS_BYTES,
+    MAX_FAILURE_MESSAGE_BYTES,
+    MAX_PLAN_CONFIGURATION_BYTES,
+    MAX_RUN_LIMITATIONS_BYTES,
+    MAX_SUITE_LIMITATIONS_BYTES,
+    MAX_SUITE_MANIFEST_BYTES,
     PreflightBlocker,
     build_execution_envelope_v2,
     canonical_json,
@@ -41,8 +47,12 @@ from src.domain.assurance.evaluation_v2 import (
     normalize_target_create,
     plan_content_projection,
     reject_sensitive_keys,
+    require_canonical_size,
     validate_idempotency_key,
+    validate_mutation_detail_body,
     validate_run_create,
+    validate_selected_configuration,
+    validate_suite_budgets,
     validate_suite_configuration,
     validated_manifest_inputs,
 )
@@ -61,6 +71,12 @@ def canonical_assurance_json(value: object) -> str:
 
 
 def _translate(error: AssuranceContractValidationError) -> EvaluationWorkbenchError:
+    if error.code in {"envelope_variable_data_too_large", "execution_envelope_too_large"}:
+        return EvaluationWorkbenchError(
+            "execution_envelope_size_exceeded",
+            "The execution envelope exceeds the bounded assurance contract.",
+            status_code=409,
+        )
     return EvaluationWorkbenchError(error.code, error.message, status_code=422)
 
 
@@ -113,7 +129,7 @@ def _target_domain(target: TargetBindingRecord) -> dict[str, object]:
 
 
 def _target_view(target: TargetBindingRecord) -> dict[str, object]:
-    return {
+    view = {
         "id": target.id,
         "organizationId": target.organization_id,
         "workspaceId": target.workspace_id,
@@ -135,6 +151,11 @@ def _target_view(target: TargetBindingRecord) -> dict[str, object]:
         "createdBy": target.created_by,
         "createdAt": target.created_at,
     }
+    try:
+        validate_mutation_detail_body(view)
+    except AssuranceContractValidationError as error:
+        raise _binding_error("The target detail exceeds the bounded public contract.") from error
+    return view
 
 
 def _trust_domain(trust: TrustPolicyBindingRecord) -> dict[str, object]:
@@ -236,7 +257,7 @@ def _suite_manifest_projection(suite: SuiteBindingRecord) -> dict[str, object]:
 
 
 def _suite_view(suite: SuiteBindingRecord) -> dict[str, object]:
-    return {
+    view = {
         "id": suite.id,
         "ownerOrganizationId": suite.owner_organization_id,
         "ownerScope": suite.owner_scope,
@@ -264,15 +285,33 @@ def _suite_view(suite: SuiteBindingRecord) -> dict[str, object]:
         "createdBy": suite.created_by,
         "createdAt": suite.created_at,
     }
+    try:
+        validate_mutation_detail_body(view)
+    except AssuranceContractValidationError as error:
+        raise _binding_error("The suite detail exceeds the bounded public contract.") from error
+    return view
 
 
 def _verify_suite(suite: SuiteBindingRecord) -> None:
     manifest = suite.manifest.to_dict()
     try:
         reject_sensitive_keys(manifest, path="suiteManifest")
+        require_canonical_size(
+            suite.configuration_defaults.to_dict(),
+            maximum_bytes=MAX_CONFIGURATION_DEFAULTS_BYTES,
+            code="configuration_defaults_too_large",
+            message="The canonical configuration defaults exceed 16 KiB.",
+        )
         validate_suite_configuration(
             suite.configuration_schema.to_dict(),
             suite.configuration_defaults.to_dict(),
+        )
+        validate_suite_budgets(suite.budgets.to_dict())
+        require_canonical_size(
+            manifest,
+            maximum_bytes=MAX_SUITE_MANIFEST_BYTES,
+            code="suite_manifest_too_large",
+            message="The canonical suite manifest exceeds 96 KiB.",
         )
         if canonical_sha256(manifest) != suite.manifest_digest:
             raise _binding_error("The suite manifest no longer matches its immutable digest.")
@@ -295,12 +334,40 @@ def _verify_plan_graph(graph: PlanGraphRecord) -> None:
     _verify_target(graph.target)
     _verify_trust(graph.trust_policy)
     suites = []
+    configuration_bytes = 0
     for selection in graph.suites:
         _verify_suite(selection.suite)
         configuration = selection.configuration.to_dict()
-        if canonical_sha256(configuration) != selection.configuration_hash:
-            raise _binding_error("A suite configuration no longer matches its immutable digest.")
+        try:
+            configuration_bytes += validate_selected_configuration(configuration)
+            if configuration_bytes > MAX_PLAN_CONFIGURATION_BYTES:
+                raise AssuranceContractValidationError(
+                    "plan_configuration_too_large",
+                    "The canonical selected configurations exceed 256 KiB per plan.",
+                )
+            validate_suite_configuration(
+                selection.suite.configuration_schema.to_dict(), configuration
+            )
+            if canonical_sha256(configuration) != selection.configuration_hash:
+                raise _binding_error(
+                    "A suite configuration no longer matches its immutable digest."
+                )
+        except AssuranceContractValidationError as error:
+            raise _binding_error(
+                "A stored suite configuration violates the immutable contract."
+            ) from error
         suites.append(_suite_domain(selection))
+    try:
+        require_canonical_size(
+            [selection.configuration.to_dict() for selection in graph.suites],
+            maximum_bytes=MAX_PLAN_CONFIGURATION_BYTES,
+            code="plan_configuration_too_large",
+            message="The canonical selected configurations exceed 256 KiB per plan.",
+        )
+    except AssuranceContractValidationError as error:
+        raise _binding_error(
+            "The stored plan configurations exceed the immutable aggregate contract."
+        ) from error
     projection = plan_content_projection(
         org_id=graph.scope.organization_id,
         workspace_id=graph.scope.workspace_id,
@@ -316,7 +383,7 @@ def _verify_plan_graph(graph: PlanGraphRecord) -> None:
 
 def _plan_view(graph: PlanGraphRecord) -> dict[str, object]:
     plan = graph.plan
-    return {
+    view = {
         "id": plan.id,
         "organizationId": plan.organization_id,
         "workspaceId": plan.workspace_id,
@@ -349,6 +416,11 @@ def _plan_view(graph: PlanGraphRecord) -> dict[str, object]:
         "createdAt": plan.created_at,
         "updatedAt": plan.updated_at,
     }
+    try:
+        validate_mutation_detail_body(view)
+    except AssuranceContractValidationError as error:
+        raise _binding_error("The plan detail exceeds the bounded public contract.") from error
+    return view
 
 
 def _plain_json_value(value: object) -> object:
@@ -356,6 +428,22 @@ def _plain_json_value(value: object) -> object:
 
 
 def _execution_view(execution: SuiteExecutionRecord) -> dict[str, object]:
+    limitations = _plain_json_value(execution.limitations)
+    try:
+        require_canonical_size(
+            limitations,
+            maximum_bytes=MAX_SUITE_LIMITATIONS_BYTES,
+            code="suite_limitations_too_large",
+            message="Suite limitations exceed 8 KiB.",
+        )
+        if execution.failure_message is not None and len(
+            execution.failure_message.encode("utf-8")
+        ) > MAX_FAILURE_MESSAGE_BYTES:
+            raise AssuranceContractValidationError(
+                "failure_message_too_large", "A failure message exceeds 2 KiB."
+            )
+    except (AssuranceContractValidationError, UnicodeError) as error:
+        raise _binding_error("A suite execution exceeds the bounded result contract.") from error
     return {
         "id": execution.id,
         "suiteVersionId": execution.suite_version_id,
@@ -366,14 +454,30 @@ def _execution_view(execution: SuiteExecutionRecord) -> dict[str, object]:
         "admissionStatus": execution.admission_status,
         "reviewStatus": execution.review_status,
         "freshnessStatus": execution.freshness_status,
-        "limitations": _plain_json_value(execution.limitations),
+        "limitations": limitations,
         "failureCode": execution.failure_code,
         "failureMessage": execution.failure_message,
     }
 
 
 def _run_view(run: RunRecord) -> dict[str, object]:
-    return {
+    executions = [_execution_view(item) for item in run.suite_executions]
+    try:
+        require_canonical_size(
+            [item["limitations"] for item in executions],
+            maximum_bytes=MAX_RUN_LIMITATIONS_BYTES,
+            code="run_limitations_too_large",
+            message="Run limitations exceed 64 KiB.",
+        )
+        if run.failure_message is not None and len(run.failure_message.encode("utf-8")) > (
+            MAX_FAILURE_MESSAGE_BYTES
+        ):
+            raise AssuranceContractValidationError(
+                "failure_message_too_large", "A failure message exceeds 2 KiB."
+            )
+    except (AssuranceContractValidationError, UnicodeError) as error:
+        raise _binding_error("The run exceeds the bounded result contract.") from error
+    view = {
         "id": run.id,
         "organizationId": run.organization_id,
         "workspaceId": run.workspace_id,
@@ -386,7 +490,7 @@ def _run_view(run: RunRecord) -> dict[str, object]:
         "evidenceOutcome": run.evidence_outcome,
         "overallVerdict": run.overall_verdict,
         "layerVerdicts": run.layer_verdicts.to_dict(),
-        "suiteExecutions": [_execution_view(item) for item in run.suite_executions],
+        "suiteExecutions": executions,
         "envelopeId": run.envelope_id,
         "envelope": run.envelope.to_dict(),
         "envelopeHash": run.envelope_hash,
@@ -399,6 +503,11 @@ def _run_view(run: RunRecord) -> dict[str, object]:
         "createdAt": run.created_at,
         "updatedAt": run.updated_at,
     }
+    try:
+        validate_mutation_detail_body(view)
+    except AssuranceContractValidationError as error:
+        raise _binding_error("The run detail exceeds the bounded public contract.") from error
+    return view
 
 
 def _preflight(
@@ -410,7 +519,7 @@ def _preflight(
     return evaluate_preflight(
         plan=_plan_domain(graph),
         target=_target_domain(graph.target),
-        trust_policy={"status": graph.trust_policy.status},
+        trust_policy=_trust_domain(graph.trust_policy),
         suites=[_suite_domain(selection) for selection in graph.suites],
         lifecycle_phase=lifecycle_phase,
         require_plan_active=active,
@@ -486,7 +595,7 @@ class EvaluationWorkbenchService:
             operation="evaluation-v2.target.create",
             idempotency_key=idempotency_key,
             scope={"organizationId": org_id, "systemId": system_id},
-            body=target,
+            body=payload,
         )
 
         def create(now: datetime) -> MutationOutcome:
@@ -629,7 +738,7 @@ class EvaluationWorkbenchService:
             operation="evaluation-v2.suite.create",
             idempotency_key=idempotency_key,
             scope={"organizationId": org_id},
-            body=suite,
+            body=payload,
         )
 
         def create(now: datetime) -> MutationOutcome:
@@ -771,7 +880,7 @@ class EvaluationWorkbenchService:
             operation="evaluation-v2.plan.create",
             idempotency_key=idempotency_key,
             scope={"organizationId": org_id, "systemId": system_id},
-            body=plan,
+            body=payload,
         )
 
         def create(now: datetime) -> MutationOutcome:
@@ -793,6 +902,7 @@ class EvaluationWorkbenchService:
                 )
             _verify_creation_bindings(bindings)
             resolved: list[PlanSuiteBindingRecord] = []
+            configuration_bytes = 0
             for ordinal, (selection, suite) in enumerate(
                 zip(selections, bindings.suites, strict=True)
             ):
@@ -803,8 +913,13 @@ class EvaluationWorkbenchService:
                     else suite.configuration_defaults.to_dict()
                 )
                 assert isinstance(configuration, dict)
-                reject_sensitive_keys(configuration, path="suite.configuration")
                 try:
+                    configuration_bytes += validate_selected_configuration(configuration)
+                    if configuration_bytes > MAX_PLAN_CONFIGURATION_BYTES:
+                        raise AssuranceContractValidationError(
+                            "plan_configuration_too_large",
+                            "The canonical selected configurations exceed 256 KiB per plan.",
+                        )
                     validate_suite_configuration(
                         suite.configuration_schema.to_dict(), configuration
                     )
@@ -823,6 +938,12 @@ class EvaluationWorkbenchService:
                         configuration_hash=canonical_sha256(configuration),
                     )
                 )
+            require_canonical_size(
+                [item.configuration.to_dict() for item in resolved],
+                maximum_bytes=MAX_PLAN_CONFIGURATION_BYTES,
+                code="plan_configuration_too_large",
+                message="The canonical selected configurations exceed 256 KiB per plan.",
+            )
             suite_domains = [_suite_domain(item) for item in resolved]
             projection = plan_content_projection(
                 org_id=org_id,
@@ -930,6 +1051,15 @@ class EvaluationWorkbenchService:
                     "plan_archived",
                     "Archived plans cannot be activated.",
                     status_code=409,
+                )
+            if graph.plan.status == "active":
+                return MutationOutcome(
+                    body=FrozenJsonObject.from_mapping(_plan_view(graph)),
+                    status=200,
+                    resource_type="evaluation_plan",
+                    resource_id=plan_id,
+                    audit_action=None,
+                    audit_details=FrozenJsonObject.from_mapping({"status": "active"}),
                 )
             blockers_by_key = {}
             for phase in graph.plan.lifecycle_phases:
@@ -1075,43 +1205,46 @@ class EvaluationWorkbenchService:
                         ordinal=selection.ordinal,
                     )
                 )
-            envelope, _, envelope_hash = build_execution_envelope_v2(
-                envelope_id=envelope_id,
-                run_id=run_id,
-                org_id=org_id,
-                workspace_id=graph.scope.workspace_id,
-                system_id=system_id,
-                plan_id=plan_id,
-                plan_content_hash=graph.plan.plan_content_hash,
-                target={
-                    "id": graph.target.id,
-                    "targetKey": graph.target.target_key,
-                    "targetKind": graph.target.target_kind,
-                    "version": graph.target.version,
-                    "systemVersion": graph.target.system_version,
-                    "subjectKind": graph.target.subject_kind,
-                    "subjectId": graph.target.subject_id,
-                    "subjectVersion": graph.target.subject_version,
-                    "subjectDigest": graph.target.subject_digest,
-                    "deploymentId": graph.target.deployment_id,
-                    "connectorBindingId": graph.target.connector_binding_id,
-                    "manifestDigest": graph.target.manifest_digest,
-                },
-                trigger=trigger,
-                lifecycle_phase=lifecycle_phase,
-                execution_depth=graph.plan.execution_depth,
-                enforcement_mode=graph.plan.enforcement_mode,
-                delivery_mode=graph.plan.delivery_mode,
-                trust_policy={
-                    "id": graph.trust_policy.id,
-                    "version": graph.trust_policy.version,
-                    "policyHash": graph.trust_policy.policy_hash,
-                },
-                nonce=nonce,
-                requester_id=actor_id,
-                requested_at=_iso(now),
-                suites=envelope_suites,
-            )
+            try:
+                envelope, _, envelope_hash = build_execution_envelope_v2(
+                    envelope_id=envelope_id,
+                    run_id=run_id,
+                    org_id=org_id,
+                    workspace_id=graph.scope.workspace_id,
+                    system_id=system_id,
+                    plan_id=plan_id,
+                    plan_content_hash=graph.plan.plan_content_hash,
+                    target={
+                        "id": graph.target.id,
+                        "targetKey": graph.target.target_key,
+                        "targetKind": graph.target.target_kind,
+                        "version": graph.target.version,
+                        "systemVersion": graph.target.system_version,
+                        "subjectKind": graph.target.subject_kind,
+                        "subjectId": graph.target.subject_id,
+                        "subjectVersion": graph.target.subject_version,
+                        "subjectDigest": graph.target.subject_digest,
+                        "deploymentId": graph.target.deployment_id,
+                        "connectorBindingId": graph.target.connector_binding_id,
+                        "manifestDigest": graph.target.manifest_digest,
+                    },
+                    trigger=trigger,
+                    lifecycle_phase=lifecycle_phase,
+                    execution_depth=graph.plan.execution_depth,
+                    enforcement_mode=graph.plan.enforcement_mode,
+                    delivery_mode=graph.plan.delivery_mode,
+                    trust_policy={
+                        "id": graph.trust_policy.id,
+                        "version": graph.trust_policy.version,
+                        "policyHash": graph.trust_policy.policy_hash,
+                    },
+                    nonce=nonce,
+                    requester_id=actor_id,
+                    requested_at=_iso(now),
+                    suites=envelope_suites,
+                )
+            except AssuranceContractValidationError as error:
+                raise _translate(error) from error
             layer_verdicts = {execution_id: "insufficient" for execution_id in execution_ids}
             record = self.repository.persist_run(
                 PersistRunCommand(

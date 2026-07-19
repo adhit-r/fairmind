@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from types import SimpleNamespace
 import uuid
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event, func, select
 from sqlalchemy.orm import sessionmaker
@@ -20,6 +22,7 @@ from database.governance_models import (
     GovernanceEvaluationPlan,
     GovernanceEvaluationRun,
     GovernanceEvaluationRunSuiteExecution,
+    GovernanceEvaluationSuiteVersion,
     GovernanceEvaluationTargetVersion,
     GovernanceEvidenceTrustPolicyVersion,
     GovernanceIdempotencyRecord,
@@ -192,7 +195,12 @@ def _target_payload() -> dict:
         "subjectId": "agent-prod",
         "subjectVersion": "sha-1",
         "subjectDigest": "b" * 64,
-        "manifest": {"inputs": {"scenario_set": {"sha256": "c" * 64}}},
+        "manifest": {
+            "schemaVersion": "2.0.0",
+            "inputs": {
+                "scenario_set": {"kind": "content_digest", "sha256": "c" * 64}
+            },
+        },
     }
 
 
@@ -359,6 +367,133 @@ def test_idempotency_replay_header_and_conflict(workbench_client) -> None:
     assert conflict.json()["detail"]["code"] == "idempotency_conflict"
 
 
+def test_create_idempotency_hashes_the_exact_accepted_alias_body(workbench_client) -> None:
+    client, _ = workbench_client
+    target_url = f"{BASE}/systems/system-a/evaluation-v2/target-versions"
+    first_target = client.post(
+        target_url,
+        headers=_headers("target-exact-body"),
+        json=_target_payload(),
+    )
+    assert first_target.status_code == 201, first_target.text
+    explicit_null = client.post(
+        target_url,
+        headers=_headers("target-exact-body"),
+        json={**_target_payload(), "deploymentId": None},
+    )
+    assert explicit_null.status_code == 409
+    assert explicit_null.json()["detail"]["code"] == "idempotency_conflict"
+
+    suite_url = f"{BASE}/evaluation-v2/suite-versions"
+    first_suite = client.post(
+        suite_url,
+        headers=_headers("suite-exact-body"),
+        json={**_suite_payload(), "name": " agent-safety-v2 "},
+    )
+    assert first_suite.status_code == 201, first_suite.text
+    trimmed_suite = client.post(
+        suite_url,
+        headers=_headers("suite-exact-body"),
+        json={**_suite_payload(), "name": "agent-safety-v2"},
+    )
+    assert trimmed_suite.status_code == 409
+    assert trimmed_suite.json()["detail"]["code"] == "idempotency_conflict"
+
+    activated_suite = client.post(
+        f"{suite_url}/{first_suite.json()['id']}/activate",
+        headers=_headers("suite-exact-activate"),
+    )
+    assert activated_suite.status_code == 200, activated_suite.text
+    plan_url = f"{BASE}/systems/system-a/evaluation-v2/plans"
+    plan = {
+        "contractVersion": "2.0.0",
+        "name": " Exact plan ",
+        "targetVersionId": first_target.json()["id"],
+        "lifecyclePhases": ["pre_deploy"],
+        "executionDepth": "deep",
+        "enforcementMode": "human_approval",
+        "deliveryMode": "external_provider",
+        "trustPolicyVersionId": "trust-a",
+        "suites": [{"suiteVersionId": first_suite.json()["id"]}],
+    }
+    first_plan = client.post(plan_url, headers=_headers("plan-exact-body"), json=plan)
+    assert first_plan.status_code == 201, first_plan.text
+    trimmed_plan = client.post(
+        plan_url,
+        headers=_headers("plan-exact-body"),
+        json={**plan, "name": "Exact plan"},
+    )
+    assert trimmed_plan.status_code == 409
+    assert trimmed_plan.json()["detail"]["code"] == "idempotency_conflict"
+
+
+@pytest.mark.asyncio
+async def test_request_reader_rejects_declared_size_before_streaming() -> None:
+    from src.api.routers.evaluation_workbench import MAX_REQUEST_BYTES, _read_request_body
+
+    class DeclaredOversizeRequest:
+        headers = {"content-length": str(MAX_REQUEST_BYTES + 1)}
+        chunks_seen = 0
+
+        async def stream(self):
+            self.chunks_seen += 1
+            yield b"must-not-be-read"
+
+    request = DeclaredOversizeRequest()
+    with pytest.raises(HTTPException) as caught:
+        await _read_request_body(request)
+
+    assert caught.value.status_code == 413
+    assert request.chunks_seen == 0
+
+
+@pytest.mark.parametrize(
+    "declared",
+    [None, "1", "malformed", "9" * 10_000],
+)
+@pytest.mark.asyncio
+async def test_request_reader_counts_the_stream_when_length_is_missing_or_untrusted(
+    declared: str | None,
+) -> None:
+    from src.api.routers.evaluation_workbench import MAX_REQUEST_BYTES, _read_request_body
+
+    class RequestWithUntrustedLength:
+        headers = {} if declared is None else {"content-length": declared}
+        chunks_seen = 0
+
+        async def stream(self):
+            for chunk in (b"a" * (MAX_REQUEST_BYTES - 1), b"b"):
+                self.chunks_seen += 1
+                yield chunk
+
+    request = RequestWithUntrustedLength()
+    body = await _read_request_body(request)
+
+    assert len(body) == MAX_REQUEST_BYTES
+    assert request.chunks_seen == 2
+
+
+@pytest.mark.asyncio
+async def test_request_reader_stops_on_the_first_overflowing_chunk() -> None:
+    from src.api.routers.evaluation_workbench import MAX_REQUEST_BYTES, _read_request_body
+
+    class ChunkedOversizeRequest:
+        headers = {}
+        chunks_seen = 0
+
+        async def stream(self):
+            for chunk in (b"a" * MAX_REQUEST_BYTES, b"b", b"must-not-be-read"):
+                self.chunks_seen += 1
+                yield chunk
+
+    request = ChunkedOversizeRequest()
+    with pytest.raises(HTTPException) as caught:
+        await _read_request_body(request)
+
+    assert caught.value.status_code == 413
+    assert request.chunks_seen == 2
+
+
 @pytest.mark.parametrize(
     ("body", "expected_status"),
     [
@@ -501,6 +636,102 @@ def test_validation_errors_never_reflect_rejected_secret_values(
     assert sentinel not in response.text
 
 
+def test_duplicate_and_extra_property_errors_do_not_reflect_caller_keys(
+    workbench_client,
+) -> None:
+    client, _ = workbench_client
+    sentinel = "CALLER_CONTROLLED_PROPERTY_SENTINEL"
+    url = f"{BASE}/systems/system-a/evaluation-v2/target-versions"
+    duplicate = client.post(
+        url,
+        headers={**_headers("duplicate-sanitized"), "Content-Type": "application/json"},
+        content=(f'{{"{sentinel}":1,"{sentinel}":2}}').encode(),
+    )
+    assert duplicate.status_code == 422
+    assert sentinel not in duplicate.text
+
+    extra = client.post(
+        url,
+        headers=_headers("extra-sanitized"),
+        json={**_target_payload(), sentinel: 1},
+    )
+    assert extra.status_code == 422
+    assert sentinel not in extra.text
+
+    nested_role = client.post(
+        url,
+        headers=_headers("nested-role-sanitized"),
+        json={
+            **_target_payload(),
+            "manifest": {
+                "schemaVersion": "2.0.0",
+                "inputs": {
+                    sentinel: {
+                        "kind": "content_digest",
+                        "sha256": "c" * 64,
+                        "sizeBytes": "not-an-integer",
+                    }
+                },
+            },
+        },
+    )
+    assert nested_role.status_code == 422
+    assert sentinel not in nested_role.text
+
+
+def test_respond_rejects_oversized_replayed_bodies_before_serialization() -> None:
+    from src.api.routers.evaluation_workbench import StrictModel, _respond
+
+    class ReplayBody(StrictModel):
+        payload: dict[str, str]
+
+    replay = SimpleNamespace(
+        body={"payload": {"value": "x" * (768 * 1024)}},
+        status=200,
+        replayed=True,
+    )
+
+    with pytest.raises(HTTPException) as caught:
+        _respond(replay, ReplayBody)
+
+    assert caught.value.status_code == 500
+    assert caught.value.detail["code"] == "response_too_large"
+
+
+def test_unsafe_configuration_schema_rejection_has_no_mutation_side_effects(
+    workbench_client,
+) -> None:
+    client, _ = workbench_client
+    payload = _suite_payload()
+    payload["configurationSchema"] = {
+        "type": "object",
+        "properties": {"label": {"type": "string", "pattern": "^safe$"}},
+        "additionalProperties": False,
+    }
+    response = client.post(
+        f"{BASE}/evaluation-v2/suite-versions",
+        headers=_headers("unsafe-schema"),
+        json=payload,
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "unsafe_configuration_schema"
+
+    session_iterator = app.dependency_overrides[get_db]()
+    session = next(session_iterator)
+    try:
+        assert session.scalar(
+            select(func.count()).select_from(GovernanceEvaluationSuiteVersion.__table__)
+        ) == 0
+        assert session.scalar(
+            select(func.count()).select_from(GovernanceIdempotencyRecord.__table__)
+        ) == 0
+        assert session.scalar(
+            select(func.count()).select_from(GovernanceEvaluationAuditEvent.__table__)
+        ) == 0
+    finally:
+        session_iterator.close()
+
+
 def test_openapi_exposes_strict_request_and_response_contracts() -> None:
     app.openapi_schema = None
     document = app.openapi()
@@ -557,6 +788,9 @@ def test_openapi_exposes_strict_request_and_response_contracts() -> None:
         "verdictVersion",
     }.issubset(run_response["required"])
     suite_execution = schemas["SuiteExecutionResponse"]
+    assert run_response["properties"]["technicalStatus"]["enum"] == suite_execution[
+        "properties"
+    ]["technicalStatus"]["enum"]
     assert suite_execution["properties"]["admissionStatus"]["enum"] == [
         "pending",
         "verified",
@@ -662,6 +896,64 @@ def test_response_contract_keeps_execution_evidence_and_governance_axes_distinct
     assert body["suiteExecutions"][0]["technicalStatus"] == "succeeded"
     assert body["suiteExecutions"][0]["evidenceResultStatus"] == "failed"
     assert body["overallVerdict"] == "insufficient"
+
+
+def test_already_active_plan_is_a_no_audit_noop_before_dependency_preflight(
+    workbench_client,
+) -> None:
+    client, _ = workbench_client
+    target, suite = _bootstrap(client)
+    plans_url = f"{BASE}/systems/system-a/evaluation-v2/plans"
+    created = client.post(
+        plans_url,
+        headers=_headers("active-noop-plan"),
+        json={
+            "contractVersion": "2.0.0",
+            "name": "Active no-op",
+            "targetVersionId": target["id"],
+            "lifecyclePhases": ["pre_deploy"],
+            "executionDepth": "deep",
+            "enforcementMode": "human_approval",
+            "deliveryMode": "external_provider",
+            "trustPolicyVersionId": "trust-a",
+            "suites": [{"suiteVersionId": suite["id"]}],
+        },
+    )
+    assert created.status_code == 201, created.text
+    activate_url = f"{plans_url}/{created.json()['id']}/activate"
+    first_activation = client.post(activate_url, headers=_headers("active-noop-first"))
+    assert first_activation.status_code == 200, first_activation.text
+
+    session_iterator = app.dependency_overrides[get_db]()
+    session = next(session_iterator)
+    try:
+        audit_before = session.scalar(
+            select(func.count()).select_from(GovernanceEvaluationAuditEvent.__table__)
+        )
+        session.execute(
+            GovernanceEvaluationSuiteVersion.__table__.update()
+            .where(GovernanceEvaluationSuiteVersion.id == suite["id"])
+            .values(status="deprecated")
+        )
+        session.commit()
+    finally:
+        session_iterator.close()
+
+    replayed_activation = client.post(
+        activate_url,
+        headers=_headers("active-noop-after-drift"),
+    )
+    assert replayed_activation.status_code == 200, replayed_activation.text
+    assert replayed_activation.json()["status"] == "active"
+
+    session_iterator = app.dependency_overrides[get_db]()
+    session = next(session_iterator)
+    try:
+        assert session.scalar(
+            select(func.count()).select_from(GovernanceEvaluationAuditEvent.__table__)
+        ) == audit_before
+    finally:
+        session_iterator.close()
 
 
 def test_v2_plan_is_hidden_from_every_v1_plan_read_and_run_creation_surface(

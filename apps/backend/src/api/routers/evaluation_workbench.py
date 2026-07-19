@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 import json
+import re
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
@@ -28,6 +29,7 @@ from src.application.services.governance_assurance_service import OrgMembership
 router = APIRouter(prefix="/organizations/{org_id}", tags=["evaluation-workbench-v2"])
 MAX_REQUEST_BYTES = 1024 * 1024
 MAX_JSON_DEPTH = 32
+MAX_MUTATION_DETAIL_RESPONSE_BYTES = 768 * 1024
 
 TargetKind = Literal[
     "predictive_model",
@@ -77,7 +79,42 @@ GovernanceVerdict = Literal["approved", "conditional", "review", "blocked", "ins
 
 
 class StrictModel(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=False)
+    model_config = ConfigDict(
+        extra="forbid", populate_by_name=False, allow_inf_nan=False, strict=True
+    )
+
+
+class TargetInputDescriptorV2(StrictModel):
+    kind: Literal["content_digest"]
+    sha256: str = Field(pattern="^[0-9a-f]{64}$")
+    media_type: str | None = Field(default=None, alias="mediaType")
+    size_bytes: int | None = Field(default=None, alias="sizeBytes", ge=0, lt=2**53)
+
+
+class TargetManifestV2(StrictModel):
+    schema_version: Literal["2.0.0"] = Field(alias="schemaVersion")
+    inputs: dict[str, TargetInputDescriptorV2] = Field(max_length=32)
+
+
+class ResourceBudgetsV1(StrictModel):
+    max_cases: int | None = Field(default=None, alias="maxCases", ge=1, le=1_000_000)
+    max_attempts: int | None = Field(default=None, alias="maxAttempts", ge=1, le=100)
+    max_duration_seconds: float | None = Field(
+        default=None, alias="maxDurationSeconds", gt=0, le=86_400
+    )
+    max_cpu_seconds: float | None = Field(default=None, alias="maxCpuSeconds", gt=0, le=86_400)
+    max_memory_mib: int | None = Field(
+        default=None, alias="maxMemoryMiB", ge=1, le=1_048_576
+    )
+    max_processes: int | None = Field(default=None, alias="maxProcesses", ge=1, le=4_096)
+    max_disk_mib: int | None = Field(default=None, alias="maxDiskMiB", ge=1, le=1_048_576)
+    max_input_bytes: int | None = Field(
+        default=None, alias="maxInputBytes", ge=1, le=1_099_511_627_776
+    )
+    max_output_bytes: int | None = Field(
+        default=None, alias="maxOutputBytes", ge=1, le=1_099_511_627_776
+    )
+    max_cost_usd: float | None = Field(default=None, alias="maxCostUsd", ge=0, le=1_000_000)
 
 
 class TargetVersionCreate(StrictModel):
@@ -91,7 +128,7 @@ class TargetVersionCreate(StrictModel):
     subject_digest: str = Field(alias="subjectDigest", pattern="^[0-9a-f]{64}$")
     deployment_id: str | None = Field(default=None, alias="deploymentId")
     connector_binding_id: str | None = Field(default=None, alias="connectorBindingId")
-    manifest: dict[str, Any]
+    manifest: TargetManifestV2
     supersedes_id: str | None = Field(default=None, alias="supersedesId")
 
 
@@ -114,8 +151,8 @@ class SuiteVersionCreate(StrictModel):
     adapter_version: str = Field(alias="adapterVersion", min_length=1)
     configuration_schema: dict[str, Any] = Field(alias="configurationSchema")
     configuration_defaults: dict[str, Any] = Field(alias="configurationDefaults")
-    required_input_roles: list[str] = Field(alias="requiredInputRoles")
-    budgets: dict[str, Any]
+    required_input_roles: list[str] = Field(alias="requiredInputRoles", max_length=32)
+    budgets: ResourceBudgetsV1
     result_contract_version: str = Field(alias="resultContractVersion", min_length=1)
 
 
@@ -162,7 +199,7 @@ class TargetVersionResponse(StrictModel):
     subject_digest: str = Field(alias="subjectDigest")
     deployment_id: str | None = Field(alias="deploymentId")
     connector_binding_id: str | None = Field(alias="connectorBindingId")
-    manifest: dict[str, Any]
+    manifest: TargetManifestV2
     manifest_digest: str = Field(alias="manifestDigest")
     status: Literal["active", "superseded", "retired"]
     supersedes_id: str | None = Field(alias="supersedesId")
@@ -278,9 +315,7 @@ class EvaluationRunV2Response(StrictModel):
     contract_version: Literal["2.0.0"] = Field(alias="contractVersion")
     trigger: Literal["manual", "ci", "scheduled", "release_gate", "incident", "integration_sync"]
     lifecycle_phase: LifecyclePhase = Field(alias="lifecyclePhase")
-    technical_status: Literal[
-        "awaiting_evidence", "running", "succeeded", "failed", "cancelled"
-    ] = Field(alias="technicalStatus")
+    technical_status: TechnicalStatus = Field(alias="technicalStatus")
     evidence_outcome: EvidenceResultStatus = Field(alias="evidenceOutcome")
     overall_verdict: GovernanceVerdict = Field(alias="overallVerdict")
     layer_verdicts: dict[str, GovernanceVerdict] = Field(alias="layerVerdicts")
@@ -312,7 +347,7 @@ def _unique_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for key, value in pairs:
         if key in result:
-            raise ValueError(f"duplicate JSON object name: {key}")
+            raise ValueError("duplicate JSON object name")
         result[key] = value
     return result
 
@@ -323,14 +358,41 @@ def _reject_constant(value: str) -> None:
 
 def _public_validation_errors(error: ValidationError) -> list[dict[str, Any]]:
     """Expose structure only; Pydantic error inputs may contain credentials."""
-    return [
-        {
-            "location": list(item["loc"]),
-            "type": item["type"],
-            "message": item["msg"],
-        }
-        for item in error.errors()
-    ]
+    errors = []
+    for item in error.errors():
+        errors.append(
+            {
+                "location": ["body"],
+                "type": item["type"],
+                "message": (
+                    "An extra property is not permitted."
+                    if item["type"] == "extra_forbidden"
+                    else item["msg"]
+                ),
+            }
+        )
+    return errors
+
+
+def _request_too_large() -> HTTPException:
+    return HTTPException(
+        413, detail={"code": "request_too_large", "message": "Request exceeds 1 MiB."}
+    )
+
+
+async def _read_request_body(request: Request) -> bytes:
+    declared = request.headers.get("content-length")
+    if declared is not None and len(declared) <= 16 and re.fullmatch(r"[0-9]+", declared):
+        declared_bytes = int(declared, 10)
+        if declared_bytes > MAX_REQUEST_BYTES:
+            raise _request_too_large()
+
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > MAX_REQUEST_BYTES:
+            raise _request_too_large()
+        body.extend(chunk)
+    return bytes(body)
 
 
 async def _payload(request: Request, model: type[StrictModel]) -> dict[str, Any]:
@@ -339,11 +401,7 @@ async def _payload(request: Request, model: type[StrictModel]) -> dict[str, Any]
         raise HTTPException(
             415, detail={"code": "unsupported_media_type", "message": "Use application/json."}
         )
-    body = await request.body()
-    if len(body) > MAX_REQUEST_BYTES:
-        raise HTTPException(
-            413, detail={"code": "request_too_large", "message": "Request exceeds 1 MiB."}
-        )
+    body = await _read_request_body(request)
     try:
         value = json.loads(
             body.decode("utf-8"),
@@ -357,7 +415,7 @@ async def _payload(request: Request, model: type[StrictModel]) -> dict[str, Any]
         # This also rejects non-finite floats and out-of-domain integers before
         # a validation error can echo them into a non-JSON error response.
         canonical_assurance_json(value)
-        parsed = model.model_validate(value)
+        model.model_validate(value)
     except (
         UnicodeDecodeError,
         ValueError,
@@ -376,7 +434,9 @@ async def _payload(request: Request, model: type[StrictModel]) -> dict[str, Any]
                 "errors": errors,
             },
         ) from error
-    return parsed.model_dump(by_alias=True, exclude_unset=True)
+    # The domain normalizes separately. Preserve this strict alias-form object
+    # exactly so idempotency distinguishes omission, explicit null, and text.
+    return value
 
 
 def _service(db: Session) -> EvaluationWorkbenchService:
@@ -395,6 +455,15 @@ def _respond(result: Any, model: type[StrictModel]) -> Response:
     headers = {}
     if result.replayed:
         headers["Idempotency-Replayed"] = "true"
+    raw_content = canonical_assurance_json(result.body)
+    if len(raw_content.encode("utf-8")) > MAX_MUTATION_DETAIL_RESPONSE_BYTES:
+        raise HTTPException(
+            500,
+            detail={
+                "code": "response_too_large",
+                "message": "The bounded assurance response exceeds 768 KiB.",
+            },
+        )
     try:
         validated = model.model_validate(result.body)
     except ValidationError as error:
@@ -405,8 +474,17 @@ def _respond(result: Any, model: type[StrictModel]) -> Response:
                 "message": "The persisted assurance response violated its public contract.",
             },
         ) from error
+    content = canonical_assurance_json(validated.model_dump(by_alias=True, mode="json"))
+    if len(content.encode("utf-8")) > MAX_MUTATION_DETAIL_RESPONSE_BYTES:
+        raise HTTPException(
+            500,
+            detail={
+                "code": "response_too_large",
+                "message": "The bounded assurance response exceeds 768 KiB.",
+            },
+        )
     return Response(
-        content=canonical_assurance_json(validated.model_dump(by_alias=True, mode="json")),
+        content=content,
         status_code=result.status,
         media_type="application/json",
         headers=headers,

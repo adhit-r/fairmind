@@ -12,8 +12,10 @@ from src.domain.assurance.evaluation_v2 import (
     build_execution_envelope_v2,
     canonical_json_bytes,
     canonical_sha256,
+    normalize_plan_create,
     normalize_suite_create,
     normalize_target_create,
+    require_canonical_size,
 )
 
 
@@ -245,7 +247,13 @@ def test_target_manifest_rejects_sensitive_key_families(key: str) -> None:
         "subjectId": "agent",
         "subjectVersion": "1",
         "subjectDigest": "a" * 64,
-        "manifest": {"inputs": {"scenario": {"sha256": "b" * 64}}, "nested": {key: "value"}},
+        "manifest": {
+            "schemaVersion": "2.0.0",
+            "inputs": {
+                "scenario": {"kind": "content_digest", "sha256": "b" * 64}
+            },
+            "nested": {key: "value"},
+        },
     }
     with pytest.raises(AssuranceContractValidationError) as caught:
         normalize_target_create(payload)
@@ -274,7 +282,7 @@ def test_target_manifest_requires_strict_opaque_input_descriptors(descriptor) ->
         "subjectId": "agent",
         "subjectVersion": "1",
         "subjectDigest": "a" * 64,
-        "manifest": {"inputs": {"scenario": descriptor}},
+        "manifest": {"schemaVersion": "2.0.0", "inputs": {"scenario": descriptor}},
     }
     with pytest.raises(AssuranceContractValidationError) as caught:
         normalize_target_create(payload)
@@ -387,3 +395,439 @@ def test_suite_runner_image_accepts_exact_sha256_oci_digest() -> None:
     payload["runnerImageDigest"] = "sha256:" + "a" * 64
     normalized = normalize_suite_create(payload, owner_scope="org")
     assert normalized["runnerImageDigest"] == "sha256:" + "a" * 64
+
+
+def _target_payload_v2() -> dict:
+    return {
+        "targetKey": "agent",
+        "targetKind": "agent",
+        "version": "1",
+        "systemVersion": "1",
+        "subjectKind": "agent",
+        "subjectId": "agent",
+        "subjectVersion": "1",
+        "subjectDigest": "a" * 64,
+        "manifest": {
+            "schemaVersion": "2.0.0",
+            "inputs": {
+                "scenario_set": {
+                    "kind": "content_digest",
+                    "sha256": "b" * 64,
+                    "mediaType": "application/json",
+                    "sizeBytes": 128,
+                }
+            },
+        },
+    }
+
+
+def test_target_manifest_v2_accepts_only_digest_bound_inputs() -> None:
+    normalized = normalize_target_create(_target_payload_v2())
+
+    assert normalized["manifest"] == _target_payload_v2()["manifest"]
+    assert normalized["manifestDigest"] == canonical_sha256(normalized["manifest"])
+
+
+@pytest.mark.parametrize(
+    "media_type",
+    ["text/plain", "image/png", "audio/wav", "video/mp4"],
+)
+def test_target_manifest_v2_accepts_allowlisted_media_families(media_type: str) -> None:
+    payload = _target_payload_v2()
+    payload["manifest"]["inputs"]["scenario_set"]["mediaType"] = media_type
+
+    normalized = normalize_target_create(payload)
+
+    assert normalized["manifest"]["inputs"]["scenario_set"]["mediaType"] == media_type
+
+
+def test_target_manifest_v2_caps_inputs_at_32() -> None:
+    payload = _target_payload_v2()
+    payload["manifest"]["inputs"] = {
+        f"input_{index}": {"kind": "content_digest", "sha256": "b" * 64}
+        for index in range(33)
+    }
+
+    with pytest.raises(AssuranceContractValidationError) as caught:
+        normalize_target_create(payload)
+
+    assert caught.value.code == "target_input_limit_exceeded"
+
+
+@pytest.mark.parametrize(
+    "manifest",
+    [
+        {"inputs": {}},
+        {"schemaVersion": "1.0.0", "inputs": {}},
+        {"schemaVersion": "2.0.0", "inputs": {}, "metadata": {}},
+        {"schemaVersion": "2.0.0", "inputs": []},
+        {
+            "schemaVersion": "2.0.0",
+            "inputs": {"not a role": {"kind": "content_digest", "sha256": "b" * 64}},
+        },
+        {
+            "schemaVersion": "2.0.0",
+            "inputs": {"scenario": {"kind": "artifact_id", "sha256": "b" * 64}},
+        },
+        {
+            "schemaVersion": "2.0.0",
+            "inputs": {
+                "scenario": {
+                    "kind": "content_digest",
+                    "sha256": "b" * 64,
+                    "artifactId": "mutable",
+                }
+            },
+        },
+        {
+            "schemaVersion": "2.0.0",
+            "inputs": {
+                "scenario": {
+                    "kind": "content_digest",
+                    "sha256": "b" * 64,
+                    "mediaType": "text/html",
+                }
+            },
+        },
+        {
+            "schemaVersion": "2.0.0",
+            "inputs": {
+                "scenario": {
+                    "kind": "content_digest",
+                    "sha256": "b" * 64,
+                    "mediaType": None,
+                }
+            },
+        },
+        {
+            "schemaVersion": "2.0.0",
+            "inputs": {
+                "scenario": {
+                    "kind": "content_digest",
+                    "sha256": "b" * 64,
+                    "sizeBytes": None,
+                }
+            },
+        },
+    ],
+)
+def test_target_manifest_v2_rejects_open_or_mutable_shapes(manifest: dict) -> None:
+    payload = _target_payload_v2()
+    payload["manifest"] = manifest
+
+    with pytest.raises(AssuranceContractValidationError) as caught:
+        normalize_target_create(payload)
+
+    assert caught.value.code in {"invalid_target_manifest", "invalid_input_descriptor"}
+
+
+@pytest.mark.parametrize(
+    "schema",
+    [
+        {"type": "object"},
+        {
+            "type": "object",
+            "properties": {"label": {"type": "string"}},
+            "additionalProperties": False,
+        },
+        {
+            "type": "object",
+            "properties": {"label": {"type": "string", "pattern": "^safe$"}},
+            "additionalProperties": False,
+        },
+        {
+            "type": "object",
+            "properties": {"count": {"type": "integer", "minimum": 0}},
+            "additionalProperties": False,
+        },
+        {
+            "type": "object",
+            "properties": {"items": {"type": "array", "items": {"type": "boolean"}}},
+            "additionalProperties": False,
+        },
+        {
+            "type": "object",
+            "title": "caller-controlled annotation",
+            "additionalProperties": False,
+        },
+        {
+            "$defs": {"loop": {"$ref": "#/$defs/loop"}},
+            "type": "object",
+            "properties": {"value": {"$ref": "#/$defs/loop"}},
+            "additionalProperties": False,
+        },
+        {
+            "type": "object",
+            "properties": {"value": {"$ref": "#/$defs/missing"}},
+            "additionalProperties": False,
+        },
+        {
+            "type": "object",
+            "properties": {"value": {"$dynamicRef": "#/$defs/value"}},
+            "additionalProperties": False,
+        },
+    ],
+)
+def test_fairmind_safe_config_v1_rejects_non_executable_schema_features(schema: dict) -> None:
+    payload = _suite_payload()
+    payload["configurationSchema"] = schema
+    payload["configurationDefaults"] = {}
+
+    with pytest.raises(AssuranceContractValidationError) as caught:
+        normalize_suite_create(payload, owner_scope="org")
+
+    assert caught.value.code in {
+        "unsafe_configuration_schema",
+        "invalid_configuration_schema",
+        "remote_schema_reference_forbidden",
+    }
+
+
+def test_fairmind_safe_config_v1_accepts_closed_bounded_local_refs() -> None:
+    payload = _suite_payload()
+    payload["configurationSchema"] = {
+        "$defs": {
+            "threshold": {"type": "number", "minimum": 0, "maximum": 1},
+            "mode": {"type": "string", "enum": ["strict", "balanced"]},
+        },
+        "type": "object",
+        "properties": {
+            "threshold": {"$ref": "#/$defs/threshold"},
+            "mode": {"$ref": "#/$defs/mode"},
+            "enabled": {"type": "boolean"},
+            "checks": {
+                "type": "array",
+                "maxItems": 8,
+                "items": {"type": "string", "enum": ["safety", "privacy"]},
+            },
+        },
+        "required": ["threshold", "mode"],
+        "additionalProperties": False,
+    }
+    payload["configurationDefaults"] = {
+        "threshold": 0.5,
+        "mode": "balanced",
+        "enabled": True,
+        "checks": ["safety"],
+    }
+
+    normalized = normalize_suite_create(payload, owner_scope="org")
+
+    assert normalized["configurationDefaults"] == payload["configurationDefaults"]
+
+
+def test_fairmind_safe_config_allows_a_property_named_pattern() -> None:
+    payload = _suite_payload()
+    payload["configurationSchema"] = {
+        "type": "object",
+        "properties": {"pattern": {"type": "boolean"}},
+        "required": ["pattern"],
+        "additionalProperties": False,
+    }
+    payload["configurationDefaults"] = {"pattern": True}
+
+    assert normalize_suite_create(payload, owner_scope="org")["configurationDefaults"] == {
+        "pattern": True
+    }
+
+
+def test_fairmind_safe_config_rejects_mutual_local_reference_cycles() -> None:
+    payload = _suite_payload()
+    payload["configurationSchema"] = {
+        "$defs": {
+            "left": {"$ref": "#/$defs/right"},
+            "right": {"$ref": "#/$defs/left"},
+        },
+        "type": "object",
+        "properties": {"value": {"$ref": "#/$defs/left"}},
+        "additionalProperties": False,
+    }
+    payload["configurationDefaults"] = {}
+
+    with pytest.raises(AssuranceContractValidationError) as caught:
+        normalize_suite_create(payload, owner_scope="org")
+
+    assert caught.value.code == "unsafe_configuration_schema"
+
+
+def _expansion_dag(depth: int) -> dict:
+    definitions = {"node0": {"type": "boolean"}}
+    for index in range(1, depth + 1):
+        definitions[f"node{index}"] = {
+            "type": "object",
+            "properties": {
+                "left": {"$ref": f"#/$defs/node{index - 1}"},
+                "right": {"$ref": f"#/$defs/node{index - 1}"},
+            },
+            "additionalProperties": False,
+        }
+    return {
+        "$defs": definitions,
+        "type": "object",
+        "properties": {"root": {"$ref": f"#/$defs/node{depth}"}},
+        "additionalProperties": False,
+    }
+
+
+def test_fairmind_safe_config_bounds_acyclic_reference_expansion() -> None:
+    allowed = _suite_payload()
+    allowed["configurationSchema"] = _expansion_dag(5)
+    allowed["configurationDefaults"] = {}
+    assert normalize_suite_create(allowed, owner_scope="org")["configurationDefaults"] == {}
+
+    amplified = _suite_payload()
+    amplified["configurationSchema"] = _expansion_dag(13)
+    amplified["configurationDefaults"] = {}
+    with pytest.raises(AssuranceContractValidationError) as caught:
+        normalize_suite_create(amplified, owner_scope="org")
+    assert caught.value.code == "unsafe_configuration_schema"
+
+
+def test_suite_required_input_roles_are_capped_at_32() -> None:
+    payload = _suite_payload()
+    payload["requiredInputRoles"] = [f"input_{index}" for index in range(33)]
+
+    with pytest.raises(AssuranceContractValidationError) as caught:
+        normalize_suite_create(payload, owner_scope="org")
+
+    assert caught.value.code == "required_input_role_limit_exceeded"
+
+
+@pytest.mark.parametrize(
+    "budgets",
+    [
+        {"customCommand": 1},
+        {"maxCases": "200"},
+        {"maxCases": True},
+        {"maxCases": 0},
+        {"maxProcesses": 1.5},
+        {"maxDurationSeconds": float("inf")},
+    ],
+)
+def test_suite_budgets_are_a_closed_typed_numeric_contract(budgets: dict) -> None:
+    payload = _suite_payload()
+    payload["budgets"] = budgets
+
+    with pytest.raises(AssuranceContractValidationError) as caught:
+        normalize_suite_create(payload, owner_scope="org")
+
+    assert caught.value.code == "invalid_budgets"
+
+
+def test_suite_budgets_accept_versioned_resource_limits() -> None:
+    payload = _suite_payload()
+    payload["budgets"] = {
+        "maxCases": 200,
+        "maxAttempts": 3,
+        "maxDurationSeconds": 60.5,
+        "maxMemoryMiB": 1024,
+    }
+
+    assert normalize_suite_create(payload, owner_scope="org")["budgets"] == payload["budgets"]
+
+
+def test_structural_and_canonical_component_limits_reject_before_persistence() -> None:
+    target = _target_payload_v2()
+    target["manifest"]["inputs"] = {
+        f"input_{index}": {"kind": "content_digest", "sha256": "b" * 64}
+        for index in range(900)
+    }
+    with pytest.raises(AssuranceContractValidationError) as target_error:
+        normalize_target_create(target)
+    assert target_error.value.code == "target_input_limit_exceeded"
+
+    suite = _suite_payload()
+    suite["configurationSchema"] = {
+        "type": "object",
+        "properties": {
+            f"flag_{index}": {"type": "boolean"}
+            for index in range(2600)
+        },
+        "additionalProperties": False,
+    }
+    with pytest.raises(AssuranceContractValidationError) as schema_error:
+        normalize_suite_create(suite, owner_scope="org")
+    assert schema_error.value.code == "configuration_schema_too_large"
+
+
+def test_selected_configuration_byte_limits_are_per_suite_and_per_plan() -> None:
+    oversized = {
+        "contractVersion": "2.0.0",
+        "name": "plan",
+        "targetVersionId": "target",
+        "lifecyclePhases": ["pre_deploy"],
+        "executionDepth": "deep",
+        "enforcementMode": "human_approval",
+        "deliveryMode": "external_provider",
+        "trustPolicyVersionId": "trust",
+        "suites": [
+            {
+                "suiteVersionId": "suite",
+                "configuration": {"checks": [False] * 6000},
+            }
+        ],
+    }
+    with pytest.raises(AssuranceContractValidationError) as caught:
+        normalize_plan_create(oversized)
+    assert caught.value.code == "suite_configuration_too_large"
+
+
+def test_32_suite_configuration_aggregate_cannot_exceed_256_kib() -> None:
+    payload = {
+        "contractVersion": "2.0.0",
+        "name": "plan",
+        "targetVersionId": "target",
+        "lifecyclePhases": ["pre_deploy"],
+        "executionDepth": "deep",
+        "enforcementMode": "human_approval",
+        "deliveryMode": "external_provider",
+        "trustPolicyVersionId": "trust",
+        "suites": [
+            {
+                "suiteVersionId": f"suite-{index}",
+                "configuration": {"checks": [False] * 1400},
+            }
+            for index in range(32)
+        ],
+    }
+
+    with pytest.raises(AssuranceContractValidationError) as caught:
+        normalize_plan_create(payload)
+
+    assert caught.value.code == "plan_configuration_too_large"
+
+
+def test_canonical_size_helper_accepts_exact_limit_and_rejects_one_byte_more() -> None:
+    assert require_canonical_size(
+        "x" * 8,
+        maximum_bytes=10,
+        code="too_large",
+        message="too large",
+    ) == 10
+    with pytest.raises(AssuranceContractValidationError) as caught:
+        require_canonical_size(
+            "x" * 9,
+            maximum_bytes=10,
+            code="too_large",
+            message="too large",
+        )
+    assert caught.value.code == "too_large"
+
+
+def test_execution_envelope_enforces_variable_and_actual_byte_limits() -> None:
+    variable_oversized = _envelope_inputs()
+    variable_oversized["suites"][0]["configuration"] = {
+        "checks": [False] * 92000
+    }
+    with pytest.raises(AssuranceContractValidationError) as variable_error:
+        build_execution_envelope_v2(**variable_oversized)
+    assert variable_error.value.code == "envelope_variable_data_too_large"
+
+    actual_oversized = _envelope_inputs()
+    actual_oversized["target"]["padding"] = "x" * (513 * 1024)
+    with pytest.raises(AssuranceContractValidationError) as actual_error:
+        build_execution_envelope_v2(**actual_oversized)
+    assert actual_error.value.code in {
+        "envelope_variable_data_too_large",
+        "execution_envelope_too_large",
+    }

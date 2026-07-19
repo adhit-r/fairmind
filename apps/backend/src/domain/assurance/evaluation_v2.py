@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import hashlib
+import math
 import re
 from typing import Any, Mapping, Sequence
 
@@ -45,6 +46,64 @@ WORKER_TYPES = DELIVERY_MODES
 RUN_TRIGGERS = frozenset(
     {"manual", "ci", "scheduled", "release_gate", "incident", "integration_sync"}
 )
+TARGET_MANIFEST_SCHEMA_VERSION = CONTRACT_VERSION
+SAFE_CONFIGURATION_SCHEMA_POLICY = "fairmind-safe-config/v1"
+
+MAX_TARGET_MANIFEST_BYTES = 64 * 1024
+MAX_INPUT_DESCRIPTOR_BYTES = 1024
+MAX_CONFIGURATION_SCHEMA_BYTES = 64 * 1024
+MAX_CONFIGURATION_DEFAULTS_BYTES = 16 * 1024
+MAX_BUDGETS_BYTES = 8 * 1024
+MAX_SUITE_MANIFEST_BYTES = 96 * 1024
+MAX_SUITE_CONFIGURATION_BYTES = 16 * 1024
+MAX_PLAN_CONFIGURATION_BYTES = 256 * 1024
+MAX_PLAN_PROJECTION_BYTES = 384 * 1024
+MAX_ENVELOPE_VARIABLE_BYTES = 448 * 1024
+MAX_EXECUTION_ENVELOPE_BYTES = 512 * 1024
+MAX_MUTATION_DETAIL_BODY_BYTES = 768 * 1024
+MAX_SUITE_LIMITATIONS_BYTES = 8 * 1024
+MAX_RUN_LIMITATIONS_BYTES = 64 * 1024
+MAX_FAILURE_MESSAGE_BYTES = 2 * 1024
+
+MAX_SAFE_SCHEMA_NODES = 2048
+MAX_SAFE_SCHEMA_REFS = 256
+MAX_SAFE_SCHEMA_EXPANSION_STEPS = 4096
+MAX_SAFE_ARRAY_ITEMS = 10_000
+MAX_SAFE_ENUM_VALUES = 256
+
+_ASCII_IDENTIFIER = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,63}$")
+_ALLOWED_INPUT_MEDIA_TYPES = frozenset(
+    {
+        "application/json",
+        "application/x-ndjson",
+        "application/octet-stream",
+        "text/plain",
+        "text/csv",
+        "image/png",
+        "image/jpeg",
+        "image/webp",
+        "image/gif",
+        "image/tiff",
+        "audio/wav",
+        "audio/mpeg",
+        "audio/flac",
+        "audio/ogg",
+        "video/mp4",
+        "video/webm",
+    }
+)
+_BUDGET_LIMITS: dict[str, tuple[str, float, float]] = {
+    "maxCases": ("integer", 1, 1_000_000),
+    "maxAttempts": ("integer", 1, 100),
+    "maxDurationSeconds": ("number", 0, 86_400),
+    "maxCpuSeconds": ("number", 0, 86_400),
+    "maxMemoryMiB": ("integer", 1, 1_048_576),
+    "maxProcesses": ("integer", 1, 4_096),
+    "maxDiskMiB": ("integer", 1, 1_048_576),
+    "maxInputBytes": ("integer", 1, 1_099_511_627_776),
+    "maxOutputBytes": ("integer", 1, 1_099_511_627_776),
+    "maxCostUsd": ("number_or_zero", 0, 1_000_000),
+}
 _DENIED_DATA_KEYS = frozenset(
     {
         "secret",
@@ -73,9 +132,7 @@ _DENIED_DATA_KEYS = frozenset(
         "rawoutput",
     }
 )
-_INPUT_DESCRIPTOR_KEYS = frozenset(
-    {"artifactId", "digest", "sha256", "mediaType", "sizeBytes", "version", "objectVersion"}
-)
+_INPUT_DESCRIPTOR_KEYS = frozenset({"kind", "sha256", "mediaType", "sizeBytes"})
 
 
 class AssuranceContractValidationError(ValueError):
@@ -110,6 +167,29 @@ def canonical_json(value: Any) -> str:
 
 def canonical_sha256(value: Any) -> str:
     return hashlib.sha256(canonical_json_bytes(value)).hexdigest()
+
+
+def require_canonical_size(
+    value: Any,
+    *,
+    maximum_bytes: int,
+    code: str,
+    message: str,
+) -> int:
+    """Reject a canonical aggregate before it can amplify storage or responses."""
+    size = len(canonical_json_bytes(value))
+    if size > maximum_bytes:
+        raise AssuranceContractValidationError(code, message)
+    return size
+
+
+def validate_mutation_detail_body(value: Any) -> None:
+    require_canonical_size(
+        value,
+        maximum_bytes=MAX_MUTATION_DETAIL_BODY_BYTES,
+        code="mutation_detail_body_too_large",
+        message="The canonical mutation or detail body exceeds 768 KiB.",
+    )
 
 
 def reject_sensitive_keys(value: Any, *, path: str = "value") -> None:
@@ -181,15 +261,252 @@ def reject_remote_schema_references(value: Any, *, path: str = "configurationSch
             reject_remote_schema_references(child, path=f"{path}[{index}]")
 
 
+def _unsafe_schema() -> AssuranceContractValidationError:
+    return AssuranceContractValidationError(
+        "unsafe_configuration_schema",
+        f"The configuration schema is outside {SAFE_CONFIGURATION_SCHEMA_POLICY}.",
+    )
+
+
+def _schema_number(value: Any) -> bool:
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+        and abs(value) < 2**53
+    )
+
+
+def _schema_children(node: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    children: list[Mapping[str, Any]] = []
+    definitions = node.get("$defs")
+    if isinstance(definitions, dict):
+        children.extend(value for value in definitions.values() if isinstance(value, dict))
+    properties = node.get("properties")
+    if isinstance(properties, dict):
+        children.extend(value for value in properties.values() if isinstance(value, dict))
+    items = node.get("items")
+    if isinstance(items, dict):
+        children.append(items)
+    return children
+
+
+def _canonical_local_definition_pointer(
+    schema: Mapping[str, Any], reference: Any
+) -> tuple[str, Mapping[str, Any]]:
+    if not isinstance(reference, str) or not reference.startswith("#/") or "%" in reference:
+        raise _unsafe_schema()
+    raw_segments = reference[2:].split("/")
+    decoded: list[str] = []
+    for raw in raw_segments:
+        index = 0
+        while index < len(raw):
+            if raw[index] == "~":
+                if index + 1 >= len(raw) or raw[index + 1] not in {"0", "1"}:
+                    raise _unsafe_schema()
+                index += 2
+            else:
+                index += 1
+        value = raw.replace("~1", "/").replace("~0", "~")
+        canonical = value.replace("~", "~0").replace("/", "~1")
+        if canonical != raw:
+            raise _unsafe_schema()
+        decoded.append(value)
+    if len(decoded) != 2 or decoded[0] != "$defs" or not _ASCII_IDENTIFIER.fullmatch(decoded[1]):
+        raise _unsafe_schema()
+    definitions = schema.get("$defs")
+    if not isinstance(definitions, dict):
+        raise _unsafe_schema()
+    target = definitions.get(decoded[1])
+    if not isinstance(target, dict):
+        raise _unsafe_schema()
+    return reference, target
+
+
+def validate_safe_configuration_schema(schema: Mapping[str, Any]) -> None:
+    """Enforce the bounded, executable fairmind-safe-config/v1 subset."""
+    require_canonical_size(
+        schema,
+        maximum_bytes=MAX_CONFIGURATION_SCHEMA_BYTES,
+        code="configuration_schema_too_large",
+        message="The canonical configuration schema exceeds 64 KiB.",
+    )
+    reject_remote_schema_references(schema)
+    node_count = 0
+    references: list[str] = []
+
+    def inspect(node: Any) -> None:
+        nonlocal node_count
+        if not isinstance(node, dict):
+            raise _unsafe_schema()
+        node_count += 1
+        if node_count > MAX_SAFE_SCHEMA_NODES:
+            raise _unsafe_schema()
+        if "$ref" in node:
+            if set(node) != {"$ref"}:
+                raise _unsafe_schema()
+            reference, _ = _canonical_local_definition_pointer(schema, node["$ref"])
+            references.append(reference)
+            if len(references) > MAX_SAFE_SCHEMA_REFS:
+                raise _unsafe_schema()
+            return
+
+        definitions = node.get("$defs")
+        if definitions is not None:
+            if (
+                not isinstance(definitions, dict)
+                or len(definitions) > MAX_SAFE_SCHEMA_REFS
+                or any(
+                    not isinstance(name, str)
+                    or _ASCII_IDENTIFIER.fullmatch(name) is None
+                    or not isinstance(child, dict)
+                    for name, child in definitions.items()
+                )
+            ):
+                raise _unsafe_schema()
+
+        schema_type = node.get("type")
+        common = {"type", "$defs"}
+        if schema_type == "object":
+            allowed = common | {
+                "properties",
+                "required",
+                "additionalProperties",
+                "minProperties",
+                "maxProperties",
+            }
+            if any(key not in allowed for key in node):
+                raise _unsafe_schema()
+            properties = node.get("properties", {})
+            if (
+                not isinstance(properties, dict)
+                or node.get("additionalProperties") is not False
+                or any(
+                    not isinstance(name, str)
+                    or _ASCII_IDENTIFIER.fullmatch(name) is None
+                    or not isinstance(child, dict)
+                    for name, child in properties.items()
+                )
+            ):
+                raise _unsafe_schema()
+            required = node.get("required", [])
+            if (
+                not isinstance(required, list)
+                or any(not isinstance(name, str) or name not in properties for name in required)
+                or len(set(required)) != len(required)
+            ):
+                raise _unsafe_schema()
+            minimum_properties = node.get("minProperties", 0)
+            maximum_properties = node.get("maxProperties", len(properties))
+            if (
+                not isinstance(minimum_properties, int)
+                or isinstance(minimum_properties, bool)
+                or not isinstance(maximum_properties, int)
+                or isinstance(maximum_properties, bool)
+                or minimum_properties < 0
+                or maximum_properties < minimum_properties
+                or maximum_properties > len(properties)
+            ):
+                raise _unsafe_schema()
+        elif schema_type in {"number", "integer"}:
+            allowed = common | {"minimum", "maximum"}
+            if (
+                any(key not in allowed for key in node)
+                or not _schema_number(node.get("minimum"))
+                or not _schema_number(node.get("maximum"))
+                or node["minimum"] > node["maximum"]
+            ):
+                raise _unsafe_schema()
+            if schema_type == "integer" and (
+                not isinstance(node["minimum"], int)
+                or isinstance(node["minimum"], bool)
+                or not isinstance(node["maximum"], int)
+                or isinstance(node["maximum"], bool)
+            ):
+                raise _unsafe_schema()
+        elif schema_type == "boolean":
+            allowed = common | {"const"}
+            if any(key not in allowed for key in node) or (
+                "const" in node and not isinstance(node["const"], bool)
+            ):
+                raise _unsafe_schema()
+        elif schema_type == "string":
+            allowed = common | {"enum", "const"}
+            if any(key not in allowed for key in node) or (("enum" in node) == ("const" in node)):
+                raise _unsafe_schema()
+            if "enum" in node:
+                values = node["enum"]
+                if (
+                    not isinstance(values, list)
+                    or not 1 <= len(values) <= MAX_SAFE_ENUM_VALUES
+                    or any(
+                        not isinstance(value, str)
+                        or not value
+                        or len(value.encode("utf-8")) > 512
+                        for value in values
+                    )
+                    or len(set(values)) != len(values)
+                ):
+                    raise _unsafe_schema()
+            else:
+                value = node["const"]
+                if not isinstance(value, str) or not value or len(value.encode("utf-8")) > 512:
+                    raise _unsafe_schema()
+        elif schema_type == "array":
+            allowed = common | {"items", "minItems", "maxItems", "uniqueItems"}
+            minimum_items = node.get("minItems", 0)
+            maximum_items = node.get("maxItems")
+            if (
+                any(key not in allowed for key in node)
+                or not isinstance(node.get("items"), dict)
+                or not isinstance(minimum_items, int)
+                or isinstance(minimum_items, bool)
+                or not isinstance(maximum_items, int)
+                or isinstance(maximum_items, bool)
+                or minimum_items < 0
+                or maximum_items < minimum_items
+                or maximum_items > MAX_SAFE_ARRAY_ITEMS
+                or ("uniqueItems" in node and not isinstance(node["uniqueItems"], bool))
+            ):
+                raise _unsafe_schema()
+        else:
+            raise _unsafe_schema()
+
+        for child in _schema_children(node):
+            inspect(child)
+
+    try:
+        inspect(schema)
+        expansion_steps = 0
+
+        def expand(node: Mapping[str, Any], stack: tuple[str, ...]) -> None:
+            nonlocal expansion_steps
+            expansion_steps += 1
+            if expansion_steps > MAX_SAFE_SCHEMA_EXPANSION_STEPS:
+                raise _unsafe_schema()
+            if "$ref" in node:
+                reference, target = _canonical_local_definition_pointer(schema, node["$ref"])
+                if reference in stack:
+                    raise _unsafe_schema()
+                expand(target, (*stack, reference))
+                return
+            for child in _schema_children(node):
+                expand(child, stack)
+
+        expand(schema, ())
+    except RecursionError as error:
+        raise _unsafe_schema() from error
+
+
 _NO_NETWORK_SCHEMA_REGISTRY: Registry = Registry()
 
 
 def strict_schema_validator(schema: Mapping[str, Any]) -> Draft202012Validator:
     """Build a Draft 2020-12 validator that cannot retrieve remote resources."""
-    reject_remote_schema_references(schema)
+    validate_safe_configuration_schema(schema)
     try:
         Draft202012Validator.check_schema(schema)
-    except SchemaError as error:
+    except (SchemaError, RecursionError) as error:
         raise AssuranceContractValidationError(
             "invalid_configuration_schema",
             "The configuration schema is invalid.",
@@ -217,71 +534,86 @@ def validate_suite_configuration(
             "invalid_configuration_schema",
             "The configuration schema contains an unresolvable local reference.",
         ) from error
+    except RecursionError as error:
+        raise AssuranceContractValidationError(
+            "unsafe_configuration_schema",
+            f"The configuration schema is outside {SAFE_CONFIGURATION_SCHEMA_POLICY}.",
+        ) from error
 
 
 def validated_manifest_inputs(manifest: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
-    """Return strictly opaque, non-empty input descriptors from a target manifest."""
-    raw = manifest.get("inputs", {})
-    if isinstance(raw, list):
-        converted: dict[str, Any] = {}
-        for item in raw:
-            if not isinstance(item, dict) or not isinstance(item.get("role"), str):
-                raise AssuranceContractValidationError(
-                    "invalid_input_descriptor", "Manifest input entries require a unique role."
-                )
-            role = item["role"]
-            if role in converted:
-                raise AssuranceContractValidationError(
-                    "invalid_input_descriptor", "Manifest input roles must be unique."
-                )
-            converted[role] = {key: value for key, value in item.items() if key != "role"}
-        raw = converted
+    """Validate and return the closed TargetManifestV2 content-digest inputs."""
+    if set(manifest) != {"schemaVersion", "inputs"} or manifest.get(
+        "schemaVersion"
+    ) != TARGET_MANIFEST_SCHEMA_VERSION:
+        raise AssuranceContractValidationError(
+            "invalid_target_manifest",
+            'Target manifest must contain only schemaVersion "2.0.0" and inputs.',
+        )
+    raw = manifest.get("inputs")
     if not isinstance(raw, dict):
         raise AssuranceContractValidationError(
-            "invalid_input_descriptor", "manifest.inputs must be an object or role list."
+            "invalid_target_manifest", "Target manifest inputs must be an object."
+        )
+    if len(raw) > 32:
+        raise AssuranceContractValidationError(
+            "target_input_limit_exceeded", "Target manifests support at most 32 inputs."
         )
     result: dict[str, dict[str, Any]] = {}
     for role, descriptor in raw.items():
-        if not isinstance(role, str) or not role or not isinstance(descriptor, dict):
-            raise AssuranceContractValidationError(
-                "invalid_input_descriptor", "Each input role requires an opaque descriptor object."
-            )
-        if not descriptor or any(key not in _INPUT_DESCRIPTOR_KEYS for key in descriptor):
-            raise AssuranceContractValidationError(
-                "invalid_input_descriptor",
-                f"Input role {role} contains unsupported descriptor fields.",
-            )
-        content_digests = [
-            descriptor.get(key) for key in ("sha256", "digest") if descriptor.get(key)
-        ]
-        if not content_digests:
+        if (
+            not isinstance(role, str)
+            or _ASCII_IDENTIFIER.fullmatch(role) is None
+            or not isinstance(descriptor, dict)
+        ):
             raise AssuranceContractValidationError(
                 "invalid_input_descriptor",
-                f"Input role {role} requires an immutable content digest.",
+                "Each input requires a bounded ASCII role and descriptor object.",
             )
-        for key, item in descriptor.items():
-            if key == "sizeBytes":
-                if not isinstance(item, int) or isinstance(item, bool) or item < 0:
-                    raise AssuranceContractValidationError(
-                        "invalid_input_descriptor", f"Input role {role} has an invalid sizeBytes."
-                    )
-            elif not isinstance(item, str) or not item:
-                raise AssuranceContractValidationError(
-                    "invalid_input_descriptor",
-                    f"Input role {role} descriptors must be scalar strings.",
-                )
-            if key in {"sha256", "digest"} and (
-                len(item) != 64 or any(character not in "0123456789abcdef" for character in item)
-            ):
-                raise AssuranceContractValidationError(
-                    "invalid_input_descriptor", f"Input role {role} has an invalid digest."
-                )
-        if len(content_digests) == 2 and content_digests[0] != content_digests[1]:
+        if (
+            set(descriptor) - _INPUT_DESCRIPTOR_KEYS
+            or not {"kind", "sha256"}.issubset(descriptor)
+            or descriptor.get("kind") != "content_digest"
+        ):
             raise AssuranceContractValidationError(
                 "invalid_input_descriptor",
-                f"Input role {role} has conflicting content digests.",
+                "An input descriptor violates the closed content-digest contract.",
             )
+        digest = descriptor.get("sha256")
+        if not isinstance(digest, str) or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+            raise AssuranceContractValidationError(
+                "invalid_input_descriptor",
+                "An input descriptor requires a lowercase SHA-256 content digest.",
+            )
+        media_type = descriptor.get("mediaType")
+        if "mediaType" in descriptor and media_type not in _ALLOWED_INPUT_MEDIA_TYPES:
+            raise AssuranceContractValidationError(
+                "invalid_input_descriptor",
+                "An input descriptor uses an unsupported media type.",
+            )
+        size = descriptor.get("sizeBytes")
+        if "sizeBytes" in descriptor and (
+            not isinstance(size, int)
+            or isinstance(size, bool)
+            or size < 0
+            or size >= 2**53
+        ):
+            raise AssuranceContractValidationError(
+                "invalid_input_descriptor", "An input descriptor has an invalid sizeBytes value."
+            )
+        require_canonical_size(
+            descriptor,
+            maximum_bytes=MAX_INPUT_DESCRIPTOR_BYTES,
+            code="input_descriptor_too_large",
+            message="A canonical target input descriptor exceeds 1 KiB.",
+        )
         result[role] = dict(descriptor)
+    require_canonical_size(
+        manifest,
+        maximum_bytes=MAX_TARGET_MANIFEST_BYTES,
+        code="target_manifest_too_large",
+        message="The canonical target manifest exceeds 64 KiB.",
+    )
     return result
 
 
@@ -302,6 +634,8 @@ def _string_list(
         not isinstance(value, list)
         or not value
         or any(not isinstance(item, str) or not item for item in value)
+        or len(value) > 64
+        or any(len(item.encode("utf-8")) > 200 for item in value)
         or len(set(value)) != len(value)
         or (allowed is not None and any(item not in allowed for item in value))
     ):
@@ -309,6 +643,47 @@ def _string_list(
             "invalid_request", f"{key} must contain distinct supported values."
         )
     return list(value)
+
+
+def validate_selected_configuration(configuration: Any) -> int:
+    if not isinstance(configuration, dict):
+        raise AssuranceContractValidationError(
+            "invalid_suite_configuration", "configuration must be an object."
+        )
+    reject_sensitive_keys(configuration, path="suite.configuration")
+    return require_canonical_size(
+        configuration,
+        maximum_bytes=MAX_SUITE_CONFIGURATION_BYTES,
+        code="suite_configuration_too_large",
+        message="A canonical suite configuration exceeds 16 KiB.",
+    )
+
+
+def validate_suite_budgets(budgets: Any) -> None:
+    if not isinstance(budgets, dict) or any(key not in _BUDGET_LIMITS for key in budgets):
+        raise AssuranceContractValidationError(
+            "invalid_budgets", "budgets must use the closed numeric resource contract."
+        )
+    for key, value in budgets.items():
+        kind, minimum, maximum = _BUDGET_LIMITS[key]
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+            or value < minimum
+            or value > maximum
+            or (minimum == 0 and kind == "number" and value <= 0)
+            or (kind == "integer" and not isinstance(value, int))
+        ):
+            raise AssuranceContractValidationError(
+                "invalid_budgets", "budgets must use the closed numeric resource contract."
+            )
+    require_canonical_size(
+        budgets,
+        maximum_bytes=MAX_BUDGETS_BYTES,
+        code="budgets_too_large",
+        message="The canonical suite budgets exceed 8 KiB.",
+    )
 
 
 def normalize_target_create(payload: Mapping[str, Any]) -> dict[str, Any]:
@@ -376,10 +751,16 @@ def normalize_suite_create(payload: Mapping[str, Any], *, owner_scope: str) -> d
     reject_sensitive_keys(schema, path="configurationSchema")
     reject_sensitive_keys(defaults, path="configurationDefaults")
     reject_sensitive_keys(budgets, path="budgets")
+    require_canonical_size(
+        defaults,
+        maximum_bytes=MAX_CONFIGURATION_DEFAULTS_BYTES,
+        code="configuration_defaults_too_large",
+        message="The canonical configuration defaults exceed 16 KiB.",
+    )
     try:
         validate_suite_configuration(schema, defaults)
     except AssuranceContractValidationError as error:
-        if error.code == "remote_schema_reference_forbidden":
+        if error.code != "invalid_suite_configuration":
             raise
         raise AssuranceContractValidationError(
             "invalid_configuration_schema",
@@ -387,14 +768,22 @@ def normalize_suite_create(payload: Mapping[str, Any], *, owner_scope: str) -> d
         ) from error
     if (
         not isinstance(roles, list)
-        or any(not isinstance(item, str) or not item for item in roles)
+        or len(roles) > 32
+        or any(
+            not isinstance(item, str) or _ASCII_IDENTIFIER.fullmatch(item) is None
+            for item in roles
+        )
         or len(set(roles)) != len(roles)
     ):
+        if isinstance(roles, list) and len(roles) > 32:
+            raise AssuranceContractValidationError(
+                "required_input_role_limit_exceeded",
+                "Suites support at most 32 required input roles.",
+            )
         raise AssuranceContractValidationError(
             "invalid_required_input_roles", "requiredInputRoles must be distinct strings."
         )
-    if not isinstance(budgets, dict):
-        raise AssuranceContractValidationError("invalid_budgets", "budgets must be an object.")
+    validate_suite_budgets(budgets)
     runner_image = payload.get("runnerImageDigest")
     if runner_image is not None and (
         not isinstance(runner_image, str)
@@ -421,6 +810,12 @@ def normalize_suite_create(payload: Mapping[str, Any], *, owner_scope: str) -> d
         "budgets": budgets,
         "resultContractVersion": result_contract,
     }
+    require_canonical_size(
+        manifest,
+        maximum_bytes=MAX_SUITE_MANIFEST_BYTES,
+        code="suite_manifest_too_large",
+        message="The canonical suite manifest exceeds 96 KiB.",
+    )
     return {
         "namespace": namespace,
         "name": name,
@@ -472,6 +867,8 @@ def normalize_plan_create(payload: Mapping[str, Any]) -> dict[str, Any]:
         )
     normalized: list[dict[str, Any]] = []
     identifiers: set[str] = set()
+    configuration_bytes = 0
+    provided_configurations: list[dict[str, Any]] = []
     for selection in selections:
         if not isinstance(selection, dict):
             raise AssuranceContractValidationError(
@@ -490,7 +887,13 @@ def normalize_plan_create(payload: Mapping[str, Any]) -> dict[str, Any]:
                 "invalid_suite_configuration", "configuration must be an object."
             )
         if configuration_present:
-            reject_sensitive_keys(configuration, path="suite.configuration")
+            configuration_bytes += validate_selected_configuration(configuration)
+            provided_configurations.append(configuration)
+            if configuration_bytes > MAX_PLAN_CONFIGURATION_BYTES:
+                raise AssuranceContractValidationError(
+                    "plan_configuration_too_large",
+                    "The canonical selected configurations exceed 256 KiB per plan.",
+                )
         normalized.append(
             {
                 "suiteVersionId": suite_id,
@@ -498,6 +901,12 @@ def normalize_plan_create(payload: Mapping[str, Any]) -> dict[str, Any]:
                 "configuration": configuration,
             }
         )
+    require_canonical_size(
+        provided_configurations,
+        maximum_bytes=MAX_PLAN_CONFIGURATION_BYTES,
+        code="plan_configuration_too_large",
+        message="The canonical selected configurations exceed 256 KiB per plan.",
+    )
     return {
         "contractVersion": CONTRACT_VERSION,
         "name": _required_text(payload, "name", maximum=120),
@@ -568,6 +977,9 @@ _BLOCKER_MESSAGES = {
     "runner_image_missing": "A FairMind-worker suite has no immutable runner image digest.",
     "worker_unavailable": "FairMind workers are disabled in this release slice.",
     "automatic_enforcement_disabled": "Automatic enforcement is disabled in this release slice.",
+    "execution_envelope_size_exceeded": (
+        "The planned execution envelope exceeds the bounded assurance contract."
+    ),
 }
 
 
@@ -586,6 +998,93 @@ def _manifest_inputs(target: Mapping[str, Any]) -> Mapping[str, Any]:
         return validated_manifest_inputs(manifest)
     except AssuranceContractValidationError:
         return {}
+
+
+def execution_envelope_variable_projection(
+    *,
+    target: Mapping[str, Any],
+    trust_policy: Mapping[str, Any],
+    suites: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    return {
+        "target": dict(target),
+        "trustPolicy": dict(trust_policy),
+        "suites": [dict(suite) for suite in suites],
+    }
+
+
+def validate_execution_envelope_variable_size(
+    *,
+    target: Mapping[str, Any],
+    trust_policy: Mapping[str, Any],
+    suites: Sequence[Mapping[str, Any]],
+) -> None:
+    require_canonical_size(
+        execution_envelope_variable_projection(
+            target=target,
+            trust_policy=trust_policy,
+            suites=suites,
+        ),
+        maximum_bytes=MAX_ENVELOPE_VARIABLE_BYTES,
+        code="envelope_variable_data_too_large",
+        message="The canonical variable execution-envelope data exceeds 448 KiB.",
+    )
+
+
+def _preflight_envelope_variable_projection(
+    *,
+    target: Mapping[str, Any],
+    trust_policy: Mapping[str, Any],
+    suites: Sequence[Mapping[str, Any]],
+) -> tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]]]:
+    inputs = _manifest_inputs(target)
+    target_binding = {
+        "id": target.get("id"),
+        "targetKey": target.get("target_key"),
+        "targetKind": target.get("target_kind"),
+        "version": target.get("version"),
+        "systemVersion": target.get("system_version"),
+        "subjectKind": target.get("subject_kind"),
+        "subjectId": target.get("subject_id"),
+        "subjectVersion": target.get("subject_version"),
+        "subjectDigest": target.get("subject_digest"),
+        "deploymentId": target.get("deployment_id"),
+        "connectorBindingId": target.get("connector_binding_id"),
+        "manifestDigest": target.get("manifest_digest"),
+    }
+    trust_binding = {
+        "id": trust_policy.get("id"),
+        "version": trust_policy.get("version"),
+        "policyHash": trust_policy.get("policy_hash"),
+    }
+    suite_bindings = []
+    placeholder = "00000000-0000-0000-0000-000000000000"
+    for suite in suites:
+        required_roles = list(suite.get("required_input_roles", []))
+        suite_bindings.append(
+            {
+                "suiteExecutionId": placeholder,
+                "suiteVersionId": suite.get("id"),
+                "ownerScope": suite.get("owner_scope"),
+                "suiteRef": suite.get("suite_ref"),
+                "manifestDigest": suite.get("manifest_digest"),
+                "workerType": suite.get("worker_type"),
+                "runnerImageDigest": suite.get("runner_image_digest"),
+                "adapterName": suite.get("adapter_name"),
+                "adapterVersion": suite.get("adapter_version"),
+                "resultContractVersion": suite.get("result_contract_version"),
+                "configuration": suite.get("configuration"),
+                "configurationHash": suite.get("configuration_hash"),
+                "inputRoles": required_roles,
+                "budgets": suite.get("budgets"),
+                "inputs": {
+                    role: inputs[role]
+                    for role in required_roles
+                    if role in inputs
+                },
+            }
+        )
+    return target_binding, trust_binding, suite_bindings
 
 
 def evaluate_preflight(
@@ -649,6 +1148,23 @@ def evaluate_preflight(
             suite_blocker("required_input_role_missing")
         if suite.get("worker_type") == "fairmind_worker" and not suite.get("runner_image_digest"):
             suite_blocker("runner_image_missing")
+    if target and trust_policy:
+        target_binding, trust_binding, suite_bindings = _preflight_envelope_variable_projection(
+            target=target,
+            trust_policy=trust_policy,
+            suites=suites,
+        )
+        try:
+            validate_execution_envelope_variable_size(
+                target=target_binding,
+                trust_policy=trust_binding,
+                suites=suite_bindings,
+            )
+        except AssuranceContractValidationError as error:
+            if error.code == "envelope_variable_data_too_large":
+                global_blocker("execution_envelope_size_exceeded")
+            else:
+                raise
     return sorted(
         blockers,
         key=lambda item: (
@@ -668,7 +1184,7 @@ def plan_content_projection(
     trust_policy: Mapping[str, Any],
     suites: Sequence[Mapping[str, Any]],
 ) -> dict[str, Any]:
-    return {
+    projection = {
         "contractVersion": CONTRACT_VERSION,
         "organizationId": org_id,
         "workspaceId": workspace_id,
@@ -709,6 +1225,13 @@ def plan_content_projection(
             for suite in suites
         ],
     }
+    require_canonical_size(
+        projection,
+        maximum_bytes=MAX_PLAN_PROJECTION_BYTES,
+        code="plan_projection_too_large",
+        message="The canonical plan projection exceeds 384 KiB.",
+    )
+    return projection
 
 
 @dataclass(frozen=True)
@@ -779,6 +1302,11 @@ def build_execution_envelope_v2(
     requested_at: str,
     suites: Sequence[Mapping[str, Any]],
 ) -> tuple[dict[str, Any], str, str]:
+    validate_execution_envelope_variable_size(
+        target=target,
+        trust_policy=trust_policy,
+        suites=suites,
+    )
     envelope = ExecutionEnvelopeV2(
         envelope_id=envelope_id,
         run_id=run_id,
@@ -800,4 +1328,9 @@ def build_execution_envelope_v2(
         suites=suites,
     ).projection()
     encoded_bytes = canonical_json_bytes(envelope)
+    if len(encoded_bytes) > MAX_EXECUTION_ENVELOPE_BYTES:
+        raise AssuranceContractValidationError(
+            "execution_envelope_too_large",
+            "The canonical execution envelope exceeds 512 KiB.",
+        )
     return envelope, encoded_bytes.decode("utf-8"), hashlib.sha256(encoded_bytes).hexdigest()

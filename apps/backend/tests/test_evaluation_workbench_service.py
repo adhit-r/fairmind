@@ -37,7 +37,11 @@ def _target(**overrides) -> dict:
         "status": "active",
         "target_kind": "agent",
         "subject_kind": "agent",
-        "manifest_json": '{"inputs":{"scenario_set":{"sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}}',
+        "manifest_json": (
+            '{"inputs":{"scenario_set":{"kind":"content_digest","sha256":'
+            '"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},'
+            '"schemaVersion":"2.0.0"}'
+        ),
     }
     value.update(overrides)
     return value
@@ -59,7 +63,9 @@ def _suite(**overrides) -> dict:
         "configuration_schema": {
             "type": "object",
             "required": ["threshold"],
-            "properties": {"threshold": {"type": "number"}},
+            "properties": {
+                "threshold": {"type": "number", "minimum": 0, "maximum": 1}
+            },
             "additionalProperties": False,
         },
         "required_input_roles": ["scenario_set"],
@@ -183,3 +189,74 @@ def test_any_fairmind_worker_suite_blocks_even_under_external_delivery() -> None
         lifecycle_phase="pre_deploy",
     )
     assert "worker_unavailable" in [item.code for item in blockers]
+
+
+def test_preflight_blocks_an_execution_envelope_over_448_kib() -> None:
+    roles = [f"input_{index:02d}" for index in range(32)]
+    inputs = {
+        role: {
+            "kind": "content_digest",
+            "sha256": "a" * 64,
+            "mediaType": "video/mp4",
+            "sizeBytes": 2**53 - 1,
+        }
+        for role in roles
+    }
+    configuration = {"checks": [False] * 1360}
+    configuration_schema = {
+        "type": "object",
+        "properties": {
+            "checks": {
+                "type": "array",
+                "maxItems": 1360,
+                "items": {"type": "boolean"},
+            }
+        },
+        "required": ["checks"],
+        "additionalProperties": False,
+    }
+    target = _target(
+        target_key="agent-prod",
+        version="1.0.0",
+        system_version="2026.07",
+        subject_id="agent-prod",
+        subject_version="sha-1",
+        subject_digest="b" * 64,
+        deployment_id=None,
+        connector_binding_id=None,
+        manifest={"schemaVersion": "2.0.0", "inputs": inputs},
+        manifest_digest="c" * 64,
+    )
+    suites = [
+        _suite(
+            id=f"suite-{index}",
+            ordinal=index,
+            owner_scope="org-1",
+            suite_ref=f"fairmind/suite-{index}@1.0.0",
+            manifest_digest="d" * 64,
+            adapter_name="inspect",
+            adapter_version="1.0.0",
+            result_contract_version="1.0.0",
+            configuration=configuration,
+            configuration_hash="e" * 64,
+            configuration_schema=configuration_schema,
+            required_input_roles=roles,
+            budgets={"maxCases": 200},
+        )
+        for index in range(32)
+    ]
+
+    blockers = evaluate_preflight(
+        plan=_plan(),
+        target=target,
+        trust_policy={
+            "id": "trust-a",
+            "version": "1.0.0",
+            "policy_hash": "f" * 64,
+            "status": "active",
+        },
+        suites=suites,
+        lifecycle_phase="pre_deploy",
+    )
+
+    assert "execution_envelope_size_exceeded" in [item.code for item in blockers]
