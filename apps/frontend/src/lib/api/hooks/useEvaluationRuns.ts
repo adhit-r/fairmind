@@ -219,6 +219,7 @@ class DefaultEvaluationRunsController implements EvaluationRunsController {
   private planGeneration = 0
   private runGeneration = 0
   private detailGeneration = 0
+  private fullRefreshGeneration = 0
   private readonly listeners = new Set<() => void>()
 
   constructor(private readonly client: EvaluationApiClient) {}
@@ -257,6 +258,7 @@ class DefaultEvaluationRunsController implements EvaluationRunsController {
     this.planGeneration += 1
     this.runGeneration += 1
     this.detailGeneration += 1
+    this.fullRefreshGeneration += 1
     this.scope = orgId && systemId ? { orgId, systemId } : null
     this.publish(emptySnapshot())
 
@@ -273,31 +275,41 @@ class DefaultEvaluationRunsController implements EvaluationRunsController {
     const scopeGeneration = this.scopeGeneration
     const planGeneration = ++this.planGeneration
     const runGeneration = ++this.runGeneration
+    const fullRefreshGeneration = ++this.fullRefreshGeneration
     this.publish({ ...this.snapshot, loading: true, error: null })
 
-    try {
-      const [plansResponse, runsResponse] = await Promise.all([
-        this.client.get<unknown>(API_ENDPOINTS.aiGovernance.evaluationPlans(scope.orgId, scope.systemId)),
-        this.client.get<unknown>(API_ENDPOINTS.aiGovernance.evaluationRuns(scope.orgId, scope.systemId)),
-      ])
-      const plans = responseData(plansResponse, evaluationPlanListSchema)
-      const runs = responseData(runsResponse, evaluationRunListSchema)
-      if (
-        this.scopeIsCurrent(scope, scopeGeneration)
-        && planGeneration === this.planGeneration
-        && runGeneration === this.runGeneration
-      ) {
-        this.publish({ plans, runs, loading: false, error: null })
-      }
-    } catch (reason) {
-      if (
-        this.scopeIsCurrent(scope, scopeGeneration)
-        && planGeneration === this.planGeneration
-        && runGeneration === this.runGeneration
-      ) {
-        this.publish({ plans: [], runs: [], loading: false, error: asError(reason) })
+    const [plansResult, runsResult] = await Promise.allSettled([
+      this.client.get<unknown>(API_ENDPOINTS.aiGovernance.evaluationPlans(scope.orgId, scope.systemId)),
+      this.client.get<unknown>(API_ENDPOINTS.aiGovernance.evaluationRuns(scope.orgId, scope.systemId)),
+    ])
+    if (
+      !this.scopeIsCurrent(scope, scopeGeneration)
+      || fullRefreshGeneration !== this.fullRefreshGeneration
+    ) return
+
+    let nextSnapshot = this.snapshot
+    let nextError = nextSnapshot.error
+    if (planGeneration === this.planGeneration) {
+      try {
+        if (plansResult.status === 'rejected') throw plansResult.reason
+        const plans = responseData(plansResult.value, evaluationPlanListSchema)
+        nextSnapshot = { ...nextSnapshot, plans }
+      } catch (reason) {
+        nextSnapshot = { ...nextSnapshot, plans: [] }
+        nextError ||= asError(reason)
       }
     }
+    if (runGeneration === this.runGeneration) {
+      try {
+        if (runsResult.status === 'rejected') throw runsResult.reason
+        const runs = responseData(runsResult.value, evaluationRunListSchema)
+        nextSnapshot = { ...nextSnapshot, runs }
+      } catch (reason) {
+        nextSnapshot = { ...nextSnapshot, runs: [] }
+        nextError ||= asError(reason)
+      }
+    }
+    this.publish({ ...nextSnapshot, loading: false, error: nextError })
   }
 
   private async refreshPlans(scope: EvaluationScope, scopeGeneration: number): Promise<void> {
@@ -310,12 +322,14 @@ class DefaultEvaluationRunsController implements EvaluationRunsController {
       if (!this.scopeIsCurrent(scope, scopeGeneration) || generation !== this.planGeneration) {
         throw new StaleEvaluationResultError()
       }
-      this.publish({ ...this.snapshot, plans, error: null })
+      this.publish({ ...this.snapshot, plans, loading: false, error: null })
     } catch (reason) {
-      if (this.scopeIsCurrent(scope, scopeGeneration) && generation === this.planGeneration) {
-        this.publish({ ...this.snapshot, error: asError(reason) })
+      if (!this.scopeIsCurrent(scope, scopeGeneration) || generation !== this.planGeneration) {
+        throw new StaleEvaluationResultError()
       }
-      throw reason
+      const error = asError(reason)
+      this.publish({ ...this.snapshot, loading: false, error })
+      throw error
     }
   }
 
@@ -329,12 +343,22 @@ class DefaultEvaluationRunsController implements EvaluationRunsController {
       if (!this.scopeIsCurrent(scope, scopeGeneration) || generation !== this.runGeneration) {
         throw new StaleEvaluationResultError()
       }
-      this.publish({ ...this.snapshot, runs, error: null })
+      this.publish({ ...this.snapshot, runs, loading: false, error: null })
     } catch (reason) {
-      if (this.scopeIsCurrent(scope, scopeGeneration) && generation === this.runGeneration) {
-        this.publish({ ...this.snapshot, error: asError(reason) })
+      if (!this.scopeIsCurrent(scope, scopeGeneration) || generation !== this.runGeneration) {
+        throw new StaleEvaluationResultError()
       }
-      throw reason
+      const error = asError(reason)
+      this.publish({ ...this.snapshot, loading: false, error })
+      throw error
+    }
+  }
+
+  private async settlePostCommitRefresh(refresh: Promise<void>): Promise<void> {
+    try {
+      await refresh
+    } catch (reason) {
+      if (reason instanceof StaleEvaluationResultError) throw reason
     }
   }
 
@@ -348,7 +372,7 @@ class DefaultEvaluationRunsController implements EvaluationRunsController {
     )
     const created = responseData(response, evaluationPlanSchema)
     if (!this.scopeIsCurrent(scope, scopeGeneration)) throw new StaleEvaluationResultError()
-    await this.refreshPlans(scope, scopeGeneration)
+    await this.settlePostCommitRefresh(this.refreshPlans(scope, scopeGeneration))
     return created
   }
 
@@ -360,7 +384,7 @@ class DefaultEvaluationRunsController implements EvaluationRunsController {
     )
     const activated = responseData(response, evaluationPlanSchema)
     if (!this.scopeIsCurrent(scope, scopeGeneration)) throw new StaleEvaluationResultError()
-    await this.refreshPlans(scope, scopeGeneration)
+    await this.settlePostCommitRefresh(this.refreshPlans(scope, scopeGeneration))
     return activated
   }
 
@@ -385,7 +409,7 @@ class DefaultEvaluationRunsController implements EvaluationRunsController {
     )
     const created = responseData(response, evaluationRunSchema)
     if (!this.scopeIsCurrent(scope, scopeGeneration)) throw new StaleEvaluationResultError()
-    await this.refreshRuns(scope, scopeGeneration)
+    await this.settlePostCommitRefresh(this.refreshRuns(scope, scopeGeneration))
     return created
   }
 
@@ -393,9 +417,20 @@ class DefaultEvaluationRunsController implements EvaluationRunsController {
     const scope = this.requireScope()
     const scopeGeneration = this.scopeGeneration
     const detailGeneration = ++this.detailGeneration
-    const response = await this.client.get<unknown>(
-      API_ENDPOINTS.aiGovernance.evaluationRun(scope.orgId, scope.systemId, runId),
-    )
+    let response: ApiResponse<unknown>
+    try {
+      response = await this.client.get<unknown>(
+        API_ENDPOINTS.aiGovernance.evaluationRun(scope.orgId, scope.systemId, runId),
+      )
+    } catch (reason) {
+      if (
+        !this.scopeIsCurrent(scope, scopeGeneration)
+        || detailGeneration !== this.detailGeneration
+      ) {
+        throw new StaleEvaluationResultError()
+      }
+      throw reason
+    }
     if (
       !this.scopeIsCurrent(scope, scopeGeneration)
       || detailGeneration !== this.detailGeneration
@@ -415,7 +450,7 @@ class DefaultEvaluationRunsController implements EvaluationRunsController {
     )
     const linked = responseData(response, evaluationRunSchema)
     if (!this.scopeIsCurrent(scope, scopeGeneration)) throw new StaleEvaluationResultError()
-    await this.refreshRuns(scope, scopeGeneration)
+    await this.settlePostCommitRefresh(this.refreshRuns(scope, scopeGeneration))
     return linked
   }
 }

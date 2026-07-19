@@ -3,6 +3,8 @@
  * Handles authentication, error handling, retry logic, and request/response interceptors
  */
 
+import { z } from 'zod'
+
 import { API_ENDPOINTS } from './endpoints'
 
 export interface ApiResponse<T> {
@@ -150,23 +152,51 @@ type ErrorPayload = {
   message?: unknown
 }
 
+const workflowErrorCodeSchema = z.enum([
+  'executor_unavailable',
+  'plan_inactive',
+  'plan_archived',
+  'passport_link_conflict',
+  'passport_scope_mismatch',
+  'suite_mismatch',
+  'target_kind_mismatch',
+  'target_kind_unverifiable',
+  'passport_snapshot_invalid',
+  'evaluation_persistence_failed',
+])
+
+const workflowErrorEnvelopeSchema = z.strictObject({
+  detail: z.strictObject({
+    code: workflowErrorCodeSchema,
+    message: z.string().min(1),
+    nextAction: z.string().min(1),
+  }),
+})
+
 function stringValue(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined
 }
 
 function decodeFailure(
-  payload: ErrorPayload,
+  payload: unknown,
   classified: ApiError,
 ): Pick<ApiResponse<never>, 'success' | 'error' | 'apiError'> {
-  const workflowDetail = payload.detail && typeof payload.detail === 'object' && !Array.isArray(payload.detail)
-    ? payload.detail as Record<string, unknown>
+  const payloadRecord = payload && typeof payload === 'object' && !Array.isArray(payload)
+    ? payload as ErrorPayload
+    : {}
+  const parsedWorkflow = workflowErrorEnvelopeSchema.safeParse(payload)
+  const workflowDetail = parsedWorkflow.success ? parsedWorkflow.data.detail : undefined
+  const untrustedDetail = payloadRecord.detail && typeof payloadRecord.detail === 'object' && !Array.isArray(payloadRecord.detail)
+    ? payloadRecord.detail as Record<string, unknown>
     : undefined
   const workflowMessage = stringValue(workflowDetail?.message)
-  const legacyDetail = stringValue(payload.detail)
+  const legacyDetail = stringValue(payloadRecord.detail)
+  const untrustedMessage = stringValue(untrustedDetail?.message)
   const message = workflowMessage
     || legacyDetail
-    || stringValue(payload.error)
-    || stringValue(payload.message)
+    || untrustedMessage
+    || stringValue(payloadRecord.error)
+    || stringValue(payloadRecord.message)
     || classified.message
 
   return {
@@ -175,9 +205,8 @@ function decodeFailure(
     apiError: {
       ...classified,
       message,
-      detail: workflowMessage || legacyDetail || message,
-      ...(stringValue(workflowDetail?.code) ? { code: stringValue(workflowDetail?.code) } : {}),
-      ...(stringValue(workflowDetail?.nextAction) ? { nextAction: stringValue(workflowDetail?.nextAction) } : {}),
+      detail: workflowMessage || legacyDetail || untrustedMessage || message,
+      ...(workflowDetail ? { code: workflowDetail.code, nextAction: workflowDetail.nextAction } : {}),
     },
   }
 }
@@ -347,7 +376,7 @@ export class ApiClient {
             return makeRequest()
           }
 
-          const errorData = await response.json().catch(() => ({})) as ErrorPayload
+          const errorData = await response.json().catch(() => ({})) as unknown
           return decodeFailure(errorData, apiError) as ApiResponse<T>
         }
 

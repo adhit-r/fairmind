@@ -252,6 +252,167 @@ describe('evaluation runs controller', () => {
     assert.equal(controller.getSnapshot().error?.message, 'Evaluation plans unavailable')
   })
 
+  test('keeps a targeted plan refresh terminal and prevents an older full refresh from overwriting it', async () => {
+    const fullPlans = deferred<ApiResponse<unknown>>()
+    const fullRuns = deferred<ApiResponse<unknown>>()
+    const targetedPlans = deferred<ApiResponse<unknown>>()
+    const targetedRequested = deferred<void>()
+    const committedPlan = plan({ id: 'plan-committed', updatedAt: '2026-07-19T03:00:00Z' })
+    let phase: 'initial' | 'overlap' = 'initial'
+    let overlappingPlanReads = 0
+    const { client } = fakeClient(
+      async (endpoint) => {
+        if (phase === 'initial') {
+          return endpoint.endsWith('/evaluation-plans')
+            ? { success: true, data: [plan()] }
+            : { success: true, data: [run()] }
+        }
+        if (endpoint.endsWith('/evaluation-plans')) {
+          overlappingPlanReads += 1
+          if (overlappingPlanReads === 1) return fullPlans.promise
+          targetedRequested.resolve(undefined)
+          return targetedPlans.promise
+        }
+        return fullRuns.promise
+      },
+      async (endpoint) => endpoint.endsWith('/activate')
+        ? { success: true, data: committedPlan }
+        : { success: false, error: `Unexpected POST ${endpoint}` },
+    )
+    const controller = createEvaluationRunsController(client)
+    await controller.setScope('org-1', 'system-1')
+    phase = 'overlap'
+
+    const fullRefresh = controller.refresh()
+    const activation = controller.activatePlan('plan-1')
+    await targetedRequested.promise
+    targetedPlans.resolve({ success: true, data: [committedPlan] })
+
+    assert.equal((await activation).id, 'plan-committed')
+    assert.equal(controller.getSnapshot().loading, false)
+    assert.deepEqual(controller.getSnapshot().plans.map(({ id }) => id), ['plan-committed'])
+    assert.deepEqual(controller.getSnapshot().runs.map(({ id }) => id), ['run-1'])
+
+    fullPlans.resolve({ success: true, data: [plan({ id: 'plan-stale' })] })
+    fullRuns.resolve({ success: true, data: [run({ id: 'run-from-full-refresh' })] })
+    await fullRefresh
+
+    assert.equal(controller.getSnapshot().loading, false)
+    assert.deepEqual(controller.getSnapshot().plans.map(({ id }) => id), ['plan-committed'])
+    assert.deepEqual(controller.getSnapshot().runs.map(({ id }) => id), ['run-from-full-refresh'])
+  })
+
+  test('keeps a committed run truthful when its overlapping targeted refresh fails', async () => {
+    const fullPlans = deferred<ApiResponse<unknown>>()
+    const fullRuns = deferred<ApiResponse<unknown>>()
+    const targetedRuns = deferred<ApiResponse<unknown>>()
+    const targetedRequested = deferred<void>()
+    const committedRun = run({ id: 'run-committed' })
+    let phase: 'initial' | 'overlap' = 'initial'
+    let overlappingRunReads = 0
+    const { client } = fakeClient(
+      async (endpoint) => {
+        if (phase === 'initial') {
+          return endpoint.endsWith('/evaluation-plans')
+            ? { success: true, data: [plan()] }
+            : { success: true, data: [run()] }
+        }
+        if (endpoint.endsWith('/evaluation-runs')) {
+          overlappingRunReads += 1
+          if (overlappingRunReads === 1) return fullRuns.promise
+          targetedRequested.resolve(undefined)
+          return targetedRuns.promise
+        }
+        return fullPlans.promise
+      },
+      async (endpoint) => endpoint.endsWith('/runs')
+        ? { success: true, data: committedRun }
+        : { success: false, error: `Unexpected POST ${endpoint}` },
+    )
+    const controller = createEvaluationRunsController(client)
+    await controller.setScope('org-1', 'system-1')
+    phase = 'overlap'
+
+    const fullRefresh = controller.refresh()
+    const creation = controller.createRun('plan-1')
+    await targetedRequested.promise
+    targetedRuns.resolve({ success: false, error: 'Run list refresh failed after commit.' })
+
+    assert.equal((await creation).id, 'run-committed')
+    assert.equal(controller.getSnapshot().loading, false)
+    assert.equal(controller.getSnapshot().error?.message, 'Run list refresh failed after commit.')
+    assert.deepEqual(controller.getSnapshot().runs.map(({ id }) => id), ['run-1'])
+
+    fullPlans.resolve({ success: true, data: [plan({ id: 'plan-from-full-refresh' })] })
+    fullRuns.resolve({ success: true, data: [run({ id: 'run-stale' })] })
+    await fullRefresh
+
+    assert.equal(controller.getSnapshot().loading, false)
+    assert.equal(controller.getSnapshot().error?.message, 'Run list refresh failed after commit.')
+    assert.deepEqual(controller.getSnapshot().plans.map(({ id }) => id), ['plan-from-full-refresh'])
+    assert.deepEqual(controller.getSnapshot().runs.map(({ id }) => id), ['run-1'])
+  })
+
+  test('returns a committed plan while exposing a failed follow-up list refresh without optimistic data', async () => {
+    const committedPlan = plan({ id: 'plan-committed', status: 'draft' })
+    let planReads = 0
+    const { client } = fakeClient(
+      async (endpoint) => {
+        if (endpoint.endsWith('/evaluation-plans')) {
+          planReads += 1
+          if (planReads > 1) return { success: false, error: 'Plan refresh unavailable.' }
+          return { success: true, data: [plan()] }
+        }
+        return { success: true, data: [run()] }
+      },
+      async () => ({ success: true, data: committedPlan }),
+    )
+    const controller = createEvaluationRunsController(client)
+    await controller.setScope('org-1', 'system-1')
+
+    const created = await controller.createPlan(createPlanInput)
+
+    assert.equal(created.id, 'plan-committed')
+    assert.equal(controller.getSnapshot().loading, false)
+    assert.equal(controller.getSnapshot().error?.message, 'Plan refresh unavailable.')
+    assert.deepEqual(controller.getSnapshot().plans.map(({ id }) => id), ['plan-1'])
+  })
+
+  test('does not swallow stale scope changes when a post-commit refresh rejects', async () => {
+    const oldRefresh = deferred<ApiResponse<unknown>>()
+    const oldRefreshRequested = deferred<void>()
+    let oldPlanReads = 0
+    const { client } = fakeClient(
+      async (endpoint) => {
+        if (endpoint.includes('/org-2/')) {
+          return endpoint.endsWith('/evaluation-plans')
+            ? { success: true, data: [plan({ orgId: 'org-2', systemId: 'system-2' })] }
+            : { success: true, data: [run({ orgId: 'org-2', systemId: 'system-2' })] }
+        }
+        if (endpoint.endsWith('/evaluation-plans')) {
+          oldPlanReads += 1
+          if (oldPlanReads > 1) {
+            oldRefreshRequested.resolve(undefined)
+            return oldRefresh.promise
+          }
+          return { success: true, data: [plan()] }
+        }
+        return { success: true, data: [run()] }
+      },
+      async () => ({ success: true, data: plan({ id: 'plan-committed', status: 'draft' }) }),
+    )
+    const controller = createEvaluationRunsController(client)
+    await controller.setScope('org-1', 'system-1')
+
+    const creation = controller.createPlan(createPlanInput)
+    await oldRefreshRequested.promise
+    await controller.setScope('org-2', 'system-2')
+    oldRefresh.reject(new Error('Old scope network failure'))
+
+    await assert.rejects(creation, StaleEvaluationResultError)
+    assert.deepEqual(controller.getSnapshot().plans.map(({ orgId }) => orgId), ['org-2'])
+  })
+
   test('uses exact mutation endpoints and refreshes only the affected list after success', async () => {
     const { client, calls } = successfulClient()
     const controller = createEvaluationRunsController(client)
@@ -357,7 +518,7 @@ describe('evaluation runs controller', () => {
 
     const staleByRun = controller.getRun('run-old')
     assert.equal((await controller.getRun('run-new')).id, 'run-new')
-    firstDetail.resolve({ success: false, error: 'The superseded detail request failed.' })
+    firstDetail.reject(new Error('The superseded detail request failed.'))
     await assert.rejects(staleByRun, StaleEvaluationResultError)
 
     const staleByScope = controller.getRun('run-scope')
@@ -373,6 +534,22 @@ describe('evaluation runs controller', () => {
       method: 'GET',
       endpoint: API_ENDPOINTS.aiGovernance.evaluationRun('org-1', 'system-1', 'run-new'),
     })
+  })
+
+  test('preserves the original rejection for the current detail request', async () => {
+    const networkFailure = new Error('Current detail network failure')
+    const { client } = fakeClient(
+      async (endpoint) => {
+        if (endpoint.endsWith('/evaluation-plans')) return { success: true, data: [plan()] }
+        if (endpoint.endsWith('/evaluation-runs')) return { success: true, data: [run()] }
+        throw networkFailure
+      },
+      async () => { throw new Error('No POST expected') },
+    )
+    const controller = createEvaluationRunsController(client)
+    await controller.setScope('org-1', 'system-1')
+
+    await assert.rejects(controller.getRun('run-current'), (reason) => reason === networkFailure)
   })
 
   test('rejects unknown and snake_case backend vocabularies instead of trusting compiled unions', async () => {
@@ -499,5 +676,85 @@ describe('API workflow error decoding', () => {
     assert.equal(response.apiError?.status, 422)
     assert.equal(response.apiError?.type, 'client')
     assert.equal(response.apiError?.code, 'target_kind_unverifiable')
+  })
+
+  test('accepts only the documented structured workflow error codes', async () => {
+    const codes = [
+      'executor_unavailable',
+      'plan_inactive',
+      'plan_archived',
+      'passport_link_conflict',
+      'passport_scope_mismatch',
+      'suite_mismatch',
+      'target_kind_mismatch',
+      'target_kind_unverifiable',
+      'passport_snapshot_invalid',
+      'evaluation_persistence_failed',
+    ] as const
+    let responseIndex = 0
+    replaceGlobal('window', {})
+    replaceGlobal('localStorage', { getItem: () => null })
+    replaceGlobal('navigator', { onLine: undefined })
+    replaceGlobal('fetch', async () => new Response(JSON.stringify({
+      detail: {
+        code: codes[responseIndex++],
+        message: 'Documented workflow failure.',
+        nextAction: 'Follow the documented recovery action.',
+      },
+    }), { status: 409, headers: { 'Content-Type': 'application/json' } }))
+    const client = new ApiClient('https://fairmind.test')
+
+    for (const code of codes) {
+      const response = await client.post('/api/v1/evaluation', {}, { enableRetry: false })
+      assert.equal(response.apiError?.code, code)
+      assert.equal(response.apiError?.nextAction, 'Follow the documented recovery action.')
+    }
+  })
+
+  test('falls back to non-actionable string errors for malformed structured envelopes', async () => {
+    const malformedDetails = [
+      {
+        code: 'unknown_workflow_code',
+        message: 'Malformed workflow failure.',
+        nextAction: 'Do not trust this action.',
+      },
+      {
+        code: 'executor_unavailable',
+        message: 'Malformed workflow failure.',
+        nextAction: 'Do not trust this action.',
+        debug: true,
+      },
+      {
+        code: 'executor_unavailable',
+        message: 'Malformed workflow failure.',
+      },
+      {
+        code: 'executor_unavailable',
+        message: 'Malformed workflow failure.',
+        nextAction: 42,
+      },
+      {
+        code: 'executor_unavailable',
+        message: 'Malformed workflow failure.',
+        next_action: 'Wrong wire casing.',
+      },
+    ]
+    let responseIndex = 0
+    replaceGlobal('window', {})
+    replaceGlobal('localStorage', { getItem: () => null })
+    replaceGlobal('navigator', { onLine: undefined })
+    replaceGlobal('fetch', async () => new Response(JSON.stringify({
+      detail: malformedDetails[responseIndex++],
+    }), { status: 409, headers: { 'Content-Type': 'application/json' } }))
+    const client = new ApiClient('https://fairmind.test')
+
+    for (const _detail of malformedDetails) {
+      const response = await client.post('/api/v1/evaluation', {}, { enableRetry: false })
+      assert.equal(response.error, 'Malformed workflow failure.')
+      assert.equal(response.apiError?.status, 409)
+      assert.equal(response.apiError?.detail, 'Malformed workflow failure.')
+      assert.equal(response.apiError?.code, undefined)
+      assert.equal(response.apiError?.nextAction, undefined)
+    }
   })
 })
