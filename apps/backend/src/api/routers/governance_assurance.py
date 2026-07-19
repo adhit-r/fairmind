@@ -881,6 +881,32 @@ def _raise_evaluation_error(error: EvaluationWorkflowError) -> None:
     raise HTTPException(status_code=error.status_code, detail=error.detail()) from error
 
 
+def _raise_evaluation_not_found(resource: Literal["system", "plan", "run"]) -> None:
+    details = {
+        "system": (
+            "AI system not found in this organization scope.",
+            "Select an AI system in the current organization and workspace.",
+        ),
+        "plan": (
+            "Evaluation plan not found in this AI system scope.",
+            "Refresh the plan list and select an available plan.",
+        ),
+        "run": (
+            "Evaluation run not found in this AI system scope.",
+            "Refresh the run list and select an available run.",
+        ),
+    }
+    message, next_action = details[resource]
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail={
+            "code": "passport_scope_mismatch",
+            "message": message,
+            "nextAction": next_action,
+        },
+    )
+
+
 @router.post(
     "/systems/{system_id}/evaluation-plans",
     response_model=EvaluationPlanResponse,
@@ -921,7 +947,7 @@ def list_evaluation_plans(
         system_id=system_id,
     )
     if plans is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="AI system not found")
+        _raise_evaluation_not_found("system")
     return plans
 
 
@@ -948,7 +974,7 @@ def activate_evaluation_plan(
     except EvaluationWorkflowError as error:
         _raise_evaluation_error(error)
     if plan is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evaluation plan not found")
+        _raise_evaluation_not_found("plan")
     return plan
 
 
@@ -969,7 +995,7 @@ def evaluation_plan_preflight(
         plan_id=plan_id,
     )
     if result is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evaluation plan not found")
+        _raise_evaluation_not_found("plan")
     return result
 
 
@@ -1015,7 +1041,7 @@ def list_evaluation_runs(
         system_id=system_id,
     )
     if runs is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="AI system not found")
+        _raise_evaluation_not_found("system")
     return runs
 
 
@@ -1036,7 +1062,7 @@ def get_evaluation_run(
         run_id=run_id,
     )
     if run is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evaluation run not found")
+        _raise_evaluation_not_found("run")
     return run
 
 
@@ -1066,5 +1092,5 @@ def link_evaluation_run_passport(
     except EvaluationWorkflowError as error:
         _raise_evaluation_error(error)
     if run is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evaluation run not found")
+        _raise_evaluation_not_found("run")
     return run

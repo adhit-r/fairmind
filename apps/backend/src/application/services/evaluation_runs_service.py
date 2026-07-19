@@ -272,7 +272,7 @@ class EvaluationRunsService:
             )
         )
 
-    def _persistence_failure(self, error: Exception) -> EvaluationWorkflowError:
+    def _persistence_failure(self) -> EvaluationWorkflowError:
         return _error(
             "evaluation_persistence_failed",
             "The evaluation workflow change could not be persisted atomically.",
@@ -341,7 +341,7 @@ class EvaluationRunsService:
             raise
         except Exception as error:
             self.db.rollback()
-            raise self._persistence_failure(error) from error
+            raise self._persistence_failure() from error
 
     def list_plans(self, *, org_id: str, system_id: str) -> list[dict] | None:
         scope = self._system_scope(org_id, system_id)
@@ -439,7 +439,7 @@ class EvaluationRunsService:
             raise
         except Exception as error:
             self.db.rollback()
-            raise self._persistence_failure(error) from error
+            raise self._persistence_failure() from error
 
     def preflight(
         self,
@@ -566,7 +566,7 @@ class EvaluationRunsService:
             raise
         except Exception as error:
             self.db.rollback()
-            raise self._persistence_failure(error) from error
+            raise self._persistence_failure() from error
 
     def list_runs(self, *, org_id: str, system_id: str) -> list[dict] | None:
         scope = self._system_scope(org_id, system_id)
@@ -812,4 +812,4 @@ class EvaluationRunsService:
             raise
         except Exception as error:
             self.db.rollback()
-            raise self._persistence_failure(error) from error
+            raise self._persistence_failure() from error

@@ -217,6 +217,16 @@ def _audit_actions(session_factory) -> list[str]:
         session.close()
 
 
+def _workflow_detail(message: str, next_action: str) -> dict:
+    return {
+        "detail": {
+            "code": "passport_scope_mismatch",
+            "message": message,
+            "nextAction": next_action,
+        }
+    }
+
+
 def _passport_snapshot(
     *,
     org_id: str = ORG_A,
@@ -357,6 +367,79 @@ def test_reads_are_membership_and_system_scoped_and_mutations_require_permission
     assert client.post(_plans_url(), json=_plan_payload()).status_code == 403
     active_user["value"] = _token(USER_A)
     assert client.get(_plans_url(system_id="missing-system")).status_code == 404
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "body", "expected"),
+    [
+        (
+            "get",
+            _plans_url(system_id="missing-system"),
+            None,
+            _workflow_detail(
+                "AI system not found in this organization scope.",
+                "Select an AI system in the current organization and workspace.",
+            ),
+        ),
+        (
+            "post",
+            f"{_plans_url()}/{uuid.uuid4()}/activate",
+            None,
+            _workflow_detail(
+                "Evaluation plan not found in this AI system scope.",
+                "Refresh the plan list and select an available plan.",
+            ),
+        ),
+        (
+            "get",
+            f"{_plans_url()}/{uuid.uuid4()}/preflight",
+            None,
+            _workflow_detail(
+                "Evaluation plan not found in this AI system scope.",
+                "Refresh the plan list and select an available plan.",
+            ),
+        ),
+        (
+            "get",
+            f"{BASE}/{ORG_A}/systems/missing-system/evaluation-runs",
+            None,
+            _workflow_detail(
+                "AI system not found in this organization scope.",
+                "Select an AI system in the current organization and workspace.",
+            ),
+        ),
+        (
+            "get",
+            f"{BASE}/{ORG_A}/systems/system-a/evaluation-runs/{uuid.uuid4()}",
+            None,
+            _workflow_detail(
+                "Evaluation run not found in this AI system scope.",
+                "Refresh the run list and select an available run.",
+            ),
+        ),
+        (
+            "post",
+            (
+                f"{BASE}/{ORG_A}/systems/system-a/evaluation-runs/{uuid.uuid4()}"
+                "/evidence-passport-link"
+            ),
+            {"evidenceRunId": "missing-evidence", "passportRevisionId": "missing-revision"},
+            _workflow_detail(
+                "Evaluation run not found in this AI system scope.",
+                "Refresh the run list and select an available run.",
+            ),
+        ),
+    ],
+)
+def test_all_evaluation_404_paths_return_exact_workflow_envelope(
+    evaluation_client, method, path, body, expected
+) -> None:
+    client, _, _ = evaluation_client
+
+    response = client.request(method, path, json=body)
+
+    assert response.status_code == 404
+    assert response.json() == expected
 
 
 @pytest.mark.parametrize(
