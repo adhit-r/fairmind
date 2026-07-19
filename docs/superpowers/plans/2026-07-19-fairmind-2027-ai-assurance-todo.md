@@ -1,0 +1,135 @@
+# FairMind 2027 AI Assurance Platform — Master TODO
+
+**Goal:** Evolve FairMind from a model-focused governance control plane into an evidence-grade assurance platform for predictive models, LLM applications, agents, code generation, vision input, image generation, audio, video, and multimodal systems.
+
+**Implementation base:** `29eaba4` in the isolated evaluation-workbench worktree. The primary `fairmind-e/p2b-paper-wedge` checkout is intentionally out of scope.
+
+**Non-negotiable sequence:** evidence integrity → isolated execution → real adapters → independently calibrated modality packs → pre/realtime/post lifecycle assurance → capability-scoped public claims.
+
+## P0 — Trustworthy control plane
+
+- [ ] Capture fresh backend, frontend, browser, build, PostgreSQL, boundary, and archive-import baselines.
+- [ ] Split evaluation planning, runs, evidence admission, decisions, and worker ports while preserving `api -> application -> domain -> infrastructure`.
+- [ ] Add immutable target versions containing exact subject, version, digest, deployment, connector, and manifest identity.
+- [ ] Preserve the current target kinds and add `vision_model`.
+- [ ] Add immutable suite versions with compatible target kinds, phases, depths, delivery modes, configuration schema, budgets, runner digest, adapter version, and result contract.
+- [ ] Replace authoritative free-text suite references and bare target kinds with version IDs and configured suite selections.
+- [ ] Generate and RFC 8785-hash an immutable Execution Envelope v2 for every run.
+- [ ] Create one suite-execution record per selected suite.
+- [ ] Bind Passport v2 to exact tenant, system, target, suite, plan, configuration, lifecycle, delivery, evaluator, nonce, and chronology.
+- [ ] Keep Passport v1 readable but ineligible for v2 runs.
+- [ ] Add evidence issuers, Ed25519 keys, immutable trust policies, admissions, freshness, and append-only reviews.
+- [ ] Require verified evidence from FairMind workers and external adapters; imports may remain unsigned only as visibly unverified human-review material.
+- [ ] Keep linking separate from governance decision-making; a link yields `review` or `insufficient`, never automatic approval/blocking.
+- [ ] Add granular plan, run, evidence, decision, catalog, trust, worker, and separation-override permissions.
+- [ ] Enforce four-eyes review and audited owner overrides.
+- [ ] Add 30-day transactional idempotency and an append-only per-organization audit hash chain.
+- [ ] Feature-disable automatic enforcement, untrusted external linking, workers, and unsupported modality packs at both API and UI boundaries.
+- [ ] Add forward migration 013 without rewriting migration 012; extend checksum-ledger drift detection.
+- [ ] Mark existing plans/runs contract v1 without fabricating registry identities; keep them readable but prevent new execution until upgraded.
+
+## P0 — Frontend and design
+
+- [ ] Add one shared session provider above the dashboard shell and bind identity to `/auth/me`.
+- [ ] Connect both logout controls; clear local tokens, authenticated caches, and cross-tab state even when revocation fails.
+- [ ] Self-host the profile portrait and eliminate authenticated third-party portrait requests.
+- [ ] Key state by organization/system/plan/run and mask prior-scope state synchronously during route changes.
+- [ ] Reject parsed responses whose scope differs from the request and remove `selected_org_id` as secondary path authority.
+- [ ] Render execution status, evaluator evidence result, and governance verdict as separate axes.
+- [ ] Show signer, source, admission, freshness, review, expiry, limitations, and invalidation reason.
+- [ ] Preserve layered suite/modality verdicts plus one overall reviewer verdict.
+- [ ] Update `DESIGN.md` with the three-axis model, admission states, capability truth table, worker security envelope, local identity/icon system, and binding model.
+- [ ] Preserve the white/black/orange/teal neobrutalist product language; no emoji, purple gradients, generic AI visuals, or dashboard rewrite.
+
+## P1 — Isolated execution foundation
+
+- [ ] Add migration 014 for worker identities, leased jobs, suite attempts, artifacts, and cancellation.
+- [ ] Implement a PostgreSQL `FOR UPDATE SKIP LOCKED` queue with 60-second leases, 20-second heartbeats, expiry recovery, and manifest-controlled retries capped at three.
+- [ ] Implement `queued`, `leased`, `running`, `awaiting_evidence`, `succeeded`, `failed`, `timed_out`, and `cancelled` job states.
+- [ ] Require the live lease token and matching signed Passport v2 for completion; cancellation wins races.
+- [ ] Add `WorkerCapabilities` and `EvaluationWorker.execute(ExecutionEnvelopeV2)` ports.
+- [ ] Store artifacts by immutable SHA-256 in S3/MinIO-compatible storage; exclude credentials, secrets, and chain-of-thought.
+- [ ] Resolve opaque target/artifact bindings through short-lived brokers.
+- [ ] Run evaluators non-root with read-only roots, ephemeral scratch, no host socket, dropped capabilities, restrictive syscalls, bounded resources, quarantined inputs, and deny-default network.
+- [ ] Add scoped egress credentials, kill switches, and operational/security metrics.
+
+## P2 — Real evaluation engines
+
+- [ ] Build a validated predictive fairness pack covering parity, opportunity, odds, calibration, subgroups, robustness, drift, privacy, and intersections; fix bootstrap resampling and cross-check AIF360/Fairlearn.
+- [ ] Add an Inspect adapter as the common LLM/agent harness.
+- [ ] Add garak for LLM security and Promptfoo for CI/red-team/agent/multimodal scenarios.
+- [ ] Add Giskard later as an external/imported adapter.
+- [ ] Quarantine fixed, simulated, mislabeled, and fail-open legacy evaluators; retain only independently validated kernels.
+- [ ] Never translate evaluator failure or unavailable input into passing evidence.
+- [ ] Treat LLM judges as calibrated supporting signals, never sole verdicts.
+
+## P3 — Modality packs
+
+- [ ] LLM/text: injection, jailbreak, unsafe output, privacy, hallucination, bias, multilingual consistency, robustness.
+- [ ] Agents: indirect injection, tool/memory poisoning, permission misuse, excessive agency, exfiltration, irreversible actions, trajectory compliance.
+- [ ] Code generation: compile/test, insecure code, dependencies, secrets, command injection, licenses, tool behavior.
+- [ ] Vision input: OCR/typographic and low-visibility instructions, metadata carriers, hidden instructions, perturbations, transform survival.
+- [ ] Image generation: unsafe content, demographic/stereotype bias, adherence, provenance, watermarking, transformation history.
+- [ ] Audio: ASR-mediated and obfuscated instructions, transcoding survival, privacy, accent disparities, generated-voice misuse.
+- [ ] Video: sparse-frame, subtitle/audio-track, temporal injection, unsafe content, representation, frame-sampling sensitivity.
+- [ ] Multimodal: cross-modal conflict and attack transfer, retrieval/context contamination, tool effects, end-to-end transformation DAG.
+- [ ] Map findings to versioned governance controls as candidate evidence; require reviewer acceptance and generate reproducible hash-bound audit packs without automatic compliance claims.
+
+## P4 — Pre, realtime pre/post, and post-deployment assurance
+
+- [ ] Add `lifecyclePhase` to run creation; each run executes one selected phase.
+- [ ] Support pre-deployment deep/CI/release-gate evaluation with verified current reviewed evidence.
+- [ ] Add synchronous realtime pre-input/tool-action evaluation for deterministic low-latency suites and queue deep checks under the same interaction ID.
+- [ ] Add realtime post-output/tool/side-effect/media evaluation with an advisory result and evidence-pending state.
+- [ ] Support scheduled post-deployment evaluation, drift, incident replay, provider changes, and evidence expiry.
+- [ ] Implement hybrid inline deterministic plus asynchronous stochastic/human review.
+- [ ] Keep enforcement advisory until accuracy, rollback, circuit-breaker, latency, and independent safety gates pass.
+
+## P5 — Research, documentation, and product evidence
+
+- [ ] EvalAttest: evidence-laundering corpus across bindings, signers, phase, and chronology.
+- [ ] GateTrace: realtime detection, latency, utility, and asynchronous follow-up.
+- [ ] X-Provenance: cross-modal transformations and causal-stage attribution.
+- [ ] Publish immutable manifests, calibration reports, limitations, confidence intervals, and reproducibility guidance.
+- [ ] Make the capability registry authoritative for product, docs, website, and sales claims.
+- [ ] Use “AI assurance control plane” until execution capabilities independently pass their gates.
+- [ ] After worker alpha, produce the product deck, audit examples, NotebookLM-style podcast, Remotion video, and HyperFrames video from validated screens and claims.
+- [ ] Run whole-repository quality and organization audits at each release gate.
+
+## Public contracts
+
+- [ ] `EvaluationPlanV2Create`: contract version, target version, phases, depth, enforcement, delivery, configured suite versions.
+- [ ] `EvaluationRunV2Create`: trigger, lifecycle phase, required `Idempotency-Key`.
+- [ ] `ExecutionEnvelopeV2`: server-generated IDs/hashes, target and suite bindings, lifecycle/enforcement/delivery, nonce, budgets, inputs, trust policy.
+- [ ] `EvidencePassportV2.executionBinding`: envelope ID/hash, suite execution, target/suite versions and digests, nonce.
+- [ ] `EvaluationRunResponse`: technical status, evidence outcome, governance verdict, layer verdicts, suite executions, envelope hash, verdict version.
+- [ ] Evidence result: `pending | passed | passed_with_limitations | failed | informational | error | unavailable | insufficient_data | unknown`.
+- [ ] Admission: `pending | verified | unverified | expired | superseded | rejected | trust_error`.
+- [ ] Review: `pending | accepted | rejected`; freshness: `current | expiring | stale | superseded`.
+- [ ] Preserve `technicalStatus=succeeded` with `evidenceResultStatus=failed` when the evaluator ran correctly and found a failing target.
+- [ ] Add target/suite catalogs, suite-specific evidence links, reviews, CAS decisions, cancellation, worker leases, and realtime pre/post endpoints under the existing AI-governance route family.
+
+## Verification and rollout gates
+
+- [ ] Mutate every envelope field independently; no mismatch may yield decision-grade evidence.
+- [ ] Test valid/tampered/unknown/revoked/expired/replayed/wrong-tenant/wrong-suite signatures and timestamp policy.
+- [ ] Test cross-tenant isolation, 20-request idempotency/concurrency, link races, lost responses, cancellation, lease recovery, and audit-chain integrity.
+- [ ] Fuzz canonical JSON and adversarially test sandbox/file/network/resource/media boundaries.
+- [ ] Complete 1,000 adversarial sandbox jobs with zero escape, unauthorized egress, host access, secret exposure, or orphaning.
+- [ ] Preserve the focused backend/frontend/browser/build/PostgreSQL/boundary baseline and add continuous CI security lanes.
+- [ ] Require zero unresolved or unaccepted Critical/High findings.
+- [ ] Per public modality: freeze manifests; use at least 100 benign and 100 adversarial independently labelled cases across at least two target families; repeat stochastic cases three times; require kappa >= 0.70, macro-F1 >= 0.80, per-class recall >= 0.70, and benign false-positive rate <= 5%.
+- [ ] Gate A private control-plane pilot: two organizations, 100 workflows, 14 days, zero isolation/integrity failures, automatic enforcement off.
+- [ ] Gate B worker alpha: one real signed sandboxed suite end to end with failure injection and human approval only.
+- [ ] Gate C modality beta: each exposed capability independently passes benchmark and sandbox gates with visible limits.
+- [ ] Gate D public execution: GA adapter, reports, independent red team, 30-day soak, zero open integrity/isolation/Critical/High defect.
+- [ ] Keep “FairMind Verified,” certification, automatic compliance, and automatic enforcement prohibited pending a separate independent safety program.
+
+## Defaults
+
+- PostgreSQL is release authority; SQLite is a parity fixture.
+- PostgreSQL leasing is the first worker queue; no Redis/Celery until capacity evidence requires it.
+- FairMind owns orchestration, scope, trust, evidence, findings, review, and decisions; specialist engines execute tests.
+- All three delivery paths and all three lifecycle phases remain supported.
+- Layered results and one overall verdict are both required.
+- Unsupported capability combinations fail preflight.
