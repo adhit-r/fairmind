@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS fairmind_operator_migration_ledger (
 DO $$
 DECLARE
     recorded_checksum TEXT;
-    expected_checksum CONSTANT TEXT := '03f7a18899d893152b80ac5dd65753e678ea1355822448f2aadfbb6277571368';
+    expected_checksum CONSTANT TEXT := '3e09436746296c397a8719ed633b91636b53ee8710f990b45576da4ef55ff2dd';
 BEGIN
     SELECT migration_checksum INTO recorded_checksum
     FROM fairmind_operator_migration_ledger
@@ -214,12 +214,26 @@ ALTER TABLE governance_evaluation_plans
     ADD COLUMN IF NOT EXISTS trust_policy_version_id TEXT;
 
 ALTER TABLE governance_evaluation_runs
+    ADD COLUMN IF NOT EXISTS contract_version TEXT NOT NULL DEFAULT '1.0.0',
     ADD COLUMN IF NOT EXISTS lifecycle_phase TEXT,
     ADD COLUMN IF NOT EXISTS envelope_id TEXT,
     ADD COLUMN IF NOT EXISTS envelope_json TEXT,
     ADD COLUMN IF NOT EXISTS envelope_hash TEXT,
     ADD COLUMN IF NOT EXISTS evidence_outcome TEXT NOT NULL DEFAULT 'pending',
     ADD COLUMN IF NOT EXISTS verdict_version INTEGER NOT NULL DEFAULT 0;
+
+UPDATE governance_evaluation_runs AS run
+SET contract_version = plan.contract_version
+FROM governance_evaluation_plans AS plan
+WHERE run.plan_id = plan.id
+  AND run.workspace_id = plan.workspace_id
+  AND run.system_id = plan.system_id
+  AND run.org_id = plan.org_id
+  AND run.contract_version IS DISTINCT FROM plan.contract_version;
+
+ALTER TABLE governance_evaluation_runs
+    ALTER COLUMN contract_version SET DEFAULT '1.0.0',
+    ALTER COLUMN contract_version SET NOT NULL;
 
 DO $$
 BEGIN
@@ -243,6 +257,7 @@ BEGIN
              AND linked_at IS NOT NULL AND started_at IS NOT NULL
              AND completed_at IS NOT NULL)
             OR (technical_status = 'succeeded'
+                AND contract_version = '2.0.0'
                 AND linked_passport_revision_id IS NULL
                 AND linked_evidence_run_id IS NULL AND linked_by IS NULL
                 AND linked_at IS NULL AND envelope_id IS NOT NULL
@@ -253,6 +268,36 @@ BEGIN
                 AND linked_evidence_run_id IS NULL AND linked_by IS NULL
                 AND linked_at IS NULL)
         );
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'uq_governance_evaluation_plan_contract_tenant'
+          AND conrelid = 'governance_evaluation_plans'::regclass
+    ) THEN
+        ALTER TABLE governance_evaluation_plans
+            ADD CONSTRAINT uq_governance_evaluation_plan_contract_tenant
+            UNIQUE (id, contract_version, workspace_id, system_id, org_id);
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'fk_governance_evaluation_run_plan_contract'
+          AND conrelid = 'governance_evaluation_runs'::regclass
+    ) THEN
+        ALTER TABLE governance_evaluation_runs
+            ADD CONSTRAINT fk_governance_evaluation_run_plan_contract
+            FOREIGN KEY (plan_id, contract_version, workspace_id, system_id, org_id)
+            REFERENCES governance_evaluation_plans(
+                id, contract_version, workspace_id, system_id, org_id
+            );
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'ck_governance_evaluation_run_contract_version'
+          AND conrelid = 'governance_evaluation_runs'::regclass
+    ) THEN
+        ALTER TABLE governance_evaluation_runs
+            ADD CONSTRAINT ck_governance_evaluation_run_contract_version
+            CHECK (contract_version IN ('1.0.0', '2.0.0'));
+    END IF;
     IF NOT EXISTS (
         SELECT 1 FROM pg_constraint
         WHERE conname = 'ck_governance_evaluation_plan_contract_version'
@@ -628,6 +673,11 @@ BEGIN
         WHERE table_schema = current_schema()
           AND table_name = 'governance_evaluation_runs'
           AND column_name = 'evidence_outcome'
+    ) OR NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'governance_evaluation_runs'
+          AND column_name = 'contract_version'
     ) THEN
         RAISE EXCEPTION 'migration 013 additive column catalog assertion failed';
     END IF;
@@ -640,6 +690,14 @@ BEGIN
         SELECT 1 FROM pg_constraint
         WHERE conname = 'ck_governance_evaluation_suite_execution_evidence_link'
           AND conrelid = 'governance_evaluation_run_suite_executions'::regclass
+    ) OR NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'fk_governance_evaluation_run_plan_contract'
+          AND conrelid = 'governance_evaluation_runs'::regclass
+    ) OR NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'uq_governance_evaluation_plan_contract_tenant'
+          AND conrelid = 'governance_evaluation_plans'::regclass
     ) THEN
         RAISE EXCEPTION 'migration 013 constraint catalog assertion failed';
     END IF;
@@ -647,7 +705,7 @@ END;
 $$;
 
 INSERT INTO fairmind_operator_migration_ledger (migration_key, migration_checksum)
-VALUES ('012-to-013-evaluation-v2-v1', '03f7a18899d893152b80ac5dd65753e678ea1355822448f2aadfbb6277571368')
+VALUES ('012-to-013-evaluation-v2-v1', '3e09436746296c397a8719ed633b91636b53ee8710f990b45576da4ef55ff2dd')
 ON CONFLICT (migration_key) DO NOTHING;
 
 COMMIT;

@@ -321,6 +321,7 @@ def test_models_expose_exact_columns_and_tenant_constraints() -> None:
         "workspace_id",
         "system_id",
         "plan_id",
+        "contract_version",
         "trigger",
         "technical_status",
         "overall_verdict",
@@ -352,9 +353,19 @@ def test_models_expose_exact_columns_and_tenant_constraints() -> None:
     assert ("id", "workspace_id", "system_id", "org_id") in constraint_columns(
         GovernanceEvaluationPlan, UniqueConstraint
     )
+    assert (
+        "id", "contract_version", "workspace_id", "system_id", "org_id",
+    ) in constraint_columns(GovernanceEvaluationPlan, UniqueConstraint)
     assert ("id", "workspace_id", "system_id", "org_id") in constraint_columns(
         GovernanceEvaluationRun, UniqueConstraint
     )
+    assert (
+        "plan_id",
+        "contract_version",
+        "workspace_id",
+        "system_id",
+        "org_id",
+    ) in constraint_columns(GovernanceEvaluationRun, ForeignKeyConstraint)
     assert (
         "linked_passport_revision_id",
         "linked_evidence_run_id",
@@ -784,6 +795,7 @@ def test_named_run_lifecycle_checks_match_orm_postgresql_and_sqlite() -> None:
                 "AND linked_at IS NOT NULL AND started_at IS NOT NULL "
                 "AND completed_at IS NOT NULL) OR "
                 "(technical_status = 'succeeded' "
+                "AND contract_version = '2.0.0' "
                 "AND linked_passport_revision_id IS NULL "
                 "AND linked_evidence_run_id IS NULL AND linked_by IS NULL "
                 "AND linked_at IS NULL AND envelope_id IS NOT NULL "

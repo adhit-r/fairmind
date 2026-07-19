@@ -1,5 +1,7 @@
 import ast
+import hashlib
 import importlib
+import re
 import sqlite3
 from pathlib import Path
 
@@ -198,11 +200,27 @@ def test_models_expose_v2_tables_columns_and_vocabulary_constraints():
     )
 
     plan_columns = governance_models.GovernanceEvaluationPlan.__table__.c
+    assert tuple(plan_columns.keys()) == (
+        "id", "org_id", "workspace_id", "system_id", "name", "target_kind",
+        "lifecycle_phases_json", "execution_depth", "enforcement_mode", "delivery_mode",
+        "suite_refs_json", "status", "created_by", "updated_by", "created_at",
+        "updated_at", "contract_version", "target_version_id", "plan_content_hash",
+        "trust_policy_version_id",
+    )
     assert plan_columns.contract_version.default.arg == "1.0.0"
     assert all(name in plan_columns for name in (
         "target_version_id", "plan_content_hash", "trust_policy_version_id"
     ))
     run_columns = governance_models.GovernanceEvaluationRun.__table__.c
+    assert tuple(run_columns.keys()) == (
+        "id", "org_id", "workspace_id", "system_id", "plan_id", "contract_version",
+        "trigger", "technical_status", "overall_verdict", "layer_verdicts_json",
+        "linked_evidence_run_id", "linked_passport_revision_id", "linked_by", "linked_at",
+        "requested_by", "started_at", "completed_at", "failure_code", "failure_message",
+        "created_at", "updated_at", "lifecycle_phase", "envelope_id", "envelope_json",
+        "envelope_hash", "evidence_outcome", "verdict_version",
+    )
+    assert run_columns.contract_version.default.arg == "1.0.0"
     assert run_columns.evidence_outcome.default.arg == "pending"
     assert run_columns.verdict_version.default.arg == 0
 
@@ -221,6 +239,7 @@ def test_plan_and_run_models_have_no_duplicate_declarations_or_constraints():
             "trust_policy_version_id",
         },
         "GovernanceEvaluationRun": {
+            "contract_version",
             "lifecycle_phase", "envelope_id", "envelope_json", "envelope_hash",
             "evidence_outcome", "verdict_version",
         },
@@ -240,6 +259,7 @@ def test_plan_and_run_models_have_no_duplicate_declarations_or_constraints():
     run = governance_models.GovernanceEvaluationRun.__table__
     for table, constraint_name in (
         (plan, "ck_governance_evaluation_plan_content_hash"),
+        (run, "ck_governance_evaluation_run_contract_version"),
         (run, "ck_governance_evaluation_run_evidence_outcome"),
         (run, "ck_governance_evaluation_run_verdict_version"),
         (run, "ck_governance_evaluation_run_envelope"),
@@ -254,6 +274,16 @@ def test_plan_and_run_models_have_no_duplicate_declarations_or_constraints():
             tuple(fk.column_keys) == local_columns
             for fk in plan.foreign_key_constraints
         ) == 1
+
+    assert sum(
+        tuple(fk.column_keys) == (
+            "plan_id", "contract_version", "workspace_id", "system_id", "org_id",
+        )
+        for fk in run.foreign_key_constraints
+    ) == 1
+    assert (
+        "id", "contract_version", "workspace_id", "system_id", "org_id",
+    ) in _constraints(governance_models.GovernanceEvaluationPlan, UniqueConstraint)
 
 
 def test_all_new_models_have_exact_columns_unique_constraint_names_and_vocabularies():
@@ -430,12 +460,14 @@ def test_sqlite_replay_preserves_populated_v2_plan_and_run_state(connection):
     connection.execute(
         """
         INSERT INTO governance_evaluation_runs (
-            id, org_id, workspace_id, system_id, plan_id, trigger, technical_status,
+            id, org_id, workspace_id, system_id, plan_id, contract_version,
+            trigger, technical_status,
             overall_verdict, layer_verdicts_json, requested_by, started_at, completed_at,
             created_at, updated_at,
             lifecycle_phase, envelope_id, envelope_json, envelope_hash,
             evidence_outcome, verdict_version
-        ) VALUES ('run-v2', 'org-a', 'ws-a', 'sys-a', 'plan-v2', 'manual', 'succeeded',
+        ) VALUES ('run-v2', 'org-a', 'ws-a', 'sys-a', 'plan-v2', '2.0.0',
+                  'manual', 'succeeded',
                   'conditional', '{}', 'user-a', ?, ?, ?, ?, 'pre_deploy',
                   'envelope-v2', '{"version":"2.0.0"}', ?, 'passed_with_limitations', 7)
         """,
@@ -450,7 +482,7 @@ def test_sqlite_replay_preserves_populated_v2_plan_and_run_state(connection):
     ).fetchone()
     expected_run = connection.execute(
         """
-        SELECT lifecycle_phase, envelope_id, envelope_json, envelope_hash,
+        SELECT contract_version, lifecycle_phase, envelope_id, envelope_json, envelope_hash,
                evidence_outcome, verdict_version
         FROM governance_evaluation_runs WHERE id='run-v2'
         """
@@ -467,52 +499,91 @@ def test_sqlite_replay_preserves_populated_v2_plan_and_run_state(connection):
     ).fetchone() == expected_plan
     assert connection.execute(
         """
-        SELECT lifecycle_phase, envelope_id, envelope_json, envelope_hash,
+        SELECT contract_version, lifecycle_phase, envelope_id, envelope_json, envelope_hash,
                evidence_outcome, verdict_version
         FROM governance_evaluation_runs WHERE id='run-v2'
         """
     ).fetchone() == expected_run
 
 
+def _insert_v2_plan(connection, plan_id: str = "plan-v2") -> None:
+    connection.execute(
+        """
+        INSERT INTO governance_evaluation_target_versions (
+            id, org_id, workspace_id, system_id, target_key, target_kind, version,
+            system_version, subject_kind, subject_id, subject_version, subject_digest,
+            manifest_json, manifest_digest, status, created_by, created_at
+        ) VALUES (?, 'org-a', 'ws-a', 'sys-a', ?, 'predictive_model', '2.0.0',
+                  '2026.07', 'model', ?, 'v2', ?, '{}', ?, 'active', 'user-a', ?)
+        """,
+        (f"target-{plan_id}", plan_id, plan_id, HASH_A, HASH_B, NOW),
+    )
+    connection.execute(
+        """
+        INSERT INTO governance_evidence_trust_policy_versions (
+            id, org_id, version, policy_json, policy_hash, maximum_evidence_age_seconds,
+            unsigned_import_policy, status, created_by, created_at
+        ) VALUES (?, 'org-a', ?, '{}', ?, 86400, 'reject', 'active', 'user-a', ?)
+        """,
+        (f"policy-{plan_id}", plan_id, HASH_A, NOW),
+    )
+    connection.execute(
+        """
+        INSERT INTO governance_evaluation_plans (
+            id, org_id, workspace_id, system_id, name, target_kind,
+            lifecycle_phases_json, execution_depth, enforcement_mode, delivery_mode,
+            suite_refs_json, status, created_by, updated_by, created_at, updated_at,
+            contract_version, target_version_id, plan_content_hash,
+            trust_policy_version_id
+        ) VALUES (?, 'org-a', 'ws-a', 'sys-a', 'Plan v2', 'predictive_model', '[]',
+                  'hybrid', 'human_approval', 'fairmind_worker', '[]', 'active',
+                  'user-a', 'user-a', ?, ?, '2.0.0', ?, ?, ?)
+        """,
+        (plan_id, NOW, NOW, f"target-{plan_id}", HASH_B, f"policy-{plan_id}"),
+    )
+
+
+def _insert_envelope_only_succeeded_run(
+    connection,
+    run_id: str,
+    plan_id: str,
+    *,
+    contract_version: str | None = None,
+    envelope_id: str | None = None,
+    envelope_json: str | None = None,
+    envelope_hash: str | None = None,
+    linked_by: str | None = None,
+) -> None:
+    contract_column = ", contract_version" if contract_version is not None else ""
+    contract_placeholder = ", ?" if contract_version is not None else ""
+    params = [run_id]
+    if contract_version is not None:
+        params.append(contract_version)
+    params.extend(
+        (linked_by, NOW, NOW, NOW, NOW, envelope_id, envelope_json, envelope_hash)
+    )
+    connection.execute(
+        f"""
+        INSERT INTO governance_evaluation_runs (
+            id, org_id, workspace_id, system_id, plan_id{contract_column}, trigger,
+            technical_status, overall_verdict, layer_verdicts_json, linked_by, requested_by,
+            started_at, completed_at, created_at, updated_at, lifecycle_phase,
+            envelope_id, envelope_json, envelope_hash, evidence_outcome, verdict_version
+        ) VALUES (?, 'org-a', 'ws-a', 'sys-a', '{plan_id}'{contract_placeholder},
+                  'manual', 'succeeded', 'conditional', '{{}}', ?, 'user-a', ?, ?, ?, ?,
+                  'pre_deploy', ?, ?, ?,
+                  'passed_with_limitations', 1)
+        """,
+        tuple(params),
+    )
+
+
 def test_enveloped_v2_success_can_aggregate_without_legacy_run_link(connection):
     _seed_plan_and_run(connection)
-
-    def insert_succeeded_run(
-        run_id: str,
-        *,
-        envelope_id: str | None = None,
-        envelope_json: str | None = None,
-        envelope_hash: str | None = None,
-        linked_by: str | None = None,
-    ) -> None:
-        connection.execute(
-            """
-            INSERT INTO governance_evaluation_runs (
-                id, org_id, workspace_id, system_id, plan_id, trigger, technical_status,
-                overall_verdict, layer_verdicts_json, linked_by, requested_by, started_at,
-                completed_at, created_at, updated_at, lifecycle_phase, envelope_id,
-                envelope_json, envelope_hash, evidence_outcome, verdict_version
-            ) VALUES (?, 'org-a', 'ws-a', 'sys-a', 'plan-a', 'manual', 'succeeded',
-                      'conditional', '{}', ?, 'user-a', ?, ?, ?, ?, 'pre_deploy', ?, ?, ?,
-                      'passed_with_limitations', 1)
-            """,
-            (
-                run_id,
-                linked_by,
-                NOW,
-                NOW,
-                NOW,
-                NOW,
-                envelope_id,
-                envelope_json,
-                envelope_hash,
-            ),
-        )
-
-    insert_succeeded_run(
-        "run-v2-success",
-        envelope_id="envelope-a",
-        envelope_json='{"contract_version":"2.0.0"}',
+    _insert_v2_plan(connection)
+    _insert_envelope_only_succeeded_run(
+        connection, "run-v2-success", "plan-v2", contract_version="2.0.0",
+        envelope_id="envelope-success", envelope_json='{"version":"2.0.0"}',
         envelope_hash=HASH_A,
     )
     assert connection.execute(
@@ -520,29 +591,79 @@ def test_enveloped_v2_success_can_aggregate_without_legacy_run_link(connection):
         "WHERE id='run-v2-success'"
     ).fetchone() == ("succeeded", None)
 
-    with pytest.raises(sqlite3.IntegrityError):
-        insert_succeeded_run("run-v1-unlinked")
-    with pytest.raises(sqlite3.IntegrityError):
-        insert_succeeded_run(
-            "run-v2-partial-envelope",
-            envelope_id="envelope-partial",
-            envelope_json='{"contract_version":"2.0.0"}',
-        )
-    with pytest.raises(sqlite3.IntegrityError):
-        insert_succeeded_run(
-            "run-v2-partial-legacy-link",
-            envelope_id="envelope-b",
-            envelope_json='{"contract_version":"2.0.0"}',
-            envelope_hash=HASH_B,
-            linked_by="reviewer-a",
-        )
-
     link_constraint = next(
         constraint
         for constraint in governance_models.GovernanceEvaluationRun.__table__.constraints
         if constraint.name == "ck_governance_evaluation_run_evidence_link_state"
     )
     assert "envelope_id IS NOT NULL" in str(link_constraint.sqltext)
+    assert "contract_version = '2.0.0'" in str(link_constraint.sqltext)
+
+    with pytest.raises(sqlite3.IntegrityError):
+        _insert_envelope_only_succeeded_run(
+            connection, "run-v2-no-envelope", "plan-v2", contract_version="2.0.0"
+        )
+    with pytest.raises(sqlite3.IntegrityError):
+        _insert_envelope_only_succeeded_run(
+            connection, "run-v2-partial-envelope", "plan-v2",
+            contract_version="2.0.0", envelope_id="envelope-partial",
+            envelope_json='{"version":"2.0.0"}',
+        )
+    with pytest.raises(sqlite3.IntegrityError):
+        _insert_envelope_only_succeeded_run(
+            connection, "run-v2-partial-legacy-link", "plan-v2",
+            contract_version="2.0.0", envelope_id="envelope-linked",
+            envelope_json='{"version":"2.0.0"}', envelope_hash=HASH_B,
+            linked_by="reviewer-a",
+        )
+
+
+def test_v1_plan_rejects_envelope_only_succeeded_run_even_with_complete_envelope(connection):
+    _seed_plan_and_run(connection)
+    with pytest.raises(sqlite3.IntegrityError):
+        _insert_envelope_only_succeeded_run(
+            connection, "run-v1-envelope", "plan-a", envelope_id="envelope-v1",
+            envelope_json='{"version":"2.0.0"}', envelope_hash=HASH_A,
+        )
+
+
+def test_run_contract_version_must_match_parent_plan(connection):
+    _seed_plan_and_run(connection)
+    _insert_v2_plan(connection)
+    with pytest.raises(sqlite3.IntegrityError, match="FOREIGN KEY"):
+        connection.execute(
+            """
+            INSERT INTO governance_evaluation_runs (
+                id, org_id, workspace_id, system_id, plan_id, contract_version, trigger,
+                technical_status, overall_verdict, layer_verdicts_json, requested_by,
+                created_at, updated_at
+            ) VALUES ('run-v2-as-v1', 'org-a', 'ws-a', 'sys-a', 'plan-v2', '1.0.0',
+                      'manual', 'awaiting_evidence', 'insufficient', '{}', 'user-a', ?, ?)
+            """,
+            (NOW, NOW),
+        )
+    with pytest.raises(sqlite3.IntegrityError, match="FOREIGN KEY"):
+        connection.execute(
+            """
+            INSERT INTO governance_evaluation_runs (
+                id, org_id, workspace_id, system_id, plan_id, contract_version, trigger,
+                technical_status, overall_verdict, layer_verdicts_json, requested_by,
+                created_at, updated_at
+            ) VALUES ('run-v1-as-v2', 'org-a', 'ws-a', 'sys-a', 'plan-a', '2.0.0',
+                      'manual', 'awaiting_evidence', 'insufficient', '{}', 'user-a', ?, ?)
+            """,
+            (NOW, NOW),
+        )
+
+
+def test_legacy_plan_and_run_default_to_v1_contract(connection):
+    _seed_plan_and_run(connection)
+    assert connection.execute(
+        "SELECT contract_version FROM governance_evaluation_plans WHERE id='plan-a'"
+    ).fetchone() == ("1.0.0",)
+    assert connection.execute(
+        "SELECT contract_version FROM governance_evaluation_runs WHERE id='run-a'"
+    ).fetchone() == ("1.0.0",)
 
 
 def test_v2_plan_contract_and_run_envelope_invariants_are_enforced(connection):
@@ -555,6 +676,7 @@ def test_v2_plan_contract_and_run_envelope_invariants_are_enforced(connection):
         str(c.sqltext) for c in run.constraints if isinstance(c, CheckConstraint)
     )
     assert "contract_version IN ('1.0.0', '2.0.0')" in plan_checks
+    assert "contract_version IN ('1.0.0', '2.0.0')" in run_checks
     assert "contract_version = '2.0.0'" in plan_checks
     for column in ("target_version_id", "plan_content_hash", "trust_policy_version_id"):
         assert f"{column} IS NOT NULL" in plan_checks
@@ -638,10 +760,11 @@ def test_v2_plan_contract_and_run_envelope_invariants_are_enforced(connection):
         connection.execute(
             """
             INSERT INTO governance_evaluation_runs (
-                id, org_id, workspace_id, system_id, plan_id, trigger, technical_status,
+                id, org_id, workspace_id, system_id, plan_id, contract_version,
+                trigger, technical_status,
                 overall_verdict, layer_verdicts_json, requested_by, created_at, updated_at,
                 lifecycle_phase, envelope_id, envelope_json, envelope_hash
-            ) VALUES (?, 'org-a', 'ws-a', 'sys-a', 'plan-contract-v2', 'manual',
+            ) VALUES (?, 'org-a', 'ws-a', 'sys-a', 'plan-contract-v2', '2.0.0', 'manual',
                       'awaiting_evidence', 'insufficient', '{}', 'user-a', ?, ?, ?, ?, ?, ?)
             """,
             (run_id, NOW, NOW, lifecycle_phase, envelope_id, envelope_json, envelope_hash),
@@ -886,12 +1009,16 @@ def test_fresh_sqlite_applies_ordered_migrations_and_replays_013():
         assert {"contract_version", "target_version_id", "plan_content_hash", "trust_policy_version_id"} <= {
             row[1] for row in connection.execute("PRAGMA table_info(governance_evaluation_plans)")
         }
+        assert connection.execute(
+            "SELECT contract_version FROM governance_evaluation_runs"
+        ).fetchall() == []
     finally:
         connection.close()
 
 
 def test_postgresql_upgrade_has_lock_checksum_drift_guard_and_catalog_assertions():
     sql = (MIGRATIONS / "upgrade_paths/012_to_013_evaluation_v2.sql").read_text()
+    direct_sql = (MIGRATIONS / "013_evaluation_assurance_contract_v2.sql").read_text()
     assert "pg_advisory_xact_lock" in sql
     assert "fairmind_operator_migration_ledger" in sql
     assert "migration_checksum" in sql and "sha256" in sql.lower()
@@ -899,3 +1026,16 @@ def test_postgresql_upgrade_has_lock_checksum_drift_guard_and_catalog_assertions
     assert "pg_constraint" in sql
     assert "information_schema.columns" in sql
     assert "to_regclass" in sql
+    expected_checksum = hashlib.sha256(direct_sql.encode()).hexdigest()
+    recorded_checksums = set(re.findall(r"[0-9a-f]{64}", sql))
+    assert recorded_checksums == {expected_checksum}
+    for migration_sql in (
+        direct_sql,
+        (MIGRATIONS / "fixtures/013_evaluation_assurance_contract_v2.sqlite.sql").read_text(),
+    ):
+        assert "contract_version TEXT NOT NULL DEFAULT '1.0.0'" in migration_sql
+        assert "UNIQUE (id, contract_version, workspace_id, system_id, org_id)" in migration_sql
+        assert (
+            "FOREIGN KEY (plan_id, contract_version, workspace_id, system_id, org_id)"
+            in migration_sql
+        )

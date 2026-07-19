@@ -180,6 +180,7 @@ CREATE TABLE IF NOT EXISTS governance_evaluation_plan_v2_replay_state (
 
 CREATE TABLE IF NOT EXISTS governance_evaluation_run_v2_replay_state (
     run_id TEXT PRIMARY KEY,
+    contract_version TEXT NOT NULL,
     lifecycle_phase TEXT,
     envelope_id TEXT,
     envelope_json TEXT,
@@ -214,6 +215,8 @@ CREATE TABLE governance_evaluation_plans_013 (
     trust_policy_version_id TEXT,
     CONSTRAINT uq_governance_evaluation_plan_tenant
         UNIQUE (id, workspace_id, system_id, org_id),
+    CONSTRAINT uq_governance_evaluation_plan_contract_tenant
+        UNIQUE (id, contract_version, workspace_id, system_id, org_id),
     CONSTRAINT ck_governance_evaluation_plan_target_kind CHECK (
         target_kind IN (
             'predictive_model', 'llm_application', 'agent', 'code_generator',
@@ -265,6 +268,7 @@ CREATE TABLE governance_evaluation_runs_013 (
     workspace_id TEXT NOT NULL,
     system_id TEXT NOT NULL,
     plan_id TEXT NOT NULL,
+    contract_version TEXT NOT NULL DEFAULT '1.0.0',
     trigger TEXT NOT NULL,
     technical_status TEXT NOT NULL DEFAULT 'awaiting_evidence',
     overall_verdict TEXT NOT NULL DEFAULT 'insufficient',
@@ -293,6 +297,8 @@ CREATE TABLE governance_evaluation_runs_013 (
         CHECK (trigger IN ('manual', 'ci', 'scheduled', 'release_gate', 'incident', 'integration_sync')),
     CONSTRAINT ck_governance_evaluation_run_technical_status
         CHECK (technical_status IN ('awaiting_evidence', 'running', 'succeeded', 'failed', 'cancelled')),
+    CONSTRAINT ck_governance_evaluation_run_contract_version
+        CHECK (contract_version IN ('1.0.0', '2.0.0')),
     CONSTRAINT ck_governance_evaluation_run_overall_verdict
         CHECK (overall_verdict IN ('approved', 'conditional', 'review', 'blocked', 'insufficient')),
     CONSTRAINT ck_governance_evaluation_run_lifecycle_phase CHECK (
@@ -307,7 +313,8 @@ CREATE TABLE governance_evaluation_runs_013 (
         (technical_status IN ('succeeded', 'failed') AND linked_passport_revision_id IS NOT NULL
          AND linked_evidence_run_id IS NOT NULL AND linked_by IS NOT NULL
          AND linked_at IS NOT NULL AND started_at IS NOT NULL AND completed_at IS NOT NULL)
-        OR (technical_status = 'succeeded' AND linked_passport_revision_id IS NULL
+        OR (technical_status = 'succeeded' AND contract_version = '2.0.0'
+            AND linked_passport_revision_id IS NULL
             AND linked_evidence_run_id IS NULL AND linked_by IS NULL AND linked_at IS NULL
             AND envelope_id IS NOT NULL AND envelope_json IS NOT NULL
             AND envelope_hash IS NOT NULL AND started_at IS NOT NULL
@@ -337,20 +344,32 @@ CREATE TABLE governance_evaluation_runs_013 (
         REFERENCES governance_ai_systems(id, workspace_id, org_id),
     FOREIGN KEY (plan_id, workspace_id, system_id, org_id)
         REFERENCES governance_evaluation_plans_013(id, workspace_id, system_id, org_id),
+    CONSTRAINT fk_governance_evaluation_run_plan_contract
+        FOREIGN KEY (plan_id, contract_version, workspace_id, system_id, org_id)
+        REFERENCES governance_evaluation_plans_013(
+            id, contract_version, workspace_id, system_id, org_id
+        ),
     FOREIGN KEY (linked_evidence_run_id, workspace_id, system_id, org_id)
         REFERENCES governance_evidence_runs(id, workspace_id, system_id, org_id),
     FOREIGN KEY (linked_passport_revision_id, linked_evidence_run_id, system_id, org_id)
         REFERENCES governance_evidence_passport_revisions(id, evidence_run_id, system_id, org_id)
 );
 INSERT INTO governance_evaluation_runs_013 (
-    id, org_id, workspace_id, system_id, plan_id, trigger, technical_status,
+    id, org_id, workspace_id, system_id, plan_id, contract_version,
+    trigger, technical_status,
     overall_verdict, layer_verdicts_json, linked_evidence_run_id,
     linked_passport_revision_id, linked_by, linked_at, requested_by, started_at,
     completed_at, failure_code, failure_message, created_at, updated_at,
     lifecycle_phase, envelope_id, envelope_json, envelope_hash,
     evidence_outcome, verdict_version
 )
-SELECT id, org_id, workspace_id, system_id, plan_id, trigger, technical_status,
+SELECT id, org_id, workspace_id, system_id, plan_id,
+       COALESCE((
+           SELECT state.contract_version
+           FROM governance_evaluation_run_v2_replay_state AS state
+           WHERE state.run_id = governance_evaluation_runs.id
+       ), '1.0.0'),
+       trigger, technical_status,
        overall_verdict, layer_verdicts_json, linked_evidence_run_id,
        linked_passport_revision_id, linked_by, linked_at, requested_by, started_at,
        completed_at, failure_code, failure_message, created_at, updated_at,
@@ -418,7 +437,12 @@ WHERE EXISTS (
 );
 
 UPDATE governance_evaluation_runs
-SET lifecycle_phase = (
+SET contract_version = (
+        SELECT state.contract_version
+        FROM governance_evaluation_run_v2_replay_state AS state
+        WHERE state.run_id = governance_evaluation_runs.id
+    ),
+    lifecycle_phase = (
         SELECT state.lifecycle_phase
         FROM governance_evaluation_run_v2_replay_state AS state
         WHERE state.run_id = governance_evaluation_runs.id
@@ -498,13 +522,15 @@ CREATE TRIGGER IF NOT EXISTS governance_evaluation_runs_capture_v2_insert
 AFTER INSERT ON governance_evaluation_runs
 BEGIN
     INSERT INTO governance_evaluation_run_v2_replay_state (
-        run_id, lifecycle_phase, envelope_id, envelope_json, envelope_hash,
+        run_id, contract_version, lifecycle_phase, envelope_id, envelope_json, envelope_hash,
         evidence_outcome, verdict_version
     ) VALUES (
-        NEW.id, NEW.lifecycle_phase, NEW.envelope_id, NEW.envelope_json, NEW.envelope_hash,
+        NEW.id, NEW.contract_version, NEW.lifecycle_phase, NEW.envelope_id,
+        NEW.envelope_json, NEW.envelope_hash,
         NEW.evidence_outcome, NEW.verdict_version
     )
     ON CONFLICT(run_id) DO UPDATE SET
+        contract_version = excluded.contract_version,
         lifecycle_phase = excluded.lifecycle_phase,
         envelope_id = excluded.envelope_id,
         envelope_json = excluded.envelope_json,
@@ -514,17 +540,19 @@ BEGIN
 END;
 
 CREATE TRIGGER IF NOT EXISTS governance_evaluation_runs_capture_v2_update
-AFTER UPDATE OF lifecycle_phase, envelope_id, envelope_json, envelope_hash,
+AFTER UPDATE OF contract_version, lifecycle_phase, envelope_id, envelope_json, envelope_hash,
                 evidence_outcome, verdict_version ON governance_evaluation_runs
 BEGIN
     INSERT INTO governance_evaluation_run_v2_replay_state (
-        run_id, lifecycle_phase, envelope_id, envelope_json, envelope_hash,
+        run_id, contract_version, lifecycle_phase, envelope_id, envelope_json, envelope_hash,
         evidence_outcome, verdict_version
     ) VALUES (
-        NEW.id, NEW.lifecycle_phase, NEW.envelope_id, NEW.envelope_json, NEW.envelope_hash,
+        NEW.id, NEW.contract_version, NEW.lifecycle_phase, NEW.envelope_id,
+        NEW.envelope_json, NEW.envelope_hash,
         NEW.evidence_outcome, NEW.verdict_version
     )
     ON CONFLICT(run_id) DO UPDATE SET
+        contract_version = excluded.contract_version,
         lifecycle_phase = excluded.lifecycle_phase,
         envelope_id = excluded.envelope_id,
         envelope_json = excluded.envelope_json,

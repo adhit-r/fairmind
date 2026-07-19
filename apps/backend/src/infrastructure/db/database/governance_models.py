@@ -1192,6 +1192,14 @@ class GovernanceEvaluationPlan(Base):
             "org_id",
             name="uq_governance_evaluation_plan_tenant",
         ),
+        UniqueConstraint(
+            "id",
+            "contract_version",
+            "workspace_id",
+            "system_id",
+            "org_id",
+            name="uq_governance_evaluation_plan_contract_tenant",
+        ),
         ForeignKeyConstraint(
             ["workspace_id", "org_id"],
             ["governance_workspaces.id", "governance_workspaces.org_id"],
@@ -1270,6 +1278,7 @@ class GovernanceEvaluationRun(Base):
     workspace_id = Column(String, nullable=False, index=True)
     system_id = Column(String, nullable=False, index=True)
     plan_id = Column(String, nullable=False, index=True)
+    contract_version = Column(String, nullable=False, default="1.0.0")
     trigger = Column(String, nullable=False)
     technical_status = Column(String, nullable=False, default="awaiting_evidence")
     overall_verdict = Column(String, nullable=False, default="insufficient")
@@ -1327,6 +1336,17 @@ class GovernanceEvaluationRun(Base):
             ],
         ),
         ForeignKeyConstraint(
+            ["plan_id", "contract_version", "workspace_id", "system_id", "org_id"],
+            [
+                "governance_evaluation_plans.id",
+                "governance_evaluation_plans.contract_version",
+                "governance_evaluation_plans.workspace_id",
+                "governance_evaluation_plans.system_id",
+                "governance_evaluation_plans.org_id",
+            ],
+            name="fk_governance_evaluation_run_plan_contract",
+        ),
+        ForeignKeyConstraint(
             ["linked_evidence_run_id", "workspace_id", "system_id", "org_id"],
             [
                 "governance_evidence_runs.id",
@@ -1360,6 +1380,10 @@ class GovernanceEvaluationRun(Base):
             name="ck_governance_evaluation_run_technical_status",
         ),
         CheckConstraint(
+            "contract_version IN ('1.0.0', '2.0.0')",
+            name="ck_governance_evaluation_run_contract_version",
+        ),
+        CheckConstraint(
             "overall_verdict IN ('approved', 'conditional', 'review', 'blocked', "
             "'insufficient')",
             name="ck_governance_evaluation_run_overall_verdict",
@@ -1381,6 +1405,7 @@ class GovernanceEvaluationRun(Base):
             "AND linked_at IS NOT NULL AND started_at IS NOT NULL "
             "AND completed_at IS NOT NULL) OR "
             "(technical_status = 'succeeded' "
+            "AND contract_version = '2.0.0' "
             "AND linked_passport_revision_id IS NULL "
             "AND linked_evidence_run_id IS NULL AND linked_by IS NULL "
             "AND linked_at IS NULL AND envelope_id IS NOT NULL "
