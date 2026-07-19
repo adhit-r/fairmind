@@ -281,6 +281,16 @@ class EvaluationRunsService:
             500,
         )
 
+    @staticmethod
+    def _require_v1_mutation(row) -> None:
+        if row.get("contract_version", "1.0.0") != "1.0.0":
+            raise _error(
+                "contract_version_requires_v2",
+                "Assurance-contract v2 records must use the evaluation-v2 workflow.",
+                "Use the corresponding evaluation-v2 endpoint for this scoped record.",
+                409,
+            )
+
     def create_plan(
         self,
         *,
@@ -357,6 +367,7 @@ class EvaluationRunsService:
                 plans.c.org_id == org_id,
                 plans.c.workspace_id == scope["workspace_id"],
                 plans.c.system_id == system_id,
+                plans.c.contract_version == "1.0.0",
             )
             .order_by(plans.c.created_at.desc(), plans.c.id.desc())
         ).mappings().all()
@@ -382,6 +393,7 @@ class EvaluationRunsService:
             )
             if row is None:
                 return None
+            self._require_v1_mutation(row)
             if row["status"] == "archived":
                 raise _error(
                     "plan_archived",
@@ -463,6 +475,8 @@ class EvaluationRunsService:
         )
         if plan is None:
             return None
+        if plan.get("contract_version", "1.0.0") != "1.0.0":
+            return None
         if plan["delivery_mode"] == "fairmind_worker":
             return {
                 "planId": plan_id,
@@ -535,6 +549,7 @@ class EvaluationRunsService:
                     "Refresh the plan list and select an available plan.",
                     404,
                 )
+            self._require_v1_mutation(plan)
             if plan["status"] != "active":
                 raise _error(
                     "plan_inactive",
@@ -604,6 +619,7 @@ class EvaluationRunsService:
                 runs.c.org_id == org_id,
                 runs.c.workspace_id == scope["workspace_id"],
                 runs.c.system_id == system_id,
+                runs.c.contract_version == "1.0.0",
             )
             .order_by(runs.c.created_at.desc(), runs.c.id.desc())
         ).mappings().all()
@@ -625,6 +641,8 @@ class EvaluationRunsService:
             workspace_id=scope["workspace_id"],
             run_id=run_id,
         )
+        if row and row.get("contract_version", "1.0.0") != "1.0.0":
+            return None
         return self._run_dict(row) if row else None
 
     @staticmethod
@@ -736,6 +754,7 @@ class EvaluationRunsService:
             )
             if run is None:
                 return None
+            self._require_v1_mutation(run)
             if run["linked_passport_revision_id"] is not None:
                 if (
                     run["linked_evidence_run_id"] == evidence_run_id

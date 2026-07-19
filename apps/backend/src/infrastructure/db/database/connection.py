@@ -6,7 +6,7 @@ Supports both PostgreSQL (Supabase) and SQLite for development
 import os
 import logging
 from typing import Optional
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import StaticPool
@@ -15,6 +15,15 @@ from contextlib import contextmanager
 logger = logging.getLogger(__name__)
 
 Base = declarative_base()
+
+
+def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record) -> None:
+    cursor = dbapi_connection.cursor()
+    try:
+        cursor.execute("PRAGMA foreign_keys = ON")
+    finally:
+        cursor.close()
+
 
 class DatabaseManager:
     """Database connection manager with support for multiple databases"""
@@ -48,6 +57,7 @@ class DatabaseManager:
                 poolclass=StaticPool,
                 echo=os.getenv("DEBUG", "false").lower() == "true"
             )
+            event.listen(self.engine, "connect", _enable_sqlite_foreign_keys)
             logger.info(f"Connected to SQLite database: {db_path}")
         
         self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
@@ -95,5 +105,4 @@ def get_db():
     """Dependency for FastAPI to get database session"""
     with db_manager.get_session() as session:
         yield session
-
 
