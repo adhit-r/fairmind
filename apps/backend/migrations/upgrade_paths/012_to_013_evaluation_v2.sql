@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS fairmind_operator_migration_ledger (
 DO $$
 DECLARE
     recorded_checksum TEXT;
-    expected_checksum CONSTANT TEXT := 'dab3fc6145c22a706ac99a57d7f7416fa43ca79df14765793332f361ebbbd804';
+    expected_checksum CONSTANT TEXT := '03f7a18899d893152b80ac5dd65753e678ea1355822448f2aadfbb6277571368';
 BEGIN
     SELECT migration_checksum INTO recorded_checksum
     FROM fairmind_operator_migration_ledger
@@ -223,6 +223,78 @@ ALTER TABLE governance_evaluation_runs
 
 DO $$
 BEGIN
+    ALTER TABLE governance_evaluation_plans
+        DROP CONSTRAINT IF EXISTS ck_governance_evaluation_plan_target_kind;
+    ALTER TABLE governance_evaluation_plans
+        ADD CONSTRAINT ck_governance_evaluation_plan_target_kind CHECK (
+            target_kind IN (
+                'predictive_model', 'llm_application', 'agent', 'code_generator',
+                'image_generator', 'audio_model', 'video_model', 'multimodal_system',
+                'vision_model'
+            )
+        );
+    ALTER TABLE governance_evaluation_runs
+        DROP CONSTRAINT IF EXISTS ck_governance_evaluation_run_evidence_link_state;
+    ALTER TABLE governance_evaluation_runs
+        ADD CONSTRAINT ck_governance_evaluation_run_evidence_link_state CHECK (
+            (technical_status IN ('succeeded', 'failed')
+             AND linked_passport_revision_id IS NOT NULL
+             AND linked_evidence_run_id IS NOT NULL AND linked_by IS NOT NULL
+             AND linked_at IS NOT NULL AND started_at IS NOT NULL
+             AND completed_at IS NOT NULL)
+            OR (technical_status = 'succeeded'
+                AND linked_passport_revision_id IS NULL
+                AND linked_evidence_run_id IS NULL AND linked_by IS NULL
+                AND linked_at IS NULL AND envelope_id IS NOT NULL
+                AND envelope_json IS NOT NULL AND envelope_hash IS NOT NULL
+                AND started_at IS NOT NULL AND completed_at IS NOT NULL)
+            OR (technical_status <> 'succeeded'
+                AND linked_passport_revision_id IS NULL
+                AND linked_evidence_run_id IS NULL AND linked_by IS NULL
+                AND linked_at IS NULL)
+        );
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'ck_governance_evaluation_plan_contract_version'
+          AND conrelid = 'governance_evaluation_plans'::regclass
+    ) THEN
+        ALTER TABLE governance_evaluation_plans
+            ADD CONSTRAINT ck_governance_evaluation_plan_contract_version
+            CHECK (contract_version IN ('1.0.0', '2.0.0'));
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'ck_governance_evaluation_plan_v2_bindings'
+          AND conrelid = 'governance_evaluation_plans'::regclass
+    ) THEN
+        ALTER TABLE governance_evaluation_plans
+            ADD CONSTRAINT ck_governance_evaluation_plan_v2_bindings CHECK (
+                contract_version = '1.0.0'
+                OR (contract_version = '2.0.0' AND target_version_id IS NOT NULL
+                    AND plan_content_hash IS NOT NULL
+                    AND trust_policy_version_id IS NOT NULL)
+            );
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'ck_governance_evaluation_run_lifecycle_phase'
+          AND conrelid = 'governance_evaluation_runs'::regclass
+    ) THEN
+        ALTER TABLE governance_evaluation_runs
+            ADD CONSTRAINT ck_governance_evaluation_run_lifecycle_phase CHECK (
+                lifecycle_phase IS NULL
+                OR lifecycle_phase IN ('pre_deploy', 'realtime', 'post_deploy')
+            );
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'uq_governance_evaluation_run_envelope'
+          AND conrelid = 'governance_evaluation_runs'::regclass
+    ) THEN
+        ALTER TABLE governance_evaluation_runs
+            ADD CONSTRAINT uq_governance_evaluation_run_envelope
+            UNIQUE (org_id, envelope_id);
+    END IF;
     IF NOT EXISTS (
         SELECT 1 FROM pg_constraint
         WHERE conname = 'fk_governance_evaluation_plan_target_version'
@@ -575,7 +647,7 @@ END;
 $$;
 
 INSERT INTO fairmind_operator_migration_ledger (migration_key, migration_checksum)
-VALUES ('012-to-013-evaluation-v2-v1', 'dab3fc6145c22a706ac99a57d7f7416fa43ca79df14765793332f361ebbbd804')
+VALUES ('012-to-013-evaluation-v2-v1', '03f7a18899d893152b80ac5dd65753e678ea1355822448f2aadfbb6277571368')
 ON CONFLICT (migration_key) DO NOTHING;
 
 COMMIT;

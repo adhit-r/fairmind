@@ -1183,10 +1183,6 @@ class GovernanceEvaluationPlan(Base):
     target_version_id = Column(String, nullable=True)
     plan_content_hash = Column(String, nullable=True)
     trust_policy_version_id = Column(String, nullable=True)
-    contract_version = Column(String, nullable=False, default="1.0.0")
-    target_version_id = Column(String, nullable=True)
-    plan_content_hash = Column(String, nullable=True)
-    trust_policy_version_id = Column(String, nullable=True)
 
     __table_args__ = (
         UniqueConstraint(
@@ -1224,26 +1220,10 @@ class GovernanceEvaluationPlan(Base):
                 "governance_evidence_trust_policy_versions.org_id",
             ],
         ),
-        ForeignKeyConstraint(
-            ["target_version_id", "workspace_id", "system_id", "org_id"],
-            [
-                "governance_evaluation_target_versions.id",
-                "governance_evaluation_target_versions.workspace_id",
-                "governance_evaluation_target_versions.system_id",
-                "governance_evaluation_target_versions.org_id",
-            ],
-        ),
-        ForeignKeyConstraint(
-            ["trust_policy_version_id", "org_id"],
-            [
-                "governance_evidence_trust_policy_versions.id",
-                "governance_evidence_trust_policy_versions.org_id",
-            ],
-        ),
         CheckConstraint(
             "target_kind IN ('predictive_model', 'llm_application', 'agent', "
             "'code_generator', 'image_generator', 'audio_model', 'video_model', "
-            "'multimodal_system')",
+            "'multimodal_system', 'vision_model')",
             name="ck_governance_evaluation_plan_target_kind",
         ),
         CheckConstraint(
@@ -1263,8 +1243,14 @@ class GovernanceEvaluationPlan(Base):
             name="ck_governance_evaluation_plan_status",
         ),
         CheckConstraint(
-            f"plan_content_hash IS NULL OR ({_lower_hex64('plan_content_hash')})",
-            name="ck_governance_evaluation_plan_content_hash",
+            "contract_version IN ('1.0.0', '2.0.0')",
+            name="ck_governance_evaluation_plan_contract_version",
+        ),
+        CheckConstraint(
+            "contract_version = '1.0.0' OR "
+            "(contract_version = '2.0.0' AND target_version_id IS NOT NULL "
+            "AND plan_content_hash IS NOT NULL AND trust_policy_version_id IS NOT NULL)",
+            name="ck_governance_evaluation_plan_v2_bindings",
         ),
         CheckConstraint(
             f"plan_content_hash IS NULL OR ({_lower_hex64('plan_content_hash')})",
@@ -1305,12 +1291,6 @@ class GovernanceEvaluationRun(Base):
     envelope_hash = Column(String, nullable=True)
     evidence_outcome = Column(String, nullable=False, default="pending")
     verdict_version = Column(Integer, nullable=False, default=0)
-    lifecycle_phase = Column(String, nullable=True)
-    envelope_id = Column(String, nullable=True)
-    envelope_json = Column(Text, nullable=True)
-    envelope_hash = Column(String, nullable=True)
-    evidence_outcome = Column(String, nullable=False, default="pending")
-    verdict_version = Column(Integer, nullable=False, default=0)
 
     __table_args__ = (
         UniqueConstraint(
@@ -1319,6 +1299,11 @@ class GovernanceEvaluationRun(Base):
             "system_id",
             "org_id",
             name="uq_governance_evaluation_run_tenant",
+        ),
+        UniqueConstraint(
+            "org_id",
+            "envelope_id",
+            name="uq_governance_evaluation_run_envelope",
         ),
         ForeignKeyConstraint(
             ["workspace_id", "org_id"],
@@ -1380,6 +1365,11 @@ class GovernanceEvaluationRun(Base):
             name="ck_governance_evaluation_run_overall_verdict",
         ),
         CheckConstraint(
+            "lifecycle_phase IS NULL OR lifecycle_phase IN "
+            "('pre_deploy', 'realtime', 'post_deploy')",
+            name="ck_governance_evaluation_run_lifecycle_phase",
+        ),
+        CheckConstraint(
             "(linked_passport_revision_id IS NULL AND linked_evidence_run_id IS NULL) OR "
             "(linked_passport_revision_id IS NOT NULL AND linked_evidence_run_id IS NOT NULL)",
             name="ck_governance_evaluation_run_complete_passport_link",
@@ -1390,6 +1380,12 @@ class GovernanceEvaluationRun(Base):
             "AND linked_evidence_run_id IS NOT NULL AND linked_by IS NOT NULL "
             "AND linked_at IS NOT NULL AND started_at IS NOT NULL "
             "AND completed_at IS NOT NULL) OR "
+            "(technical_status = 'succeeded' "
+            "AND linked_passport_revision_id IS NULL "
+            "AND linked_evidence_run_id IS NULL AND linked_by IS NULL "
+            "AND linked_at IS NULL AND envelope_id IS NOT NULL "
+            "AND envelope_json IS NOT NULL AND envelope_hash IS NOT NULL "
+            "AND started_at IS NOT NULL AND completed_at IS NOT NULL) OR "
             "(technical_status <> 'succeeded' AND linked_passport_revision_id IS NULL "
             "AND linked_evidence_run_id IS NULL AND linked_by IS NULL AND linked_at IS NULL)",
             name="ck_governance_evaluation_run_evidence_link_state",
@@ -1403,22 +1399,6 @@ class GovernanceEvaluationRun(Base):
             "AND completed_at IS NOT NULL) OR "
             "(technical_status IN ('failed', 'cancelled') AND completed_at IS NOT NULL)",
             name="ck_governance_evaluation_run_timestamps",
-        ),
-        CheckConstraint(
-            "evidence_outcome IN ('pending', 'passed', 'passed_with_limitations', "
-            "'failed', 'informational', 'error', 'unavailable', 'insufficient_data', "
-            "'unknown')",
-            name="ck_governance_evaluation_run_evidence_outcome",
-        ),
-        CheckConstraint(
-            "verdict_version >= 0",
-            name="ck_governance_evaluation_run_verdict_version",
-        ),
-        CheckConstraint(
-            "(envelope_id IS NULL AND envelope_json IS NULL AND envelope_hash IS NULL) OR "
-            "(envelope_id IS NOT NULL AND envelope_json IS NOT NULL "
-            f"AND envelope_hash IS NOT NULL AND {_lower_hex64('envelope_hash')})",
-            name="ck_governance_evaluation_run_envelope",
         ),
         CheckConstraint(
             "evidence_outcome IN ('pending', 'passed', 'passed_with_limitations', "

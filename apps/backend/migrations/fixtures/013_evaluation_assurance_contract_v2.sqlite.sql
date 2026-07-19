@@ -167,6 +167,27 @@ CREATE TABLE IF NOT EXISTS governance_evidence_trust_policy_versions (
         CHECK (status IN ('draft', 'active', 'retired'))
 );
 
+-- SQLite cannot conditionally add columns. These internal replay-state tables
+-- let the table-rebuild migration preserve populated v2 fields on later replay,
+-- while the first 012-to-013 application still reads only columns present in 012.
+CREATE TABLE IF NOT EXISTS governance_evaluation_plan_v2_replay_state (
+    plan_id TEXT PRIMARY KEY,
+    contract_version TEXT NOT NULL,
+    target_version_id TEXT,
+    plan_content_hash TEXT,
+    trust_policy_version_id TEXT
+);
+
+CREATE TABLE IF NOT EXISTS governance_evaluation_run_v2_replay_state (
+    run_id TEXT PRIMARY KEY,
+    lifecycle_phase TEXT,
+    envelope_id TEXT,
+    envelope_json TEXT,
+    envelope_hash TEXT,
+    evidence_outcome TEXT NOT NULL,
+    verdict_version INTEGER NOT NULL
+);
+
 DROP TABLE IF EXISTS governance_evaluation_runs_013;
 DROP TABLE IF EXISTS governance_evaluation_plans_013;
 
@@ -196,7 +217,8 @@ CREATE TABLE governance_evaluation_plans_013 (
     CONSTRAINT ck_governance_evaluation_plan_target_kind CHECK (
         target_kind IN (
             'predictive_model', 'llm_application', 'agent', 'code_generator',
-            'image_generator', 'audio_model', 'video_model', 'multimodal_system'
+            'image_generator', 'audio_model', 'video_model', 'multimodal_system',
+            'vision_model'
         )
     ),
     CONSTRAINT ck_governance_evaluation_plan_execution_depth
@@ -207,6 +229,13 @@ CREATE TABLE governance_evaluation_plans_013 (
         CHECK (delivery_mode IN ('fairmind_worker', 'external_provider', 'imported_report')),
     CONSTRAINT ck_governance_evaluation_plan_status
         CHECK (status IN ('draft', 'active', 'archived')),
+    CONSTRAINT ck_governance_evaluation_plan_contract_version
+        CHECK (contract_version IN ('1.0.0', '2.0.0')),
+    CONSTRAINT ck_governance_evaluation_plan_v2_bindings CHECK (
+        contract_version = '1.0.0'
+        OR (contract_version = '2.0.0' AND target_version_id IS NOT NULL
+            AND plan_content_hash IS NOT NULL AND trust_policy_version_id IS NOT NULL)
+    ),
     CONSTRAINT ck_governance_evaluation_plan_content_hash CHECK (
         plan_content_hash IS NULL OR
         (length(plan_content_hash) = 64 AND plan_content_hash NOT GLOB '*[^0-9a-f]*')
@@ -259,12 +288,17 @@ CREATE TABLE governance_evaluation_runs_013 (
     verdict_version INTEGER NOT NULL DEFAULT 0,
     CONSTRAINT uq_governance_evaluation_run_tenant
         UNIQUE (id, workspace_id, system_id, org_id),
+    CONSTRAINT uq_governance_evaluation_run_envelope UNIQUE (org_id, envelope_id),
     CONSTRAINT ck_governance_evaluation_run_trigger
         CHECK (trigger IN ('manual', 'ci', 'scheduled', 'release_gate', 'incident', 'integration_sync')),
     CONSTRAINT ck_governance_evaluation_run_technical_status
         CHECK (technical_status IN ('awaiting_evidence', 'running', 'succeeded', 'failed', 'cancelled')),
     CONSTRAINT ck_governance_evaluation_run_overall_verdict
         CHECK (overall_verdict IN ('approved', 'conditional', 'review', 'blocked', 'insufficient')),
+    CONSTRAINT ck_governance_evaluation_run_lifecycle_phase CHECK (
+        lifecycle_phase IS NULL
+        OR lifecycle_phase IN ('pre_deploy', 'realtime', 'post_deploy')
+    ),
     CONSTRAINT ck_governance_evaluation_run_complete_passport_link CHECK (
         (linked_passport_revision_id IS NULL AND linked_evidence_run_id IS NULL)
         OR (linked_passport_revision_id IS NOT NULL AND linked_evidence_run_id IS NOT NULL)
@@ -273,6 +307,11 @@ CREATE TABLE governance_evaluation_runs_013 (
         (technical_status IN ('succeeded', 'failed') AND linked_passport_revision_id IS NOT NULL
          AND linked_evidence_run_id IS NOT NULL AND linked_by IS NOT NULL
          AND linked_at IS NOT NULL AND started_at IS NOT NULL AND completed_at IS NOT NULL)
+        OR (technical_status = 'succeeded' AND linked_passport_revision_id IS NULL
+            AND linked_evidence_run_id IS NULL AND linked_by IS NULL AND linked_at IS NULL
+            AND envelope_id IS NOT NULL AND envelope_json IS NOT NULL
+            AND envelope_hash IS NOT NULL AND started_at IS NOT NULL
+            AND completed_at IS NOT NULL)
         OR (technical_status <> 'succeeded' AND linked_passport_revision_id IS NULL
             AND linked_evidence_run_id IS NULL AND linked_by IS NULL AND linked_at IS NULL)
     ),
@@ -307,18 +346,199 @@ INSERT INTO governance_evaluation_runs_013 (
     id, org_id, workspace_id, system_id, plan_id, trigger, technical_status,
     overall_verdict, layer_verdicts_json, linked_evidence_run_id,
     linked_passport_revision_id, linked_by, linked_at, requested_by, started_at,
-    completed_at, failure_code, failure_message, created_at, updated_at
+    completed_at, failure_code, failure_message, created_at, updated_at,
+    lifecycle_phase, envelope_id, envelope_json, envelope_hash,
+    evidence_outcome, verdict_version
 )
 SELECT id, org_id, workspace_id, system_id, plan_id, trigger, technical_status,
        overall_verdict, layer_verdicts_json, linked_evidence_run_id,
        linked_passport_revision_id, linked_by, linked_at, requested_by, started_at,
-       completed_at, failure_code, failure_message, created_at, updated_at
+       completed_at, failure_code, failure_message, created_at, updated_at,
+       (
+           SELECT state.lifecycle_phase
+           FROM governance_evaluation_run_v2_replay_state AS state
+           WHERE state.run_id = governance_evaluation_runs.id
+       ),
+       (
+           SELECT state.envelope_id
+           FROM governance_evaluation_run_v2_replay_state AS state
+           WHERE state.run_id = governance_evaluation_runs.id
+       ),
+       (
+           SELECT state.envelope_json
+           FROM governance_evaluation_run_v2_replay_state AS state
+           WHERE state.run_id = governance_evaluation_runs.id
+       ),
+       (
+           SELECT state.envelope_hash
+           FROM governance_evaluation_run_v2_replay_state AS state
+           WHERE state.run_id = governance_evaluation_runs.id
+       ),
+       COALESCE((
+           SELECT state.evidence_outcome
+           FROM governance_evaluation_run_v2_replay_state AS state
+           WHERE state.run_id = governance_evaluation_runs.id
+       ), 'pending'),
+       COALESCE((
+           SELECT state.verdict_version
+           FROM governance_evaluation_run_v2_replay_state AS state
+           WHERE state.run_id = governance_evaluation_runs.id
+       ), 0)
 FROM governance_evaluation_runs;
 
 DROP TABLE governance_evaluation_runs;
 DROP TABLE governance_evaluation_plans;
 ALTER TABLE governance_evaluation_plans_013 RENAME TO governance_evaluation_plans;
 ALTER TABLE governance_evaluation_runs_013 RENAME TO governance_evaluation_runs;
+
+UPDATE governance_evaluation_plans
+SET contract_version = (
+        SELECT state.contract_version
+        FROM governance_evaluation_plan_v2_replay_state AS state
+        WHERE state.plan_id = governance_evaluation_plans.id
+    ),
+    target_version_id = (
+        SELECT state.target_version_id
+        FROM governance_evaluation_plan_v2_replay_state AS state
+        WHERE state.plan_id = governance_evaluation_plans.id
+    ),
+    plan_content_hash = (
+        SELECT state.plan_content_hash
+        FROM governance_evaluation_plan_v2_replay_state AS state
+        WHERE state.plan_id = governance_evaluation_plans.id
+    ),
+    trust_policy_version_id = (
+        SELECT state.trust_policy_version_id
+        FROM governance_evaluation_plan_v2_replay_state AS state
+        WHERE state.plan_id = governance_evaluation_plans.id
+    )
+WHERE EXISTS (
+    SELECT 1 FROM governance_evaluation_plan_v2_replay_state AS state
+    WHERE state.plan_id = governance_evaluation_plans.id
+);
+
+UPDATE governance_evaluation_runs
+SET lifecycle_phase = (
+        SELECT state.lifecycle_phase
+        FROM governance_evaluation_run_v2_replay_state AS state
+        WHERE state.run_id = governance_evaluation_runs.id
+    ),
+    envelope_id = (
+        SELECT state.envelope_id
+        FROM governance_evaluation_run_v2_replay_state AS state
+        WHERE state.run_id = governance_evaluation_runs.id
+    ),
+    envelope_json = (
+        SELECT state.envelope_json
+        FROM governance_evaluation_run_v2_replay_state AS state
+        WHERE state.run_id = governance_evaluation_runs.id
+    ),
+    envelope_hash = (
+        SELECT state.envelope_hash
+        FROM governance_evaluation_run_v2_replay_state AS state
+        WHERE state.run_id = governance_evaluation_runs.id
+    ),
+    evidence_outcome = (
+        SELECT state.evidence_outcome
+        FROM governance_evaluation_run_v2_replay_state AS state
+        WHERE state.run_id = governance_evaluation_runs.id
+    ),
+    verdict_version = (
+        SELECT state.verdict_version
+        FROM governance_evaluation_run_v2_replay_state AS state
+        WHERE state.run_id = governance_evaluation_runs.id
+    )
+WHERE EXISTS (
+    SELECT 1 FROM governance_evaluation_run_v2_replay_state AS state
+    WHERE state.run_id = governance_evaluation_runs.id
+);
+
+CREATE TRIGGER IF NOT EXISTS governance_evaluation_plans_capture_v2_insert
+AFTER INSERT ON governance_evaluation_plans
+BEGIN
+    INSERT INTO governance_evaluation_plan_v2_replay_state (
+        plan_id, contract_version, target_version_id, plan_content_hash,
+        trust_policy_version_id
+    ) VALUES (
+        NEW.id, NEW.contract_version, NEW.target_version_id, NEW.plan_content_hash,
+        NEW.trust_policy_version_id
+    )
+    ON CONFLICT(plan_id) DO UPDATE SET
+        contract_version = excluded.contract_version,
+        target_version_id = excluded.target_version_id,
+        plan_content_hash = excluded.plan_content_hash,
+        trust_policy_version_id = excluded.trust_policy_version_id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS governance_evaluation_plans_capture_v2_update
+AFTER UPDATE OF contract_version, target_version_id, plan_content_hash,
+                trust_policy_version_id ON governance_evaluation_plans
+BEGIN
+    INSERT INTO governance_evaluation_plan_v2_replay_state (
+        plan_id, contract_version, target_version_id, plan_content_hash,
+        trust_policy_version_id
+    ) VALUES (
+        NEW.id, NEW.contract_version, NEW.target_version_id, NEW.plan_content_hash,
+        NEW.trust_policy_version_id
+    )
+    ON CONFLICT(plan_id) DO UPDATE SET
+        contract_version = excluded.contract_version,
+        target_version_id = excluded.target_version_id,
+        plan_content_hash = excluded.plan_content_hash,
+        trust_policy_version_id = excluded.trust_policy_version_id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS governance_evaluation_plans_clear_v2_delete
+AFTER DELETE ON governance_evaluation_plans
+BEGIN
+    DELETE FROM governance_evaluation_plan_v2_replay_state WHERE plan_id = OLD.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS governance_evaluation_runs_capture_v2_insert
+AFTER INSERT ON governance_evaluation_runs
+BEGIN
+    INSERT INTO governance_evaluation_run_v2_replay_state (
+        run_id, lifecycle_phase, envelope_id, envelope_json, envelope_hash,
+        evidence_outcome, verdict_version
+    ) VALUES (
+        NEW.id, NEW.lifecycle_phase, NEW.envelope_id, NEW.envelope_json, NEW.envelope_hash,
+        NEW.evidence_outcome, NEW.verdict_version
+    )
+    ON CONFLICT(run_id) DO UPDATE SET
+        lifecycle_phase = excluded.lifecycle_phase,
+        envelope_id = excluded.envelope_id,
+        envelope_json = excluded.envelope_json,
+        envelope_hash = excluded.envelope_hash,
+        evidence_outcome = excluded.evidence_outcome,
+        verdict_version = excluded.verdict_version;
+END;
+
+CREATE TRIGGER IF NOT EXISTS governance_evaluation_runs_capture_v2_update
+AFTER UPDATE OF lifecycle_phase, envelope_id, envelope_json, envelope_hash,
+                evidence_outcome, verdict_version ON governance_evaluation_runs
+BEGIN
+    INSERT INTO governance_evaluation_run_v2_replay_state (
+        run_id, lifecycle_phase, envelope_id, envelope_json, envelope_hash,
+        evidence_outcome, verdict_version
+    ) VALUES (
+        NEW.id, NEW.lifecycle_phase, NEW.envelope_id, NEW.envelope_json, NEW.envelope_hash,
+        NEW.evidence_outcome, NEW.verdict_version
+    )
+    ON CONFLICT(run_id) DO UPDATE SET
+        lifecycle_phase = excluded.lifecycle_phase,
+        envelope_id = excluded.envelope_id,
+        envelope_json = excluded.envelope_json,
+        envelope_hash = excluded.envelope_hash,
+        evidence_outcome = excluded.evidence_outcome,
+        verdict_version = excluded.verdict_version;
+END;
+
+CREATE TRIGGER IF NOT EXISTS governance_evaluation_runs_clear_v2_delete
+AFTER DELETE ON governance_evaluation_runs
+BEGIN
+    DELETE FROM governance_evaluation_run_v2_replay_state WHERE run_id = OLD.id;
+END;
+
 CREATE INDEX IF NOT EXISTS idx_governance_evaluation_plans_scope_status
     ON governance_evaluation_plans(org_id, system_id, status);
 CREATE INDEX IF NOT EXISTS idx_governance_evaluation_runs_scope_created

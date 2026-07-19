@@ -25,6 +25,7 @@ from database.governance_models import (
     GovernanceWorkspace,
 )
 from migrations.evaluation_runs_migration import sql_for
+from migrations.evaluation_assurance_v2_migration import sql_for as sql_for_v2
 
 
 PRODUCTION_TABLES = (
@@ -743,7 +744,7 @@ def test_check_constraints_cover_exact_vocabulary() -> None:
 
     assert (
         "target_kind IN ('predictive_model', 'llm_application', 'agent', 'code_generator', "
-        "'image_generator', 'audio_model', 'video_model', 'multimodal_system')"
+        "'image_generator', 'audio_model', 'video_model', 'multimodal_system', 'vision_model')"
         in plan_checks
     )
     assert "execution_depth IN ('inline', 'deep', 'hybrid')" in plan_checks
@@ -779,10 +780,16 @@ def test_named_run_lifecycle_checks_match_orm_postgresql_and_sqlite() -> None:
         "ck_governance_evaluation_run_evidence_link_state": (
             "(technical_status IN ('succeeded', 'failed') "
             "AND linked_passport_revision_id IS NOT NULL "
-            "AND linked_evidence_run_id IS NOT NULL AND linked_by IS NOT NULL "
-            "AND linked_at IS NOT NULL AND started_at IS NOT NULL "
-            "AND completed_at IS NOT NULL) OR "
-            "(technical_status <> 'succeeded' AND linked_passport_revision_id IS NULL "
+                "AND linked_evidence_run_id IS NOT NULL AND linked_by IS NOT NULL "
+                "AND linked_at IS NOT NULL AND started_at IS NOT NULL "
+                "AND completed_at IS NOT NULL) OR "
+                "(technical_status = 'succeeded' "
+                "AND linked_passport_revision_id IS NULL "
+                "AND linked_evidence_run_id IS NULL AND linked_by IS NULL "
+                "AND linked_at IS NULL AND envelope_id IS NOT NULL "
+                "AND envelope_json IS NOT NULL AND envelope_hash IS NOT NULL "
+                "AND started_at IS NOT NULL AND completed_at IS NOT NULL) OR "
+                "(technical_status <> 'succeeded' AND linked_passport_revision_id IS NULL "
             "AND linked_evidence_run_id IS NULL AND linked_by IS NULL AND linked_at IS NULL)"
         ),
         "ck_governance_evaluation_run_timestamps": (
@@ -800,13 +807,13 @@ def test_named_run_lifecycle_checks_match_orm_postgresql_and_sqlite() -> None:
         for constraint in GovernanceEvaluationRun.__table__.constraints
         if isinstance(constraint, CheckConstraint)
     }
-    dialect_sql = {
-        "postgresql": normalize_sql(sql_for("postgresql")),
-        "sqlite": normalize_sql(sql_for("sqlite")),
-    }
-
     for name, expression in expected_checks.items():
         normalized_expression = normalize_sql(expression)
         assert orm_checks[name] == normalized_expression
-        for sql in dialect_sql.values():
+        selector = (
+            sql_for_v2
+            if name == "ck_governance_evaluation_run_evidence_link_state"
+            else sql_for
+        )
+        for sql in (normalize_sql(selector("postgresql")), normalize_sql(selector("sqlite"))):
             assert normalize_sql(f"CONSTRAINT {name} CHECK ({expression})") in sql
