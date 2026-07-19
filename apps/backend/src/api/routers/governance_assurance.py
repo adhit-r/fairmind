@@ -11,7 +11,8 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic_core import PydanticCustomError
 from sqlalchemy.orm import Session
 
 from config.auth import TokenData, get_current_active_user
@@ -36,6 +37,11 @@ from src.application.services.governance_assurance_service import (
     EvidenceMappingConflictError,
     GovernanceAssuranceService,
     OrgMembership,
+)
+from src.application.services.evaluation_runs_service import (
+    EvaluationRunsService,
+    EvaluationWorkflowError,
+    SUITE_REF_PATTERN,
 )
 
 router = APIRouter(prefix="/organizations/{org_id}", tags=["governance-assurance"])
@@ -92,6 +98,181 @@ class EvidenceMappingReviewRequest(BaseModel):
 
 class EvidencePassportErrorResponse(BaseModel):
     detail: str
+
+
+class EvaluationPlanRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=120)
+    target_kind: Literal[
+        "predictive_model",
+        "llm_application",
+        "agent",
+        "code_generator",
+        "image_generator",
+        "audio_model",
+        "video_model",
+        "multimodal_system",
+    ] = Field(alias="targetKind")
+    lifecycle_phases: list[Literal["pre_deploy", "realtime", "post_deploy"]] = Field(
+        alias="lifecyclePhases", min_length=1, max_length=3
+    )
+    execution_depth: Literal["inline", "deep", "hybrid"] = Field(
+        default="hybrid", alias="executionDepth"
+    )
+    enforcement_mode: Literal["advisory", "human_approval", "automatic"] = Field(
+        default="human_approval", alias="enforcementMode"
+    )
+    delivery_mode: Literal["fairmind_worker", "external_provider", "imported_report"] = Field(
+        alias="deliveryMode"
+    )
+    suite_refs: list[str] = Field(alias="suiteRefs", min_length=1, max_length=32)
+
+    @field_validator("name")
+    @classmethod
+    def _name_must_not_be_whitespace(cls, value: str) -> str:
+        if not value.strip():
+            raise PydanticCustomError(
+                "name_whitespace",
+                "name must contain non-whitespace characters",
+            )
+        return value
+
+    @field_validator("lifecycle_phases")
+    @classmethod
+    def _lifecycle_phases_must_be_distinct(cls, value: list[str]) -> list[str]:
+        if len(set(value)) != len(value):
+            raise PydanticCustomError(
+                "duplicate_lifecycle_phases",
+                "lifecyclePhases must be distinct",
+            )
+        return value
+
+    @field_validator("suite_refs")
+    @classmethod
+    def _suite_refs_must_be_exact_and_distinct(cls, value: list[str]) -> list[str]:
+        if len(set(value)) != len(value):
+            raise PydanticCustomError("duplicate_suite_refs", "suiteRefs must be distinct")
+        for suite_ref in value:
+            if len(suite_ref) > 160 or SUITE_REF_PATTERN.fullmatch(suite_ref) is None:
+                raise PydanticCustomError(
+                    "invalid_suite_ref",
+                    "suiteRefs must use exact namespace/name@version syntax",
+                )
+        return value
+
+
+class EvaluationRunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    trigger: Literal["manual", "ci", "scheduled", "release_gate", "incident", "integration_sync"]
+
+
+class EvidencePassportLinkRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    evidence_run_id: str = Field(alias="evidenceRunId", min_length=1)
+    passport_revision_id: str = Field(alias="passportRevisionId", min_length=1)
+
+
+class EvaluationPlanResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str
+    org_id: str = Field(alias="orgId")
+    workspace_id: str = Field(alias="workspaceId")
+    system_id: str = Field(alias="systemId")
+    name: str
+    target_kind: Literal[
+        "predictive_model",
+        "llm_application",
+        "agent",
+        "code_generator",
+        "image_generator",
+        "audio_model",
+        "video_model",
+        "multimodal_system",
+    ] = Field(alias="targetKind")
+    lifecycle_phases: list[Literal["pre_deploy", "realtime", "post_deploy"]] = Field(
+        alias="lifecyclePhases"
+    )
+    execution_depth: Literal["inline", "deep", "hybrid"] = Field(alias="executionDepth")
+    enforcement_mode: Literal["advisory", "human_approval", "automatic"] = Field(
+        alias="enforcementMode"
+    )
+    delivery_mode: Literal["fairmind_worker", "external_provider", "imported_report"] = Field(
+        alias="deliveryMode"
+    )
+    suite_refs: list[str] = Field(alias="suiteRefs")
+    status: Literal["draft", "active", "archived"]
+    created_by: str = Field(alias="createdBy")
+    updated_by: str = Field(alias="updatedBy")
+    created_at: str = Field(alias="createdAt")
+    updated_at: str = Field(alias="updatedAt")
+
+
+class EvaluationRunResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str
+    org_id: str = Field(alias="orgId")
+    workspace_id: str = Field(alias="workspaceId")
+    system_id: str = Field(alias="systemId")
+    plan_id: str = Field(alias="planId")
+    trigger: Literal["manual", "ci", "scheduled", "release_gate", "incident", "integration_sync"]
+    technical_status: Literal[
+        "awaiting_evidence", "running", "succeeded", "failed", "cancelled"
+    ] = Field(alias="technicalStatus")
+    overall_verdict: Literal[
+        "approved", "conditional", "review", "blocked", "insufficient"
+    ] = Field(alias="overallVerdict")
+    layer_verdicts: dict[str, Any] = Field(alias="layerVerdicts")
+    linked_evidence_run_id: str | None = Field(alias="linkedEvidenceRunId")
+    linked_passport_revision_id: str | None = Field(alias="linkedPassportRevisionId")
+    linked_by: str | None = Field(alias="linkedBy")
+    linked_at: str | None = Field(alias="linkedAt")
+    requested_by: str = Field(alias="requestedBy")
+    started_at: str | None = Field(alias="startedAt")
+    completed_at: str | None = Field(alias="completedAt")
+    failure_code: str | None = Field(alias="failureCode")
+    failure_message: str | None = Field(alias="failureMessage")
+    created_at: str = Field(alias="createdAt")
+    updated_at: str = Field(alias="updatedAt")
+
+
+class EvaluationPreflightResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    plan_id: str = Field(alias="planId")
+    can_prepare_run: bool = Field(alias="canPrepareRun")
+    fairmind_execution_available: bool = Field(alias="fairmindExecutionAvailable")
+    code: Literal["executor_unavailable", "evidence_link_required"]
+    message: str
+    next_action: str = Field(alias="nextAction")
+
+
+class EvaluationWorkflowErrorDetail(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    code: str
+    message: str
+    next_action: str = Field(alias="nextAction")
+
+
+class EvaluationWorkflowErrorResponse(BaseModel):
+    detail: EvaluationWorkflowErrorDetail
+
+
+_EVALUATION_ERROR_RESPONSES = {
+    code: {"model": EvaluationWorkflowErrorResponse, "description": description}
+    for code, description in {
+        403: "Organization membership or mutation permission required",
+        404: "Scoped AI system, evaluation plan, or evaluation run not found",
+        409: "Evaluation workflow conflict",
+        422: "Invalid exact Passport scope or compatibility",
+        500: "Evaluation persistence, canonical snapshot, or audit failure",
+    }.items()
+}
 
 
 class EvidenceArtifactResponse(BaseModel):
@@ -690,3 +871,200 @@ def review_evidence_mapping(
             status_code=status.HTTP_404_NOT_FOUND, detail="Evidence mapping not found"
         )
     return mapping
+
+
+def _evaluation_service(db: Session) -> EvaluationRunsService:
+    return EvaluationRunsService(db)
+
+
+def _raise_evaluation_error(error: EvaluationWorkflowError) -> None:
+    raise HTTPException(status_code=error.status_code, detail=error.detail()) from error
+
+
+@router.post(
+    "/systems/{system_id}/evaluation-plans",
+    response_model=EvaluationPlanResponse,
+    status_code=status.HTTP_201_CREATED,
+    responses=_EVALUATION_ERROR_RESPONSES,
+)
+def create_evaluation_plan(
+    system_id: str,
+    request: EvaluationPlanRequest,
+    membership: OrgMembership = Depends(organization_membership),
+    db: Session = Depends(get_db),
+) -> dict:
+    authorization_service = _service(db)
+    _require_mutation(membership, authorization_service)
+    try:
+        return _evaluation_service(db).create_plan(
+            org_id=membership.org_id,
+            system_id=system_id,
+            actor_id=membership.user_id,
+            payload=request.model_dump(by_alias=True),
+        )
+    except EvaluationWorkflowError as error:
+        _raise_evaluation_error(error)
+
+
+@router.get(
+    "/systems/{system_id}/evaluation-plans",
+    response_model=list[EvaluationPlanResponse],
+    responses=_EVALUATION_ERROR_RESPONSES,
+)
+def list_evaluation_plans(
+    system_id: str,
+    membership: OrgMembership = Depends(organization_membership),
+    db: Session = Depends(get_db),
+) -> list[dict]:
+    plans = _evaluation_service(db).list_plans(
+        org_id=membership.org_id,
+        system_id=system_id,
+    )
+    if plans is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="AI system not found")
+    return plans
+
+
+@router.post(
+    "/systems/{system_id}/evaluation-plans/{plan_id}/activate",
+    response_model=EvaluationPlanResponse,
+    responses=_EVALUATION_ERROR_RESPONSES,
+)
+def activate_evaluation_plan(
+    system_id: str,
+    plan_id: str,
+    membership: OrgMembership = Depends(organization_membership),
+    db: Session = Depends(get_db),
+) -> dict:
+    authorization_service = _service(db)
+    _require_mutation(membership, authorization_service)
+    try:
+        plan = _evaluation_service(db).activate_plan(
+            org_id=membership.org_id,
+            system_id=system_id,
+            plan_id=plan_id,
+            actor_id=membership.user_id,
+        )
+    except EvaluationWorkflowError as error:
+        _raise_evaluation_error(error)
+    if plan is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evaluation plan not found")
+    return plan
+
+
+@router.get(
+    "/systems/{system_id}/evaluation-plans/{plan_id}/preflight",
+    response_model=EvaluationPreflightResponse,
+    responses=_EVALUATION_ERROR_RESPONSES,
+)
+def evaluation_plan_preflight(
+    system_id: str,
+    plan_id: str,
+    membership: OrgMembership = Depends(organization_membership),
+    db: Session = Depends(get_db),
+) -> dict:
+    result = _evaluation_service(db).preflight(
+        org_id=membership.org_id,
+        system_id=system_id,
+        plan_id=plan_id,
+    )
+    if result is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evaluation plan not found")
+    return result
+
+
+@router.post(
+    "/systems/{system_id}/evaluation-plans/{plan_id}/runs",
+    response_model=EvaluationRunResponse,
+    status_code=status.HTTP_201_CREATED,
+    responses=_EVALUATION_ERROR_RESPONSES,
+)
+def create_evaluation_run(
+    system_id: str,
+    plan_id: str,
+    request: EvaluationRunRequest,
+    membership: OrgMembership = Depends(organization_membership),
+    db: Session = Depends(get_db),
+) -> dict:
+    authorization_service = _service(db)
+    _require_mutation(membership, authorization_service)
+    try:
+        return _evaluation_service(db).create_run(
+            org_id=membership.org_id,
+            system_id=system_id,
+            plan_id=plan_id,
+            actor_id=membership.user_id,
+            trigger=request.trigger,
+        )
+    except EvaluationWorkflowError as error:
+        _raise_evaluation_error(error)
+
+
+@router.get(
+    "/systems/{system_id}/evaluation-runs",
+    response_model=list[EvaluationRunResponse],
+    responses=_EVALUATION_ERROR_RESPONSES,
+)
+def list_evaluation_runs(
+    system_id: str,
+    membership: OrgMembership = Depends(organization_membership),
+    db: Session = Depends(get_db),
+) -> list[dict]:
+    runs = _evaluation_service(db).list_runs(
+        org_id=membership.org_id,
+        system_id=system_id,
+    )
+    if runs is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="AI system not found")
+    return runs
+
+
+@router.get(
+    "/systems/{system_id}/evaluation-runs/{run_id}",
+    response_model=EvaluationRunResponse,
+    responses=_EVALUATION_ERROR_RESPONSES,
+)
+def get_evaluation_run(
+    system_id: str,
+    run_id: str,
+    membership: OrgMembership = Depends(organization_membership),
+    db: Session = Depends(get_db),
+) -> dict:
+    run = _evaluation_service(db).get_run(
+        org_id=membership.org_id,
+        system_id=system_id,
+        run_id=run_id,
+    )
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evaluation run not found")
+    return run
+
+
+@router.post(
+    "/systems/{system_id}/evaluation-runs/{run_id}/evidence-passport-link",
+    response_model=EvaluationRunResponse,
+    responses=_EVALUATION_ERROR_RESPONSES,
+)
+def link_evaluation_run_passport(
+    system_id: str,
+    run_id: str,
+    request: EvidencePassportLinkRequest,
+    membership: OrgMembership = Depends(organization_membership),
+    db: Session = Depends(get_db),
+) -> dict:
+    authorization_service = _service(db)
+    _require_mutation(membership, authorization_service)
+    try:
+        run = _evaluation_service(db).link_passport_revision(
+            org_id=membership.org_id,
+            system_id=system_id,
+            run_id=run_id,
+            evidence_run_id=request.evidence_run_id,
+            passport_revision_id=request.passport_revision_id,
+            actor_id=membership.user_id,
+        )
+    except EvaluationWorkflowError as error:
+        _raise_evaluation_error(error)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evaluation run not found")
+    return run
