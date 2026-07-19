@@ -493,6 +493,671 @@ class GovernanceEvidencePassportRevision(Base):
     )
 
 
+class GovernanceEvaluationTargetVersion(Base):
+    """Immutable tenant-scoped evaluated-target identity."""
+
+    __tablename__ = "governance_evaluation_target_versions"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    workspace_id = Column(String, nullable=False, index=True)
+    system_id = Column(String, nullable=False, index=True)
+    target_key = Column(String, nullable=False)
+    target_kind = Column(String, nullable=False)
+    version = Column(String, nullable=False)
+    system_version = Column(String, nullable=False)
+    subject_kind = Column(String, nullable=False)
+    subject_id = Column(String, nullable=False)
+    subject_version = Column(String, nullable=False)
+    subject_digest = Column(String, nullable=False)
+    deployment_id = Column(String, nullable=True)
+    connector_binding_id = Column(String, nullable=True)
+    manifest_json = Column(Text, nullable=False)
+    manifest_digest = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="active")
+    supersedes_id = Column(String, nullable=True)
+    created_by = Column(String, nullable=False)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+    __table_args__ = (
+        UniqueConstraint(
+            "id", "workspace_id", "system_id", "org_id",
+            name="uq_governance_evaluation_target_tenant",
+        ),
+        UniqueConstraint(
+            "org_id", "system_id", "target_key", "version",
+            name="uq_governance_evaluation_target_version",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "org_id"],
+            ["governance_workspaces.id", "governance_workspaces.org_id"],
+        ),
+        ForeignKeyConstraint(
+            ["system_id", "workspace_id", "org_id"],
+            [
+                "governance_ai_systems.id",
+                "governance_ai_systems.workspace_id",
+                "governance_ai_systems.org_id",
+            ],
+        ),
+        ForeignKeyConstraint(
+            ["supersedes_id", "workspace_id", "system_id", "org_id"],
+            [
+                "governance_evaluation_target_versions.id",
+                "governance_evaluation_target_versions.workspace_id",
+                "governance_evaluation_target_versions.system_id",
+                "governance_evaluation_target_versions.org_id",
+            ],
+        ),
+        CheckConstraint(
+            "target_kind IN ('predictive_model', 'llm_application', 'agent', "
+            "'code_generator', 'image_generator', 'audio_model', 'video_model', "
+            "'multimodal_system', 'vision_model')",
+            name="ck_governance_evaluation_target_kind",
+        ),
+        CheckConstraint(
+            "status IN ('active', 'superseded', 'retired')",
+            name="ck_governance_evaluation_target_status",
+        ),
+        CheckConstraint(
+            "length(trim(target_key)) > 0 AND length(trim(version)) > 0 "
+            "AND length(trim(system_version)) > 0 AND length(trim(subject_kind)) > 0 "
+            "AND length(trim(subject_id)) > 0 AND length(trim(subject_version)) > 0",
+            name="ck_governance_evaluation_target_identity",
+        ),
+        CheckConstraint(
+            _lower_hex64("subject_digest"),
+            name="ck_governance_evaluation_target_subject_digest",
+        ),
+        CheckConstraint(
+            _lower_hex64("manifest_digest"),
+            name="ck_governance_evaluation_target_manifest_digest",
+        ),
+    )
+
+
+class GovernanceEvaluationSuiteVersion(Base):
+    """Immutable platform or organization-owned suite identity."""
+
+    __tablename__ = "governance_evaluation_suite_versions"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    owner_org_id = Column(String, nullable=True, index=True)
+    owner_scope = Column(String, nullable=False)
+    namespace = Column(String, nullable=False)
+    name = Column(String, nullable=False)
+    version = Column(String, nullable=False)
+    suite_ref = Column(String, nullable=False)
+    manifest_json = Column(Text, nullable=False)
+    manifest_digest = Column(String, nullable=False)
+    target_kinds_json = Column(Text, nullable=False)
+    subject_kinds_json = Column(Text, nullable=False)
+    lifecycle_phases_json = Column(Text, nullable=False)
+    execution_depths_json = Column(Text, nullable=False)
+    delivery_modes_json = Column(Text, nullable=False)
+    worker_type = Column(String, nullable=False)
+    runner_image_digest = Column(String, nullable=True)
+    adapter_name = Column(String, nullable=False)
+    adapter_version = Column(String, nullable=False)
+    configuration_schema_json = Column(Text, nullable=False)
+    configuration_defaults_json = Column(Text, nullable=False)
+    required_input_roles_json = Column(Text, nullable=False)
+    default_budgets_json = Column(Text, nullable=False)
+    result_contract_version = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="draft")
+    created_by = Column(String, nullable=False)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+    __table_args__ = (
+        UniqueConstraint(
+            "owner_scope", "namespace", "name", "version",
+            name="uq_governance_evaluation_suite_owner_identity",
+        ),
+        UniqueConstraint(
+            "id", "owner_scope", name="uq_governance_evaluation_suite_scope"
+        ),
+        CheckConstraint(
+            "(owner_org_id IS NULL AND owner_scope = 'platform') OR "
+            "(owner_org_id IS NOT NULL AND owner_scope = owner_org_id)",
+            name="ck_governance_evaluation_suite_owner_scope",
+        ),
+        CheckConstraint(
+            "length(trim(namespace)) > 0 AND length(trim(name)) > 0 "
+            "AND length(trim(version)) > 0 AND length(trim(suite_ref)) > 0",
+            name="ck_governance_evaluation_suite_identity",
+        ),
+        CheckConstraint(
+            _lower_hex64("manifest_digest"),
+            name="ck_governance_evaluation_suite_manifest_digest",
+        ),
+        CheckConstraint(
+            "status IN ('draft', 'active', 'deprecated', 'revoked')",
+            name="ck_governance_evaluation_suite_status",
+        ),
+    )
+
+
+class GovernanceEvidenceIssuer(Base):
+    __tablename__ = "governance_evidence_issuers"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    issuer_key = Column(String, nullable=False)
+    name = Column(String, nullable=False)
+    issuer_type = Column(String, nullable=False)
+    source_restrictions_json = Column(Text, nullable=False, default="[]")
+    suite_restrictions_json = Column(Text, nullable=False, default="[]")
+    target_restrictions_json = Column(Text, nullable=False, default="[]")
+    status = Column(String, nullable=False, default="active")
+    created_by = Column(String, nullable=False)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+    __table_args__ = (
+        UniqueConstraint("id", "org_id", name="uq_governance_evidence_issuer_tenant"),
+        UniqueConstraint(
+            "org_id", "issuer_key", name="uq_governance_evidence_issuer_key"
+        ),
+        CheckConstraint(
+            "status IN ('active', 'revoked')",
+            name="ck_governance_evidence_issuer_status",
+        ),
+    )
+
+
+class GovernanceEvidenceSigningKey(Base):
+    __tablename__ = "governance_evidence_signing_keys"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    issuer_id = Column(String, nullable=False, index=True)
+    key_id = Column(String, nullable=False)
+    algorithm = Column(String, nullable=False)
+    public_jwk_json = Column(Text, nullable=False)
+    valid_from = Column(String, nullable=False)
+    valid_until = Column(String, nullable=False)
+    revoked_at = Column(String, nullable=True)
+    revocation_reason = Column(Text, nullable=True)
+    created_by = Column(String, nullable=False)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+    __table_args__ = (
+        UniqueConstraint(
+            "id", "issuer_id", "org_id",
+            name="uq_governance_evidence_signing_key_tenant",
+        ),
+        UniqueConstraint(
+            "org_id", "issuer_id", "key_id",
+            name="uq_governance_evidence_signing_key_id",
+        ),
+        ForeignKeyConstraint(
+            ["issuer_id", "org_id"],
+            ["governance_evidence_issuers.id", "governance_evidence_issuers.org_id"],
+        ),
+        CheckConstraint(
+            "algorithm = 'Ed25519'",
+            name="ck_governance_evidence_signing_key_algorithm",
+        ),
+        CheckConstraint(
+            "valid_until > valid_from",
+            name="ck_governance_evidence_signing_key_validity",
+        ),
+        CheckConstraint(
+            "(revoked_at IS NULL AND revocation_reason IS NULL) OR "
+            "(revoked_at IS NOT NULL AND revocation_reason IS NOT NULL)",
+            name="ck_governance_evidence_signing_key_revocation",
+        ),
+    )
+
+
+class GovernanceEvidenceTrustPolicyVersion(Base):
+    __tablename__ = "governance_evidence_trust_policy_versions"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    version = Column(String, nullable=False)
+    policy_json = Column(Text, nullable=False)
+    policy_hash = Column(String, nullable=False)
+    maximum_evidence_age_seconds = Column(Integer, nullable=False)
+    unsigned_import_policy = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="draft")
+    created_by = Column(String, nullable=False)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+    __table_args__ = (
+        UniqueConstraint(
+            "id", "org_id", name="uq_governance_evidence_trust_policy_tenant"
+        ),
+        UniqueConstraint(
+            "org_id", "version", name="uq_governance_evidence_trust_policy_version"
+        ),
+        CheckConstraint(
+            _lower_hex64("policy_hash"),
+            name="ck_governance_evidence_trust_policy_hash",
+        ),
+        CheckConstraint(
+            "maximum_evidence_age_seconds >= 0",
+            name="ck_governance_evidence_trust_policy_age",
+        ),
+        CheckConstraint(
+            "unsigned_import_policy IN ('reject', 'manual_review', 'allow')",
+            name="ck_governance_evidence_trust_policy_unsigned",
+        ),
+        CheckConstraint(
+            "status IN ('draft', 'active', 'retired')",
+            name="ck_governance_evidence_trust_policy_status",
+        ),
+    )
+
+
+class GovernanceEvaluationPlanSuite(Base):
+    __tablename__ = "governance_evaluation_plan_suites"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    workspace_id = Column(String, nullable=False, index=True)
+    system_id = Column(String, nullable=False, index=True)
+    plan_id = Column(String, nullable=False, index=True)
+    suite_version_id = Column(String, nullable=False, index=True)
+    suite_owner_scope = Column(String, nullable=False)
+    ordinal = Column(Integer, nullable=False)
+    configuration_json = Column(Text, nullable=False)
+    configuration_hash = Column(String, nullable=False)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+    __table_args__ = (
+        UniqueConstraint(
+            "id", "plan_id", "workspace_id", "system_id", "org_id",
+            name="uq_governance_evaluation_plan_suite_tenant",
+        ),
+        UniqueConstraint(
+            "plan_id", "ordinal",
+            name="uq_governance_evaluation_plan_suite_ordinal",
+        ),
+        UniqueConstraint(
+            "plan_id", "suite_version_id",
+            name="uq_governance_evaluation_plan_suite_version",
+        ),
+        ForeignKeyConstraint(
+            ["plan_id", "workspace_id", "system_id", "org_id"],
+            [
+                "governance_evaluation_plans.id",
+                "governance_evaluation_plans.workspace_id",
+                "governance_evaluation_plans.system_id",
+                "governance_evaluation_plans.org_id",
+            ],
+        ),
+        ForeignKeyConstraint(
+            ["suite_version_id", "suite_owner_scope"],
+            [
+                "governance_evaluation_suite_versions.id",
+                "governance_evaluation_suite_versions.owner_scope",
+            ],
+        ),
+        CheckConstraint(
+            "suite_owner_scope IN ('platform', org_id)",
+            name="ck_governance_evaluation_plan_suite_owner",
+        ),
+        CheckConstraint(
+            "ordinal >= 0", name="ck_governance_evaluation_plan_suite_ordinal"
+        ),
+        CheckConstraint(
+            _lower_hex64("configuration_hash"),
+            name="ck_governance_evaluation_plan_suite_configuration_hash",
+        ),
+    )
+
+
+class GovernanceEvaluationRunSuiteExecution(Base):
+    __tablename__ = "governance_evaluation_run_suite_executions"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    workspace_id = Column(String, nullable=False, index=True)
+    system_id = Column(String, nullable=False, index=True)
+    run_id = Column(String, nullable=False, index=True)
+    suite_version_id = Column(String, nullable=False, index=True)
+    suite_owner_scope = Column(String, nullable=False)
+    ordinal = Column(Integer, nullable=False)
+    technical_status = Column(String, nullable=False, default="awaiting_evidence")
+    evidence_result_status = Column(String, nullable=False, default="pending")
+    admission_status = Column(String, nullable=False, default="pending")
+    review_status = Column(String, nullable=False, default="pending")
+    freshness_status = Column(String, nullable=False, default="current")
+    evidence_run_id = Column(String, nullable=True)
+    passport_revision_id = Column(String, nullable=True)
+    linked_by = Column(String, nullable=True)
+    linked_at = Column(String, nullable=True)
+    result_summary_json = Column(Text, nullable=True)
+    limitations_json = Column(Text, nullable=True)
+    started_at = Column(String, nullable=True)
+    completed_at = Column(String, nullable=True)
+    failure_code = Column(String, nullable=True)
+    failure_message = Column(Text, nullable=True)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+    __table_args__ = (
+        UniqueConstraint(
+            "id", "run_id", "workspace_id", "system_id", "org_id",
+            name="uq_governance_evaluation_suite_execution_tenant",
+        ),
+        UniqueConstraint(
+            "id", "workspace_id", "system_id", "org_id",
+            name="uq_governance_evaluation_suite_execution_scope",
+        ),
+        UniqueConstraint(
+            "run_id", "ordinal",
+            name="uq_governance_evaluation_suite_execution_ordinal",
+        ),
+        UniqueConstraint(
+            "run_id", "suite_version_id",
+            name="uq_governance_evaluation_suite_execution_suite",
+        ),
+        ForeignKeyConstraint(
+            ["run_id", "workspace_id", "system_id", "org_id"],
+            [
+                "governance_evaluation_runs.id",
+                "governance_evaluation_runs.workspace_id",
+                "governance_evaluation_runs.system_id",
+                "governance_evaluation_runs.org_id",
+            ],
+        ),
+        ForeignKeyConstraint(
+            ["suite_version_id", "suite_owner_scope"],
+            [
+                "governance_evaluation_suite_versions.id",
+                "governance_evaluation_suite_versions.owner_scope",
+            ],
+        ),
+        ForeignKeyConstraint(
+            ["evidence_run_id", "workspace_id", "system_id", "org_id"],
+            [
+                "governance_evidence_runs.id",
+                "governance_evidence_runs.workspace_id",
+                "governance_evidence_runs.system_id",
+                "governance_evidence_runs.org_id",
+            ],
+        ),
+        ForeignKeyConstraint(
+            ["passport_revision_id", "evidence_run_id", "system_id", "org_id"],
+            [
+                "governance_evidence_passport_revisions.id",
+                "governance_evidence_passport_revisions.evidence_run_id",
+                "governance_evidence_passport_revisions.system_id",
+                "governance_evidence_passport_revisions.org_id",
+            ],
+        ),
+        CheckConstraint(
+            "suite_owner_scope IN ('platform', org_id)",
+            name="ck_governance_evaluation_suite_execution_owner",
+        ),
+        CheckConstraint(
+            "ordinal >= 0", name="ck_governance_evaluation_suite_execution_ordinal"
+        ),
+        CheckConstraint(
+            "technical_status IN ('awaiting_evidence', 'queued', 'leased', 'running', "
+            "'succeeded', 'failed', 'timed_out', 'cancelled')",
+            name="ck_governance_evaluation_suite_execution_technical",
+        ),
+        CheckConstraint(
+            "evidence_result_status IN ('pending', 'passed', 'passed_with_limitations', "
+            "'failed', 'informational', 'error', 'unavailable', 'insufficient_data', "
+            "'unknown')",
+            name="ck_governance_evaluation_suite_execution_result",
+        ),
+        CheckConstraint(
+            "admission_status IN ('pending', 'verified', 'unverified', 'expired', "
+            "'superseded', 'rejected', 'trust_error')",
+            name="ck_governance_evaluation_suite_execution_admission",
+        ),
+        CheckConstraint(
+            "review_status IN ('pending', 'accepted', 'rejected')",
+            name="ck_governance_evaluation_suite_execution_review",
+        ),
+        CheckConstraint(
+            "freshness_status IN ('current', 'expiring', 'stale', 'superseded')",
+            name="ck_governance_evaluation_suite_execution_freshness",
+        ),
+        CheckConstraint(
+            "(evidence_run_id IS NULL AND passport_revision_id IS NULL "
+            "AND linked_by IS NULL AND linked_at IS NULL) OR "
+            "(evidence_run_id IS NOT NULL AND passport_revision_id IS NOT NULL "
+            "AND linked_by IS NOT NULL AND linked_at IS NOT NULL)",
+            name="ck_governance_evaluation_suite_execution_evidence_link",
+        ),
+    )
+
+
+class GovernanceEvidenceAdmission(Base):
+    __tablename__ = "governance_evidence_admissions"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    workspace_id = Column(String, nullable=False, index=True)
+    system_id = Column(String, nullable=False, index=True)
+    evidence_run_id = Column(String, nullable=False, index=True)
+    passport_revision_id = Column(String, nullable=False, index=True)
+    trust_policy_version_id = Column(String, nullable=False, index=True)
+    suite_execution_id = Column(String, nullable=False, index=True)
+    envelope_hash = Column(String, nullable=False)
+    admission_status = Column(String, nullable=False)
+    freshness_status = Column(String, nullable=False)
+    issuer_id = Column(String, nullable=True)
+    signing_key_id = Column(String, nullable=True)
+    signer_key_id = Column(String, nullable=True)
+    signer_algorithm = Column(String, nullable=True)
+    reasons_json = Column(Text, nullable=False, default="[]")
+    checked_by = Column(String, nullable=False)
+    checked_at = Column(String, nullable=False)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+    __table_args__ = (
+        UniqueConstraint(
+            "id", "evidence_run_id", "passport_revision_id", "system_id", "org_id",
+            name="uq_governance_evidence_admission_tenant",
+        ),
+        UniqueConstraint(
+            "passport_revision_id", "trust_policy_version_id",
+            name="uq_governance_evidence_admission_policy",
+        ),
+        ForeignKeyConstraint(
+            ["passport_revision_id", "evidence_run_id", "system_id", "org_id"],
+            [
+                "governance_evidence_passport_revisions.id",
+                "governance_evidence_passport_revisions.evidence_run_id",
+                "governance_evidence_passport_revisions.system_id",
+                "governance_evidence_passport_revisions.org_id",
+            ],
+        ),
+        ForeignKeyConstraint(
+            ["trust_policy_version_id", "org_id"],
+            [
+                "governance_evidence_trust_policy_versions.id",
+                "governance_evidence_trust_policy_versions.org_id",
+            ],
+        ),
+        ForeignKeyConstraint(
+            ["suite_execution_id", "workspace_id", "system_id", "org_id"],
+            [
+                "governance_evaluation_run_suite_executions.id",
+                "governance_evaluation_run_suite_executions.workspace_id",
+                "governance_evaluation_run_suite_executions.system_id",
+                "governance_evaluation_run_suite_executions.org_id",
+            ],
+        ),
+        ForeignKeyConstraint(
+            ["signing_key_id", "issuer_id", "org_id"],
+            [
+                "governance_evidence_signing_keys.id",
+                "governance_evidence_signing_keys.issuer_id",
+                "governance_evidence_signing_keys.org_id",
+            ],
+        ),
+        CheckConstraint(
+            "admission_status IN ('pending', 'verified', 'unverified', 'expired', "
+            "'superseded', 'rejected', 'trust_error')",
+            name="ck_governance_evidence_admission_status",
+        ),
+        CheckConstraint(
+            "freshness_status IN ('current', 'expiring', 'stale', 'superseded')",
+            name="ck_governance_evidence_admission_freshness",
+        ),
+        CheckConstraint(
+            _lower_hex64("envelope_hash"),
+            name="ck_governance_evidence_admission_envelope_hash",
+        ),
+        CheckConstraint(
+            "(issuer_id IS NULL AND signing_key_id IS NULL AND signer_key_id IS NULL "
+            "AND signer_algorithm IS NULL) OR "
+            "(issuer_id IS NOT NULL AND signing_key_id IS NOT NULL "
+            "AND signer_key_id IS NOT NULL AND signer_algorithm = 'Ed25519')",
+            name="ck_governance_evidence_admission_signer",
+        ),
+    )
+
+
+class GovernanceEvidenceReview(Base):
+    __tablename__ = "governance_evidence_reviews"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    system_id = Column(String, nullable=False, index=True)
+    evidence_run_id = Column(String, nullable=False, index=True)
+    passport_revision_id = Column(String, nullable=False, index=True)
+    admission_id = Column(String, nullable=False, index=True)
+    decision = Column(String, nullable=False)
+    rationale = Column(Text, nullable=False)
+    reviewed_by = Column(String, nullable=False)
+    review_version = Column(Integer, nullable=False)
+    separation_override_reason = Column(Text, nullable=True)
+    reviewed_at = Column(String, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("id", "org_id", name="uq_governance_evidence_review_tenant"),
+        UniqueConstraint(
+            "passport_revision_id", "admission_id", "review_version",
+            name="uq_governance_evidence_review_version",
+        ),
+        ForeignKeyConstraint(
+            ["passport_revision_id", "evidence_run_id", "system_id", "org_id"],
+            [
+                "governance_evidence_passport_revisions.id",
+                "governance_evidence_passport_revisions.evidence_run_id",
+                "governance_evidence_passport_revisions.system_id",
+                "governance_evidence_passport_revisions.org_id",
+            ],
+        ),
+        ForeignKeyConstraint(
+            [
+                "admission_id", "evidence_run_id", "passport_revision_id",
+                "system_id", "org_id",
+            ],
+            [
+                "governance_evidence_admissions.id",
+                "governance_evidence_admissions.evidence_run_id",
+                "governance_evidence_admissions.passport_revision_id",
+                "governance_evidence_admissions.system_id",
+                "governance_evidence_admissions.org_id",
+            ],
+        ),
+        CheckConstraint(
+            "decision IN ('accepted', 'rejected')",
+            name="ck_governance_evidence_review_decision",
+        ),
+        CheckConstraint(
+            "review_version >= 1", name="ck_governance_evidence_review_version"
+        ),
+    )
+
+
+class GovernanceIdempotencyRecord(Base):
+    __tablename__ = "governance_idempotency_records"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    actor_id = Column(String, nullable=False)
+    operation = Column(String, nullable=False)
+    key_hash = Column(String, nullable=False)
+    request_hash = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="in_progress")
+    response_status = Column(Integer, nullable=True)
+    response_body_json = Column(Text, nullable=True)
+    resource_type = Column(String, nullable=True)
+    resource_id = Column(String, nullable=True)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    expires_at = Column(String, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "org_id", "actor_id", "operation", "key_hash",
+            name="uq_governance_idempotency_identity",
+        ),
+        CheckConstraint(
+            _lower_hex64("key_hash"), name="ck_governance_idempotency_key_hash"
+        ),
+        CheckConstraint(
+            _lower_hex64("request_hash"), name="ck_governance_idempotency_request_hash"
+        ),
+        CheckConstraint(
+            "status IN ('in_progress', 'completed')",
+            name="ck_governance_idempotency_status",
+        ),
+        CheckConstraint(
+            "(status = 'in_progress' AND response_status IS NULL "
+            "AND response_body_json IS NULL) OR status = 'completed'",
+            name="ck_governance_idempotency_response",
+        ),
+    )
+
+
+class GovernanceEvaluationAuditEvent(Base):
+    __tablename__ = "governance_evaluation_audit_events"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    sequence_number = Column(Integer, nullable=False)
+    actor_id = Column(String, nullable=False)
+    action = Column(String, nullable=False)
+    outcome = Column(String, nullable=False)
+    resource_type = Column(String, nullable=False)
+    resource_id = Column(String, nullable=False)
+    details_json = Column(Text, nullable=False)
+    previous_hash = Column(String, nullable=True)
+    event_hash = Column(String, nullable=False)
+    request_id = Column(String, nullable=True)
+    correlation_id = Column(String, nullable=True)
+    source_ip = Column(String, nullable=True)
+    user_agent = Column(Text, nullable=True)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+    __table_args__ = (
+        UniqueConstraint(
+            "org_id", "sequence_number",
+            name="uq_governance_evaluation_audit_sequence",
+        ),
+        UniqueConstraint(
+            "org_id", "event_hash",
+            name="uq_governance_evaluation_audit_hash",
+        ),
+        CheckConstraint(
+            "sequence_number >= 1",
+            name="ck_governance_evaluation_audit_sequence",
+        ),
+        CheckConstraint(
+            _lower_hex64("event_hash"),
+            name="ck_governance_evaluation_audit_event_hash",
+        ),
+        CheckConstraint(
+            "(sequence_number = 1 AND previous_hash IS NULL) OR "
+            f"(sequence_number > 1 AND previous_hash IS NOT NULL "
+            f"AND {_lower_hex64('previous_hash')})",
+            name="ck_governance_evaluation_audit_previous_hash",
+        ),
+    )
+
+
 class GovernanceEvaluationPlan(Base):
     """Tenant-bound configuration for a versioned evaluation suite."""
 
@@ -514,6 +1179,14 @@ class GovernanceEvaluationPlan(Base):
     updated_by = Column(String, nullable=False)
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
     updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    contract_version = Column(String, nullable=False, default="1.0.0")
+    target_version_id = Column(String, nullable=True)
+    plan_content_hash = Column(String, nullable=True)
+    trust_policy_version_id = Column(String, nullable=True)
+    contract_version = Column(String, nullable=False, default="1.0.0")
+    target_version_id = Column(String, nullable=True)
+    plan_content_hash = Column(String, nullable=True)
+    trust_policy_version_id = Column(String, nullable=True)
 
     __table_args__ = (
         UniqueConstraint(
@@ -533,6 +1206,38 @@ class GovernanceEvaluationPlan(Base):
                 "governance_ai_systems.id",
                 "governance_ai_systems.workspace_id",
                 "governance_ai_systems.org_id",
+            ],
+        ),
+        ForeignKeyConstraint(
+            ["target_version_id", "workspace_id", "system_id", "org_id"],
+            [
+                "governance_evaluation_target_versions.id",
+                "governance_evaluation_target_versions.workspace_id",
+                "governance_evaluation_target_versions.system_id",
+                "governance_evaluation_target_versions.org_id",
+            ],
+        ),
+        ForeignKeyConstraint(
+            ["trust_policy_version_id", "org_id"],
+            [
+                "governance_evidence_trust_policy_versions.id",
+                "governance_evidence_trust_policy_versions.org_id",
+            ],
+        ),
+        ForeignKeyConstraint(
+            ["target_version_id", "workspace_id", "system_id", "org_id"],
+            [
+                "governance_evaluation_target_versions.id",
+                "governance_evaluation_target_versions.workspace_id",
+                "governance_evaluation_target_versions.system_id",
+                "governance_evaluation_target_versions.org_id",
+            ],
+        ),
+        ForeignKeyConstraint(
+            ["trust_policy_version_id", "org_id"],
+            [
+                "governance_evidence_trust_policy_versions.id",
+                "governance_evidence_trust_policy_versions.org_id",
             ],
         ),
         CheckConstraint(
@@ -556,6 +1261,14 @@ class GovernanceEvaluationPlan(Base):
         CheckConstraint(
             "status IN ('draft', 'active', 'archived')",
             name="ck_governance_evaluation_plan_status",
+        ),
+        CheckConstraint(
+            f"plan_content_hash IS NULL OR ({_lower_hex64('plan_content_hash')})",
+            name="ck_governance_evaluation_plan_content_hash",
+        ),
+        CheckConstraint(
+            f"plan_content_hash IS NULL OR ({_lower_hex64('plan_content_hash')})",
+            name="ck_governance_evaluation_plan_content_hash",
         ),
         Index("idx_governance_evaluation_plans_scope_status", "org_id", "system_id", "status"),
     )
@@ -586,6 +1299,18 @@ class GovernanceEvaluationRun(Base):
     failure_message = Column(Text, nullable=True)
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
     updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    lifecycle_phase = Column(String, nullable=True)
+    envelope_id = Column(String, nullable=True)
+    envelope_json = Column(Text, nullable=True)
+    envelope_hash = Column(String, nullable=True)
+    evidence_outcome = Column(String, nullable=False, default="pending")
+    verdict_version = Column(Integer, nullable=False, default=0)
+    lifecycle_phase = Column(String, nullable=True)
+    envelope_id = Column(String, nullable=True)
+    envelope_json = Column(Text, nullable=True)
+    envelope_hash = Column(String, nullable=True)
+    evidence_outcome = Column(String, nullable=False, default="pending")
+    verdict_version = Column(Integer, nullable=False, default=0)
 
     __table_args__ = (
         UniqueConstraint(
@@ -678,6 +1403,38 @@ class GovernanceEvaluationRun(Base):
             "AND completed_at IS NOT NULL) OR "
             "(technical_status IN ('failed', 'cancelled') AND completed_at IS NOT NULL)",
             name="ck_governance_evaluation_run_timestamps",
+        ),
+        CheckConstraint(
+            "evidence_outcome IN ('pending', 'passed', 'passed_with_limitations', "
+            "'failed', 'informational', 'error', 'unavailable', 'insufficient_data', "
+            "'unknown')",
+            name="ck_governance_evaluation_run_evidence_outcome",
+        ),
+        CheckConstraint(
+            "verdict_version >= 0",
+            name="ck_governance_evaluation_run_verdict_version",
+        ),
+        CheckConstraint(
+            "(envelope_id IS NULL AND envelope_json IS NULL AND envelope_hash IS NULL) OR "
+            "(envelope_id IS NOT NULL AND envelope_json IS NOT NULL "
+            f"AND envelope_hash IS NOT NULL AND {_lower_hex64('envelope_hash')})",
+            name="ck_governance_evaluation_run_envelope",
+        ),
+        CheckConstraint(
+            "evidence_outcome IN ('pending', 'passed', 'passed_with_limitations', "
+            "'failed', 'informational', 'error', 'unavailable', 'insufficient_data', "
+            "'unknown')",
+            name="ck_governance_evaluation_run_evidence_outcome",
+        ),
+        CheckConstraint(
+            "verdict_version >= 0",
+            name="ck_governance_evaluation_run_verdict_version",
+        ),
+        CheckConstraint(
+            "(envelope_id IS NULL AND envelope_json IS NULL AND envelope_hash IS NULL) OR "
+            "(envelope_id IS NOT NULL AND envelope_json IS NOT NULL "
+            f"AND envelope_hash IS NOT NULL AND {_lower_hex64('envelope_hash')})",
+            name="ck_governance_evaluation_run_envelope",
         ),
         Index("idx_governance_evaluation_runs_scope_created", "org_id", "system_id", "created_at"),
         Index(

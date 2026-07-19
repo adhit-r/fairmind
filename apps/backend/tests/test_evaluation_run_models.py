@@ -18,8 +18,10 @@ from database.governance_models import (
     GovernanceAISystem,
     GovernanceEvaluationPlan,
     GovernanceEvaluationRun,
+    GovernanceEvaluationTargetVersion,
     GovernanceEvidencePassportRevision,
     GovernanceEvidenceRun,
+    GovernanceEvidenceTrustPolicyVersion,
     GovernanceWorkspace,
 )
 from migrations.evaluation_runs_migration import sql_for
@@ -30,6 +32,8 @@ PRODUCTION_TABLES = (
     GovernanceAISystem.__table__,
     GovernanceEvidenceRun.__table__,
     GovernanceEvidencePassportRevision.__table__,
+    GovernanceEvaluationTargetVersion.__table__,
+    GovernanceEvidenceTrustPolicyVersion.__table__,
     GovernanceEvaluationPlan.__table__,
     GovernanceEvaluationRun.__table__,
 )
@@ -305,6 +309,10 @@ def test_models_expose_exact_columns_and_tenant_constraints() -> None:
         "updated_by",
         "created_at",
         "updated_at",
+        "contract_version",
+        "target_version_id",
+        "plan_content_hash",
+        "trust_policy_version_id",
     )
     assert tuple(GovernanceEvaluationRun.__table__.columns.keys()) == (
         "id",
@@ -327,6 +335,12 @@ def test_models_expose_exact_columns_and_tenant_constraints() -> None:
         "failure_message",
         "created_at",
         "updated_at",
+        "lifecycle_phase",
+        "envelope_id",
+        "envelope_json",
+        "envelope_hash",
+        "evidence_outcome",
+        "verdict_version",
     )
     assert ("id", "workspace_id", "org_id") in constraint_columns(
         GovernanceAISystem, UniqueConstraint
