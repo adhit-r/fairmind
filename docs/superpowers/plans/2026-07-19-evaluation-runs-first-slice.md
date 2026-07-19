@@ -369,6 +369,7 @@ git commit -m "feat(evaluations): expose evidence-backed run workflow"
 - Produces endpoint builders matching Task 2.
 - Produces a focused hook that loads plans and runs for the selected `(orgId, systemId)` and exposes mutation methods without optimistic green states.
 - Produces a backward-compatible structured `ApiError` path preserving HTTP status, stable API `code`, `detail`, and `nextAction` for callers that need actionable preflight failures.
+- Produces a dependency-free evaluation client controller used directly by the React hook, giving Bun unit tests a real stale-response seam without adding a DOM or hook-renderer package.
 
 - [ ] **Step 1: Write failing hook tests**
 
@@ -376,12 +377,13 @@ Mock the existing API client and assert:
 
 - no request is issued until both `orgId` and `systemId` exist.
 - plan and run requests use organization and system IDs in their URLs.
-- changing either scope cancels or ignores stale responses.
+- changing either scope invalidates generation tokens so stale list or detail responses cannot replace the current scope.
 - loading, empty, and server-error states remain distinguishable.
 - `createPlan`, `activatePlan`, `loadPreflight`, `createRun`, and `linkPassportRevision` call the exact Task 2 endpoints and refresh only after success.
 - a `409 executor_unavailable` remains an actionable error and never inserts a fake run.
 - run detail requests remain scoped to both organization and selected system and ignore stale responses after scope/run changes.
 - unknown backend vocabularies are rejected by runtime schemas rather than being trusted because a TypeScript union compiled.
+- nested structured and legacy string FastAPI errors both preserve a string `error`; structured workflow failures additionally preserve `status`, `code`, `detail`, and `nextAction` on `apiError`.
 
 - [ ] **Step 2: Run hook tests and verify RED**
 
@@ -394,7 +396,7 @@ Expected: import failure because the hook is absent.
 
 - [ ] **Step 3: Add endpoint builders and exact TypeScript unions**
 
-Keep transport types separate from display labels. The exact unions must match backend vocabularies. Use Zod or equivalent explicit runtime guards for plans, preflight, runs, lists, and structured errors.
+Keep transport types separate from display labels. The exact unions must match backend vocabularies. Use strict Zod runtime schemas for raw camelCase plans, preflight, runs, lists, and structured errors. Do not call `normalizeGovernanceResponse` before validation because that would hide a snake_case regression in Task 2's exact public contract. With Zod 4, use `z.partialRecord` for partial verdict maps; `z.record` with an enum key would incorrectly require every key.
 
 Keep the two verdict axes separate rather than conflating system components with risk dimensions:
 
@@ -426,7 +428,11 @@ The server may return both maps absent when linked evidence has not been normali
 
 - [ ] **Step 4: Implement the minimum scoped hook**
 
-Follow existing `normalizeGovernanceResponse` and API client conventions. Do not duplicate token or base URL logic. Expose:
+Follow existing API client token and base URL conventions, but parse Task 2 responses before any case normalization. Extend `ApiResponse<T>` backward-compatibly with optional `apiError`; keep `error` a string for existing callers. Decode the exact nested FastAPI workflow envelope and plain-string legacy details. Tighten the browser-offline test to `navigator.onLine === false` so Bun's undefined `onLine` is not treated as offline.
+
+Implement a small generation-token controller inside the same module and have the hook subscribe/delegate to it. Missing scope clears to empty non-loading state. Valid scope loads plan and run lists together. Mutations refresh only the affected successful list: plan creation/activation refresh plans; run creation/Passport linking refresh runs; preflight/detail do not refresh. A superseded `getRun` rejects with a named stale-result error so the detail page can suppress it.
+
+Expose:
 
 ```typescript
 useEvaluationRuns(orgId?: string, systemId?: string): {
@@ -449,7 +455,7 @@ useEvaluationRuns(orgId?: string, systemId?: string): {
 ```bash
 cd apps/frontend
 bun test src/lib/api/hooks/useEvaluationRuns.test.ts
-bunx tsc --noEmit
+bunx tsc --noEmit --incremental false
 ```
 
 - [ ] **Step 6: Commit**
