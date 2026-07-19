@@ -474,6 +474,7 @@ git commit -m "feat(evaluations): add typed evaluation runs client"
 - Modify: `apps/frontend/src/components/layout/ClientNavigation.tsx`
 - Modify: `apps/frontend/src/components/layout/Header.tsx`
 - Modify: `apps/frontend/src/components/layout/Sidebar.tsx`
+- Modify: `apps/frontend/src/components/workflow/SystemContext.tsx`
 - Modify: `apps/frontend/src/lib/constants/navigation.ts`
 - Create: `apps/frontend/src/components/ui/FramedIcon.tsx`
 - Create: `apps/frontend/src/components/ui/FramedIdentity.tsx`
@@ -483,7 +484,7 @@ git commit -m "feat(evaluations): add typed evaluation runs client"
 **Interfaces:**
 
 - `/tests` becomes “Evaluation Runs” but stays inside the established dashboard shell.
-- Reuses `useOrg`, `useSystemContext`, `SystemContextBar`, and Task 3's hook.
+- Reuses `useOrg`, `useSystemContext`, the layout-owned `SystemContextBar`, and Task 3's hook.
 - Adds no new top-level navigation taxonomy; “Evaluation Runs” sits under the existing Assess category.
 - Shared `FramedIcon` and `FramedIdentity` establish the requested icon and illustrated profile treatment across expanded and collapsed shell controls.
 
@@ -497,7 +498,7 @@ Required assertions:
 2. The route is not treated as auth/shell-less; only `/test` and `/test/...` keep any legacy exception, not `/tests`.
 3. the illustrated profile identity remains visible in the desktop header and collapsed/mobile shell with a labelled fallback when the image fails.
 4. navigation/action icons are framed, have accessible names, 44px hit areas, visible keyboard focus, and text labels when expanded.
-5. no real selected system shows an explicit “Choose an AI system” state and makes no evaluation request. Until the shared SystemContext fallback is removed in a separately validated refactor, any system with `metadata.source === 'fallback'` must be treated as missing rather than queried or presented as real; the Evaluation Runs page must omit `SystemContextBar`, and the rendered shell must not contain the fallback name “Acme Pricing Lab”.
+5. no real selected system shows an explicit “Choose an AI system” state and makes no evaluation request. Any system with `metadata.source === 'fallback'` must be treated as missing rather than queried or presented as real. The layout-owned `SystemContextBar` must return `null` for that fallback, and the rendered shell must not contain “Acme Pricing Lab”.
 6. no plan shows a compact create-plan form with target kind, lifecycle phase multi-select, execution depth, enforcement mode, delivery mode, and versioned suite refs.
 7. a FairMind-worker plan displays “Executor unavailable”, `canPrepareRun=false`, and disables run creation.
 8. an external/imported plan displays “Evidence link required”, `canPrepareRun=true`, `fairmindExecutionAvailable=false`, and can prepare an `awaiting_evidence` run without claiming the evaluation is ready.
@@ -519,7 +520,7 @@ If the Playwright config starts Bun, confirm Bun exists before changing configur
 
 - [ ] **Step 3: Fix routing and navigation first**
 
-Replace the broad `pathname.startsWith("/test")` shell exception with a segment-exact check that excludes `/tests`. Correct every legacy `/dashboard/tests/...` link. Rename the existing Assess entry to “Evaluation Runs”; do not add another competing Test History item.
+Replace the broad `pathname.startsWith("/test")` shell exception with a segment-exact check that excludes `/tests`. Correct every legacy `/dashboard/tests/...` link. Add exactly one “Evaluation Runs” child under the existing Assess category; do not rename Assess or add a competing Test History item. In collapsed navigation, reduce container padding so 44px framed controls and the identity are not clipped.
 
 - [ ] **Step 4: Add the shared framed icon and identity components**
 
@@ -528,6 +529,8 @@ Replace the broad `pathname.startsWith("/test")` shell exception with a segment-
 `FramedIdentity` owns the illustrated portrait, border, hard shadow, fallback initials, status/name text, and collapsed variant. Preserve the illustrated portrait character the user approved. If the current remote portrait remains the only available approved source in this slice, keep it as a centralized fallback in this component and document local asset replacement as a follow-up; do not scatter the URL.
 
 Use the shared components in Header and Sidebar wherever they replace existing one-off profile/action icon wrappers. Do not force decorative frames around every inline status glyph.
+
+The shared `SystemContextBar` must not render the repository's synthetic fallback system. Keep the bar layout-owned for real systems; do not duplicate it inside the page. Replace its raised gradient wrapper with the established flat canvas/border treatment while preserving its organization/system controls.
 
 - [ ] **Step 5: Build the dense Evaluation Runs workspace**
 
@@ -577,7 +580,7 @@ The production build may require network access for the existing Google Raleway 
 - [ ] **Step 9: Commit**
 
 ```bash
-git add DESIGN.md apps/frontend/src/app/'(dashboard)'/tests/page.tsx apps/frontend/src/app/'(dashboard)'/tests/'[testId]'/page.tsx apps/frontend/src/components/layout/ClientNavigation.tsx apps/frontend/src/components/layout/Header.tsx apps/frontend/src/components/layout/Sidebar.tsx apps/frontend/src/lib/constants/navigation.ts apps/frontend/src/components/ui/FramedIcon.tsx apps/frontend/src/components/ui/FramedIdentity.tsx apps/frontend/tests/evaluation-runs.spec.ts
+git add DESIGN.md apps/frontend/src/app/'(dashboard)'/tests/page.tsx apps/frontend/src/app/'(dashboard)'/tests/'[testId]'/page.tsx apps/frontend/src/components/layout/ClientNavigation.tsx apps/frontend/src/components/layout/Header.tsx apps/frontend/src/components/layout/Sidebar.tsx apps/frontend/src/components/workflow/SystemContext.tsx apps/frontend/src/lib/constants/navigation.ts apps/frontend/src/components/ui/FramedIcon.tsx apps/frontend/src/components/ui/FramedIdentity.tsx apps/frontend/tests/evaluation-runs.spec.ts
 git commit -m "feat(evaluations): launch evidence-backed runs workspace"
 ```
 
