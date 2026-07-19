@@ -10,6 +10,7 @@ export interface ApiResponse<T> {
   data?: T
   message?: string
   error?: string
+  apiError?: ApiError
 }
 
 export interface ApiError {
@@ -17,6 +18,9 @@ export interface ApiError {
   status: number
   type: 'network' | 'server' | 'client' | 'timeout' | 'cors' | 'unknown'
   canRetry: boolean
+  code?: string
+  detail?: string
+  nextAction?: string
 }
 
 enum ApiErrorType {
@@ -49,7 +53,7 @@ const setCachedData = (key: string, data: any, ttl: number = 5 * 60 * 1000) => {
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
 const classifyError = (error: any, response?: Response): ApiError => {
-  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
     return {
       message: 'No internet connection. Please check your network.',
       status: 0,
@@ -95,6 +99,15 @@ const classifyError = (error: any, response?: Response): ApiError => {
       }
     }
 
+    if (response.status >= 400) {
+      return {
+        message: 'Request failed',
+        status: response.status,
+        type: 'client',
+        canRetry: false,
+      }
+    }
+
     if (response.status === 0 || error?.message?.includes('CORS')) {
       return {
         message: 'Connection blocked. Check CORS configuration.',
@@ -131,7 +144,45 @@ interface RequestOptions extends RequestInit {
   useCache?: boolean
 }
 
-class ApiClient {
+type ErrorPayload = {
+  detail?: unknown
+  error?: unknown
+  message?: unknown
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined
+}
+
+function decodeFailure(
+  payload: ErrorPayload,
+  classified: ApiError,
+): Pick<ApiResponse<never>, 'success' | 'error' | 'apiError'> {
+  const workflowDetail = payload.detail && typeof payload.detail === 'object' && !Array.isArray(payload.detail)
+    ? payload.detail as Record<string, unknown>
+    : undefined
+  const workflowMessage = stringValue(workflowDetail?.message)
+  const legacyDetail = stringValue(payload.detail)
+  const message = workflowMessage
+    || legacyDetail
+    || stringValue(payload.error)
+    || stringValue(payload.message)
+    || classified.message
+
+  return {
+    success: false,
+    error: message,
+    apiError: {
+      ...classified,
+      message,
+      detail: workflowMessage || legacyDetail || message,
+      ...(stringValue(workflowDetail?.code) ? { code: stringValue(workflowDetail?.code) } : {}),
+      ...(stringValue(workflowDetail?.nextAction) ? { nextAction: stringValue(workflowDetail?.nextAction) } : {}),
+    },
+  }
+}
+
+export class ApiClient {
   private baseUrl: string
   private accessToken: string | null = null
   private refreshToken: string | null = null
@@ -296,11 +347,8 @@ class ApiClient {
             return makeRequest()
           }
 
-          const errorData = await response.json().catch(() => ({}))
-          return {
-            success: false,
-            error: errorData.detail || errorData.error || errorData.message || apiError.message || `HTTP ${response.status}: ${response.statusText}`,
-          } as ApiResponse<T>
+          const errorData = await response.json().catch(() => ({})) as ErrorPayload
+          return decodeFailure(errorData, apiError) as ApiResponse<T>
         }
 
         const jsonData = await response.json()
@@ -339,16 +387,29 @@ class ApiClient {
             return {
               success: false,
               error: 'Request timeout - please check your connection',
+              apiError: {
+                ...apiError,
+                message: 'Request timeout - please check your connection',
+                detail: 'Request timeout - please check your connection',
+              },
             } as ApiResponse<T>
           }
           return {
             success: false,
             error: apiError.message || error.message || 'Network error occurred',
+            apiError: {
+              ...apiError,
+              detail: apiError.message || error.message || 'Network error occurred',
+            },
           } as ApiResponse<T>
         }
         return {
           success: false,
           error: apiError.message || 'Unknown error occurred',
+          apiError: {
+            ...apiError,
+            detail: apiError.message || 'Unknown error occurred',
+          },
         } as ApiResponse<T>
       }
     }

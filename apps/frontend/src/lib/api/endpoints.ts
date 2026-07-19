@@ -179,6 +179,20 @@ export const API_ENDPOINTS = {
       `/api/v1/ai-governance/organizations/${orgId}/control-assessments/${assessmentId}`,
     evidenceRuns: (orgId: string, systemId: string) =>
       `/api/v1/ai-governance/organizations/${orgId}/systems/${systemId}/evidence-runs`,
+    evaluationPlans: (orgId: string, systemId: string) =>
+      `/api/v1/ai-governance/organizations/${orgId}/systems/${systemId}/evaluation-plans`,
+    evaluationPlanActivation: (orgId: string, systemId: string, planId: string) =>
+      `/api/v1/ai-governance/organizations/${orgId}/systems/${systemId}/evaluation-plans/${planId}/activate`,
+    evaluationPlanPreflight: (orgId: string, systemId: string, planId: string) =>
+      `/api/v1/ai-governance/organizations/${orgId}/systems/${systemId}/evaluation-plans/${planId}/preflight`,
+    evaluationPlanRuns: (orgId: string, systemId: string, planId: string) =>
+      `/api/v1/ai-governance/organizations/${orgId}/systems/${systemId}/evaluation-plans/${planId}/runs`,
+    evaluationRuns: (orgId: string, systemId: string) =>
+      `/api/v1/ai-governance/organizations/${orgId}/systems/${systemId}/evaluation-runs`,
+    evaluationRun: (orgId: string, systemId: string, runId: string) =>
+      `/api/v1/ai-governance/organizations/${orgId}/systems/${systemId}/evaluation-runs/${runId}`,
+    evaluationRunPassportLink: (orgId: string, systemId: string, runId: string) =>
+      `/api/v1/ai-governance/organizations/${orgId}/systems/${systemId}/evaluation-runs/${runId}/evidence-passport-link`,
     evidenceMappings: (orgId: string, evidenceId: string) =>
       `/api/v1/ai-governance/organizations/${orgId}/evidence/${evidenceId}/control-mappings`,
     reviewEvidenceMapping: (orgId: string, mappingId: string) =>
