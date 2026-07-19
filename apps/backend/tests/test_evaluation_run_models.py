@@ -186,6 +186,8 @@ def insert_evaluation_run(
     linked_evidence_run_id: str | None = None,
     linked_passport_revision_id: str | None = None,
     include_link_audit: bool = True,
+    started_at: str | None = None,
+    completed_at: str | None = None,
 ) -> None:
     has_link_audit = linked_passport_revision_id is not None and include_link_audit
     linked_by = "reviewer-a" if has_link_audit else None
@@ -198,9 +200,9 @@ def insert_evaluation_run(
             id, org_id, workspace_id, system_id, plan_id, trigger,
             technical_status, overall_verdict, layer_verdicts_json,
             linked_evidence_run_id, linked_passport_revision_id, linked_by, linked_at,
-            requested_by, created_at, updated_at
+            requested_by, started_at, completed_at, created_at, updated_at
         ) VALUES (?, ?, ?, ?, ?, 'manual', ?, 'insufficient', '{}', ?, ?, ?, ?,
-                  'user-a', ?, ?)
+                  'user-a', ?, ?, ?, ?)
         """,
         (
             id,
@@ -213,6 +215,8 @@ def insert_evaluation_run(
             linked_passport_revision_id,
             linked_by,
             linked_at,
+            started_at,
+            completed_at,
             "2026-07-19T00:00:00+00:00",
             "2026-07-19T00:00:00+00:00",
         ),
@@ -247,6 +251,32 @@ def add_plan(session: Session) -> EvaluationPlan:
     session.add(plan)
     session.flush()
     return plan
+
+
+def seed_linkable_evaluation_scope(connection: sqlite3.Connection) -> None:
+    seed_governance_scope(
+        connection, org_id="org-a", workspace_id="ws-a", system_id="sys-a"
+    )
+    insert_evaluation_plan(
+        connection,
+        id="plan-a",
+        org_id="org-a",
+        workspace_id="ws-a",
+        system_id="sys-a",
+    )
+    connection.execute(
+        """
+        INSERT INTO governance_evidence_runs (id, workspace_id, system_id, org_id)
+        VALUES ('evidence-a', 'ws-a', 'sys-a', 'org-a')
+        """
+    )
+    connection.execute(
+        """
+        INSERT INTO governance_evidence_passport_revisions
+            (id, evidence_run_id, system_id, org_id)
+        VALUES ('revision-a', 'evidence-a', 'sys-a', 'org-a')
+        """
+    )
 
 
 def constraint_columns(model: type, constraint_type: type) -> set[tuple[str, ...]]:
@@ -442,6 +472,8 @@ def test_sqlite_migration_requires_succeeded_runs_to_have_exact_passport_link(
             linked_evidence_run_id="evidence-a",
             linked_passport_revision_id="revision-a",
             include_link_audit=False,
+            started_at="2026-07-19T00:00:00+00:00",
+            completed_at="2026-07-19T00:05:00+00:00",
         )
 
     insert_evaluation_run(
@@ -454,6 +486,8 @@ def test_sqlite_migration_requires_succeeded_runs_to_have_exact_passport_link(
         technical_status="succeeded",
         linked_evidence_run_id="evidence-a",
         linked_passport_revision_id="revision-a",
+        started_at="2026-07-19T00:00:00+00:00",
+        completed_at="2026-07-19T00:05:00+00:00",
     )
 
     with pytest.raises(sqlite3.IntegrityError):
@@ -467,6 +501,8 @@ def test_sqlite_migration_requires_succeeded_runs_to_have_exact_passport_link(
             technical_status="running",
             linked_evidence_run_id="evidence-a",
             linked_passport_revision_id="revision-a",
+            started_at="2026-07-19T00:00:00+00:00",
+            completed_at="2026-07-19T00:05:00+00:00",
         )
 
     with pytest.raises(sqlite3.IntegrityError):
@@ -480,6 +516,110 @@ def test_sqlite_migration_requires_succeeded_runs_to_have_exact_passport_link(
             technical_status="succeeded",
             linked_evidence_run_id="evidence-a",
             linked_passport_revision_id="missing-revision",
+            started_at="2026-07-19T00:00:00+00:00",
+            completed_at="2026-07-19T00:05:00+00:00",
+        )
+
+
+@pytest.mark.parametrize(
+    ("technical_status", "started_at", "completed_at", "linked"),
+    (
+        ("awaiting_evidence", None, None, False),
+        ("running", "2026-07-19T00:00:00+00:00", None, False),
+        (
+            "succeeded",
+            "2026-07-19T00:00:00+00:00",
+            "2026-07-19T00:05:00+00:00",
+            True,
+        ),
+        ("failed", None, "2026-07-19T00:05:00+00:00", False),
+        (
+            "failed",
+            "2026-07-19T00:00:00+00:00",
+            "2026-07-19T00:05:00+00:00",
+            False,
+        ),
+        ("cancelled", None, "2026-07-19T00:05:00+00:00", False),
+        (
+            "cancelled",
+            "2026-07-19T00:00:00+00:00",
+            "2026-07-19T00:05:00+00:00",
+            False,
+        ),
+    ),
+)
+def test_sqlite_migration_accepts_valid_status_timestamp_matrix(
+    sqlite_connection: sqlite3.Connection,
+    technical_status: str,
+    started_at: str | None,
+    completed_at: str | None,
+    linked: bool,
+) -> None:
+    seed_linkable_evaluation_scope(sqlite_connection)
+
+    insert_evaluation_run(
+        sqlite_connection,
+        plan_id="plan-a",
+        org_id="org-a",
+        workspace_id="ws-a",
+        system_id="sys-a",
+        technical_status=technical_status,
+        linked_evidence_run_id="evidence-a" if linked else None,
+        linked_passport_revision_id="revision-a" if linked else None,
+        started_at=started_at,
+        completed_at=completed_at,
+    )
+
+
+@pytest.mark.parametrize(
+    ("technical_status", "started_at", "completed_at", "linked"),
+    (
+        ("awaiting_evidence", "2026-07-19T00:00:00+00:00", None, False),
+        ("awaiting_evidence", None, "2026-07-19T00:05:00+00:00", False),
+        (
+            "awaiting_evidence",
+            "2026-07-19T00:00:00+00:00",
+            "2026-07-19T00:05:00+00:00",
+            False,
+        ),
+        ("running", None, None, False),
+        ("running", None, "2026-07-19T00:05:00+00:00", False),
+        (
+            "running",
+            "2026-07-19T00:00:00+00:00",
+            "2026-07-19T00:05:00+00:00",
+            False,
+        ),
+        ("succeeded", None, None, True),
+        ("succeeded", "2026-07-19T00:00:00+00:00", None, True),
+        ("succeeded", None, "2026-07-19T00:05:00+00:00", True),
+        ("failed", None, None, False),
+        ("failed", "2026-07-19T00:00:00+00:00", None, False),
+        ("cancelled", None, None, False),
+        ("cancelled", "2026-07-19T00:00:00+00:00", None, False),
+    ),
+)
+def test_sqlite_migration_rejects_invalid_status_timestamp_matrix(
+    sqlite_connection: sqlite3.Connection,
+    technical_status: str,
+    started_at: str | None,
+    completed_at: str | None,
+    linked: bool,
+) -> None:
+    seed_linkable_evaluation_scope(sqlite_connection)
+
+    with pytest.raises(sqlite3.IntegrityError):
+        insert_evaluation_run(
+            sqlite_connection,
+            plan_id="plan-a",
+            org_id="org-a",
+            workspace_id="ws-a",
+            system_id="sys-a",
+            technical_status=technical_status,
+            linked_evidence_run_id="evidence-a" if linked else None,
+            linked_passport_revision_id="revision-a" if linked else None,
+            started_at=started_at,
+            completed_at=completed_at,
         )
 
 
@@ -590,3 +730,47 @@ def test_check_constraints_cover_exact_vocabulary() -> None:
         "trigger IN ('manual', 'ci', 'scheduled', 'release_gate', 'incident', "
         "'integration_sync')" in run_checks
     )
+
+
+def normalize_sql(value: str) -> str:
+    normalized = " ".join(value.split())
+    for spaced, compact in (("( ", "("), (" )", ")"), (", ", ",")):
+        normalized = normalized.replace(spaced, compact)
+    return normalized
+
+
+def test_named_run_lifecycle_checks_match_orm_postgresql_and_sqlite() -> None:
+    expected_checks = {
+        "ck_governance_evaluation_run_succeeded_link": (
+            "(technical_status = 'succeeded' AND linked_passport_revision_id IS NOT NULL "
+            "AND linked_evidence_run_id IS NOT NULL AND linked_by IS NOT NULL "
+            "AND linked_at IS NOT NULL AND started_at IS NOT NULL "
+            "AND completed_at IS NOT NULL) OR "
+            "(technical_status <> 'succeeded' AND linked_passport_revision_id IS NULL "
+            "AND linked_evidence_run_id IS NULL AND linked_by IS NULL AND linked_at IS NULL)"
+        ),
+        "ck_governance_evaluation_run_timestamps": (
+            "(technical_status = 'awaiting_evidence' AND started_at IS NULL "
+            "AND completed_at IS NULL) OR "
+            "(technical_status = 'running' AND started_at IS NOT NULL "
+            "AND completed_at IS NULL) OR "
+            "(technical_status = 'succeeded' AND started_at IS NOT NULL "
+            "AND completed_at IS NOT NULL) OR "
+            "(technical_status IN ('failed', 'cancelled') AND completed_at IS NOT NULL)"
+        ),
+    }
+    orm_checks = {
+        constraint.name: normalize_sql(str(constraint.sqltext))
+        for constraint in GovernanceEvaluationRun.__table__.constraints
+        if isinstance(constraint, CheckConstraint)
+    }
+    dialect_sql = {
+        "postgresql": normalize_sql(sql_for("postgresql")),
+        "sqlite": normalize_sql(sql_for("sqlite")),
+    }
+
+    for name, expression in expected_checks.items():
+        normalized_expression = normalize_sql(expression)
+        assert orm_checks[name] == normalized_expression
+        for sql in dialect_sql.values():
+            assert normalize_sql(f"CONSTRAINT {name} CHECK ({expression})") in sql

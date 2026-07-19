@@ -662,10 +662,21 @@ class GovernanceEvaluationRun(Base):
         CheckConstraint(
             "(technical_status = 'succeeded' AND linked_passport_revision_id IS NOT NULL "
             "AND linked_evidence_run_id IS NOT NULL AND linked_by IS NOT NULL "
-            "AND linked_at IS NOT NULL) OR "
+            "AND linked_at IS NOT NULL AND started_at IS NOT NULL "
+            "AND completed_at IS NOT NULL) OR "
             "(technical_status <> 'succeeded' AND linked_passport_revision_id IS NULL "
             "AND linked_evidence_run_id IS NULL AND linked_by IS NULL AND linked_at IS NULL)",
-            name="ck_governance_evaluation_run_succeeded_passport_link",
+            name="ck_governance_evaluation_run_succeeded_link",
+        ),
+        CheckConstraint(
+            "(technical_status = 'awaiting_evidence' AND started_at IS NULL "
+            "AND completed_at IS NULL) OR "
+            "(technical_status = 'running' AND started_at IS NOT NULL "
+            "AND completed_at IS NULL) OR "
+            "(technical_status = 'succeeded' AND started_at IS NOT NULL "
+            "AND completed_at IS NOT NULL) OR "
+            "(technical_status IN ('failed', 'cancelled') AND completed_at IS NOT NULL)",
+            name="ck_governance_evaluation_run_timestamps",
         ),
         Index("idx_governance_evaluation_runs_scope_created", "org_id", "system_id", "created_at"),
         Index(

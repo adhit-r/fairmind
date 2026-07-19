@@ -81,13 +81,15 @@ CREATE TABLE IF NOT EXISTS governance_evaluation_runs (
         OR
         (linked_passport_revision_id IS NOT NULL AND linked_evidence_run_id IS NOT NULL)
     ),
-    CONSTRAINT ck_governance_evaluation_run_succeeded_passport_link CHECK (
+    CONSTRAINT ck_governance_evaluation_run_succeeded_link CHECK (
         (
             technical_status = 'succeeded'
             AND linked_passport_revision_id IS NOT NULL
             AND linked_evidence_run_id IS NOT NULL
             AND linked_by IS NOT NULL
             AND linked_at IS NOT NULL
+            AND started_at IS NOT NULL
+            AND completed_at IS NOT NULL
         )
         OR
         (
@@ -97,6 +99,15 @@ CREATE TABLE IF NOT EXISTS governance_evaluation_runs (
             AND linked_by IS NULL
             AND linked_at IS NULL
         )
+    ),
+    CONSTRAINT ck_governance_evaluation_run_timestamps CHECK (
+        (technical_status = 'awaiting_evidence' AND started_at IS NULL AND completed_at IS NULL)
+        OR
+        (technical_status = 'running' AND started_at IS NOT NULL AND completed_at IS NULL)
+        OR
+        (technical_status = 'succeeded' AND started_at IS NOT NULL AND completed_at IS NOT NULL)
+        OR
+        (technical_status IN ('failed', 'cancelled') AND completed_at IS NOT NULL)
     ),
     FOREIGN KEY (workspace_id, org_id)
         REFERENCES governance_workspaces(id, org_id),
