@@ -18,21 +18,22 @@ import {
   IconClipboardList,
   IconUserCheck,
   IconDatabase,
+  IconChecklist,
 } from '@tabler/icons-react';
-import { ReactNode } from 'react';
+import type { TablerIcon } from '@tabler/icons-react';
 
 export interface NavigationItem {
   title: string;
   href: string;
   description?: string;
-  icon?: React.ComponentType<any>;
+  icon?: TablerIcon;
 }
 
 export interface NavigationCategory {
   id: string;
   title: string;
   href?: string;
-  icon?: React.ComponentType<any>;
+  icon?: TablerIcon;
   items?: NavigationItem[];
 }
 
@@ -59,6 +60,12 @@ export const NAVIGATION_ITEMS: NavigationCategory[] = [
         href: '/bias',
         description: 'Analyze models for bias',
         icon: IconScale,
+      },
+      {
+        title: 'Evaluation Runs',
+        href: '/tests',
+        description: 'Plan evaluations and trace evidence-backed runs',
+        icon: IconChecklist,
       },
       {
         title: 'Remediation Wizard',

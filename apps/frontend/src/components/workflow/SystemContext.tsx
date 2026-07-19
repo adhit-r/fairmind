@@ -3,7 +3,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
 import {
   Select,
   SelectContent,
@@ -466,8 +465,14 @@ function riskTierClassName(riskTier: AISystemSummary["riskTier"]) {
 export function SystemContextBar() {
   const { systems, selectedSystem, selectedSystemStatus, setSelectedSystemId, loading } = useSystemContext()
 
+  if (selectedSystem.metadata?.source === "fallback") {
+    return null
+  }
+
+  const realSystems = systems.filter((system) => system.metadata?.source !== "fallback")
+
   return (
-    <Card className="mb-6 border-4 border-black bg-gradient-to-r from-[#fff4de] via-white to-[#e9f7f0] p-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+    <section aria-label="Selected AI system context" className="mb-6 border-4 border-[#0F1412] bg-[#FCFDF8] p-4">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-start gap-3">
           <div className="border-2 border-black bg-black p-3 text-white shadow-[4px_4px_0px_0px_#FF6B35]">
@@ -485,13 +490,13 @@ export function SystemContextBar() {
         <div className="grid gap-3 md:grid-cols-4 lg:min-w-[720px]">
           <div className="space-y-1">
             <p className="text-xs font-bold uppercase text-muted-foreground">System Scope</p>
-            {systems.length > 0 ? (
+            {realSystems.length > 0 ? (
               <Select onValueChange={setSelectedSystemId} value={selectedSystem.id}>
                 <SelectTrigger aria-label="System scope" className="border-2 border-black bg-white font-bold">
                   <SelectValue placeholder={loading ? "Loading systems..." : "Select system"} />
                 </SelectTrigger>
                 <SelectContent>
-                  {systems.map((system) => (
+                  {realSystems.map((system) => (
                     <SelectItem key={system.id} value={system.id}>
                       {system.name}
                     </SelectItem>
@@ -532,6 +537,6 @@ export function SystemContextBar() {
           </div>
         </div>
       </div>
-    </Card>
+    </section>
   )
 }

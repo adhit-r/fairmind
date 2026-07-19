@@ -2,7 +2,6 @@
 
 import React from 'react'
 import { OrangeLogo } from '@/components/OrangeLogo'
-import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,8 +11,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { useSidebar } from '@/components/ui/sidebar'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Input } from '@/components/ui/input'
+import { FramedIcon } from '@/components/ui/FramedIcon'
+import { FramedIdentity } from '@/components/ui/FramedIdentity'
 import {
   IconSearch,
   IconBell,
@@ -29,28 +29,29 @@ interface HeaderProps {
   onMenuToggle?: () => void
 }
 
-// Reusable "Brutal" Button Style
-const brutalBtnClass = "h-11 w-11 border-2 border-black bg-white text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none transition-all rounded-none"
 const brutalInputClass = "h-11 border-2 border-black bg-white text-black placeholder:text-gray-500 placeholder:font-bold shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] focus-visible:ring-0 focus-visible:translate-x-[2px] focus-visible:translate-y-[2px] focus-visible:shadow-none transition-all rounded-none text-sm font-bold"
 
 export function Header({ onMenuToggle }: HeaderProps) {
   const [isDark, setIsDark] = React.useState(false)
+  const [isSearchFocused, setIsSearchFocused] = React.useState(false)
   const { toggleSidebar } = useSidebar()
+
+  const handleNavigationToggle = () => {
+    onMenuToggle?.()
+    toggleSidebar()
+  }
 
   return (
     <header className="sticky top-0 z-30 bg-white border-b-4 border-black w-full py-2 sm:py-3">
       <div className="container mx-auto px-3 sm:px-4 md:px-6 flex items-center justify-between gap-2 sm:gap-4 md:gap-6">
         {/* Left: Sidebar Toggle + Logo */}
         <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
-          <Button
-            variant="neutral"
-            size="icon"
-            onClick={toggleSidebar}
-            className={brutalBtnClass}
-            title="Toggle Sidebar"
-          >
-            <IconMenu2 className="h-5 w-5 sm:h-6 sm:w-6" />
-          </Button>
+          <FramedIcon
+            icon={IconMenu2}
+            label="Toggle navigation"
+            onClick={handleNavigationToggle}
+            title="Toggle navigation"
+          />
           <div className="hidden sm:block">
             <OrangeLogo size="md" showText={true} />
           </div>
@@ -68,6 +69,9 @@ export function Header({ onMenuToggle }: HeaderProps) {
             <Input
               type="search"
               placeholder="SEARCH..."
+              onFocus={() => setIsSearchFocused(true)}
+              onBlur={() => setIsSearchFocused(false)}
+              style={isSearchFocused ? { outline: '2px solid #0F1412', outlineOffset: 2 } : undefined}
               className={`${brutalInputClass} pl-10 w-full uppercase tracking-wider`}
             />
           </div>
@@ -76,52 +80,38 @@ export function Header({ onMenuToggle }: HeaderProps) {
         {/* Right: Actions */}
         <div className="flex items-center gap-2 sm:gap-3 md:gap-4">
           {/* Mobile Search */}
-          <Button
-            variant="neutral"
-            size="icon"
-            className={`lg:hidden ${brutalBtnClass}`}
+          <FramedIcon
+            icon={IconSearch}
+            label="Search"
+            className="hidden sm:inline-flex lg:hidden"
             title="Search"
-          >
-            <IconSearch className="h-4 w-4 sm:h-5 sm:w-5" />
-          </Button>
+          />
 
           {/* Theme Toggle */}
-          <Button
-            variant="neutral"
-            size="icon"
+          <FramedIcon
+            icon={isDark ? IconSun : IconMoon}
+            label={isDark ? 'Use light theme' : 'Use dark theme'}
             onClick={() => setIsDark(!isDark)}
-            className={brutalBtnClass}
-            title="Toggle Theme"
-          >
-            {isDark ? <IconSun className="h-4 w-4 sm:h-5 sm:w-5" /> : <IconMoon className="h-4 w-4 sm:h-5 sm:w-5" />}
-          </Button>
+            aria-pressed={isDark}
+            className="hidden md:inline-flex"
+          />
 
           {/* Notifications */}
-          <Button
-            variant="neutral"
-            size="icon"
-            className={`${brutalBtnClass} relative`}
+          <FramedIcon
+            icon={IconBell}
+            label="Notifications"
+            className="hidden sm:inline-flex"
             title="Notifications"
-          >
-            <IconBell className="h-5 w-5" />
-            <span className="absolute -top-2 -right-2 h-6 w-6 bg-orange border-2 border-black flex items-center justify-center text-xs font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-              3
-            </span>
-          </Button>
+          />
 
           {/* User Menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button
-                variant="neutral"
-                size="icon"
-                className={`${brutalBtnClass} p-0 overflow-hidden`}
-              >
-                <Avatar className="h-full w-full rounded-none border-none">
-                  <AvatarImage src="https://ui.shadcn.com/avatars/02.png" alt="User" />
-                  <AvatarFallback className="bg-orange text-black font-black">U</AvatarFallback>
-                </Avatar>
-              </Button>
+              <FramedIdentity
+                name="User Name"
+                collapsed
+                label="Open user menu for User Name"
+              />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-64 border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] bg-white rounded-none p-0 mt-2">
               <div className="px-5 py-4 bg-orange border-b-2 border-black">
@@ -129,16 +119,16 @@ export function Header({ onMenuToggle }: HeaderProps) {
                 <p className="text-xs text-black font-bold opacity-80">user@example.com</p>
               </div>
               <div className="p-2 space-y-1">
-                <DropdownMenuItem className="h-10 px-4 border-2 border-transparent focus:border-black focus:bg-gray-100 focus:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer font-bold text-sm rounded-none">
+                <DropdownMenuItem className="min-h-11 px-4 border-2 border-transparent focus:border-black focus:bg-gray-100 focus:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer font-bold text-sm rounded-none">
                   <IconUser className="mr-3 h-5 w-5" />
                   PROFILE
                 </DropdownMenuItem>
-                <DropdownMenuItem className="h-10 px-4 border-2 border-transparent focus:border-black focus:bg-gray-100 focus:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer font-bold text-sm rounded-none">
+                <DropdownMenuItem className="min-h-11 px-4 border-2 border-transparent focus:border-black focus:bg-gray-100 focus:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer font-bold text-sm rounded-none">
                   <IconSettings className="mr-3 h-5 w-5" />
                   SETTINGS
                 </DropdownMenuItem>
                 <DropdownMenuSeparator className="bg-black h-0.5 my-2" />
-                <DropdownMenuItem className="h-10 px-4 border-2 border-transparent text-red-600 focus:text-red-600 focus:border-black focus:bg-red-50 focus:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer font-bold text-sm rounded-none">
+                <DropdownMenuItem className="min-h-11 px-4 border-2 border-transparent text-red-600 focus:text-red-600 focus:border-black focus:bg-red-50 focus:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer font-bold text-sm rounded-none">
                   <IconLogout className="mr-3 h-5 w-5" />
                   LOGOUT
                 </DropdownMenuItem>

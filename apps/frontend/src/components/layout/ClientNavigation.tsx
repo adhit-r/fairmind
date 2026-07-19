@@ -2,7 +2,7 @@
 
 import React from "react";
 import { usePathname } from "next/navigation";
-import { SidebarProvider, useSidebar } from "@/components/ui/sidebar";
+import { SidebarProvider } from "@/components/ui/sidebar";
 import { Header } from "./Header";
 import { AppSidebar } from "./Sidebar";
 
@@ -26,7 +26,7 @@ function MainContent({ children }: { children: React.ReactNode }) {
           paddingTop: 0,
         }}
       >
-        <main className="flex-1 pt-3 pb-6 px-6 bg-gray-50 overflow-auto min-h-0 w-full">
+        <main className="flex-1 min-h-0 w-full overflow-auto bg-[#F3F5F0] px-3 pb-6 pt-3 sm:px-6">
           {children}
         </main>
       </div>
@@ -36,20 +36,21 @@ function MainContent({ children }: { children: React.ReactNode }) {
 
 export function ClientNavigation({ children }: ClientNavigationProps) {
   const pathname = usePathname();
+  const isLegacyTestRoute = pathname === "/test" || pathname?.startsWith("/test/");
   const isAuthRoute =
     pathname?.startsWith("/login") ||
     pathname?.startsWith("/register") ||
-    pathname?.startsWith("/test");
+    isLegacyTestRoute;
 
 
-  // Don't show sidebar/header on auth/test pages
+  // Keep only the singular legacy /test route shell-less. /tests is product navigation.
   if (isAuthRoute) {
     return <>{children}</>;
   }
 
   return (
     <SidebarProvider>
-      <div className="flex min-h-screen w-full relative">
+      <div className="relative flex min-h-screen w-full overflow-x-clip">
         {/* Sidebar - fixed position, full height from top */}
         <AppSidebar />
 

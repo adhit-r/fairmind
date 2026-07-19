@@ -182,6 +182,45 @@ The existing collapsible left sidebar remains. AI Governance is one expanded cat
 
 A control trace row presents framework ID, shared control, assessment state, owner, evidence count, latest evaluation, freshness, and findings in one scan line. Expanding the row reveals mapping rationale and the chronological evidence trail without opening a modal.
 
+### Framed Functional Icons
+
+Framed icons identify navigation and direct actions. The anatomy is a square Deep Ink border, Warm Canvas or semantic fill, one high-contrast line icon, and a short hard offset shadow. Compact controls are exactly 44px or larger; expanded controls pair the same icon frame with a visible task label. Hover and pressed states move the control toward the shadow rather than adding glow or blur.
+
+Every icon-only button or link has a specific accessible name. The icon itself is hidden from assistive technology so the control is announced once. Use the frame for navigation, refresh, open, menu, profile, and other functional controls. Do not frame decorative illustrations, table status glyphs, verdict marks, or every inline metadata icon.
+
+### Illustrated Identity
+
+The profile identity uses the approved illustrated portrait inside a square bordered frame. Expanded navigation shows portrait, name, and supporting account text; collapsed and header treatments retain a labelled 44px portrait control. The current approved remote portrait source is centralized in `FramedIdentity` and must not be duplicated elsewhere. Replace it with a local, licensed asset when one is available while retaining the same crop and frame.
+
+Image failure is a designed state. Failed or already-broken portrait loads switch to labelled two-letter initials on Action Orange, including failures that occur before client hydration. The initials fallback keeps the same dimensions, accessible name, border, focus treatment, and interaction target.
+
+### Evaluation State Semantics
+
+Evaluation runs always expose two independent axes:
+
+- **Technical status:** `awaiting_evidence`, `running`, `succeeded`, `failed`, or `cancelled`. It describes execution lifecycle only.
+- **Governance verdict:** `approved`, `conditional`, `review`, `blocked`, or `insufficient`. It describes the current review judgment supported by available evidence.
+
+`succeeded` never implies `approved`. `awaiting_evidence` and `insufficient` remain neutral, explicit states rather than being presented as success or failure. `review` uses Action Orange to signal required human attention, not a passed result. Component-layer verdicts and risk-dimension verdicts remain separate labelled sections; an absent axis reads “Not assessed.”
+
+### Evaluation Runs Workbench
+
+Evaluation Runs is one dense, flat work surface inside the established dashboard shell. Its scan order is title and assurance purpose, layout-owned organization and real AI-system context, plan selection or compact creation form, preflight blocker and next action, then the recent-runs table. Synthetic fallback systems are never displayed as real scope and never trigger evaluation requests.
+
+The plan form keeps target kind, lifecycle phases, depth, enforcement, delivery, and immutable suite versions visible together. Preflight states state both whether a run can be prepared and whether FairMind execution is available. External and imported plans may prepare an `awaiting_evidence` run, but the interface continues to state that an exact Evidence Passport revision is required.
+
+The recent-runs table keeps technical status and overall verdict in separate columns. Run details show plan metadata, only the layer results supplied by the evidence, exact evidence-run and Passport-revision identifiers, and an “Awaiting evidence” state when no revision is linked. It never fabricates artifacts, scores, layer findings, or compliance claims.
+
+### Interaction Accessibility
+
+- Meet WCAG 2.2 AA contrast for text, controls, status fills, and focus indicators.
+- Keep every actionable control at least 44px by 44px on desktop and touch layouts.
+- Give icon-only controls precise accessible names and keep expanded task labels visible.
+- Preserve a visible 2px keyboard focus outline with offset on every link, button, field, and menu trigger.
+- Keep semantic headings, fieldsets, tables, status regions, and alerts so loading, empty, server-error, and action-error states are distinguishable without color.
+- Under `prefers-reduced-motion: reduce`, remove translations, animated skeleton pulses, and non-essential transitions while preserving immediate state feedback.
+- Preserve the white, Deep Ink, teal, orange, square-border, hard-shadow language. Purple gradients, generic AI styling, glass effects, glow, and decorative dashboard metrics remain prohibited.
+
 ## Do's and Don'ts
 
 ### Do:
