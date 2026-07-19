@@ -81,9 +81,9 @@ CREATE TABLE IF NOT EXISTS governance_evaluation_runs (
         OR
         (linked_passport_revision_id IS NOT NULL AND linked_evidence_run_id IS NOT NULL)
     ),
-    CONSTRAINT ck_governance_evaluation_run_succeeded_link CHECK (
+    CONSTRAINT ck_governance_evaluation_run_evidence_link_state CHECK (
         (
-            technical_status = 'succeeded'
+            technical_status IN ('succeeded', 'failed')
             AND linked_passport_revision_id IS NOT NULL
             AND linked_evidence_run_id IS NOT NULL
             AND linked_by IS NOT NULL

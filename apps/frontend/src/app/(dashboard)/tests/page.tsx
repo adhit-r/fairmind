@@ -95,6 +95,32 @@ function verdictClass(verdict: GovernanceVerdict) {
   return 'border-[#59615D] bg-[#F3F5F0] text-[#303834]'
 }
 
+function preflightPresentation(plan: EvaluationPlan, preflight: EvaluationPreflight) {
+  const canPrepareRun = preflight.canPrepareRun && plan.status === 'active'
+  if (plan.status === 'draft') {
+    return {
+      canPrepareRun,
+      stateLabel: 'Plan activation required',
+      message: 'This plan version is still a draft and cannot prepare a run.',
+      nextAction: 'Activate this plan version after review, then run preflight again.',
+    }
+  }
+  if (plan.status === 'archived') {
+    return {
+      canPrepareRun,
+      stateLabel: 'Plan archived',
+      message: 'This plan version is archived and cannot prepare a run.',
+      nextAction: 'Create a new plan version and activate it before preparing a run.',
+    }
+  }
+  return {
+    canPrepareRun,
+    stateLabel: preflight.code === 'executor_unavailable' ? 'Executor unavailable' : 'Evidence link required',
+    message: preflight.message,
+    nextAction: preflight.nextAction,
+  }
+}
+
 function StateLabel({ children, className }: { children: React.ReactNode; className: string }) {
   return (
     <span className={`inline-flex min-h-8 items-center border-2 px-2.5 py-1 text-xs font-black uppercase ${className}`}>
@@ -346,6 +372,10 @@ export default function EvaluationRunsPage() {
   const actionAlertRef = useRef<HTMLDivElement>(null)
 
   const selectedPlan = evaluations.plans.find((plan) => plan.id === selectedPlanId) ?? null
+  const planListUnconfirmed = evaluations.plans.length === 0 && !evaluations.plansLoaded
+  const selectedPreflight = selectedPlan && preflight
+    ? preflightPresentation(selectedPlan, preflight)
+    : null
 
   useEffect(() => {
     if (evaluations.plans.length === 0) {
@@ -491,7 +521,7 @@ export default function EvaluationRunsPage() {
                     <h2 id="evaluation-plan-heading" className="text-lg font-black">Evaluation plan</h2>
                     <p className="text-sm font-semibold text-[#59615D]">Version the target, lifecycle coverage, delivery route, and suites before collecting evidence.</p>
                   </div>
-                  {evaluations.plans.length > 0 && (
+                  {evaluations.plansLoaded && evaluations.plans.length > 0 && (
                     <FramedIcon
                       icon={IconPlus}
                       label={showCreatePlan ? 'Close new plan form' : 'Create another evaluation plan'}
@@ -502,7 +532,14 @@ export default function EvaluationRunsPage() {
                   )}
                 </div>
 
-                {evaluations.plans.length === 0 || showCreatePlan ? (
+                {planListUnconfirmed ? (
+                  <div role="status" className="border-2 border-[#0F1412] bg-[#F3F5F0] p-4">
+                    <p className="font-black">Plan availability is unconfirmed</p>
+                    <p className="mt-1 max-w-[70ch] text-sm font-semibold text-[#59615D]">
+                      Retry loading evaluations before creating a plan so an existing version is not duplicated.
+                    </p>
+                  </div>
+                ) : evaluations.plans.length === 0 || showCreatePlan ? (
                   <EvaluationPlanForm onCreate={createPlan} submitting={actionBusy} />
                 ) : (
                   <div className="space-y-4">
@@ -540,22 +577,22 @@ export default function EvaluationRunsPage() {
                     <p aria-label="Loading evaluation preflight" className="mt-3 min-h-11 animate-pulse bg-[#E5E9E3] p-3 text-sm font-bold motion-reduce:animate-none">Checking execution and evidence requirements</p>
                   ) : preflightError ? (
                     <p role="alert" className="mt-3 border-2 border-[#D83A2E] bg-red-50 p-3 text-sm font-bold text-[#8F2019]">{preflightError.message}</p>
-                  ) : preflight ? (
+                  ) : preflight && selectedPreflight ? (
                     <div className="mt-3 grid gap-4 lg:grid-cols-[1fr_auto] lg:items-end">
                       <div className="border-2 border-[#0F1412] bg-[#F3F5F0] p-4">
                         <div className="flex flex-wrap items-center gap-2">
-                          <StateLabel className={preflight.canPrepareRun ? 'border-[#155D46] bg-[#DFF4EA] text-[#155D46]' : 'border-[#D83A2E] bg-red-50 text-[#8F2019]'}>
-                            {preflight.code === 'executor_unavailable' ? 'Executor unavailable' : 'Evidence link required'}
+                          <StateLabel className={selectedPreflight.canPrepareRun ? 'border-[#155D46] bg-[#DFF4EA] text-[#155D46]' : 'border-[#D83A2E] bg-red-50 text-[#8F2019]'}>
+                            {selectedPreflight.stateLabel}
                           </StateLabel>
-                          <span className="text-xs font-black uppercase text-[#59615D]">{preflight.canPrepareRun ? 'Run preparation: allowed' : 'Run preparation: blocked'}</span>
+                          <span className="text-xs font-black uppercase text-[#59615D]">{selectedPreflight.canPrepareRun ? 'Run preparation: allowed' : 'Run preparation: blocked'}</span>
                           <span className="text-xs font-black uppercase text-[#59615D]">FairMind execution: {preflight.fairmindExecutionAvailable ? 'available' : 'unavailable'}</span>
                         </div>
-                        <p className="mt-3 text-sm font-semibold">{preflight.message}</p>
-                        <p className="mt-2 text-sm font-black">Next action: {preflight.nextAction}</p>
+                        <p className="mt-3 text-sm font-semibold">{selectedPreflight.message}</p>
+                        <p className="mt-2 text-sm font-black">Next action: {selectedPreflight.nextAction}</p>
                       </div>
                       <Button
                         onClick={() => void prepareRun()}
-                        disabled={actionBusy || !preflight.canPrepareRun || selectedPlan.status !== 'active'}
+                        disabled={actionBusy || !selectedPreflight.canPrepareRun}
                         className="rounded-none border-[#0F1412] bg-[#FF6B35] font-black"
                       >
                         <IconPlayerPlay aria-hidden="true" />

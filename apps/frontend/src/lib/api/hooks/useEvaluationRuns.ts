@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { z } from 'zod'
 
 import { apiClient, type ApiError, type ApiResponse } from '../api-client'
@@ -134,7 +134,11 @@ export type PassportRevisionLinkInput = z.infer<typeof passportRevisionLinkInput
 
 export interface EvaluationApiClient {
   get<T>(endpoint: string): Promise<ApiResponse<T>>
-  post<T>(endpoint: string, data?: unknown): Promise<ApiResponse<T>>
+  post<T>(
+    endpoint: string,
+    data?: unknown,
+    options?: { enableRetry?: boolean },
+  ): Promise<ApiResponse<T>>
 }
 
 export class EvaluationApiRequestError extends Error {
@@ -163,12 +167,14 @@ export class StaleEvaluationResultError extends Error {
 export interface EvaluationRunsSnapshot {
   plans: EvaluationPlan[]
   runs: EvaluationRun[]
+  plansLoaded: boolean
   loading: boolean
   error: Error | null
 }
 
 export interface EvaluationRunsController {
   getSnapshot(): EvaluationRunsSnapshot
+  matchesScope(orgId?: string, systemId?: string): boolean
   subscribe(listener: () => void): () => void
   setScope(orgId?: string, systemId?: string): Promise<void>
   refresh(): Promise<void>
@@ -188,9 +194,34 @@ type EvaluationScope = {
 const emptySnapshot = (): EvaluationRunsSnapshot => ({
   plans: [],
   runs: [],
+  plansLoaded: false,
   loading: false,
   error: null,
 })
+
+export interface EvaluationRunsScopeView {
+  readonly snapshot: EvaluationRunsSnapshot
+  run<T>(operation: (controller: EvaluationRunsController) => Promise<T>): Promise<T>
+}
+
+export function createEvaluationRunsScopeView(
+  controller: EvaluationRunsController,
+  orgId?: string,
+  systemId?: string,
+): EvaluationRunsScopeView {
+  const inputScopeIsCurrent = () => controller.matchesScope(orgId, systemId)
+  return {
+    get snapshot() {
+      return inputScopeIsCurrent()
+        ? controller.getSnapshot()
+        : { ...emptySnapshot(), loading: Boolean(orgId && systemId) }
+    },
+    async run<T>(operation: (scopedController: EvaluationRunsController) => Promise<T>) {
+      if (!inputScopeIsCurrent()) throw new StaleEvaluationResultError()
+      return operation(controller)
+    },
+  }
+}
 
 function responseData<T>(response: ApiResponse<unknown>, schema: z.ZodType<T>): T {
   if (!response.success || response.data === undefined) {
@@ -225,6 +256,10 @@ class DefaultEvaluationRunsController implements EvaluationRunsController {
   constructor(private readonly client: EvaluationApiClient) {}
 
   getSnapshot = () => this.snapshot
+
+  matchesScope = (orgId?: string, systemId?: string) => (
+    orgId === this.rawOrgId && systemId === this.rawSystemId
+  )
 
   subscribe = (listener: () => void) => {
     this.listeners.add(listener)
@@ -293,9 +328,9 @@ class DefaultEvaluationRunsController implements EvaluationRunsController {
       try {
         if (plansResult.status === 'rejected') throw plansResult.reason
         const plans = responseData(plansResult.value, evaluationPlanListSchema)
-        nextSnapshot = { ...nextSnapshot, plans }
+        nextSnapshot = { ...nextSnapshot, plans, plansLoaded: true }
       } catch (reason) {
-        nextSnapshot = { ...nextSnapshot, plans: [] }
+        nextSnapshot = { ...nextSnapshot, plans: [], plansLoaded: false }
         nextError ||= asError(reason)
       }
     }
@@ -322,13 +357,13 @@ class DefaultEvaluationRunsController implements EvaluationRunsController {
       if (!this.scopeIsCurrent(scope, scopeGeneration) || generation !== this.planGeneration) {
         throw new StaleEvaluationResultError()
       }
-      this.publish({ ...this.snapshot, plans, loading: false, error: null })
+      this.publish({ ...this.snapshot, plans, plansLoaded: true, loading: false, error: null })
     } catch (reason) {
       if (!this.scopeIsCurrent(scope, scopeGeneration) || generation !== this.planGeneration) {
         throw new StaleEvaluationResultError()
       }
       const error = asError(reason)
-      this.publish({ ...this.snapshot, loading: false, error })
+      this.publish({ ...this.snapshot, plansLoaded: false, loading: false, error })
       throw error
     }
   }
@@ -369,6 +404,7 @@ class DefaultEvaluationRunsController implements EvaluationRunsController {
     const response = await this.client.post<unknown>(
       API_ENDPOINTS.aiGovernance.evaluationPlans(scope.orgId, scope.systemId),
       payload,
+      { enableRetry: false },
     )
     const created = responseData(response, evaluationPlanSchema)
     if (!this.scopeIsCurrent(scope, scopeGeneration)) throw new StaleEvaluationResultError()
@@ -406,6 +442,7 @@ class DefaultEvaluationRunsController implements EvaluationRunsController {
     const response = await this.client.post<unknown>(
       API_ENDPOINTS.aiGovernance.evaluationPlanRuns(scope.orgId, scope.systemId, planId),
       payload,
+      { enableRetry: false },
     )
     const created = responseData(response, evaluationRunSchema)
     if (!this.scopeIsCurrent(scope, scopeGeneration)) throw new StaleEvaluationResultError()
@@ -465,29 +502,49 @@ export function useEvaluationRuns(orgId?: string, systemId?: string) {
   const controllerRef = useRef<EvaluationRunsController | null>(null)
   if (!controllerRef.current) controllerRef.current = createEvaluationRunsController()
   const controller = controllerRef.current
-  const [snapshot, setSnapshot] = useState<EvaluationRunsSnapshot>(controller.getSnapshot())
+  const [, setSnapshot] = useState<EvaluationRunsSnapshot>(controller.getSnapshot())
+  const scopeView = useMemo(
+    () => createEvaluationRunsScopeView(controller, orgId, systemId),
+    [controller, orgId, systemId],
+  )
 
   useEffect(() => controller.subscribe(() => setSnapshot(controller.getSnapshot())), [controller])
   useEffect(() => {
     void controller.setScope(orgId, systemId)
   }, [controller, orgId, systemId])
 
-  const refresh = useCallback(() => controller.refresh(), [controller])
-  const createPlan = useCallback((input: CreateEvaluationPlanInput) => controller.createPlan(input), [controller])
-  const activatePlan = useCallback((planId: string) => controller.activatePlan(planId), [controller])
-  const loadPreflight = useCallback((planId: string) => controller.loadPreflight(planId), [controller])
-  const createRun = useCallback(
-    (planId: string, trigger?: EvaluationTrigger) => controller.createRun(planId, trigger),
-    [controller],
+  const refresh = useCallback(() => scopeView.run((scopedController) => scopedController.refresh()), [scopeView])
+  const createPlan = useCallback(
+    (input: CreateEvaluationPlanInput) => scopeView.run((scopedController) => scopedController.createPlan(input)),
+    [scopeView],
   )
-  const getRun = useCallback((runId: string) => controller.getRun(runId), [controller])
+  const activatePlan = useCallback(
+    (planId: string) => scopeView.run((scopedController) => scopedController.activatePlan(planId)),
+    [scopeView],
+  )
+  const loadPreflight = useCallback(
+    (planId: string) => scopeView.run((scopedController) => scopedController.loadPreflight(planId)),
+    [scopeView],
+  )
+  const createRun = useCallback(
+    (planId: string, trigger?: EvaluationTrigger) => scopeView.run(
+      (scopedController) => scopedController.createRun(planId, trigger),
+    ),
+    [scopeView],
+  )
+  const getRun = useCallback(
+    (runId: string) => scopeView.run((scopedController) => scopedController.getRun(runId)),
+    [scopeView],
+  )
   const linkPassportRevision = useCallback(
-    (runId: string, input: PassportRevisionLinkInput) => controller.linkPassportRevision(runId, input),
-    [controller],
+    (runId: string, input: PassportRevisionLinkInput) => scopeView.run(
+      (scopedController) => scopedController.linkPassportRevision(runId, input),
+    ),
+    [scopeView],
   )
 
   return {
-    ...snapshot,
+    ...scopeView.snapshot,
     refresh,
     createPlan,
     activatePlan,

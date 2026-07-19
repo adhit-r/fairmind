@@ -20,6 +20,7 @@ from database.governance_models import (
     GovernanceWorkspace,
 )
 from database.models import OrganizationAuditLog
+from src.domain.assurance.evidence_passport import CapabilityState, EvaluationStatus
 
 
 TARGET_KINDS = frozenset(
@@ -328,14 +329,16 @@ class EvaluationRunsService:
                 resource_id=plan_id,
                 changes={"systemId": system_id, "status": "draft"},
             )
-            self.db.commit()
-            row = self._plan_row(
-                org_id=org_id,
-                system_id=system_id,
-                workspace_id=scope["workspace_id"],
-                plan_id=plan_id,
+            response = self._plan_dict(
+                self._plan_row(
+                    org_id=org_id,
+                    system_id=system_id,
+                    workspace_id=scope["workspace_id"],
+                    plan_id=plan_id,
+                )
             )
-            return self._plan_dict(row)
+            self.db.commit()
+            return response
         except EvaluationWorkflowError:
             self.db.rollback()
             raise
@@ -425,8 +428,7 @@ class EvaluationRunsService:
                 resource_id=plan_id,
                 changes={"from": "draft", "to": "active"},
             )
-            self.db.commit()
-            return self._plan_dict(
+            response = self._plan_dict(
                 self._plan_row(
                     org_id=org_id,
                     system_id=system_id,
@@ -434,6 +436,8 @@ class EvaluationRunsService:
                     plan_id=plan_id,
                 )
             )
+            self.db.commit()
+            return response
         except EvaluationWorkflowError:
             self.db.rollback()
             raise
@@ -468,6 +472,26 @@ class EvaluationRunsService:
                 "message": "No FairMind worker is installed for this plan.",
                 "nextAction": (
                     "Select an external provider or imported report, or install a compatible worker."
+                ),
+            }
+        if plan["status"] == "draft":
+            return {
+                "planId": plan_id,
+                "canPrepareRun": False,
+                "fairmindExecutionAvailable": False,
+                "code": "evidence_link_required",
+                "message": "This evaluation plan is still a draft and cannot prepare runs.",
+                "nextAction": "Activate the plan before preparing a run.",
+            }
+        if plan["status"] == "archived":
+            return {
+                "planId": plan_id,
+                "canPrepareRun": False,
+                "fairmindExecutionAvailable": False,
+                "code": "evidence_link_required",
+                "message": "This evaluation plan is archived and cannot prepare runs.",
+                "nextAction": (
+                    "Create and activate a new versioned plan before preparing a run."
                 ),
             }
         return {
@@ -552,8 +576,7 @@ class EvaluationRunsService:
                 resource_id=run_id,
                 changes={"planId": plan_id, "technicalStatus": "awaiting_evidence"},
             )
-            self.db.commit()
-            return self._run_dict(
+            response = self._run_dict(
                 self._run_row(
                     org_id=org_id,
                     system_id=system_id,
@@ -561,6 +584,8 @@ class EvaluationRunsService:
                     run_id=run_id,
                 )
             )
+            self.db.commit()
+            return response
         except EvaluationWorkflowError:
             self.db.rollback()
             raise
@@ -603,7 +628,7 @@ class EvaluationRunsService:
         return self._run_dict(row) if row else None
 
     @staticmethod
-    def _passport_projection(snapshot_json: str) -> dict[str, str]:
+    def _passport_projection(snapshot_json: str) -> dict[str, str | None]:
         try:
             snapshot = json.loads(snapshot_json)
             if not isinstance(snapshot, dict):
@@ -613,14 +638,47 @@ class EvaluationRunsService:
             evaluation = snapshot["evaluation"]
             suite = evaluation["suite"]
             result = evaluation["result"]
+            capability_state = CapabilityState(evaluation["capabilityState"]).value
+            result_status = EvaluationStatus(result["status"]).value
+            expected_status = {
+                CapabilityState.UNAVAILABLE.value: EvaluationStatus.UNAVAILABLE.value,
+                CapabilityState.INSUFFICIENT_DATA.value: (
+                    EvaluationStatus.INSUFFICIENT_DATA.value
+                ),
+            }.get(capability_state)
+            if expected_status is not None and result_status != expected_status:
+                raise ValueError
             projection = {
                 "schemaVersion": schema_version,
                 "targetKind": ai_system["kind"],
                 "suiteRef": f"{suite['name']}@{suite['version']}",
+                "capabilityState": capability_state,
+                "resultStatus": result_status,
+                "resultSummary": result["summary"],
+                "errorCode": result.get("errorCode"),
+                "errorMessage": result.get("errorMessage"),
                 "startedAt": result["startedAt"],
                 "endedAt": result["endedAt"],
             }
-            if not all(isinstance(value, str) and value for value in projection.values()):
+            required_keys = {
+                "schemaVersion",
+                "targetKind",
+                "suiteRef",
+                "capabilityState",
+                "resultStatus",
+                "resultSummary",
+                "startedAt",
+                "endedAt",
+            }
+            if any(
+                not isinstance(projection[key], str) or not projection[key]
+                for key in required_keys
+            ):
+                raise ValueError
+            if any(
+                value is not None and (not isinstance(value, str) or not value)
+                for value in (projection["errorCode"], projection["errorMessage"])
+            ):
                 raise ValueError
             if schema_version != "1.0.0":
                 raise ValueError
@@ -632,6 +690,29 @@ class EvaluationRunsService:
                 "Re-ingest a valid canonical Evidence Passport revision.",
                 500,
             ) from error
+
+    @staticmethod
+    def _passport_run_outcome(passport: dict[str, str | None]) -> dict[str, str | None]:
+        result_status = passport["resultStatus"]
+        completed_outcomes = {
+            EvaluationStatus.PASSED.value,
+            EvaluationStatus.PASSED_WITH_LIMITATIONS.value,
+            EvaluationStatus.FAILED.value,
+            EvaluationStatus.INFORMATIONAL.value,
+        }
+        if result_status in completed_outcomes:
+            return {
+                "technicalStatus": "succeeded",
+                "overallVerdict": "review",
+                "failureCode": None,
+                "failureMessage": None,
+            }
+        return {
+            "technicalStatus": "failed",
+            "overallVerdict": "insufficient",
+            "failureCode": passport["errorCode"] or f"passport_result_{result_status}",
+            "failureMessage": passport["errorMessage"] or passport["resultSummary"],
+        }
 
     def link_passport_revision(
         self,
@@ -744,6 +825,7 @@ class EvaluationRunsService:
                     422,
                 )
 
+            outcome = self._passport_run_outcome(passport)
             linked_at = _now()
             result = self.db.execute(
                 update(GovernanceEvaluationRun.__table__)
@@ -763,8 +845,10 @@ class EvaluationRunsService:
                     linked_at=linked_at,
                     started_at=passport["startedAt"],
                     completed_at=passport["endedAt"],
-                    technical_status="succeeded",
-                    overall_verdict="review",
+                    technical_status=outcome["technicalStatus"],
+                    overall_verdict=outcome["overallVerdict"],
+                    failure_code=outcome["failureCode"],
+                    failure_message=outcome["failureMessage"],
                     updated_at=linked_at,
                 )
             )
@@ -798,8 +882,7 @@ class EvaluationRunsService:
                     "passportRevisionId": passport_revision_id,
                 },
             )
-            self.db.commit()
-            return self._run_dict(
+            response = self._run_dict(
                 self._run_row(
                     org_id=org_id,
                     system_id=system_id,
@@ -807,6 +890,8 @@ class EvaluationRunsService:
                     run_id=run_id,
                 )
             )
+            self.db.commit()
+            return response
         except EvaluationWorkflowError:
             self.db.rollback()
             raise

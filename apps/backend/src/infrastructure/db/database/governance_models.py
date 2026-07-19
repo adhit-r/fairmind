@@ -660,13 +660,14 @@ class GovernanceEvaluationRun(Base):
             name="ck_governance_evaluation_run_complete_passport_link",
         ),
         CheckConstraint(
-            "(technical_status = 'succeeded' AND linked_passport_revision_id IS NOT NULL "
+            "(technical_status IN ('succeeded', 'failed') "
+            "AND linked_passport_revision_id IS NOT NULL "
             "AND linked_evidence_run_id IS NOT NULL AND linked_by IS NOT NULL "
             "AND linked_at IS NOT NULL AND started_at IS NOT NULL "
             "AND completed_at IS NOT NULL) OR "
             "(technical_status <> 'succeeded' AND linked_passport_revision_id IS NULL "
             "AND linked_evidence_run_id IS NULL AND linked_by IS NULL AND linked_at IS NULL)",
-            name="ck_governance_evaluation_run_succeeded_link",
+            name="ck_governance_evaluation_run_evidence_link_state",
         ),
         CheckConstraint(
             "(technical_status = 'awaiting_evidence' AND started_at IS NULL "

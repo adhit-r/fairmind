@@ -6,6 +6,7 @@ import { API_ENDPOINTS } from '../endpoints'
 import {
   EvaluationApiRequestError,
   StaleEvaluationResultError,
+  createEvaluationRunsScopeView,
   createEvaluationRunsController,
   type CreateEvaluationPlanInput,
   type EvaluationApiClient,
@@ -18,6 +19,7 @@ type ApiCall = {
   method: 'GET' | 'POST'
   endpoint: string
   data?: unknown
+  options?: { enableRetry?: boolean }
 }
 
 function deferred<T>() {
@@ -92,7 +94,11 @@ function preflight(overrides: Partial<EvaluationPreflight> = {}): EvaluationPref
 
 function fakeClient(
   getImpl: (endpoint: string) => Promise<ApiResponse<unknown>>,
-  postImpl: (endpoint: string, data?: unknown) => Promise<ApiResponse<unknown>>,
+  postImpl: (
+    endpoint: string,
+    data?: unknown,
+    options?: { enableRetry?: boolean },
+  ) => Promise<ApiResponse<unknown>>,
 ) {
   const calls: ApiCall[] = []
   const client: EvaluationApiClient = {
@@ -100,9 +106,9 @@ function fakeClient(
       calls.push({ method: 'GET', endpoint })
       return await getImpl(endpoint) as ApiResponse<T>
     },
-    async post<T>(endpoint: string, data?: unknown) {
-      calls.push({ method: 'POST', endpoint, data })
-      return await postImpl(endpoint, data) as ApiResponse<T>
+    async post<T>(endpoint: string, data?: unknown, options?: { enableRetry?: boolean }) {
+      calls.push({ method: 'POST', endpoint, data, ...(options ? { options } : {}) })
+      return await postImpl(endpoint, data, options) as ApiResponse<T>
     },
   }
   return { client, calls }
@@ -183,7 +189,9 @@ describe('evaluation runs controller', () => {
     await controller.setScope(undefined, 'system-1')
 
     assert.deepEqual(calls, [])
-    assert.deepEqual(controller.getSnapshot(), { plans: [], runs: [], loading: false, error: null })
+    assert.deepEqual(controller.getSnapshot(), {
+      plans: [], runs: [], plansLoaded: false, loading: false, error: null,
+    })
   })
 
   test('loads scoped plan and run lists together and exposes loading separately from empty', async () => {
@@ -196,7 +204,9 @@ describe('evaluation runs controller', () => {
     const controller = createEvaluationRunsController(client)
 
     const loading = controller.setScope('org-1', 'system-1')
-    assert.deepEqual(controller.getSnapshot(), { plans: [], runs: [], loading: true, error: null })
+    assert.deepEqual(controller.getSnapshot(), {
+      plans: [], runs: [], plansLoaded: false, loading: true, error: null,
+    })
     assert.deepEqual(calls.map(({ method, endpoint }) => [method, endpoint]), [
       ['GET', '/api/v1/ai-governance/organizations/org-1/systems/system-1/evaluation-plans'],
       ['GET', '/api/v1/ai-governance/organizations/org-1/systems/system-1/evaluation-runs'],
@@ -206,7 +216,9 @@ describe('evaluation runs controller', () => {
     runsResponse.resolve({ success: true, data: [run()] })
     await loading
 
-    assert.deepEqual(controller.getSnapshot(), { plans: [plan()], runs: [run()], loading: false, error: null })
+    assert.deepEqual(controller.getSnapshot(), {
+      plans: [plan()], runs: [run()], plansLoaded: true, loading: false, error: null,
+    })
   })
 
   test('invalidates stale list responses when either scope identifier changes', async () => {
@@ -235,6 +247,28 @@ describe('evaluation runs controller', () => {
     assert.deepEqual(controller.getSnapshot().runs.map(({ id }) => id), ['run-new'])
   })
 
+  test('masks the previous scope and blocks its actions during the render before scope effects run', async () => {
+    const { client, calls } = successfulClient()
+    const controller = createEvaluationRunsController(client)
+    await controller.setScope('org-1', 'system-1')
+    calls.length = 0
+
+    const nextRender = createEvaluationRunsScopeView(
+      controller,
+      'org-1',
+      'system-2',
+    )
+
+    assert.deepEqual(nextRender.snapshot, {
+      plans: [], runs: [], plansLoaded: false, loading: true, error: null,
+    })
+    await assert.rejects(
+      nextRender.run((scopedController) => scopedController.createRun('plan-1')),
+      StaleEvaluationResultError,
+    )
+    assert.deepEqual(calls, [])
+  })
+
   test('keeps server errors distinct from loading and empty success', async () => {
     const { client } = fakeClient(
       async (endpoint) => endpoint.endsWith('/evaluation-plans')
@@ -247,6 +281,7 @@ describe('evaluation runs controller', () => {
     await controller.setScope('org-1', 'system-1')
 
     assert.equal(controller.getSnapshot().loading, false)
+    assert.equal(controller.getSnapshot().plansLoaded, false)
     assert.deepEqual(controller.getSnapshot().plans, [])
     assert.deepEqual(controller.getSnapshot().runs, [])
     assert.equal(controller.getSnapshot().error?.message, 'Evaluation plans unavailable')
@@ -421,7 +456,12 @@ describe('evaluation runs controller', () => {
 
     await controller.createPlan(createPlanInput)
     assert.deepEqual(calls.splice(0), [
-      { method: 'POST', endpoint: API_ENDPOINTS.aiGovernance.evaluationPlans('org-1', 'system-1'), data: createPlanInput },
+      {
+        method: 'POST',
+        endpoint: API_ENDPOINTS.aiGovernance.evaluationPlans('org-1', 'system-1'),
+        data: createPlanInput,
+        options: { enableRetry: false },
+      },
       { method: 'GET', endpoint: API_ENDPOINTS.aiGovernance.evaluationPlans('org-1', 'system-1') },
     ])
 
@@ -438,7 +478,12 @@ describe('evaluation runs controller', () => {
 
     await controller.createRun('plan-1', 'release_gate')
     assert.deepEqual(calls.splice(0), [
-      { method: 'POST', endpoint: API_ENDPOINTS.aiGovernance.evaluationPlanRuns('org-1', 'system-1', 'plan-1'), data: { trigger: 'release_gate' } },
+      {
+        method: 'POST',
+        endpoint: API_ENDPOINTS.aiGovernance.evaluationPlanRuns('org-1', 'system-1', 'plan-1'),
+        data: { trigger: 'release_gate' },
+        options: { enableRetry: false },
+      },
       { method: 'GET', endpoint: API_ENDPOINTS.aiGovernance.evaluationRuns('org-1', 'system-1') },
     ])
 
@@ -495,8 +540,88 @@ describe('evaluation runs controller', () => {
         method: 'POST',
         endpoint: API_ENDPOINTS.aiGovernance.evaluationPlanRuns('org-1', 'system-1', 'plan-1'),
         data: { trigger: 'manual' },
+        options: { enableRetry: false },
       },
     ])
+  })
+
+  test('does not retry create-plan or create-run POSTs after timeout, network, or server failures', async () => {
+    const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window')
+    const originalLocalStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
+    const originalNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator')
+    const originalFetch = Object.getOwnPropertyDescriptor(globalThis, 'fetch')
+    const setGlobal = (key: PropertyKey, value: unknown) => {
+      Object.defineProperty(globalThis, key, { configurable: true, writable: true, value })
+    }
+    const restoreGlobal = (key: PropertyKey, descriptor: PropertyDescriptor | undefined) => {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor)
+      else delete (globalThis as Record<PropertyKey, unknown>)[key]
+    }
+    const failures = [
+      {
+        name: 'timeout',
+        response: () => {
+          const error = new Error('Request timed out')
+          error.name = 'AbortError'
+          throw error
+        },
+      },
+      {
+        name: 'network',
+        response: () => { throw new Error('Connection reset') },
+      },
+      {
+        name: 'server',
+        response: () => new Response(JSON.stringify({ detail: 'Evaluation service unavailable' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      },
+    ]
+
+    try {
+      for (const failure of failures) {
+        for (const mutation of ['createPlan', 'createRun'] as const) {
+          let attempts = 0
+          setGlobal('window', {})
+          setGlobal('localStorage', { getItem: () => null })
+          setGlobal('navigator', { onLine: undefined })
+          setGlobal('fetch', async () => {
+            attempts += 1
+            return failure.response()
+          })
+          const transport = new ApiClient('https://fairmind.test')
+          const controller = createEvaluationRunsController({
+            async get<T>(endpoint: string) {
+              const data = endpoint.endsWith('/evaluation-plans') ? [plan()] : [run()]
+              return { success: true, data } as ApiResponse<T>
+            },
+            async post<T>(
+              endpoint: string,
+              data?: unknown,
+              options?: { enableRetry?: boolean },
+            ) {
+              return transport.post<T>(endpoint, data, { ...options, retryDelay: 0 })
+            },
+          })
+          await controller.setScope('org-1', 'system-1')
+
+          await assert.rejects(
+            mutation === 'createPlan'
+              ? controller.createPlan(createPlanInput)
+              : controller.createRun('plan-1'),
+            EvaluationApiRequestError,
+            `${mutation} should expose the ${failure.name} failure`,
+          )
+          assert.equal(attempts, 1, `${mutation} retried the ${failure.name} failure`)
+        }
+      }
+    } finally {
+      restoreGlobal('window', originalWindow)
+      restoreGlobal('localStorage', originalLocalStorage)
+      restoreGlobal('navigator', originalNavigator)
+      restoreGlobal('fetch', originalFetch)
+    }
   })
 
   test('scopes details and rejects stale detail results after run or scope changes', async () => {

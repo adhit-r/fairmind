@@ -92,6 +92,12 @@ type MockOptions = {
   listError?: boolean
   createRunError?: boolean
   portraitFailure?: boolean
+  secondaryScope?: {
+    systemId: string
+    plans: Array<Record<string, unknown>>
+    runs?: Array<Record<string, unknown>>
+    listDelayMs?: number
+  }
 }
 
 async function fulfillJson(route: Route, body: unknown, status = 200) {
@@ -102,6 +108,7 @@ async function mockEvaluationWorkbench(page: Page, options: MockOptions = {}) {
   let plans = structuredClone(options.plans ?? [])
   let runs = structuredClone(options.runs ?? [])
   const evaluationRequestPaths: string[] = []
+  const evaluationMutationPaths: string[] = []
 
   await page.addInitScript(() => {
     window.localStorage.setItem('access_token', 'playwright-token')
@@ -129,9 +136,39 @@ async function mockEvaluationWorkbench(page: Page, options: MockOptions = {}) {
 
     if (/\/evaluation-(?:plans|runs)(?:\/|$)/.test(path)) {
       evaluationRequestPaths.push(path)
+      if (request.method() !== 'GET') evaluationMutationPaths.push(path)
     }
 
     const evaluationPrefix = '/api/v1/ai-governance/organizations/org-1/systems/system-1'
+    const secondaryPrefix = options.secondaryScope
+      ? `/api/v1/ai-governance/organizations/org-1/systems/${options.secondaryScope.systemId}`
+      : null
+    if (secondaryPrefix && path.startsWith(secondaryPrefix)) {
+      if (options.secondaryScope?.listDelayMs && request.method() === 'GET' && (
+        path === `${secondaryPrefix}/evaluation-plans`
+        || path === `${secondaryPrefix}/evaluation-runs`
+      )) {
+        await new Promise((resolve) => setTimeout(resolve, options.secondaryScope?.listDelayMs))
+      }
+      if (path === `${secondaryPrefix}/evaluation-plans` && request.method() === 'GET') {
+        return fulfillJson(route, options.secondaryScope?.plans ?? [])
+      }
+      if (path === `${secondaryPrefix}/evaluation-runs` && request.method() === 'GET') {
+        return fulfillJson(route, options.secondaryScope?.runs ?? [])
+      }
+      const secondaryPreflight = path.match(/\/evaluation-plans\/([^/]+)\/preflight$/)
+      if (secondaryPreflight && request.method() === 'GET') {
+        return fulfillJson(route, {
+          planId: secondaryPreflight[1],
+          canPrepareRun: true,
+          fairmindExecutionAvailable: false,
+          code: 'evidence_link_required',
+          message: 'Prepare the run, then link evidence from the configured provider.',
+          nextAction: 'Link an exact Evidence Passport revision after external execution.',
+        })
+      }
+      return fulfillJson(route, [])
+    }
     if (!path.startsWith(evaluationPrefix)) {
       return fulfillJson(route, [])
     }
@@ -241,6 +278,7 @@ async function mockEvaluationWorkbench(page: Page, options: MockOptions = {}) {
   return {
     getEvaluationRequestCount: () => evaluationRequestPaths.length,
     getEvaluationRequestPaths: () => [...evaluationRequestPaths],
+    getEvaluationMutationPaths: () => [...evaluationMutationPaths],
   }
 }
 
@@ -318,6 +356,42 @@ test('treats the synthetic fallback system as missing and makes no evaluation re
   expect(mocks.getEvaluationRequestPaths()).toEqual([])
 })
 
+test('masks old-system plans and actions before delayed new-system evaluation lists resolve', async ({ page }) => {
+  const secondSystem = {
+    ...governedSystem,
+    id: 'system-2',
+    name: 'Claims Review Agent',
+    workspaceId: 'workspace-2',
+  }
+  const secondPlan = {
+    ...basePlan,
+    id: 'plan-system-2',
+    systemId: 'system-2',
+    workspaceId: 'workspace-2',
+    name: 'Claims release assurance',
+  }
+  const mocks = await mockEvaluationWorkbench(page, {
+    systems: [governedSystem, secondSystem],
+    plans: [basePlan],
+    secondaryScope: {
+      systemId: 'system-2',
+      plans: [secondPlan],
+      listDelayMs: 800,
+    },
+  })
+  await page.goto('/tests')
+  await expect(page.getByLabel('Selected plan')).toContainText(basePlan.name)
+  await expect(page.getByRole('button', { name: 'Prepare evidence run' })).toBeVisible()
+
+  await page.getByRole('combobox', { name: 'System scope' }).click()
+  await page.getByRole('option', { name: secondSystem.name }).click()
+
+  await expect(page.getByText(basePlan.name, { exact: true })).toHaveCount(0, { timeout: 400 })
+  await expect(page.getByRole('button', { name: 'Prepare evidence run' })).toHaveCount(0, { timeout: 400 })
+  expect(mocks.getEvaluationMutationPaths().filter((path) => path.includes('/systems/system-1/'))).toEqual([])
+  await expect(page.getByLabel('Selected plan')).toContainText(secondPlan.name)
+})
+
 test('requires an organization before rendering the scoped workbench', async ({ page }) => {
   const mocks = await mockEvaluationWorkbench(page, { organizations: [] })
   await page.goto('/tests')
@@ -362,6 +436,29 @@ test('blocks unavailable FairMind workers with an explicit next action', async (
   await expect(preflight.getByText('FairMind execution: unavailable', { exact: true })).toBeVisible()
   await expect(preflight).toContainText('Choose an external provider or imported report delivery mode.')
   await expect(preflight.getByRole('button', { name: 'Prepare evidence run' })).toBeDisabled()
+})
+
+test('requires an active plan even when delivery preflight can prepare evidence', async ({ page }) => {
+  const draftPlan = { ...basePlan, id: 'plan-draft', status: 'draft' }
+  await mockEvaluationWorkbench(page, { plans: [draftPlan] })
+  await page.goto('/tests')
+
+  const preflight = page.getByRole('region', { name: 'Evaluation preflight' })
+  await expect(preflight.getByText('Run preparation: blocked', { exact: true })).toBeVisible()
+  await expect(preflight.getByText('Run preparation: allowed', { exact: true })).toHaveCount(0)
+  await expect(preflight).toContainText('Activate this plan version')
+  await expect(preflight.getByRole('button', { name: 'Prepare evidence run' })).toBeDisabled()
+
+  await page.unroute('**/api/proxy/**')
+  const archivedPlan = { ...basePlan, id: 'plan-archived', status: 'archived' }
+  await mockEvaluationWorkbench(page, { plans: [archivedPlan] })
+  await page.reload()
+
+  const archivedPreflight = page.getByRole('region', { name: 'Evaluation preflight' })
+  await expect(archivedPreflight.getByText('Run preparation: blocked', { exact: true })).toBeVisible()
+  await expect(archivedPreflight.getByText('Run preparation: allowed', { exact: true })).toHaveCount(0)
+  await expect(archivedPreflight).toContainText('Create a new plan version')
+  await expect(archivedPreflight.getByRole('button', { name: 'Prepare evidence run' })).toBeDisabled()
 })
 
 test('prepares external evidence runs without conflating technical status and governance verdict', async ({ page }) => {
@@ -441,6 +538,8 @@ test('separates loading, server failure, and focused action failure states', asy
   const serverAlert = page.getByRole('alert').filter({ hasText: 'Evaluation data unavailable' })
   await expect(serverAlert).toContainText('Evaluation plan service unavailable')
   await expect(serverAlert.getByRole('button', { name: 'Retry loading evaluations' })).toBeVisible()
+  await expect(page.getByRole('form', { name: 'Create evaluation plan' })).toHaveCount(0)
+  await expect(page.getByText('Plan availability is unconfirmed', { exact: true })).toBeVisible()
 
   await page.unroute('**/api/proxy/**')
   await mockEvaluationWorkbench(page, {

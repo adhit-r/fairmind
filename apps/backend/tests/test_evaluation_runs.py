@@ -235,8 +235,35 @@ def _passport_snapshot(
     target_kind: str = "model",
     suite_name: str = "fairmind/bias",
     suite_version: str = "2026.07",
+    capability_state: str = "validated",
+    result_status: str = "passed",
+    error_code: str | None = None,
+    error_message: str | None = None,
 ) -> dict:
     """Canonical Passport 1.0 fields consumed by the exact-link contract."""
+    result = {
+        "status": result_status,
+        "summary": f"Bounded {result_status} result.",
+        "metrics": [],
+        "startedAt": "2026-07-18T00:00:00Z",
+        "endedAt": "2026-07-18T00:05:00Z",
+    }
+    if error_code is not None:
+        result["errorCode"] = error_code
+    if error_message is not None:
+        result["errorMessage"] = error_message
+    artifacts = []
+    if result_status in {"error", "unavailable"}:
+        artifacts.append(
+            {
+                "artifactId": "artifact-log",
+                "role": "log",
+                "uri": "https://evidence.example.test/evaluation.log",
+                "sha256": "6" * 64,
+                "mediaType": "text/plain",
+                "containsSensitiveData": False,
+            }
+        )
     return {
         "schemaVersion": "1.0.0",
         "passportId": str(uuid.uuid4()),
@@ -256,7 +283,7 @@ def _passport_snapshot(
             "sourceType": "fairmind_evaluation",
             "sourceIdentifier": "fairmind-bias-suite",
             "runId": str(uuid.uuid4()),
-            "capabilityState": "validated",
+            "capabilityState": capability_state,
             "assuranceSource": "fairmind_internal",
             "evaluator": {"name": "FairMind evaluator", "version": "2.0.0"},
             "suite": {
@@ -268,18 +295,12 @@ def _passport_snapshot(
             "scope": {"intendedUse": "Bounded synthetic evaluation."},
             "configurationHash": "5" * 64,
             "thresholds": [],
-            "result": {
-                "status": "passed",
-                "summary": "Bounded result.",
-                "metrics": [],
-                "startedAt": "2026-07-18T00:00:00Z",
-                "endedAt": "2026-07-18T00:05:00Z",
-            },
+            "result": result,
             "runContentHash": "2" * 64,
             "capturedAt": "2026-07-18T00:05:00Z",
             "limitations": ["Synthetic test set only."],
         },
-        "artifacts": [],
+        "artifacts": artifacts,
         "frameworkMappings": [],
         "review": {"status": "pending", "reviewVersion": 0},
         "findings": [],
@@ -325,9 +346,9 @@ def _seed_passport(
                 content_hash="4" * 64,
                 passport_id=snapshot["passportId"],
                 schema_version=snapshot["schemaVersion"],
-                capability_state="validated",
+                capability_state=snapshot["evaluation"]["capabilityState"],
                 assurance_source="fairmind_internal",
-                result="passed",
+                result=snapshot["evaluation"]["result"]["status"],
                 provenance_json="{}",
                 artifact_refs_json="[]",
                 limitations_json='["Synthetic test set only."]',
@@ -522,6 +543,27 @@ def test_plan_creation_rolls_back_when_audit_write_fails(evaluation_client, monk
         session.close()
 
 
+def test_plan_creation_rolls_back_when_response_read_fails(
+    evaluation_client, monkeypatch
+) -> None:
+    client, session_factory, _ = evaluation_client
+
+    def fail_response_read(*_args, **_kwargs):
+        raise RuntimeError("injected response read failure")
+
+    monkeypatch.setattr(EvaluationRunsService, "_plan_row", fail_response_read)
+    response = client.post(_plans_url(), json=_plan_payload())
+
+    assert response.status_code == 500
+    assert response.json()["detail"]["code"] == "evaluation_persistence_failed"
+    session = session_factory()
+    try:
+        assert session.execute(select(GovernanceEvaluationPlan.__table__.c.id)).all() == []
+        assert session.execute(select(OrganizationAuditLog.__table__.c.id)).all() == []
+    finally:
+        session.close()
+
+
 def test_activation_is_scoped_idempotent_and_does_not_retire_other_plans(evaluation_client) -> None:
     client, session_factory, _ = evaluation_client
     first = _create_plan(client)
@@ -584,6 +626,38 @@ def test_activation_rolls_back_when_audit_write_fails(evaluation_client, monkeyp
         session.close()
 
 
+def test_activation_rolls_back_when_response_read_fails(
+    evaluation_client, monkeypatch
+) -> None:
+    client, session_factory, _ = evaluation_client
+    plan = _create_plan(client)
+    original_plan_row = EvaluationRunsService._plan_row
+    read_count = 0
+
+    def fail_second_plan_read(self, **kwargs):
+        nonlocal read_count
+        read_count += 1
+        if read_count == 2:
+            raise RuntimeError("injected response read failure")
+        return original_plan_row(self, **kwargs)
+
+    monkeypatch.setattr(EvaluationRunsService, "_plan_row", fail_second_plan_read)
+    response = _activate(client, plan["id"])
+
+    assert response.status_code == 500
+    assert response.json()["detail"]["code"] == "evaluation_persistence_failed"
+    session = session_factory()
+    try:
+        assert session.execute(
+            select(GovernanceEvaluationPlan.__table__.c.status).where(
+                GovernanceEvaluationPlan.__table__.c.id == plan["id"]
+            )
+        ).scalar_one() == "draft"
+        assert _audit_actions(session_factory) == ["evaluation_plan.created"]
+    finally:
+        session.close()
+
+
 @pytest.mark.parametrize("delivery_mode", ["external_provider", "imported_report"])
 def test_preflight_and_run_preparation_are_honest_and_audited(
     evaluation_client, delivery_mode
@@ -611,6 +685,52 @@ def test_preflight_and_run_preparation_are_honest_and_audited(
     assert run["layerVerdicts"] == {}
     assert run["trigger"] == "release_gate"
     assert _audit_actions(session_factory)[-1] == "evaluation_run.prepared"
+
+
+@pytest.mark.parametrize("delivery_mode", ["external_provider", "imported_report"])
+@pytest.mark.parametrize(
+    ("plan_status", "message", "next_action"),
+    [
+        (
+            "draft",
+            "This evaluation plan is still a draft and cannot prepare runs.",
+            "Activate the plan before preparing a run.",
+        ),
+        (
+            "archived",
+            "This evaluation plan is archived and cannot prepare runs.",
+            "Create and activate a new versioned plan before preparing a run.",
+        ),
+    ],
+)
+def test_preflight_blocks_inactive_external_and_imported_plans(
+    evaluation_client, delivery_mode, plan_status, message, next_action
+) -> None:
+    client, session_factory, _ = evaluation_client
+    plan = _create_plan(client, deliveryMode=delivery_mode)
+    if plan_status == "archived":
+        session = session_factory()
+        try:
+            session.execute(
+                update(GovernanceEvaluationPlan.__table__)
+                .where(GovernanceEvaluationPlan.__table__.c.id == plan["id"])
+                .values(status="archived")
+            )
+            session.commit()
+        finally:
+            session.close()
+
+    response = client.get(f"{_plans_url()}/{plan['id']}/preflight")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "planId": plan["id"],
+        "canPrepareRun": False,
+        "fairmindExecutionAvailable": False,
+        "code": "evidence_link_required",
+        "message": message,
+        "nextAction": next_action,
+    }
 
 
 def test_unavailable_worker_cannot_create_run(evaluation_client) -> None:
@@ -679,6 +799,29 @@ def test_run_preparation_rolls_back_when_audit_write_fails(evaluation_client, mo
         session.close()
 
 
+def test_run_preparation_rolls_back_when_response_read_fails(
+    evaluation_client, monkeypatch
+) -> None:
+    client, session_factory, _ = evaluation_client
+    plan = _create_plan(client)
+    assert _activate(client, plan["id"]).status_code == 200
+
+    def fail_response_read(*_args, **_kwargs):
+        raise RuntimeError("injected response read failure")
+
+    monkeypatch.setattr(EvaluationRunsService, "_run_row", fail_response_read)
+    response = _create_run(client, plan["id"])
+
+    assert response.status_code == 500
+    assert response.json()["detail"]["code"] == "evaluation_persistence_failed"
+    session = session_factory()
+    try:
+        assert session.execute(select(GovernanceEvaluationRun.__table__.c.id)).all() == []
+        assert "evaluation_run.prepared" not in _audit_actions(session_factory)
+    finally:
+        session.close()
+
+
 def _prepared_run(client: TestClient, **plan_overrides) -> tuple[dict, dict]:
     plan = _create_plan(client, **plan_overrides)
     assert _activate(client, plan["id"]).status_code == 200
@@ -692,6 +835,29 @@ def _link(client: TestClient, run_id: str, evidence_run_id: str, revision_id: st
         f"{BASE}/{ORG_A}/systems/system-a/evaluation-runs/{run_id}/evidence-passport-link",
         json={"evidenceRunId": evidence_run_id, "passportRevisionId": revision_id},
     )
+
+
+def test_passport_projection_includes_capability_result_and_diagnostics() -> None:
+    snapshot = _passport_snapshot(
+        result_status="error",
+        error_code="provider_timeout",
+        error_message="Provider timed out.",
+    )
+
+    projection = EvaluationRunsService._passport_projection(json.dumps(snapshot))
+
+    assert projection == {
+        "schemaVersion": "1.0.0",
+        "targetKind": "model",
+        "suiteRef": "fairmind/bias@2026.07",
+        "capabilityState": "validated",
+        "resultStatus": "error",
+        "resultSummary": "Bounded error result.",
+        "errorCode": "provider_timeout",
+        "errorMessage": "Provider timed out.",
+        "startedAt": "2026-07-18T00:00:00Z",
+        "endedAt": "2026-07-18T00:05:00Z",
+    }
 
 
 def test_exact_passport_link_succeeds_idempotently_and_preserves_revision(evaluation_client) -> None:
@@ -730,6 +896,97 @@ def test_exact_passport_link_succeeds_idempotently_and_preserves_revision(evalua
         ).scalar_one() == original_json
     finally:
         session.close()
+
+
+@pytest.mark.parametrize(
+    (
+        "result_status",
+        "capability_state",
+        "technical_status",
+        "overall_verdict",
+        "failure_code",
+        "failure_message",
+    ),
+    [
+        ("passed", "validated", "succeeded", "review", None, None),
+        (
+            "passed_with_limitations",
+            "validated",
+            "succeeded",
+            "review",
+            None,
+            None,
+        ),
+        ("failed", "validated", "succeeded", "review", None, None),
+        ("informational", "metadata_only", "succeeded", "review", None, None),
+        (
+            "error",
+            "validated",
+            "failed",
+            "insufficient",
+            "provider_timeout",
+            "Provider timed out.",
+        ),
+        (
+            "unavailable",
+            "unavailable",
+            "failed",
+            "insufficient",
+            "passport_result_unavailable",
+            "Bounded unavailable result.",
+        ),
+        (
+            "insufficient_data",
+            "insufficient_data",
+            "failed",
+            "insufficient",
+            "passport_result_insufficient_data",
+            "Bounded insufficient_data result.",
+        ),
+        (
+            "unknown",
+            "metadata_only",
+            "failed",
+            "insufficient",
+            "passport_result_unknown",
+            "Bounded unknown result.",
+        ),
+    ],
+)
+def test_passport_link_maps_every_result_status_truthfully(
+    evaluation_client,
+    result_status,
+    capability_state,
+    technical_status,
+    overall_verdict,
+    failure_code,
+    failure_message,
+) -> None:
+    client, session_factory, _ = evaluation_client
+    _, run = _prepared_run(client)
+    snapshot = _passport_snapshot(
+        capability_state=capability_state,
+        result_status=result_status,
+        error_code="provider_timeout" if result_status == "error" else None,
+        error_message="Provider timed out." if result_status == "error" else None,
+    )
+    _seed_passport(
+        session_factory,
+        evidence_run_id="evidence-a",
+        revision_id="revision-a",
+        snapshot=snapshot,
+    )
+
+    response = _link(client, run["id"], "evidence-a", "revision-a")
+
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["technicalStatus"] == technical_status
+    assert result["overallVerdict"] == overall_verdict
+    assert result["failureCode"] == failure_code
+    assert result["failureMessage"] == failure_message
+    assert result["linkedEvidenceRunId"] == "evidence-a"
+    assert result["linkedPassportRevisionId"] == "revision-a"
 
 
 @pytest.mark.parametrize(
@@ -843,6 +1100,46 @@ def test_passport_link_rolls_back_when_audit_write_fails(evaluation_client, monk
     ).json()
     assert detail["technicalStatus"] == "awaiting_evidence"
     assert detail["linkedPassportRevisionId"] is None
+
+
+def test_passport_link_rolls_back_when_response_read_fails(
+    evaluation_client, monkeypatch
+) -> None:
+    client, session_factory, _ = evaluation_client
+    _, run = _prepared_run(client)
+    _seed_passport(
+        session_factory,
+        evidence_run_id="evidence-a",
+        revision_id="revision-a",
+        snapshot=_passport_snapshot(),
+    )
+    original_run_row = EvaluationRunsService._run_row
+    read_count = 0
+
+    def fail_second_run_read(self, **kwargs):
+        nonlocal read_count
+        read_count += 1
+        if read_count == 2:
+            raise RuntimeError("injected response read failure")
+        return original_run_row(self, **kwargs)
+
+    monkeypatch.setattr(EvaluationRunsService, "_run_row", fail_second_run_read)
+    response = _link(client, run["id"], "evidence-a", "revision-a")
+
+    assert response.status_code == 500
+    assert response.json()["detail"]["code"] == "evaluation_persistence_failed"
+    session = session_factory()
+    try:
+        stored = session.execute(
+            select(GovernanceEvaluationRun.__table__).where(
+                GovernanceEvaluationRun.__table__.c.id == run["id"]
+            )
+        ).mappings().one()
+        assert stored["technical_status"] == "awaiting_evidence"
+        assert stored["linked_passport_revision_id"] is None
+        assert "evaluation_run.passport_linked" not in _audit_actions(session_factory)
+    finally:
+        session.close()
 
 
 def test_passport_link_rejects_invalid_canonical_snapshot_without_mutating_run(

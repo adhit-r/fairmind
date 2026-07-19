@@ -521,6 +521,25 @@ def test_sqlite_migration_requires_succeeded_runs_to_have_exact_passport_link(
         )
 
 
+def test_sqlite_migration_allows_failed_run_to_retain_exact_passport_link(
+    sqlite_connection: sqlite3.Connection,
+) -> None:
+    seed_linkable_evaluation_scope(sqlite_connection)
+
+    insert_evaluation_run(
+        sqlite_connection,
+        plan_id="plan-a",
+        org_id="org-a",
+        workspace_id="ws-a",
+        system_id="sys-a",
+        technical_status="failed",
+        linked_evidence_run_id="evidence-a",
+        linked_passport_revision_id="revision-a",
+        started_at="2026-07-19T00:00:00+00:00",
+        completed_at="2026-07-19T00:05:00+00:00",
+    )
+
+
 @pytest.mark.parametrize(
     ("technical_status", "started_at", "completed_at", "linked"),
     (
@@ -743,8 +762,9 @@ def normalize_sql(value: str) -> str:
 
 def test_named_run_lifecycle_checks_match_orm_postgresql_and_sqlite() -> None:
     expected_checks = {
-        "ck_governance_evaluation_run_succeeded_link": (
-            "(technical_status = 'succeeded' AND linked_passport_revision_id IS NOT NULL "
+        "ck_governance_evaluation_run_evidence_link_state": (
+            "(technical_status IN ('succeeded', 'failed') "
+            "AND linked_passport_revision_id IS NOT NULL "
             "AND linked_evidence_run_id IS NOT NULL AND linked_by IS NOT NULL "
             "AND linked_at IS NOT NULL AND started_at IS NOT NULL "
             "AND completed_at IS NOT NULL) OR "
