@@ -664,6 +664,8 @@ def test_sqlite_migration_rejects_evidence_link_from_another_workspace(
             technical_status="succeeded",
             linked_evidence_run_id="evidence-b",
             linked_passport_revision_id="revision-b",
+            started_at="2026-07-19T00:00:00+00:00",
+            completed_at="2026-07-19T00:05:00+00:00",
         )
 
 
