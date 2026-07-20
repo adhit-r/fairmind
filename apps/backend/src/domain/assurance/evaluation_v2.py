@@ -148,7 +148,15 @@ _SAFE_UUID = re.compile(
     r"[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
 )
 _SAFE_DIGEST = re.compile(r"^(?:sha256:)?[0-9a-f]{64}$")
-_CATALOG_MEMBER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/:+-]{0,127}$")
+_CATALOG_SYMBOL_PATTERN = (
+    r"[A-Za-z0-9]{1,16}(?:[-_.][A-Za-z0-9]{1,16}){0,2}"
+)
+_CATALOG_SYMBOL = re.compile(rf"^{_CATALOG_SYMBOL_PATTERN}$")
+_VERSIONED_CATALOG_REFERENCE = re.compile(
+    rf"^{_CATALOG_SYMBOL_PATTERN}/{_CATALOG_SYMBOL_PATTERN}@"
+    r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
+    r"(?:-[A-Za-z0-9]{1,16}(?:\.[A-Za-z0-9]{1,16}){0,2})?$"
+)
 _JWT_VALUE = re.compile(
     r"^[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}$"
 )
@@ -157,7 +165,7 @@ _PROVIDER_KEY_VALUE = re.compile(
     r"[A-Za-z0-9_\-]{12,}$"
 )
 _CONNECTION_URL_VALUE = re.compile(
-    r"(?i)(?:https?|postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|amqps?|s3)://"
+    r"(?i)(?:file|https?|postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|amqps?|s3)://"
 )
 _BEARER_OR_BASIC_VALUE = re.compile(
     r"(?i)(?:^|[_\-\s])(?:raw[_\-\s]+)?(?:bearer|basic)(?:[_\-\s]|$)"
@@ -165,12 +173,21 @@ _BEARER_OR_BASIC_VALUE = re.compile(
 _EMAIL_VALUE = re.compile(
     r"^[A-Za-z0-9._%+\-]{1,64}@[A-Za-z0-9.-]{1,255}$"
 )
+_SECRET_LIKE_VALUE = re.compile(
+    r"(?i)(?:^|[._:/+\-\s])(?:secret|password|passwd|credentials?|"
+    r"(?:private|api|client|access|refresh|bearer)[._:+\-\s]*(?:key|secret|token))"
+    r"(?:$|[._:/+\-\s])"
+)
 _RAW_PROMPT_VALUE = re.compile(
-    r"(?i)(?:\b(?:ignore|disregard)\s+(?:all\s+)?previous\b|"
-    r"\bsystem\s+prompt\b|\bdeveloper\s+message\b|"
+    r"(?i)(?:\b(?:ignore|disregard)[\s._:/+\-]+"
+    r"(?:all[\s._:/+\-]+)?previous[\s._:/+\-]+"
+    r"(?:instructions?|messages?|prompts?)\b|"
+    r"\bsystem[\s._:/+\-]+prompt\b|"
+    r"\bdeveloper[\s._:/+\-]+message\b|"
     r"\breveal\b.{0,80}\b(?:prompt|secret|instruction)s?\b)"
 )
 _OPAQUE_BASE64_VALUE = re.compile(r"^[A-Za-z0-9+/=_-]+$")
+_PRIMITIVE_SCHEMA_TYPES = frozenset({"boolean", "integer", "number", "string"})
 
 
 class AssuranceContractValidationError(ValueError):
@@ -246,13 +263,15 @@ def _high_entropy_opaque_value(value: str) -> bool:
     return entropy >= 4.2
 
 
-def _unsafe_public_string(value: str) -> bool:
+def _unsafe_public_string(value: str, *, allow_digest: bool = False) -> bool:
     if not value or len(value.encode("utf-8")) > 512:
         return True
     if value != value.strip() or any(ord(character) < 0x20 for character in value):
         return True
-    if _SAFE_UUID.fullmatch(value) or _SAFE_DIGEST.fullmatch(value):
+    if _SAFE_UUID.fullmatch(value):
         return False
+    if _SAFE_DIGEST.fullmatch(value):
+        return not allow_digest
     return bool(
         "-----BEGIN " in value.upper()
         or _JWT_VALUE.fullmatch(value)
@@ -260,20 +279,32 @@ def _unsafe_public_string(value: str) -> bool:
         or _CONNECTION_URL_VALUE.search(value)
         or _BEARER_OR_BASIC_VALUE.search(value)
         or _EMAIL_VALUE.fullmatch(value)
+        or _SECRET_LIKE_VALUE.search(value)
         or _RAW_PROMPT_VALUE.search(value)
         or _high_entropy_opaque_value(value)
     )
 
 
-def validate_public_safe_string(value: str, *, catalog_member: bool = False) -> None:
+def _is_catalog_member(value: str) -> bool:
+    """Admit a short symbolic ID or namespace/name@semantic-version reference."""
+    return bool(
+        (len(value) <= 32 and _CATALOG_SYMBOL.fullmatch(value))
+        or (
+            len(value) <= 96
+            and _VERSIONED_CATALOG_REFERENCE.fullmatch(value)
+        )
+    )
+
+
+def validate_public_safe_string(
+    value: str,
+    *,
+    catalog_member: bool = False,
+    allow_digest: bool = False,
+) -> None:
     """Reject caller strings that cannot safely become persisted public evidence."""
-    explicit_safe_reference = bool(
-        _SAFE_UUID.fullmatch(value) or _SAFE_DIGEST.fullmatch(value)
-    )
-    invalid_catalog_member = catalog_member and not (
-        explicit_safe_reference or _CATALOG_MEMBER.fullmatch(value)
-    )
-    if _unsafe_public_string(value) or invalid_catalog_member:
+    invalid_catalog_member = catalog_member and not _is_catalog_member(value)
+    if _unsafe_public_string(value, allow_digest=allow_digest) or invalid_catalog_member:
         raise AssuranceContractValidationError(
             "unsafe_string_value",
             UNSAFE_STRING_VALUE_MESSAGE,
@@ -290,6 +321,14 @@ def validate_public_safe_values(value: Any, *, catalog_members: bool = False) ->
     elif isinstance(value, (list, tuple)):
         for child in value:
             validate_public_safe_values(child, catalog_members=catalog_members)
+
+
+def _safe_schema_identifier(value: Any) -> bool:
+    return bool(
+        isinstance(value, str)
+        and _ASCII_IDENTIFIER.fullmatch(value)
+        and not _unsafe_public_string(value)
+    )
 
 
 def reject_sensitive_keys(value: Any, *, path: str = "value") -> None:
@@ -414,7 +453,7 @@ def _canonical_local_definition_pointer(
         if canonical != raw:
             raise _unsafe_schema()
         decoded.append(value)
-    if len(decoded) != 2 or decoded[0] != "$defs" or not _ASCII_IDENTIFIER.fullmatch(decoded[1]):
+    if len(decoded) != 2 or decoded[0] != "$defs" or not _safe_schema_identifier(decoded[1]):
         raise _unsafe_schema()
     definitions = schema.get("$defs")
     if not isinstance(definitions, dict):
@@ -423,6 +462,19 @@ def _canonical_local_definition_pointer(
     if not isinstance(target, dict):
         raise _unsafe_schema()
     return reference, target
+
+
+def _resolved_schema_type(
+    schema: Mapping[str, Any],
+    node: Mapping[str, Any],
+    stack: tuple[str, ...] = (),
+) -> Any:
+    if "$ref" not in node:
+        return node.get("type")
+    reference, target = _canonical_local_definition_pointer(schema, node["$ref"])
+    if reference in stack or len(stack) >= MAX_SAFE_SCHEMA_REFS:
+        raise _unsafe_schema()
+    return _resolved_schema_type(schema, target, (*stack, reference))
 
 
 def validate_safe_configuration_schema(schema: Mapping[str, Any]) -> int:
@@ -459,8 +511,7 @@ def validate_safe_configuration_schema(schema: Mapping[str, Any]) -> int:
                 not isinstance(definitions, dict)
                 or len(definitions) > MAX_SAFE_SCHEMA_REFS
                 or any(
-                    not isinstance(name, str)
-                    or _ASCII_IDENTIFIER.fullmatch(name) is None
+                    not _safe_schema_identifier(name)
                     or not isinstance(child, dict)
                     for name, child in definitions.items()
                 )
@@ -484,8 +535,7 @@ def validate_safe_configuration_schema(schema: Mapping[str, Any]) -> int:
                 not isinstance(properties, dict)
                 or node.get("additionalProperties") is not False
                 or any(
-                    not isinstance(name, str)
-                    or _ASCII_IDENTIFIER.fullmatch(name) is None
+                    not _safe_schema_identifier(name)
                     or not isinstance(child, dict)
                     for name, child in properties.items()
                 )
@@ -572,6 +622,10 @@ def validate_safe_configuration_schema(schema: Mapping[str, Any]) -> int:
                 or maximum_items > MAX_SAFE_ARRAY_ITEMS
                 or ("uniqueItems" in node and not isinstance(node["uniqueItems"], bool))
             ):
+                raise _unsafe_schema()
+            if node.get("uniqueItems") is True and _resolved_schema_type(
+                schema, node["items"]
+            ) not in _PRIMITIVE_SCHEMA_TYPES:
                 raise _unsafe_schema()
         else:
             raise _unsafe_schema()
@@ -770,13 +824,19 @@ def validated_manifest_inputs(manifest: Mapping[str, Any]) -> dict[str, dict[str
     return result
 
 
-def _required_text(payload: Mapping[str, Any], key: str, *, maximum: int = 200) -> str:
+def _required_text(
+    payload: Mapping[str, Any],
+    key: str,
+    *,
+    maximum: int = 200,
+    allow_digest: bool = False,
+) -> str:
     value = payload.get(key)
     if not isinstance(value, str) or not value.strip() or len(value) > maximum:
         raise AssuranceContractValidationError(
             "invalid_request", f"{key} must contain 1 to {maximum} characters."
         )
-    validate_public_safe_string(value.strip())
+    validate_public_safe_string(value.strip(), allow_digest=allow_digest)
     return value.strip()
 
 
@@ -848,7 +908,12 @@ def normalize_target_create(payload: Mapping[str, Any]) -> dict[str, Any]:
         raise AssuranceContractValidationError(
             "invalid_target_kind", "targetKind is not supported."
         )
-    subject_digest = _required_text(payload, "subjectDigest", maximum=64)
+    subject_digest = _required_text(
+        payload,
+        "subjectDigest",
+        maximum=64,
+        allow_digest=True,
+    )
     if len(subject_digest) != 64 or any(c not in "0123456789abcdef" for c in subject_digest):
         raise AssuranceContractValidationError(
             "invalid_subject_digest", "subjectDigest must be a lowercase SHA-256 digest."
@@ -1180,6 +1245,76 @@ def execution_envelope_variable_projection(
     }
 
 
+def _validate_bound_digest(value: Any) -> None:
+    if value is None:
+        return
+    if not isinstance(value, str) or _SAFE_DIGEST.fullmatch(value) is None:
+        raise AssuranceContractValidationError(
+            "unsafe_string_value",
+            UNSAFE_STRING_VALUE_MESSAGE,
+        )
+    validate_public_safe_string(value, allow_digest=True)
+
+
+def _validate_binding_object(
+    value: Mapping[str, Any],
+    *,
+    digest_fields: frozenset[str],
+) -> None:
+    validate_public_safe_values(
+        {key: child for key, child in value.items() if key not in digest_fields}
+    )
+    for field in digest_fields:
+        if field in value:
+            _validate_bound_digest(value[field])
+
+
+def _validate_suite_binding_public_values(suite: Mapping[str, Any]) -> None:
+    digest_fields = frozenset(
+        {
+            "manifestDigest",
+            "manifest_digest",
+            "runnerImageDigest",
+            "runner_image_digest",
+            "configurationHash",
+            "configuration_hash",
+        }
+    )
+    excluded_fields = digest_fields | {"configuration", "inputs"}
+    validate_public_safe_values(
+        {key: child for key, child in suite.items() if key not in excluded_fields}
+    )
+    for field in digest_fields:
+        if field in suite:
+            _validate_bound_digest(suite[field])
+
+    configuration = suite.get("configuration")
+    if configuration is not None:
+        validate_public_safe_values(configuration, catalog_members=True)
+
+    inputs = suite.get("inputs")
+    if inputs is None:
+        return
+    if not isinstance(inputs, Mapping):
+        validate_public_safe_values(inputs)
+        return
+    for role, descriptor in inputs.items():
+        if not isinstance(role, str):
+            raise AssuranceContractValidationError(
+                "unsafe_string_value",
+                UNSAFE_STRING_VALUE_MESSAGE,
+            )
+        validate_public_safe_string(role, catalog_member=True)
+        if not isinstance(descriptor, Mapping):
+            validate_public_safe_values(descriptor)
+            continue
+        validate_public_safe_values(
+            {key: child for key, child in descriptor.items() if key != "sha256"}
+        )
+        if "sha256" in descriptor:
+            _validate_bound_digest(descriptor["sha256"])
+
+
 def validate_execution_envelope_variable_size(
     *,
     target: Mapping[str, Any],
@@ -1197,11 +1332,18 @@ def validate_execution_envelope_variable_size(
         code="envelope_variable_data_too_large",
         message="The canonical variable execution-envelope data exceeds 448 KiB.",
     )
-    validate_public_safe_values(projection)
+    _validate_binding_object(
+        target,
+        digest_fields=frozenset(
+            {"subjectDigest", "subject_digest", "manifestDigest", "manifest_digest"}
+        ),
+    )
+    _validate_binding_object(
+        trust_policy,
+        digest_fields=frozenset({"policyHash", "policy_hash"}),
+    )
     for suite in suites:
-        configuration = suite.get("configuration")
-        if configuration is not None:
-            validate_public_safe_values(configuration, catalog_members=True)
+        _validate_suite_binding_public_values(suite)
 
 
 def _preflight_envelope_variable_projection(

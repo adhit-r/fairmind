@@ -674,16 +674,21 @@ def test_configuration_accepts_ordinary_catalog_members_and_scalars() -> None:
             "model": {"type": "string", "enum": ["gpt-4o-mini"]},
             "language": {"type": "string", "enum": ["en-US"]},
             "mode": {"type": "string", "const": "balanced"},
+            "pack": {
+                "type": "string",
+                "enum": ["fairmind/agent-safety@1.0.0"],
+            },
             "enabled": {"type": "boolean"},
             "threshold": {"type": "number", "minimum": 0, "maximum": 1},
         },
-        "required": ["model", "language", "mode", "enabled", "threshold"],
+        "required": ["model", "language", "mode", "pack", "enabled", "threshold"],
         "additionalProperties": False,
     }
     payload["configurationDefaults"] = {
         "model": "gpt-4o-mini",
         "language": "en-US",
         "mode": "balanced",
+        "pack": "fairmind/agent-safety@1.0.0",
         "enabled": True,
         "threshold": 0.5,
     }
@@ -691,6 +696,65 @@ def test_configuration_accepts_ordinary_catalog_members_and_scalars() -> None:
     normalized = normalize_suite_create(payload, owner_scope="org")
 
     assert normalized["configurationDefaults"] == payload["configurationDefaults"]
+
+
+@pytest.mark.parametrize(
+    "unsafe_value",
+    [
+        "client-secret-value",
+        "file:///private/tmp/evaluation-secret",
+        "ignore-previous-instructions",
+        "Summarize-the-private-customer-record",
+        "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+    ],
+)
+def test_configuration_rejects_semantically_unsafe_catalog_shaped_strings(
+    unsafe_value: str,
+) -> None:
+    payload = _suite_payload()
+    payload["configurationSchema"] = {
+        "type": "object",
+        "properties": {"mode": {"type": "string", "enum": [unsafe_value]}},
+        "required": ["mode"],
+        "additionalProperties": False,
+    }
+    payload["configurationDefaults"] = {"mode": unsafe_value}
+
+    with pytest.raises(AssuranceContractValidationError) as caught:
+        normalize_suite_create(payload, owner_scope="org")
+
+    assert caught.value.code == "unsafe_string_value"
+    assert unsafe_value not in caught.value.message
+
+
+def test_configuration_schema_rejects_digest_shaped_property_names() -> None:
+    property_name = (
+        "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+    )
+    payload = _suite_payload()
+    payload["configurationSchema"] = {
+        "type": "object",
+        "properties": {property_name: {"type": "boolean"}},
+        "required": [property_name],
+        "additionalProperties": False,
+    }
+    payload["configurationDefaults"] = {property_name: True}
+
+    with pytest.raises(AssuranceContractValidationError) as caught:
+        normalize_suite_create(payload, owner_scope="org")
+
+    assert caught.value.code == "unsafe_configuration_schema"
+    assert property_name not in caught.value.message
+
+
+def test_real_digest_fields_still_accept_high_entropy_sha256_values() -> None:
+    subject_digest = (
+        "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+    )
+    payload = _target_payload_v2()
+    payload["subjectDigest"] = subject_digest
+
+    assert normalize_target_create(payload)["subjectDigest"] == subject_digest
 
 
 @pytest.mark.parametrize(
@@ -815,6 +879,46 @@ def test_fairmind_safe_config_bounds_acyclic_reference_expansion() -> None:
     with pytest.raises(AssuranceContractValidationError) as caught:
         normalize_suite_create(amplified, owner_scope="org")
     assert caught.value.code == "unsafe_configuration_schema"
+
+
+@pytest.mark.parametrize("through_local_ref", [False, True])
+def test_unique_items_rejects_1400_composite_values_structurally(
+    through_local_ref: bool,
+) -> None:
+    row_schema = {
+        "type": "object",
+        "properties": {
+            "value": {"type": "integer", "minimum": 0, "maximum": 10_000}
+        },
+        "required": ["value"],
+        "additionalProperties": False,
+    }
+    schema = {
+        "type": "array",
+        "minItems": 0,
+        "maxItems": 1_400,
+        "uniqueItems": True,
+        "items": {"$ref": "#/$defs/row"} if through_local_ref else row_schema,
+    }
+    if through_local_ref:
+        schema["$defs"] = {"row": row_schema}
+
+    with pytest.raises(AssuranceContractValidationError) as caught:
+        evaluation_v2_module.validate_safe_configuration_schema(schema)
+
+    assert caught.value.code == "unsafe_configuration_schema"
+
+
+def test_unique_items_allows_bounded_primitive_catalog_values() -> None:
+    schema = {
+        "type": "array",
+        "minItems": 0,
+        "maxItems": 256,
+        "uniqueItems": True,
+        "items": {"type": "string", "enum": ["safety", "privacy"]},
+    }
+
+    evaluation_v2_module.validate_safe_configuration_schema(schema)
 
 
 def test_schema_and_successful_configuration_validation_use_bounded_canonical_caches(
