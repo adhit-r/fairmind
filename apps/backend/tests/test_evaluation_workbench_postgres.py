@@ -5,7 +5,7 @@ run creates a unique empty schema and applies the production SQL chain.  The
 governance slice begins at migration 008, but exact user/organization seeding
 requires its identity/RBAC prerequisites, so 001 and corrected 007 are applied
 first.  The assurance migrations then run in the required order:
-008 -> 011 -> 012 -> 013.  Nothing depends on ORM-generated DDL.
+008 -> 011 -> 012 -> 013 -> 013a.  Nothing depends on ORM-generated DDL.
 """
 
 from __future__ import annotations
@@ -137,6 +137,12 @@ def postgres_session_factory():
             cursor.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(schema_name)))
             cursor.execute(sql.SQL("SET search_path TO {}").format(sql.Identifier(schema_name)))
             for migration_name in (*IDENTITY_PREREQUISITES, *ASSURANCE_MIGRATIONS):
+                if migration_name == "013a_evaluation_binding_integrity.sql":
+                    cursor.execute(
+                        "SELECT pg_catalog.set_config"
+                        "('fairmind.migration_schema', %s, false)",
+                        (schema_name,),
+                    )
                 cursor.execute((MIGRATIONS / migration_name).read_text(encoding="utf-8"))
         migration_connection.commit()
     finally:
