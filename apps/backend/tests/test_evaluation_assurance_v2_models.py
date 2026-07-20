@@ -218,7 +218,7 @@ def test_models_expose_v2_tables_columns_and_vocabulary_constraints():
         "linked_evidence_run_id", "linked_passport_revision_id", "linked_by", "linked_at",
         "requested_by", "started_at", "completed_at", "failure_code", "failure_message",
         "created_at", "updated_at", "lifecycle_phase", "envelope_id", "envelope_json",
-        "envelope_hash", "evidence_outcome", "verdict_version",
+        "envelope_hash", "envelope_nonce", "evidence_outcome", "verdict_version",
     )
     assert run_columns.contract_version.default.arg == "1.0.0"
     assert run_columns.evidence_outcome.default.arg == "pending"
@@ -241,6 +241,7 @@ def test_plan_and_run_models_have_no_duplicate_declarations_or_constraints():
         "GovernanceEvaluationRun": {
             "contract_version",
             "lifecycle_phase", "envelope_id", "envelope_json", "envelope_hash",
+            "envelope_nonce",
             "evidence_outcome", "verdict_version",
         },
     }
@@ -267,7 +268,9 @@ def test_plan_and_run_models_have_no_duplicate_declarations_or_constraints():
         assert sum(c.name == constraint_name for c in table.constraints) == 1
 
     for local_columns in (
-        ("target_version_id", "workspace_id", "system_id", "org_id"),
+        (
+            "target_version_id", "target_kind", "workspace_id", "system_id", "org_id",
+        ),
         ("trust_policy_version_id", "org_id"),
     ):
         assert sum(

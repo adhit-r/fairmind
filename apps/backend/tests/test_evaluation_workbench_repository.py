@@ -49,6 +49,10 @@ from src.infrastructure.db.repositories.evaluation_workbench_repository import (
     SqlAlchemyEvaluationWorkbenchRepository,
     SqlAlchemyEvaluationWorkbenchUnitOfWork,
 )
+from tests.evaluation_workbench_sqlite import (
+    allow_deliberate_check_constraint_corruption,
+    install_013a_for_application_verifier_harness,
+)
 
 ORG = str(uuid.uuid4())
 OTHER_ORG = str(uuid.uuid4())
@@ -107,6 +111,7 @@ def repository_fixture():
         connection.execute("PRAGMA foreign_keys = ON")
 
     Base.metadata.create_all(engine)
+    install_013a_for_application_verifier_harness(engine)
     factory = sessionmaker(bind=engine)
     session = factory()
     user_uuid = uuid.UUID(USER)
@@ -931,12 +936,13 @@ def test_run_read_rejects_invalid_stored_envelope_encodings(
     service = _service(session)
     _, run = _create_active_plan_and_run(service)
     raw = stored_envelope(canonical_json(run["envelope"]))
-    session.execute(
-        GovernanceEvaluationRun.__table__.update()
-        .where(GovernanceEvaluationRun.id == run["id"])
-        .values(envelope_json=raw)
-    )
-    session.commit()
+    with allow_deliberate_check_constraint_corruption(session):
+        session.execute(
+            GovernanceEvaluationRun.__table__.update()
+            .where(GovernanceEvaluationRun.id == run["id"])
+            .values(envelope_json=raw)
+        )
+        session.commit()
 
     with pytest.raises(EvaluationWorkbenchError) as caught:
         service.get_run(org_id=ORG, system_id="system-a", run_id=run["id"])

@@ -238,14 +238,15 @@ BEGIN
     SELECT pg_catalog.count(*) INTO raw_entry_count
     FROM pg_catalog.json_each_text(p_value::json);
     SELECT pg_catalog.count(*) INTO canonical_entry_count
-    FROM pg_catalog.jsonb_each_text(parsed);
+    FROM pg_catalog.jsonb_each(parsed);
     IF canonical_entry_count > 32 OR raw_entry_count <> canonical_entry_count THEN
         RETURN false;
     END IF;
     RETURN NOT EXISTS (
         SELECT 1
-        FROM pg_catalog.jsonb_each_text(parsed) AS entry(key, value)
-        WHERE entry.value <> 'insufficient'
+        FROM pg_catalog.jsonb_each(parsed) AS entry(key, value)
+        WHERE pg_catalog.jsonb_typeof(entry.value) IS DISTINCT FROM 'string'
+           OR entry.value IS DISTINCT FROM pg_catalog.to_jsonb('insufficient'::text)
     );
 EXCEPTION WHEN others THEN
     RETURN false;
@@ -989,6 +990,8 @@ END;
 $fairmind_validate_existing$ LANGUAGE plpgsql;
 
 ALTER TABLE governance_evaluation_plans
+    DROP CONSTRAINT IF EXISTS ck_governance_evaluation_plan_v2_requires_013a_migration;
+ALTER TABLE governance_evaluation_plans
     DROP CONSTRAINT IF EXISTS fk_governance_evaluation_plan_target_version;
 ALTER TABLE governance_evaluation_target_versions
     DROP CONSTRAINT IF EXISTS uq_governance_evaluation_target_kind_tenant;
@@ -1023,6 +1026,7 @@ ALTER TABLE governance_evaluation_runs
     UNIQUE (org_id, envelope_nonce);
 
 ALTER TABLE governance_evaluation_runs
+    DROP CONSTRAINT IF EXISTS ck_governance_evaluation_run_v2_requires_013a_migration,
     DROP CONSTRAINT IF EXISTS ck_governance_evaluation_run_technical_status,
     DROP CONSTRAINT IF EXISTS ck_governance_evaluation_run_evidence_link_state,
     DROP CONSTRAINT IF EXISTS ck_governance_evaluation_run_timestamps,

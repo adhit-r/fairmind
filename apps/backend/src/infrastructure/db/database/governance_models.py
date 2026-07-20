@@ -1399,6 +1399,10 @@ class GovernanceEvaluationPlan(Base):
             name="ck_governance_evaluation_plan_contract_version",
         ),
         CheckConstraint(
+            "contract_version <> '2.0.0'",
+            name="ck_governance_evaluation_plan_v2_requires_013a_migration",
+        ),
+        CheckConstraint(
             "contract_version = '1.0.0' OR "
             "(contract_version = '2.0.0' AND target_version_id IS NOT NULL "
             "AND plan_content_hash IS NOT NULL AND trust_policy_version_id IS NOT NULL)",
@@ -1553,6 +1557,10 @@ class GovernanceEvaluationRun(Base):
         CheckConstraint(
             "contract_version IN ('1.0.0', '2.0.0')",
             name="ck_governance_evaluation_run_contract_version",
+        ),
+        CheckConstraint(
+            "contract_version <> '2.0.0'",
+            name="ck_governance_evaluation_run_v2_requires_013a_migration",
         ),
         CheckConstraint(
             "overall_verdict IN ('approved', 'conditional', 'review', 'blocked', "

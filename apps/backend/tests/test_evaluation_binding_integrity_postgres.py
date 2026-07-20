@@ -297,6 +297,28 @@ def _assert_postgres_error(connection, statement: str, message: str) -> None:
             cursor.execute(statement)
 
 
+@pytest.mark.parametrize(
+    "layer_verdicts_json",
+    (
+        '{"execution-a":null}',
+        '{"execution-a":1}',
+        '{"execution-a":true}',
+        '{"execution-a":[]}',
+        '{"execution-a":{}}',
+    ),
+)
+def test_postgresql_initial_layer_verdicts_require_exact_string_literals(
+    postgres_connection,
+    layer_verdicts_json: str,
+) -> None:
+    with postgres_connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT fairmind_is_initial_layer_verdicts(%s)",
+            (layer_verdicts_json,),
+        )
+        assert cursor.fetchone() == (False,)
+
+
 def test_postgresql_backfills_only_structurally_valid_independent_nonce() -> None:
     assert POSTGRES_URL is not None
     import psycopg2

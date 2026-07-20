@@ -263,34 +263,70 @@ WHERE EXISTS (
     FROM governance_evaluation_runs AS run
     WHERE run.contract_version = '2.0.0'
       AND (
-          NOT (
+          COALESCE((
               length(run.created_at) IN (25, 32)
-              AND substr(run.created_at, 5, 1) = '-'
-              AND substr(run.created_at, 8, 1) = '-'
               AND substr(run.created_at, 11, 1) = 'T'
-              AND substr(run.created_at, 14, 1) = ':'
-              AND substr(run.created_at, 17, 1) = ':'
               AND substr(run.created_at, -6) = '+00:00'
-              AND strftime('%Y-%m-%dT%H:%M:%S', run.created_at) = substr(run.created_at, 1, 19)
-          )
-          OR NOT (
+              AND CAST(substr(run.created_at, 1, 4) AS INTEGER) BETWEEN 1 AND 9999
+              AND (
+                  (length(run.created_at) = 25 AND substr(run.created_at, 20, 1) = '+')
+                  OR (length(run.created_at) = 32
+                      AND substr(run.created_at, 20, 1) = '.'
+                      AND substr(run.created_at, 21, 6) NOT GLOB '*[^0-9]*'
+                      AND substr(run.created_at, 27, 1) = '+')
+              )
+              AND strftime('%Y-%m-%dT%H:%M:%S', run.created_at, '+0 seconds') IS NOT NULL
+              AND strftime('%Y-%m-%dT%H:%M:%S', run.created_at, '+0 seconds') =
+                  substr(run.created_at, 1, 19)
+          ), 0) = 0
+          OR COALESCE((
               length(run.updated_at) IN (25, 32)
               AND substr(run.updated_at, 11, 1) = 'T'
               AND substr(run.updated_at, -6) = '+00:00'
-              AND strftime('%Y-%m-%dT%H:%M:%S', run.updated_at) = substr(run.updated_at, 1, 19)
-          )
-          OR (run.started_at IS NOT NULL AND NOT (
+              AND CAST(substr(run.updated_at, 1, 4) AS INTEGER) BETWEEN 1 AND 9999
+              AND (
+                  (length(run.updated_at) = 25 AND substr(run.updated_at, 20, 1) = '+')
+                  OR (length(run.updated_at) = 32
+                      AND substr(run.updated_at, 20, 1) = '.'
+                      AND substr(run.updated_at, 21, 6) NOT GLOB '*[^0-9]*'
+                      AND substr(run.updated_at, 27, 1) = '+')
+              )
+              AND strftime('%Y-%m-%dT%H:%M:%S', run.updated_at, '+0 seconds') IS NOT NULL
+              AND strftime('%Y-%m-%dT%H:%M:%S', run.updated_at, '+0 seconds') =
+                  substr(run.updated_at, 1, 19)
+          ), 0) = 0
+          OR (run.started_at IS NOT NULL AND COALESCE((
               length(run.started_at) IN (25, 32)
               AND substr(run.started_at, 11, 1) = 'T'
               AND substr(run.started_at, -6) = '+00:00'
-              AND strftime('%Y-%m-%dT%H:%M:%S', run.started_at) = substr(run.started_at, 1, 19)
-          ))
-          OR (run.completed_at IS NOT NULL AND NOT (
+              AND CAST(substr(run.started_at, 1, 4) AS INTEGER) BETWEEN 1 AND 9999
+              AND (
+                  (length(run.started_at) = 25 AND substr(run.started_at, 20, 1) = '+')
+                  OR (length(run.started_at) = 32
+                      AND substr(run.started_at, 20, 1) = '.'
+                      AND substr(run.started_at, 21, 6) NOT GLOB '*[^0-9]*'
+                      AND substr(run.started_at, 27, 1) = '+')
+              )
+              AND strftime('%Y-%m-%dT%H:%M:%S', run.started_at, '+0 seconds') IS NOT NULL
+              AND strftime('%Y-%m-%dT%H:%M:%S', run.started_at, '+0 seconds') =
+                  substr(run.started_at, 1, 19)
+          ), 0) = 0)
+          OR (run.completed_at IS NOT NULL AND COALESCE((
               length(run.completed_at) IN (25, 32)
               AND substr(run.completed_at, 11, 1) = 'T'
               AND substr(run.completed_at, -6) = '+00:00'
-              AND strftime('%Y-%m-%dT%H:%M:%S', run.completed_at) = substr(run.completed_at, 1, 19)
-          ))
+              AND CAST(substr(run.completed_at, 1, 4) AS INTEGER) BETWEEN 1 AND 9999
+              AND (
+                  (length(run.completed_at) = 25 AND substr(run.completed_at, 20, 1) = '+')
+                  OR (length(run.completed_at) = 32
+                      AND substr(run.completed_at, 20, 1) = '.'
+                      AND substr(run.completed_at, 21, 6) NOT GLOB '*[^0-9]*'
+                      AND substr(run.completed_at, 27, 1) = '+')
+              )
+              AND strftime('%Y-%m-%dT%H:%M:%S', run.completed_at, '+0 seconds') IS NOT NULL
+              AND strftime('%Y-%m-%dT%H:%M:%S', run.completed_at, '+0 seconds') =
+                  substr(run.completed_at, 1, 19)
+          ), 0) = 0)
           OR run.created_at > run.updated_at
           OR (run.started_at IS NOT NULL AND (
               run.started_at < run.created_at OR run.started_at > run.updated_at
@@ -303,34 +339,74 @@ WHERE EXISTS (
 ) OR EXISTS (
     SELECT 1
     FROM governance_evaluation_run_suite_executions AS execution
-    WHERE NOT (
+    WHERE COALESCE((
           length(execution.created_at) IN (25, 32)
           AND substr(execution.created_at, 11, 1) = 'T'
           AND substr(execution.created_at, -6) = '+00:00'
-          AND strftime('%Y-%m-%dT%H:%M:%S', execution.created_at) =
+          AND CAST(substr(execution.created_at, 1, 4) AS INTEGER) BETWEEN 1 AND 9999
+          AND (
+              (length(execution.created_at) = 25
+               AND substr(execution.created_at, 20, 1) = '+')
+              OR (length(execution.created_at) = 32
+                  AND substr(execution.created_at, 20, 1) = '.'
+                  AND substr(execution.created_at, 21, 6) NOT GLOB '*[^0-9]*'
+                  AND substr(execution.created_at, 27, 1) = '+')
+          )
+          AND strftime('%Y-%m-%dT%H:%M:%S', execution.created_at, '+0 seconds') IS NOT NULL
+          AND strftime('%Y-%m-%dT%H:%M:%S', execution.created_at, '+0 seconds') =
               substr(execution.created_at, 1, 19)
-      )
-       OR NOT (
+      ), 0) = 0
+       OR COALESCE((
           length(execution.updated_at) IN (25, 32)
           AND substr(execution.updated_at, 11, 1) = 'T'
           AND substr(execution.updated_at, -6) = '+00:00'
-          AND strftime('%Y-%m-%dT%H:%M:%S', execution.updated_at) =
+          AND CAST(substr(execution.updated_at, 1, 4) AS INTEGER) BETWEEN 1 AND 9999
+          AND (
+              (length(execution.updated_at) = 25
+               AND substr(execution.updated_at, 20, 1) = '+')
+              OR (length(execution.updated_at) = 32
+                  AND substr(execution.updated_at, 20, 1) = '.'
+                  AND substr(execution.updated_at, 21, 6) NOT GLOB '*[^0-9]*'
+                  AND substr(execution.updated_at, 27, 1) = '+')
+          )
+          AND strftime('%Y-%m-%dT%H:%M:%S', execution.updated_at, '+0 seconds') IS NOT NULL
+          AND strftime('%Y-%m-%dT%H:%M:%S', execution.updated_at, '+0 seconds') =
               substr(execution.updated_at, 1, 19)
-      )
-       OR (execution.started_at IS NOT NULL AND NOT (
+      ), 0) = 0
+       OR (execution.started_at IS NOT NULL AND COALESCE((
           length(execution.started_at) IN (25, 32)
           AND substr(execution.started_at, 11, 1) = 'T'
           AND substr(execution.started_at, -6) = '+00:00'
-          AND strftime('%Y-%m-%dT%H:%M:%S', execution.started_at) =
+          AND CAST(substr(execution.started_at, 1, 4) AS INTEGER) BETWEEN 1 AND 9999
+          AND (
+              (length(execution.started_at) = 25
+               AND substr(execution.started_at, 20, 1) = '+')
+              OR (length(execution.started_at) = 32
+                  AND substr(execution.started_at, 20, 1) = '.'
+                  AND substr(execution.started_at, 21, 6) NOT GLOB '*[^0-9]*'
+                  AND substr(execution.started_at, 27, 1) = '+')
+          )
+          AND strftime('%Y-%m-%dT%H:%M:%S', execution.started_at, '+0 seconds') IS NOT NULL
+          AND strftime('%Y-%m-%dT%H:%M:%S', execution.started_at, '+0 seconds') =
               substr(execution.started_at, 1, 19)
-      ))
-       OR (execution.completed_at IS NOT NULL AND NOT (
+      ), 0) = 0)
+       OR (execution.completed_at IS NOT NULL AND COALESCE((
           length(execution.completed_at) IN (25, 32)
           AND substr(execution.completed_at, 11, 1) = 'T'
           AND substr(execution.completed_at, -6) = '+00:00'
-          AND strftime('%Y-%m-%dT%H:%M:%S', execution.completed_at) =
+          AND CAST(substr(execution.completed_at, 1, 4) AS INTEGER) BETWEEN 1 AND 9999
+          AND (
+              (length(execution.completed_at) = 25
+               AND substr(execution.completed_at, 20, 1) = '+')
+              OR (length(execution.completed_at) = 32
+                  AND substr(execution.completed_at, 20, 1) = '.'
+                  AND substr(execution.completed_at, 21, 6) NOT GLOB '*[^0-9]*'
+                  AND substr(execution.completed_at, 27, 1) = '+')
+          )
+          AND strftime('%Y-%m-%dT%H:%M:%S', execution.completed_at, '+0 seconds') IS NOT NULL
+          AND strftime('%Y-%m-%dT%H:%M:%S', execution.completed_at, '+0 seconds') =
               substr(execution.completed_at, 1, 19)
-      ))
+      ), 0) = 0)
        OR execution.created_at > execution.updated_at
        OR (execution.started_at IS NOT NULL AND (
           execution.started_at < execution.created_at
@@ -565,27 +641,62 @@ CREATE TABLE governance_evaluation_runs_013a (
     ),
     CONSTRAINT ck_governance_evaluation_run_timestamp_canonical CHECK (
         contract_version = '1.0.0' OR (
-            length(created_at) IN (25, 32)
+            COALESCE((length(created_at) IN (25, 32)
             AND substr(created_at, 11, 1) = 'T'
             AND substr(created_at, -6) = '+00:00'
-            AND strftime('%Y-%m-%dT%H:%M:%S', created_at) = substr(created_at, 1, 19)
-            AND length(updated_at) IN (25, 32)
+            AND CAST(substr(created_at, 1, 4) AS INTEGER) BETWEEN 1 AND 9999
+            AND (
+                (length(created_at) = 25 AND substr(created_at, 20, 1) = '+')
+                OR (length(created_at) = 32 AND substr(created_at, 20, 1) = '.'
+                    AND substr(created_at, 21, 6) NOT GLOB '*[^0-9]*'
+                    AND substr(created_at, 27, 1) = '+')
+            )
+            AND strftime('%Y-%m-%dT%H:%M:%S', created_at, '+0 seconds') IS NOT NULL
+            AND strftime('%Y-%m-%dT%H:%M:%S', created_at, '+0 seconds') =
+                substr(created_at, 1, 19)), 0) = 1
+            AND COALESCE((length(updated_at) IN (25, 32)
             AND substr(updated_at, 11, 1) = 'T'
             AND substr(updated_at, -6) = '+00:00'
-            AND strftime('%Y-%m-%dT%H:%M:%S', updated_at) = substr(updated_at, 1, 19)
-            AND (started_at IS NULL OR (
+            AND CAST(substr(updated_at, 1, 4) AS INTEGER) BETWEEN 1 AND 9999
+            AND (
+                (length(updated_at) = 25 AND substr(updated_at, 20, 1) = '+')
+                OR (length(updated_at) = 32 AND substr(updated_at, 20, 1) = '.'
+                    AND substr(updated_at, 21, 6) NOT GLOB '*[^0-9]*'
+                    AND substr(updated_at, 27, 1) = '+')
+            )
+            AND strftime('%Y-%m-%dT%H:%M:%S', updated_at, '+0 seconds') IS NOT NULL
+            AND strftime('%Y-%m-%dT%H:%M:%S', updated_at, '+0 seconds') =
+                substr(updated_at, 1, 19)), 0) = 1
+            AND (started_at IS NULL OR COALESCE((
                 length(started_at) IN (25, 32)
                 AND substr(started_at, 11, 1) = 'T'
                 AND substr(started_at, -6) = '+00:00'
-                AND strftime('%Y-%m-%dT%H:%M:%S', started_at) = substr(started_at, 1, 19)
-            ))
-            AND (completed_at IS NULL OR (
+                AND CAST(substr(started_at, 1, 4) AS INTEGER) BETWEEN 1 AND 9999
+                AND (
+                    (length(started_at) = 25 AND substr(started_at, 20, 1) = '+')
+                    OR (length(started_at) = 32 AND substr(started_at, 20, 1) = '.'
+                        AND substr(started_at, 21, 6) NOT GLOB '*[^0-9]*'
+                        AND substr(started_at, 27, 1) = '+')
+                )
+                AND strftime('%Y-%m-%dT%H:%M:%S', started_at, '+0 seconds') IS NOT NULL
+                AND strftime('%Y-%m-%dT%H:%M:%S', started_at, '+0 seconds') =
+                    substr(started_at, 1, 19)
+            ), 0) = 1)
+            AND (completed_at IS NULL OR COALESCE((
                 length(completed_at) IN (25, 32)
                 AND substr(completed_at, 11, 1) = 'T'
                 AND substr(completed_at, -6) = '+00:00'
-                AND strftime('%Y-%m-%dT%H:%M:%S', completed_at) =
+                AND CAST(substr(completed_at, 1, 4) AS INTEGER) BETWEEN 1 AND 9999
+                AND (
+                    (length(completed_at) = 25 AND substr(completed_at, 20, 1) = '+')
+                    OR (length(completed_at) = 32 AND substr(completed_at, 20, 1) = '.'
+                        AND substr(completed_at, 21, 6) NOT GLOB '*[^0-9]*'
+                        AND substr(completed_at, 27, 1) = '+')
+                )
+                AND strftime('%Y-%m-%dT%H:%M:%S', completed_at, '+0 seconds') IS NOT NULL
+                AND strftime('%Y-%m-%dT%H:%M:%S', completed_at, '+0 seconds') =
                     substr(completed_at, 1, 19)
-            ))
+            ), 0) = 1)
         )
     ),
     CONSTRAINT ck_governance_evaluation_run_timestamp_order CHECK (
@@ -667,90 +778,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_governance_evaluation_run_v2_envelope_scope
     );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_governance_evaluation_run_org_envelope_nonce
     ON governance_evaluation_runs(org_id, envelope_nonce);
-
-CREATE TRIGGER governance_evaluation_plans_capture_v2_insert
-AFTER INSERT ON governance_evaluation_plans
-BEGIN
-    INSERT INTO governance_evaluation_plan_v2_replay_state (
-        plan_id, contract_version, target_version_id, plan_content_hash,
-        trust_policy_version_id
-    ) VALUES (
-        NEW.id, NEW.contract_version, NEW.target_version_id, NEW.plan_content_hash,
-        NEW.trust_policy_version_id
-    )
-    ON CONFLICT(plan_id) DO UPDATE SET
-        contract_version = excluded.contract_version,
-        target_version_id = excluded.target_version_id,
-        plan_content_hash = excluded.plan_content_hash,
-        trust_policy_version_id = excluded.trust_policy_version_id;
-END;
-CREATE TRIGGER governance_evaluation_plans_capture_v2_update
-AFTER UPDATE OF contract_version, target_version_id, plan_content_hash,
-                trust_policy_version_id ON governance_evaluation_plans
-BEGIN
-    INSERT INTO governance_evaluation_plan_v2_replay_state (
-        plan_id, contract_version, target_version_id, plan_content_hash,
-        trust_policy_version_id
-    ) VALUES (
-        NEW.id, NEW.contract_version, NEW.target_version_id, NEW.plan_content_hash,
-        NEW.trust_policy_version_id
-    )
-    ON CONFLICT(plan_id) DO UPDATE SET
-        contract_version = excluded.contract_version,
-        target_version_id = excluded.target_version_id,
-        plan_content_hash = excluded.plan_content_hash,
-        trust_policy_version_id = excluded.trust_policy_version_id;
-END;
-CREATE TRIGGER governance_evaluation_plans_clear_v2_delete
-AFTER DELETE ON governance_evaluation_plans
-BEGIN
-    DELETE FROM governance_evaluation_plan_v2_replay_state WHERE plan_id = OLD.id;
-END;
-
-CREATE TRIGGER governance_evaluation_runs_capture_v2_insert
-AFTER INSERT ON governance_evaluation_runs
-BEGIN
-    INSERT INTO governance_evaluation_run_v2_replay_state (
-        run_id, contract_version, lifecycle_phase, envelope_id, envelope_json, envelope_hash,
-        evidence_outcome, verdict_version
-    ) VALUES (
-        NEW.id, NEW.contract_version, NEW.lifecycle_phase, NEW.envelope_id,
-        NEW.envelope_json, NEW.envelope_hash, NEW.evidence_outcome, NEW.verdict_version
-    )
-    ON CONFLICT(run_id) DO UPDATE SET
-        contract_version = excluded.contract_version,
-        lifecycle_phase = excluded.lifecycle_phase,
-        envelope_id = excluded.envelope_id,
-        envelope_json = excluded.envelope_json,
-        envelope_hash = excluded.envelope_hash,
-        evidence_outcome = excluded.evidence_outcome,
-        verdict_version = excluded.verdict_version;
-END;
-CREATE TRIGGER governance_evaluation_runs_capture_v2_update
-AFTER UPDATE OF contract_version, lifecycle_phase, envelope_id, envelope_json, envelope_hash,
-                evidence_outcome, verdict_version ON governance_evaluation_runs
-BEGIN
-    INSERT INTO governance_evaluation_run_v2_replay_state (
-        run_id, contract_version, lifecycle_phase, envelope_id, envelope_json, envelope_hash,
-        evidence_outcome, verdict_version
-    ) VALUES (
-        NEW.id, NEW.contract_version, NEW.lifecycle_phase, NEW.envelope_id,
-        NEW.envelope_json, NEW.envelope_hash, NEW.evidence_outcome, NEW.verdict_version
-    )
-    ON CONFLICT(run_id) DO UPDATE SET
-        contract_version = excluded.contract_version,
-        lifecycle_phase = excluded.lifecycle_phase,
-        envelope_id = excluded.envelope_id,
-        envelope_json = excluded.envelope_json,
-        envelope_hash = excluded.envelope_hash,
-        evidence_outcome = excluded.evidence_outcome,
-        verdict_version = excluded.verdict_version;
-END;
-CREATE TRIGGER governance_evaluation_runs_clear_v2_delete
-AFTER DELETE ON governance_evaluation_runs
-BEGIN
-    DELETE FROM governance_evaluation_run_v2_replay_state WHERE run_id = OLD.id;
-END;
 
 DROP TRIGGER IF EXISTS governance_evaluation_target_versions_guard_update;
 CREATE TRIGGER governance_evaluation_target_versions_guard_update
@@ -1287,30 +1314,64 @@ BEGIN
         OR (NEW.technical_status IN ('failed', 'timed_out', 'cancelled')
             AND NEW.completed_at IS NOT NULL)
     ) THEN RAISE(ABORT, 'suite-execution timestamps do not match state') END;
-    SELECT CASE WHEN NOT (
-        length(NEW.created_at) IN (25, 32)
+    SELECT CASE WHEN COALESCE((
+        (length(NEW.created_at) IN (25, 32)
         AND substr(NEW.created_at, 11, 1) = 'T'
         AND substr(NEW.created_at, -6) = '+00:00'
-        AND strftime('%Y-%m-%dT%H:%M:%S', NEW.created_at) = substr(NEW.created_at, 1, 19)
-        AND length(NEW.updated_at) IN (25, 32)
+        AND CAST(substr(NEW.created_at, 1, 4) AS INTEGER) BETWEEN 1 AND 9999
+        AND (
+            (length(NEW.created_at) = 25 AND substr(NEW.created_at, 20, 1) = '+')
+            OR (length(NEW.created_at) = 32 AND substr(NEW.created_at, 20, 1) = '.'
+                AND substr(NEW.created_at, 21, 6) NOT GLOB '*[^0-9]*'
+                AND substr(NEW.created_at, 27, 1) = '+')
+        )
+        AND strftime('%Y-%m-%dT%H:%M:%S', NEW.created_at, '+0 seconds') IS NOT NULL
+        AND strftime('%Y-%m-%dT%H:%M:%S', NEW.created_at, '+0 seconds') =
+            substr(NEW.created_at, 1, 19))
+        AND (length(NEW.updated_at) IN (25, 32)
         AND substr(NEW.updated_at, 11, 1) = 'T'
         AND substr(NEW.updated_at, -6) = '+00:00'
-        AND strftime('%Y-%m-%dT%H:%M:%S', NEW.updated_at) = substr(NEW.updated_at, 1, 19)
+        AND CAST(substr(NEW.updated_at, 1, 4) AS INTEGER) BETWEEN 1 AND 9999
+        AND (
+            (length(NEW.updated_at) = 25 AND substr(NEW.updated_at, 20, 1) = '+')
+            OR (length(NEW.updated_at) = 32 AND substr(NEW.updated_at, 20, 1) = '.'
+                AND substr(NEW.updated_at, 21, 6) NOT GLOB '*[^0-9]*'
+                AND substr(NEW.updated_at, 27, 1) = '+')
+        )
+        AND strftime('%Y-%m-%dT%H:%M:%S', NEW.updated_at, '+0 seconds') IS NOT NULL
+        AND strftime('%Y-%m-%dT%H:%M:%S', NEW.updated_at, '+0 seconds') =
+            substr(NEW.updated_at, 1, 19))
         AND (NEW.started_at IS NULL OR (
             length(NEW.started_at) IN (25, 32)
             AND substr(NEW.started_at, 11, 1) = 'T'
             AND substr(NEW.started_at, -6) = '+00:00'
-            AND strftime('%Y-%m-%dT%H:%M:%S', NEW.started_at) =
+            AND CAST(substr(NEW.started_at, 1, 4) AS INTEGER) BETWEEN 1 AND 9999
+            AND (
+                (length(NEW.started_at) = 25 AND substr(NEW.started_at, 20, 1) = '+')
+                OR (length(NEW.started_at) = 32 AND substr(NEW.started_at, 20, 1) = '.'
+                    AND substr(NEW.started_at, 21, 6) NOT GLOB '*[^0-9]*'
+                    AND substr(NEW.started_at, 27, 1) = '+')
+            )
+            AND strftime('%Y-%m-%dT%H:%M:%S', NEW.started_at, '+0 seconds') IS NOT NULL
+            AND strftime('%Y-%m-%dT%H:%M:%S', NEW.started_at, '+0 seconds') =
                 substr(NEW.started_at, 1, 19)
         ))
         AND (NEW.completed_at IS NULL OR (
             length(NEW.completed_at) IN (25, 32)
             AND substr(NEW.completed_at, 11, 1) = 'T'
             AND substr(NEW.completed_at, -6) = '+00:00'
-            AND strftime('%Y-%m-%dT%H:%M:%S', NEW.completed_at) =
+            AND CAST(substr(NEW.completed_at, 1, 4) AS INTEGER) BETWEEN 1 AND 9999
+            AND (
+                (length(NEW.completed_at) = 25 AND substr(NEW.completed_at, 20, 1) = '+')
+                OR (length(NEW.completed_at) = 32 AND substr(NEW.completed_at, 20, 1) = '.'
+                    AND substr(NEW.completed_at, 21, 6) NOT GLOB '*[^0-9]*'
+                    AND substr(NEW.completed_at, 27, 1) = '+')
+            )
+            AND strftime('%Y-%m-%dT%H:%M:%S', NEW.completed_at, '+0 seconds') IS NOT NULL
+            AND strftime('%Y-%m-%dT%H:%M:%S', NEW.completed_at, '+0 seconds') =
                 substr(NEW.completed_at, 1, 19)
         ))
-    ) THEN RAISE(ABORT, 'suite-execution timestamp must be canonical UTC') END;
+    ), 0) <> 1 THEN RAISE(ABORT, 'suite-execution timestamp must be canonical UTC') END;
     SELECT CASE WHEN NEW.created_at > NEW.updated_at
         OR (NEW.started_at IS NOT NULL AND (
             NEW.started_at < NEW.created_at OR NEW.started_at > NEW.updated_at
@@ -1340,30 +1401,80 @@ BEGIN
         OR (NEW.technical_status IN ('failed', 'timed_out', 'cancelled')
             AND NEW.completed_at IS NOT NULL)
     ) THEN RAISE(ABORT, 'suite-execution timestamps do not match state') END;
-    SELECT CASE WHEN NOT (
-        length(NEW.created_at) IN (25, 32)
-        AND substr(NEW.created_at, 11, 1) = 'T'
-        AND substr(NEW.created_at, -6) = '+00:00'
-        AND strftime('%Y-%m-%dT%H:%M:%S', NEW.created_at) = substr(NEW.created_at, 1, 19)
-        AND length(NEW.updated_at) IN (25, 32)
-        AND substr(NEW.updated_at, 11, 1) = 'T'
-        AND substr(NEW.updated_at, -6) = '+00:00'
-        AND strftime('%Y-%m-%dT%H:%M:%S', NEW.updated_at) = substr(NEW.updated_at, 1, 19)
+    SELECT CASE WHEN COALESCE((
+        (
+            length(NEW.created_at) IN (25, 32)
+            AND substr(NEW.created_at, 11, 1) = 'T'
+            AND substr(NEW.created_at, -6) = '+00:00'
+            AND CAST(substr(NEW.created_at, 1, 4) AS INTEGER) BETWEEN 1 AND 9999
+            AND (
+                (length(NEW.created_at) = 25 AND substr(NEW.created_at, 20, 1) = '+')
+                OR (
+                    length(NEW.created_at) = 32
+                    AND substr(NEW.created_at, 20, 1) = '.'
+                    AND substr(NEW.created_at, 21, 6) NOT GLOB '*[^0-9]*'
+                    AND substr(NEW.created_at, 27, 1) = '+'
+                )
+            )
+            AND strftime('%Y-%m-%dT%H:%M:%S', NEW.created_at, '+0 seconds') IS NOT NULL
+            AND strftime('%Y-%m-%dT%H:%M:%S', NEW.created_at, '+0 seconds') =
+                substr(NEW.created_at, 1, 19)
+        )
+        AND (
+            length(NEW.updated_at) IN (25, 32)
+            AND substr(NEW.updated_at, 11, 1) = 'T'
+            AND substr(NEW.updated_at, -6) = '+00:00'
+            AND CAST(substr(NEW.updated_at, 1, 4) AS INTEGER) BETWEEN 1 AND 9999
+            AND (
+                (length(NEW.updated_at) = 25 AND substr(NEW.updated_at, 20, 1) = '+')
+                OR (
+                    length(NEW.updated_at) = 32
+                    AND substr(NEW.updated_at, 20, 1) = '.'
+                    AND substr(NEW.updated_at, 21, 6) NOT GLOB '*[^0-9]*'
+                    AND substr(NEW.updated_at, 27, 1) = '+'
+                )
+            )
+            AND strftime('%Y-%m-%dT%H:%M:%S', NEW.updated_at, '+0 seconds') IS NOT NULL
+            AND strftime('%Y-%m-%dT%H:%M:%S', NEW.updated_at, '+0 seconds') =
+                substr(NEW.updated_at, 1, 19)
+        )
         AND (NEW.started_at IS NULL OR (
             length(NEW.started_at) IN (25, 32)
             AND substr(NEW.started_at, 11, 1) = 'T'
             AND substr(NEW.started_at, -6) = '+00:00'
-            AND strftime('%Y-%m-%dT%H:%M:%S', NEW.started_at) =
+            AND CAST(substr(NEW.started_at, 1, 4) AS INTEGER) BETWEEN 1 AND 9999
+            AND (
+                (length(NEW.started_at) = 25 AND substr(NEW.started_at, 20, 1) = '+')
+                OR (
+                    length(NEW.started_at) = 32
+                    AND substr(NEW.started_at, 20, 1) = '.'
+                    AND substr(NEW.started_at, 21, 6) NOT GLOB '*[^0-9]*'
+                    AND substr(NEW.started_at, 27, 1) = '+'
+                )
+            )
+            AND strftime('%Y-%m-%dT%H:%M:%S', NEW.started_at, '+0 seconds') IS NOT NULL
+            AND strftime('%Y-%m-%dT%H:%M:%S', NEW.started_at, '+0 seconds') =
                 substr(NEW.started_at, 1, 19)
         ))
         AND (NEW.completed_at IS NULL OR (
             length(NEW.completed_at) IN (25, 32)
             AND substr(NEW.completed_at, 11, 1) = 'T'
             AND substr(NEW.completed_at, -6) = '+00:00'
-            AND strftime('%Y-%m-%dT%H:%M:%S', NEW.completed_at) =
+            AND CAST(substr(NEW.completed_at, 1, 4) AS INTEGER) BETWEEN 1 AND 9999
+            AND (
+                (length(NEW.completed_at) = 25 AND substr(NEW.completed_at, 20, 1) = '+')
+                OR (
+                    length(NEW.completed_at) = 32
+                    AND substr(NEW.completed_at, 20, 1) = '.'
+                    AND substr(NEW.completed_at, 21, 6) NOT GLOB '*[^0-9]*'
+                    AND substr(NEW.completed_at, 27, 1) = '+'
+                )
+            )
+            AND strftime('%Y-%m-%dT%H:%M:%S', NEW.completed_at, '+0 seconds') IS NOT NULL
+            AND strftime('%Y-%m-%dT%H:%M:%S', NEW.completed_at, '+0 seconds') =
                 substr(NEW.completed_at, 1, 19)
         ))
-    ) THEN RAISE(ABORT, 'suite-execution timestamp must be canonical UTC') END;
+    ), 0) <> 1 THEN RAISE(ABORT, 'suite-execution timestamp must be canonical UTC') END;
     SELECT CASE WHEN NEW.created_at > NEW.updated_at
         OR (NEW.started_at IS NOT NULL AND (
             NEW.started_at < NEW.created_at OR NEW.started_at > NEW.updated_at

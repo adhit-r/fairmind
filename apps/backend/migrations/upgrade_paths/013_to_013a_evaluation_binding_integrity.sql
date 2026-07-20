@@ -57,7 +57,7 @@ DECLARE
     expected_prerequisite CONSTANT TEXT :=
         '3e09436746296c397a8719ed633b91636b53ee8710f990b45576da4ef55ff2dd';
     expected_checksum CONSTANT TEXT :=
-        '11b6067eaf5168ff8a4ff235cef22f83bcf8109fd57e2442aeea209dd7b511d3';
+        '92fa0dbfd9f940e070439768b2f70faf3627ec589ae9b413c7730c6efd90d6a8';
     catalog_table_count INTEGER;
     required_column_count INTEGER;
 BEGIN
@@ -151,6 +151,30 @@ DECLARE
     trusted_schema TEXT := pg_catalog.current_setting('fairmind.migration_schema');
     matched_count INTEGER;
 BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_constraint AS constraint_entry
+        WHERE constraint_entry.conname OPERATOR(pg_catalog.=)
+              'ck_governance_evaluation_plan_v2_requires_013a_migration'
+          AND constraint_entry.conrelid OPERATOR(pg_catalog.=) pg_catalog.to_regclass(
+              pg_catalog.format('%I.%I', trusted_schema, 'governance_evaluation_plans')
+          )
+    ) THEN
+        RAISE EXCEPTION 'unmigrated v2 ORM plan guard survived 013a';
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_constraint AS constraint_entry
+        WHERE constraint_entry.conname OPERATOR(pg_catalog.=)
+              'ck_governance_evaluation_run_v2_requires_013a_migration'
+          AND constraint_entry.conrelid OPERATOR(pg_catalog.=) pg_catalog.to_regclass(
+              pg_catalog.format('%I.%I', trusted_schema, 'governance_evaluation_runs')
+          )
+    ) THEN
+        RAISE EXCEPTION 'unmigrated v2 ORM guard survived 013a';
+    END IF;
+
     SELECT pg_catalog.count(*) INTO matched_count
     FROM (
         VALUES
@@ -358,7 +382,7 @@ $fairmind_operator_postcondition$ LANGUAGE plpgsql;
 INSERT INTO fairmind_operator_migration_ledger (migration_key, migration_checksum)
 VALUES (
     '013-to-013a-evaluation-binding-integrity-v1',
-    '11b6067eaf5168ff8a4ff235cef22f83bcf8109fd57e2442aeea209dd7b511d3'
+    '92fa0dbfd9f940e070439768b2f70faf3627ec589ae9b413c7730c6efd90d6a8'
 )
 ON CONFLICT (migration_key) DO NOTHING;
 

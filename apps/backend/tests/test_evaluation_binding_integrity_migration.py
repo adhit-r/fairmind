@@ -32,6 +32,11 @@ NONCE_A = "A" * 43
 NONCE_B = "E" * 43
 ENVELOPE_A = '{"nonce":"' + NONCE_A + '"}'
 ENVELOPE_B = '{"nonce":"' + NONCE_B + '"}'
+INVALID_SQLITE_TIMESTAMPS = (
+    "2026-07-20T00:00:xx+00:00",
+    "2026-07-20T24:00:00+00:00",
+    "2026-02-29T00:00:00+00:00",
+)
 RUN_STATES = {
     "awaiting_evidence",
     "queued",
@@ -302,6 +307,14 @@ def test_operator_upgrade_pins_exact_payload_and_prerequisite() -> None:
         assert column_contract in upgrade
     assert "UNIQUE (org_id, envelope_nonce)" in upgrade
     assert "ck_governance_evaluation_run_envelope_nonce" in upgrade
+    for migration_guard in (
+        "ck_governance_evaluation_plan_v2_requires_013a_migration",
+        "ck_governance_evaluation_run_v2_requires_013a_migration",
+    ):
+        assert migration_guard in direct
+        assert migration_guard in upgrade
+    assert "unmigrated v2 ORM plan guard survived 013a" in upgrade
+    assert "unmigrated v2 ORM guard survived 013a" in upgrade
 
 
 def test_orm_run_and_suite_execution_publish_all_eight_states_and_timestamps() -> None:
@@ -422,6 +435,11 @@ def test_orm_has_exact_target_parent_key_and_frozen_v2_projection_constraints() 
         for constraint in governance_models.GovernanceEvaluationSuiteVersion.__table__.constraints
         if isinstance(constraint, CheckConstraint)
     }
+    plan_checks = {
+        constraint.name: str(constraint.sqltext)
+        for constraint in governance_models.GovernanceEvaluationPlan.__table__.constraints
+        if isinstance(constraint, CheckConstraint)
+    }
     run_checks = {
         constraint.name: str(constraint.sqltext)
         for constraint in governance_models.GovernanceEvaluationRun.__table__.constraints
@@ -437,6 +455,9 @@ def test_orm_has_exact_target_parent_key_and_frozen_v2_projection_constraints() 
     assert "namespace || '/' || name || '@' || version" in suite_checks[
         "ck_governance_evaluation_suite_canonical_ref"
     ]
+    assert plan_checks[
+        "ck_governance_evaluation_plan_v2_requires_013a_migration"
+    ] == "contract_version <> '2.0.0'"
     assert "verdict_version = 0" in run_checks[
         "ck_governance_evaluation_run_v2_projection_freeze"
     ]
@@ -458,6 +479,143 @@ def test_orm_has_exact_target_parent_key_and_frozen_v2_projection_constraints() 
     assert "started_at <= completed_at" in execution_checks[
         "ck_governance_evaluation_suite_execution_timestamp_order"
     ]
+
+    migration_guard = run_checks[
+        "ck_governance_evaluation_run_v2_requires_013a_migration"
+    ]
+    assert migration_guard == "contract_version <> '2.0.0'"
+
+
+@pytest.mark.parametrize("status", ("draft", "active"))
+def test_raw_orm_create_all_fails_closed_for_unmigrated_v2_plans(
+    status: str,
+) -> None:
+    from database import models as _identity_models  # noqa: F401
+    from database.connection import Base
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    try:
+        with engine.begin() as connection:
+            with pytest.raises(
+                IntegrityError,
+                match="ck_governance_evaluation_plan_v2_requires_013a_migration",
+            ):
+                connection.exec_driver_sql(
+                    """
+                    INSERT INTO governance_evaluation_plans (
+                        id, org_id, workspace_id, system_id, name, target_kind,
+                        lifecycle_phases_json, execution_depth, enforcement_mode,
+                        delivery_mode, suite_refs_json, status, created_by, updated_by,
+                        created_at, updated_at, contract_version, target_version_id,
+                        plan_content_hash, trust_policy_version_id
+                    ) VALUES (
+                        'raw-v2-plan', 'org-a', 'ws-a', 'sys-a', 'Raw v2 plan',
+                        'predictive_model', '["pre_deploy"]', 'deep',
+                        'human_approval', 'external_provider',
+                        '["fairmind/core@1.0.0"]', ?, 'user-a', 'user-a', ?, ?,
+                        '2.0.0', 'target-a', ?, 'policy-a'
+                    )
+                    """,
+                    (status, NOW, NOW, HASH_A),
+                )
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.parametrize(
+    ("envelope_json", "layer_verdicts_json"),
+    (
+        (ENVELOPE_B, '{"execution-a":"insufficient"}'),
+        (ENVELOPE_A, '{"execution-a":"approved"}'),
+    ),
+)
+def test_raw_orm_create_all_fails_closed_for_unmigrated_v2_runs(
+    envelope_json: str,
+    layer_verdicts_json: str,
+) -> None:
+    from database import models as _identity_models  # noqa: F401
+    from database.connection import Base
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    try:
+        with engine.begin() as connection:
+            with pytest.raises(
+                IntegrityError,
+                match="ck_governance_evaluation_run_v2_requires_013a_migration",
+            ):
+                connection.exec_driver_sql(
+                    """
+                    INSERT INTO governance_evaluation_runs (
+                        id, org_id, workspace_id, system_id, plan_id,
+                        contract_version, trigger, technical_status,
+                        overall_verdict, layer_verdicts_json, requested_by,
+                        created_at, updated_at, lifecycle_phase, envelope_id,
+                        envelope_json, envelope_hash, envelope_nonce,
+                        evidence_outcome, verdict_version
+                    ) VALUES (
+                        'raw-v2', 'org-a', 'ws-a', 'sys-a', 'plan-a',
+                        '2.0.0', 'manual', 'awaiting_evidence', 'insufficient', ?,
+                        'user-a', ?, ?, 'pre_deploy', 'envelope-raw-v2', ?, ?, ?,
+                        'pending', 0
+                    )
+                    """,
+                    (
+                        layer_verdicts_json,
+                        NOW,
+                        NOW,
+                        envelope_json,
+                        HASH_A,
+                        NONCE_A,
+                    ),
+                )
+    finally:
+        engine.dispose()
+
+
+def test_real_sqlite_013a_accepts_a_valid_new_v2_plan_and_run() -> None:
+    connection = _fresh_013()
+    try:
+        _apply_013a(connection)
+        _seed_v2_graph(connection, plan_status="draft", with_run=False)
+        connection.execute(
+            "UPDATE governance_evaluation_plans "
+            "SET status='active', updated_by='user-b', updated_at=? WHERE id='plan-a'",
+            (LATER,),
+        )
+        _insert_v2_run(
+            connection,
+            run_id="run-after-013a",
+            layer_verdicts_json='{"execution-after-013a":"insufficient"}',
+        )
+        connection.execute(
+            """
+            INSERT INTO governance_evaluation_run_suite_executions (
+                id, org_id, workspace_id, system_id, run_id, suite_version_id,
+                suite_owner_scope, ordinal, technical_status, evidence_result_status,
+                admission_status, review_status, freshness_status, created_at, updated_at
+            ) VALUES (
+                'execution-after-013a', 'org-a', 'ws-a', 'sys-a', 'run-after-013a',
+                'suite-a', 'platform', 0, 'awaiting_evidence', 'pending', 'pending',
+                'pending', 'current', ?, ?
+            )
+            """,
+            (NOW, NOW),
+        )
+
+        assert connection.execute(
+            "SELECT contract_version, status FROM governance_evaluation_plans "
+            "WHERE id='plan-a'"
+        ).fetchone() == ("2.0.0", "active")
+        run_contract, run_nonce = connection.execute(
+            "SELECT contract_version, envelope_nonce FROM governance_evaluation_runs "
+            "WHERE id='run-after-013a'"
+        ).fetchone()
+        assert run_contract == "2.0.0"
+        assert run_nonce == _envelope_for("run-after-013a")[0]
+    finally:
+        connection.close()
 
 
 @pytest.mark.parametrize(
@@ -724,6 +882,33 @@ def test_sqlite_envelope_nonce_is_independent_immutable_and_org_unique() -> None
                 envelope_nonce=NONCE_A,
                 envelope_json=ENVELOPE_A,
             )
+    finally:
+        connection.close()
+
+
+def test_sqlite_applied_trigger_catalog_has_no_replay_state_dependencies() -> None:
+    connection = _fresh_013()
+    try:
+        _apply_013a(connection)
+        trigger_rows = connection.execute(
+            "SELECT name, sql FROM sqlite_master WHERE type='trigger'"
+        ).fetchall()
+        trigger_names = {name for name, _sql in trigger_rows}
+
+        assert "governance_evaluation_plans_v2_guard_update" in trigger_names
+        assert "governance_evaluation_runs_v2_guard_update" in trigger_names
+        assert "governance_evaluation_suite_executions_guard_insert" in trigger_names
+        assert all("replay_state" not in (sql or "").lower() for _name, sql in trigger_rows)
+        assert all("_capture_v2_" not in name for name in trigger_names)
+
+        historical_tables = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+        }
+        assert "governance_evaluation_plan_v2_replay_state" in historical_tables
+        assert "governance_evaluation_run_v2_replay_state" in historical_tables
     finally:
         connection.close()
 
@@ -1047,6 +1232,71 @@ def test_sqlite_rejects_noncanonical_and_reversed_run_timestamps() -> None:
         connection.close()
 
 
+@pytest.mark.parametrize(
+    "table_name",
+    (
+        "governance_evaluation_runs",
+        "governance_evaluation_run_suite_executions",
+    ),
+)
+@pytest.mark.parametrize("invalid_timestamp", INVALID_SQLITE_TIMESTAMPS)
+def test_sqlite_migration_rejects_preexisting_unparseable_or_impossible_timestamps(
+    table_name: str,
+    invalid_timestamp: str,
+) -> None:
+    connection = _fresh_013()
+    try:
+        _seed_v2_graph(connection)
+        connection.execute(
+            f"UPDATE {table_name} SET created_at=?, updated_at=?",
+            (invalid_timestamp, invalid_timestamp),
+        )
+
+        with pytest.raises(sqlite3.IntegrityError, match="pre-existing v2 timestamp"):
+            _apply_013a(connection)
+    finally:
+        connection.close()
+
+
+@pytest.mark.parametrize("invalid_timestamp", INVALID_SQLITE_TIMESTAMPS)
+def test_sqlite_run_check_rejects_unparseable_or_impossible_timestamps(
+    invalid_timestamp: str,
+) -> None:
+    connection = _fresh_013()
+    try:
+        _seed_v2_graph(connection, with_run=False)
+        _apply_013a(connection)
+
+        with pytest.raises(sqlite3.IntegrityError, match="timestamp|canonical"):
+            _insert_v2_run(
+                connection,
+                run_id="run-invalid-time",
+                created_at=invalid_timestamp,
+                updated_at=invalid_timestamp,
+            )
+    finally:
+        connection.close()
+
+
+def test_sqlite_run_check_fails_closed_when_optional_timestamp_parse_returns_null() -> None:
+    connection = _fresh_013()
+    try:
+        _seed_v2_graph(connection)
+        _apply_013a(connection)
+
+        with pytest.raises(sqlite3.IntegrityError, match="timestamp|canonical"):
+            connection.execute(
+                "UPDATE governance_evaluation_runs SET technical_status='running', "
+                "started_at=?, updated_at=? WHERE id='run-a'",
+                (
+                    "2026-07-20T00:00:xx+00:00",
+                    "2026-07-20T00:00:xx+00:00",
+                ),
+            )
+    finally:
+        connection.close()
+
+
 def test_sqlite_rejects_noncanonical_and_reversed_suite_execution_timestamps() -> None:
     connection = _fresh_013()
     try:
@@ -1073,6 +1323,59 @@ def test_sqlite_rejects_noncanonical_and_reversed_suite_execution_timestamps() -
                 "completed_at=?, updated_at=? "
                 "WHERE id='execution-a'",
                 (LATER, "2026-07-20T00:03:00+00:00"),
+            )
+    finally:
+        connection.close()
+
+
+@pytest.mark.parametrize("invalid_timestamp", INVALID_SQLITE_TIMESTAMPS)
+def test_sqlite_suite_insert_trigger_rejects_unparseable_or_impossible_timestamps(
+    invalid_timestamp: str,
+) -> None:
+    connection = _fresh_013()
+    try:
+        _seed_v2_graph(connection, with_run=False)
+        _apply_013a(connection)
+        _insert_v2_run(
+            connection,
+            run_id="run-invalid-execution-time",
+            layer_verdicts_json='{"execution-invalid-time":"insufficient"}',
+        )
+
+        with pytest.raises(sqlite3.IntegrityError, match="timestamp|canonical"):
+            connection.execute(
+                """
+                INSERT INTO governance_evaluation_run_suite_executions (
+                    id, org_id, workspace_id, system_id, run_id, suite_version_id,
+                    suite_owner_scope, ordinal, technical_status, evidence_result_status,
+                    admission_status, review_status, freshness_status, created_at, updated_at
+                ) VALUES (
+                    'execution-invalid-time', 'org-a', 'ws-a', 'sys-a',
+                    'run-invalid-execution-time', 'suite-a', 'platform', 0,
+                    'awaiting_evidence', 'pending', 'pending', 'pending', 'current', ?, ?
+                )
+                """,
+                (invalid_timestamp, invalid_timestamp),
+            )
+    finally:
+        connection.close()
+
+
+def test_sqlite_suite_update_trigger_fails_closed_when_optional_timestamp_parse_returns_null() -> None:
+    connection = _fresh_013()
+    try:
+        _seed_v2_graph(connection)
+        _apply_013a(connection)
+
+        with pytest.raises(sqlite3.IntegrityError, match="timestamp|canonical"):
+            connection.execute(
+                "UPDATE governance_evaluation_run_suite_executions "
+                "SET technical_status='running', started_at=?, updated_at=? "
+                "WHERE id='execution-a'",
+                (
+                    "2026-07-20T00:00:xx+00:00",
+                    "2026-07-20T00:00:xx+00:00",
+                ),
             )
     finally:
         connection.close()

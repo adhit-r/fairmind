@@ -32,6 +32,10 @@ from database.governance_models import (
 )
 from database.models import Organization, OrganizationMember, User
 from src.domain.assurance.evaluation_v2 import canonical_json, canonical_sha256
+from tests.evaluation_workbench_sqlite import (
+    allow_deliberate_check_constraint_corruption,
+    install_013a_for_application_verifier_harness,
+)
 
 ORG = str(uuid.uuid4())
 FOREIGN_ORG = str(uuid.uuid4())
@@ -68,6 +72,7 @@ def workbench_client():
         connection.execute("PRAGMA foreign_keys = ON")
 
     Base.metadata.create_all(engine)
+    install_013a_for_application_verifier_harness(engine)
     factory = sessionmaker(bind=engine)
     session = factory()
     for user_id in (USER, VIEWER):
@@ -1249,15 +1254,16 @@ def test_run_nonce_witness_mismatch_is_a_generic_409(workbench_client) -> None:
             select(runs.c.envelope_nonce).where(runs.c.id == run["id"])
         )
         assert stored_nonce != rebound_nonce
-        session.execute(
-            GovernanceEvaluationRun.__table__.update()
-            .where(GovernanceEvaluationRun.id == run["id"])
-            .values(
-                envelope_json=canonical_json(envelope),
-                envelope_hash=canonical_sha256(envelope),
+        with allow_deliberate_check_constraint_corruption(session):
+            session.execute(
+                GovernanceEvaluationRun.__table__.update()
+                .where(GovernanceEvaluationRun.id == run["id"])
+                .values(
+                    envelope_json=canonical_json(envelope),
+                    envelope_hash=canonical_sha256(envelope),
+                )
             )
-        )
-        session.commit()
+            session.commit()
     finally:
         session_iterator.close()
 
