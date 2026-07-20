@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import importlib
 import os
@@ -6,7 +7,17 @@ import sqlite3
 from pathlib import Path
 
 import pytest
-from sqlalchemy import CheckConstraint
+from sqlalchemy import (
+    CheckConstraint,
+    Column,
+    ForeignKeyConstraint,
+    MetaData,
+    String,
+    Table,
+    UniqueConstraint,
+    create_engine,
+)
+from sqlalchemy.exc import IntegrityError
 
 from database import governance_models
 
@@ -17,6 +28,10 @@ NOW = "2026-07-20T00:00:00+00:00"
 LATER = "2026-07-20T00:01:00+00:00"
 HASH_A = "a" * 64
 HASH_B = "b" * 64
+NONCE_A = "A" * 43
+NONCE_B = "E" * 43
+ENVELOPE_A = '{"nonce":"' + NONCE_A + '"}'
+ENVELOPE_B = '{"nonce":"' + NONCE_B + '"}'
 RUN_STATES = {
     "awaiting_evidence",
     "queued",
@@ -27,6 +42,13 @@ RUN_STATES = {
     "timed_out",
     "cancelled",
 }
+
+
+def _envelope_for(run_id: str) -> tuple[str, str]:
+    nonce = base64.urlsafe_b64encode(
+        hashlib.sha256(run_id.encode("utf-8")).digest()
+    ).rstrip(b"=").decode("ascii")
+    return nonce, '{"nonce":"' + nonce + '"}'
 
 
 def _fresh_013() -> sqlite3.Connection:
@@ -145,10 +167,11 @@ def _seed_v2_graph(
             created_at, updated_at, lifecycle_phase, envelope_id, envelope_json,
             envelope_hash, evidence_outcome, verdict_version
         ) VALUES ('run-a', 'org-a', 'ws-a', 'sys-a', 'plan-a', '2.0.0', 'manual',
-                  'awaiting_evidence', 'insufficient', '{}', 'user-a', ?, ?, 'pre_deploy',
-                  'envelope-a', '{}', ?, 'pending', 0)
+                  'awaiting_evidence', 'insufficient',
+                  '{"execution-a":"insufficient"}', 'user-a', ?, ?, 'pre_deploy',
+                  'envelope-a', ?, ?, 'pending', 0)
         """,
-        (NOW, NOW, HASH_A),
+        (NOW, NOW, ENVELOPE_A, HASH_A),
     )
     connection.execute(
         """
@@ -172,6 +195,55 @@ def _run_timestamps(status: str) -> tuple[str | None, str | None]:
     if status in {"failed", "timed_out", "cancelled"}:
         return None, LATER
     return None, None
+
+
+def _insert_v2_run(
+    connection: sqlite3.Connection,
+    *,
+    run_id: str,
+    technical_status: str = "awaiting_evidence",
+    overall_verdict: str = "insufficient",
+    layer_verdicts_json: str = "{}",
+    evidence_outcome: str = "pending",
+    verdict_version: int = 0,
+    started_at: str | None = None,
+    completed_at: str | None = None,
+    created_at: str = NOW,
+    updated_at: str = NOW,
+    envelope_nonce: str | None = None,
+    envelope_json: str | None = None,
+) -> None:
+    generated_nonce, generated_envelope = _envelope_for(run_id)
+    envelope_nonce = envelope_nonce or generated_nonce
+    envelope_json = envelope_json or generated_envelope
+    connection.execute(
+        """
+        INSERT INTO governance_evaluation_runs (
+            id, org_id, workspace_id, system_id, plan_id, contract_version, trigger,
+            technical_status, overall_verdict, layer_verdicts_json, requested_by,
+            started_at, completed_at, created_at, updated_at, lifecycle_phase,
+            envelope_id, envelope_json, envelope_hash, envelope_nonce,
+            evidence_outcome, verdict_version
+        ) VALUES (?, 'org-a', 'ws-a', 'sys-a', 'plan-a', '2.0.0', 'manual', ?, ?, ?,
+                  'user-a', ?, ?, ?, ?, 'pre_deploy', ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            run_id,
+            technical_status,
+            overall_verdict,
+            layer_verdicts_json,
+            started_at,
+            completed_at,
+            created_at,
+            updated_at,
+            f"envelope-{run_id}",
+            envelope_json,
+            HASH_A,
+            envelope_nonce,
+            evidence_outcome,
+            verdict_version,
+        ),
+    )
 
 
 def test_selector_returns_frozen_direct_files_and_rejects_unknown_dialect() -> None:
@@ -205,6 +277,31 @@ def test_operator_upgrade_pins_exact_payload_and_prerequisite() -> None:
     assert "\\ir ../013a_evaluation_binding_integrity.sql" in upgrade
     assert "checksum drift" in upgrade
     assert "prerequisite" in upgrade
+    for sql in (direct, upgrade):
+        assert "fairmind.migration_schema" in sql
+        assert "pg_catalog.set_config" in sql
+        assert "pg_temp" in sql
+    assert "tgrelid" in upgrade
+    assert "pronamespace" in upgrade
+    assert "fairmind_extract_canonical_envelope_nonce" in upgrade
+    assert "guard_governance_evaluation_run_graph_deferred" in upgrade
+    assert "governance_evaluation_runs_guard_layer_graph" in upgrade
+    assert "governance_evaluation_suite_executions_guard_layer_graph" in upgrade
+    assert "trigger_entry.tgdeferrable = required.is_deferred" in upgrade
+    assert "trigger_entry.tginitdeferred = required.is_deferred" in upgrade
+    assert "matched_count <> 8" in upgrade
+    assert "matched_count <> 14" in upgrade
+    for column_contract in (
+        "attribute_entry.atttypid = pg_catalog.to_regtype('pg_catalog.text')",
+        "attribute_entry.atttypmod = -1",
+        "NOT attribute_entry.attnotnull",
+        "NOT attribute_entry.atthasdef",
+        "attribute_entry.attidentity = ''",
+        "attribute_entry.attgenerated = ''",
+    ):
+        assert column_contract in upgrade
+    assert "UNIQUE (org_id, envelope_nonce)" in upgrade
+    assert "ck_governance_evaluation_run_envelope_nonce" in upgrade
 
 
 def test_orm_run_and_suite_execution_publish_all_eight_states_and_timestamps() -> None:
@@ -260,6 +357,156 @@ def test_orm_run_and_suite_execution_publish_all_eight_states_and_timestamps() -
             expected in actual
             for expected, actual in zip(expected_columns, rendered, strict=True)
         )
+
+
+def test_orm_has_exact_target_parent_key_and_frozen_v2_projection_constraints() -> None:
+    target_uniques = {
+        tuple(constraint.columns.keys())
+        for constraint in governance_models.GovernanceEvaluationTargetVersion.__table__.constraints
+        if isinstance(constraint, UniqueConstraint)
+    }
+    assert (
+        "id",
+        "target_kind",
+        "workspace_id",
+        "system_id",
+        "org_id",
+    ) in target_uniques
+
+    run_uniques = {
+        (constraint.name, tuple(constraint.columns.keys()))
+        for constraint in governance_models.GovernanceEvaluationRun.__table__.constraints
+        if isinstance(constraint, UniqueConstraint)
+    }
+    assert (
+        "uq_governance_evaluation_run_v2_envelope_scope",
+        (
+            "id",
+            "contract_version",
+            "envelope_id",
+            "envelope_hash",
+            "workspace_id",
+            "system_id",
+            "org_id",
+        ),
+    ) in run_uniques
+    assert (
+        "uq_governance_evaluation_run_org_envelope_nonce",
+        ("org_id", "envelope_nonce"),
+    ) in run_uniques
+    assert "envelope_nonce" in (
+        governance_models.GovernanceEvaluationRun.__table__.columns.keys()
+    )
+
+    target_foreign_keys = {
+        (
+            tuple(element.parent.name for element in constraint.elements),
+            tuple(element.target_fullname for element in constraint.elements),
+        )
+        for constraint in governance_models.GovernanceEvaluationPlan.__table__.constraints
+        if isinstance(constraint, ForeignKeyConstraint)
+    }
+    assert (
+        ("target_version_id", "target_kind", "workspace_id", "system_id", "org_id"),
+        (
+            "governance_evaluation_target_versions.id",
+            "governance_evaluation_target_versions.target_kind",
+            "governance_evaluation_target_versions.workspace_id",
+            "governance_evaluation_target_versions.system_id",
+            "governance_evaluation_target_versions.org_id",
+        ),
+    ) in target_foreign_keys
+
+    suite_checks = {
+        constraint.name: str(constraint.sqltext)
+        for constraint in governance_models.GovernanceEvaluationSuiteVersion.__table__.constraints
+        if isinstance(constraint, CheckConstraint)
+    }
+    run_checks = {
+        constraint.name: str(constraint.sqltext)
+        for constraint in governance_models.GovernanceEvaluationRun.__table__.constraints
+        if isinstance(constraint, CheckConstraint)
+    }
+    execution_checks = {
+        constraint.name: str(constraint.sqltext)
+        for constraint in (
+            governance_models.GovernanceEvaluationRunSuiteExecution.__table__.constraints
+        )
+        if isinstance(constraint, CheckConstraint)
+    }
+    assert "namespace || '/' || name || '@' || version" in suite_checks[
+        "ck_governance_evaluation_suite_canonical_ref"
+    ]
+    assert "verdict_version = 0" in run_checks[
+        "ck_governance_evaluation_run_v2_projection_freeze"
+    ]
+    assert "evidence_outcome = 'pending'" in run_checks[
+        "ck_governance_evaluation_run_v2_projection_freeze"
+    ]
+    assert "layer_verdicts_json = '{}'" not in run_checks[
+        "ck_governance_evaluation_run_v2_projection_freeze"
+    ]
+    nonce_check = run_checks["ck_governance_evaluation_run_envelope_nonce"]
+    assert "length(envelope_nonce) = 43" in nonce_check
+    assert "contract_version <> '2.0.0'" in nonce_check
+    assert "evidence_result_status = 'pending'" in execution_checks[
+        "ck_governance_evaluation_suite_execution_projection_freeze"
+    ]
+    assert "started_at <= completed_at" in run_checks[
+        "ck_governance_evaluation_run_timestamp_order"
+    ]
+    assert "started_at <= completed_at" in execution_checks[
+        "ck_governance_evaluation_suite_execution_timestamp_order"
+    ]
+
+
+@pytest.mark.parametrize(
+    "invalid_timestamp",
+    (
+        "2026-02-30T12:00:00+00:00",
+        "2026-07-20T25:00:00+00:00",
+        "2026-07-20T12:60:00+00:00",
+        "2026-07-20T12:00:60+00:00",
+    ),
+)
+def test_orm_timestamp_constraint_rejects_impossible_calendar_values(
+    invalid_timestamp: str,
+) -> None:
+    run_constraint = next(
+        constraint
+        for constraint in governance_models.GovernanceEvaluationRun.__table__.constraints
+        if constraint.name == "ck_governance_evaluation_run_timestamp_canonical"
+    )
+    metadata = MetaData()
+    probe = Table(
+        "timestamp_probe",
+        metadata,
+        Column("created_at", String, nullable=False),
+        Column("updated_at", String, nullable=False),
+        Column("started_at", String, nullable=True),
+        Column("completed_at", String, nullable=True),
+        CheckConstraint(str(run_constraint.sqltext), name="ck_timestamp_probe_canonical"),
+    )
+    engine = create_engine("sqlite:///:memory:")
+    metadata.create_all(engine)
+    with engine.begin() as connection:
+        connection.execute(
+            probe.insert().values(
+                created_at=NOW,
+                updated_at=NOW,
+                started_at=None,
+                completed_at=None,
+            )
+        )
+        with pytest.raises(IntegrityError):
+            connection.execute(
+                probe.insert().values(
+                    created_at=invalid_timestamp,
+                    updated_at=invalid_timestamp,
+                    started_at=None,
+                    completed_at=None,
+                )
+            )
 
 
 def test_sqlite_rebuild_preserves_v1_v2_rows_and_replays() -> None:
@@ -348,6 +595,57 @@ def test_sqlite_rebuild_preserves_v1_v2_rows_and_replays() -> None:
                 if row[5]
             )
             assert actual == expected
+
+        plan_foreign_keys: dict[int, list[tuple[str, str, str]]] = {}
+        for row in connection.execute("PRAGMA foreign_key_list('governance_evaluation_plans')"):
+            plan_foreign_keys.setdefault(row[0], []).append((row[2], row[3], row[4]))
+        assert [
+            ("governance_evaluation_target_versions", "target_version_id", "id"),
+            ("governance_evaluation_target_versions", "target_kind", "target_kind"),
+            ("governance_evaluation_target_versions", "workspace_id", "workspace_id"),
+            ("governance_evaluation_target_versions", "system_id", "system_id"),
+            ("governance_evaluation_target_versions", "org_id", "org_id"),
+        ] in plan_foreign_keys.values()
+        target_unique_indexes = {
+            row[1]
+            for row in connection.execute(
+                "PRAGMA index_list('governance_evaluation_target_versions')"
+            )
+            if row[2]
+        }
+        assert "uq_governance_evaluation_target_kind_tenant" in target_unique_indexes
+        run_unique_indexes = {
+            row[1]
+            for row in connection.execute(
+                "PRAGMA index_list('governance_evaluation_runs')"
+            )
+            if row[2]
+        }
+        assert "uq_governance_evaluation_run_v2_envelope_scope" in run_unique_indexes
+        assert "uq_governance_evaluation_run_org_envelope_nonce" in run_unique_indexes
+        assert tuple(
+            row[2]
+            for row in connection.execute(
+                "PRAGMA index_info('uq_governance_evaluation_run_v2_envelope_scope')"
+            )
+        ) == (
+            "id",
+            "contract_version",
+            "envelope_id",
+            "envelope_hash",
+            "workspace_id",
+            "system_id",
+            "org_id",
+        )
+        assert connection.execute(
+            "SELECT id, envelope_nonce FROM governance_evaluation_runs ORDER BY id"
+        ).fetchall() == [("run-a", NONCE_A), ("run-v1", None)]
+        assert tuple(
+            row[2]
+            for row in connection.execute(
+                "PRAGMA index_info('uq_governance_evaluation_run_org_envelope_nonce')"
+            )
+        ) == ("org_id", "envelope_nonce")
     finally:
         connection.close()
 
@@ -375,32 +673,438 @@ def test_sqlite_rejects_malformed_preexisting_v2_run_graph() -> None:
         connection.close()
 
 
+@pytest.mark.parametrize(
+    "malformed_envelope",
+    (
+        "{}",
+        '{"nonce":"' + NONCE_A + '","nonce":"' + NONCE_B + '"}',
+        '{"nonce":"' + ("A" * 42) + 'B"}',
+    ),
+)
+def test_sqlite_rejects_missing_duplicate_or_noncanonical_preexisting_nonce(
+    malformed_envelope: str,
+) -> None:
+    connection = _fresh_013()
+    try:
+        _seed_v2_graph(connection)
+        connection.execute(
+            "UPDATE governance_evaluation_runs SET envelope_json=? WHERE id='run-a'",
+            (malformed_envelope,),
+        )
+        with pytest.raises(sqlite3.IntegrityError, match="envelope nonce"):
+            _apply_013a(connection)
+    finally:
+        connection.close()
+
+
+def test_sqlite_envelope_nonce_is_independent_immutable_and_org_unique() -> None:
+    connection = _fresh_013()
+    try:
+        _seed_v2_graph(connection)
+        _apply_013a(connection)
+        assert connection.execute(
+            "SELECT envelope_nonce FROM governance_evaluation_runs WHERE id='run-a'"
+        ).fetchone() == (NONCE_A,)
+
+        with pytest.raises(sqlite3.IntegrityError, match="immutable|nonce"):
+            connection.execute(
+                "UPDATE governance_evaluation_runs SET envelope_nonce=? WHERE id='run-a'",
+                (NONCE_B,),
+            )
+        with pytest.raises(sqlite3.IntegrityError, match="immutable|nonce"):
+            connection.execute(
+                "UPDATE governance_evaluation_runs SET envelope_json=?, envelope_hash=? "
+                "WHERE id='run-a'",
+                (ENVELOPE_B, HASH_B),
+            )
+        with pytest.raises(sqlite3.IntegrityError, match="UNIQUE|unique"):
+            _insert_v2_run(
+                connection,
+                run_id="run-replayed-nonce",
+                envelope_nonce=NONCE_A,
+                envelope_json=ENVELOPE_A,
+            )
+    finally:
+        connection.close()
+
+
+def test_sqlite_replay_ignores_forged_nonce_replay_state() -> None:
+    connection = _fresh_013()
+    try:
+        _seed_v2_graph(connection)
+        _apply_013a(connection)
+        connection.execute(
+            "CREATE TABLE governance_evaluation_run_nonce_replay_state ("
+            "run_id TEXT PRIMARY KEY, envelope_nonce TEXT)"
+        )
+        connection.execute(
+            "INSERT INTO governance_evaluation_run_nonce_replay_state "
+            "(run_id, envelope_nonce) VALUES ('run-a', ?)",
+            (NONCE_B,),
+        )
+
+        _apply_013a(connection)
+
+        assert connection.execute(
+            "SELECT envelope_nonce FROM governance_evaluation_runs WHERE id='run-a'"
+        ).fetchone() == (NONCE_A,)
+    finally:
+        connection.close()
+
+
+@pytest.mark.parametrize(
+    "layer_verdicts_json",
+    (
+        "{}",
+        '{"wrong-execution":"insufficient"}',
+        '{"execution-a":"insufficient","extra-execution":"insufficient"}',
+    ),
+)
+def test_sqlite_rejects_preexisting_layer_keys_not_equal_to_suite_executions(
+    layer_verdicts_json: str,
+) -> None:
+    connection = _fresh_013()
+    try:
+        _seed_v2_graph(connection)
+        connection.execute(
+            "UPDATE governance_evaluation_runs SET layer_verdicts_json=? "
+            "WHERE id='run-a'",
+            (layer_verdicts_json,),
+        )
+        with pytest.raises(sqlite3.IntegrityError, match="run graph|layer"):
+            _apply_013a(connection)
+    finally:
+        connection.close()
+
+
+@pytest.mark.parametrize(
+    "layer_verdicts_json",
+    (
+        "{}",
+        '{"wrong-execution":"insufficient"}',
+        '{"execution-b":"insufficient","extra-execution":"insufficient"}',
+    ),
+)
+def test_sqlite_rejects_completed_new_graph_with_inexact_layer_keys(
+    layer_verdicts_json: str,
+) -> None:
+    connection = _fresh_013()
+    try:
+        _seed_v2_graph(connection, with_run=False)
+        _apply_013a(connection)
+        _insert_v2_run(
+            connection,
+            run_id="run-layer-key-mismatch",
+            layer_verdicts_json=layer_verdicts_json,
+        )
+        with pytest.raises(sqlite3.IntegrityError, match="run graph|layer"):
+            connection.execute(
+                """
+                INSERT INTO governance_evaluation_run_suite_executions (
+                    id, org_id, workspace_id, system_id, run_id, suite_version_id,
+                    suite_owner_scope, ordinal, technical_status, evidence_result_status,
+                    admission_status, review_status, freshness_status, created_at, updated_at
+                ) VALUES ('execution-b', 'org-a', 'ws-a', 'sys-a',
+                          'run-layer-key-mismatch', 'suite-a', 'platform', 0,
+                          'awaiting_evidence', 'pending', 'pending', 'pending',
+                          'current', ?, ?)
+                """,
+                (NOW, NOW),
+            )
+    finally:
+        connection.close()
+
+
+def test_sqlite_incomplete_zero_child_graph_cannot_become_authoritative() -> None:
+    connection = _fresh_013()
+    try:
+        _seed_v2_graph(connection, with_run=False)
+        _apply_013a(connection)
+        _insert_v2_run(
+            connection,
+            run_id="run-zero-children",
+            layer_verdicts_json='{"execution-never-created":"insufficient"}',
+        )
+        with pytest.raises(sqlite3.IntegrityError, match="run graph"):
+            connection.execute(
+                "UPDATE governance_evaluation_runs SET technical_status='queued', "
+                "updated_at=? WHERE id='run-zero-children'",
+                (LATER,),
+            )
+    finally:
+        connection.close()
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    (
+        (
+            "UPDATE governance_evaluation_plans SET target_kind='agent' WHERE id='plan-a'",
+            "target",
+        ),
+        (
+            "UPDATE governance_evaluation_suite_versions SET suite_ref='forged/ref@9' "
+            "WHERE id='suite-a'; "
+            "UPDATE governance_evaluation_plans "
+            "SET suite_refs_json='[\"forged/ref@9\"]' WHERE id='plan-a'",
+            "suite",
+        ),
+    ),
+)
+def test_sqlite_rejects_preexisting_forged_plan_bindings(
+    mutation: str,
+    message: str,
+) -> None:
+    connection = _fresh_013()
+    try:
+        _seed_v2_graph(connection, with_run=False)
+        connection.executescript(mutation)
+        with pytest.raises(sqlite3.IntegrityError, match=message):
+            _apply_013a(connection)
+    finally:
+        connection.close()
+
+
+def test_sqlite_rejects_preexisting_decision_and_evidence_projections() -> None:
+    connection = _fresh_013()
+    try:
+        _seed_v2_graph(connection)
+        connection.execute(
+            "UPDATE governance_evaluation_runs SET evidence_outcome='passed', "
+            "overall_verdict='approved', "
+            "layer_verdicts_json='{\"execution-a\":\"approved\"}', "
+            "verdict_version=7 WHERE id='run-a'"
+        )
+        connection.execute(
+            "UPDATE governance_evaluation_run_suite_executions "
+            "SET evidence_result_status='passed', admission_status='verified', "
+            "review_status='accepted', freshness_status='expiring', "
+            "result_summary_json='{}', limitations_json='[]' WHERE id='execution-a'"
+        )
+        with pytest.raises(sqlite3.IntegrityError, match="projection"):
+            _apply_013a(connection)
+    finally:
+        connection.close()
+
+
+def test_sqlite_rejects_forged_initial_v2_run_and_suite_projection() -> None:
+    connection = _fresh_013()
+    try:
+        _seed_v2_graph(connection, with_run=False)
+        _apply_013a(connection)
+        with pytest.raises(sqlite3.IntegrityError, match="initial|frozen"):
+            _insert_v2_run(
+                connection,
+                run_id="run-forged",
+                technical_status="succeeded",
+                overall_verdict="approved",
+                layer_verdicts_json='{"suite-a":"approved"}',
+                evidence_outcome="passed",
+                verdict_version=1,
+                started_at=NOW,
+                completed_at=LATER,
+                updated_at=LATER,
+            )
+        with pytest.raises(sqlite3.IntegrityError, match="layer|initial|frozen"):
+            _insert_v2_run(
+                connection,
+                run_id="run-duplicate-layer",
+                layer_verdicts_json=(
+                    '{"execution-a":"insufficient",'
+                    '"execution-a":"insufficient"}'
+                ),
+            )
+
+        _insert_v2_run(connection, run_id="run-clean")
+        with pytest.raises(sqlite3.IntegrityError, match="projection|frozen"):
+            connection.execute(
+                """
+                INSERT INTO governance_evaluation_run_suite_executions (
+                    id, org_id, workspace_id, system_id, run_id, suite_version_id,
+                    suite_owner_scope, ordinal, technical_status, evidence_result_status,
+                    admission_status, review_status, freshness_status,
+                    result_summary_json, limitations_json, created_at, updated_at
+                ) VALUES ('execution-clean', 'org-a', 'ws-a', 'sys-a', 'run-clean',
+                          'suite-a', 'platform', 0, 'awaiting_evidence', 'passed',
+                          'verified', 'accepted', 'expiring', '{}', '[]', ?, ?)
+                """,
+                (NOW, NOW),
+            )
+    finally:
+        connection.close()
+
+
+def test_sqlite_freezes_v2_evidence_governance_and_suite_projection_axes() -> None:
+    connection = _fresh_013()
+    try:
+        _seed_v2_graph(connection)
+        _apply_013a(connection)
+        for statement in (
+            "UPDATE governance_evaluation_runs SET evidence_outcome='passed' WHERE id='run-a'",
+            "UPDATE governance_evaluation_runs SET overall_verdict='review', "
+            "verdict_version=1 WHERE id='run-a'",
+            "UPDATE governance_evaluation_runs SET layer_verdicts_json='{\"x\":\"review\"}', "
+            "verdict_version=1 WHERE id='run-a'",
+            "UPDATE governance_evaluation_runs SET verdict_version=1 WHERE id='run-a'",
+        ):
+            with pytest.raises(sqlite3.IntegrityError, match="frozen"):
+                connection.execute(statement)
+
+        with pytest.raises(sqlite3.IntegrityError, match="coherent|transition"):
+            connection.execute(
+                "UPDATE governance_evaluation_run_suite_executions "
+                "SET evidence_result_status='passed' WHERE id='execution-a'"
+            )
+
+        for statement in (
+            "UPDATE governance_evaluation_run_suite_executions "
+            "SET admission_status='verified' WHERE id='execution-a'",
+            "UPDATE governance_evaluation_run_suite_executions "
+            "SET review_status='accepted' WHERE id='execution-a'",
+            "UPDATE governance_evaluation_run_suite_executions "
+            "SET freshness_status='expiring' WHERE id='execution-a'",
+            "UPDATE governance_evaluation_run_suite_executions "
+            "SET result_summary_json='{}' WHERE id='execution-a'",
+            "UPDATE governance_evaluation_run_suite_executions "
+            "SET limitations_json='[]' WHERE id='execution-a'",
+        ):
+            with pytest.raises(sqlite3.IntegrityError, match="frozen"):
+                connection.execute(statement)
+    finally:
+        connection.close()
+
+
+def test_sqlite_accepts_initial_nonempty_all_insufficient_layer_map() -> None:
+    connection = _fresh_013()
+    try:
+        _seed_v2_graph(connection, with_run=False)
+        _apply_013a(connection)
+        _insert_v2_run(
+            connection,
+            run_id="run-layered",
+            layer_verdicts_json='{"execution-layered":"insufficient"}',
+        )
+        connection.execute(
+            """
+            INSERT INTO governance_evaluation_run_suite_executions (
+                id, org_id, workspace_id, system_id, run_id, suite_version_id,
+                suite_owner_scope, ordinal, technical_status, evidence_result_status,
+                admission_status, review_status, freshness_status, created_at, updated_at
+            ) VALUES ('execution-layered', 'org-a', 'ws-a', 'sys-a', 'run-layered',
+                      'suite-a', 'platform', 0, 'awaiting_evidence', 'pending', 'pending',
+                      'pending', 'current', ?, ?)
+            """,
+            (NOW, NOW),
+        )
+    finally:
+        connection.close()
+
+
+def test_sqlite_parent_cancellation_prevents_child_progress() -> None:
+    connection = _fresh_013()
+    try:
+        _seed_v2_graph(connection)
+        _apply_013a(connection)
+        connection.execute(
+            "UPDATE governance_evaluation_runs SET technical_status='cancelled', "
+            "completed_at=?, updated_at=? WHERE id='run-a'",
+            (LATER, LATER),
+        )
+        with pytest.raises(sqlite3.IntegrityError, match="parent.*cancelled"):
+            connection.execute(
+                "UPDATE governance_evaluation_run_suite_executions "
+                "SET technical_status='queued', updated_at=? WHERE id='execution-a'",
+                ("2026-07-20T00:02:00+00:00",),
+            )
+    finally:
+        connection.close()
+
+
+def test_sqlite_rejects_noncanonical_and_reversed_run_timestamps() -> None:
+    connection = _fresh_013()
+    try:
+        _seed_v2_graph(connection)
+        _apply_013a(connection)
+        with pytest.raises(sqlite3.IntegrityError, match="canonical"):
+            connection.execute(
+                "UPDATE governance_evaluation_runs SET technical_status='running', "
+                "started_at='2026-07-20 00:00:30+00:00', updated_at=? WHERE id='run-a'",
+                (LATER,),
+            )
+
+        connection.execute(
+            "UPDATE governance_evaluation_runs SET technical_status='running', "
+            "started_at=?, updated_at=? WHERE id='run-a'",
+            ("2026-07-20T00:02:00+00:00", "2026-07-20T00:02:00+00:00"),
+        )
+        with pytest.raises(sqlite3.IntegrityError, match="order"):
+            connection.execute(
+                "UPDATE governance_evaluation_runs SET technical_status='succeeded', "
+                "completed_at=?, updated_at=? WHERE id='run-a'",
+                (LATER, "2026-07-20T00:03:00+00:00"),
+            )
+    finally:
+        connection.close()
+
+
+def test_sqlite_rejects_noncanonical_and_reversed_suite_execution_timestamps() -> None:
+    connection = _fresh_013()
+    try:
+        _seed_v2_graph(connection)
+        _apply_013a(connection)
+        with pytest.raises(sqlite3.IntegrityError, match="canonical"):
+            connection.execute(
+                "UPDATE governance_evaluation_run_suite_executions "
+                "SET technical_status='running', started_at='2026-07-20 00:00:30+00:00', "
+                "updated_at=? WHERE id='execution-a'",
+                (LATER,),
+            )
+
+        connection.execute(
+            "UPDATE governance_evaluation_run_suite_executions "
+            "SET technical_status='running', started_at=?, updated_at=? "
+            "WHERE id='execution-a'",
+            ("2026-07-20T00:02:00+00:00", "2026-07-20T00:02:00+00:00"),
+        )
+        with pytest.raises(sqlite3.IntegrityError, match="order"):
+            connection.execute(
+                "UPDATE governance_evaluation_run_suite_executions "
+                "SET technical_status='succeeded', evidence_result_status='failed', "
+                "completed_at=?, updated_at=? "
+                "WHERE id='execution-a'",
+                (LATER, "2026-07-20T00:03:00+00:00"),
+            )
+    finally:
+        connection.close()
+
+
 def test_sqlite_top_level_run_supports_all_states_with_coherent_timestamps() -> None:
     for status in sorted(RUN_STATES):
         connection = _fresh_013()
         try:
-            _seed_v2_graph(connection, with_run=False)
+            _seed_v2_graph(connection)
             _apply_013a(connection)
             started_at, completed_at = _run_timestamps(status)
-            connection.execute(
-                """
-                INSERT INTO governance_evaluation_runs (
-                    id, org_id, workspace_id, system_id, plan_id, contract_version, trigger,
-                    technical_status, overall_verdict, layer_verdicts_json, requested_by,
-                    started_at, completed_at, created_at, updated_at, lifecycle_phase,
-                    envelope_id, envelope_json, envelope_hash, evidence_outcome, verdict_version
-                ) VALUES (?, 'org-a', 'ws-a', 'sys-a', 'plan-a', '2.0.0', 'manual', ?,
-                          'insufficient', '{}', 'user-a', ?, ?, ?, ?, 'pre_deploy', ?, '{}', ?,
-                          'pending', 0)
-                """,
-                (
-                    f"run-{status}", status, started_at, completed_at, NOW, NOW,
-                    f"envelope-{status}", HASH_A,
-                ),
-            )
+            if status == "leased":
+                connection.execute(
+                    "UPDATE governance_evaluation_runs SET technical_status='queued', "
+                    "updated_at=? WHERE id='run-a'",
+                    (LATER,),
+                )
+                connection.execute(
+                    "UPDATE governance_evaluation_runs SET technical_status='leased', "
+                    "updated_at=? WHERE id='run-a'",
+                    ("2026-07-20T00:02:00+00:00",),
+                )
+            elif status != "awaiting_evidence":
+                connection.execute(
+                    "UPDATE governance_evaluation_runs SET technical_status=?, started_at=?, "
+                    "completed_at=?, updated_at=? WHERE id='run-a'",
+                    (status, started_at, completed_at, LATER),
+                )
             assert connection.execute(
                 "SELECT technical_status FROM governance_evaluation_runs WHERE id=?",
-                (f"run-{status}",),
+                ("run-a",),
             ).fetchone() == (status,)
         finally:
             connection.close()
@@ -412,10 +1116,16 @@ def test_sqlite_suite_execution_preserves_all_states_with_coherent_timestamps() 
         try:
             _seed_v2_graph(connection)
             started_at, completed_at = _run_timestamps(status)
+            evidence_result = {
+                "succeeded": "failed",
+                "failed": "error",
+                "timed_out": "unavailable",
+            }.get(status, "pending")
             connection.execute(
                 "UPDATE governance_evaluation_run_suite_executions "
-                "SET technical_status=?, started_at=?, completed_at=? WHERE id='execution-a'",
-                (status, started_at, completed_at),
+                "SET technical_status=?, evidence_result_status=?, started_at=?, completed_at=?, "
+                "updated_at=? WHERE id='execution-a'",
+                (status, evidence_result, started_at, completed_at, LATER),
             )
             _apply_013a(connection)
             assert connection.execute(
@@ -426,7 +1136,7 @@ def test_sqlite_suite_execution_preserves_all_states_with_coherent_timestamps() 
             connection.close()
 
 
-def test_sqlite_binding_guards_transitions_and_verdict_cas() -> None:
+def test_sqlite_binding_guards_transitions_and_projection_freeze() -> None:
     connection = _fresh_013()
     try:
         _seed_v2_graph(connection)
@@ -485,20 +1195,16 @@ def test_sqlite_binding_guards_transitions_and_verdict_cas() -> None:
                 ("2026-07-20T00:07:00+00:00",),
             )
 
-        with pytest.raises(sqlite3.IntegrityError, match="verdict version"):
+        with pytest.raises(sqlite3.IntegrityError, match="frozen"):
             connection.execute(
                 "UPDATE governance_evaluation_runs SET overall_verdict='review', updated_at=? "
                 "WHERE id='run-a'",
                 (LATER,),
             )
-        connection.execute(
-            "UPDATE governance_evaluation_runs SET overall_verdict='review', verdict_version=1, "
-            "updated_at=? WHERE id='run-a'",
-            (LATER,),
-        )
-        with pytest.raises(sqlite3.IntegrityError, match="at most one"):
+        with pytest.raises(sqlite3.IntegrityError, match="frozen"):
             connection.execute(
-                "UPDATE governance_evaluation_runs SET verdict_version=3, updated_at=? "
+                "UPDATE governance_evaluation_runs SET overall_verdict='review', "
+                "verdict_version=1, updated_at=? "
                 "WHERE id='run-a'",
                 ("2026-07-20T00:08:00+00:00",),
             )
@@ -530,7 +1236,8 @@ def test_sqlite_binding_guards_transitions_and_verdict_cas() -> None:
         )
         connection.execute(
             "UPDATE governance_evaluation_run_suite_executions "
-            "SET technical_status='timed_out', completed_at=?, updated_at=? "
+            "SET technical_status='timed_out', evidence_result_status='unavailable', "
+            "completed_at=?, updated_at=? "
             "WHERE id='execution-a'",
             (LATER, "2026-07-20T00:14:00+00:00"),
         )

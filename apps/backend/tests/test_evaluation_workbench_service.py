@@ -12,7 +12,12 @@ from src.application.services.evaluation_workbench_service import (
     EvaluationWorkbenchError,
     EvaluationWorkbenchService,
 )
-from src.domain.assurance.evaluation_v2 import evaluate_preflight
+import src.domain.assurance.evaluation_v2 as evaluation_v2_module
+from src.domain.assurance.evaluation_v2 import (
+    build_execution_envelope_v2,
+    canonical_sha256,
+    evaluate_preflight,
+)
 
 
 @dataclass
@@ -103,14 +108,107 @@ def test_plan_service_rejects_wrong_contract_version_before_repository() -> None
 
 
 def test_preflight_success_has_no_blockers() -> None:
+    plan, target, trust, suites = _fully_bound_preflight_graph()
     result = evaluate_preflight(
-        plan=_plan(),
-        target=_target(),
-        trust_policy={"status": "active"},
-        suites=[_suite()],
+        plan=plan,
+        target=target,
+        trust_policy=trust,
+        suites=suites,
         lifecycle_phase="pre_deploy",
     )
     assert result == []
+
+
+def _fully_bound_preflight_graph() -> tuple[dict, dict, dict, list[dict]]:
+    target = _target(
+        target_key="agent-prod",
+        version="1.0.0",
+        system_version="2026.07",
+        subject_id="agent-prod",
+        subject_version="sha-1",
+        subject_digest="b" * 64,
+        deployment_id="deploy-1",
+        connector_binding_id=None,
+        manifest_digest="c" * 64,
+    )
+    trust = {
+        "id": "trust-1",
+        "version": "1.0.0",
+        "policy_hash": "d" * 64,
+        "status": "active",
+    }
+    configuration = {"threshold": 0.5}
+    suites = [
+        _suite(
+            owner_scope="org-1",
+            suite_ref="fairmind/agent-safety@1.0.0",
+            manifest_digest="e" * 64,
+            adapter_name="inspect",
+            adapter_version="0.3.0",
+            result_contract_version="1.0.0",
+            configuration=configuration,
+            configuration_hash=canonical_sha256(configuration),
+            budgets={"maxCases": 200},
+        )
+    ]
+    return _plan(), target, trust, suites
+
+
+def test_preflight_clean_binding_projection_can_build_an_execution_envelope() -> None:
+    plan, target, trust, suites = _fully_bound_preflight_graph()
+
+    blockers = evaluate_preflight(
+        plan=plan,
+        target=target,
+        trust_policy=trust,
+        suites=suites,
+        lifecycle_phase="pre_deploy",
+    )
+    target_binding, trust_binding, suite_bindings = (
+        evaluation_v2_module._preflight_envelope_variable_projection(
+            target=target,
+            trust_policy=trust,
+            suites=suites,
+        )
+    )
+
+    assert blockers == []
+    envelope, _, _ = build_execution_envelope_v2(
+        envelope_id="envelope-1",
+        run_id="run-1",
+        org_id="org-1",
+        workspace_id="workspace-1",
+        system_id="system-1",
+        plan_id="plan-1",
+        plan_content_hash="a" * 64,
+        target=target_binding,
+        trigger="release_gate",
+        lifecycle_phase="pre_deploy",
+        execution_depth="deep",
+        enforcement_mode="human_approval",
+        delivery_mode="external_provider",
+        trust_policy=trust_binding,
+        nonce="nonce-1",
+        requester_id="user-1",
+        requested_at="2026-07-20T00:00:00+00:00",
+        suites=suite_bindings,
+    )
+    assert envelope["suites"][0]["suiteRef"] == "fairmind/agent-safety@1.0.0"
+
+
+def test_preflight_marks_a_binding_invalid_before_run_construction() -> None:
+    plan, target, trust, suites = _fully_bound_preflight_graph()
+    suites[0]["suite_ref"] = "fairmind/agent-safety@1"
+
+    blockers = evaluate_preflight(
+        plan=plan,
+        target=target,
+        trust_policy=trust,
+        suites=suites,
+        lifecycle_phase="pre_deploy",
+    )
+
+    assert "execution_binding_invalid" in {blocker.code for blocker in blockers}
 
 
 @pytest.mark.parametrize(

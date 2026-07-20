@@ -341,6 +341,7 @@ def test_models_expose_exact_columns_and_tenant_constraints() -> None:
         "envelope_id",
         "envelope_json",
         "envelope_hash",
+        "envelope_nonce",
         "evidence_outcome",
         "verdict_version",
     )
@@ -801,7 +802,8 @@ def test_named_run_lifecycle_checks_match_orm_postgresql_and_sqlite() -> None:
             "(contract_version = '2.0.0' AND linked_passport_revision_id IS NULL "
             "AND linked_evidence_run_id IS NULL AND linked_by IS NULL "
             "AND linked_at IS NULL AND envelope_id IS NOT NULL "
-            "AND envelope_json IS NOT NULL AND envelope_hash IS NOT NULL) OR "
+            "AND envelope_json IS NOT NULL AND envelope_hash IS NOT NULL "
+            "AND envelope_nonce IS NOT NULL) OR "
             "(contract_version = '1.0.0' AND ((technical_status IN "
             "('succeeded', 'failed') AND linked_passport_revision_id IS NOT NULL "
             "AND linked_evidence_run_id IS NOT NULL AND linked_by IS NOT NULL "

@@ -94,7 +94,9 @@ def _envelope_inputs() -> dict:
                 "adapterVersion": "0.3.0",
                 "resultContractVersion": "1.0.0",
                 "configuration": {"threshold": 0.5, "locale": "de-DE"},
-                "configurationHash": "f" * 64,
+                "configurationHash": canonical_sha256(
+                    {"threshold": 0.5, "locale": "de-DE"}
+                ),
                 "inputRoles": ["scenario_set"],
                 "budgets": {"maxCases": 200},
                 "inputs": {
@@ -116,7 +118,7 @@ def _envelope_inputs() -> dict:
                 "adapterVersion": "0.3.0",
                 "resultContractVersion": "1.0.0",
                 "configuration": {"attempts": 3},
-                "configurationHash": "3" * 64,
+                "configurationHash": canonical_sha256({"attempts": 3}),
                 "inputRoles": [],
                 "budgets": {},
                 "inputs": {},
@@ -329,7 +331,7 @@ def test_suite_schema_rejects_remote_references(reference_key: str) -> None:
     payload = {
         "namespace": "fairmind",
         "name": "suite",
-        "version": "1",
+        "version": "1.0.0",
         "supportedTargetKinds": ["agent"],
         "supportedSubjectKinds": ["agent"],
         "lifecyclePhases": ["pre_deploy"],
@@ -355,7 +357,7 @@ def _suite_payload() -> dict:
     return {
         "namespace": "fairmind",
         "name": "suite",
-        "version": "1",
+        "version": "1.0.0",
         "supportedTargetKinds": ["agent"],
         "supportedSubjectKinds": ["agent"],
         "lifecyclePhases": ["pre_deploy"],
@@ -889,6 +891,346 @@ def test_declared_fairmind_value_types_accept_real_bounded_identifiers(
     )
 
     assert normalized["configurationDefaults"] == {"value": value}
+
+
+@pytest.mark.parametrize(
+    "model_id",
+    [
+        "cohere/command-r-plus",
+        "anthropic/claude-sonnet",
+        "stabilityai/stable-diffusion",
+        "openai/whisper",
+    ],
+)
+def test_model_id_catalog_accepts_provider_neutral_names_without_digits(
+    model_id: str,
+) -> None:
+    normalized = normalize_suite_create(
+        _typed_string_suite(model_id, "model_id"),
+        owner_scope="org",
+    )
+
+    assert normalized["configurationDefaults"] == {"value": model_id}
+
+
+@pytest.mark.parametrize("discriminator", [[], {}, ["symbol"]])
+def test_non_string_schema_value_type_is_a_sanitized_contract_error(
+    discriminator: object,
+) -> None:
+    schema = {
+        "type": "string",
+        "x-fairmind-valueType": discriminator,
+        "enum": ["safe"],
+    }
+
+    with pytest.raises(AssuranceContractValidationError) as caught:
+        evaluation_v2_module.validate_safe_configuration_schema(schema)
+
+    assert caught.value.code == "unsafe_configuration_schema"
+    assert caught.value.message == (
+        "The configuration schema is outside fairmind-safe-config/v1."
+    )
+    assert repr(discriminator) not in caught.value.message
+
+
+@pytest.mark.parametrize("schema_type", [[], {}, ["string"]])
+def test_non_string_json_schema_type_is_a_sanitized_contract_error(
+    schema_type: object,
+) -> None:
+    with pytest.raises(AssuranceContractValidationError) as caught:
+        evaluation_v2_module.validate_safe_configuration_schema({"type": schema_type})
+
+    assert caught.value.code == "unsafe_configuration_schema"
+    assert caught.value.message == (
+        "The configuration schema is outside fairmind-safe-config/v1."
+    )
+    assert repr(schema_type) not in caught.value.message
+
+
+@pytest.mark.parametrize("through_local_ref", [False, True])
+def test_unique_items_non_string_item_type_is_a_sanitized_contract_error(
+    through_local_ref: bool,
+) -> None:
+    schema = {
+        "type": "array",
+        "maxItems": 2,
+        "uniqueItems": True,
+        "items": {"$ref": "#/$defs/member"}
+        if through_local_ref
+        else {"type": ["string"]},
+    }
+    if through_local_ref:
+        schema["$defs"] = {"member": {"type": ["string"]}}
+
+    with pytest.raises(AssuranceContractValidationError) as caught:
+        evaluation_v2_module.validate_safe_configuration_schema(schema)
+
+    assert caught.value.code == "unsafe_configuration_schema"
+
+
+@pytest.mark.parametrize(
+    "member",
+    [
+        ["scenario_set"],
+        {"role": "scenario_set"},
+    ],
+)
+def test_non_string_suite_input_role_is_a_sanitized_contract_error(
+    member: object,
+) -> None:
+    inputs = _envelope_inputs()
+    inputs["suites"][0]["inputRoles"] = [member]
+
+    with pytest.raises(AssuranceContractValidationError) as caught:
+        build_execution_envelope_v2(**inputs)
+
+    assert caught.value.code == "invalid_execution_binding"
+    assert caught.value.message == (
+        "The execution envelope contains an invalid closed binding."
+    )
+    assert repr(member) not in caught.value.message
+
+
+def test_none_suite_collection_is_a_sanitized_contract_error() -> None:
+    inputs = _envelope_inputs()
+    inputs["suites"] = None
+
+    with pytest.raises(AssuranceContractValidationError) as caught:
+        build_execution_envelope_v2(**inputs)
+
+    assert caught.value.code == "invalid_execution_binding"
+    assert caught.value.message == (
+        "The execution envelope contains an invalid closed binding."
+    )
+
+
+def test_none_suite_collection_is_sanitized_in_plan_projection_too() -> None:
+    target = {
+        "id": "target-1",
+        "target_key": "agent-prod",
+        "target_kind": "agent",
+        "version": "1.0.0",
+        "system_version": "2026.07",
+        "subject_kind": "agent",
+        "subject_id": "agent-prod",
+        "subject_version": "sha-1",
+        "subject_digest": "b" * 64,
+        "deployment_id": None,
+        "connector_binding_id": None,
+        "manifest_digest": "c" * 64,
+    }
+    plan = {
+        "lifecyclePhases": ["pre_deploy"],
+        "executionDepth": "deep",
+        "enforcementMode": "human_approval",
+        "deliveryMode": "external_provider",
+    }
+    trust = {"id": "trust-1", "version": "1.0.0", "policy_hash": "d" * 64}
+
+    with pytest.raises(AssuranceContractValidationError) as caught:
+        evaluation_v2_module.plan_content_projection(
+            org_id="org-1",
+            workspace_id="workspace-1",
+            system_id="system-1",
+            target=target,
+            plan=plan,
+            trust_policy=trust,
+            suites=None,
+        )
+
+    assert caught.value.code == "invalid_execution_binding"
+
+
+@pytest.mark.parametrize(
+    ("value_type", "opaque_value"),
+    [
+        ("symbol", "aZ8bY7cX6dW5eV4f-Q3rS2tU1vN0mL9k"),
+        (
+            "suite_ref",
+            "fairmind/a0b1c2d3e4f5g6h7-i8j9k0l1m2n3o4p5-"
+            "q6r7s8t9u0v1w2x3@1.0.0",
+        ),
+        (
+            "model_id",
+            "a0b1c2d3e4f5.g6h7i8j9k0l1.m2n3o4p5q6r7.s8t9u0v1w2x3",
+        ),
+        (
+            "media_type",
+            "application/a0b1c2d3e4f5g6h7.i8j9k0l1m2n3o4p5.q6r7s8t9",
+        ),
+        ("symbol", "aZ8bY7cX6dW-5eV4fQ3rS2t-U1vN0mL9k"),
+        (
+            "suite_ref",
+            "fairmind/a0b1c2d3e4-f5g6h7i8j9-k0l1m2n3o4-p5q6r7s8t9-"
+            "u0v1w2x3@1.0.0",
+        ),
+        (
+            "model_id",
+            "a0b1c2d3e4f5/g6h7i8j9k0l1-m2n3o4p5q6r7-s8t9u0v1w2x3",
+        ),
+        (
+            "media_type",
+            "application/a0b1c2d3e4f5.g6h7i8j9k0l1.m2n3o4p5q6r7."
+            "s8t9u0v1w2x3",
+        ),
+    ],
+)
+def test_segmented_opaque_values_cannot_bypass_typed_catalog_grammar(
+    value_type: str,
+    opaque_value: str,
+) -> None:
+    with pytest.raises(AssuranceContractValidationError) as caught:
+        normalize_suite_create(
+            _typed_string_suite(opaque_value, value_type),
+            owner_scope="org",
+        )
+
+    assert caught.value.code == "unsafe_string_value"
+    assert opaque_value not in caught.value.message
+
+
+@pytest.mark.parametrize(
+    ("value_type", "value"),
+    [
+        ("media_type", "application/x-ndjson"),
+        ("media_type", "application/octet-stream"),
+        ("suite_ref", "fairmind/predictive-fairness@1.2.3-rc.1+cpu.1"),
+    ],
+)
+def test_closed_catalog_grammars_keep_real_non_opaque_compatibility(
+    value_type: str,
+    value: str,
+) -> None:
+    normalized = normalize_suite_create(
+        _typed_string_suite(value, value_type),
+        owner_scope="org",
+    )
+
+    assert normalized["configurationDefaults"] == {"value": value}
+
+
+@pytest.mark.parametrize("version", ["1.0.0-01", "1.0.0-alpha.01"])
+def test_suite_version_rejects_semver_numeric_prerelease_leading_zero(
+    version: str,
+) -> None:
+    payload = _suite_payload()
+    payload["version"] = version
+
+    with pytest.raises(AssuranceContractValidationError) as caught:
+        normalize_suite_create(payload, owner_scope="org")
+
+    assert caught.value.code == "invalid_request"
+    assert version not in caught.value.message
+
+
+def test_execution_envelope_recomputes_the_configuration_hash() -> None:
+    inputs = _envelope_inputs()
+    inputs["suites"][0]["configurationHash"] = "f" * 64
+
+    with pytest.raises(AssuranceContractValidationError) as caught:
+        build_execution_envelope_v2(**inputs)
+
+    assert caught.value.code == "invalid_execution_binding"
+
+
+def test_execution_envelope_rejects_uncatalogued_configuration_strings() -> None:
+    inputs = _envelope_inputs()
+    unsafe = "Summarize-the-private-customer-record"
+    inputs["suites"][0]["configuration"] = {"mode": unsafe}
+    inputs["suites"][0]["configurationHash"] = canonical_sha256(
+        inputs["suites"][0]["configuration"]
+    )
+
+    with pytest.raises(AssuranceContractValidationError) as caught:
+        build_execution_envelope_v2(**inputs)
+
+    assert caught.value.code in {"invalid_execution_binding", "unsafe_string_value"}
+    assert unsafe not in caught.value.message
+
+
+@pytest.mark.parametrize(
+    ("payload_kind", "field", "value"),
+    [
+        ("suite", "version", "1"),
+        (
+            "suite",
+            "namespace",
+            "a0b1c2d3e4f5-g6h7i8j9k0l1-m2n3o4p5q6r7",
+        ),
+        (
+            "suite",
+            "name",
+            "a0b1c2d3e4f5-g6h7i8j9k0l1-m2n3o4p5q6r7",
+        ),
+        (
+            "suite",
+            "adapterVersion",
+            "abcdefghijklmnopq",
+        ),
+        (
+            "suite",
+            "resultContractVersion",
+            "qrstuvwxyzabcdefg",
+        ),
+        (
+            "target",
+            "subjectKind",
+            "a0b1c2d3e4f5-g6h7i8j9k0l1-m2n3o4p5q6r7",
+        ),
+        ("target", "subjectVersion", "abcdef0123456789abcdef0123456789abcdef01"),
+        (
+            "target",
+            "deploymentId",
+            "deployment-region-primary-candidate-v1",
+        ),
+        (
+            "target",
+            "connectorBindingId",
+            "connector-region-primary-candidate-v1",
+        ),
+    ],
+)
+def test_normalization_and_envelope_use_the_same_closed_binding_grammars(
+    payload_kind: str,
+    field: str,
+    value: str,
+) -> None:
+    payload = _suite_payload() if payload_kind == "suite" else _target_payload_v2()
+    payload[field] = value
+
+    with pytest.raises(AssuranceContractValidationError) as caught:
+        if payload_kind == "suite":
+            normalize_suite_create(payload, owner_scope="org")
+        else:
+            normalize_target_create(payload)
+
+    assert value not in caught.value.message
+
+
+def test_suite_input_roles_use_the_same_closed_binding_grammar_as_envelopes() -> None:
+    payload = _suite_payload()
+    unsafe = "a0b1c2d3e4f5-g6h7i8j9k0l1-m2n3o4p5q6r7"
+    payload["requiredInputRoles"] = [unsafe]
+
+    with pytest.raises(AssuranceContractValidationError) as caught:
+        normalize_suite_create(payload, owner_scope="org")
+
+    assert caught.value.code == "invalid_required_input_roles"
+    assert unsafe not in caught.value.message
+
+
+def test_target_manifest_roles_use_the_same_closed_binding_grammar_as_envelopes() -> None:
+    payload = _target_payload_v2()
+    unsafe = "a0b1c2d3e4f5-g6h7i8j9k0l1-m2n3o4p5q6r7"
+    payload["manifest"]["inputs"] = {
+        unsafe: {"kind": "content_digest", "sha256": "b" * 64}
+    }
+
+    with pytest.raises(AssuranceContractValidationError) as caught:
+        normalize_target_create(payload)
+
+    assert caught.value.code == "invalid_input_descriptor"
+    assert unsafe not in caught.value.message
 
 
 def test_string_configuration_requires_an_explicit_fairmind_value_type() -> None:

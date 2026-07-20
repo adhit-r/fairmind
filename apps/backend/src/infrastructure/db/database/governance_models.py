@@ -47,6 +47,72 @@ def _lower_hex64(column: str) -> str:
     return f"length({column}) = 64 AND length({stripped}) = 0"
 
 
+def _digits_only(expression: str, length: int) -> str:
+    """Portable predicate for an exact-width decimal field."""
+    stripped = expression
+    for character in "0123456789":
+        stripped = f"replace({stripped}, '{character}', '')"
+    return f"length({expression}) = {length} AND length({stripped}) = 0"
+
+
+def _canonical_envelope_nonce(column: str) -> str:
+    """Portable predicate for canonical unpadded base64url encoding of 32 bytes."""
+    stripped = column
+    for character in (
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-"
+    ):
+        stripped = f"replace({stripped}, '{character}', '')"
+    return (
+        f"length({column}) = 43 AND length({stripped}) = 0 "
+        f"AND substr({column}, 43, 1) IN "
+        "('A', 'E', 'I', 'M', 'Q', 'U', 'Y', 'c', 'g', 'k', 'o', 's', 'w', "
+        "'0', '4', '8')"
+    )
+
+
+def _canonical_utc_timestamp(column: str, *, nullable: bool = True) -> str:
+    """Portable calendar-valid check for canonical UTC ISO-8601 text timestamps."""
+    year = f"CAST(substr({column}, 1, 4) AS INTEGER)"
+    month = f"CAST(substr({column}, 6, 2) AS INTEGER)"
+    day = f"CAST(substr({column}, 9, 2) AS INTEGER)"
+    hour = f"CAST(substr({column}, 12, 2) AS INTEGER)"
+    minute = f"CAST(substr({column}, 15, 2) AS INTEGER)"
+    second = f"CAST(substr({column}, 18, 2) AS INTEGER)"
+    maximum_day = (
+        f"CASE WHEN {month} IN (1, 3, 5, 7, 8, 10, 12) THEN 31 "
+        f"WHEN {month} IN (4, 6, 9, 11) THEN 30 "
+        f"WHEN {month} = 2 AND "
+        f"((({year} % 4) = 0 AND ({year} % 100) <> 0) OR ({year} % 400) = 0) "
+        f"THEN 29 WHEN {month} = 2 THEN 28 ELSE 0 END"
+    )
+    predicate = (
+        f"length({column}) IN (25, 32) "
+        f"AND ({_digits_only(f'substr({column}, 1, 4)', 4)}) "
+        f"AND ({_digits_only(f'substr({column}, 6, 2)', 2)}) "
+        f"AND ({_digits_only(f'substr({column}, 9, 2)', 2)}) "
+        f"AND ({_digits_only(f'substr({column}, 12, 2)', 2)}) "
+        f"AND ({_digits_only(f'substr({column}, 15, 2)', 2)}) "
+        f"AND ({_digits_only(f'substr({column}, 18, 2)', 2)}) "
+        f"AND substr({column}, 5, 1) = '-' "
+        f"AND substr({column}, 8, 1) = '-' "
+        f"AND substr({column}, 11, 1) = 'T' "
+        f"AND substr({column}, 14, 1) = ':' "
+        f"AND substr({column}, 17, 1) = ':' "
+        f"AND substr({column}, -6) = '+00:00' "
+        f"AND {year} BETWEEN 1 AND 9999 "
+        f"AND {month} BETWEEN 1 AND 12 "
+        f"AND {day} BETWEEN 1 AND ({maximum_day}) "
+        f"AND {hour} BETWEEN 0 AND 23 "
+        f"AND {minute} BETWEEN 0 AND 59 "
+        f"AND {second} BETWEEN 0 AND 59 "
+        f"AND ((length({column}) = 25 AND substr({column}, 20, 1) = '+') "
+        f"OR (length({column}) = 32 AND substr({column}, 20, 1) = '.' "
+        f"AND ({_digits_only(f'substr({column}, 21, 6)', 6)}) "
+        f"AND substr({column}, 27, 1) = '+'))"
+    )
+    return f"{column} IS NULL OR ({predicate})" if nullable else predicate
+
+
 # ---------------------------------------------------------------------------
 # Enums
 # ---------------------------------------------------------------------------
@@ -525,6 +591,10 @@ class GovernanceEvaluationTargetVersion(Base):
             name="uq_governance_evaluation_target_tenant",
         ),
         UniqueConstraint(
+            "id", "target_kind", "workspace_id", "system_id", "org_id",
+            name="uq_governance_evaluation_target_kind_tenant",
+        ),
+        UniqueConstraint(
             "org_id", "system_id", "target_key", "version",
             name="uq_governance_evaluation_target_version",
         ),
@@ -633,6 +703,10 @@ class GovernanceEvaluationSuiteVersion(Base):
             "length(trim(namespace)) > 0 AND length(trim(name)) > 0 "
             "AND length(trim(version)) > 0 AND length(trim(suite_ref)) > 0",
             name="ck_governance_evaluation_suite_identity",
+        ),
+        CheckConstraint(
+            "suite_ref = namespace || '/' || name || '@' || version",
+            name="ck_governance_evaluation_suite_canonical_ref",
         ),
         CheckConstraint(
             _lower_hex64("manifest_digest"),
@@ -953,6 +1027,41 @@ class GovernanceEvaluationRunSuiteExecution(Base):
             "AND linked_by IS NOT NULL AND linked_at IS NOT NULL)",
             name="ck_governance_evaluation_suite_execution_evidence_link",
         ),
+        CheckConstraint(
+            "((technical_status IN ('awaiting_evidence', 'queued', 'leased', 'running') "
+            "AND evidence_result_status = 'pending') "
+            "OR (technical_status = 'succeeded' AND evidence_result_status IN "
+            "('passed', 'passed_with_limitations', 'failed', 'informational', "
+            "'insufficient_data', 'unknown')) "
+            "OR (technical_status IN ('failed', 'timed_out') "
+            "AND evidence_result_status IN "
+            "('error', 'unavailable', 'insufficient_data', 'unknown')) "
+            "OR (technical_status = 'cancelled' AND evidence_result_status IN "
+            "('pending', 'unavailable', 'unknown'))) "
+            "AND admission_status = 'pending' "
+            "AND review_status = 'pending' "
+            "AND freshness_status = 'current' "
+            "AND evidence_run_id IS NULL AND passport_revision_id IS NULL "
+            "AND linked_by IS NULL AND linked_at IS NULL "
+            "AND result_summary_json IS NULL AND limitations_json IS NULL",
+            name="ck_governance_evaluation_suite_execution_projection_freeze",
+        ),
+        CheckConstraint(
+            f"({_canonical_utc_timestamp('created_at', nullable=False)}) AND "
+            f"({_canonical_utc_timestamp('updated_at', nullable=False)}) AND "
+            f"({_canonical_utc_timestamp('started_at')}) AND "
+            f"({_canonical_utc_timestamp('completed_at')})",
+            name="ck_governance_evaluation_suite_execution_timestamp_canonical",
+        ),
+        CheckConstraint(
+            "created_at <= updated_at "
+            "AND (started_at IS NULL OR "
+            "(created_at <= started_at AND started_at <= updated_at)) "
+            "AND (completed_at IS NULL OR "
+            "(created_at <= completed_at AND completed_at <= updated_at "
+            "AND (started_at IS NULL OR started_at <= completed_at)))",
+            name="ck_governance_evaluation_suite_execution_timestamp_order",
+        ),
     )
 
 
@@ -1240,13 +1349,21 @@ class GovernanceEvaluationPlan(Base):
             ],
         ),
         ForeignKeyConstraint(
-            ["target_version_id", "workspace_id", "system_id", "org_id"],
+            [
+                "target_version_id",
+                "target_kind",
+                "workspace_id",
+                "system_id",
+                "org_id",
+            ],
             [
                 "governance_evaluation_target_versions.id",
+                "governance_evaluation_target_versions.target_kind",
                 "governance_evaluation_target_versions.workspace_id",
                 "governance_evaluation_target_versions.system_id",
                 "governance_evaluation_target_versions.org_id",
             ],
+            name="fk_governance_evaluation_plan_target_version",
         ),
         ForeignKeyConstraint(
             ["trust_policy_version_id", "org_id"],
@@ -1334,6 +1451,7 @@ class GovernanceEvaluationRun(Base):
     envelope_id = Column(String, nullable=True)
     envelope_json = Column(Text, nullable=True)
     envelope_hash = Column(String, nullable=True)
+    envelope_nonce = Column(String, nullable=True)
     evidence_outcome = Column(String, nullable=False, default="pending")
     verdict_version = Column(Integer, nullable=False, default=0)
 
@@ -1349,6 +1467,21 @@ class GovernanceEvaluationRun(Base):
             "org_id",
             "envelope_id",
             name="uq_governance_evaluation_run_envelope",
+        ),
+        UniqueConstraint(
+            "id",
+            "contract_version",
+            "envelope_id",
+            "envelope_hash",
+            "workspace_id",
+            "system_id",
+            "org_id",
+            name="uq_governance_evaluation_run_v2_envelope_scope",
+        ),
+        UniqueConstraint(
+            "org_id",
+            "envelope_nonce",
+            name="uq_governance_evaluation_run_org_envelope_nonce",
         ),
         ForeignKeyConstraint(
             ["workspace_id", "org_id"],
@@ -1440,7 +1573,7 @@ class GovernanceEvaluationRun(Base):
             "(contract_version = '2.0.0' AND linked_passport_revision_id IS NULL "
             "AND linked_evidence_run_id IS NULL AND linked_by IS NULL AND linked_at IS NULL "
             "AND envelope_id IS NOT NULL AND envelope_json IS NOT NULL "
-            "AND envelope_hash IS NOT NULL) "
+            "AND envelope_hash IS NOT NULL AND envelope_nonce IS NOT NULL) "
             "OR (contract_version = '1.0.0' AND "
             "((technical_status IN ('succeeded', 'failed') "
             "AND linked_passport_revision_id IS NOT NULL "
@@ -1475,10 +1608,37 @@ class GovernanceEvaluationRun(Base):
             name="ck_governance_evaluation_run_verdict_version",
         ),
         CheckConstraint(
+            "contract_version <> '2.0.0' OR "
+            "(evidence_outcome = 'pending' AND overall_verdict = 'insufficient' "
+            "AND verdict_version = 0)",
+            name="ck_governance_evaluation_run_v2_projection_freeze",
+        ),
+        CheckConstraint(
             "(envelope_id IS NULL AND envelope_json IS NULL AND envelope_hash IS NULL) OR "
             "(envelope_id IS NOT NULL AND envelope_json IS NOT NULL "
             f"AND envelope_hash IS NOT NULL AND {_lower_hex64('envelope_hash')})",
             name="ck_governance_evaluation_run_envelope",
+        ),
+        CheckConstraint(
+            "contract_version <> '2.0.0' OR "
+            f"(envelope_nonce IS NOT NULL AND ({_canonical_envelope_nonce('envelope_nonce')}))",
+            name="ck_governance_evaluation_run_envelope_nonce",
+        ),
+        CheckConstraint(
+            f"({_canonical_utc_timestamp('created_at', nullable=False)}) AND "
+            f"({_canonical_utc_timestamp('updated_at', nullable=False)}) AND "
+            f"({_canonical_utc_timestamp('started_at')}) AND "
+            f"({_canonical_utc_timestamp('completed_at')})",
+            name="ck_governance_evaluation_run_timestamp_canonical",
+        ),
+        CheckConstraint(
+            "created_at <= updated_at "
+            "AND (started_at IS NULL OR "
+            "(created_at <= started_at AND started_at <= updated_at)) "
+            "AND (completed_at IS NULL OR "
+            "(created_at <= completed_at AND completed_at <= updated_at "
+            "AND (started_at IS NULL OR started_at <= completed_at)))",
+            name="ck_governance_evaluation_run_timestamp_order",
         ),
         Index("idx_governance_evaluation_runs_scope_created", "org_id", "system_id", "created_at"),
         Index(

@@ -153,33 +153,33 @@ _SAFE_UUID = re.compile(
     r"[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
 )
 _SAFE_DIGEST = re.compile(r"^(?:sha256:)?[0-9a-f]{64}$")
-_VALUE_ATOM = r"[A-Za-z0-9]{1,16}"
+_VALUE_ATOM = r"[A-Za-z0-9]{1,12}"
 _SYMBOL_VALUE = re.compile(rf"^{_VALUE_ATOM}(?:[-_.]{_VALUE_ATOM}){{0,2}}$")
-_MODEL_SEGMENT = rf"{_VALUE_ATOM}(?:[-_.]{_VALUE_ATOM}){{0,8}}"
+_MODEL_SEGMENT = rf"{_VALUE_ATOM}(?:[-_.]{_VALUE_ATOM}){{0,12}}"
 _MODEL_ID_VALUE = re.compile(rf"^{_MODEL_SEGMENT}(?:/{_MODEL_SEGMENT})?$")
 _LOCALE_VALUE = re.compile(r"^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8}){0,5}$")
 _MEDIA_TYPE_VALUE = re.compile(
-    r"^[a-z][a-z0-9!#$&^_.+\-]{0,31}/[a-z0-9][a-z0-9!#$&^_.+\-]{0,63}$"
+    r"^[a-z][a-z0-9]{0,11}/[a-z0-9]{1,12}"
+    r"(?:[!#$&^_.+\-][a-z0-9]{1,12}){0,8}$"
 )
-_SEMANTIC_VERSION = (
-    r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
-    r"(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?"
-    r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?"
+_SEMANTIC_VERSION_VALUE = re.compile(
+    r"^(?P<core>(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\."
+    r"(?:0|[1-9][0-9]*))"
+    r"(?:-(?P<prerelease>[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?"
+    r"(?:\+(?P<build>[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$"
 )
-_SUITE_REF_VALUE = re.compile(
-    rf"^[a-z0-9][a-z0-9._-]{{0,31}}/"
-    rf"[a-z0-9][a-z0-9._-]{{0,63}}@{_SEMANTIC_VERSION}$"
-)
+_SUITE_COMPONENT = r"[a-z0-9]{1,12}(?:[-_.][a-z0-9]{1,12}){0,4}"
+_SUITE_NAMESPACE_VALUE = re.compile(rf"^{_SUITE_COMPONENT}$")
+_SUITE_NAME_VALUE = re.compile(rf"^{_SUITE_COMPONENT}$")
 _ADAPTER_IDENTIFIER = re.compile(
     r"^[a-z][a-z0-9]{0,15}(?:[-_.][a-z0-9]{1,16}){0,2}$"
 )
-_BINDING_ATOM = r"[A-Za-z0-9]{1,24}"
+_BINDING_ATOM = r"[A-Za-z0-9]{1,12}"
 _BINDING_IDENTIFIER = re.compile(
     rf"^{_BINDING_ATOM}(?:[-_.:]{_BINDING_ATOM}){{0,3}}$"
 )
-_BINDING_VERSION = re.compile(
-    rf"^(?:{_SEMANTIC_VERSION}|"
-    r"[A-Za-z0-9]{1,16}(?:[._+-][A-Za-z0-9]{1,16}){0,3})$"
+_BINDING_VERSION_LABEL = re.compile(
+    r"^[A-Za-z0-9]{1,12}(?:[._+-][A-Za-z0-9]{1,12}){0,3}$"
 )
 _SCHEMA_IDENTIFIER = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,47}$")
 _HEXISH_SCHEMA_IDENTIFIER = re.compile(r"(?i)^[0-9a-f]{32,}$")
@@ -347,6 +347,90 @@ def _suite_ref_contains_opaque_segment(value: str) -> bool:
     )
 
 
+def _opaque_normalized_payload(value: str) -> bool:
+    """Detect opaque payloads after removing attacker-controlled separators."""
+    normalized = "".join(re.findall(r"[A-Za-z0-9]+", value))
+    if len(normalized) < 28:
+        return False
+    if re.fullmatch(r"(?i)[0-9a-f]{32,}", normalized):
+        return True
+    entropy = -sum(
+        (normalized.count(character) / len(normalized))
+        * math.log2(normalized.count(character) / len(normalized))
+        for character in set(normalized)
+    )
+    return len(set(normalized)) >= 18 and entropy >= 4.25
+
+
+def _valid_semantic_version(value: Any) -> bool:
+    if not isinstance(value, str) or len(value) > 80:
+        return False
+    matched = _SEMANTIC_VERSION_VALUE.fullmatch(value)
+    if matched is None:
+        return False
+    prerelease = matched.group("prerelease")
+    if prerelease is None:
+        return True
+    return all(
+        not (identifier.isdigit() and len(identifier) > 1 and identifier.startswith("0"))
+        for identifier in prerelease.split(".")
+    )
+
+
+def _valid_suite_ref(value: Any) -> bool:
+    if not isinstance(value, str) or not 1 <= len(value) <= 128:
+        return False
+    if value.count("/") != 1 or value.count("@") != 1:
+        return False
+    namespace, remainder = value.split("/", 1)
+    name, version = remainder.rsplit("@", 1)
+    return bool(
+        _SUITE_NAMESPACE_VALUE.fullmatch(namespace)
+        and _SUITE_NAME_VALUE.fullmatch(name)
+        and _valid_semantic_version(version)
+        and not _suite_ref_contains_opaque_segment(value)
+    )
+
+
+def _valid_binding_identifier(value: Any) -> bool:
+    return bool(
+        isinstance(value, str)
+        and len(value) <= 96
+        and not _unsafe_public_string(value)
+        and (
+            _SAFE_UUID.fullmatch(value) is not None
+            or _BINDING_IDENTIFIER.fullmatch(value) is not None
+        )
+    )
+
+
+def _valid_binding_version(value: Any) -> bool:
+    if not isinstance(value, str) or not 1 <= len(value) <= 64:
+        return False
+    if _unsafe_public_string(value):
+        return False
+    if re.match(r"^[0-9]+\.[0-9]+\.[0-9]+", value):
+        return _valid_semantic_version(value)
+    return _BINDING_VERSION_LABEL.fullmatch(value) is not None
+
+
+def _valid_binding_symbol(value: Any) -> bool:
+    return bool(
+        isinstance(value, str)
+        and len(value) <= 96
+        and not _unsafe_public_string(value)
+        and _BINDING_IDENTIFIER.fullmatch(value)
+    )
+
+
+def _valid_role_identifier(value: Any) -> bool:
+    return bool(
+        isinstance(value, str)
+        and _ASCII_IDENTIFIER.fullmatch(value)
+        and not _unsafe_public_string(value)
+    )
+
+
 def _unsafe_public_string(value: str, *, allow_digest: bool = False) -> bool:
     if not value or len(value.encode("utf-8")) > 512:
         return True
@@ -372,6 +456,7 @@ def _unsafe_public_string(value: str, *, allow_digest: bool = False) -> bool:
         or _SECRET_LIKE_VALUE.search(value)
         or _RAW_PROMPT_VALUE.search(value)
         or _high_entropy_opaque_value(value)
+        or _opaque_normalized_payload(value)
     )
 
 
@@ -382,18 +467,14 @@ def _matches_fairmind_value_type(value: str, value_type: str) -> bool:
         return bool(
             len(value) <= 96
             and _MODEL_ID_VALUE.fullmatch(value)
-            and any(character.isdigit() for character in value)
+            and ("/" in value or any(character.isdigit() for character in value))
         )
     if value_type == "locale":
         return len(value) <= 48 and _LOCALE_VALUE.fullmatch(value) is not None
     if value_type == "media_type":
         return len(value) <= 96 and _MEDIA_TYPE_VALUE.fullmatch(value) is not None
     if value_type == "suite_ref":
-        return bool(
-            len(value) <= 128
-            and _SUITE_REF_VALUE.fullmatch(value)
-            and not _suite_ref_contains_opaque_segment(value)
-        )
+        return _valid_suite_ref(value)
     return False
 
 
@@ -442,6 +523,26 @@ def validate_public_safe_values(value: Any) -> None:
     elif isinstance(value, (list, tuple)):
         for child in value:
             validate_public_safe_values(child)
+
+
+def validate_catalog_configuration_values(value: Any) -> None:
+    """Require every configuration string to use one closed typed-value grammar."""
+    if isinstance(value, str):
+        validate_public_safe_string(value)
+        if not any(
+            _matches_fairmind_value_type(value, value_type)
+            for value_type in FAIRMIND_VALUE_TYPES
+        ):
+            raise AssuranceContractValidationError(
+                "unsafe_string_value",
+                UNSAFE_STRING_VALUE_MESSAGE,
+            )
+    elif isinstance(value, dict):
+        for child in value.values():
+            validate_catalog_configuration_values(child)
+    elif isinstance(value, (list, tuple)):
+        for child in value:
+            validate_catalog_configuration_values(child)
 
 
 def _safe_schema_identifier(value: Any) -> bool:
@@ -641,6 +742,8 @@ def validate_safe_configuration_schema(schema: Mapping[str, Any]) -> int:
                 raise _unsafe_schema()
 
         schema_type = node.get("type")
+        if not isinstance(schema_type, str):
+            raise _unsafe_schema()
         common = {"type", "$defs"}
         if schema_type == "object":
             allowed = common | {
@@ -710,6 +813,7 @@ def validate_safe_configuration_schema(schema: Mapping[str, Any]) -> int:
             if (
                 any(key not in allowed for key in node)
                 or (("enum" in node) == ("const" in node))
+                or not isinstance(value_type, str)
                 or value_type not in FAIRMIND_VALUE_TYPES
             ):
                 raise _unsafe_schema()
@@ -751,10 +855,13 @@ def validate_safe_configuration_schema(schema: Mapping[str, Any]) -> int:
                 or ("uniqueItems" in node and not isinstance(node["uniqueItems"], bool))
             ):
                 raise _unsafe_schema()
-            if node.get("uniqueItems") is True and _resolved_schema_type(
-                schema, node["items"]
-            ) not in _PRIMITIVE_SCHEMA_TYPES:
-                raise _unsafe_schema()
+            if node.get("uniqueItems") is True:
+                resolved_item_type = _resolved_schema_type(schema, node["items"])
+                if (
+                    not isinstance(resolved_item_type, str)
+                    or resolved_item_type not in _PRIMITIVE_SCHEMA_TYPES
+                ):
+                    raise _unsafe_schema()
         else:
             raise _unsafe_schema()
 
@@ -872,7 +979,7 @@ def validate_suite_configuration(
     schema_json = canonical_json(schema)
     configuration_json = canonical_json(configuration)
     _compiled_safe_validator(schema_json)
-    validate_public_safe_values(configuration)
+    validate_catalog_configuration_values(configuration)
     _successful_configuration_validation(
         schema_json,
         configuration_json,
@@ -900,8 +1007,7 @@ def validated_manifest_inputs(manifest: Mapping[str, Any]) -> dict[str, dict[str
     result: dict[str, dict[str, Any]] = {}
     for role, descriptor in raw.items():
         if (
-            not isinstance(role, str)
-            or _ASCII_IDENTIFIER.fullmatch(role) is None
+            not _valid_role_identifier(role)
             or not isinstance(descriptor, dict)
         ):
             raise AssuranceContractValidationError(
@@ -971,6 +1077,43 @@ def _required_text(
     return value.strip()
 
 
+def _required_binding_identifier(
+    payload: Mapping[str, Any],
+    key: str,
+) -> str:
+    value = _required_text(payload, key, maximum=96)
+    if not _valid_binding_identifier(value):
+        raise AssuranceContractValidationError(
+            "invalid_request",
+            f"{key} does not satisfy the closed binding identifier contract.",
+        )
+    return value
+
+
+def _optional_binding_identifier(payload: Mapping[str, Any], key: str) -> str | None:
+    value = payload.get(key)
+    if value is None:
+        return None
+    if isinstance(value, str):
+        validate_public_safe_string(value)
+    if not _valid_binding_identifier(value):
+        raise AssuranceContractValidationError(
+            "invalid_request",
+            f"{key} does not satisfy the closed binding identifier contract.",
+        )
+    return value
+
+
+def _required_binding_version(payload: Mapping[str, Any], key: str) -> str:
+    value = _required_text(payload, key, maximum=64)
+    if not _valid_binding_version(value):
+        raise AssuranceContractValidationError(
+            "invalid_request",
+            f"{key} does not satisfy the closed binding version contract.",
+        )
+    return value
+
+
 def _string_list(
     payload: Mapping[str, Any], key: str, *, allowed: frozenset[str] | None = None
 ) -> list[str]:
@@ -997,7 +1140,7 @@ def validate_selected_configuration(configuration: Any) -> int:
             "invalid_suite_configuration", "configuration must be an object."
         )
     reject_sensitive_keys(configuration, path="suite.configuration")
-    validate_public_safe_values(configuration)
+    validate_catalog_configuration_values(configuration)
     return require_canonical_size(
         configuration,
         maximum_bytes=MAX_SUITE_CONFIGURATION_BYTES,
@@ -1039,6 +1182,11 @@ def normalize_target_create(payload: Mapping[str, Any]) -> dict[str, Any]:
         raise AssuranceContractValidationError(
             "invalid_target_kind", "targetKind is not supported."
         )
+    subject_kind = _required_text(payload, "subjectKind", maximum=96)
+    if not _valid_binding_symbol(subject_kind):
+        raise AssuranceContractValidationError(
+            "invalid_request", "subjectKind violates the closed binding contract."
+        )
     subject_digest = _required_text(
         payload,
         "subjectDigest",
@@ -1054,29 +1202,25 @@ def normalize_target_create(payload: Mapping[str, Any]) -> dict[str, Any]:
         raise AssuranceContractValidationError("invalid_manifest", "manifest must be an object.")
     reject_sensitive_keys(manifest, path="manifest")
     validated_manifest_inputs(manifest)
-    validate_public_safe_values(
-        {
-            "deploymentId": payload.get("deploymentId"),
-            "connectorBindingId": payload.get("connectorBindingId"),
-            "supersedesId": payload.get("supersedesId"),
-        }
-    )
+    deployment_id = _optional_binding_identifier(payload, "deploymentId")
+    connector_binding_id = _optional_binding_identifier(payload, "connectorBindingId")
+    supersedes_id = _optional_binding_identifier(payload, "supersedesId")
     manifest_json = canonical_json(manifest)
     return {
-        "targetKey": _required_text(payload, "targetKey"),
+        "targetKey": _required_binding_identifier(payload, "targetKey"),
         "targetKind": target_kind,
-        "version": _required_text(payload, "version"),
-        "systemVersion": _required_text(payload, "systemVersion"),
-        "subjectKind": _required_text(payload, "subjectKind"),
-        "subjectId": _required_text(payload, "subjectId"),
-        "subjectVersion": _required_text(payload, "subjectVersion"),
+        "version": _required_binding_version(payload, "version"),
+        "systemVersion": _required_binding_version(payload, "systemVersion"),
+        "subjectKind": subject_kind,
+        "subjectId": _required_binding_identifier(payload, "subjectId"),
+        "subjectVersion": _required_binding_version(payload, "subjectVersion"),
         "subjectDigest": subject_digest,
-        "deploymentId": payload.get("deploymentId"),
-        "connectorBindingId": payload.get("connectorBindingId"),
+        "deploymentId": deployment_id,
+        "connectorBindingId": connector_binding_id,
         "manifest": manifest,
         "manifestJson": manifest_json,
         "manifestDigest": hashlib.sha256(manifest_json.encode("utf-8")).hexdigest(),
-        "supersedesId": payload.get("supersedesId"),
+        "supersedesId": supersedes_id,
     }
 
 
@@ -1084,6 +1228,15 @@ def normalize_suite_create(payload: Mapping[str, Any], *, owner_scope: str) -> d
     namespace = _required_text(payload, "namespace", maximum=80)
     name = _required_text(payload, "name", maximum=80)
     version = _required_text(payload, "version", maximum=80)
+    if (
+        _SUITE_NAMESPACE_VALUE.fullmatch(namespace) is None
+        or _SUITE_NAME_VALUE.fullmatch(name) is None
+        or not _valid_semantic_version(version)
+    ):
+        raise AssuranceContractValidationError(
+            "invalid_request",
+            "namespace, name, and version must form a closed versioned suite reference.",
+        )
     target_kinds = _string_list(payload, "supportedTargetKinds", allowed=TARGET_KINDS)
     subject_kinds = _string_list(payload, "supportedSubjectKinds")
     lifecycle_phases = _string_list(payload, "lifecyclePhases", allowed=LIFECYCLE_PHASES)
@@ -1097,9 +1250,17 @@ def normalize_suite_create(payload: Mapping[str, Any], *, owner_scope: str) -> d
         )
     adapter_name = _required_text(payload, "adapterName")
     validate_adapter_identifier(adapter_name)
-    adapter_version = _required_text(payload, "adapterVersion")
-    result_contract = _required_text(payload, "resultContractVersion")
-    validate_public_safe_string(owner_scope)
+    adapter_version = _required_binding_version(payload, "adapterVersion")
+    result_contract = _required_binding_version(payload, "resultContractVersion")
+    if not _valid_binding_identifier(owner_scope):
+        raise AssuranceContractValidationError(
+            "invalid_request", "owner scope violates the closed binding contract."
+        )
+    if any(not _valid_binding_symbol(kind) for kind in subject_kinds):
+        raise AssuranceContractValidationError(
+            "invalid_request",
+            "supportedSubjectKinds must use closed binding identifiers.",
+        )
     schema = payload.get("configurationSchema")
     defaults = payload.get("configurationDefaults")
     roles = payload.get("requiredInputRoles")
@@ -1130,10 +1291,7 @@ def normalize_suite_create(payload: Mapping[str, Any], *, owner_scope: str) -> d
     if (
         not isinstance(roles, list)
         or len(roles) > 32
-        or any(
-            not isinstance(item, str) or _ASCII_IDENTIFIER.fullmatch(item) is None
-            for item in roles
-        )
+        or any(not _valid_role_identifier(item) for item in roles)
         or len(set(roles)) != len(roles)
     ):
         if isinstance(roles, list) and len(roles) > 32:
@@ -1344,6 +1502,9 @@ _BLOCKER_MESSAGES = {
     "execution_envelope_size_exceeded": (
         "The planned execution envelope exceeds the bounded assurance contract."
     ),
+    "execution_binding_invalid": (
+        "The planned execution envelope contains an invalid closed binding."
+    ),
 }
 
 
@@ -1364,24 +1525,48 @@ def _manifest_inputs(target: Mapping[str, Any]) -> Mapping[str, Any]:
         return {}
 
 
+def _invalid_execution_binding() -> AssuranceContractValidationError:
+    return AssuranceContractValidationError(
+        "invalid_execution_binding",
+        "The execution envelope contains an invalid closed binding.",
+    )
+
+
+def _require_suite_sequence(value: Any) -> Sequence[Mapping[str, Any]]:
+    if (
+        not isinstance(value, (list, tuple))
+        or not 1 <= len(value) <= 32
+        or any(not isinstance(suite, Mapping) for suite in value)
+    ):
+        raise _invalid_execution_binding()
+    return value
+
+
+def _require_role_list(value: Any) -> list[str]:
+    if (
+        not isinstance(value, list)
+        or len(value) > 32
+        or any(not _valid_role_identifier(role) for role in value)
+        or len(set(value)) != len(value)
+    ):
+        raise _invalid_execution_binding()
+    return list(value)
+
+
 def execution_envelope_variable_projection(
     *,
     target: Mapping[str, Any],
     trust_policy: Mapping[str, Any],
     suites: Sequence[Mapping[str, Any]],
 ) -> dict[str, Any]:
+    if not isinstance(target, Mapping) or not isinstance(trust_policy, Mapping):
+        raise _invalid_execution_binding()
+    suites = _require_suite_sequence(suites)
     return {
         "target": dict(target),
         "trustPolicy": dict(trust_policy),
         "suites": [dict(suite) for suite in suites],
     }
-
-
-def _invalid_execution_binding() -> AssuranceContractValidationError:
-    return AssuranceContractValidationError(
-        "invalid_execution_binding",
-        "The execution envelope contains an invalid closed binding.",
-    )
 
 
 def _require_closed_binding_keys(
@@ -1397,24 +1582,13 @@ def _require_binding_identifier(value: Any, *, optional: bool = False) -> None:
     if value is None and optional:
         return
     if (
-        not isinstance(value, str)
-        or len(value) > 96
-        or _unsafe_public_string(value)
-        or (
-            _SAFE_UUID.fullmatch(value) is None
-            and _BINDING_IDENTIFIER.fullmatch(value) is None
-        )
+        not _valid_binding_identifier(value)
     ):
         raise _invalid_execution_binding()
 
 
 def _require_binding_version(value: Any) -> None:
-    if (
-        not isinstance(value, str)
-        or len(value) > 64
-        or _unsafe_public_string(value)
-        or _BINDING_VERSION.fullmatch(value) is None
-    ):
+    if not _valid_binding_version(value):
         raise _invalid_execution_binding()
 
 
@@ -1432,12 +1606,7 @@ def _require_oci_sha256(value: Any) -> None:
 
 
 def _require_binding_symbol(value: Any) -> None:
-    if (
-        not isinstance(value, str)
-        or len(value) > 96
-        or _unsafe_public_string(value)
-        or _BINDING_IDENTIFIER.fullmatch(value) is None
-    ):
+    if not _valid_binding_symbol(value):
         raise _invalid_execution_binding()
 
 
@@ -1498,7 +1667,7 @@ def _validate_suite_binding(suite: Mapping[str, Any]) -> None:
     if (
         not isinstance(suite_ref, str)
         or _unsafe_public_string(suite_ref)
-        or not _matches_fairmind_value_type(suite_ref, "suite_ref")
+        or not _valid_suite_ref(suite_ref)
     ):
         raise _invalid_execution_binding()
     _require_plain_sha256(suite["manifestDigest"])
@@ -1513,23 +1682,18 @@ def _validate_suite_binding(suite: Mapping[str, Any]) -> None:
     _require_binding_version(suite["resultContractVersion"])
     validate_selected_configuration(suite["configuration"])
     _require_plain_sha256(suite["configurationHash"])
+    if suite["configurationHash"] != canonical_sha256(suite["configuration"]):
+        raise _invalid_execution_binding()
     validate_suite_budgets(suite["budgets"])
 
-    input_roles = suite["inputRoles"]
-    if (
-        not isinstance(input_roles, list)
-        or len(input_roles) > 32
-        or len(set(input_roles)) != len(input_roles)
-    ):
-        raise _invalid_execution_binding()
-    for role in input_roles:
-        _require_binding_symbol(role)
+    input_roles = _require_role_list(suite["inputRoles"])
 
     inputs = suite["inputs"]
     if not isinstance(inputs, Mapping) or set(inputs) != set(input_roles):
         raise _invalid_execution_binding()
     for role, descriptor in inputs.items():
-        _require_binding_symbol(role)
+        if not _valid_role_identifier(role):
+            raise _invalid_execution_binding()
         _validate_input_descriptor(descriptor)
 
 
@@ -1568,6 +1732,7 @@ def _preflight_envelope_variable_projection(
     trust_policy: Mapping[str, Any],
     suites: Sequence[Mapping[str, Any]],
 ) -> tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]]]:
+    suites = _require_suite_sequence(suites)
     inputs = _manifest_inputs(target)
     target_binding = {
         "id": target.get("id"),
@@ -1589,9 +1754,9 @@ def _preflight_envelope_variable_projection(
         "policyHash": trust_policy.get("policy_hash"),
     }
     suite_bindings = []
-    placeholder = "00000000-0000-0000-0000-000000000000"
+    placeholder = "00000000-0000-4000-8000-000000000000"
     for suite in suites:
-        required_roles = list(suite.get("required_input_roles", []))
+        required_roles = _require_role_list(suite.get("required_input_roles", []))
         suite_bindings.append(
             {
                 "suiteExecutionId": placeholder,
@@ -1629,6 +1794,7 @@ def evaluate_preflight(
     validate_phase_independent: bool = True,
 ) -> list[PreflightBlocker]:
     """Return all blockers in stable global/suite-ordinal/code order."""
+    suites = _require_suite_sequence(suites)
     blockers: list[PreflightBlocker] = []
 
     def global_blocker(code: str) -> None:
@@ -1699,18 +1865,16 @@ def evaluate_preflight(
             suites=suites,
         )
         try:
-            _require_execution_envelope_variable_size(
-                execution_envelope_variable_projection(
-                    target=target_binding,
-                    trust_policy=trust_binding,
-                    suites=suite_bindings,
-                )
+            validate_execution_envelope_variable_size(
+                target=target_binding,
+                trust_policy=trust_binding,
+                suites=suite_bindings,
             )
         except AssuranceContractValidationError as error:
             if error.code == "envelope_variable_data_too_large":
                 global_blocker("execution_envelope_size_exceeded")
             else:
-                raise
+                global_blocker("execution_binding_invalid")
     return sorted(
         blockers,
         key=lambda item: (
@@ -1730,6 +1894,7 @@ def plan_content_projection(
     trust_policy: Mapping[str, Any],
     suites: Sequence[Mapping[str, Any]],
 ) -> dict[str, Any]:
+    suites = _require_suite_sequence(suites)
     projection = {
         "contractVersion": CONTRACT_VERSION,
         "organizationId": org_id,
