@@ -8,16 +8,16 @@
 
 ## P0 — Trustworthy control plane
 
-- [ ] Capture fresh backend, frontend, browser, build, PostgreSQL, boundary, and archive-import baselines.
+- [x] Capture fresh backend, frontend, browser, build, PostgreSQL, boundary, and archive-import baselines.
 - [ ] Split evaluation planning, runs, evidence admission, decisions, and worker ports while preserving `api -> application -> domain -> infrastructure`.
-- [ ] Add immutable target versions containing exact subject, version, digest, deployment, connector, and manifest identity.
-- [ ] Preserve the current target kinds and add `vision_model`.
-- [ ] Add immutable suite versions with compatible target kinds, phases, depths, delivery modes, configuration schema, budgets, runner digest, adapter version, and result contract.
-- [ ] Replace authoritative free-text suite references and bare target kinds with version IDs and configured suite selections.
-- [ ] Generate and RFC 8785-hash an immutable Execution Envelope v2 for every run.
-- [ ] Create one suite-execution record per selected suite.
+- [x] Add immutable target versions containing exact subject, version, digest, deployment, connector, and manifest identity.
+- [x] Preserve the current target kinds and add `vision_model`.
+- [x] Add immutable suite versions with compatible target kinds, phases, depths, delivery modes, configuration schema, budgets, runner digest, adapter version, and result contract.
+- [x] Replace authoritative free-text suite references and bare target kinds with version IDs and configured suite selections.
+- [x] Generate and RFC 8785-hash an immutable Execution Envelope v2 for every run.
+- [x] Create one suite-execution record per selected suite.
 - [ ] Bind Passport v2 to exact tenant, system, target, suite, plan, configuration, lifecycle, delivery, evaluator, nonce, and chronology.
-- [ ] Keep Passport v1 readable but ineligible for v2 runs.
+- [x] Keep Passport v1 readable but ineligible for v2 runs.
 - [ ] Add evidence issuers, Ed25519 keys, immutable trust policies, admissions, freshness, and append-only reviews.
 - [ ] Require verified evidence from FairMind workers and external adapters; imports may remain unsigned only as visibly unverified human-review material.
 - [ ] Keep linking separate from governance decision-making; a link yields `review` or `insufficient`, never automatic approval/blocking.
@@ -25,7 +25,7 @@
 - [ ] Enforce four-eyes review and audited owner overrides.
 - [ ] Add 30-day transactional idempotency and an append-only per-organization audit hash chain.
 - [ ] Feature-disable automatic enforcement, untrusted external linking, workers, and unsupported modality packs at both API and UI boundaries.
-- [ ] Add forward migration 013 without rewriting migration 012; extend checksum-ledger drift detection.
+- [x] Add forward migration 013 without rewriting migration 012; extend checksum-ledger drift detection.
 - [ ] Mark existing plans/runs contract v1 without fabricating registry identities; keep them readable but prevent new execution until upgraded.
 
 ## P0 — Frontend and design
@@ -98,15 +98,15 @@
 
 ## Public contracts
 
-- [ ] `EvaluationPlanV2Create`: contract version, target version, phases, depth, enforcement, delivery, configured suite versions.
-- [ ] `EvaluationRunV2Create`: trigger, lifecycle phase, required `Idempotency-Key`.
-- [ ] `ExecutionEnvelopeV2`: server-generated IDs/hashes, target and suite bindings, lifecycle/enforcement/delivery, nonce, budgets, inputs, trust policy.
+- [x] `EvaluationPlanV2Create`: contract version, target version, phases, depth, enforcement, delivery, configured suite versions.
+- [x] `EvaluationRunV2Create`: trigger, lifecycle phase, required `Idempotency-Key`.
+- [x] `ExecutionEnvelopeV2`: server-generated IDs/hashes, target and suite bindings, lifecycle/enforcement/delivery, nonce, budgets, inputs, trust policy.
 - [ ] `EvidencePassportV2.executionBinding`: envelope ID/hash, suite execution, target/suite versions and digests, nonce.
-- [ ] `EvaluationRunResponse`: technical status, evidence outcome, governance verdict, layer verdicts, suite executions, envelope hash, verdict version.
-- [ ] Evidence result: `pending | passed | passed_with_limitations | failed | informational | error | unavailable | insufficient_data | unknown`.
-- [ ] Admission: `pending | verified | unverified | expired | superseded | rejected | trust_error`.
-- [ ] Review: `pending | accepted | rejected`; freshness: `current | expiring | stale | superseded`.
-- [ ] Preserve `technicalStatus=succeeded` with `evidenceResultStatus=failed` when the evaluator ran correctly and found a failing target.
+- [x] `EvaluationRunResponse`: technical status, evidence outcome, governance verdict, layer verdicts, suite executions, envelope hash, verdict version.
+- [x] Evidence result: `pending | passed | passed_with_limitations | failed | informational | error | unavailable | insufficient_data | unknown`.
+- [x] Admission: `pending | verified | unverified | expired | superseded | rejected | trust_error`.
+- [x] Review: `pending | accepted | rejected`; freshness: `current | expiring | stale | superseded`.
+- [x] Preserve `technicalStatus=succeeded` with `evidenceResultStatus=failed` when the evaluator ran correctly and found a failing target.
 - [ ] Add target/suite catalogs, suite-specific evidence links, reviews, CAS decisions, cancellation, worker leases, and realtime pre/post endpoints under the existing AI-governance route family.
 
 ## Verification and rollout gates
