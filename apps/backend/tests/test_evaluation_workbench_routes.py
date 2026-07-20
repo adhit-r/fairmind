@@ -11,7 +11,7 @@ import uuid
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, event, func, select
+from sqlalchemy import create_engine, event, func, select, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -1096,6 +1096,89 @@ def test_run_integrity_failures_are_generic_409_without_stored_value_reflection(
 
     runs_url = f"{BASE}/systems/system-a/evaluation-v2/runs"
     response = client.get(f"{runs_url}/{run['id']}" if read_method == "detail" else runs_url)
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": BINDING_INTEGRITY_DETAIL}
+    assert "FM_SENTINEL" not in response.text
+
+
+@pytest.mark.parametrize(
+    "corruption",
+    [
+        "partial-link",
+        "malformed-result-json",
+        "orphan-result-summary",
+        "malformed-link-id",
+        "malformed-link-time",
+        "succeeded-parent-with-pending-child",
+    ],
+)
+def test_privileged_suite_projection_corruption_returns_generic_409(
+    workbench_client,
+    corruption: str,
+) -> None:
+    client, _ = workbench_client
+    _, run = _create_active_v2_plan_and_run(client)
+    session_iterator = app.dependency_overrides[get_db]()
+    session = next(session_iterator)
+    timestamp = run["createdAt"]
+    try:
+        session.execute(text("PRAGMA foreign_keys = OFF"))
+        session.execute(text("PRAGMA ignore_check_constraints = ON"))
+        execution_table = GovernanceEvaluationRunSuiteExecution.__table__
+        execution_update: dict[str, object]
+        if corruption == "partial-link":
+            execution_update = {"linked_at": timestamp}
+        elif corruption == "malformed-result-json":
+            execution_update = {"result_summary_json": '{"FM_SENTINEL":'}
+        elif corruption == "orphan-result-summary":
+            execution_update = {
+                "result_summary_json": canonical_json({"status": "complete"})
+            }
+        else:
+            execution_update = {
+                "technical_status": "succeeded",
+                "evidence_result_status": "failed",
+                "admission_status": "verified",
+                "evidence_run_id": str(uuid.uuid4()),
+                "passport_revision_id": str(uuid.uuid4()),
+                "linked_by": USER,
+                "linked_at": timestamp,
+                "started_at": timestamp,
+                "completed_at": timestamp,
+                "updated_at": timestamp,
+            }
+            if corruption == "malformed-link-id":
+                execution_update["evidence_run_id"] = "FM SENTINEL INVALID ID"
+            elif corruption == "malformed-link-time":
+                execution_update["linked_at"] = "FM_SENTINEL_INVALID_TIME"
+        if corruption != "succeeded-parent-with-pending-child":
+            session.execute(
+                execution_table.update()
+                .where(execution_table.c.run_id == run["id"])
+                .values(**execution_update)
+            )
+        if corruption in {
+            "malformed-link-id",
+            "malformed-link-time",
+            "succeeded-parent-with-pending-child",
+        }:
+            session.execute(
+                GovernanceEvaluationRun.__table__.update()
+                .where(GovernanceEvaluationRun.id == run["id"])
+                .values(
+                    technical_status="succeeded",
+                    started_at=timestamp,
+                    completed_at=timestamp,
+                    updated_at=timestamp,
+                )
+            )
+        session.commit()
+        session.execute(text("PRAGMA foreign_keys = ON"))
+    finally:
+        session_iterator.close()
+
+    response = client.get(f"{BASE}/systems/system-a/evaluation-v2/runs/{run['id']}")
 
     assert response.status_code == 409
     assert response.json() == {"detail": BINDING_INTEGRITY_DETAIL}

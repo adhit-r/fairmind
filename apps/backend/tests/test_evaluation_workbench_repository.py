@@ -328,6 +328,84 @@ def test_created_run_persists_an_independent_nonce_witness(repository_fixture) -
     assert len(base64.urlsafe_b64decode(row_nonce + "=")) == 32
 
 
+def test_suite_execution_record_preserves_all_authoritative_evidence_projections(
+    repository_fixture,
+) -> None:
+    session, _ = repository_fixture
+    service = _service(session)
+    _, run = _create_active_plan_and_run(service)
+    _, record, _ = _stored_run_and_graph(session, run["id"])
+
+    execution = record.suite_executions[0]
+    assert execution.evidence_run_id is None
+    assert execution.passport_revision_id is None
+    assert execution.linked_by is None
+    assert execution.linked_at is None
+    assert execution.result_summary is None
+    assert execution.limitations is None
+
+
+def test_repository_decodes_canonical_suite_result_and_limitations(
+    repository_fixture,
+) -> None:
+    session, _ = repository_fixture
+    service = _service(session)
+    _, run = _create_active_plan_and_run(service)
+    table = GovernanceEvaluationRunSuiteExecution.__table__
+    row = dict(
+        session.execute(select(table).where(table.c.run_id == run["id"])).mappings().one()
+    )
+    row["result_summary_json"] = canonical_json(
+        {"metrics": {"failureRate": 0.25}, "sampleCount": 4}
+    )
+    row["limitations_json"] = canonical_json(["Synthetic cases only."])
+
+    execution = SqlAlchemyEvaluationWorkbenchRepository(
+        session
+    )._suite_execution_record(row)
+
+    assert execution.result_summary is not None
+    assert execution.result_summary.to_dict() == {
+        "metrics": {"failureRate": 0.25},
+        "sampleCount": 4,
+    }
+    assert execution.limitations == ("Synthetic cases only.",)
+
+
+@pytest.mark.parametrize(
+    ("column", "raw"),
+    [
+        ("result_summary_json", '{"score":1}\n'),
+        ("result_summary_json", '{"score":1,"score":2}'),
+        ("result_summary_json", "[]"),
+        (
+            "result_summary_json",
+            canonical_json({"summary": "x" * (64 * 1024)}),
+        ),
+        ("limitations_json", '{"limitation":"wrong root"}'),
+        ("limitations_json", canonical_json(["x" * (8 * 1024)])),
+    ],
+)
+def test_repository_rejects_malformed_or_unbounded_suite_projection_json(
+    repository_fixture,
+    column: str,
+    raw: str,
+) -> None:
+    session, _ = repository_fixture
+    service = _service(session)
+    _, run = _create_active_plan_and_run(service)
+    table = GovernanceEvaluationRunSuiteExecution.__table__
+    row = dict(
+        session.execute(select(table).where(table.c.run_id == run["id"])).mappings().one()
+    )
+    row[column] = raw
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        SqlAlchemyEvaluationWorkbenchRepository(session)._suite_execution_record(row)
+
+    assert caught.value.detail() == BINDING_INTEGRITY_DETAIL
+
+
 def test_run_verifier_rejects_a_rehashed_envelope_with_a_rebound_nonce(
     repository_fixture,
 ) -> None:
@@ -1113,6 +1191,10 @@ def _earlier_than(timestamp: str) -> str:
     return (datetime.fromisoformat(timestamp) - timedelta(seconds=1)).isoformat()
 
 
+def _later_than(timestamp: str, *, seconds: int = 1) -> str:
+    return (datetime.fromisoformat(timestamp) + timedelta(seconds=seconds)).isoformat()
+
+
 def _tampered_run_state(record, case: str):
     if case == "unknown-technical-status":
         return replace(record, technical_status="unknown-state")
@@ -1341,6 +1423,284 @@ def test_run_verifier_rejects_incoherent_suite_state_time_and_failure_fields(
     assert caught.value.detail() == BINDING_INTEGRITY_DETAIL
 
 
+def test_run_verifier_rejects_partial_suite_evidence_link_tuple(
+    repository_fixture,
+) -> None:
+    session, _ = repository_fixture
+    service = _service(session)
+    _, run = _create_active_plan_and_run(service)
+    _, record, graph = _stored_run_and_graph(session, run["id"])
+    execution = replace(
+        record.suite_executions[0],
+        evidence_run_id=str(uuid.uuid4()),
+    )
+    tampered = replace(record, suite_executions=(execution,))
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        evaluation_service_module._verify_run_record(tampered, graph)
+
+    assert caught.value.detail() == BINDING_INTEGRITY_DETAIL
+
+
+def _with_complete_evidence_link(execution, *, admission_status: str = "verified"):
+    return replace(
+        execution,
+        evidence_run_id=str(uuid.uuid4()),
+        passport_revision_id=str(uuid.uuid4()),
+        linked_by=USER,
+        linked_at=execution.updated_at,
+        admission_status=admission_status,
+    )
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "complete-link-pending-admission",
+        "admitted-without-link",
+        "malformed-link-id",
+        "malformed-link-time",
+        "link-before-execution",
+        "link-after-update",
+        "terminal-link-before-completion",
+        "pending-result-summary",
+        "oversized-result-summary",
+        "oversized-limitations",
+    ],
+)
+def test_run_verifier_rejects_incoherent_or_unbounded_suite_evidence_projections(
+    repository_fixture,
+    case: str,
+) -> None:
+    session, _ = repository_fixture
+    service = _service(session)
+    _, run = _create_active_plan_and_run(service)
+    _, record, graph = _stored_run_and_graph(session, run["id"])
+    execution = record.suite_executions[0]
+    if case == "complete-link-pending-admission":
+        execution = _with_complete_evidence_link(
+            execution,
+            admission_status="pending",
+        )
+    elif case == "admitted-without-link":
+        execution = replace(execution, admission_status="verified")
+    elif case == "malformed-link-id":
+        execution = replace(
+            _with_complete_evidence_link(execution),
+            evidence_run_id="FM SENTINEL INVALID ID",
+        )
+    elif case == "malformed-link-time":
+        execution = replace(
+            _with_complete_evidence_link(execution),
+            linked_at="FM_SENTINEL_INVALID_TIME",
+        )
+    elif case == "link-before-execution":
+        execution = replace(
+            _with_complete_evidence_link(execution),
+            linked_at=_earlier_than(execution.created_at),
+        )
+    elif case == "link-after-update":
+        execution = replace(
+            _with_complete_evidence_link(execution),
+            linked_at=_later_than(execution.updated_at),
+        )
+    elif case == "terminal-link-before-completion":
+        completed_at = _later_than(execution.created_at)
+        execution = replace(
+            _with_complete_evidence_link(execution),
+            technical_status="succeeded",
+            evidence_result_status="failed",
+            started_at=execution.created_at,
+            completed_at=completed_at,
+            updated_at=_later_than(execution.created_at, seconds=2),
+        )
+    elif case == "pending-result-summary":
+        execution = replace(
+            execution,
+            result_summary=FrozenJsonObject.from_mapping({"status": "pending"}),
+        )
+    elif case == "oversized-result-summary":
+        execution = replace(
+            execution,
+            result_summary=FrozenJsonObject.from_mapping(
+                {"summary": "x" * (64 * 1024)}
+            ),
+        )
+    else:
+        execution = replace(execution, limitations=("x" * (8 * 1024),))
+    tampered = replace(record, suite_executions=(execution,))
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        evaluation_service_module._verify_run_record(tampered, graph)
+
+    assert caught.value.detail() == BINDING_INTEGRITY_DETAIL
+
+
+def test_verdict_zero_accepts_valid_linked_evidence_without_deriving_run_outcome(
+    repository_fixture,
+) -> None:
+    session, _ = repository_fixture
+    service = _service(session)
+    _, run = _create_active_plan_and_run(service)
+    _, record, graph = _stored_run_and_graph(session, run["id"])
+    execution = replace(
+        _with_complete_evidence_link(record.suite_executions[0]),
+        technical_status="succeeded",
+        evidence_result_status="failed",
+        result_summary=FrozenJsonObject.from_mapping(
+            {"failedCases": 1, "sampleCount": 4}
+        ),
+        limitations=("Synthetic cases only.",),
+        started_at=record.suite_executions[0].created_at,
+        completed_at=record.suite_executions[0].updated_at,
+    )
+    linked = replace(
+        record,
+        technical_status="succeeded",
+        evidence_outcome="pending",
+        started_at=record.created_at,
+        completed_at=record.updated_at,
+        suite_executions=(execution,),
+    )
+
+    evaluation_service_module._verify_run_record(linked, graph)
+
+
+@pytest.mark.parametrize(
+    ("admission_status", "freshness_status"),
+    [
+        ("verified", "current"),
+        ("unverified", "current"),
+        ("expired", "stale"),
+        ("superseded", "superseded"),
+    ],
+)
+def test_complete_suite_evidence_links_remain_valid_across_admission_history(
+    repository_fixture,
+    admission_status: str,
+    freshness_status: str,
+) -> None:
+    session, _ = repository_fixture
+    service = _service(session)
+    _, run = _create_active_plan_and_run(service)
+    _, record, graph = _stored_run_and_graph(session, run["id"])
+    execution = replace(
+        _with_complete_evidence_link(
+            record.suite_executions[0],
+            admission_status=admission_status,
+        ),
+        technical_status="succeeded",
+        evidence_result_status="failed",
+        freshness_status=freshness_status,
+        result_summary=FrozenJsonObject.from_mapping({"failedCases": 1}),
+        limitations=("Synthetic cases only.",),
+        started_at=record.suite_executions[0].created_at,
+        completed_at=record.suite_executions[0].updated_at,
+    )
+    linked = replace(
+        record,
+        technical_status="succeeded",
+        evidence_outcome="pending",
+        started_at=record.created_at,
+        completed_at=record.updated_at,
+        suite_executions=(execution,),
+    )
+
+    evaluation_service_module._verify_run_record(linked, graph)
+
+
+@pytest.mark.parametrize(
+    ("admission_status", "freshness_status"),
+    [
+        ("expired", "stale"),
+        ("superseded", "superseded"),
+    ],
+)
+def test_accepted_suite_evidence_remains_readable_after_historical_rollover(
+    repository_fixture,
+    admission_status: str,
+    freshness_status: str,
+) -> None:
+    session, _ = repository_fixture
+    service = _service(session)
+    _, run = _create_active_plan_and_run(service)
+    _, record, graph = _stored_run_and_graph(session, run["id"])
+    execution = replace(
+        _with_complete_evidence_link(
+            record.suite_executions[0],
+            admission_status=admission_status,
+        ),
+        technical_status="succeeded",
+        evidence_result_status="failed",
+        review_status="accepted",
+        freshness_status=freshness_status,
+        result_summary=FrozenJsonObject.from_mapping({"failedCases": 1}),
+        limitations=("Synthetic cases only.",),
+        started_at=record.suite_executions[0].created_at,
+        completed_at=record.suite_executions[0].updated_at,
+    )
+    historical = replace(
+        record,
+        technical_status="succeeded",
+        evidence_outcome="pending",
+        started_at=record.created_at,
+        completed_at=record.updated_at,
+        suite_executions=(execution,),
+    )
+
+    evaluation_service_module._verify_run_record(historical, graph)
+
+
+@pytest.mark.parametrize(
+    ("parent_status", "child_status"),
+    [
+        ("awaiting_evidence", "succeeded"),
+        ("queued", "succeeded"),
+        ("leased", "succeeded"),
+        ("running", "succeeded"),
+        ("failed", "running"),
+        ("timed_out", "succeeded"),
+        ("cancelled", "awaiting_evidence"),
+    ],
+)
+def test_run_verifier_allows_child_ahead_and_abort_cleanup_state_mixtures(
+    repository_fixture,
+    parent_status: str,
+    child_status: str,
+) -> None:
+    session, _ = repository_fixture
+    service = _service(session)
+    _, run = _create_active_plan_and_run(service)
+    _, record, graph = _stored_run_and_graph(session, run["id"])
+    execution = record.suite_executions[0]
+    if child_status == "succeeded":
+        execution = replace(
+            execution,
+            technical_status="succeeded",
+            evidence_result_status="failed",
+            started_at=execution.created_at,
+            completed_at=execution.updated_at,
+        )
+    elif child_status == "running":
+        execution = replace(
+            execution,
+            technical_status="running",
+            started_at=execution.created_at,
+        )
+    parent_changes = {
+        "technical_status": parent_status,
+        "evidence_outcome": "pending",
+        "suite_executions": (execution,),
+    }
+    if parent_status == "running":
+        parent_changes["started_at"] = record.created_at
+    elif parent_status in {"failed", "timed_out", "cancelled"}:
+        parent_changes["completed_at"] = record.updated_at
+    transitional = replace(record, **parent_changes)
+
+    evaluation_service_module._verify_run_record(transitional, graph)
+
+
 def test_succeeded_evaluator_with_failed_model_is_a_valid_forward_compatible_state(
     repository_fixture,
 ) -> None:
@@ -1367,6 +1727,26 @@ def test_succeeded_evaluator_with_failed_model_is_a_valid_forward_compatible_sta
     evaluation_service_module._verify_run_record(valid, graph)
 
 
+def test_verdict_zero_rejects_succeeded_parent_with_non_succeeded_suite(
+    repository_fixture,
+) -> None:
+    session, _ = repository_fixture
+    service = _service(session)
+    _, run = _create_active_plan_and_run(service)
+    _, record, graph = _stored_run_and_graph(session, run["id"])
+    impossible = replace(
+        record,
+        technical_status="succeeded",
+        started_at=record.created_at,
+        completed_at=record.updated_at,
+    )
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        evaluation_service_module._verify_run_record(impossible, graph)
+
+    assert caught.value.detail() == BINDING_INTEGRITY_DETAIL
+
+
 def test_positive_verdict_version_allows_valid_layered_and_overall_decisions(
     repository_fixture,
 ) -> None:
@@ -1375,10 +1755,9 @@ def test_positive_verdict_version_allows_valid_layered_and_overall_decisions(
     _, run = _create_active_plan_and_run(service)
     _, record, graph = _stored_run_and_graph(session, run["id"])
     execution = replace(
-        record.suite_executions[0],
+        _with_complete_evidence_link(record.suite_executions[0]),
         technical_status="succeeded",
         evidence_result_status="failed",
-        admission_status="verified",
         review_status="accepted",
         started_at=record.suite_executions[0].created_at,
         completed_at=record.suite_executions[0].updated_at,
@@ -1426,6 +1805,8 @@ def test_positive_verdict_version_rejects_nonterminal_pending_execution(
         "cancelled-terminal",
         "unverified-admission",
         "stale-evidence",
+        "expired-accepted-history",
+        "superseded-accepted-history",
         "review-pending",
     ],
 )
@@ -1438,10 +1819,9 @@ def test_positive_verdict_version_requires_succeeded_verified_current_reviewed_s
     _, run = _create_active_plan_and_run(service)
     _, record, graph = _stored_run_and_graph(session, run["id"])
     execution = replace(
-        record.suite_executions[0],
+        _with_complete_evidence_link(record.suite_executions[0]),
         technical_status="succeeded",
         evidence_result_status="failed",
-        admission_status="verified",
         review_status="accepted",
         freshness_status="current",
         started_at=record.suite_executions[0].created_at,
@@ -1481,6 +1861,18 @@ def test_positive_verdict_version_requires_succeeded_verified_current_reviewed_s
         execution = replace(execution, admission_status="unverified")
     elif case == "stale-evidence":
         execution = replace(execution, freshness_status="stale")
+    elif case == "expired-accepted-history":
+        execution = replace(
+            execution,
+            admission_status="expired",
+            freshness_status="stale",
+        )
+    elif case == "superseded-accepted-history":
+        execution = replace(
+            execution,
+            admission_status="superseded",
+            freshness_status="superseded",
+        )
     else:
         execution = replace(execution, review_status="pending")
     impossible = replace(

@@ -55,6 +55,7 @@ from src.domain.assurance.evaluation_v2 import (
     validate_idempotency_key,
     validate_mutation_detail_body,
     validate_plan_schema_complexity,
+    validate_public_safe_string,
     validate_run_create,
     validate_selected_configuration,
     validate_suite_budgets,
@@ -128,6 +129,10 @@ RUN_EVIDENCE_OUTCOMES_BY_TECHNICAL_STATUS = {
     )
     for status, outcomes in EVIDENCE_RESULTS_BY_TECHNICAL_STATUS.items()
 }
+_MAX_SUITE_RESULT_SUMMARY_BYTES = 64 * 1024
+_STORED_LINK_IDENTIFIER = re.compile(
+    r"^[A-Za-z0-9](?:[A-Za-z0-9_.:-]{0,94}[A-Za-z0-9])?$"
+)
 
 
 class EvaluationWorkbenchInputError(ValueError):
@@ -537,7 +542,11 @@ def _plain_json_value(value: object) -> object:
 
 
 def _execution_view(execution: SuiteExecutionRecord) -> dict[str, object]:
-    limitations = _plain_json_value(execution.limitations)
+    limitations = (
+        []
+        if execution.limitations is None
+        else _plain_json_value(execution.limitations)
+    )
     try:
         require_canonical_size(
             limitations,
@@ -815,7 +824,12 @@ def _verify_admission_review_freshness(execution: SuiteExecutionRecord) -> None:
         raise _binding_error("A suite evidence state uses an unknown value.")
     if admission == "pending" and (review != "pending" or freshness != "current"):
         raise _binding_error("Pending evidence carries review or freshness projections.")
-    if review == "accepted" and admission not in {"verified", "unverified"}:
+    if review == "accepted" and admission not in {
+        "verified",
+        "unverified",
+        "expired",
+        "superseded",
+    }:
         raise _binding_error("Accepted review is not backed by admitted evidence.")
     if review == "rejected" and admission == "pending":
         raise _binding_error("Rejected review cannot precede evidence admission.")
@@ -825,6 +839,93 @@ def _verify_admission_review_freshness(execution: SuiteExecutionRecord) -> None:
         raise _binding_error("Superseded evidence must have superseded freshness.")
     if admission in {"rejected", "trust_error"} and review == "accepted":
         raise _binding_error("Rejected or untrusted evidence cannot be accepted.")
+
+
+def _verify_suite_evidence_projections(execution: SuiteExecutionRecord) -> None:
+    link_tuple = (
+        execution.evidence_run_id,
+        execution.passport_revision_id,
+        execution.linked_by,
+        execution.linked_at,
+    )
+    present = tuple(value is not None for value in link_tuple)
+    if any(present) and not all(present):
+        raise _binding_error("A suite evidence link is only partially populated.")
+    try:
+        result_summary = (
+            None
+            if execution.result_summary is None
+            else execution.result_summary.to_dict()
+        )
+        limitations = (
+            None
+            if execution.limitations is None
+            else _plain_json_value(execution.limitations)
+        )
+        if result_summary is not None:
+            require_canonical_size(
+                result_summary,
+                maximum_bytes=_MAX_SUITE_RESULT_SUMMARY_BYTES,
+                code="suite_result_summary_too_large",
+                message="Suite result summary exceeds 64 KiB.",
+            )
+        if limitations is not None:
+            require_canonical_size(
+                limitations,
+                maximum_bytes=MAX_SUITE_LIMITATIONS_BYTES,
+                code="suite_limitations_too_large",
+                message="Suite limitations exceed 8 KiB.",
+            )
+    except (
+        AssuranceContractValidationError,
+        AttributeError,
+        TypeError,
+        UnicodeError,
+    ) as error:
+        raise _binding_error("A suite evidence projection is malformed.") from error
+
+    if not any(present):
+        if (
+            execution.admission_status != "pending"
+            or result_summary is not None
+            or limitations is not None
+        ):
+            raise _binding_error("An unlinked suite carries evidence projections.")
+        return
+
+    if (
+        execution.admission_status in {"pending", "rejected", "trust_error"}
+        or execution.evidence_result_status == "pending"
+    ):
+        raise _binding_error("A linked suite is not backed by eligible evidence.")
+    for identifier in link_tuple[:3]:
+        try:
+            if (
+                not isinstance(identifier, str)
+                or _STORED_LINK_IDENTIFIER.fullmatch(identifier) is None
+                or len(identifier.encode("utf-8")) > 96
+            ):
+                raise ValueError("invalid stored link identifier")
+            validate_public_safe_string(identifier)
+        except (
+            AssuranceContractValidationError,
+            TypeError,
+            UnicodeError,
+            ValueError,
+        ) as error:
+            raise _binding_error("A suite evidence-link identifier is malformed.") from error
+    linked_at = _parsed_utc_timestamp(execution.linked_at, optional=False)
+    created_at = _parsed_utc_timestamp(execution.created_at, optional=False)
+    updated_at = _parsed_utc_timestamp(execution.updated_at, optional=False)
+    completed_at = _parsed_utc_timestamp(execution.completed_at, optional=True)
+    if (
+        linked_at is None
+        or created_at is None
+        or updated_at is None
+        or not created_at <= linked_at <= updated_at
+        or (completed_at is not None and linked_at < completed_at)
+    ):
+        raise _binding_error("A suite evidence-link timestamp is out of order.")
 
 
 def _verify_suite_execution_state(execution: SuiteExecutionRecord) -> None:
@@ -848,6 +949,7 @@ def _verify_suite_execution_state(execution: SuiteExecutionRecord) -> None:
         failure_message=execution.failure_message,
     )
     _verify_admission_review_freshness(execution)
+    _verify_suite_evidence_projections(execution)
 
 
 def _verify_run_state(run: RunRecord, layer_verdicts: Mapping[str, object]) -> None:
@@ -877,6 +979,11 @@ def _verify_run_state(run: RunRecord, layer_verdicts: Mapping[str, object]) -> N
         failure_code=run.failure_code,
         failure_message=run.failure_message,
     )
+    if run.technical_status == "succeeded" and any(
+        execution.technical_status != "succeeded"
+        for execution in run.suite_executions
+    ):
+        raise _binding_error("A succeeded run has a non-succeeded suite execution.")
     if run.verdict_version == 0 and (
         run.overall_verdict != "insufficient"
         or any(verdict != "insufficient" for verdict in layer_verdicts.values())

@@ -319,7 +319,12 @@ class SuiteExecutionRecord:
     admission_status: str
     review_status: str
     freshness_status: str
-    limitations: JsonValue
+    evidence_run_id: str | None
+    passport_revision_id: str | None
+    linked_by: str | None
+    linked_at: str | None
+    result_summary: FrozenJsonObject | None
+    limitations: tuple[JsonValue, ...] | None
     failure_code: str | None
     failure_message: str | None
     started_at: str | None

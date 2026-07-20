@@ -67,6 +67,7 @@ from src.domain.assurance.evaluation_v2 import (
 _SQLITE_WRITE_LOCK = threading.RLock()
 _BINDING_INTEGRITY_MESSAGE = "Stored assurance bindings failed integrity verification."
 _MAX_LAYER_VERDICTS_BYTES = 8 * 1024
+_MAX_SUITE_RESULT_SUMMARY_BYTES = 64 * 1024
 _MAX_BINDING_LIST_BYTES = 8 * 1024
 _MAX_TRUST_POLICY_BYTES = 64 * 1024
 _MAX_STORED_JSON_DEPTH = 32
@@ -906,8 +907,16 @@ class SqlAlchemyEvaluationWorkbenchRepository:
     # --------------------------------------------------------------
 
     def _suite_execution_record(self, row: Mapping[str, Any]) -> SuiteExecutionRecord:
+        frozen_result_summary = (
+            None
+            if row["result_summary_json"] is None
+            else self._stored_json_object(
+                row["result_summary_json"],
+                maximum_bytes=_MAX_SUITE_RESULT_SUMMARY_BYTES,
+            )
+        )
         frozen_limitations = (
-            ()
+            None
             if row["limitations_json"] is None
             else self._stored_json_array(
                 row["limitations_json"],
@@ -924,6 +933,11 @@ class SqlAlchemyEvaluationWorkbenchRepository:
             admission_status=row["admission_status"],
             review_status=row["review_status"],
             freshness_status=row["freshness_status"],
+            evidence_run_id=row["evidence_run_id"],
+            passport_revision_id=row["passport_revision_id"],
+            linked_by=row["linked_by"],
+            linked_at=row["linked_at"],
+            result_summary=frozen_result_summary,
             limitations=frozen_limitations,
             failure_code=row["failure_code"],
             failure_message=row["failure_message"],
