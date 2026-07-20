@@ -32,6 +32,18 @@ UNSAFE_PUBLIC_VALUES = (
     "caller@example.invalid",
 )
 
+UNSAFE_ADAPTER_IDENTIFIERS = (
+    "Summarize-the-private-customer-record",
+    "file:/etc/hosts",
+    "file%3A%2Fetc%2Fhosts",
+    "a" * 63,
+    "A" * 64,
+    "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6",
+)
+OPAQUE_VERSIONED_SUITE_REF = (
+    "fairmind/a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6@1.0.0"
+)
+
 
 def _envelope_inputs() -> dict:
     return {
@@ -85,7 +97,12 @@ def _envelope_inputs() -> dict:
                 "configurationHash": "f" * 64,
                 "inputRoles": ["scenario_set"],
                 "budgets": {"maxCases": 200},
-                "inputs": {"scenario_set": {"sha256": "1" * 64}},
+                "inputs": {
+                    "scenario_set": {
+                        "kind": "content_digest",
+                        "sha256": "1" * 64,
+                    }
+                },
             },
             {
                 "suiteExecutionId": "execution-2",
@@ -608,7 +625,11 @@ def test_fairmind_safe_config_v1_accepts_closed_bounded_local_refs() -> None:
     payload["configurationSchema"] = {
         "$defs": {
             "threshold": {"type": "number", "minimum": 0, "maximum": 1},
-            "mode": {"type": "string", "enum": ["strict", "balanced"]},
+            "mode": {
+                "type": "string",
+                "x-fairmind-valueType": "symbol",
+                "enum": ["strict", "balanced"],
+            },
         },
         "type": "object",
         "properties": {
@@ -618,7 +639,11 @@ def test_fairmind_safe_config_v1_accepts_closed_bounded_local_refs() -> None:
             "checks": {
                 "type": "array",
                 "maxItems": 8,
-                "items": {"type": "string", "enum": ["safety", "privacy"]},
+                "items": {
+                    "type": "string",
+                    "x-fairmind-valueType": "symbol",
+                    "enum": ["safety", "privacy"],
+                },
             },
         },
         "required": ["threshold", "mode"],
@@ -644,9 +669,17 @@ def test_configuration_strings_are_safe_catalog_members(
 ) -> None:
     payload = _suite_payload()
     string_schema = (
-        {"type": "string", "enum": [unsafe_value]}
+        {
+            "type": "string",
+            "x-fairmind-valueType": "symbol",
+            "enum": [unsafe_value],
+        }
         if string_contract == "enum"
-        else {"type": "string", "const": unsafe_value}
+        else {
+            "type": "string",
+            "x-fairmind-valueType": "symbol",
+            "const": unsafe_value,
+        }
     )
     payload["configurationSchema"] = {
         "type": "object",
@@ -671,11 +704,24 @@ def test_configuration_accepts_ordinary_catalog_members_and_scalars() -> None:
     payload["configurationSchema"] = {
         "type": "object",
         "properties": {
-            "model": {"type": "string", "enum": ["gpt-4o-mini"]},
-            "language": {"type": "string", "enum": ["en-US"]},
-            "mode": {"type": "string", "const": "balanced"},
+            "model": {
+                "type": "string",
+                "x-fairmind-valueType": "model_id",
+                "enum": ["gpt-4o-mini"],
+            },
+            "language": {
+                "type": "string",
+                "x-fairmind-valueType": "locale",
+                "enum": ["en-US"],
+            },
+            "mode": {
+                "type": "string",
+                "x-fairmind-valueType": "symbol",
+                "const": "balanced",
+            },
             "pack": {
                 "type": "string",
+                "x-fairmind-valueType": "suite_ref",
                 "enum": ["fairmind/agent-safety@1.0.0"],
             },
             "enabled": {"type": "boolean"},
@@ -698,6 +744,229 @@ def test_configuration_accepts_ordinary_catalog_members_and_scalars() -> None:
     assert normalized["configurationDefaults"] == payload["configurationDefaults"]
 
 
+@pytest.mark.parametrize("unsafe_value", UNSAFE_ADAPTER_IDENTIFIERS)
+def test_adapter_name_rejects_exact_identifier_bypasses(unsafe_value: str) -> None:
+    payload = _suite_payload()
+    payload["adapterName"] = unsafe_value
+
+    with pytest.raises(AssuranceContractValidationError) as caught:
+        normalize_suite_create(payload, owner_scope="org")
+
+    assert caught.value.code == "unsafe_string_value"
+    assert unsafe_value not in caught.value.message
+
+
+@pytest.mark.parametrize("unsafe_value", UNSAFE_ADAPTER_IDENTIFIERS)
+def test_execution_envelope_rejects_exact_adapter_identifier_bypasses(
+    unsafe_value: str,
+) -> None:
+    inputs = _envelope_inputs()
+    inputs["suites"][0]["adapterName"] = unsafe_value
+
+    with pytest.raises(AssuranceContractValidationError) as caught:
+        build_execution_envelope_v2(**inputs)
+
+    assert caught.value.code == "unsafe_string_value"
+    assert unsafe_value not in caught.value.message
+
+
+@pytest.mark.parametrize(
+    ("binding", "field", "value"),
+    [
+        ("target", "unexpectedLabel", "safe"),
+        ("target", "targetKind", "unsupported-kind"),
+        ("trust", "unexpectedLabel", "safe"),
+        ("suite", "suiteRef", "not-versioned"),
+        ("suite", "workerType", "unknown-worker"),
+    ],
+)
+def test_execution_envelope_uses_closed_field_level_binding_contracts(
+    binding: str,
+    field: str,
+    value: str,
+) -> None:
+    inputs = _envelope_inputs()
+    if binding == "target":
+        inputs["target"][field] = value
+    elif binding == "trust":
+        inputs["trust_policy"][field] = value
+    else:
+        inputs["suites"][0][field] = value
+
+    with pytest.raises(AssuranceContractValidationError) as caught:
+        build_execution_envelope_v2(**inputs)
+
+    assert caught.value.code == "invalid_execution_binding"
+    assert value not in caught.value.message
+
+
+@pytest.mark.parametrize(
+    ("binding_path",),
+    [
+        (("target", "id"),),
+        (("target", "targetKey"),),
+        (("target", "targetKind"),),
+        (("target", "version"),),
+        (("target", "systemVersion"),),
+        (("target", "subjectKind"),),
+        (("target", "subjectId"),),
+        (("target", "subjectVersion"),),
+        (("target", "deploymentId"),),
+        (("target", "connectorBindingId"),),
+        (("trust_policy", "id"),),
+        (("trust_policy", "version"),),
+        (("suites", 0, "suiteExecutionId"),),
+        (("suites", 0, "suiteVersionId"),),
+        (("suites", 0, "ownerScope"),),
+        (("suites", 0, "suiteRef"),),
+        (("suites", 0, "workerType"),),
+        (("suites", 0, "adapterVersion"),),
+        (("suites", 0, "resultContractVersion"),),
+        (("suites", 0, "inputRoles", 0),),
+        (("suites", 0, "inputs", "scenario_set", "kind"),),
+        (("suites", 0, "inputs", "scenario_set", "mediaType"),),
+    ],
+)
+def test_unsafe_metadata_sentinel_cannot_rotate_between_binding_fields(
+    binding_path: tuple[str | int, ...],
+) -> None:
+    inputs = _envelope_inputs()
+    inputs["suites"][0]["inputs"]["scenario_set"] = {
+        "kind": "content_digest",
+        "sha256": "1" * 64,
+        "mediaType": "application/json",
+        "sizeBytes": 512,
+    }
+    cursor = inputs
+    for segment in binding_path[:-1]:
+        cursor = cursor[segment]
+    unsafe_value = "Summarize-the-private-customer-record"
+    cursor[binding_path[-1]] = unsafe_value
+
+    with pytest.raises(AssuranceContractValidationError) as caught:
+        build_execution_envelope_v2(**inputs)
+
+    assert caught.value.code == "invalid_execution_binding"
+    assert unsafe_value not in caught.value.message
+
+
+def _typed_string_suite(value: str, value_type: str) -> dict:
+    payload = _suite_payload()
+    payload["configurationSchema"] = {
+        "type": "object",
+        "properties": {
+            "value": {
+                "type": "string",
+                "x-fairmind-valueType": value_type,
+                "enum": [value],
+            }
+        },
+        "required": ["value"],
+        "additionalProperties": False,
+    }
+    payload["configurationDefaults"] = {"value": value}
+    return payload
+
+
+@pytest.mark.parametrize(
+    ("value_type", "value"),
+    [
+        ("model_id", "gpt-4.1-mini-2025-04-14"),
+        ("model_id", "claude-3-5-sonnet-20241022"),
+        ("model_id", "meta-llama/Llama-3.1-8B-Instruct"),
+        ("media_type", "image/png"),
+        ("locale", "en-GB-x-private"),
+        ("suite_ref", "fairmind/agent-safety@1.0.0+cpu.1"),
+    ],
+)
+def test_declared_fairmind_value_types_accept_real_bounded_identifiers(
+    value_type: str,
+    value: str,
+) -> None:
+    normalized = normalize_suite_create(
+        _typed_string_suite(value, value_type),
+        owner_scope="org",
+    )
+
+    assert normalized["configurationDefaults"] == {"value": value}
+
+
+def test_string_configuration_requires_an_explicit_fairmind_value_type() -> None:
+    payload = _suite_payload()
+    payload["configurationSchema"] = {
+        "type": "object",
+        "properties": {"value": {"type": "string", "enum": ["topsecret"]}},
+        "required": ["value"],
+        "additionalProperties": False,
+    }
+    payload["configurationDefaults"] = {"value": "topsecret"}
+
+    with pytest.raises(AssuranceContractValidationError) as caught:
+        normalize_suite_create(payload, owner_scope="org")
+
+    assert caught.value.code == "unsafe_configuration_schema"
+
+
+@pytest.mark.parametrize(
+    ("value_type", "unsafe_value"),
+    [
+        ("symbol", "topsecret"),
+        ("model_id", "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6"),
+    ],
+)
+def test_declared_fairmind_value_types_reject_secret_or_opaque_values(
+    value_type: str,
+    unsafe_value: str,
+) -> None:
+    with pytest.raises(AssuranceContractValidationError) as caught:
+        normalize_suite_create(
+            _typed_string_suite(unsafe_value, value_type),
+            owner_scope="org",
+        )
+
+    assert caught.value.code == "unsafe_string_value"
+    assert unsafe_value not in caught.value.message
+
+
+def test_versioned_suite_ref_rejects_an_opaque_high_entropy_name_segment() -> None:
+    with pytest.raises(AssuranceContractValidationError) as caught:
+        normalize_suite_create(
+            _typed_string_suite(OPAQUE_VERSIONED_SUITE_REF, "suite_ref"),
+            owner_scope="org",
+        )
+
+    assert caught.value.code == "unsafe_string_value"
+    assert OPAQUE_VERSIONED_SUITE_REF not in caught.value.message
+
+
+def test_execution_envelope_rejects_an_opaque_versioned_suite_ref() -> None:
+    inputs = _envelope_inputs()
+    inputs["suites"][0]["suiteRef"] = OPAQUE_VERSIONED_SUITE_REF
+
+    with pytest.raises(AssuranceContractValidationError) as caught:
+        build_execution_envelope_v2(**inputs)
+
+    assert caught.value.code == "invalid_execution_binding"
+    assert OPAQUE_VERSIONED_SUITE_REF not in caught.value.message
+
+
+def test_configuration_schema_rejects_61_character_hex_property_name() -> None:
+    property_name = "a" * 61
+    payload = _suite_payload()
+    payload["configurationSchema"] = {
+        "type": "object",
+        "properties": {property_name: {"type": "boolean"}},
+        "required": [property_name],
+        "additionalProperties": False,
+    }
+    payload["configurationDefaults"] = {property_name: True}
+
+    with pytest.raises(AssuranceContractValidationError) as caught:
+        normalize_suite_create(payload, owner_scope="org")
+
+    assert caught.value.code == "unsafe_configuration_schema"
+
+
 @pytest.mark.parametrize(
     "unsafe_value",
     [
@@ -714,7 +983,13 @@ def test_configuration_rejects_semantically_unsafe_catalog_shaped_strings(
     payload = _suite_payload()
     payload["configurationSchema"] = {
         "type": "object",
-        "properties": {"mode": {"type": "string", "enum": [unsafe_value]}},
+        "properties": {
+            "mode": {
+                "type": "string",
+                "x-fairmind-valueType": "symbol",
+                "enum": [unsafe_value],
+            }
+        },
         "required": ["mode"],
         "additionalProperties": False,
     }
@@ -915,7 +1190,11 @@ def test_unique_items_allows_bounded_primitive_catalog_values() -> None:
         "minItems": 0,
         "maxItems": 256,
         "uniqueItems": True,
-        "items": {"type": "string", "enum": ["safety", "privacy"]},
+        "items": {
+            "type": "string",
+            "x-fairmind-valueType": "symbol",
+            "enum": ["safety", "privacy"],
+        },
     }
 
     evaluation_v2_module.validate_safe_configuration_schema(schema)
@@ -926,7 +1205,13 @@ def test_schema_and_successful_configuration_validation_use_bounded_canonical_ca
 ) -> None:
     schema = {
         "type": "object",
-        "properties": {"mode": {"type": "string", "enum": ["cache-probe"]}},
+        "properties": {
+            "mode": {
+                "type": "string",
+                "x-fairmind-valueType": "symbol",
+                "enum": ["cache-probe"],
+            }
+        },
         "required": ["mode"],
         "additionalProperties": False,
     }
@@ -967,7 +1252,13 @@ def test_schema_and_successful_configuration_validation_use_bounded_canonical_ca
 def test_schema_cache_never_accepts_mutated_or_failed_untrusted_values() -> None:
     schema = {
         "type": "object",
-        "properties": {"mode": {"type": "string", "enum": ["strict"]}},
+        "properties": {
+            "mode": {
+                "type": "string",
+                "x-fairmind-valueType": "symbol",
+                "enum": ["strict"],
+            }
+        },
         "required": ["mode"],
         "additionalProperties": False,
     }

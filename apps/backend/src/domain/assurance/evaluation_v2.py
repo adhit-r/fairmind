@@ -14,6 +14,7 @@ import json
 import math
 import re
 from typing import Any, Mapping, Sequence
+from urllib.parse import unquote
 
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import SchemaError, ValidationError as JsonSchemaValidationError
@@ -50,6 +51,10 @@ RUN_TRIGGERS = frozenset(
 )
 TARGET_MANIFEST_SCHEMA_VERSION = CONTRACT_VERSION
 SAFE_CONFIGURATION_SCHEMA_POLICY = "fairmind-safe-config/v1"
+FAIRMIND_VALUE_TYPE_KEY = "x-fairmind-valueType"
+FAIRMIND_VALUE_TYPES = frozenset(
+    {"symbol", "model_id", "locale", "media_type", "suite_ref"}
+)
 
 MAX_TARGET_MANIFEST_BYTES = 64 * 1024
 MAX_INPUT_DESCRIPTOR_BYTES = 1024
@@ -148,15 +153,36 @@ _SAFE_UUID = re.compile(
     r"[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
 )
 _SAFE_DIGEST = re.compile(r"^(?:sha256:)?[0-9a-f]{64}$")
-_CATALOG_SYMBOL_PATTERN = (
-    r"[A-Za-z0-9]{1,16}(?:[-_.][A-Za-z0-9]{1,16}){0,2}"
+_VALUE_ATOM = r"[A-Za-z0-9]{1,16}"
+_SYMBOL_VALUE = re.compile(rf"^{_VALUE_ATOM}(?:[-_.]{_VALUE_ATOM}){{0,2}}$")
+_MODEL_SEGMENT = rf"{_VALUE_ATOM}(?:[-_.]{_VALUE_ATOM}){{0,8}}"
+_MODEL_ID_VALUE = re.compile(rf"^{_MODEL_SEGMENT}(?:/{_MODEL_SEGMENT})?$")
+_LOCALE_VALUE = re.compile(r"^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8}){0,5}$")
+_MEDIA_TYPE_VALUE = re.compile(
+    r"^[a-z][a-z0-9!#$&^_.+\-]{0,31}/[a-z0-9][a-z0-9!#$&^_.+\-]{0,63}$"
 )
-_CATALOG_SYMBOL = re.compile(rf"^{_CATALOG_SYMBOL_PATTERN}$")
-_VERSIONED_CATALOG_REFERENCE = re.compile(
-    rf"^{_CATALOG_SYMBOL_PATTERN}/{_CATALOG_SYMBOL_PATTERN}@"
+_SEMANTIC_VERSION = (
     r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
-    r"(?:-[A-Za-z0-9]{1,16}(?:\.[A-Za-z0-9]{1,16}){0,2})?$"
+    r"(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?"
+    r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?"
 )
+_SUITE_REF_VALUE = re.compile(
+    rf"^[a-z0-9][a-z0-9._-]{{0,31}}/"
+    rf"[a-z0-9][a-z0-9._-]{{0,63}}@{_SEMANTIC_VERSION}$"
+)
+_ADAPTER_IDENTIFIER = re.compile(
+    r"^[a-z][a-z0-9]{0,15}(?:[-_.][a-z0-9]{1,16}){0,2}$"
+)
+_BINDING_ATOM = r"[A-Za-z0-9]{1,24}"
+_BINDING_IDENTIFIER = re.compile(
+    rf"^{_BINDING_ATOM}(?:[-_.:]{_BINDING_ATOM}){{0,3}}$"
+)
+_BINDING_VERSION = re.compile(
+    rf"^(?:{_SEMANTIC_VERSION}|"
+    r"[A-Za-z0-9]{1,16}(?:[._+-][A-Za-z0-9]{1,16}){0,3})$"
+)
+_SCHEMA_IDENTIFIER = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,47}$")
+_HEXISH_SCHEMA_IDENTIFIER = re.compile(r"(?i)^[0-9a-f]{32,}$")
 _JWT_VALUE = re.compile(
     r"^[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}$"
 )
@@ -165,7 +191,7 @@ _PROVIDER_KEY_VALUE = re.compile(
     r"[A-Za-z0-9_\-]{12,}$"
 )
 _CONNECTION_URL_VALUE = re.compile(
-    r"(?i)(?:file|https?|postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|amqps?|s3)://"
+    r"(?i)(?:file:/+|(?:https?|postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|amqps?|s3)://)"
 )
 _BEARER_OR_BASIC_VALUE = re.compile(
     r"(?i)(?:^|[_\-\s])(?:raw[_\-\s]+)?(?:bearer|basic)(?:[_\-\s]|$)"
@@ -174,9 +200,9 @@ _EMAIL_VALUE = re.compile(
     r"^[A-Za-z0-9._%+\-]{1,64}@[A-Za-z0-9.-]{1,255}$"
 )
 _SECRET_LIKE_VALUE = re.compile(
-    r"(?i)(?:^|[._:/+\-\s])(?:secret|password|passwd|credentials?|"
+    r"(?i)(?:secret|(?:^|[._:/+\-\s])(?:password|passwd|credentials?|"
     r"(?:private|api|client|access|refresh|bearer)[._:+\-\s]*(?:key|secret|token))"
-    r"(?:$|[._:/+\-\s])"
+    r"(?:$|[._:/+\-\s]))"
 )
 _RAW_PROMPT_VALUE = re.compile(
     r"(?i)(?:\b(?:ignore|disregard)[\s._:/+\-]+"
@@ -187,7 +213,45 @@ _RAW_PROMPT_VALUE = re.compile(
     r"\breveal\b.{0,80}\b(?:prompt|secret|instruction)s?\b)"
 )
 _OPAQUE_BASE64_VALUE = re.compile(r"^[A-Za-z0-9+/=_-]+$")
+_OPAQUE_REFERENCE_SEGMENT = re.compile(r"^[A-Za-z0-9]{24,}$")
+_HEX_REFERENCE_SEGMENT = re.compile(r"(?i)^[0-9a-f]{24,}$")
 _PRIMITIVE_SCHEMA_TYPES = frozenset({"boolean", "integer", "number", "string"})
+_TARGET_BINDING_KEYS = frozenset(
+    {
+        "id",
+        "targetKey",
+        "targetKind",
+        "version",
+        "systemVersion",
+        "subjectKind",
+        "subjectId",
+        "subjectVersion",
+        "subjectDigest",
+        "deploymentId",
+        "connectorBindingId",
+        "manifestDigest",
+    }
+)
+_TRUST_BINDING_KEYS = frozenset({"id", "version", "policyHash"})
+_SUITE_BINDING_KEYS = frozenset(
+    {
+        "suiteExecutionId",
+        "suiteVersionId",
+        "ownerScope",
+        "suiteRef",
+        "manifestDigest",
+        "workerType",
+        "runnerImageDigest",
+        "adapterName",
+        "adapterVersion",
+        "resultContractVersion",
+        "configuration",
+        "configurationHash",
+        "inputRoles",
+        "budgets",
+        "inputs",
+    }
+)
 
 
 class AssuranceContractValidationError(ValueError):
@@ -263,6 +327,26 @@ def _high_entropy_opaque_value(value: str) -> bool:
     return entropy >= 4.2
 
 
+def _opaque_reference_segment(value: str) -> bool:
+    if _HEX_REFERENCE_SEGMENT.fullmatch(value):
+        return True
+    if _OPAQUE_REFERENCE_SEGMENT.fullmatch(value) is None:
+        return False
+    entropy = -sum(
+        (value.count(character) / len(value))
+        * math.log2(value.count(character) / len(value))
+        for character in set(value)
+    )
+    return entropy >= 4.0
+
+
+def _suite_ref_contains_opaque_segment(value: str) -> bool:
+    return any(
+        _opaque_reference_segment(segment)
+        for segment in re.findall(r"[A-Za-z0-9]+", value)
+    )
+
+
 def _unsafe_public_string(value: str, *, allow_digest: bool = False) -> bool:
     if not value or len(value.encode("utf-8")) > 512:
         return True
@@ -272,11 +356,17 @@ def _unsafe_public_string(value: str, *, allow_digest: bool = False) -> bool:
         return False
     if _SAFE_DIGEST.fullmatch(value):
         return not allow_digest
+    decoded = value
+    for _ in range(2):
+        unquoted = unquote(decoded)
+        if unquoted == decoded:
+            break
+        decoded = unquoted
     return bool(
         "-----BEGIN " in value.upper()
         or _JWT_VALUE.fullmatch(value)
         or _PROVIDER_KEY_VALUE.search(value)
-        or _CONNECTION_URL_VALUE.search(value)
+        or _CONNECTION_URL_VALUE.search(decoded)
         or _BEARER_OR_BASIC_VALUE.search(value)
         or _EMAIL_VALUE.fullmatch(value)
         or _SECRET_LIKE_VALUE.search(value)
@@ -285,48 +375,80 @@ def _unsafe_public_string(value: str, *, allow_digest: bool = False) -> bool:
     )
 
 
-def _is_catalog_member(value: str) -> bool:
-    """Admit a short symbolic ID or namespace/name@semantic-version reference."""
-    return bool(
-        (len(value) <= 32 and _CATALOG_SYMBOL.fullmatch(value))
-        or (
+def _matches_fairmind_value_type(value: str, value_type: str) -> bool:
+    if value_type == "symbol":
+        return len(value) <= 32 and _SYMBOL_VALUE.fullmatch(value) is not None
+    if value_type == "model_id":
+        return bool(
             len(value) <= 96
-            and _VERSIONED_CATALOG_REFERENCE.fullmatch(value)
+            and _MODEL_ID_VALUE.fullmatch(value)
+            and any(character.isdigit() for character in value)
         )
-    )
+    if value_type == "locale":
+        return len(value) <= 48 and _LOCALE_VALUE.fullmatch(value) is not None
+    if value_type == "media_type":
+        return len(value) <= 96 and _MEDIA_TYPE_VALUE.fullmatch(value) is not None
+    if value_type == "suite_ref":
+        return bool(
+            len(value) <= 128
+            and _SUITE_REF_VALUE.fullmatch(value)
+            and not _suite_ref_contains_opaque_segment(value)
+        )
+    return False
 
 
-def validate_public_safe_string(
-    value: str,
-    *,
-    catalog_member: bool = False,
-    allow_digest: bool = False,
-) -> None:
-    """Reject caller strings that cannot safely become persisted public evidence."""
-    invalid_catalog_member = catalog_member and not _is_catalog_member(value)
-    if _unsafe_public_string(value, allow_digest=allow_digest) or invalid_catalog_member:
+def validate_fairmind_typed_value(value: str, value_type: str) -> None:
+    if _unsafe_public_string(value) or not _matches_fairmind_value_type(
+        value, value_type
+    ):
         raise AssuranceContractValidationError(
             "unsafe_string_value",
             UNSAFE_STRING_VALUE_MESSAGE,
         )
 
 
-def validate_public_safe_values(value: Any, *, catalog_members: bool = False) -> None:
+def validate_adapter_identifier(value: str) -> None:
+    if (
+        _unsafe_public_string(value)
+        or len(value) > 48
+        or _ADAPTER_IDENTIFIER.fullmatch(value) is None
+    ):
+        raise AssuranceContractValidationError(
+            "unsafe_string_value",
+            UNSAFE_STRING_VALUE_MESSAGE,
+        )
+
+
+def validate_public_safe_string(
+    value: str,
+    *,
+    allow_digest: bool = False,
+) -> None:
+    """Reject caller strings that cannot safely become persisted public evidence."""
+    if _unsafe_public_string(value, allow_digest=allow_digest):
+        raise AssuranceContractValidationError(
+            "unsafe_string_value",
+            UNSAFE_STRING_VALUE_MESSAGE,
+        )
+
+
+def validate_public_safe_values(value: Any) -> None:
     """Recursively validate string values without inspecting or reflecting their paths."""
     if isinstance(value, str):
-        validate_public_safe_string(value, catalog_member=catalog_members)
+        validate_public_safe_string(value)
     elif isinstance(value, dict):
         for child in value.values():
-            validate_public_safe_values(child, catalog_members=catalog_members)
+            validate_public_safe_values(child)
     elif isinstance(value, (list, tuple)):
         for child in value:
-            validate_public_safe_values(child, catalog_members=catalog_members)
+            validate_public_safe_values(child)
 
 
 def _safe_schema_identifier(value: Any) -> bool:
     return bool(
         isinstance(value, str)
-        and _ASCII_IDENTIFIER.fullmatch(value)
+        and _SCHEMA_IDENTIFIER.fullmatch(value)
+        and _HEXISH_SCHEMA_IDENTIFIER.fullmatch(value) is None
         and not _unsafe_public_string(value)
     )
 
@@ -583,8 +705,13 @@ def validate_safe_configuration_schema(schema: Mapping[str, Any]) -> int:
             ):
                 raise _unsafe_schema()
         elif schema_type == "string":
-            allowed = common | {"enum", "const"}
-            if any(key not in allowed for key in node) or (("enum" in node) == ("const" in node)):
+            allowed = common | {"enum", "const", FAIRMIND_VALUE_TYPE_KEY}
+            value_type = node.get(FAIRMIND_VALUE_TYPE_KEY)
+            if (
+                any(key not in allowed for key in node)
+                or (("enum" in node) == ("const" in node))
+                or value_type not in FAIRMIND_VALUE_TYPES
+            ):
                 raise _unsafe_schema()
             if "enum" in node:
                 values = node["enum"]
@@ -600,12 +727,13 @@ def validate_safe_configuration_schema(schema: Mapping[str, Any]) -> int:
                     or len(set(values)) != len(values)
                 ):
                     raise _unsafe_schema()
-                validate_public_safe_values(values, catalog_members=True)
+                for value in values:
+                    validate_fairmind_typed_value(value, value_type)
             else:
                 value = node["const"]
                 if not isinstance(value, str) or not value or len(value.encode("utf-8")) > 512:
                     raise _unsafe_schema()
-                validate_public_safe_string(value, catalog_member=True)
+                validate_fairmind_typed_value(value, value_type)
         elif schema_type == "array":
             allowed = common | {"items", "minItems", "maxItems", "uniqueItems"}
             minimum_items = node.get("minItems", 0)
@@ -741,10 +869,13 @@ def validate_suite_configuration(
 ) -> None:
     """Validate suite configuration without network or filesystem retrieval."""
     reject_sensitive_keys(configuration)
-    validate_public_safe_values(configuration, catalog_members=True)
+    schema_json = canonical_json(schema)
+    configuration_json = canonical_json(configuration)
+    _compiled_safe_validator(schema_json)
+    validate_public_safe_values(configuration)
     _successful_configuration_validation(
-        canonical_json(schema),
-        canonical_json(configuration),
+        schema_json,
+        configuration_json,
     )
 
 
@@ -866,7 +997,7 @@ def validate_selected_configuration(configuration: Any) -> int:
             "invalid_suite_configuration", "configuration must be an object."
         )
     reject_sensitive_keys(configuration, path="suite.configuration")
-    validate_public_safe_values(configuration, catalog_members=True)
+    validate_public_safe_values(configuration)
     return require_canonical_size(
         configuration,
         maximum_bytes=MAX_SUITE_CONFIGURATION_BYTES,
@@ -965,6 +1096,7 @@ def normalize_suite_create(payload: Mapping[str, Any], *, owner_scope: str) -> d
             "workerType must be a supported delivery mode declared by the suite.",
         )
     adapter_name = _required_text(payload, "adapterName")
+    validate_adapter_identifier(adapter_name)
     adapter_version = _required_text(payload, "adapterVersion")
     result_contract = _required_text(payload, "resultContractVersion")
     validate_public_safe_string(owner_scope)
@@ -1245,74 +1377,171 @@ def execution_envelope_variable_projection(
     }
 
 
-def _validate_bound_digest(value: Any) -> None:
-    if value is None:
+def _invalid_execution_binding() -> AssuranceContractValidationError:
+    return AssuranceContractValidationError(
+        "invalid_execution_binding",
+        "The execution envelope contains an invalid closed binding.",
+    )
+
+
+def _require_closed_binding_keys(
+    value: Any,
+    expected: frozenset[str],
+) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping) or set(value) != expected:
+        raise _invalid_execution_binding()
+    return value
+
+
+def _require_binding_identifier(value: Any, *, optional: bool = False) -> None:
+    if value is None and optional:
         return
-    if not isinstance(value, str) or _SAFE_DIGEST.fullmatch(value) is None:
-        raise AssuranceContractValidationError(
-            "unsafe_string_value",
-            UNSAFE_STRING_VALUE_MESSAGE,
+    if (
+        not isinstance(value, str)
+        or len(value) > 96
+        or _unsafe_public_string(value)
+        or (
+            _SAFE_UUID.fullmatch(value) is None
+            and _BINDING_IDENTIFIER.fullmatch(value) is None
         )
-    validate_public_safe_string(value, allow_digest=True)
+    ):
+        raise _invalid_execution_binding()
 
 
-def _validate_binding_object(
-    value: Mapping[str, Any],
-    *,
-    digest_fields: frozenset[str],
-) -> None:
-    validate_public_safe_values(
-        {key: child for key, child in value.items() if key not in digest_fields}
-    )
-    for field in digest_fields:
-        if field in value:
-            _validate_bound_digest(value[field])
+def _require_binding_version(value: Any) -> None:
+    if (
+        not isinstance(value, str)
+        or len(value) > 64
+        or _unsafe_public_string(value)
+        or _BINDING_VERSION.fullmatch(value) is None
+    ):
+        raise _invalid_execution_binding()
 
 
-def _validate_suite_binding_public_values(suite: Mapping[str, Any]) -> None:
-    digest_fields = frozenset(
-        {
-            "manifestDigest",
-            "manifest_digest",
-            "runnerImageDigest",
-            "runner_image_digest",
-            "configurationHash",
-            "configuration_hash",
-        }
-    )
-    excluded_fields = digest_fields | {"configuration", "inputs"}
-    validate_public_safe_values(
-        {key: child for key, child in suite.items() if key not in excluded_fields}
-    )
-    for field in digest_fields:
-        if field in suite:
-            _validate_bound_digest(suite[field])
+def _require_plain_sha256(value: Any) -> None:
+    if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{64}", value) is None:
+        raise _invalid_execution_binding()
 
-    configuration = suite.get("configuration")
-    if configuration is not None:
-        validate_public_safe_values(configuration, catalog_members=True)
 
-    inputs = suite.get("inputs")
-    if inputs is None:
-        return
-    if not isinstance(inputs, Mapping):
-        validate_public_safe_values(inputs)
-        return
+def _require_oci_sha256(value: Any) -> None:
+    if value is not None and (
+        not isinstance(value, str)
+        or re.fullmatch(r"sha256:[0-9a-f]{64}", value) is None
+    ):
+        raise _invalid_execution_binding()
+
+
+def _require_binding_symbol(value: Any) -> None:
+    if (
+        not isinstance(value, str)
+        or len(value) > 96
+        or _unsafe_public_string(value)
+        or _BINDING_IDENTIFIER.fullmatch(value) is None
+    ):
+        raise _invalid_execution_binding()
+
+
+def _validate_target_binding(target: Mapping[str, Any]) -> None:
+    target = _require_closed_binding_keys(target, _TARGET_BINDING_KEYS)
+    _require_binding_identifier(target["id"])
+    _require_binding_identifier(target["targetKey"])
+    if target["targetKind"] not in TARGET_KINDS:
+        raise _invalid_execution_binding()
+    _require_binding_version(target["version"])
+    _require_binding_version(target["systemVersion"])
+    _require_binding_symbol(target["subjectKind"])
+    _require_binding_identifier(target["subjectId"])
+    _require_binding_version(target["subjectVersion"])
+    _require_plain_sha256(target["subjectDigest"])
+    _require_binding_identifier(target["deploymentId"], optional=True)
+    _require_binding_identifier(target["connectorBindingId"], optional=True)
+    _require_plain_sha256(target["manifestDigest"])
+
+
+def _validate_trust_binding(trust_policy: Mapping[str, Any]) -> None:
+    trust_policy = _require_closed_binding_keys(trust_policy, _TRUST_BINDING_KEYS)
+    _require_binding_identifier(trust_policy["id"])
+    _require_binding_version(trust_policy["version"])
+    _require_plain_sha256(trust_policy["policyHash"])
+
+
+def _validate_input_descriptor(descriptor: Any) -> None:
+    if (
+        not isinstance(descriptor, Mapping)
+        or set(descriptor) - _INPUT_DESCRIPTOR_KEYS
+        or not {"kind", "sha256"}.issubset(descriptor)
+        or descriptor["kind"] != "content_digest"
+    ):
+        raise _invalid_execution_binding()
+    _require_plain_sha256(descriptor["sha256"])
+    if (
+        "mediaType" in descriptor
+        and descriptor["mediaType"] not in _ALLOWED_INPUT_MEDIA_TYPES
+    ):
+        raise _invalid_execution_binding()
+    size = descriptor.get("sizeBytes")
+    if "sizeBytes" in descriptor and (
+        not isinstance(size, int)
+        or isinstance(size, bool)
+        or size < 0
+        or size >= 2**53
+    ):
+        raise _invalid_execution_binding()
+
+
+def _validate_suite_binding(suite: Mapping[str, Any]) -> None:
+    suite = _require_closed_binding_keys(suite, _SUITE_BINDING_KEYS)
+    _require_binding_identifier(suite["suiteExecutionId"])
+    _require_binding_identifier(suite["suiteVersionId"])
+    _require_binding_identifier(suite["ownerScope"])
+    suite_ref = suite["suiteRef"]
+    if (
+        not isinstance(suite_ref, str)
+        or _unsafe_public_string(suite_ref)
+        or not _matches_fairmind_value_type(suite_ref, "suite_ref")
+    ):
+        raise _invalid_execution_binding()
+    _require_plain_sha256(suite["manifestDigest"])
+    if suite["workerType"] not in WORKER_TYPES:
+        raise _invalid_execution_binding()
+    _require_oci_sha256(suite["runnerImageDigest"])
+    adapter_name = suite["adapterName"]
+    if not isinstance(adapter_name, str):
+        raise _invalid_execution_binding()
+    validate_adapter_identifier(adapter_name)
+    _require_binding_version(suite["adapterVersion"])
+    _require_binding_version(suite["resultContractVersion"])
+    validate_selected_configuration(suite["configuration"])
+    _require_plain_sha256(suite["configurationHash"])
+    validate_suite_budgets(suite["budgets"])
+
+    input_roles = suite["inputRoles"]
+    if (
+        not isinstance(input_roles, list)
+        or len(input_roles) > 32
+        or len(set(input_roles)) != len(input_roles)
+    ):
+        raise _invalid_execution_binding()
+    for role in input_roles:
+        _require_binding_symbol(role)
+
+    inputs = suite["inputs"]
+    if not isinstance(inputs, Mapping) or set(inputs) != set(input_roles):
+        raise _invalid_execution_binding()
     for role, descriptor in inputs.items():
-        if not isinstance(role, str):
-            raise AssuranceContractValidationError(
-                "unsafe_string_value",
-                UNSAFE_STRING_VALUE_MESSAGE,
-            )
-        validate_public_safe_string(role, catalog_member=True)
-        if not isinstance(descriptor, Mapping):
-            validate_public_safe_values(descriptor)
-            continue
-        validate_public_safe_values(
-            {key: child for key, child in descriptor.items() if key != "sha256"}
-        )
-        if "sha256" in descriptor:
-            _validate_bound_digest(descriptor["sha256"])
+        _require_binding_symbol(role)
+        _validate_input_descriptor(descriptor)
+
+
+def _require_execution_envelope_variable_size(
+    projection: Mapping[str, Any],
+) -> None:
+    require_canonical_size(
+        projection,
+        maximum_bytes=MAX_ENVELOPE_VARIABLE_BYTES,
+        code="envelope_variable_data_too_large",
+        message="The canonical variable execution-envelope data exceeds 448 KiB.",
+    )
 
 
 def validate_execution_envelope_variable_size(
@@ -1326,24 +1555,11 @@ def validate_execution_envelope_variable_size(
         trust_policy=trust_policy,
         suites=suites,
     )
-    require_canonical_size(
-        projection,
-        maximum_bytes=MAX_ENVELOPE_VARIABLE_BYTES,
-        code="envelope_variable_data_too_large",
-        message="The canonical variable execution-envelope data exceeds 448 KiB.",
-    )
-    _validate_binding_object(
-        target,
-        digest_fields=frozenset(
-            {"subjectDigest", "subject_digest", "manifestDigest", "manifest_digest"}
-        ),
-    )
-    _validate_binding_object(
-        trust_policy,
-        digest_fields=frozenset({"policyHash", "policy_hash"}),
-    )
+    _require_execution_envelope_variable_size(projection)
+    _validate_target_binding(target)
+    _validate_trust_binding(trust_policy)
     for suite in suites:
-        _validate_suite_binding_public_values(suite)
+        _validate_suite_binding(suite)
 
 
 def _preflight_envelope_variable_projection(
@@ -1483,10 +1699,12 @@ def evaluate_preflight(
             suites=suites,
         )
         try:
-            validate_execution_envelope_variable_size(
-                target=target_binding,
-                trust_policy=trust_binding,
-                suites=suite_bindings,
+            _require_execution_envelope_variable_size(
+                execution_envelope_variable_projection(
+                    target=target_binding,
+                    trust_policy=trust_binding,
+                    suites=suite_bindings,
+                )
             )
         except AssuranceContractValidationError as error:
             if error.code == "envelope_variable_data_too_large":
