@@ -580,7 +580,13 @@ def list_targets(
     membership: OrgMembership = Depends(organization_membership),
     db: Session = Depends(get_db),
 ):
-    result = _service(db).list_target_versions(org_id=membership.org_id, system_id=system_id)
+    try:
+        result = _service(db).list_target_versions(
+            org_id=membership.org_id,
+            system_id=system_id,
+        )
+    except EvaluationWorkbenchError as error:
+        _raise(error)
     if result is None:
         _missing("system")
     return result
@@ -596,11 +602,14 @@ def get_target(
     membership: OrgMembership = Depends(organization_membership),
     db: Session = Depends(get_db),
 ):
-    result = _service(db).get_target_version(
-        org_id=membership.org_id,
-        system_id=system_id,
-        target_version_id=target_version_id,
-    )
+    try:
+        result = _service(db).get_target_version(
+            org_id=membership.org_id,
+            system_id=system_id,
+            target_version_id=target_version_id,
+        )
+    except EvaluationWorkbenchError as error:
+        _raise(error)
     if result is None:
         _missing("target_version")
     return result
@@ -639,7 +648,10 @@ def list_suites(
     membership: OrgMembership = Depends(organization_membership),
     db: Session = Depends(get_db),
 ):
-    return _service(db).list_suite_versions(org_id=membership.org_id)
+    try:
+        return _service(db).list_suite_versions(org_id=membership.org_id)
+    except EvaluationWorkbenchError as error:
+        _raise(error)
 
 
 @router.get(
@@ -651,10 +663,13 @@ def get_suite(
     membership: OrgMembership = Depends(organization_membership),
     db: Session = Depends(get_db),
 ):
-    result = _service(db).get_suite_version(
-        org_id=membership.org_id,
-        suite_version_id=suite_version_id,
-    )
+    try:
+        result = _service(db).get_suite_version(
+            org_id=membership.org_id,
+            suite_version_id=suite_version_id,
+        )
+    except EvaluationWorkbenchError as error:
+        _raise(error)
     if result is None:
         _missing("suite_version")
     return result
@@ -721,7 +736,13 @@ def list_plans(
     membership: OrgMembership = Depends(organization_membership),
     db: Session = Depends(get_db),
 ):
-    result = _service(db).list_plans(org_id=membership.org_id, system_id=system_id)
+    try:
+        result = _service(db).list_plans(
+            org_id=membership.org_id,
+            system_id=system_id,
+        )
+    except EvaluationWorkbenchError as error:
+        _raise(error)
     if result is None:
         _missing("system")
     return result
@@ -840,7 +861,13 @@ def list_runs(
     membership: OrgMembership = Depends(organization_membership),
     db: Session = Depends(get_db),
 ):
-    result = _service(db).list_runs(org_id=membership.org_id, system_id=system_id)
+    try:
+        result = _service(db).list_runs(
+            org_id=membership.org_id,
+            system_id=system_id,
+        )
+    except EvaluationWorkbenchError as error:
+        _raise(error)
     if result is None:
         _missing("system")
     return result
@@ -856,11 +883,14 @@ def get_run(
     membership: OrgMembership = Depends(organization_membership),
     db: Session = Depends(get_db),
 ):
-    result = _service(db).get_run(
-        org_id=membership.org_id,
-        system_id=system_id,
-        run_id=run_id,
-    )
+    try:
+        result = _service(db).get_run(
+            org_id=membership.org_id,
+            system_id=system_id,
+            run_id=run_id,
+        )
+    except EvaluationWorkbenchError as error:
+        _raise(error)
     if result is None:
         _missing("run")
     return result

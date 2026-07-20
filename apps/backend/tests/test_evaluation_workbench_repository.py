@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import base64
+from copy import deepcopy
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 import hashlib
 import json
@@ -35,8 +38,11 @@ from src.application.services.evaluation_workbench_service import (
     EvaluationWorkbenchService,
     assurance_request_hash,
 )
+from src.application.ports.evaluation_workbench import FrozenJsonObject
 from src.domain.assurance.evaluation_v2 import (
     AssuranceContractValidationError,
+    MAX_EXECUTION_ENVELOPE_BYTES,
+    canonical_json,
     canonical_sha256,
 )
 from src.infrastructure.db.repositories.evaluation_workbench_repository import (
@@ -47,6 +53,33 @@ from src.infrastructure.db.repositories.evaluation_workbench_repository import (
 ORG = str(uuid.uuid4())
 OTHER_ORG = str(uuid.uuid4())
 USER = str(uuid.uuid4())
+BINDING_INTEGRITY_DETAIL = {
+    "code": "binding_integrity_error",
+    "message": "Stored assurance bindings failed integrity verification.",
+}
+
+
+def test_envelope_nonce_verifier_rejects_standard_base64_alphabet() -> None:
+    standard_nonce = base64.b64encode(b"\xfb" * 32).decode("ascii").rstrip("=")
+    assert len(standard_nonce) == 43
+    assert "+" in standard_nonce or "/" in standard_nonce
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        evaluation_service_module._verified_envelope_nonce({"nonce": standard_nonce})
+
+    assert caught.value.detail() == BINDING_INTEGRITY_DETAIL
+
+
+def test_envelope_nonce_verifier_rejects_noncanonical_pad_bits() -> None:
+    noncanonical_nonce = ("A" * 42) + "B"
+    assert base64.urlsafe_b64decode(noncanonical_nonce + "=") == b"\x00" * 32
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        evaluation_service_module._verified_envelope_nonce(
+            {"nonce": noncanonical_nonce}
+        )
+
+    assert caught.value.detail() == BINDING_INTEGRITY_DETAIL
 
 
 def _service(
@@ -221,6 +254,546 @@ def _create_bound_catalog(service: EvaluationWorkbenchService, *, suites: int = 
         assert activated and activated.body["status"] == "active"
         suite_ids.append(suite["id"])
     return target, suite_ids
+
+
+def _create_active_plan_and_run(
+    service: EvaluationWorkbenchService,
+    *,
+    suites: int = 1,
+    run_key: str = "integrity-run",
+):
+    target, suite_ids = _create_bound_catalog(service, suites=suites)
+    plan = service.create_plan(
+        org_id=ORG,
+        system_id="system-a",
+        actor_id=USER,
+        idempotency_key="integrity-plan",
+        payload=_plan_payload(target["id"], suite_ids),
+    ).body
+    service.activate_plan(
+        org_id=ORG,
+        system_id="system-a",
+        plan_id=plan["id"],
+        actor_id=USER,
+        idempotency_key="integrity-plan-activate",
+    )
+    run = service.create_run(
+        org_id=ORG,
+        system_id="system-a",
+        plan_id=plan["id"],
+        actor_id=USER,
+        idempotency_key=run_key,
+        payload={"trigger": "manual", "lifecyclePhase": "pre_deploy"},
+    ).body
+    return plan, run
+
+
+def _rehash_plan_graph(graph):
+    projection = evaluation_service_module.plan_content_projection(
+        org_id=graph.scope.organization_id,
+        workspace_id=graph.scope.workspace_id,
+        system_id=graph.scope.system_id,
+        target=evaluation_service_module._target_domain(graph.target),
+        plan=evaluation_service_module._requested_plan_domain(graph),
+        trust_policy=evaluation_service_module._trust_domain(graph.trust_policy),
+        suites=[
+            evaluation_service_module._suite_domain(selection)
+            for selection in graph.suites
+        ],
+    )
+    return replace(
+        graph,
+        plan=replace(graph.plan, plan_content_hash=canonical_sha256(projection)),
+    )
+
+
+def _tamper_plan_graph(graph, case: str):
+    if case == "contract_version":
+        return replace(graph, plan=replace(graph.plan, contract_version="1.0.0"))
+    if case == "plan_scope":
+        return replace(graph, plan=replace(graph.plan, workspace_id="workspace-other"))
+    if case == "target_scope":
+        return replace(graph, target=replace(graph.target, system_id="system-other"))
+    if case == "target_id":
+        return replace(graph, plan=replace(graph.plan, target_version_id="target-other"))
+    if case == "target_kind":
+        return replace(graph, plan=replace(graph.plan, target_kind="vision_model"))
+    if case == "trust_id":
+        return replace(
+            graph,
+            plan=replace(graph.plan, trust_policy_version_id="trust-other"),
+        )
+    if case == "trust_scope":
+        return replace(
+            graph,
+            trust_policy=replace(graph.trust_policy, organization_id=OTHER_ORG),
+        )
+    if case == "suite_ref_identity":
+        selection = graph.suites[0]
+        changed = replace(selection, suite=replace(selection.suite, namespace="other"))
+        return replace(graph, suites=(changed, *graph.suites[1:]))
+    if case == "suite_owner_scope":
+        selection = graph.suites[0]
+        changed = replace(
+            selection,
+            suite=replace(selection.suite, owner_organization_id=OTHER_ORG),
+        )
+        return replace(graph, suites=(changed, *graph.suites[1:]))
+    if case == "ordinal":
+        selection = replace(graph.suites[0], ordinal=1)
+        return _rehash_plan_graph(replace(graph, suites=(selection, *graph.suites[1:])))
+    raise AssertionError(f"unknown graph tamper case: {case}")
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "contract_version",
+        "plan_scope",
+        "target_scope",
+        "target_id",
+        "target_kind",
+        "trust_id",
+        "trust_scope",
+        "suite_ref_identity",
+        "suite_owner_scope",
+        "ordinal",
+    ],
+)
+def test_plan_graph_rejects_every_cross_record_binding_before_projection_hash(
+    repository_fixture,
+    case: str,
+) -> None:
+    session, _ = repository_fixture
+    service = _service(session)
+    target, suite_ids = _create_bound_catalog(service)
+    plan = service.create_plan(
+        org_id=ORG,
+        system_id="system-a",
+        actor_id=USER,
+        idempotency_key="plan-graph-integrity",
+        payload=_plan_payload(target["id"], suite_ids),
+    ).body
+    repository = SqlAlchemyEvaluationWorkbenchRepository(session)
+    graph = repository.get_plan_graph(
+        org_id=ORG,
+        system_id="system-a",
+        plan_id=plan["id"],
+    )
+    assert graph is not None
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        evaluation_service_module._verify_plan_graph(_tamper_plan_graph(graph, case))
+
+    assert caught.value.status_code == 409
+    assert caught.value.detail() == BINDING_INTEGRITY_DETAIL
+
+
+def test_create_run_rejects_tampered_persistence_record_and_rolls_back(
+    repository_fixture,
+    monkeypatch,
+) -> None:
+    session, _ = repository_fixture
+    repository = SqlAlchemyEvaluationWorkbenchRepository(session)
+    service = _service(session, repository)
+    target, suite_ids = _create_bound_catalog(service)
+    plan = service.create_plan(
+        org_id=ORG,
+        system_id="system-a",
+        actor_id=USER,
+        idempotency_key="create-integrity-plan",
+        payload=_plan_payload(target["id"], suite_ids),
+    ).body
+    service.activate_plan(
+        org_id=ORG,
+        system_id="system-a",
+        plan_id=plan["id"],
+        actor_id=USER,
+        idempotency_key="create-integrity-plan-activate",
+    )
+    idempotency_before = session.scalar(
+        select(func.count()).select_from(GovernanceIdempotencyRecord)
+    )
+    audit_before = session.scalar(
+        select(func.count()).select_from(GovernanceEvaluationAuditEvent)
+    )
+    persist_run = repository.persist_run
+
+    def persist_tampered(command):
+        record = persist_run(command)
+        envelope = record.envelope.to_dict()
+        envelope["systemId"] = "system-tampered"
+        return replace(
+            record,
+            envelope=FrozenJsonObject.from_mapping(envelope),
+            envelope_hash=canonical_sha256(envelope),
+        )
+
+    monkeypatch.setattr(repository, "persist_run", persist_tampered)
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        service.create_run(
+            org_id=ORG,
+            system_id="system-a",
+            plan_id=plan["id"],
+            actor_id=USER,
+            idempotency_key="create-integrity-run",
+            payload={"trigger": "manual", "lifecyclePhase": "pre_deploy"},
+        )
+
+    assert caught.value.detail() == BINDING_INTEGRITY_DETAIL
+    assert session.scalar(select(func.count()).select_from(GovernanceEvaluationRun)) == 0
+    assert session.scalar(
+        select(func.count()).select_from(GovernanceIdempotencyRecord)
+    ) == idempotency_before
+    assert session.scalar(
+        select(func.count()).select_from(GovernanceEvaluationAuditEvent)
+    ) == audit_before
+
+
+@pytest.mark.parametrize("read_method", ["detail", "list"])
+def test_run_reads_reject_rehashed_envelope_bound_to_another_scope(
+    repository_fixture,
+    read_method: str,
+) -> None:
+    session, _ = repository_fixture
+    service = _service(session)
+    _, run = _create_active_plan_and_run(service)
+    envelope = deepcopy(run["envelope"])
+    envelope["organizationId"] = "FM_SENTINEL_FOREIGN_ORGANIZATION"
+    session.execute(
+        GovernanceEvaluationRun.__table__.update()
+        .where(GovernanceEvaluationRun.id == run["id"])
+        .values(
+            envelope_json=canonical_json(envelope),
+            envelope_hash=canonical_sha256(envelope),
+        )
+    )
+    session.commit()
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        if read_method == "detail":
+            service.get_run(org_id=ORG, system_id="system-a", run_id=run["id"])
+        else:
+            service.list_runs(org_id=ORG, system_id="system-a")
+
+    assert caught.value.detail() == BINDING_INTEGRITY_DETAIL
+    assert "FM_SENTINEL" not in caught.value.message
+
+
+def test_run_read_rejects_envelope_hash_mismatch(repository_fixture) -> None:
+    session, _ = repository_fixture
+    service = _service(session)
+    _, run = _create_active_plan_and_run(service)
+    envelope = deepcopy(run["envelope"])
+    envelope["trigger"] = "ci"
+    session.execute(
+        GovernanceEvaluationRun.__table__.update()
+        .where(GovernanceEvaluationRun.id == run["id"])
+        .values(envelope_json=canonical_json(envelope))
+    )
+    session.commit()
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        service.get_run(org_id=ORG, system_id="system-a", run_id=run["id"])
+
+    assert caught.value.detail() == BINDING_INTEGRITY_DETAIL
+
+
+def test_run_read_rejects_duplicate_names_in_stored_envelope(repository_fixture) -> None:
+    session, _ = repository_fixture
+    service = _service(session)
+    _, run = _create_active_plan_and_run(service)
+    canonical = canonical_json(run["envelope"])
+    duplicate = '{"schemaVersion":"2.0.0",' + canonical[1:]
+    session.execute(
+        GovernanceEvaluationRun.__table__.update()
+        .where(GovernanceEvaluationRun.id == run["id"])
+        .values(envelope_json=duplicate)
+    )
+    session.commit()
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        service.get_run(org_id=ORG, system_id="system-a", run_id=run["id"])
+
+    assert caught.value.detail() == BINDING_INTEGRITY_DETAIL
+
+
+@pytest.mark.parametrize(
+    "stored_envelope",
+    [
+        pytest.param(
+            lambda canonical: canonical + "\n",
+            id="noncanonical-whitespace",
+        ),
+        pytest.param(
+            lambda canonical: json.dumps(
+                dict(reversed(list(json.loads(canonical).items()))),
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ),
+            id="noncanonical-key-order",
+        ),
+        pytest.param(
+            lambda _canonical: '{"schemaVersion":NaN}',
+            id="nonfinite-number",
+        ),
+        pytest.param(
+            lambda _canonical: '{"padding":"'
+            + ("x" * MAX_EXECUTION_ENVELOPE_BYTES)
+            + '"}',
+            id="oversized-payload",
+        ),
+    ],
+)
+def test_run_read_rejects_invalid_stored_envelope_encodings(
+    repository_fixture,
+    stored_envelope,
+) -> None:
+    session, _ = repository_fixture
+    service = _service(session)
+    _, run = _create_active_plan_and_run(service)
+    raw = stored_envelope(canonical_json(run["envelope"]))
+    session.execute(
+        GovernanceEvaluationRun.__table__.update()
+        .where(GovernanceEvaluationRun.id == run["id"])
+        .values(envelope_json=raw)
+    )
+    session.commit()
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        service.get_run(org_id=ORG, system_id="system-a", run_id=run["id"])
+
+    assert caught.value.detail() == BINDING_INTEGRITY_DETAIL
+
+
+@pytest.mark.parametrize(
+    "encoding_case",
+    ["duplicate-name", "noncanonical-whitespace", "oversized-payload"],
+)
+def test_run_read_rejects_invalid_layer_verdict_encodings_before_verification(
+    repository_fixture,
+    monkeypatch,
+    encoding_case: str,
+) -> None:
+    session, _ = repository_fixture
+    service = _service(session)
+    _, run = _create_active_plan_and_run(service)
+    execution_id = run["suiteExecutions"][0]["id"]
+    if encoding_case == "duplicate-name":
+        raw = (
+            "{"
+            f'"{execution_id}":"insufficient",'
+            f'"{execution_id}":"insufficient"'
+            "}"
+        )
+    elif encoding_case == "noncanonical-whitespace":
+        raw = canonical_json(run["layerVerdicts"]) + "\n"
+    else:
+        raw = canonical_json({"x" * (8 * 1024): "insufficient"})
+    session.execute(
+        GovernanceEvaluationRun.__table__.update()
+        .where(GovernanceEvaluationRun.id == run["id"])
+        .values(layer_verdicts_json=raw)
+    )
+    session.commit()
+
+    def verifier_must_not_run(*_args, **_kwargs):
+        raise AssertionError("stored JSON must be rejected before application verification")
+
+    monkeypatch.setattr(
+        evaluation_service_module,
+        "_verify_run_record",
+        verifier_must_not_run,
+    )
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        service.get_run(org_id=ORG, system_id="system-a", run_id=run["id"])
+
+    assert caught.value.detail() == BINDING_INTEGRITY_DETAIL
+
+
+def test_run_read_rejects_rehashed_suite_execution_id_rebinding(repository_fixture) -> None:
+    session, _ = repository_fixture
+    service = _service(session)
+    _, run = _create_active_plan_and_run(service)
+    envelope = deepcopy(run["envelope"])
+    envelope["suites"][0]["suiteExecutionId"] = str(uuid.uuid4())
+    session.execute(
+        GovernanceEvaluationRun.__table__.update()
+        .where(GovernanceEvaluationRun.id == run["id"])
+        .values(
+            envelope_json=canonical_json(envelope),
+            envelope_hash=canonical_sha256(envelope),
+        )
+    )
+    session.commit()
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        service.get_run(org_id=ORG, system_id="system-a", run_id=run["id"])
+
+    assert caught.value.detail() == BINDING_INTEGRITY_DETAIL
+
+
+@pytest.mark.parametrize(
+    ("record_change", "envelope_change"),
+    [
+        pytest.param(
+            {"trigger": "FM_SENTINEL_TRIGGER"},
+            {"trigger": "FM_SENTINEL_TRIGGER"},
+            id="unsupported-trigger",
+        ),
+        pytest.param(
+            {"created_at": "2026-07-20T12:00:00+05:30"},
+            {"requestedAt": "2026-07-20T12:00:00+05:30"},
+            id="non-utc-request-time",
+        ),
+        pytest.param(
+            {"created_at": "2026-07-20 12:00:00+00:00"},
+            {"requestedAt": "2026-07-20 12:00:00+00:00"},
+            id="noncanonical-request-time",
+        ),
+    ],
+)
+def test_run_verifier_rejects_rehashed_invalid_contract_fields(
+    repository_fixture,
+    record_change: dict[str, str],
+    envelope_change: dict[str, str],
+) -> None:
+    session, _ = repository_fixture
+    service = _service(session)
+    plan, run = _create_active_plan_and_run(service)
+    repository = SqlAlchemyEvaluationWorkbenchRepository(session)
+    graph = repository.get_plan_graph(
+        org_id=ORG,
+        system_id="system-a",
+        plan_id=plan["id"],
+    )
+    record = repository.get_run_record(
+        org_id=ORG,
+        system_id="system-a",
+        run_id=run["id"],
+    )
+    assert graph is not None
+    assert record is not None
+    envelope = record.envelope.to_dict()
+    envelope.update(envelope_change)
+    tampered = replace(
+        record,
+        **record_change,
+        envelope=FrozenJsonObject.from_mapping(envelope),
+        envelope_hash=canonical_sha256(envelope),
+    )
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        evaluation_service_module._verify_run_record(tampered, graph)
+
+    assert caught.value.detail() == BINDING_INTEGRITY_DETAIL
+    assert "FM_SENTINEL" not in caught.value.message
+
+
+def test_run_verifier_rejects_standard_base64_nonce_with_recomputed_hash(
+    repository_fixture,
+) -> None:
+    session, _ = repository_fixture
+    service = _service(session)
+    plan, run = _create_active_plan_and_run(service)
+    repository = SqlAlchemyEvaluationWorkbenchRepository(session)
+    graph = repository.get_plan_graph(
+        org_id=ORG,
+        system_id="system-a",
+        plan_id=plan["id"],
+    )
+    record = repository.get_run_record(
+        org_id=ORG,
+        system_id="system-a",
+        run_id=run["id"],
+    )
+    assert graph is not None
+    assert record is not None
+    standard_nonce = base64.b64encode(b"\xfb" * 32).decode("ascii").rstrip("=")
+    assert len(standard_nonce) == 43
+    assert "+" in standard_nonce or "/" in standard_nonce
+    envelope = record.envelope.to_dict()
+    envelope["nonce"] = standard_nonce
+    tampered = replace(
+        record,
+        envelope=FrozenJsonObject.from_mapping(envelope),
+        envelope_hash=canonical_sha256(envelope),
+    )
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        evaluation_service_module._verify_run_record(tampered, graph)
+
+    assert caught.value.detail() == BINDING_INTEGRITY_DETAIL
+
+
+def test_run_read_rejects_missing_suite_execution(repository_fixture) -> None:
+    session, _ = repository_fixture
+    service = _service(session)
+    _, run = _create_active_plan_and_run(service, suites=2)
+    session.execute(
+        GovernanceEvaluationRunSuiteExecution.__table__.delete().where(
+            GovernanceEvaluationRunSuiteExecution.id == run["suiteExecutions"][1]["id"]
+        )
+    )
+    session.commit()
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        service.get_run(org_id=ORG, system_id="system-a", run_id=run["id"])
+
+    assert caught.value.detail() == BINDING_INTEGRITY_DETAIL
+
+
+def test_run_read_rejects_rehashed_reordered_suite_envelope(repository_fixture) -> None:
+    session, _ = repository_fixture
+    service = _service(session)
+    _, run = _create_active_plan_and_run(service, suites=2)
+    envelope = deepcopy(run["envelope"])
+    envelope["suites"] = list(reversed(envelope["suites"]))
+    session.execute(
+        GovernanceEvaluationRun.__table__.update()
+        .where(GovernanceEvaluationRun.id == run["id"])
+        .values(
+            envelope_json=canonical_json(envelope),
+            envelope_hash=canonical_sha256(envelope),
+        )
+    )
+    session.commit()
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        service.get_run(org_id=ORG, system_id="system-a", run_id=run["id"])
+
+    assert caught.value.detail() == BINDING_INTEGRITY_DETAIL
+
+
+def test_run_list_verifies_one_plan_graph_once_per_request(repository_fixture, monkeypatch) -> None:
+    session, _ = repository_fixture
+    repository = SqlAlchemyEvaluationWorkbenchRepository(session)
+    service = _service(session, repository)
+    plan, _ = _create_active_plan_and_run(service, run_key="cached-plan-run-one")
+    service.create_run(
+        org_id=ORG,
+        system_id="system-a",
+        plan_id=plan["id"],
+        actor_id=USER,
+        idempotency_key="cached-plan-run-two",
+        payload={"trigger": "ci", "lifecyclePhase": "pre_deploy"},
+    )
+    load_graph = repository.get_plan_graph
+    calls = 0
+
+    def count_graph_load(**kwargs):
+        nonlocal calls
+        calls += 1
+        return load_graph(**kwargs)
+
+    monkeypatch.setattr(repository, "get_plan_graph", count_graph_load)
+
+    records = service.list_runs(org_id=ORG, system_id="system-a")
+
+    assert records is not None and len(records) == 2
+    assert calls == 1
 
 
 def test_plan_and_run_are_bound_atomically_to_exact_suite_versions(repository_fixture) -> None:
@@ -1037,6 +1610,7 @@ def test_successful_evaluator_can_report_failed_model_without_governance_autodec
             evidence_result_status="failed",
             started_at=completed_at,
             completed_at=completed_at,
+            updated_at=completed_at,
         )
     )
     session.execute(
@@ -1044,10 +1618,10 @@ def test_successful_evaluator_can_report_failed_model_without_governance_autodec
         .where(GovernanceEvaluationRun.id == run["id"])
         .values(
             technical_status="succeeded",
-            evidence_outcome="failed",
             overall_verdict="insufficient",
             started_at=completed_at,
             completed_at=completed_at,
+            updated_at=completed_at,
         )
     )
     session.commit()
@@ -1059,7 +1633,7 @@ def test_successful_evaluator_can_report_failed_model_without_governance_autodec
     )
     assert result is not None
     assert result["technicalStatus"] == "succeeded"
-    assert result["evidenceOutcome"] == "failed"
+    assert result["evidenceOutcome"] == "pending"
     assert result["suiteExecutions"][0]["technicalStatus"] == "succeeded"
     assert result["suiteExecutions"][0]["evidenceResultStatus"] == "failed"
     assert result["overallVerdict"] == "insufficient"

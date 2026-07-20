@@ -30,7 +30,7 @@ from database.governance_models import (
     GovernanceWorkspace,
 )
 from database.models import Organization, OrganizationMember, User
-from src.domain.assurance.evaluation_v2 import canonical_sha256
+from src.domain.assurance.evaluation_v2 import canonical_json, canonical_sha256
 
 ORG = str(uuid.uuid4())
 FOREIGN_ORG = str(uuid.uuid4())
@@ -38,6 +38,10 @@ USER = str(uuid.uuid4())
 VIEWER = str(uuid.uuid4())
 BASE = f"/api/v1/ai-governance/organizations/{ORG}"
 FOREIGN_BASE = f"/api/v1/ai-governance/organizations/{FOREIGN_ORG}"
+BINDING_INTEGRITY_DETAIL = {
+    "code": "binding_integrity_error",
+    "message": "Stored assurance bindings failed integrity verification.",
+}
 
 
 def _token(user_id: str) -> TokenData:
@@ -661,7 +665,13 @@ def test_unsafe_neutral_configuration_values_have_no_mutation_side_effects(
     payload = _suite_payload()
     payload["configurationSchema"] = {
         "type": "object",
-        "properties": {"mode": {"type": "string", "enum": [unsafe_value]}},
+        "properties": {
+            "mode": {
+                "type": "string",
+                "x-fairmind-valueType": "symbol",
+                "enum": [unsafe_value],
+            }
+        },
         "required": ["mode"],
         "additionalProperties": False,
     }
@@ -995,6 +1005,7 @@ def test_response_contract_keeps_execution_evidence_and_governance_axes_distinct
                 evidence_result_status="failed",
                 started_at=timestamp,
                 completed_at=timestamp,
+                updated_at=timestamp,
             )
         )
         session.execute(
@@ -1002,10 +1013,10 @@ def test_response_contract_keeps_execution_evidence_and_governance_axes_distinct
             .where(GovernanceEvaluationRun.id == run["id"])
             .values(
                 technical_status="succeeded",
-                evidence_outcome="failed",
                 overall_verdict="insufficient",
                 started_at=timestamp,
                 completed_at=timestamp,
+                updated_at=timestamp,
             )
         )
         session.commit()
@@ -1016,10 +1027,91 @@ def test_response_contract_keeps_execution_evidence_and_governance_axes_distinct
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["technicalStatus"] == "succeeded"
-    assert body["evidenceOutcome"] == "failed"
+    assert body["evidenceOutcome"] == "pending"
     assert body["suiteExecutions"][0]["technicalStatus"] == "succeeded"
     assert body["suiteExecutions"][0]["evidenceResultStatus"] == "failed"
     assert body["overallVerdict"] == "insufficient"
+
+
+@pytest.mark.parametrize("read_method", ["detail", "list"])
+def test_run_integrity_failures_are_generic_409_without_stored_value_reflection(
+    workbench_client,
+    read_method: str,
+) -> None:
+    client, _ = workbench_client
+    _, run = _create_active_v2_plan_and_run(client)
+    envelope = run["envelope"]
+    envelope["organizationId"] = "FM_SENTINEL_FOREIGN_ORGANIZATION"
+    session_iterator = app.dependency_overrides[get_db]()
+    session = next(session_iterator)
+    try:
+        session.execute(
+            GovernanceEvaluationRun.__table__.update()
+            .where(GovernanceEvaluationRun.id == run["id"])
+            .values(
+                envelope_json=canonical_json(envelope),
+                envelope_hash=canonical_sha256(envelope),
+            )
+        )
+        session.commit()
+    finally:
+        session_iterator.close()
+
+    runs_url = f"{BASE}/systems/system-a/evaluation-v2/runs"
+    response = client.get(f"{runs_url}/{run['id']}" if read_method == "detail" else runs_url)
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": BINDING_INTEGRITY_DETAIL}
+    assert "FM_SENTINEL" not in response.text
+
+
+def test_plan_list_integrity_failure_is_a_generic_409(workbench_client) -> None:
+    client, _ = workbench_client
+    plan, _ = _create_active_v2_plan_and_run(client)
+    session_iterator = app.dependency_overrides[get_db]()
+    session = next(session_iterator)
+    try:
+        session.execute(
+            GovernanceEvaluationPlan.__table__.update()
+            .where(GovernanceEvaluationPlan.id == plan["id"])
+            .values(plan_content_hash="f" * 64)
+        )
+        session.commit()
+    finally:
+        session_iterator.close()
+
+    response = client.get(f"{BASE}/systems/system-a/evaluation-v2/plans")
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": BINDING_INTEGRITY_DETAIL}
+
+
+@pytest.mark.parametrize("read_method", ["detail", "list"])
+def test_suite_integrity_failure_is_a_generic_409(
+    workbench_client,
+    read_method: str,
+) -> None:
+    client, _ = workbench_client
+    _, suite = _bootstrap(client)
+    session_iterator = app.dependency_overrides[get_db]()
+    session = next(session_iterator)
+    try:
+        session.execute(
+            GovernanceEvaluationSuiteVersion.__table__.update()
+            .where(GovernanceEvaluationSuiteVersion.id == suite["id"])
+            .values(manifest_json=canonical_json({"tampered": True}))
+        )
+        session.commit()
+    finally:
+        session_iterator.close()
+
+    suites_url = f"{BASE}/evaluation-v2/suite-versions"
+    response = client.get(
+        f"{suites_url}/{suite['id']}" if read_method == "detail" else suites_url
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": BINDING_INTEGRITY_DETAIL}
 
 
 def test_already_active_plan_is_a_no_audit_noop_before_dependency_preflight(

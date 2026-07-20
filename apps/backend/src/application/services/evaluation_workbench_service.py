@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import base64
-from datetime import datetime
+import binascii
+from datetime import datetime, timedelta
+import re
 import secrets
 from typing import Mapping
 import uuid
@@ -31,6 +33,7 @@ from src.application.ports.evaluation_workbench import (
 )
 from src.domain.assurance.evaluation_v2 import (
     AssuranceContractValidationError,
+    CONTRACT_VERSION,
     MAX_CONFIGURATION_DEFAULTS_BYTES,
     MAX_FAILURE_MESSAGE_BYTES,
     MAX_PLAN_CONFIGURATION_BYTES,
@@ -38,6 +41,7 @@ from src.domain.assurance.evaluation_v2 import (
     MAX_SUITE_LIMITATIONS_BYTES,
     MAX_SUITE_MANIFEST_BYTES,
     PreflightBlocker,
+    RUN_TRIGGERS,
     build_execution_envelope_v2,
     canonical_json,
     canonical_sha256,
@@ -56,6 +60,12 @@ from src.domain.assurance.evaluation_v2 import (
     validate_suite_budgets,
     validate_suite_configuration,
     validated_manifest_inputs,
+)
+
+
+BINDING_INTEGRITY_MESSAGE = "Stored assurance bindings failed integrity verification."
+GOVERNANCE_VERDICTS = frozenset(
+    {"approved", "conditional", "review", "blocked", "insufficient"}
 )
 
 
@@ -81,10 +91,10 @@ def _translate(error: AssuranceContractValidationError) -> EvaluationWorkbenchEr
     return EvaluationWorkbenchError(error.code, error.message, status_code=422)
 
 
-def _binding_error(message: str) -> EvaluationWorkbenchError:
+def _binding_error(_reason: str | None = None) -> EvaluationWorkbenchError:
     return EvaluationWorkbenchError(
         "binding_integrity_error",
-        message,
+        BINDING_INTEGRITY_MESSAGE,
         status_code=409,
     )
 
@@ -296,6 +306,13 @@ def _suite_view(suite: SuiteBindingRecord) -> dict[str, object]:
 def _verify_suite(suite: SuiteBindingRecord) -> None:
     manifest = suite.manifest.to_dict()
     try:
+        expected_owner_scope = (
+            "platform" if suite.owner_organization_id is None else suite.owner_organization_id
+        )
+        if suite.owner_scope != expected_owner_scope:
+            raise _binding_error("The suite owner scope is internally inconsistent.")
+        if suite.suite_ref != f"{suite.namespace}/{suite.name}@{suite.version}":
+            raise _binding_error("The suite reference does not match its version identity.")
         reject_sensitive_keys(manifest, path="suiteManifest")
         require_canonical_size(
             suite.configuration_defaults.to_dict(),
@@ -332,11 +349,38 @@ def _verify_creation_bindings(bindings: PlanCreationBindings) -> None:
 
 
 def _verify_plan_graph(graph: PlanGraphRecord) -> None:
+    scope = graph.scope
+    plan = graph.plan
+    scope_identity = (scope.organization_id, scope.workspace_id, scope.system_id)
+    if (
+        plan.contract_version != CONTRACT_VERSION
+        or (plan.organization_id, plan.workspace_id, plan.system_id) != scope_identity
+        or (
+            graph.target.organization_id,
+            graph.target.workspace_id,
+            graph.target.system_id,
+        )
+        != scope_identity
+        or plan.target_version_id != graph.target.id
+        or plan.target_kind != graph.target.target_kind
+        or plan.trust_policy_version_id != graph.trust_policy.id
+        or graph.trust_policy.organization_id != scope.organization_id
+        or not 1 <= len(graph.suites) <= 32
+    ):
+        raise _binding_error("The plan graph contains a cross-record binding mismatch.")
     _verify_target(graph.target)
     _verify_trust(graph.trust_policy)
     suites = []
     configuration_bytes = 0
-    for selection in graph.suites:
+    suite_ids: set[str] = set()
+    for expected_ordinal, selection in enumerate(graph.suites):
+        if (
+            selection.ordinal != expected_ordinal
+            or selection.suite.id in suite_ids
+            or selection.suite.owner_scope not in {"platform", scope.organization_id}
+        ):
+            raise _binding_error("The plan suite bindings are not exact and ordered.")
+        suite_ids.add(selection.suite.id)
         _verify_suite(selection.suite)
         configuration = selection.configuration.to_dict()
         try:
@@ -545,6 +589,168 @@ def _required_inputs(
             details={"roles": missing},
         )
     return {role: descriptors[role] for role in roles}
+
+
+def _envelope_target_binding(target: TargetBindingRecord) -> dict[str, object]:
+    return {
+        "id": target.id,
+        "targetKey": target.target_key,
+        "targetKind": target.target_kind,
+        "version": target.version,
+        "systemVersion": target.system_version,
+        "subjectKind": target.subject_kind,
+        "subjectId": target.subject_id,
+        "subjectVersion": target.subject_version,
+        "subjectDigest": target.subject_digest,
+        "deploymentId": target.deployment_id,
+        "connectorBindingId": target.connector_binding_id,
+        "manifestDigest": target.manifest_digest,
+    }
+
+
+def _envelope_trust_binding(trust: TrustPolicyBindingRecord) -> dict[str, object]:
+    return {
+        "id": trust.id,
+        "version": trust.version,
+        "policyHash": trust.policy_hash,
+    }
+
+
+def _envelope_suite_binding(
+    selection: PlanSuiteBindingRecord,
+    *,
+    execution_id: str,
+    target: TargetBindingRecord,
+) -> dict[str, object]:
+    suite = selection.suite
+    return {
+        "suiteExecutionId": execution_id,
+        "suiteVersionId": suite.id,
+        "ownerScope": suite.owner_scope,
+        "suiteRef": suite.suite_ref,
+        "manifestDigest": suite.manifest_digest,
+        "workerType": suite.worker_type,
+        "runnerImageDigest": suite.runner_image_digest,
+        "adapterName": suite.adapter_name,
+        "adapterVersion": suite.adapter_version,
+        "resultContractVersion": suite.result_contract_version,
+        "configuration": selection.configuration.to_dict(),
+        "configurationHash": selection.configuration_hash,
+        "inputRoles": list(suite.required_input_roles),
+        "budgets": suite.budgets.to_dict(),
+        "inputs": _required_inputs(target, suite.required_input_roles),
+    }
+
+
+def _verified_envelope_nonce(envelope: Mapping[str, object]) -> str:
+    nonce = envelope.get("nonce")
+    if not isinstance(nonce, str) or re.fullmatch(r"[A-Za-z0-9_-]{43}", nonce) is None:
+        raise _binding_error("The execution envelope nonce is malformed.")
+    try:
+        decoded = base64.urlsafe_b64decode(nonce + "=")
+    except (ValueError, binascii.Error) as error:
+        raise _binding_error("The execution envelope nonce is malformed.") from error
+    encoded = base64.urlsafe_b64encode(decoded).decode("ascii").rstrip("=")
+    if len(decoded) != 32 or encoded != nonce:
+        raise _binding_error("The execution envelope nonce is malformed.")
+    return nonce
+
+
+def _verified_utc_timestamp(value: object) -> str:
+    if not isinstance(value, str):
+        raise _binding_error("The execution request timestamp is malformed.")
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as error:
+        raise _binding_error("The execution request timestamp is malformed.") from error
+    if (
+        parsed.tzinfo is None
+        or parsed.utcoffset() != timedelta(0)
+        or parsed.isoformat() != value
+    ):
+        raise _binding_error("The execution request timestamp is malformed.")
+    return value
+
+
+def _verify_run_record(run: RunRecord, graph: PlanGraphRecord) -> None:
+    try:
+        _verify_plan_graph(graph)
+        scope_identity = (
+            graph.scope.organization_id,
+            graph.scope.workspace_id,
+            graph.scope.system_id,
+        )
+        if (
+            run.contract_version != CONTRACT_VERSION
+            or run.trigger not in RUN_TRIGGERS
+            or (run.organization_id, run.workspace_id, run.system_id) != scope_identity
+            or run.plan_id != graph.plan.id
+            or run.lifecycle_phase not in graph.plan.lifecycle_phases
+            or len(run.suite_executions) != len(graph.suites)
+        ):
+            raise _binding_error("The run does not match its exact plan scope.")
+
+        execution_ids: list[str] = []
+        envelope_suites: list[dict[str, object]] = []
+        for expected_ordinal, (selection, execution) in enumerate(
+            zip(graph.suites, run.suite_executions, strict=True)
+        ):
+            if (
+                selection.ordinal != expected_ordinal
+                or execution.ordinal != expected_ordinal
+                or execution.suite_version_id != selection.suite.id
+                or execution.owner_scope != selection.suite.owner_scope
+                or execution.id in execution_ids
+            ):
+                raise _binding_error("The run suite executions do not match the plan.")
+            execution_ids.append(execution.id)
+            envelope_suites.append(
+                _envelope_suite_binding(
+                    selection,
+                    execution_id=execution.id,
+                    target=graph.target,
+                )
+            )
+
+        layer_verdicts = run.layer_verdicts.to_dict()
+        if set(layer_verdicts) != set(execution_ids) or any(
+            verdict not in GOVERNANCE_VERDICTS for verdict in layer_verdicts.values()
+        ):
+            raise _binding_error("The layered verdict keys do not match suite executions.")
+
+        actual_envelope = run.envelope.to_dict()
+        if canonical_sha256(actual_envelope) != run.envelope_hash:
+            raise _binding_error("The stored execution envelope digest is invalid.")
+        nonce = _verified_envelope_nonce(actual_envelope)
+        requested_at = _verified_utc_timestamp(run.created_at)
+        expected_envelope, _, expected_hash = build_execution_envelope_v2(
+            envelope_id=run.envelope_id,
+            run_id=run.id,
+            org_id=run.organization_id,
+            workspace_id=run.workspace_id,
+            system_id=run.system_id,
+            plan_id=run.plan_id,
+            plan_content_hash=graph.plan.plan_content_hash,
+            target=_envelope_target_binding(graph.target),
+            trigger=run.trigger,
+            lifecycle_phase=run.lifecycle_phase,
+            execution_depth=graph.plan.execution_depth,
+            enforcement_mode=graph.plan.enforcement_mode,
+            delivery_mode=graph.plan.delivery_mode,
+            trust_policy=_envelope_trust_binding(graph.trust_policy),
+            nonce=nonce,
+            requester_id=run.requested_by,
+            requested_at=requested_at,
+            suites=envelope_suites,
+        )
+        if actual_envelope != expected_envelope or run.envelope_hash != expected_hash:
+            raise _binding_error("The stored execution envelope bindings are invalid.")
+    except EvaluationWorkbenchError as error:
+        if error.code == "binding_integrity_error":
+            raise
+        raise _binding_error("A dependent run binding could not be reconstructed.") from error
+    except (AssuranceContractValidationError, TypeError, ValueError) as error:
+        raise _binding_error("The stored run violates the immutable contract.") from error
 
 
 class EvaluationWorkbenchService:
@@ -1190,23 +1396,11 @@ class EvaluationWorkbenchService:
             for execution_id, selection in zip(execution_ids, graph.suites, strict=True):
                 suite = selection.suite
                 envelope_suites.append(
-                    {
-                        "suiteExecutionId": execution_id,
-                        "suiteVersionId": suite.id,
-                        "ownerScope": suite.owner_scope,
-                        "suiteRef": suite.suite_ref,
-                        "manifestDigest": suite.manifest_digest,
-                        "workerType": suite.worker_type,
-                        "runnerImageDigest": suite.runner_image_digest,
-                        "adapterName": suite.adapter_name,
-                        "adapterVersion": suite.adapter_version,
-                        "resultContractVersion": suite.result_contract_version,
-                        "configuration": selection.configuration.to_dict(),
-                        "configurationHash": selection.configuration_hash,
-                        "inputRoles": list(suite.required_input_roles),
-                        "budgets": suite.budgets.to_dict(),
-                        "inputs": _required_inputs(graph.target, suite.required_input_roles),
-                    }
+                    _envelope_suite_binding(
+                        selection,
+                        execution_id=execution_id,
+                        target=graph.target,
+                    )
                 )
                 persist_suites.append(
                     PersistRunSuiteCommand(
@@ -1225,30 +1419,13 @@ class EvaluationWorkbenchService:
                     system_id=system_id,
                     plan_id=plan_id,
                     plan_content_hash=graph.plan.plan_content_hash,
-                    target={
-                        "id": graph.target.id,
-                        "targetKey": graph.target.target_key,
-                        "targetKind": graph.target.target_kind,
-                        "version": graph.target.version,
-                        "systemVersion": graph.target.system_version,
-                        "subjectKind": graph.target.subject_kind,
-                        "subjectId": graph.target.subject_id,
-                        "subjectVersion": graph.target.subject_version,
-                        "subjectDigest": graph.target.subject_digest,
-                        "deploymentId": graph.target.deployment_id,
-                        "connectorBindingId": graph.target.connector_binding_id,
-                        "manifestDigest": graph.target.manifest_digest,
-                    },
+                    target=_envelope_target_binding(graph.target),
                     trigger=trigger,
                     lifecycle_phase=lifecycle_phase,
                     execution_depth=graph.plan.execution_depth,
                     enforcement_mode=graph.plan.enforcement_mode,
                     delivery_mode=graph.plan.delivery_mode,
-                    trust_policy={
-                        "id": graph.trust_policy.id,
-                        "version": graph.trust_policy.version,
-                        "policyHash": graph.trust_policy.policy_hash,
-                    },
+                    trust_policy=_envelope_trust_binding(graph.trust_policy),
                     nonce=nonce,
                     requester_id=actor_id,
                     requested_at=_iso(now),
@@ -1275,6 +1452,7 @@ class EvaluationWorkbenchService:
                     suites=tuple(persist_suites),
                 )
             )
+            _verify_run_record(record, graph)
             return MutationOutcome(
                 body=FrozenJsonObject.from_mapping(_run_view(record)),
                 status=201,
@@ -1304,6 +1482,19 @@ class EvaluationWorkbenchService:
         records = self.repository.list_run_records(org_id=org_id, system_id=system_id)
         if records is None:
             return None
+        graphs: dict[str, PlanGraphRecord] = {}
+        for record in records:
+            graph = graphs.get(record.plan_id)
+            if graph is None:
+                graph = self.repository.get_plan_graph(
+                    org_id=org_id,
+                    system_id=system_id,
+                    plan_id=record.plan_id,
+                )
+                if graph is None:
+                    raise _binding_error("A stored run references an unavailable plan graph.")
+                graphs[record.plan_id] = graph
+            _verify_run_record(record, graph)
         return [_run_view(record) for record in records]
 
     def get_run(
@@ -1318,7 +1509,17 @@ class EvaluationWorkbenchService:
             system_id=system_id,
             run_id=run_id,
         )
-        return _run_view(record) if record is not None else None
+        if record is None:
+            return None
+        graph = self.repository.get_plan_graph(
+            org_id=org_id,
+            system_id=system_id,
+            plan_id=record.plan_id,
+        )
+        if graph is None:
+            raise _binding_error("A stored run references an unavailable plan graph.")
+        _verify_run_record(record, graph)
+        return _run_view(record)
 
 
 __all__ = [

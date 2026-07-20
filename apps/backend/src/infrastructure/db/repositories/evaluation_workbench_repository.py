@@ -49,12 +49,16 @@ from src.application.ports.evaluation_workbench import (
     TrustPolicyBindingRecord,
 )
 from src.domain.assurance.evaluation_v2 import (
+    AssuranceContractValidationError,
     CONTRACT_VERSION,
+    MAX_EXECUTION_ENVELOPE_BYTES,
     canonical_json,
     canonical_sha256,
 )
 
 _SQLITE_WRITE_LOCK = threading.RLock()
+_BINDING_INTEGRITY_MESSAGE = "Stored assurance bindings failed integrity verification."
+_MAX_LAYER_VERDICTS_BYTES = 8 * 1024
 
 
 def _now() -> datetime:
@@ -74,6 +78,19 @@ def _json_load(value: str | None, fallback: Any) -> Any:
     if value is None:
         return fallback
     return json.loads(value)
+
+
+def _unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate JSON object name")
+        result[key] = value
+    return result
+
+
+def _reject_json_constant(_value: str) -> None:
+    raise ValueError("non-finite JSON number")
 
 
 class SqlAlchemyEvaluationWorkbenchRepository:
@@ -861,6 +878,45 @@ class SqlAlchemyEvaluationWorkbenchRepository:
             failure_message=row["failure_message"],
         )
 
+    def _stored_json_object(
+        self,
+        raw: Any,
+        *,
+        maximum_bytes: int,
+    ) -> FrozenJsonObject:
+        try:
+            if not isinstance(raw, str):
+                raise ValueError("stored JSON object must be text")
+            encoded = raw.encode("utf-8")
+            if len(encoded) > maximum_bytes:
+                raise ValueError("stored JSON object exceeds its byte budget")
+            decoded = json.loads(
+                encoded,
+                object_pairs_hook=_unique_json_object,
+                parse_constant=_reject_json_constant,
+            )
+            if not isinstance(decoded, dict) or canonical_json(decoded) != raw:
+                raise ValueError("stored JSON is not a canonical object")
+            return FrozenJsonObject.from_mapping(decoded)
+        except (
+            AssuranceContractValidationError,
+            RecursionError,
+            TypeError,
+            UnicodeError,
+            ValueError,
+        ) as error:
+            raise self._error(
+                "binding_integrity_error",
+                _BINDING_INTEGRITY_MESSAGE,
+                409,
+            ) from error
+
+    def _stored_envelope(self, raw: Any) -> FrozenJsonObject:
+        return self._stored_json_object(
+            raw,
+            maximum_bytes=MAX_EXECUTION_ENVELOPE_BYTES,
+        )
+
     def _run_record(self, row: Mapping[str, Any]) -> RunRecord:
         executions = (
             self.db.execute(
@@ -888,12 +944,15 @@ class SqlAlchemyEvaluationWorkbenchRepository:
             technical_status=row["technical_status"],
             evidence_outcome=row["evidence_outcome"],
             overall_verdict=row["overall_verdict"],
-            layer_verdicts=FrozenJsonObject.from_json(row["layer_verdicts_json"]),
+            layer_verdicts=self._stored_json_object(
+                row["layer_verdicts_json"],
+                maximum_bytes=_MAX_LAYER_VERDICTS_BYTES,
+            ),
             suite_executions=tuple(
                 self._suite_execution_record(execution) for execution in executions
             ),
             envelope_id=row["envelope_id"],
-            envelope=FrozenJsonObject.from_json(row["envelope_json"]),
+            envelope=self._stored_envelope(row["envelope_json"]),
             envelope_hash=row["envelope_hash"],
             verdict_version=int(row["verdict_version"]),
             requested_by=row["requested_by"],
