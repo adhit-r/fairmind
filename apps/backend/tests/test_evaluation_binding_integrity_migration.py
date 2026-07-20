@@ -639,6 +639,7 @@ def test_orm_timestamp_constraint_rejects_impossible_calendar_values(
     probe = Table(
         "timestamp_probe",
         metadata,
+        Column("contract_version", String, nullable=False),
         Column("created_at", String, nullable=False),
         Column("updated_at", String, nullable=False),
         Column("started_at", String, nullable=True),
@@ -650,8 +651,18 @@ def test_orm_timestamp_constraint_rejects_impossible_calendar_values(
     with engine.begin() as connection:
         connection.execute(
             probe.insert().values(
+                contract_version="2.0.0",
                 created_at=NOW,
                 updated_at=NOW,
+                started_at=None,
+                completed_at=None,
+            )
+        )
+        connection.execute(
+            probe.insert().values(
+                contract_version="1.0.0",
+                created_at=invalid_timestamp,
+                updated_at=invalid_timestamp,
                 started_at=None,
                 completed_at=None,
             )
@@ -659,11 +670,47 @@ def test_orm_timestamp_constraint_rejects_impossible_calendar_values(
         with pytest.raises(IntegrityError):
             connection.execute(
                 probe.insert().values(
+                    contract_version="2.0.0",
                     created_at=invalid_timestamp,
                     updated_at=invalid_timestamp,
                     started_at=None,
                     completed_at=None,
                 )
+            )
+
+
+def test_orm_timestamp_order_constraint_preserves_v1_and_rejects_v2() -> None:
+    run_constraint = next(
+        constraint
+        for constraint in governance_models.GovernanceEvaluationRun.__table__.constraints
+        if constraint.name == "ck_governance_evaluation_run_timestamp_order"
+    )
+    metadata = MetaData()
+    probe = Table(
+        "timestamp_order_probe",
+        metadata,
+        Column("contract_version", String, nullable=False),
+        Column("created_at", String, nullable=False),
+        Column("updated_at", String, nullable=False),
+        Column("started_at", String, nullable=True),
+        Column("completed_at", String, nullable=True),
+        CheckConstraint(str(run_constraint.sqltext), name="ck_timestamp_probe_order"),
+    )
+    engine = create_engine("sqlite:///:memory:")
+    metadata.create_all(engine)
+    reversed_timestamps = {
+        "created_at": NOW,
+        "updated_at": NOW,
+        "started_at": LATER,
+        "completed_at": None,
+    }
+    with engine.begin() as connection:
+        connection.execute(
+            probe.insert().values(contract_version="1.0.0", **reversed_timestamps)
+        )
+        with pytest.raises(IntegrityError):
+            connection.execute(
+                probe.insert().values(contract_version="2.0.0", **reversed_timestamps)
             )
 
 

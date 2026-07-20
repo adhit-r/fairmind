@@ -1633,19 +1633,20 @@ class GovernanceEvaluationRun(Base):
             name="ck_governance_evaluation_run_envelope_nonce",
         ),
         CheckConstraint(
+            "contract_version = '1.0.0' OR ("
             f"({_canonical_utc_timestamp('created_at', nullable=False)}) AND "
             f"({_canonical_utc_timestamp('updated_at', nullable=False)}) AND "
             f"({_canonical_utc_timestamp('started_at')}) AND "
-            f"({_canonical_utc_timestamp('completed_at')})",
+            f"({_canonical_utc_timestamp('completed_at')}))",
             name="ck_governance_evaluation_run_timestamp_canonical",
         ),
         CheckConstraint(
-            "created_at <= updated_at "
+            "contract_version = '1.0.0' OR (created_at <= updated_at "
             "AND (started_at IS NULL OR "
             "(created_at <= started_at AND started_at <= updated_at)) "
             "AND (completed_at IS NULL OR "
             "(created_at <= completed_at AND completed_at <= updated_at "
-            "AND (started_at IS NULL OR started_at <= completed_at)))",
+            "AND (started_at IS NULL OR started_at <= completed_at))))",
             name="ck_governance_evaluation_run_timestamp_order",
         ),
         Index("idx_governance_evaluation_runs_scope_created", "org_id", "system_id", "created_at"),
