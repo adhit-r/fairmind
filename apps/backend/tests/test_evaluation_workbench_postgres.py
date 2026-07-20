@@ -64,6 +64,7 @@ ASSURANCE_MIGRATIONS = (
     "011_governance_assurance.sql",
     "012_evaluation_runs.sql",
     "013_evaluation_assurance_contract_v2.sql",
+    "013a_evaluation_binding_integrity.sql",
 )
 
 

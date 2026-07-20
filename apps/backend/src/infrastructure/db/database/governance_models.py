@@ -573,6 +573,14 @@ class GovernanceEvaluationTargetVersion(Base):
             _lower_hex64("manifest_digest"),
             name="ck_governance_evaluation_target_manifest_digest",
         ),
+        Index(
+            "idx_governance_evaluation_targets_scope_created_keyset",
+            "org_id",
+            "workspace_id",
+            "system_id",
+            created_at.desc(),
+            id.desc(),
+        ),
     )
 
 
@@ -633,6 +641,14 @@ class GovernanceEvaluationSuiteVersion(Base):
         CheckConstraint(
             "status IN ('draft', 'active', 'deprecated', 'revoked')",
             name="ck_governance_evaluation_suite_status",
+        ),
+        Index(
+            "idx_governance_evaluation_suites_owner_identity_keyset",
+            "owner_scope",
+            "namespace",
+            "name",
+            "version",
+            "id",
         ),
     )
 
@@ -899,6 +915,17 @@ class GovernanceEvaluationRunSuiteExecution(Base):
             "technical_status IN ('awaiting_evidence', 'queued', 'leased', 'running', "
             "'succeeded', 'failed', 'timed_out', 'cancelled')",
             name="ck_governance_evaluation_suite_execution_technical",
+        ),
+        CheckConstraint(
+            "(technical_status IN ('awaiting_evidence', 'queued', 'leased') "
+            "AND started_at IS NULL AND completed_at IS NULL) OR "
+            "(technical_status = 'running' AND started_at IS NOT NULL "
+            "AND completed_at IS NULL) OR "
+            "(technical_status = 'succeeded' AND started_at IS NOT NULL "
+            "AND completed_at IS NOT NULL) OR "
+            "(technical_status IN ('failed', 'timed_out', 'cancelled') "
+            "AND completed_at IS NOT NULL)",
+            name="ck_governance_evaluation_suite_execution_timestamps",
         ),
         CheckConstraint(
             "evidence_result_status IN ('pending', 'passed', 'passed_with_limitations', "
@@ -1265,6 +1292,15 @@ class GovernanceEvaluationPlan(Base):
             name="ck_governance_evaluation_plan_content_hash",
         ),
         Index("idx_governance_evaluation_plans_scope_status", "org_id", "system_id", "status"),
+        Index(
+            "idx_governance_evaluation_plans_scope_contract_created_keyset",
+            "org_id",
+            "workspace_id",
+            "system_id",
+            "contract_version",
+            created_at.desc(),
+            id.desc(),
+        ),
     )
 
 
@@ -1375,8 +1411,10 @@ class GovernanceEvaluationRun(Base):
             name="ck_governance_evaluation_run_trigger",
         ),
         CheckConstraint(
-            "technical_status IN ('awaiting_evidence', 'running', 'succeeded', "
-            "'failed', 'cancelled')",
+            "technical_status IN ('awaiting_evidence', 'queued', 'leased', 'running', "
+            "'succeeded', 'failed', 'timed_out', 'cancelled') AND "
+            "(contract_version = '2.0.0' OR technical_status IN "
+            "('awaiting_evidence', 'running', 'succeeded', 'failed', 'cancelled'))",
             name="ck_governance_evaluation_run_technical_status",
         ),
         CheckConstraint(
@@ -1399,30 +1437,31 @@ class GovernanceEvaluationRun(Base):
             name="ck_governance_evaluation_run_complete_passport_link",
         ),
         CheckConstraint(
-            "(technical_status IN ('succeeded', 'failed') "
+            "(contract_version = '2.0.0' AND linked_passport_revision_id IS NULL "
+            "AND linked_evidence_run_id IS NULL AND linked_by IS NULL AND linked_at IS NULL "
+            "AND envelope_id IS NOT NULL AND envelope_json IS NOT NULL "
+            "AND envelope_hash IS NOT NULL) "
+            "OR (contract_version = '1.0.0' AND "
+            "((technical_status IN ('succeeded', 'failed') "
             "AND linked_passport_revision_id IS NOT NULL "
             "AND linked_evidence_run_id IS NOT NULL AND linked_by IS NOT NULL "
             "AND linked_at IS NOT NULL AND started_at IS NOT NULL "
             "AND completed_at IS NOT NULL) OR "
-            "(technical_status = 'succeeded' "
-            "AND contract_version = '2.0.0' "
+            "(technical_status NOT IN ('succeeded', 'failed') "
             "AND linked_passport_revision_id IS NULL "
             "AND linked_evidence_run_id IS NULL AND linked_by IS NULL "
-            "AND linked_at IS NULL AND envelope_id IS NOT NULL "
-            "AND envelope_json IS NOT NULL AND envelope_hash IS NOT NULL "
-            "AND started_at IS NOT NULL AND completed_at IS NOT NULL) OR "
-            "(technical_status <> 'succeeded' AND linked_passport_revision_id IS NULL "
-            "AND linked_evidence_run_id IS NULL AND linked_by IS NULL AND linked_at IS NULL)",
+            "AND linked_at IS NULL)))",
             name="ck_governance_evaluation_run_evidence_link_state",
         ),
         CheckConstraint(
-            "(technical_status = 'awaiting_evidence' AND started_at IS NULL "
-            "AND completed_at IS NULL) OR "
+            "(technical_status IN ('awaiting_evidence', 'queued', 'leased') "
+            "AND started_at IS NULL AND completed_at IS NULL) OR "
             "(technical_status = 'running' AND started_at IS NOT NULL "
             "AND completed_at IS NULL) OR "
             "(technical_status = 'succeeded' AND started_at IS NOT NULL "
             "AND completed_at IS NOT NULL) OR "
-            "(technical_status IN ('failed', 'cancelled') AND completed_at IS NOT NULL)",
+            "(technical_status IN ('failed', 'timed_out', 'cancelled') "
+            "AND completed_at IS NOT NULL)",
             name="ck_governance_evaluation_run_timestamps",
         ),
         CheckConstraint(
@@ -1442,6 +1481,15 @@ class GovernanceEvaluationRun(Base):
             name="ck_governance_evaluation_run_envelope",
         ),
         Index("idx_governance_evaluation_runs_scope_created", "org_id", "system_id", "created_at"),
+        Index(
+            "idx_governance_evaluation_runs_scope_contract_created_keyset",
+            "org_id",
+            "workspace_id",
+            "system_id",
+            "contract_version",
+            created_at.desc(),
+            id.desc(),
+        ),
         Index(
             "idx_governance_evaluation_runs_status_verdict",
             "org_id",

@@ -24,8 +24,8 @@ from database.governance_models import (
     GovernanceEvidenceTrustPolicyVersion,
     GovernanceWorkspace,
 )
+from migrations.evaluation_binding_integrity_migration import sql_for as sql_for_integrity
 from migrations.evaluation_runs_migration import sql_for
-from migrations.evaluation_assurance_v2_migration import sql_for as sql_for_v2
 
 
 PRODUCTION_TABLES = (
@@ -766,8 +766,11 @@ def test_check_constraints_cover_exact_vocabulary() -> None:
     )
     assert "status IN ('draft', 'active', 'archived')" in plan_checks
     assert (
-        "technical_status IN ('awaiting_evidence', 'running', 'succeeded', 'failed', "
-        "'cancelled')" in run_checks
+        "technical_status IN ('awaiting_evidence', 'queued', 'leased', 'running', "
+        "'succeeded', 'failed', 'timed_out', 'cancelled') AND "
+        "(contract_version = '2.0.0' OR technical_status IN "
+        "('awaiting_evidence', 'running', 'succeeded', 'failed', 'cancelled'))"
+        in run_checks
     )
     assert (
         "overall_verdict IN ('approved', 'conditional', 'review', 'blocked', "
@@ -788,30 +791,37 @@ def normalize_sql(value: str) -> str:
 
 def test_named_run_lifecycle_checks_match_orm_postgresql_and_sqlite() -> None:
     expected_checks = {
+        "ck_governance_evaluation_run_technical_status": (
+            "technical_status IN ('awaiting_evidence', 'queued', 'leased', 'running', "
+            "'succeeded', 'failed', 'timed_out', 'cancelled') AND "
+            "(contract_version = '2.0.0' OR technical_status IN "
+            "('awaiting_evidence', 'running', 'succeeded', 'failed', 'cancelled'))"
+        ),
         "ck_governance_evaluation_run_evidence_link_state": (
-            "(technical_status IN ('succeeded', 'failed') "
-            "AND linked_passport_revision_id IS NOT NULL "
-                "AND linked_evidence_run_id IS NOT NULL AND linked_by IS NOT NULL "
-                "AND linked_at IS NOT NULL AND started_at IS NOT NULL "
-                "AND completed_at IS NOT NULL) OR "
-                "(technical_status = 'succeeded' "
-                "AND contract_version = '2.0.0' "
-                "AND linked_passport_revision_id IS NULL "
-                "AND linked_evidence_run_id IS NULL AND linked_by IS NULL "
-                "AND linked_at IS NULL AND envelope_id IS NOT NULL "
-                "AND envelope_json IS NOT NULL AND envelope_hash IS NOT NULL "
-                "AND started_at IS NOT NULL AND completed_at IS NOT NULL) OR "
-                "(technical_status <> 'succeeded' AND linked_passport_revision_id IS NULL "
-            "AND linked_evidence_run_id IS NULL AND linked_by IS NULL AND linked_at IS NULL)"
+            "(contract_version = '2.0.0' AND linked_passport_revision_id IS NULL "
+            "AND linked_evidence_run_id IS NULL AND linked_by IS NULL "
+            "AND linked_at IS NULL AND envelope_id IS NOT NULL "
+            "AND envelope_json IS NOT NULL AND envelope_hash IS NOT NULL) OR "
+            "(contract_version = '1.0.0' AND ((technical_status IN "
+            "('succeeded', 'failed') AND linked_passport_revision_id IS NOT NULL "
+            "AND linked_evidence_run_id IS NOT NULL AND linked_by IS NOT NULL "
+            "AND linked_at IS NOT NULL AND started_at IS NOT NULL "
+            "AND completed_at IS NOT NULL) OR "
+            "(technical_status NOT IN ('succeeded', 'failed') "
+            "AND linked_passport_revision_id IS NULL "
+            "AND linked_evidence_run_id IS NULL AND linked_by IS NULL "
+            "AND linked_at IS NULL)))"
         ),
         "ck_governance_evaluation_run_timestamps": (
-            "(technical_status = 'awaiting_evidence' AND started_at IS NULL "
+            "(technical_status IN ('awaiting_evidence', 'queued', 'leased') "
+            "AND started_at IS NULL "
             "AND completed_at IS NULL) OR "
             "(technical_status = 'running' AND started_at IS NOT NULL "
             "AND completed_at IS NULL) OR "
             "(technical_status = 'succeeded' AND started_at IS NOT NULL "
             "AND completed_at IS NOT NULL) OR "
-            "(technical_status IN ('failed', 'cancelled') AND completed_at IS NOT NULL)"
+            "(technical_status IN ('failed', 'timed_out', 'cancelled') "
+            "AND completed_at IS NOT NULL)"
         ),
     }
     orm_checks = {
@@ -822,10 +832,8 @@ def test_named_run_lifecycle_checks_match_orm_postgresql_and_sqlite() -> None:
     for name, expression in expected_checks.items():
         normalized_expression = normalize_sql(expression)
         assert orm_checks[name] == normalized_expression
-        selector = (
-            sql_for_v2
-            if name == "ck_governance_evaluation_run_evidence_link_state"
-            else sql_for
-        )
-        for sql in (normalize_sql(selector("postgresql")), normalize_sql(selector("sqlite"))):
+        for sql in (
+            normalize_sql(sql_for_integrity("postgresql")),
+            normalize_sql(sql_for_integrity("sqlite")),
+        ):
             assert normalize_sql(f"CONSTRAINT {name} CHECK ({expression})") in sql
