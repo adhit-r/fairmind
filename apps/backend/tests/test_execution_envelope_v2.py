@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 from copy import deepcopy
 import hashlib
 
@@ -43,6 +44,49 @@ UNSAFE_ADAPTER_IDENTIFIERS = (
 OPAQUE_VERSIONED_SUITE_REF = (
     "fairmind/a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6@1.0.0"
 )
+CANONICAL_NONCE = base64.urlsafe_b64encode(bytes(range(32))).decode("ascii").rstrip("=")
+
+
+_INVALID_IDENTIFIER_VALUES = (None, False, 0, [], {}, "", "a" * 97)
+_INVALID_ENUM_VALUES = (None, False, 0, [], {}, "unsupported")
+_REVIEWER_TOP_LEVEL_INVALID_CASES = tuple(
+    (field, value)
+    for field in (
+        "envelope_id",
+        "run_id",
+        "org_id",
+        "workspace_id",
+        "system_id",
+        "plan_id",
+        "requester_id",
+    )
+    for value in _INVALID_IDENTIFIER_VALUES
+) + tuple(
+    (field, value)
+    for field in (
+        "trigger",
+        "lifecycle_phase",
+        "execution_depth",
+        "enforcement_mode",
+        "delivery_mode",
+    )
+    for value in _INVALID_ENUM_VALUES
+) + tuple(
+    ("plan_content_hash", value)
+    for value in (None, False, 0, [], {}, "bad")
+) + tuple(
+    ("nonce", value)
+    for value in (None, False, 0, [], {}, "nonce-1")
+) + (
+    ("requested_at", None),
+    ("requested_at", "not-a-time"),
+)
+
+assert len(_REVIEWER_TOP_LEVEL_INVALID_CASES) == 93
+_TOP_LEVEL_INVALID_CASES = _REVIEWER_TOP_LEVEL_INVALID_CASES + tuple(
+    ("requested_at", value) for value in (False, 0, [], {})
+)
+assert len(_TOP_LEVEL_INVALID_CASES) == 97
 
 
 def _envelope_inputs() -> dict:
@@ -78,7 +122,7 @@ def _envelope_inputs() -> dict:
             "version": "1.0.0",
             "policyHash": "d" * 64,
         },
-        "nonce": "nonce-1",
+        "nonce": CANONICAL_NONCE,
         "requester_id": "user-1",
         "requested_at": "2026-07-20T00:00:00+00:00",
         "suites": [
@@ -175,6 +219,98 @@ def test_envelope_has_ordered_suite_bindings_and_hashes_exact_bytes() -> None:
     assert envelope["suites"][0]["suiteExecutionId"] == "execution-1"
     assert envelope["suites"][1]["suiteExecutionId"] == "execution-2"
     assert "envelopeHash" not in envelope
+    assert encoded.encode("utf-8") == canonical_json_bytes(envelope)
+    assert digest == hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def test_envelope_fixture_nonce_is_canonical_unpadded_32_byte_base64url() -> None:
+    assert len(CANONICAL_NONCE) == 43
+    assert base64.urlsafe_b64decode(CANONICAL_NONCE + "=") == bytes(range(32))
+    assert base64.urlsafe_b64encode(bytes(range(32))).decode("ascii").rstrip("=") == (
+        CANONICAL_NONCE
+    )
+
+
+@pytest.mark.parametrize(
+    ("field", "invalid"),
+    _TOP_LEVEL_INVALID_CASES,
+    ids=[f"{field}-{index}" for index, (field, _) in enumerate(_TOP_LEVEL_INVALID_CASES)],
+)
+def test_all_top_level_execution_envelope_bindings_fail_closed_before_hashing(
+    field: str,
+    invalid: object,
+) -> None:
+    inputs = _envelope_inputs()
+    inputs[field] = invalid
+
+    with pytest.raises(AssuranceContractValidationError) as caught:
+        build_execution_envelope_v2(**inputs)
+
+    assert caught.value.code == "invalid_execution_binding"
+    assert caught.value.message == (
+        "The execution envelope contains an invalid closed binding."
+    )
+    assert repr(invalid) not in caught.value.message
+
+
+@pytest.mark.parametrize(
+    "requested_at",
+    [
+        "2026-07-20T00:00:00Z",
+        "2026-07-20 00:00:00+00:00",
+        "2026-07-20T05:30:00+05:30",
+        "2026-07-20T00:00:00",
+        "2026-07-20T00:00:00.0000000+00:00",
+    ],
+)
+def test_execution_envelope_requires_exact_canonical_utc_timestamp(
+    requested_at: str,
+) -> None:
+    inputs = _envelope_inputs()
+    inputs["requested_at"] = requested_at
+
+    with pytest.raises(AssuranceContractValidationError) as caught:
+        build_execution_envelope_v2(**inputs)
+
+    assert caught.value.code == "invalid_execution_binding"
+
+
+@pytest.mark.parametrize(
+    "nonce",
+    [
+        base64.b64encode(b"\xfb" * 32).decode("ascii").rstrip("="),
+        ("A" * 42) + "B",
+        CANONICAL_NONCE + "=",
+        CANONICAL_NONCE[:-1],
+        CANONICAL_NONCE + "A",
+    ],
+)
+def test_execution_envelope_requires_exact_canonical_32_byte_nonce(
+    nonce: str,
+) -> None:
+    inputs = _envelope_inputs()
+    inputs["nonce"] = nonce
+
+    with pytest.raises(AssuranceContractValidationError) as caught:
+        build_execution_envelope_v2(**inputs)
+
+    assert caught.value.code == "invalid_execution_binding"
+
+
+def test_returned_envelope_is_deeply_isolated_from_every_caller_owned_container() -> None:
+    inputs = _envelope_inputs()
+    envelope, encoded, digest = build_execution_envelope_v2(**inputs)
+    original = deepcopy(envelope)
+
+    inputs["target"]["deploymentId"] = "deploy-mutated"
+    inputs["trust_policy"]["version"] = "9.9.9"
+    inputs["suites"][0]["configuration"]["threshold"] = 0.9
+    inputs["suites"][0]["budgets"]["maxCases"] = 999
+    inputs["suites"][0]["inputRoles"].append("other_role")
+    inputs["suites"][0]["inputs"]["scenario_set"]["sha256"] = "9" * 64
+    inputs["suites"].append(deepcopy(inputs["suites"][0]))
+
+    assert envelope == original
     assert encoded.encode("utf-8") == canonical_json_bytes(envelope)
     assert digest == hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
@@ -1121,6 +1257,82 @@ def test_suite_version_rejects_semver_numeric_prerelease_leading_zero(
 
     assert caught.value.code == "invalid_request"
     assert version not in caught.value.message
+
+
+@pytest.mark.parametrize(
+    "version",
+    [
+        "1.0.0-abcdefghijklmnopqrstuvwx",
+        "1.0.0-abcdefghijkl.mnopqrstuvwx",
+        "1.0.0-abcdef-ghijkl-mnopqr-stuvwx",
+    ],
+)
+def test_suite_create_rejects_version_that_cannot_enter_an_execution_suite_ref(
+    version: str,
+) -> None:
+    payload = _suite_payload()
+    payload["version"] = version
+
+    with pytest.raises(AssuranceContractValidationError) as caught:
+        normalize_suite_create(payload, owner_scope="org")
+
+    assert caught.value.code == "invalid_request"
+    assert version not in caught.value.message
+
+
+@pytest.mark.parametrize(
+    "version",
+    [
+        "0.0.0",
+        "1.2.3",
+        "1.0.0-alpha",
+        "1.0.0-alpha.1",
+        "1.0.0-0",
+        "1.0.0-rc.12+cpu.1",
+        "12.34.56+darwin.arm64",
+    ],
+)
+def test_every_accepted_suite_version_can_enter_the_execution_envelope(
+    version: str,
+) -> None:
+    payload = _suite_payload()
+    payload["version"] = version
+    normalized = normalize_suite_create(payload, owner_scope="org")
+    inputs = _envelope_inputs()
+    inputs["suites"][0]["suiteRef"] = normalized["suiteRef"]
+
+    envelope, _, _ = build_execution_envelope_v2(**inputs)
+
+    assert envelope["suites"][0]["suiteRef"] == normalized["suiteRef"]
+
+
+def _nested_object(depth: int) -> dict:
+    value: dict = {}
+    for _ in range(depth):
+        value = {"level": value}
+    return value
+
+
+@pytest.mark.parametrize(
+    "validator",
+    [
+        canonical_json_bytes,
+        evaluation_v2_module.validate_safe_configuration_schema,
+        evaluation_v2_module.validate_selected_configuration,
+    ],
+)
+def test_deep_schema_and_configuration_are_bounded_sanitized_contract_errors(
+    validator,
+) -> None:
+    deep_value = _nested_object(1_500)
+
+    with pytest.raises(AssuranceContractValidationError) as caught:
+        validator(deep_value)
+
+    assert caught.value.code == "invalid_ijson"
+    assert caught.value.message == (
+        "Value cannot be represented in the RFC 8785 I-JSON domain."
+    )
 
 
 def test_execution_envelope_recomputes_the_configuration_hash() -> None:

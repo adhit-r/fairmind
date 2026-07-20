@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from time import perf_counter
@@ -17,7 +18,25 @@ from src.domain.assurance.evaluation_v2 import (
     build_execution_envelope_v2,
     canonical_sha256,
     evaluate_preflight,
+    normalize_suite_create,
 )
+
+
+CANONICAL_NONCE = base64.urlsafe_b64encode(bytes(range(32))).decode("ascii").rstrip("=")
+EXECUTABLE_SEMVER_CASES = tuple(
+    f"{major}.{minor}.{patch}"
+    for major in (0, 1, 12)
+    for minor in (0, 2, 34)
+    for patch in (0, 3, 56)
+) + (
+    "1.0.0-alpha",
+    "1.0.0-alpha.1",
+    "1.0.0-0",
+    "1.0.0-rc.12+cpu.1",
+    "12.34.56+darwin.arm64",
+)
+
+assert len(EXECUTABLE_SEMVER_CASES) == 32
 
 
 @dataclass
@@ -80,6 +99,34 @@ def _suite(**overrides) -> dict:
     return value
 
 
+def _suite_creation_payload(version: str) -> dict:
+    return {
+        "namespace": "fairmind",
+        "name": "agent-safety",
+        "version": version,
+        "supportedTargetKinds": ["agent"],
+        "supportedSubjectKinds": ["agent"],
+        "lifecyclePhases": ["pre_deploy"],
+        "executionDepths": ["deep"],
+        "deliveryModes": ["external_provider"],
+        "workerType": "external_provider",
+        "adapterName": "inspect",
+        "adapterVersion": "0.3.0",
+        "configurationSchema": {
+            "type": "object",
+            "properties": {
+                "threshold": {"type": "number", "minimum": 0, "maximum": 1}
+            },
+            "required": ["threshold"],
+            "additionalProperties": False,
+        },
+        "configurationDefaults": {"threshold": 0.5},
+        "requiredInputRoles": ["scenario_set"],
+        "budgets": {"maxCases": 200},
+        "resultContractVersion": "1.0.0",
+    }
+
+
 def _plan(**overrides) -> dict:
     value = {
         "status": "active",
@@ -119,7 +166,9 @@ def test_preflight_success_has_no_blockers() -> None:
     assert result == []
 
 
-def _fully_bound_preflight_graph() -> tuple[dict, dict, dict, list[dict]]:
+def _fully_bound_preflight_graph(
+    *, suite_ref: str = "fairmind/agent-safety@1.0.0"
+) -> tuple[dict, dict, dict, list[dict]]:
     target = _target(
         target_key="agent-prod",
         version="1.0.0",
@@ -141,7 +190,7 @@ def _fully_bound_preflight_graph() -> tuple[dict, dict, dict, list[dict]]:
     suites = [
         _suite(
             owner_scope="org-1",
-            suite_ref="fairmind/agent-safety@1.0.0",
+            suite_ref=suite_ref,
             manifest_digest="e" * 64,
             adapter_name="inspect",
             adapter_version="0.3.0",
@@ -188,12 +237,65 @@ def test_preflight_clean_binding_projection_can_build_an_execution_envelope() ->
         enforcement_mode="human_approval",
         delivery_mode="external_provider",
         trust_policy=trust_binding,
-        nonce="nonce-1",
+        nonce=CANONICAL_NONCE,
         requester_id="user-1",
         requested_at="2026-07-20T00:00:00+00:00",
         suites=suite_bindings,
     )
     assert envelope["suites"][0]["suiteRef"] == "fairmind/agent-safety@1.0.0"
+
+
+@pytest.mark.parametrize(
+    "version",
+    EXECUTABLE_SEMVER_CASES,
+)
+def test_preflight_clean_suite_ref_uses_the_same_envelope_grammar(
+    version: str,
+) -> None:
+    created_suite = normalize_suite_create(
+        _suite_creation_payload(version),
+        owner_scope="org-1",
+    )
+    suite_ref = created_suite["suiteRef"]
+    plan, target, trust, suites = _fully_bound_preflight_graph(suite_ref=suite_ref)
+
+    blockers = evaluate_preflight(
+        plan=plan,
+        target=target,
+        trust_policy=trust,
+        suites=suites,
+        lifecycle_phase="pre_deploy",
+    )
+    target_binding, trust_binding, suite_bindings = (
+        evaluation_v2_module._preflight_envelope_variable_projection(
+            target=target,
+            trust_policy=trust,
+            suites=suites,
+        )
+    )
+    envelope, _, _ = build_execution_envelope_v2(
+        envelope_id="envelope-1",
+        run_id="run-1",
+        org_id="org-1",
+        workspace_id="workspace-1",
+        system_id="system-1",
+        plan_id="plan-1",
+        plan_content_hash="a" * 64,
+        target=target_binding,
+        trigger="release_gate",
+        lifecycle_phase="pre_deploy",
+        execution_depth="deep",
+        enforcement_mode="human_approval",
+        delivery_mode="external_provider",
+        trust_policy=trust_binding,
+        nonce=CANONICAL_NONCE,
+        requester_id="user-1",
+        requested_at="2026-07-20T00:00:00+00:00",
+        suites=suite_bindings,
+    )
+
+    assert blockers == []
+    assert envelope["suites"][0]["suiteRef"] == suite_ref
 
 
 def test_preflight_marks_a_binding_invalid_before_run_construction() -> None:

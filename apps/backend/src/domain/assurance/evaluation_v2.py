@@ -7,7 +7,10 @@ has been constrained to the I-JSON interoperable domain.
 
 from __future__ import annotations
 
+import base64
+import binascii
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from functools import lru_cache
 import hashlib
 import json
@@ -263,6 +266,13 @@ class AssuranceContractValidationError(ValueError):
         self.message = message
 
 
+def _invalid_ijson() -> AssuranceContractValidationError:
+    return AssuranceContractValidationError(
+        "invalid_ijson",
+        "Value cannot be represented in the RFC 8785 I-JSON domain.",
+    )
+
+
 def canonical_json_bytes(value: Any) -> bytes:
     """Return exact RFC 8785 bytes after enforcing the I-JSON domain."""
     try:
@@ -271,13 +281,11 @@ def canonical_json_bytes(value: Any) -> bytes:
     except (
         EvidencePassportValidationError,
         rfc8785.CanonicalizationError,
+        RecursionError,
         UnicodeError,
         ValueError,
     ) as error:
-        raise AssuranceContractValidationError(
-            "invalid_ijson",
-            "Value cannot be represented in the RFC 8785 I-JSON domain.",
-        ) from error
+        raise _invalid_ijson() from error
 
 
 def canonical_json(value: Any) -> str:
@@ -460,6 +468,14 @@ def _unsafe_public_string(value: str, *, allow_digest: bool = False) -> bool:
     )
 
 
+def _valid_execution_suite_ref(value: Any) -> bool:
+    return bool(
+        isinstance(value, str)
+        and not _unsafe_public_string(value)
+        and _valid_suite_ref(value)
+    )
+
+
 def _matches_fairmind_value_type(value: str, value_type: str) -> bool:
     if value_type == "symbol":
         return len(value) <= 32 and _SYMBOL_VALUE.fullmatch(value) is not None
@@ -474,7 +490,7 @@ def _matches_fairmind_value_type(value: str, value_type: str) -> bool:
     if value_type == "media_type":
         return len(value) <= 96 and _MEDIA_TYPE_VALUE.fullmatch(value) is not None
     if value_type == "suite_ref":
-        return _valid_suite_ref(value)
+        return _valid_execution_suite_ref(value)
     return False
 
 
@@ -515,34 +531,40 @@ def validate_public_safe_string(
 
 def validate_public_safe_values(value: Any) -> None:
     """Recursively validate string values without inspecting or reflecting their paths."""
-    if isinstance(value, str):
-        validate_public_safe_string(value)
-    elif isinstance(value, dict):
-        for child in value.values():
-            validate_public_safe_values(child)
-    elif isinstance(value, (list, tuple)):
-        for child in value:
-            validate_public_safe_values(child)
+    try:
+        if isinstance(value, str):
+            validate_public_safe_string(value)
+        elif isinstance(value, dict):
+            for child in value.values():
+                validate_public_safe_values(child)
+        elif isinstance(value, (list, tuple)):
+            for child in value:
+                validate_public_safe_values(child)
+    except RecursionError as error:
+        raise _invalid_ijson() from error
 
 
 def validate_catalog_configuration_values(value: Any) -> None:
     """Require every configuration string to use one closed typed-value grammar."""
-    if isinstance(value, str):
-        validate_public_safe_string(value)
-        if not any(
-            _matches_fairmind_value_type(value, value_type)
-            for value_type in FAIRMIND_VALUE_TYPES
-        ):
-            raise AssuranceContractValidationError(
-                "unsafe_string_value",
-                UNSAFE_STRING_VALUE_MESSAGE,
-            )
-    elif isinstance(value, dict):
-        for child in value.values():
-            validate_catalog_configuration_values(child)
-    elif isinstance(value, (list, tuple)):
-        for child in value:
-            validate_catalog_configuration_values(child)
+    try:
+        if isinstance(value, str):
+            validate_public_safe_string(value)
+            if not any(
+                _matches_fairmind_value_type(value, value_type)
+                for value_type in FAIRMIND_VALUE_TYPES
+            ):
+                raise AssuranceContractValidationError(
+                    "unsafe_string_value",
+                    UNSAFE_STRING_VALUE_MESSAGE,
+                )
+        elif isinstance(value, dict):
+            for child in value.values():
+                validate_catalog_configuration_values(child)
+        elif isinstance(value, (list, tuple)):
+            for child in value:
+                validate_catalog_configuration_values(child)
+    except RecursionError as error:
+        raise _invalid_ijson() from error
 
 
 def _safe_schema_identifier(value: Any) -> bool:
@@ -557,49 +579,52 @@ def _safe_schema_identifier(value: Any) -> bool:
 def reject_sensitive_keys(value: Any, *, path: str = "value") -> None:
     """Reject data-shaped keys that could place secrets or reasoning in evidence."""
     del path
-    if isinstance(value, dict):
-        for key, child in value.items():
-            normalized = re.sub(r"[^a-z0-9]", "", str(key).lower())
-            sensitive_family = any(
-                fragment in normalized
-                for fragment in (
-                    "secret",
-                    "credential",
-                    "password",
-                    "passwd",
-                    "reasoning",
-                    "chainofthought",
-                    "privatekey",
-                    "apikey",
-                    "authorization",
-                    "cookie",
-                    "jwt",
+    try:
+        if isinstance(value, dict):
+            for key, child in value.items():
+                normalized = re.sub(r"[^a-z0-9]", "", str(key).lower())
+                sensitive_family = any(
+                    fragment in normalized
+                    for fragment in (
+                        "secret",
+                        "credential",
+                        "password",
+                        "passwd",
+                        "reasoning",
+                        "chainofthought",
+                        "privatekey",
+                        "apikey",
+                        "authorization",
+                        "cookie",
+                        "jwt",
+                    )
                 )
-            )
-            sensitive_access_key = normalized.endswith(
-                ("clientkey", "accesskey", "accesskeyid", "openaikey")
-            )
-            sensitive_token = (
-                normalized == "token"
-                or normalized.endswith("token")
-                or normalized.startswith(
-                    ("authtoken", "accesstoken", "refreshtoken", "bearertoken")
+                sensitive_access_key = normalized.endswith(
+                    ("clientkey", "accesskey", "accesskeyid", "openaikey")
                 )
-            )
-            if (
-                normalized in _DENIED_DATA_KEYS
-                or sensitive_family
-                or sensitive_token
-                or sensitive_access_key
-            ):
-                raise AssuranceContractValidationError(
-                    "sensitive_data_forbidden",
-                    SENSITIVE_DATA_MESSAGE,
+                sensitive_token = (
+                    normalized == "token"
+                    or normalized.endswith("token")
+                    or normalized.startswith(
+                        ("authtoken", "accesstoken", "refreshtoken", "bearertoken")
+                    )
                 )
-            reject_sensitive_keys(child)
-    elif isinstance(value, list):
-        for child in value:
-            reject_sensitive_keys(child)
+                if (
+                    normalized in _DENIED_DATA_KEYS
+                    or sensitive_family
+                    or sensitive_token
+                    or sensitive_access_key
+                ):
+                    raise AssuranceContractValidationError(
+                        "sensitive_data_forbidden",
+                        SENSITIVE_DATA_MESSAGE,
+                    )
+                reject_sensitive_keys(child)
+        elif isinstance(value, list):
+            for child in value:
+                reject_sensitive_keys(child)
+    except RecursionError as error:
+        raise _invalid_ijson() from error
 
 
 def reject_remote_schema_references(value: Any, *, path: str = "configurationSchema") -> None:
@@ -1228,10 +1253,12 @@ def normalize_suite_create(payload: Mapping[str, Any], *, owner_scope: str) -> d
     namespace = _required_text(payload, "namespace", maximum=80)
     name = _required_text(payload, "name", maximum=80)
     version = _required_text(payload, "version", maximum=80)
+    suite_ref = f"{namespace}/{name}@{version}"
     if (
         _SUITE_NAMESPACE_VALUE.fullmatch(namespace) is None
         or _SUITE_NAME_VALUE.fullmatch(name) is None
         or not _valid_semantic_version(version)
+        or not _valid_execution_suite_ref(suite_ref)
     ):
         raise AssuranceContractValidationError(
             "invalid_request",
@@ -1313,7 +1340,7 @@ def normalize_suite_create(payload: Mapping[str, Any], *, owner_scope: str) -> d
             "runnerImageDigest must be an immutable lowercase sha256 OCI digest.",
         )
     manifest = {
-        "suiteRef": f"{namespace}/{name}@{version}",
+        "suiteRef": suite_ref,
         "ownerScope": owner_scope,
         "supportedTargetKinds": target_kinds,
         "supportedSubjectKinds": subject_kinds,
@@ -1597,6 +1624,76 @@ def _require_plain_sha256(value: Any) -> None:
         raise _invalid_execution_binding()
 
 
+def _require_envelope_enum(value: Any, allowed: frozenset[str]) -> None:
+    if not isinstance(value, str) or value not in allowed:
+        raise _invalid_execution_binding()
+
+
+def _require_envelope_nonce(value: Any) -> None:
+    if not isinstance(value, str) or re.fullmatch(r"[A-Za-z0-9_-]{43}", value) is None:
+        raise _invalid_execution_binding()
+    try:
+        decoded = base64.urlsafe_b64decode(value + "=")
+    except (binascii.Error, ValueError) as error:
+        raise _invalid_execution_binding() from error
+    canonical = base64.urlsafe_b64encode(decoded).decode("ascii").rstrip("=")
+    if len(decoded) != 32 or canonical != value:
+        raise _invalid_execution_binding()
+
+
+def _require_canonical_utc_timestamp(value: Any) -> None:
+    if not isinstance(value, str):
+        raise _invalid_execution_binding()
+    try:
+        parsed = datetime.fromisoformat(value)
+    except (OverflowError, ValueError) as error:
+        raise _invalid_execution_binding() from error
+    if (
+        parsed.tzinfo is None
+        or parsed.utcoffset() != timedelta(0)
+        or parsed.isoformat() != value
+    ):
+        raise _invalid_execution_binding()
+
+
+def _validate_execution_envelope_metadata(
+    *,
+    envelope_id: Any,
+    run_id: Any,
+    org_id: Any,
+    workspace_id: Any,
+    system_id: Any,
+    plan_id: Any,
+    plan_content_hash: Any,
+    trigger: Any,
+    lifecycle_phase: Any,
+    execution_depth: Any,
+    enforcement_mode: Any,
+    delivery_mode: Any,
+    nonce: Any,
+    requester_id: Any,
+    requested_at: Any,
+) -> None:
+    for identifier in (
+        envelope_id,
+        run_id,
+        org_id,
+        workspace_id,
+        system_id,
+        plan_id,
+        requester_id,
+    ):
+        _require_binding_identifier(identifier)
+    _require_plain_sha256(plan_content_hash)
+    _require_envelope_enum(trigger, RUN_TRIGGERS)
+    _require_envelope_enum(lifecycle_phase, LIFECYCLE_PHASES)
+    _require_envelope_enum(execution_depth, EXECUTION_DEPTHS)
+    _require_envelope_enum(enforcement_mode, ENFORCEMENT_MODES)
+    _require_envelope_enum(delivery_mode, DELIVERY_MODES)
+    _require_envelope_nonce(nonce)
+    _require_canonical_utc_timestamp(requested_at)
+
+
 def _require_oci_sha256(value: Any) -> None:
     if value is not None and (
         not isinstance(value, str)
@@ -1664,11 +1761,7 @@ def _validate_suite_binding(suite: Mapping[str, Any]) -> None:
     _require_binding_identifier(suite["suiteVersionId"])
     _require_binding_identifier(suite["ownerScope"])
     suite_ref = suite["suiteRef"]
-    if (
-        not isinstance(suite_ref, str)
-        or _unsafe_public_string(suite_ref)
-        or not _valid_suite_ref(suite_ref)
-    ):
+    if not _valid_execution_suite_ref(suite_ref):
         raise _invalid_execution_binding()
     _require_plain_sha256(suite["manifestDigest"])
     if suite["workerType"] not in WORKER_TYPES:
@@ -2013,6 +2106,23 @@ def build_execution_envelope_v2(
     requested_at: str,
     suites: Sequence[Mapping[str, Any]],
 ) -> tuple[dict[str, Any], str, str]:
+    _validate_execution_envelope_metadata(
+        envelope_id=envelope_id,
+        run_id=run_id,
+        org_id=org_id,
+        workspace_id=workspace_id,
+        system_id=system_id,
+        plan_id=plan_id,
+        plan_content_hash=plan_content_hash,
+        trigger=trigger,
+        lifecycle_phase=lifecycle_phase,
+        execution_depth=execution_depth,
+        enforcement_mode=enforcement_mode,
+        delivery_mode=delivery_mode,
+        nonce=nonce,
+        requester_id=requester_id,
+        requested_at=requested_at,
+    )
     validate_execution_envelope_variable_size(
         target=target,
         trust_policy=trust_policy,
@@ -2044,4 +2154,11 @@ def build_execution_envelope_v2(
             "execution_envelope_too_large",
             "The canonical execution envelope exceeds 512 KiB.",
         )
-    return envelope, encoded_bytes.decode("utf-8"), hashlib.sha256(encoded_bytes).hexdigest()
+    encoded = encoded_bytes.decode("utf-8")
+    try:
+        isolated_envelope = json.loads(encoded)
+    except (RecursionError, TypeError, ValueError) as error:
+        raise _invalid_ijson() from error
+    if not isinstance(isolated_envelope, dict):
+        raise _invalid_ijson()
+    return isolated_envelope, encoded, hashlib.sha256(encoded_bytes).hexdigest()
