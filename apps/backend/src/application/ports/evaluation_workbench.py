@@ -293,6 +293,7 @@ class PersistRunSuiteCommand:
 class PersistRunCommand:
     run_id: str
     envelope_id: str
+    envelope_nonce: str
     envelope: FrozenJsonObject
     envelope_hash: str
     actor_id: str
@@ -321,6 +322,10 @@ class SuiteExecutionRecord:
     limitations: JsonValue
     failure_code: str | None
     failure_message: str | None
+    started_at: str | None
+    completed_at: str | None
+    created_at: str
+    updated_at: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -339,6 +344,7 @@ class RunRecord:
     layer_verdicts: FrozenJsonObject
     suite_executions: tuple[SuiteExecutionRecord, ...]
     envelope_id: str
+    envelope_nonce: str
     envelope: FrozenJsonObject
     envelope_hash: str
     verdict_version: int

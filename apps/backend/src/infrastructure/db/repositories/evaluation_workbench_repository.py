@@ -51,7 +51,15 @@ from src.application.ports.evaluation_workbench import (
 from src.domain.assurance.evaluation_v2 import (
     AssuranceContractValidationError,
     CONTRACT_VERSION,
+    MAX_BUDGETS_BYTES,
+    MAX_CONFIGURATION_DEFAULTS_BYTES,
+    MAX_CONFIGURATION_SCHEMA_BYTES,
     MAX_EXECUTION_ENVELOPE_BYTES,
+    MAX_SAFE_ARRAY_ITEMS,
+    MAX_SUITE_CONFIGURATION_BYTES,
+    MAX_SUITE_LIMITATIONS_BYTES,
+    MAX_SUITE_MANIFEST_BYTES,
+    MAX_TARGET_MANIFEST_BYTES,
     canonical_json,
     canonical_sha256,
 )
@@ -59,6 +67,10 @@ from src.domain.assurance.evaluation_v2 import (
 _SQLITE_WRITE_LOCK = threading.RLock()
 _BINDING_INTEGRITY_MESSAGE = "Stored assurance bindings failed integrity verification."
 _MAX_LAYER_VERDICTS_BYTES = 8 * 1024
+_MAX_BINDING_LIST_BYTES = 8 * 1024
+_MAX_TRUST_POLICY_BYTES = 64 * 1024
+_MAX_STORED_JSON_DEPTH = 32
+_MAX_STORED_JSON_ITEMS = MAX_SAFE_ARRAY_ITEMS
 
 
 def _now() -> datetime:
@@ -91,6 +103,22 @@ def _unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
 
 def _reject_json_constant(_value: str) -> None:
     raise ValueError("non-finite JSON number")
+
+
+def _validate_stored_json_shape(value: object) -> None:
+    pending: list[tuple[object, int]] = [(value, 1)]
+    item_count = -1
+    while pending:
+        current, depth = pending.pop()
+        if depth > _MAX_STORED_JSON_DEPTH:
+            raise ValueError("stored JSON exceeds its depth limit")
+        item_count += 1
+        if item_count > _MAX_STORED_JSON_ITEMS:
+            raise ValueError("stored JSON exceeds its aggregate item limit")
+        if isinstance(current, dict):
+            pending.extend((child, depth + 1) for child in current.values())
+        elif isinstance(current, list):
+            pending.extend((child, depth + 1) for child in current)
 
 
 class SqlAlchemyEvaluationWorkbenchRepository:
@@ -494,21 +522,7 @@ class SqlAlchemyEvaluationWorkbenchRepository:
         )
         if lock:
             statement = statement.with_for_update()
-        rows = self.db.execute(statement).mappings().all()
-        result = []
-        for row in rows:
-            value = dict(row)
-            value["configuration"] = _json_load(value["configuration_json"], {})
-            value["configuration_schema"] = _json_load(value["configuration_schema_json"], {})
-            value["target_kinds"] = _json_load(value["target_kinds_json"], [])
-            value["subject_kinds"] = _json_load(value["subject_kinds_json"], [])
-            value["lifecycle_phases"] = _json_load(value["lifecycle_phases_json"], [])
-            value["execution_depths"] = _json_load(value["execution_depths_json"], [])
-            value["delivery_modes"] = _json_load(value["delivery_modes_json"], [])
-            value["required_input_roles"] = _json_load(value["required_input_roles_json"], [])
-            value["budgets"] = _json_load(value["default_budgets_json"], {})
-            result.append(value)
-        return result
+        return self.db.execute(statement).mappings().all()
 
     @staticmethod
     def _scope_record(row: Mapping[str, Any]) -> SystemScopeRecord:
@@ -518,8 +532,7 @@ class SqlAlchemyEvaluationWorkbenchRepository:
             system_id=row["system_id"],
         )
 
-    @staticmethod
-    def _target_binding(row: Mapping[str, Any]) -> TargetBindingRecord:
+    def _target_binding(self, row: Mapping[str, Any]) -> TargetBindingRecord:
         return TargetBindingRecord(
             id=row["id"],
             organization_id=row["org_id"],
@@ -535,7 +548,10 @@ class SqlAlchemyEvaluationWorkbenchRepository:
             subject_digest=row["subject_digest"],
             deployment_id=row["deployment_id"],
             connector_binding_id=row["connector_binding_id"],
-            manifest=FrozenJsonObject.from_json(row["manifest_json"]),
+            manifest=self._stored_json_object(
+                row["manifest_json"],
+                maximum_bytes=MAX_TARGET_MANIFEST_BYTES,
+            ),
             manifest_digest=row["manifest_digest"],
             status=row["status"],
             supersedes_id=row["supersedes_id"],
@@ -543,19 +559,20 @@ class SqlAlchemyEvaluationWorkbenchRepository:
             created_at=row["created_at"],
         )
 
-    @staticmethod
-    def _trust_binding(row: Mapping[str, Any]) -> TrustPolicyBindingRecord:
+    def _trust_binding(self, row: Mapping[str, Any]) -> TrustPolicyBindingRecord:
         return TrustPolicyBindingRecord(
             id=row["id"],
             organization_id=row["org_id"],
             version=row["version"],
-            policy=FrozenJsonObject.from_json(row["policy_json"]),
+            policy=self._stored_json_object(
+                row["policy_json"],
+                maximum_bytes=_MAX_TRUST_POLICY_BYTES,
+            ),
             policy_hash=row["policy_hash"],
             status=row["status"],
         )
 
-    @staticmethod
-    def _suite_binding(row: Mapping[str, Any]) -> SuiteBindingRecord:
+    def _suite_binding(self, row: Mapping[str, Any]) -> SuiteBindingRecord:
         return SuiteBindingRecord(
             id=row["id"],
             owner_organization_id=row["owner_org_id"],
@@ -564,38 +581,65 @@ class SqlAlchemyEvaluationWorkbenchRepository:
             name=row["name"],
             version=row["version"],
             suite_ref=row["suite_ref"],
-            manifest=FrozenJsonObject.from_json(row["manifest_json"]),
+            manifest=self._stored_json_object(
+                row["manifest_json"],
+                maximum_bytes=MAX_SUITE_MANIFEST_BYTES,
+            ),
             manifest_digest=row["manifest_digest"],
-            target_kinds=tuple(_json_load(row["target_kinds_json"], [])),
-            subject_kinds=tuple(_json_load(row["subject_kinds_json"], [])),
-            lifecycle_phases=tuple(_json_load(row["lifecycle_phases_json"], [])),
-            execution_depths=tuple(_json_load(row["execution_depths_json"], [])),
-            delivery_modes=tuple(_json_load(row["delivery_modes_json"], [])),
+            target_kinds=self._stored_string_array(
+                row["target_kinds_json"], maximum_bytes=_MAX_BINDING_LIST_BYTES
+            ),
+            subject_kinds=self._stored_string_array(
+                row["subject_kinds_json"], maximum_bytes=_MAX_BINDING_LIST_BYTES
+            ),
+            lifecycle_phases=self._stored_string_array(
+                row["lifecycle_phases_json"], maximum_bytes=_MAX_BINDING_LIST_BYTES
+            ),
+            execution_depths=self._stored_string_array(
+                row["execution_depths_json"], maximum_bytes=_MAX_BINDING_LIST_BYTES
+            ),
+            delivery_modes=self._stored_string_array(
+                row["delivery_modes_json"], maximum_bytes=_MAX_BINDING_LIST_BYTES
+            ),
             worker_type=row["worker_type"],
             runner_image_digest=row["runner_image_digest"],
             adapter_name=row["adapter_name"],
             adapter_version=row["adapter_version"],
-            configuration_schema=FrozenJsonObject.from_json(row["configuration_schema_json"]),
-            configuration_defaults=FrozenJsonObject.from_json(row["configuration_defaults_json"]),
-            required_input_roles=tuple(_json_load(row["required_input_roles_json"], [])),
-            budgets=FrozenJsonObject.from_json(row["default_budgets_json"]),
+            configuration_schema=self._stored_json_object(
+                row["configuration_schema_json"],
+                maximum_bytes=MAX_CONFIGURATION_SCHEMA_BYTES,
+            ),
+            configuration_defaults=self._stored_json_object(
+                row["configuration_defaults_json"],
+                maximum_bytes=MAX_CONFIGURATION_DEFAULTS_BYTES,
+            ),
+            required_input_roles=self._stored_string_array(
+                row["required_input_roles_json"],
+                maximum_bytes=_MAX_BINDING_LIST_BYTES,
+                allow_empty=True,
+            ),
+            budgets=self._stored_json_object(
+                row["default_budgets_json"],
+                maximum_bytes=MAX_BUDGETS_BYTES,
+            ),
             result_contract_version=row["result_contract_version"],
             status=row["status"],
             created_by=row["created_by"],
             created_at=row["created_at"],
         )
 
-    @classmethod
-    def _plan_suite_binding(cls, row: Mapping[str, Any]) -> PlanSuiteBindingRecord:
+    def _plan_suite_binding(self, row: Mapping[str, Any]) -> PlanSuiteBindingRecord:
         return PlanSuiteBindingRecord(
-            suite=cls._suite_binding(row),
-            ordinal=int(row["ordinal"]),
-            configuration=FrozenJsonObject.from_json(row["configuration_json"]),
+            suite=self._suite_binding(row),
+            ordinal=row["ordinal"],
+            configuration=self._stored_json_object(
+                row["configuration_json"],
+                maximum_bytes=MAX_SUITE_CONFIGURATION_BYTES,
+            ),
             configuration_hash=row["configuration_hash"],
         )
 
-    @staticmethod
-    def _plan_binding(row: Mapping[str, Any]) -> PlanBindingRecord:
+    def _plan_binding(self, row: Mapping[str, Any]) -> PlanBindingRecord:
         return PlanBindingRecord(
             id=row["id"],
             organization_id=row["org_id"],
@@ -605,7 +649,10 @@ class SqlAlchemyEvaluationWorkbenchRepository:
             contract_version=row["contract_version"],
             target_version_id=row["target_version_id"],
             target_kind=row["target_kind"],
-            lifecycle_phases=tuple(_json_load(row["lifecycle_phases_json"], [])),
+            lifecycle_phases=self._stored_string_array(
+                row["lifecycle_phases_json"],
+                maximum_bytes=_MAX_BINDING_LIST_BYTES,
+            ),
             execution_depth=row["execution_depth"],
             enforcement_mode=row["enforcement_mode"],
             delivery_mode=row["delivery_mode"],
@@ -858,16 +905,20 @@ class SqlAlchemyEvaluationWorkbenchRepository:
     # Runs and immutable envelopes.
     # --------------------------------------------------------------
 
-    @staticmethod
-    def _suite_execution_record(row: Mapping[str, Any]) -> SuiteExecutionRecord:
-        frozen_limitations = FrozenJsonObject.from_mapping(
-            {"items": _json_load(row["limitations_json"], [])}
-        )["items"]
+    def _suite_execution_record(self, row: Mapping[str, Any]) -> SuiteExecutionRecord:
+        frozen_limitations = (
+            ()
+            if row["limitations_json"] is None
+            else self._stored_json_array(
+                row["limitations_json"],
+                maximum_bytes=MAX_SUITE_LIMITATIONS_BYTES,
+            )
+        )
         return SuiteExecutionRecord(
             id=row["id"],
             suite_version_id=row["suite_version_id"],
             owner_scope=row["suite_owner_scope"],
-            ordinal=int(row["ordinal"]),
+            ordinal=row["ordinal"],
             technical_status=row["technical_status"],
             evidence_result_status=row["evidence_result_status"],
             admission_status=row["admission_status"],
@@ -876,30 +927,39 @@ class SqlAlchemyEvaluationWorkbenchRepository:
             limitations=frozen_limitations,
             failure_code=row["failure_code"],
             failure_message=row["failure_message"],
+            started_at=row["started_at"],
+            completed_at=row["completed_at"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
         )
 
-    def _stored_json_object(
+    def _stored_json_value(
         self,
         raw: Any,
         *,
         maximum_bytes: int,
-    ) -> FrozenJsonObject:
+        expected_type: type[dict] | type[list],
+    ) -> Any:
         try:
-            if not isinstance(raw, str):
-                raise ValueError("stored JSON object must be text")
+            if not isinstance(raw, str) or maximum_bytes < 1:
+                raise ValueError("stored JSON must be bounded text")
             encoded = raw.encode("utf-8")
             if len(encoded) > maximum_bytes:
-                raise ValueError("stored JSON object exceeds its byte budget")
+                raise ValueError("stored JSON exceeds its byte budget")
             decoded = json.loads(
                 encoded,
                 object_pairs_hook=_unique_json_object,
                 parse_constant=_reject_json_constant,
             )
-            if not isinstance(decoded, dict) or canonical_json(decoded) != raw:
-                raise ValueError("stored JSON is not a canonical object")
-            return FrozenJsonObject.from_mapping(decoded)
+            if not isinstance(decoded, expected_type):
+                raise ValueError("stored JSON has the wrong root type")
+            _validate_stored_json_shape(decoded)
+            if canonical_json(decoded) != raw:
+                raise ValueError("stored JSON is not exact canonical JSON")
+            return decoded
         except (
             AssuranceContractValidationError,
+            OverflowError,
             RecursionError,
             TypeError,
             UnicodeError,
@@ -910,6 +970,68 @@ class SqlAlchemyEvaluationWorkbenchRepository:
                 _BINDING_INTEGRITY_MESSAGE,
                 409,
             ) from error
+
+    def _stored_json_object(
+        self,
+        raw: Any,
+        *,
+        maximum_bytes: int,
+    ) -> FrozenJsonObject:
+        decoded = self._stored_json_value(
+            raw,
+            maximum_bytes=maximum_bytes,
+            expected_type=dict,
+        )
+        return FrozenJsonObject.from_mapping(decoded)
+
+    def _stored_json_array(
+        self,
+        raw: Any,
+        *,
+        maximum_bytes: int,
+    ) -> tuple[Any, ...]:
+        decoded = self._stored_json_value(
+            raw,
+            maximum_bytes=maximum_bytes,
+            expected_type=list,
+        )
+        frozen = FrozenJsonObject.from_mapping({"items": decoded})["items"]
+        if not isinstance(frozen, tuple):
+            raise self._error(
+                "binding_integrity_error",
+                _BINDING_INTEGRITY_MESSAGE,
+                409,
+            )
+        return frozen
+
+    def _stored_string_array(
+        self,
+        raw: Any,
+        *,
+        maximum_bytes: int,
+        allow_empty: bool = False,
+    ) -> tuple[str, ...]:
+        values = self._stored_json_array(raw, maximum_bytes=maximum_bytes)
+        try:
+            if (
+                (not values and not allow_empty)
+                or len(values) > 64
+                or any(
+                    not isinstance(value, str)
+                    or not value
+                    or len(value.encode("utf-8")) > 200
+                    for value in values
+                )
+                or len(set(values)) != len(values)
+            ):
+                raise ValueError("stored string array violates its closed contract")
+        except (TypeError, UnicodeError, ValueError) as error:
+            raise self._error(
+                "binding_integrity_error",
+                _BINDING_INTEGRITY_MESSAGE,
+                409,
+            ) from error
+        return values
 
     def _stored_envelope(self, raw: Any) -> FrozenJsonObject:
         return self._stored_json_object(
@@ -952,9 +1074,10 @@ class SqlAlchemyEvaluationWorkbenchRepository:
                 self._suite_execution_record(execution) for execution in executions
             ),
             envelope_id=row["envelope_id"],
+            envelope_nonce=row["envelope_nonce"],
             envelope=self._stored_envelope(row["envelope_json"]),
             envelope_hash=row["envelope_hash"],
-            verdict_version=int(row["verdict_version"]),
+            verdict_version=row["verdict_version"],
             requested_by=row["requested_by"],
             started_at=row["started_at"],
             completed_at=row["completed_at"],
@@ -983,6 +1106,7 @@ class SqlAlchemyEvaluationWorkbenchRepository:
                 updated_at=command.created_at,
                 lifecycle_phase=command.lifecycle_phase,
                 envelope_id=command.envelope_id,
+                envelope_nonce=command.envelope_nonce,
                 envelope_json=canonical_json(command.envelope.to_dict()),
                 envelope_hash=command.envelope_hash,
                 evidence_outcome=command.evidence_outcome,

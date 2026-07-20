@@ -288,6 +288,305 @@ def _create_active_plan_and_run(
     return plan, run
 
 
+def _stored_run_and_graph(session, run_id: str):
+    repository = SqlAlchemyEvaluationWorkbenchRepository(session)
+    record = repository.get_run_record(
+        org_id=ORG,
+        system_id="system-a",
+        run_id=run_id,
+    )
+    assert record is not None
+    graph = repository.get_plan_graph(
+        org_id=ORG,
+        system_id="system-a",
+        plan_id=record.plan_id,
+    )
+    assert graph is not None
+    return repository, record, graph
+
+
+def _nested_policy(depth: int) -> str:
+    nested: object = "leaf"
+    for _ in range(depth):
+        nested = {"child": nested}
+    return canonical_json({"nested": nested})
+
+
+def test_created_run_persists_an_independent_nonce_witness(repository_fixture) -> None:
+    session, _ = repository_fixture
+    service = _service(session)
+    _, run = _create_active_plan_and_run(service)
+
+    runs = GovernanceEvaluationRun.__table__
+    row_nonce = session.scalar(
+        select(runs.c.envelope_nonce).where(runs.c.id == run["id"])
+    )
+    _, record, _ = _stored_run_and_graph(session, run["id"])
+
+    assert row_nonce == run["envelope"]["nonce"]
+    assert record.envelope_nonce == row_nonce
+    assert len(base64.urlsafe_b64decode(row_nonce + "=")) == 32
+
+
+def test_run_verifier_rejects_a_rehashed_envelope_with_a_rebound_nonce(
+    repository_fixture,
+) -> None:
+    session, _ = repository_fixture
+    service = _service(session)
+    _, run = _create_active_plan_and_run(service)
+    _, record, graph = _stored_run_and_graph(session, run["id"])
+    rebound_nonce = base64.urlsafe_b64encode(b"n" * 32).decode("ascii").rstrip("=")
+    assert rebound_nonce != record.envelope_nonce
+    envelope = record.envelope.to_dict()
+    envelope["nonce"] = rebound_nonce
+    tampered = replace(
+        record,
+        envelope=FrozenJsonObject.from_mapping(envelope),
+        envelope_hash=canonical_sha256(envelope),
+    )
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        evaluation_service_module._verify_run_record(tampered, graph)
+
+    assert caught.value.detail() == BINDING_INTEGRITY_DETAIL
+
+
+@pytest.mark.parametrize(
+    "binding_json",
+    [
+        "target.manifest_json",
+        "trust.policy_json",
+        "suite.manifest_json",
+        "suite.target_kinds_json",
+        "suite.subject_kinds_json",
+        "suite.lifecycle_phases_json",
+        "suite.execution_depths_json",
+        "suite.delivery_modes_json",
+        "suite.configuration_schema_json",
+        "suite.configuration_defaults_json",
+        "suite.required_input_roles_json",
+        "suite.default_budgets_json",
+        "plan.lifecycle_phases_json",
+        "selection.configuration_json",
+    ],
+)
+def test_every_authoritative_binding_json_requires_exact_canonical_storage(
+    repository_fixture,
+    binding_json: str,
+) -> None:
+    session, _ = repository_fixture
+    service = _service(session)
+    plan, run = _create_active_plan_and_run(service)
+    target_id = plan["targetVersionId"]
+    suite_id = plan["suites"][0]["suiteVersionId"]
+    model_name, column_name = binding_json.split(".", 1)
+    if model_name == "target":
+        table = GovernanceEvaluationTargetVersion.__table__
+        predicate = table.c.id == target_id
+        read = lambda: service.get_target_version(
+            org_id=ORG,
+            system_id="system-a",
+            target_version_id=target_id,
+        )
+    elif model_name == "trust":
+        table = GovernanceEvidenceTrustPolicyVersion.__table__
+        predicate = table.c.id == "trust-a"
+        read = lambda: service.get_plan(
+            org_id=ORG,
+            system_id="system-a",
+            plan_id=plan["id"],
+        )
+    elif model_name == "suite":
+        table = GovernanceEvaluationSuiteVersion.__table__
+        predicate = table.c.id == suite_id
+        read = lambda: service.get_suite_version(
+            org_id=ORG,
+            suite_version_id=suite_id,
+        )
+    elif model_name == "plan":
+        table = GovernanceEvaluationPlan.__table__
+        predicate = table.c.id == plan["id"]
+        read = lambda: service.get_plan(
+            org_id=ORG,
+            system_id="system-a",
+            plan_id=plan["id"],
+        )
+    else:
+        table = GovernanceEvaluationPlanSuite.__table__
+        predicate = table.c.plan_id == plan["id"]
+        read = lambda: service.get_run(
+            org_id=ORG,
+            system_id="system-a",
+            run_id=run["id"],
+        )
+    raw = session.scalar(select(table.c[column_name]).where(predicate))
+    assert isinstance(raw, str)
+    session.execute(table.update().where(predicate).values({column_name: raw + "\n"}))
+    session.commit()
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        read()
+
+    assert caught.value.detail() == BINDING_INTEGRITY_DETAIL
+
+
+@pytest.mark.parametrize(
+    "malformed_policy",
+    [
+        pytest.param('{"marker":"safe","marker":"safe"}', id="duplicate-name"),
+        pytest.param('{"marker":NaN}', id="nonfinite-number"),
+        pytest.param(_nested_policy(33), id="depth-limit"),
+        pytest.param(
+            canonical_json({"items": [None] * 10_001}),
+            id="aggregate-item-limit",
+        ),
+        pytest.param(
+            canonical_json({"padding": "x" * (64 * 1024)}),
+            id="byte-limit",
+        ),
+    ],
+)
+def test_authoritative_binding_decoder_rejects_unsafe_json_before_verification(
+    repository_fixture,
+    monkeypatch,
+    malformed_policy: str,
+) -> None:
+    session, _ = repository_fixture
+    service = _service(session)
+    plan, _ = _create_active_plan_and_run(service)
+    session.execute(
+        GovernanceEvidenceTrustPolicyVersion.__table__.update()
+        .where(GovernanceEvidenceTrustPolicyVersion.id == "trust-a")
+        .values(policy_json=malformed_policy)
+    )
+    session.commit()
+
+    def verifier_must_not_run(*_args, **_kwargs):
+        raise AssertionError("stored JSON must be rejected before application verification")
+
+    monkeypatch.setattr(
+        evaluation_service_module,
+        "_verify_plan_graph",
+        verifier_must_not_run,
+    )
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        service.get_plan(org_id=ORG, system_id="system-a", plan_id=plan["id"])
+
+    assert caught.value.detail() == BINDING_INTEGRITY_DETAIL
+
+
+@pytest.mark.parametrize("encoding_case", ["duplicate-name", "malformed-json"])
+def test_suite_manifest_hostile_encoding_is_a_generic_integrity_error(
+    repository_fixture,
+    encoding_case: str,
+) -> None:
+    session, _ = repository_fixture
+    service = _service(session)
+    target, suite_ids = _create_bound_catalog(service)
+    del target
+    suite_id = suite_ids[0]
+    table = GovernanceEvaluationSuiteVersion.__table__
+    raw = session.scalar(select(table.c.manifest_json).where(table.c.id == suite_id))
+    assert isinstance(raw, str)
+    if encoding_case == "duplicate-name":
+        manifest = json.loads(raw)
+        duplicate_key = next(iter(manifest))
+        hostile = raw[:-1] + (
+            f",{canonical_json(duplicate_key)}:{canonical_json(manifest[duplicate_key])}"
+            "}"
+        )
+    else:
+        hostile = "{"
+    session.execute(
+        table.update().where(table.c.id == suite_id).values(manifest_json=hostile)
+    )
+    session.commit()
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        service.get_suite_version(org_id=ORG, suite_version_id=suite_id)
+
+    assert caught.value.detail() == BINDING_INTEGRITY_DETAIL
+
+
+def test_catalog_string_array_rejects_an_object_member_before_verification(
+    repository_fixture,
+    monkeypatch,
+) -> None:
+    session, _ = repository_fixture
+    service = _service(session)
+    _, suite_ids = _create_bound_catalog(service)
+    suite_id = suite_ids[0]
+    session.execute(
+        GovernanceEvaluationSuiteVersion.__table__.update()
+        .where(GovernanceEvaluationSuiteVersion.id == suite_id)
+        .values(target_kinds_json=canonical_json([{"kind": "agent"}]))
+    )
+    session.commit()
+
+    monkeypatch.setattr(
+        evaluation_service_module,
+        "_verify_suite",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("stored string arrays must fail before verification")
+        ),
+    )
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        service.get_suite_version(org_id=ORG, suite_version_id=suite_id)
+
+    assert caught.value.detail() == BINDING_INTEGRITY_DETAIL
+
+
+def test_catalog_decoder_allows_an_empty_required_input_role_list(
+    repository_fixture,
+) -> None:
+    session, _ = repository_fixture
+    service = _service(session)
+    payload = _suite_payload("no-input-suite")
+    payload["requiredInputRoles"] = []
+    created = service.create_suite_version(
+        org_id=ORG,
+        actor_id=USER,
+        idempotency_key="no-input-suite",
+        payload=payload,
+    ).body
+
+    suite = service.get_suite_version(org_id=ORG, suite_version_id=created["id"])
+
+    assert suite is not None
+    assert suite["requiredInputRoles"] == []
+
+
+def test_stored_json_item_limit_accepts_exactly_ten_thousand_array_items(
+    repository_fixture,
+) -> None:
+    session, _ = repository_fixture
+    repository = SqlAlchemyEvaluationWorkbenchRepository(session)
+    raw = canonical_json([None] * 10_000)
+
+    decoded = repository._stored_json_array(
+        raw,
+        maximum_bytes=len(raw.encode("utf-8")),
+    )
+
+    assert len(decoded) == 10_000
+
+
+def test_stored_json_arrays_are_deeply_immutable(repository_fixture) -> None:
+    session, _ = repository_fixture
+    repository = SqlAlchemyEvaluationWorkbenchRepository(session)
+    raw = canonical_json([{"status": "safe"}])
+
+    decoded = repository._stored_json_array(
+        raw,
+        maximum_bytes=len(raw.encode("utf-8")),
+    )
+
+    with pytest.raises(TypeError):
+        decoded[0]["status"] = "tampered"
+
+
 def _rehash_plan_graph(graph):
     projection = evaluation_service_module.plan_content_projection(
         org_id=graph.scope.organization_id,
@@ -789,11 +1088,414 @@ def test_run_list_verifies_one_plan_graph_once_per_request(repository_fixture, m
         return load_graph(**kwargs)
 
     monkeypatch.setattr(repository, "get_plan_graph", count_graph_load)
+    verify_graph = evaluation_service_module._verify_plan_graph
+    verify_calls = 0
+
+    def count_graph_verification(graph):
+        nonlocal verify_calls
+        verify_calls += 1
+        return verify_graph(graph)
+
+    monkeypatch.setattr(
+        evaluation_service_module,
+        "_verify_plan_graph",
+        count_graph_verification,
+    )
 
     records = service.list_runs(org_id=ORG, system_id="system-a")
 
     assert records is not None and len(records) == 2
     assert calls == 1
+    assert verify_calls == 1
+
+
+def _earlier_than(timestamp: str) -> str:
+    return (datetime.fromisoformat(timestamp) - timedelta(seconds=1)).isoformat()
+
+
+def _tampered_run_state(record, case: str):
+    if case == "unknown-technical-status":
+        return replace(record, technical_status="unknown-state")
+    if case == "unknown-evidence-outcome":
+        return replace(record, evidence_outcome="unknown-result-state")
+    if case == "incoherent-pending-result":
+        return replace(record, evidence_outcome="error")
+    if case == "unknown-governance-verdict":
+        return replace(record, overall_verdict="unknown-verdict")
+    if case == "negative-verdict-version":
+        return replace(record, verdict_version=-1)
+    if case == "boolean-verdict-version":
+        return replace(record, verdict_version=True)
+    if case == "v0-overall-decision":
+        return replace(record, overall_verdict="approved")
+    if case == "noncanonical-updated-time":
+        return replace(record, updated_at=record.updated_at.replace("T", " "))
+    if case == "updated-before-created":
+        return replace(record, updated_at=_earlier_than(record.created_at))
+    if case == "queued-with-start-time":
+        return replace(record, technical_status="queued", started_at=record.created_at)
+    if case == "running-without-start-time":
+        return replace(record, technical_status="running")
+    if case == "succeeded-without-terminal-times":
+        return replace(record, technical_status="succeeded", evidence_outcome="failed")
+    if case == "failed-without-completion-time":
+        return replace(record, technical_status="failed", evidence_outcome="error")
+    if case == "nonfailure-with-failure-code":
+        return replace(record, failure_code="unexpected_failure")
+    if case == "oversized-failure-message":
+        return replace(
+            record,
+            technical_status="failed",
+            evidence_outcome="error",
+            completed_at=record.updated_at,
+            failure_message="x" * (2 * 1024 + 1),
+        )
+    raise AssertionError(f"unknown run state tamper: {case}")
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "unknown-technical-status",
+        "unknown-evidence-outcome",
+        "incoherent-pending-result",
+        "unknown-governance-verdict",
+        "negative-verdict-version",
+        "boolean-verdict-version",
+        "v0-overall-decision",
+        "noncanonical-updated-time",
+        "updated-before-created",
+        "queued-with-start-time",
+        "running-without-start-time",
+        "succeeded-without-terminal-times",
+        "failed-without-completion-time",
+        "nonfailure-with-failure-code",
+        "oversized-failure-message",
+    ],
+)
+def test_run_verifier_rejects_incoherent_state_version_time_and_failure_fields(
+    repository_fixture,
+    case: str,
+) -> None:
+    session, _ = repository_fixture
+    service = _service(session)
+    _, run = _create_active_plan_and_run(service)
+    _, record, graph = _stored_run_and_graph(session, run["id"])
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        evaluation_service_module._verify_run_record(
+            _tampered_run_state(record, case),
+            graph,
+        )
+
+    assert caught.value.detail() == BINDING_INTEGRITY_DETAIL
+
+
+def test_run_read_maps_raw_malformed_suite_ordinal_to_generic_integrity_error(
+    repository_fixture,
+) -> None:
+    session, _ = repository_fixture
+    service = _service(session)
+    _, run = _create_active_plan_and_run(service)
+    session.execute(
+        GovernanceEvaluationRunSuiteExecution.__table__.update()
+        .where(
+            GovernanceEvaluationRunSuiteExecution.id
+            == run["suiteExecutions"][0]["id"]
+        )
+        .values(ordinal="FM_SENTINEL_ORDINAL")
+    )
+    session.commit()
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        service.get_run(org_id=ORG, system_id="system-a", run_id=run["id"])
+
+    assert caught.value.detail() == BINDING_INTEGRITY_DETAIL
+    assert "FM_SENTINEL" not in caught.value.message
+
+
+def _tampered_suite_state(record, case: str):
+    execution = record.suite_executions[0]
+    if case == "unknown-technical-status":
+        changed = replace(execution, technical_status="unknown-state")
+    elif case == "unknown-evidence-result":
+        changed = replace(execution, evidence_result_status="unknown-result-state")
+    elif case == "pending-with-model-result":
+        changed = replace(execution, evidence_result_status="failed")
+    elif case == "succeeded-with-evaluator-error":
+        changed = replace(
+            execution,
+            technical_status="succeeded",
+            evidence_result_status="error",
+            started_at=execution.created_at,
+            completed_at=execution.updated_at,
+        )
+    elif case == "failed-with-model-result":
+        changed = replace(
+            execution,
+            technical_status="failed",
+            evidence_result_status="passed",
+            completed_at=execution.updated_at,
+        )
+    elif case == "cancelled-with-model-result":
+        changed = replace(
+            execution,
+            technical_status="cancelled",
+            evidence_result_status="failed",
+            completed_at=execution.updated_at,
+        )
+    elif case == "unknown-admission":
+        changed = replace(execution, admission_status="unknown-admission")
+    elif case == "unknown-review":
+        changed = replace(execution, review_status="unknown-review")
+    elif case == "unknown-freshness":
+        changed = replace(execution, freshness_status="unknown-freshness")
+    elif case == "pending-admission-with-accepted-review":
+        changed = replace(execution, review_status="accepted")
+    elif case == "pending-admission-with-stale-freshness":
+        changed = replace(execution, freshness_status="stale")
+    elif case == "expired-admission-with-accepted-review":
+        changed = replace(
+            execution,
+            admission_status="expired",
+            review_status="accepted",
+            freshness_status="stale",
+        )
+    elif case == "superseded-admission-with-current-freshness":
+        changed = replace(
+            execution,
+            admission_status="superseded",
+            freshness_status="current",
+        )
+    elif case == "noncanonical-updated-time":
+        changed = replace(execution, updated_at=execution.updated_at.replace("T", " "))
+    elif case == "updated-before-created":
+        changed = replace(execution, updated_at=_earlier_than(execution.created_at))
+    elif case == "queued-with-start-time":
+        changed = replace(
+            execution,
+            technical_status="queued",
+            started_at=execution.created_at,
+        )
+    elif case == "running-without-start-time":
+        changed = replace(execution, technical_status="running")
+    elif case == "succeeded-without-terminal-times":
+        changed = replace(
+            execution,
+            technical_status="succeeded",
+            evidence_result_status="failed",
+        )
+    elif case == "failed-without-completion-time":
+        changed = replace(
+            execution,
+            technical_status="failed",
+            evidence_result_status="error",
+        )
+    elif case == "nonfailure-with-failure-message":
+        changed = replace(execution, failure_message="unexpected failure")
+    else:
+        raise AssertionError(f"unknown suite state tamper: {case}")
+    return replace(record, suite_executions=(changed, *record.suite_executions[1:]))
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "unknown-technical-status",
+        "unknown-evidence-result",
+        "pending-with-model-result",
+        "succeeded-with-evaluator-error",
+        "failed-with-model-result",
+        "cancelled-with-model-result",
+        "unknown-admission",
+        "unknown-review",
+        "unknown-freshness",
+        "pending-admission-with-accepted-review",
+        "pending-admission-with-stale-freshness",
+        "expired-admission-with-accepted-review",
+        "superseded-admission-with-current-freshness",
+        "noncanonical-updated-time",
+        "updated-before-created",
+        "queued-with-start-time",
+        "running-without-start-time",
+        "succeeded-without-terminal-times",
+        "failed-without-completion-time",
+        "nonfailure-with-failure-message",
+    ],
+)
+def test_run_verifier_rejects_incoherent_suite_state_time_and_failure_fields(
+    repository_fixture,
+    case: str,
+) -> None:
+    session, _ = repository_fixture
+    service = _service(session)
+    _, run = _create_active_plan_and_run(service)
+    _, record, graph = _stored_run_and_graph(session, run["id"])
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        evaluation_service_module._verify_run_record(
+            _tampered_suite_state(record, case),
+            graph,
+        )
+
+    assert caught.value.detail() == BINDING_INTEGRITY_DETAIL
+
+
+def test_succeeded_evaluator_with_failed_model_is_a_valid_forward_compatible_state(
+    repository_fixture,
+) -> None:
+    session, _ = repository_fixture
+    service = _service(session)
+    _, run = _create_active_plan_and_run(service)
+    _, record, graph = _stored_run_and_graph(session, run["id"])
+    execution = replace(
+        record.suite_executions[0],
+        technical_status="succeeded",
+        evidence_result_status="failed",
+        started_at=record.suite_executions[0].created_at,
+        completed_at=record.suite_executions[0].updated_at,
+    )
+    valid = replace(
+        record,
+        technical_status="succeeded",
+        evidence_outcome="failed",
+        started_at=record.created_at,
+        completed_at=record.updated_at,
+        suite_executions=(execution,),
+    )
+
+    evaluation_service_module._verify_run_record(valid, graph)
+
+
+def test_positive_verdict_version_allows_valid_layered_and_overall_decisions(
+    repository_fixture,
+) -> None:
+    session, _ = repository_fixture
+    service = _service(session)
+    _, run = _create_active_plan_and_run(service)
+    _, record, graph = _stored_run_and_graph(session, run["id"])
+    execution = replace(
+        record.suite_executions[0],
+        technical_status="succeeded",
+        evidence_result_status="failed",
+        admission_status="verified",
+        review_status="accepted",
+        started_at=record.suite_executions[0].created_at,
+        completed_at=record.suite_executions[0].updated_at,
+    )
+    decided = replace(
+        record,
+        technical_status="succeeded",
+        evidence_outcome="failed",
+        verdict_version=1,
+        overall_verdict="conditional",
+        layer_verdicts=FrozenJsonObject.from_mapping({execution.id: "review"}),
+        suite_executions=(execution,),
+        started_at=record.created_at,
+        completed_at=record.updated_at,
+    )
+
+    evaluation_service_module._verify_run_record(decided, graph)
+
+
+def test_positive_verdict_version_rejects_nonterminal_pending_execution(
+    repository_fixture,
+) -> None:
+    session, _ = repository_fixture
+    service = _service(session)
+    _, run = _create_active_plan_and_run(service)
+    _, record, graph = _stored_run_and_graph(session, run["id"])
+    execution_id = record.suite_executions[0].id
+    impossible = replace(
+        record,
+        verdict_version=1,
+        overall_verdict="conditional",
+        layer_verdicts=FrozenJsonObject.from_mapping({execution_id: "review"}),
+    )
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        evaluation_service_module._verify_run_record(impossible, graph)
+
+    assert caught.value.detail() == BINDING_INTEGRITY_DETAIL
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "failed-terminal",
+        "cancelled-terminal",
+        "unverified-admission",
+        "stale-evidence",
+        "review-pending",
+    ],
+)
+def test_positive_verdict_version_requires_succeeded_verified_current_reviewed_suites(
+    repository_fixture,
+    case: str,
+) -> None:
+    session, _ = repository_fixture
+    service = _service(session)
+    _, run = _create_active_plan_and_run(service)
+    _, record, graph = _stored_run_and_graph(session, run["id"])
+    execution = replace(
+        record.suite_executions[0],
+        technical_status="succeeded",
+        evidence_result_status="failed",
+        admission_status="verified",
+        review_status="accepted",
+        freshness_status="current",
+        started_at=record.suite_executions[0].created_at,
+        completed_at=record.suite_executions[0].updated_at,
+    )
+    run_changes = {
+        "technical_status": "succeeded",
+        "evidence_outcome": "failed",
+        "started_at": record.created_at,
+        "completed_at": record.updated_at,
+    }
+    if case == "failed-terminal":
+        execution = replace(
+            execution,
+            technical_status="failed",
+            evidence_result_status="error",
+            started_at=None,
+        )
+        run_changes.update(
+            technical_status="failed",
+            evidence_outcome="error",
+            started_at=None,
+        )
+    elif case == "cancelled-terminal":
+        execution = replace(
+            execution,
+            technical_status="cancelled",
+            evidence_result_status="unavailable",
+            started_at=None,
+        )
+        run_changes.update(
+            technical_status="cancelled",
+            evidence_outcome="unavailable",
+            started_at=None,
+        )
+    elif case == "unverified-admission":
+        execution = replace(execution, admission_status="unverified")
+    elif case == "stale-evidence":
+        execution = replace(execution, freshness_status="stale")
+    else:
+        execution = replace(execution, review_status="pending")
+    impossible = replace(
+        record,
+        **run_changes,
+        verdict_version=1,
+        overall_verdict="conditional",
+        layer_verdicts=FrozenJsonObject.from_mapping({execution.id: "review"}),
+        suite_executions=(execution,),
+    )
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        evaluation_service_module._verify_run_record(impossible, graph)
+
+    assert caught.value.detail() == BINDING_INTEGRITY_DETAIL
 
 
 def test_plan_and_run_are_bound_atomically_to_exact_suite_versions(repository_fixture) -> None:

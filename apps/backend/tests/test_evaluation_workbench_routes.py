@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 from datetime import datetime, timezone
 import json
 from types import SimpleNamespace
@@ -706,6 +707,42 @@ def test_unsafe_neutral_configuration_values_have_no_mutation_side_effects(
         session_iterator.close()
 
 
+@pytest.mark.parametrize("discriminator", [[], {}, ["symbol"]])
+def test_non_string_value_type_returns_one_sanitized_validation_error(
+    workbench_client,
+    discriminator: object,
+) -> None:
+    client, _ = workbench_client
+    payload = _suite_payload()
+    payload["configurationSchema"] = {
+        "type": "object",
+        "properties": {
+            "mode": {
+                "type": "string",
+                "x-fairmind-valueType": discriminator,
+                "enum": ["safe"],
+            }
+        },
+        "required": ["mode"],
+        "additionalProperties": False,
+    }
+    payload["configurationDefaults"] = {"mode": "safe"}
+
+    response = client.post(
+        f"{BASE}/evaluation-v2/suite-versions",
+        headers=_headers(f"hostile-discriminator-{type(discriminator).__name__}"),
+        json=payload,
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == {
+        "code": "unsafe_configuration_schema",
+        "message": "The configuration schema is outside fairmind-safe-config/v1.",
+    }
+    assert repr(discriminator) not in response.text
+    assert len(response.content) < 512
+
+
 def test_json_structural_cardinality_accepts_exact_limits_and_rejects_plus_one() -> None:
     from src.api.routers.evaluation_workbench import (
         MAX_JSON_NODES,
@@ -1108,6 +1145,93 @@ def test_suite_integrity_failure_is_a_generic_409(
     suites_url = f"{BASE}/evaluation-v2/suite-versions"
     response = client.get(
         f"{suites_url}/{suite['id']}" if read_method == "detail" else suites_url
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": BINDING_INTEGRITY_DETAIL}
+
+
+def test_run_nonce_witness_mismatch_is_a_generic_409(workbench_client) -> None:
+    client, _ = workbench_client
+    _, run = _create_active_v2_plan_and_run(client)
+    rebound_nonce = base64.urlsafe_b64encode(b"r" * 32).decode("ascii").rstrip("=")
+    envelope = run["envelope"]
+    assert rebound_nonce != envelope["nonce"]
+    envelope["nonce"] = rebound_nonce
+    session_iterator = app.dependency_overrides[get_db]()
+    session = next(session_iterator)
+    try:
+        runs = GovernanceEvaluationRun.__table__
+        stored_nonce = session.scalar(
+            select(runs.c.envelope_nonce).where(runs.c.id == run["id"])
+        )
+        assert stored_nonce != rebound_nonce
+        session.execute(
+            GovernanceEvaluationRun.__table__.update()
+            .where(GovernanceEvaluationRun.id == run["id"])
+            .values(
+                envelope_json=canonical_json(envelope),
+                envelope_hash=canonical_sha256(envelope),
+            )
+        )
+        session.commit()
+    finally:
+        session_iterator.close()
+
+    response = client.get(
+        f"{BASE}/systems/system-a/evaluation-v2/runs/{run['id']}"
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": BINDING_INTEGRITY_DETAIL}
+
+
+def test_noncanonical_target_binding_json_is_a_generic_409(workbench_client) -> None:
+    client, _ = workbench_client
+    plan, _ = _create_active_v2_plan_and_run(client)
+    target_id = plan["targetVersionId"]
+    session_iterator = app.dependency_overrides[get_db]()
+    session = next(session_iterator)
+    try:
+        target = session.execute(
+            select(GovernanceEvaluationTargetVersion.__table__).where(
+                GovernanceEvaluationTargetVersion.id == target_id
+            )
+        ).mappings().one()
+        session.execute(
+            GovernanceEvaluationTargetVersion.__table__.update()
+            .where(GovernanceEvaluationTargetVersion.id == target_id)
+            .values(manifest_json=target["manifest_json"] + "\n")
+        )
+        session.commit()
+    finally:
+        session_iterator.close()
+
+    response = client.get(
+        f"{BASE}/systems/system-a/evaluation-v2/target-versions/{target_id}"
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": BINDING_INTEGRITY_DETAIL}
+
+
+def test_incoherent_run_state_is_a_generic_409(workbench_client) -> None:
+    client, _ = workbench_client
+    _, run = _create_active_v2_plan_and_run(client)
+    session_iterator = app.dependency_overrides[get_db]()
+    session = next(session_iterator)
+    try:
+        session.execute(
+            GovernanceEvaluationRun.__table__.update()
+            .where(GovernanceEvaluationRun.id == run["id"])
+            .values(failure_code="unexpected_failure")
+        )
+        session.commit()
+    finally:
+        session_iterator.close()
+
+    response = client.get(
+        f"{BASE}/systems/system-a/evaluation-v2/runs/{run['id']}"
     )
 
     assert response.status_code == 409

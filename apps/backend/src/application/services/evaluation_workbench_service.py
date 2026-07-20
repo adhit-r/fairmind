@@ -67,6 +67,67 @@ BINDING_INTEGRITY_MESSAGE = "Stored assurance bindings failed integrity verifica
 GOVERNANCE_VERDICTS = frozenset(
     {"approved", "conditional", "review", "blocked", "insufficient"}
 )
+TECHNICAL_STATUSES = frozenset(
+    {
+        "awaiting_evidence",
+        "queued",
+        "leased",
+        "running",
+        "succeeded",
+        "failed",
+        "timed_out",
+        "cancelled",
+    }
+)
+TERMINAL_TECHNICAL_STATUSES = frozenset(
+    {"succeeded", "failed", "timed_out", "cancelled"}
+)
+FAILURE_TECHNICAL_STATUSES = frozenset({"failed", "timed_out", "cancelled"})
+EVIDENCE_RESULTS = frozenset(
+    {
+        "pending",
+        "passed",
+        "passed_with_limitations",
+        "failed",
+        "informational",
+        "error",
+        "unavailable",
+        "insufficient_data",
+        "unknown",
+    }
+)
+ADMISSION_STATUSES = frozenset(
+    {"pending", "verified", "unverified", "expired", "superseded", "rejected", "trust_error"}
+)
+REVIEW_STATUSES = frozenset({"pending", "accepted", "rejected"})
+FRESHNESS_STATUSES = frozenset({"current", "expiring", "stale", "superseded"})
+EVIDENCE_RESULTS_BY_TECHNICAL_STATUS = {
+    "awaiting_evidence": frozenset({"pending"}),
+    "queued": frozenset({"pending"}),
+    "leased": frozenset({"pending"}),
+    "running": frozenset({"pending"}),
+    "succeeded": frozenset(
+        {
+            "passed",
+            "passed_with_limitations",
+            "failed",
+            "informational",
+            "insufficient_data",
+            "unknown",
+        }
+    ),
+    "failed": frozenset({"error", "unavailable", "insufficient_data", "unknown"}),
+    "timed_out": frozenset({"error", "unavailable", "insufficient_data", "unknown"}),
+    "cancelled": frozenset({"pending", "unavailable", "unknown"}),
+}
+RUN_EVIDENCE_OUTCOMES_BY_TECHNICAL_STATUS = {
+    status: (
+        outcomes | {"pending"}
+        if status in TERMINAL_TECHNICAL_STATUSES
+        else outcomes
+    )
+    for status, outcomes in EVIDENCE_RESULTS_BY_TECHNICAL_STATUS.items()
+}
 
 
 class EvaluationWorkbenchInputError(ValueError):
@@ -642,39 +703,205 @@ def _envelope_suite_binding(
     }
 
 
-def _verified_envelope_nonce(envelope: Mapping[str, object]) -> str:
-    nonce = envelope.get("nonce")
-    if not isinstance(nonce, str) or re.fullmatch(r"[A-Za-z0-9_-]{43}", nonce) is None:
+def _verified_nonce(value: object) -> str:
+    if not isinstance(value, str) or re.fullmatch(r"[A-Za-z0-9_-]{43}", value) is None:
         raise _binding_error("The execution envelope nonce is malformed.")
     try:
-        decoded = base64.urlsafe_b64decode(nonce + "=")
+        decoded = base64.urlsafe_b64decode(value + "=")
     except (ValueError, binascii.Error) as error:
         raise _binding_error("The execution envelope nonce is malformed.") from error
     encoded = base64.urlsafe_b64encode(decoded).decode("ascii").rstrip("=")
-    if len(decoded) != 32 or encoded != nonce:
+    if len(decoded) != 32 or encoded != value:
         raise _binding_error("The execution envelope nonce is malformed.")
-    return nonce
+    return value
 
 
-def _verified_utc_timestamp(value: object) -> str:
+def _verified_envelope_nonce(envelope: Mapping[str, object]) -> str:
+    return _verified_nonce(envelope.get("nonce"))
+
+
+def _parsed_utc_timestamp(value: object, *, optional: bool) -> datetime | None:
+    if value is None and optional:
+        return None
     if not isinstance(value, str):
-        raise _binding_error("The execution request timestamp is malformed.")
+        raise _binding_error("A stored assurance timestamp is malformed.")
     try:
         parsed = datetime.fromisoformat(value)
-    except ValueError as error:
-        raise _binding_error("The execution request timestamp is malformed.") from error
+    except (OverflowError, ValueError) as error:
+        raise _binding_error("A stored assurance timestamp is malformed.") from error
     if (
         parsed.tzinfo is None
         or parsed.utcoffset() != timedelta(0)
         or parsed.isoformat() != value
     ):
+        raise _binding_error("A stored assurance timestamp is malformed.")
+    return parsed
+
+
+def _verified_utc_timestamp(value: object) -> str:
+    _parsed_utc_timestamp(value, optional=False)
+    if not isinstance(value, str):
         raise _binding_error("The execution request timestamp is malformed.")
     return value
 
 
-def _verify_run_record(run: RunRecord, graph: PlanGraphRecord) -> None:
+def _verify_temporal_state(
+    *,
+    technical_status: object,
+    created_at: object,
+    updated_at: object,
+    started_at: object,
+    completed_at: object,
+) -> None:
+    created = _parsed_utc_timestamp(created_at, optional=False)
+    updated = _parsed_utc_timestamp(updated_at, optional=False)
+    started = _parsed_utc_timestamp(started_at, optional=True)
+    completed = _parsed_utc_timestamp(completed_at, optional=True)
+    if created is None or updated is None or created > updated:
+        raise _binding_error("Stored assurance timestamps are out of order.")
+    if started is not None and not created <= started <= updated:
+        raise _binding_error("Stored assurance timestamps are out of order.")
+    if completed is not None and not (started or created) <= completed <= updated:
+        raise _binding_error("Stored assurance timestamps are out of order.")
+    if technical_status in {"awaiting_evidence", "queued", "leased"}:
+        coherent = started is None and completed is None
+    elif technical_status == "running":
+        coherent = started is not None and completed is None
+    elif technical_status == "succeeded":
+        coherent = started is not None and completed is not None
+    elif technical_status in FAILURE_TECHNICAL_STATUSES:
+        coherent = completed is not None
+    else:
+        coherent = False
+    if not coherent:
+        raise _binding_error("Stored assurance state and timestamps are incoherent.")
+
+
+def _verify_failure_fields(
+    *,
+    technical_status: object,
+    failure_code: object,
+    failure_message: object,
+) -> None:
+    if technical_status not in FAILURE_TECHNICAL_STATUSES and (
+        failure_code is not None or failure_message is not None
+    ):
+        raise _binding_error("A non-failure state carries failure projections.")
     try:
-        _verify_plan_graph(graph)
+        if failure_code is not None and (
+            not isinstance(failure_code, str)
+            or not failure_code
+            or len(failure_code.encode("utf-8")) > 256
+        ):
+            raise ValueError("invalid failure code")
+        if failure_message is not None and (
+            not isinstance(failure_message, str)
+            or len(failure_message.encode("utf-8")) > MAX_FAILURE_MESSAGE_BYTES
+        ):
+            raise ValueError("invalid failure message")
+    except (TypeError, UnicodeError, ValueError) as error:
+        raise _binding_error("Stored failure projections violate their bounds.") from error
+
+
+def _verify_admission_review_freshness(execution: SuiteExecutionRecord) -> None:
+    admission = execution.admission_status
+    review = execution.review_status
+    freshness = execution.freshness_status
+    if (
+        admission not in ADMISSION_STATUSES
+        or review not in REVIEW_STATUSES
+        or freshness not in FRESHNESS_STATUSES
+    ):
+        raise _binding_error("A suite evidence state uses an unknown value.")
+    if admission == "pending" and (review != "pending" or freshness != "current"):
+        raise _binding_error("Pending evidence carries review or freshness projections.")
+    if review == "accepted" and admission not in {"verified", "unverified"}:
+        raise _binding_error("Accepted review is not backed by admitted evidence.")
+    if review == "rejected" and admission == "pending":
+        raise _binding_error("Rejected review cannot precede evidence admission.")
+    if admission == "expired" and freshness != "stale":
+        raise _binding_error("Expired evidence must be stale.")
+    if admission == "superseded" and freshness != "superseded":
+        raise _binding_error("Superseded evidence must have superseded freshness.")
+    if admission in {"rejected", "trust_error"} and review == "accepted":
+        raise _binding_error("Rejected or untrusted evidence cannot be accepted.")
+
+
+def _verify_suite_execution_state(execution: SuiteExecutionRecord) -> None:
+    if (
+        execution.technical_status not in TECHNICAL_STATUSES
+        or execution.evidence_result_status not in EVIDENCE_RESULTS
+        or execution.evidence_result_status
+        not in EVIDENCE_RESULTS_BY_TECHNICAL_STATUS.get(execution.technical_status, ())
+    ):
+        raise _binding_error("A suite execution state is internally incoherent.")
+    _verify_temporal_state(
+        technical_status=execution.technical_status,
+        created_at=execution.created_at,
+        updated_at=execution.updated_at,
+        started_at=execution.started_at,
+        completed_at=execution.completed_at,
+    )
+    _verify_failure_fields(
+        technical_status=execution.technical_status,
+        failure_code=execution.failure_code,
+        failure_message=execution.failure_message,
+    )
+    _verify_admission_review_freshness(execution)
+
+
+def _verify_run_state(run: RunRecord, layer_verdicts: Mapping[str, object]) -> None:
+    if (
+        run.technical_status not in TECHNICAL_STATUSES
+        or run.evidence_outcome not in EVIDENCE_RESULTS
+        or run.evidence_outcome
+        not in RUN_EVIDENCE_OUTCOMES_BY_TECHNICAL_STATUS.get(
+            run.technical_status,
+            (),
+        )
+        or run.overall_verdict not in GOVERNANCE_VERDICTS
+        or not isinstance(run.verdict_version, int)
+        or isinstance(run.verdict_version, bool)
+        or run.verdict_version < 0
+    ):
+        raise _binding_error("The run state or verdict version is incoherent.")
+    _verify_temporal_state(
+        technical_status=run.technical_status,
+        created_at=run.created_at,
+        updated_at=run.updated_at,
+        started_at=run.started_at,
+        completed_at=run.completed_at,
+    )
+    _verify_failure_fields(
+        technical_status=run.technical_status,
+        failure_code=run.failure_code,
+        failure_message=run.failure_message,
+    )
+    if run.verdict_version == 0 and (
+        run.overall_verdict != "insufficient"
+        or any(verdict != "insufficient" for verdict in layer_verdicts.values())
+    ):
+        raise _binding_error("An unversioned run carries governance decisions.")
+    if run.verdict_version > 0 and (
+        run.technical_status != "succeeded"
+        or run.evidence_outcome == "pending"
+        or any(
+            execution.technical_status != "succeeded"
+            or execution.evidence_result_status == "pending"
+            or execution.admission_status != "verified"
+            or execution.review_status != "accepted"
+            or execution.freshness_status != "current"
+            for execution in run.suite_executions
+        )
+    ):
+        raise _binding_error("A governance decision precedes terminal evaluation results.")
+
+
+def _verify_run_record_against_verified_graph(
+    run: RunRecord,
+    graph: PlanGraphRecord,
+) -> None:
+    try:
         scope_identity = (
             graph.scope.organization_id,
             graph.scope.workspace_id,
@@ -703,6 +930,7 @@ def _verify_run_record(run: RunRecord, graph: PlanGraphRecord) -> None:
                 or execution.id in execution_ids
             ):
                 raise _binding_error("The run suite executions do not match the plan.")
+            _verify_suite_execution_state(execution)
             execution_ids.append(execution.id)
             envelope_suites.append(
                 _envelope_suite_binding(
@@ -717,11 +945,14 @@ def _verify_run_record(run: RunRecord, graph: PlanGraphRecord) -> None:
             verdict not in GOVERNANCE_VERDICTS for verdict in layer_verdicts.values()
         ):
             raise _binding_error("The layered verdict keys do not match suite executions.")
+        _verify_run_state(run, layer_verdicts)
 
         actual_envelope = run.envelope.to_dict()
         if canonical_sha256(actual_envelope) != run.envelope_hash:
             raise _binding_error("The stored execution envelope digest is invalid.")
-        nonce = _verified_envelope_nonce(actual_envelope)
+        stored_nonce = _verified_nonce(run.envelope_nonce)
+        if _verified_envelope_nonce(actual_envelope) != stored_nonce:
+            raise _binding_error("The envelope nonce does not match its independent witness.")
         requested_at = _verified_utc_timestamp(run.created_at)
         expected_envelope, _, expected_hash = build_execution_envelope_v2(
             envelope_id=run.envelope_id,
@@ -738,7 +969,7 @@ def _verify_run_record(run: RunRecord, graph: PlanGraphRecord) -> None:
             enforcement_mode=graph.plan.enforcement_mode,
             delivery_mode=graph.plan.delivery_mode,
             trust_policy=_envelope_trust_binding(graph.trust_policy),
-            nonce=nonce,
+            nonce=stored_nonce,
             requester_id=run.requested_by,
             requested_at=requested_at,
             suites=envelope_suites,
@@ -751,6 +982,16 @@ def _verify_run_record(run: RunRecord, graph: PlanGraphRecord) -> None:
         raise _binding_error("A dependent run binding could not be reconstructed.") from error
     except (AssuranceContractValidationError, TypeError, ValueError) as error:
         raise _binding_error("The stored run violates the immutable contract.") from error
+
+
+def _verify_run_record(run: RunRecord, graph: PlanGraphRecord) -> None:
+    try:
+        _verify_plan_graph(graph)
+    except EvaluationWorkbenchError:
+        raise
+    except (AssuranceContractValidationError, TypeError, ValueError) as error:
+        raise _binding_error("The stored plan graph violates its contract.") from error
+    _verify_run_record_against_verified_graph(run, graph)
 
 
 class EvaluationWorkbenchService:
@@ -1438,6 +1679,7 @@ class EvaluationWorkbenchService:
                 PersistRunCommand(
                     run_id=run_id,
                     envelope_id=envelope_id,
+                    envelope_nonce=nonce,
                     envelope=FrozenJsonObject.from_mapping(envelope),
                     envelope_hash=envelope_hash,
                     actor_id=actor_id,
@@ -1493,8 +1735,9 @@ class EvaluationWorkbenchService:
                 )
                 if graph is None:
                     raise _binding_error("A stored run references an unavailable plan graph.")
+                _verify_plan_graph(graph)
                 graphs[record.plan_id] = graph
-            _verify_run_record(record, graph)
+            _verify_run_record_against_verified_graph(record, graph)
         return [_run_view(record) for record in records]
 
     def get_run(
