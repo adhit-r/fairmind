@@ -50,6 +50,7 @@ from src.domain.assurance.evaluation_v2 import (
     require_canonical_size,
     validate_idempotency_key,
     validate_mutation_detail_body,
+    validate_plan_schema_complexity,
     validate_run_create,
     validate_selected_configuration,
     validate_suite_budgets,
@@ -358,6 +359,9 @@ def _verify_plan_graph(graph: PlanGraphRecord) -> None:
             ) from error
         suites.append(_suite_domain(selection))
     try:
+        validate_plan_schema_complexity(
+            [selection.suite.configuration_schema.to_dict() for selection in graph.suites]
+        )
         require_canonical_size(
             [selection.configuration.to_dict() for selection in graph.suites],
             maximum_bytes=MAX_PLAN_CONFIGURATION_BYTES,
@@ -523,6 +527,7 @@ def _preflight(
         suites=[_suite_domain(selection) for selection in graph.suites],
         lifecycle_phase=lifecycle_phase,
         require_plan_active=active,
+        validate_phase_independent=False,
     )
 
 
@@ -901,6 +906,12 @@ class EvaluationWorkbenchService:
                     status_code=422,
                 )
             _verify_creation_bindings(bindings)
+            try:
+                validate_plan_schema_complexity(
+                    [suite.configuration_schema.to_dict() for suite in bindings.suites]
+                )
+            except AssuranceContractValidationError as error:
+                raise _translate(error) from error
             resolved: list[PlanSuiteBindingRecord] = []
             configuration_bytes = 0
             for ordinal, (selection, suite) in enumerate(

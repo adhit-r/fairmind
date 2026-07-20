@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from time import perf_counter
 
 import pytest
 
@@ -260,3 +261,44 @@ def test_preflight_blocks_an_execution_envelope_over_448_kib() -> None:
     )
 
     assert "execution_envelope_size_exceeded" in [item.code for item in blockers]
+
+
+def test_three_phase_preflight_bounds_aggregate_schema_complexity_and_latency() -> None:
+    schema = {
+        "type": "object",
+        "properties": {
+            f"flag_{index}": {"type": "boolean"} for index in range(180)
+        },
+        "additionalProperties": False,
+    }
+    suites = [
+        _suite(
+            id=f"suite-{index}",
+            ordinal=index,
+            lifecycle_phases=["pre_deploy", "realtime", "post_deploy"],
+            configuration={},
+            configuration_schema=schema,
+            required_input_roles=[],
+        )
+        for index in range(32)
+    ]
+    plan = _plan(lifecycle_phases=["pre_deploy", "realtime", "post_deploy"])
+
+    started = perf_counter()
+    results = [
+        evaluate_preflight(
+            plan=plan,
+            target=_target(),
+            trust_policy={"status": "active"},
+            suites=suites,
+            lifecycle_phase=phase,
+        )
+        for phase in plan["lifecycle_phases"]
+    ]
+    elapsed = perf_counter() - started
+
+    assert all(
+        "plan_schema_complexity_exceeded" in {blocker.code for blocker in blockers}
+        for blockers in results
+    )
+    assert elapsed < 1.0

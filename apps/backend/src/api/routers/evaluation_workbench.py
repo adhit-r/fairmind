@@ -29,6 +29,8 @@ from src.application.services.governance_assurance_service import OrgMembership
 router = APIRouter(prefix="/organizations/{org_id}", tags=["evaluation-workbench-v2"])
 MAX_REQUEST_BYTES = 1024 * 1024
 MAX_JSON_DEPTH = 32
+MAX_JSON_NODES = 20_000
+MAX_JSON_OBJECT_MEMBERS = 10_000
 MAX_MUTATION_DETAIL_RESPONSE_BYTES = 768 * 1024
 
 TargetKind = Literal[
@@ -343,6 +345,25 @@ def _depth(value: Any, level: int = 0) -> int:
     return level
 
 
+def _validate_json_structure(value: Any) -> None:
+    """Bound decoded JSON work before schema validation can amplify errors."""
+    nodes = 0
+    object_members = 0
+    pending = [value]
+    while pending:
+        current = pending.pop()
+        nodes += 1
+        if nodes > MAX_JSON_NODES:
+            raise ValueError("request JSON has too many nodes")
+        if isinstance(current, dict):
+            object_members += len(current)
+            if object_members > MAX_JSON_OBJECT_MEMBERS:
+                raise ValueError("request JSON has too many object members")
+            pending.extend(current.values())
+        elif isinstance(current, list):
+            pending.extend(current)
+
+
 def _unique_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for key, value in pairs:
@@ -356,22 +377,16 @@ def _reject_constant(value: str) -> None:
     raise ValueError(f"non-finite JSON number: {value}")
 
 
-def _public_validation_errors(error: ValidationError) -> list[dict[str, Any]]:
+def _public_validation_errors(error: Exception) -> list[dict[str, Any]]:
     """Expose structure only; Pydantic error inputs may contain credentials."""
-    errors = []
-    for item in error.errors():
-        errors.append(
-            {
-                "location": ["body"],
-                "type": item["type"],
-                "message": (
-                    "An extra property is not permitted."
-                    if item["type"] == "extra_forbidden"
-                    else item["msg"]
-                ),
-            }
-        )
-    return errors
+    del error
+    return [
+        {
+            "location": ["body"],
+            "type": "validation_error",
+            "message": "Request body does not satisfy the strict contract.",
+        }
+    ]
 
 
 def _request_too_large() -> HTTPException:
@@ -410,6 +425,7 @@ async def _payload(request: Request, model: type[StrictModel]) -> dict[str, Any]
         )
         if not isinstance(value, dict):
             raise ValueError("request JSON must be an object")
+        _validate_json_structure(value)
         if _depth(value) > MAX_JSON_DEPTH:
             raise ValueError("request JSON is too deeply nested")
         # This also rejects non-finite floats and out-of-domain integers before
@@ -423,9 +439,7 @@ async def _payload(request: Request, model: type[StrictModel]) -> dict[str, Any]
         RecursionError,
         EvaluationWorkbenchInputError,
     ) as error:
-        errors: Any = (
-            _public_validation_errors(error) if isinstance(error, ValidationError) else str(error)
-        )
+        errors = _public_validation_errors(error)
         raise HTTPException(
             422,
             detail={

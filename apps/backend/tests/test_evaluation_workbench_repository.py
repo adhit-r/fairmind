@@ -29,6 +29,7 @@ from database.governance_models import (
 )
 from database.models import Organization, OrganizationMember, User
 import src.application.services.evaluation_workbench_service as evaluation_service_module
+import src.domain.assurance.evaluation_v2 as evaluation_v2_module
 from src.application.services.evaluation_workbench_service import (
     EvaluationWorkbenchError,
     EvaluationWorkbenchService,
@@ -275,6 +276,133 @@ def test_plan_and_run_are_bound_atomically_to_exact_suite_versions(repository_fi
     )
     assert stored_run["contract_version"] == "2.0.0"
     assert stored_run["linked_passport_revision_id"] is None
+
+
+def test_activation_does_not_repeat_phase_independent_configuration_validation(
+    repository_fixture,
+    monkeypatch,
+) -> None:
+    session, _ = repository_fixture
+    service = _service(session)
+    target = service.create_target_version(
+        org_id=ORG,
+        system_id="system-a",
+        actor_id=USER,
+        idempotency_key="three-phase-target",
+        payload=_target_payload("three-phase-agent"),
+    ).body
+    suite_payload = _suite_payload("three-phase-suite")
+    suite_payload["lifecyclePhases"] = ["pre_deploy", "realtime", "post_deploy"]
+    suite = service.create_suite_version(
+        org_id=ORG,
+        actor_id=USER,
+        idempotency_key="three-phase-suite",
+        payload=suite_payload,
+    ).body
+    service.activate_suite_version(
+        org_id=ORG,
+        suite_version_id=suite["id"],
+        actor_id=USER,
+        idempotency_key="three-phase-suite-activate",
+    )
+    plan_payload = _plan_payload(target["id"], [suite["id"]])
+    plan_payload["lifecyclePhases"] = ["pre_deploy", "realtime", "post_deploy"]
+    plan = service.create_plan(
+        org_id=ORG,
+        system_id="system-a",
+        actor_id=USER,
+        idempotency_key="three-phase-plan",
+        payload=plan_payload,
+    ).body
+    calls = 0
+    original_validate = evaluation_v2_module.validate_suite_configuration
+
+    def counting_validate(schema, configuration):
+        nonlocal calls
+        calls += 1
+        return original_validate(schema, configuration)
+
+    monkeypatch.setattr(
+        evaluation_v2_module,
+        "validate_suite_configuration",
+        counting_validate,
+    )
+
+    service.activate_plan(
+        org_id=ORG,
+        system_id="system-a",
+        plan_id=plan["id"],
+        actor_id=USER,
+        idempotency_key="three-phase-plan-activate",
+    )
+
+    assert calls == 0
+
+
+def test_plan_schema_complexity_is_rejected_before_plan_persistence(
+    repository_fixture,
+) -> None:
+    session, _ = repository_fixture
+    service = _service(session)
+    target = service.create_target_version(
+        org_id=ORG,
+        system_id="system-a",
+        actor_id=USER,
+        idempotency_key="complexity-target",
+        payload=_target_payload("complexity-agent"),
+    ).body
+    schema = {
+        "type": "object",
+        "properties": {
+            f"flag_{index}": {"type": "boolean"} for index in range(180)
+        },
+        "additionalProperties": False,
+    }
+    suite_ids = []
+    for index in range(32):
+        suite_payload = _suite_payload(f"complexity-suite-{index}")
+        suite_payload["configurationSchema"] = schema
+        suite_payload["configurationDefaults"] = {}
+        suite = service.create_suite_version(
+            org_id=ORG,
+            actor_id=USER,
+            idempotency_key=f"complexity-suite-{index}",
+            payload=suite_payload,
+        ).body
+        service.activate_suite_version(
+            org_id=ORG,
+            suite_version_id=suite["id"],
+            actor_id=USER,
+            idempotency_key=f"complexity-suite-activate-{index}",
+        )
+        suite_ids.append(suite["id"])
+    idempotency_before = session.scalar(
+        select(func.count()).select_from(GovernanceIdempotencyRecord.__table__)
+    )
+    audit_before = session.scalar(
+        select(func.count()).select_from(GovernanceEvaluationAuditEvent.__table__)
+    )
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        service.create_plan(
+            org_id=ORG,
+            system_id="system-a",
+            actor_id=USER,
+            idempotency_key="complexity-plan",
+            payload=_plan_payload(target["id"], suite_ids),
+        )
+
+    assert caught.value.code == "plan_schema_complexity_exceeded"
+    assert caught.value.status_code == 422
+    assert session.scalar(
+        select(func.count()).select_from(GovernanceEvaluationPlan.__table__)
+    ) == 0
+    assert session.scalar(
+        select(func.count()).select_from(GovernanceIdempotencyRecord.__table__)
+    ) == idempotency_before
+    assert session.scalar(
+        select(func.count()).select_from(GovernanceEvaluationAuditEvent.__table__)
+    ) == audit_before
 
 
 def test_envelope_size_preflight_blocks_activation_and_run_before_persistence(

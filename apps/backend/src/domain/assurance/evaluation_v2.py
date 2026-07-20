@@ -8,7 +8,9 @@ has been constrained to the I-JSON interoperable domain.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 import hashlib
+import json
 import math
 import re
 from typing import Any, Mapping, Sequence
@@ -70,6 +72,14 @@ MAX_SAFE_SCHEMA_REFS = 256
 MAX_SAFE_SCHEMA_EXPANSION_STEPS = 4096
 MAX_SAFE_ARRAY_ITEMS = 10_000
 MAX_SAFE_ENUM_VALUES = 256
+MAX_PLAN_SAFE_SCHEMA_COMPLEXITY = 8192
+
+UNSAFE_STRING_VALUE_MESSAGE = (
+    "Assurance inputs may contain only bounded, non-secret public values."
+)
+SENSITIVE_DATA_MESSAGE = (
+    "Secrets, credentials, reasoning, and raw private data are forbidden."
+)
 
 _ASCII_IDENTIFIER = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,63}$")
 _ALLOWED_INPUT_MEDIA_TYPES = frozenset(
@@ -133,6 +143,34 @@ _DENIED_DATA_KEYS = frozenset(
     }
 )
 _INPUT_DESCRIPTOR_KEYS = frozenset({"kind", "sha256", "mediaType", "sizeBytes"})
+_SAFE_UUID = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-"
+    r"[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+)
+_SAFE_DIGEST = re.compile(r"^(?:sha256:)?[0-9a-f]{64}$")
+_CATALOG_MEMBER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/:+-]{0,127}$")
+_JWT_VALUE = re.compile(
+    r"^[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}$"
+)
+_PROVIDER_KEY_VALUE = re.compile(
+    r"(?i)^(?:sk-(?:ant-|proj-)?|gh[pousr]_|xox[baprs]-|hf_|AIza|AKIA|ASIA)"
+    r"[A-Za-z0-9_\-]{12,}$"
+)
+_CONNECTION_URL_VALUE = re.compile(
+    r"(?i)(?:https?|postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|amqps?|s3)://"
+)
+_BEARER_OR_BASIC_VALUE = re.compile(
+    r"(?i)(?:^|[_\-\s])(?:raw[_\-\s]+)?(?:bearer|basic)(?:[_\-\s]|$)"
+)
+_EMAIL_VALUE = re.compile(
+    r"^[A-Za-z0-9._%+\-]{1,64}@[A-Za-z0-9.-]{1,255}$"
+)
+_RAW_PROMPT_VALUE = re.compile(
+    r"(?i)(?:\b(?:ignore|disregard)\s+(?:all\s+)?previous\b|"
+    r"\bsystem\s+prompt\b|\bdeveloper\s+message\b|"
+    r"\breveal\b.{0,80}\b(?:prompt|secret|instruction)s?\b)"
+)
+_OPAQUE_BASE64_VALUE = re.compile(r"^[A-Za-z0-9+/=_-]+$")
 
 
 class AssuranceContractValidationError(ValueError):
@@ -192,8 +230,71 @@ def validate_mutation_detail_body(value: Any) -> None:
     )
 
 
+def _high_entropy_opaque_value(value: str) -> bool:
+    if len(value) < 40 or _OPAQUE_BASE64_VALUE.fullmatch(value) is None:
+        return False
+    if any(separator in value for separator in (".", ":", "@")):
+        return False
+    sample = value.rstrip("=")
+    if not sample:
+        return False
+    entropy = -sum(
+        (sample.count(character) / len(sample))
+        * math.log2(sample.count(character) / len(sample))
+        for character in set(sample)
+    )
+    return entropy >= 4.2
+
+
+def _unsafe_public_string(value: str) -> bool:
+    if not value or len(value.encode("utf-8")) > 512:
+        return True
+    if value != value.strip() or any(ord(character) < 0x20 for character in value):
+        return True
+    if _SAFE_UUID.fullmatch(value) or _SAFE_DIGEST.fullmatch(value):
+        return False
+    return bool(
+        "-----BEGIN " in value.upper()
+        or _JWT_VALUE.fullmatch(value)
+        or _PROVIDER_KEY_VALUE.search(value)
+        or _CONNECTION_URL_VALUE.search(value)
+        or _BEARER_OR_BASIC_VALUE.search(value)
+        or _EMAIL_VALUE.fullmatch(value)
+        or _RAW_PROMPT_VALUE.search(value)
+        or _high_entropy_opaque_value(value)
+    )
+
+
+def validate_public_safe_string(value: str, *, catalog_member: bool = False) -> None:
+    """Reject caller strings that cannot safely become persisted public evidence."""
+    explicit_safe_reference = bool(
+        _SAFE_UUID.fullmatch(value) or _SAFE_DIGEST.fullmatch(value)
+    )
+    invalid_catalog_member = catalog_member and not (
+        explicit_safe_reference or _CATALOG_MEMBER.fullmatch(value)
+    )
+    if _unsafe_public_string(value) or invalid_catalog_member:
+        raise AssuranceContractValidationError(
+            "unsafe_string_value",
+            UNSAFE_STRING_VALUE_MESSAGE,
+        )
+
+
+def validate_public_safe_values(value: Any, *, catalog_members: bool = False) -> None:
+    """Recursively validate string values without inspecting or reflecting their paths."""
+    if isinstance(value, str):
+        validate_public_safe_string(value, catalog_member=catalog_members)
+    elif isinstance(value, dict):
+        for child in value.values():
+            validate_public_safe_values(child, catalog_members=catalog_members)
+    elif isinstance(value, (list, tuple)):
+        for child in value:
+            validate_public_safe_values(child, catalog_members=catalog_members)
+
+
 def reject_sensitive_keys(value: Any, *, path: str = "value") -> None:
     """Reject data-shaped keys that could place secrets or reasoning in evidence."""
+    del path
     if isinstance(value, dict):
         for key, child in value.items():
             normalized = re.sub(r"[^a-z0-9]", "", str(key).lower())
@@ -231,16 +332,17 @@ def reject_sensitive_keys(value: Any, *, path: str = "value") -> None:
             ):
                 raise AssuranceContractValidationError(
                     "sensitive_data_forbidden",
-                    f"{path}.{key} is not permitted in assurance inputs.",
+                    SENSITIVE_DATA_MESSAGE,
                 )
-            reject_sensitive_keys(child, path=f"{path}.{key}")
+            reject_sensitive_keys(child)
     elif isinstance(value, list):
-        for index, child in enumerate(value):
-            reject_sensitive_keys(child, path=f"{path}[{index}]")
+        for child in value:
+            reject_sensitive_keys(child)
 
 
 def reject_remote_schema_references(value: Any, *, path: str = "configurationSchema") -> None:
     """Allow local fragment references only; evaluation never performs retrieval."""
+    del path
     if isinstance(value, dict):
         for key, child in value.items():
             if key in {"$ref", "$dynamicRef"} and (
@@ -248,17 +350,17 @@ def reject_remote_schema_references(value: Any, *, path: str = "configurationSch
             ):
                 raise AssuranceContractValidationError(
                     "remote_schema_reference_forbidden",
-                    f"{path} contains a non-local JSON Schema reference.",
+                    "Configuration schemas may use local references only.",
                 )
             if key == "$id" and isinstance(child, str) and "://" in child:
                 raise AssuranceContractValidationError(
                     "remote_schema_reference_forbidden",
-                    f"{path} contains a remote JSON Schema identifier.",
+                    "Configuration schemas may use local references only.",
                 )
-            reject_remote_schema_references(child, path=f"{path}.{key}")
+            reject_remote_schema_references(child)
     elif isinstance(value, list):
-        for index, child in enumerate(value):
-            reject_remote_schema_references(child, path=f"{path}[{index}]")
+        for child in value:
+            reject_remote_schema_references(child)
 
 
 def _unsafe_schema() -> AssuranceContractValidationError:
@@ -323,7 +425,7 @@ def _canonical_local_definition_pointer(
     return reference, target
 
 
-def validate_safe_configuration_schema(schema: Mapping[str, Any]) -> None:
+def validate_safe_configuration_schema(schema: Mapping[str, Any]) -> int:
     """Enforce the bounded, executable fairmind-safe-config/v1 subset."""
     require_canonical_size(
         schema,
@@ -448,10 +550,12 @@ def validate_safe_configuration_schema(schema: Mapping[str, Any]) -> None:
                     or len(set(values)) != len(values)
                 ):
                     raise _unsafe_schema()
+                validate_public_safe_values(values, catalog_members=True)
             else:
                 value = node["const"]
                 if not isinstance(value, str) or not value or len(value.encode("utf-8")) > 512:
                     raise _unsafe_schema()
+                validate_public_safe_string(value, catalog_member=True)
         elif schema_type == "array":
             allowed = common | {"items", "minItems", "maxItems", "uniqueItems"}
             minimum_items = node.get("minItems", 0)
@@ -494,6 +598,7 @@ def validate_safe_configuration_schema(schema: Mapping[str, Any]) -> None:
                 expand(child, stack)
 
         expand(schema, ())
+        return node_count + expansion_steps
     except RecursionError as error:
         raise _unsafe_schema() from error
 
@@ -501,9 +606,12 @@ def validate_safe_configuration_schema(schema: Mapping[str, Any]) -> None:
 _NO_NETWORK_SCHEMA_REGISTRY: Registry = Registry()
 
 
-def strict_schema_validator(schema: Mapping[str, Any]) -> Draft202012Validator:
-    """Build a Draft 2020-12 validator that cannot retrieve remote resources."""
-    validate_safe_configuration_schema(schema)
+@lru_cache(maxsize=128)
+def _compiled_safe_validator(
+    schema_json: str,
+) -> tuple[Draft202012Validator, int]:
+    schema = json.loads(schema_json)
+    complexity = validate_safe_configuration_schema(schema)
     try:
         Draft202012Validator.check_schema(schema)
     except (SchemaError, RecursionError) as error:
@@ -511,19 +619,45 @@ def strict_schema_validator(schema: Mapping[str, Any]) -> Draft202012Validator:
             "invalid_configuration_schema",
             "The configuration schema is invalid.",
         ) from error
-    return Draft202012Validator(
-        schema,
-        registry=_NO_NETWORK_SCHEMA_REGISTRY,
+    return (
+        Draft202012Validator(schema, registry=_NO_NETWORK_SCHEMA_REGISTRY),
+        complexity,
     )
 
 
-def validate_suite_configuration(
-    schema: Mapping[str, Any],
-    configuration: Any,
+def strict_schema_validator(schema: Mapping[str, Any]) -> Draft202012Validator:
+    """Build a Draft 2020-12 validator that cannot retrieve remote resources."""
+    validator, _ = _compiled_safe_validator(canonical_json(schema))
+    return validator
+
+
+def configuration_schema_complexity(schema: Mapping[str, Any]) -> int:
+    """Return the cached bounded complexity of an immutable safe schema."""
+    _, complexity = _compiled_safe_validator(canonical_json(schema))
+    return complexity
+
+
+def validate_plan_schema_complexity(schemas: Sequence[Mapping[str, Any]]) -> int:
+    """Bound aggregate compilation/validation work for one selected plan."""
+    total = 0
+    for schema in schemas:
+        total += configuration_schema_complexity(schema)
+        if total > MAX_PLAN_SAFE_SCHEMA_COMPLEXITY:
+            raise AssuranceContractValidationError(
+                "plan_schema_complexity_exceeded",
+                "The selected suite schemas exceed the bounded plan complexity budget.",
+            )
+    return total
+
+
+@lru_cache(maxsize=1024)
+def _successful_configuration_validation(
+    schema_json: str,
+    configuration_json: str,
 ) -> None:
-    """Validate suite configuration without network or filesystem retrieval."""
+    validator, _ = _compiled_safe_validator(schema_json)
     try:
-        strict_schema_validator(schema).validate(configuration)
+        validator.validate(json.loads(configuration_json))
     except JsonSchemaValidationError as error:
         raise AssuranceContractValidationError(
             "invalid_suite_configuration",
@@ -539,6 +673,25 @@ def validate_suite_configuration(
             "unsafe_configuration_schema",
             f"The configuration schema is outside {SAFE_CONFIGURATION_SCHEMA_POLICY}.",
         ) from error
+
+
+def clear_configuration_validation_caches() -> None:
+    """Clear bounded validator caches for deterministic tests and process maintenance."""
+    _successful_configuration_validation.cache_clear()
+    _compiled_safe_validator.cache_clear()
+
+
+def validate_suite_configuration(
+    schema: Mapping[str, Any],
+    configuration: Any,
+) -> None:
+    """Validate suite configuration without network or filesystem retrieval."""
+    reject_sensitive_keys(configuration)
+    validate_public_safe_values(configuration, catalog_members=True)
+    _successful_configuration_validation(
+        canonical_json(schema),
+        canonical_json(configuration),
+    )
 
 
 def validated_manifest_inputs(manifest: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
@@ -623,6 +776,7 @@ def _required_text(payload: Mapping[str, Any], key: str, *, maximum: int = 200) 
         raise AssuranceContractValidationError(
             "invalid_request", f"{key} must contain 1 to {maximum} characters."
         )
+    validate_public_safe_string(value.strip())
     return value.strip()
 
 
@@ -642,6 +796,7 @@ def _string_list(
         raise AssuranceContractValidationError(
             "invalid_request", f"{key} must contain distinct supported values."
         )
+    validate_public_safe_values(value)
     return list(value)
 
 
@@ -651,6 +806,7 @@ def validate_selected_configuration(configuration: Any) -> int:
             "invalid_suite_configuration", "configuration must be an object."
         )
     reject_sensitive_keys(configuration, path="suite.configuration")
+    validate_public_safe_values(configuration, catalog_members=True)
     return require_canonical_size(
         configuration,
         maximum_bytes=MAX_SUITE_CONFIGURATION_BYTES,
@@ -702,6 +858,13 @@ def normalize_target_create(payload: Mapping[str, Any]) -> dict[str, Any]:
         raise AssuranceContractValidationError("invalid_manifest", "manifest must be an object.")
     reject_sensitive_keys(manifest, path="manifest")
     validated_manifest_inputs(manifest)
+    validate_public_safe_values(
+        {
+            "deploymentId": payload.get("deploymentId"),
+            "connectorBindingId": payload.get("connectorBindingId"),
+            "supersedesId": payload.get("supersedesId"),
+        }
+    )
     manifest_json = canonical_json(manifest)
     return {
         "targetKey": _required_text(payload, "targetKey"),
@@ -739,6 +902,7 @@ def normalize_suite_create(payload: Mapping[str, Any], *, owner_scope: str) -> d
     adapter_name = _required_text(payload, "adapterName")
     adapter_version = _required_text(payload, "adapterVersion")
     result_contract = _required_text(payload, "resultContractVersion")
+    validate_public_safe_string(owner_scope)
     schema = payload.get("configurationSchema")
     defaults = payload.get("configurationDefaults")
     roles = payload.get("requiredInputRoles")
@@ -977,6 +1141,9 @@ _BLOCKER_MESSAGES = {
     "runner_image_missing": "A FairMind-worker suite has no immutable runner image digest.",
     "worker_unavailable": "FairMind workers are disabled in this release slice.",
     "automatic_enforcement_disabled": "Automatic enforcement is disabled in this release slice.",
+    "plan_schema_complexity_exceeded": (
+        "The selected suite schemas exceed the bounded plan complexity budget."
+    ),
     "execution_envelope_size_exceeded": (
         "The planned execution envelope exceeds the bounded assurance contract."
     ),
@@ -1019,16 +1186,22 @@ def validate_execution_envelope_variable_size(
     trust_policy: Mapping[str, Any],
     suites: Sequence[Mapping[str, Any]],
 ) -> None:
+    projection = execution_envelope_variable_projection(
+        target=target,
+        trust_policy=trust_policy,
+        suites=suites,
+    )
     require_canonical_size(
-        execution_envelope_variable_projection(
-            target=target,
-            trust_policy=trust_policy,
-            suites=suites,
-        ),
+        projection,
         maximum_bytes=MAX_ENVELOPE_VARIABLE_BYTES,
         code="envelope_variable_data_too_large",
         message="The canonical variable execution-envelope data exceeds 448 KiB.",
     )
+    validate_public_safe_values(projection)
+    for suite in suites:
+        configuration = suite.get("configuration")
+        if configuration is not None:
+            validate_public_safe_values(configuration, catalog_members=True)
 
 
 def _preflight_envelope_variable_projection(
@@ -1095,6 +1268,7 @@ def evaluate_preflight(
     suites: Sequence[Mapping[str, Any]],
     lifecycle_phase: str,
     require_plan_active: bool = True,
+    validate_phase_independent: bool = True,
 ) -> list[PreflightBlocker]:
     """Return all blockers in stable global/suite-ordinal/code order."""
     blockers: list[PreflightBlocker] = []
@@ -1116,6 +1290,17 @@ def evaluate_preflight(
         global_blocker("worker_unavailable")
     if plan.get("enforcement_mode") == "automatic":
         global_blocker("automatic_enforcement_disabled")
+
+    validate_configurations = validate_phase_independent
+    if validate_configurations:
+        try:
+            validate_plan_schema_complexity(
+                [suite.get("configuration_schema", {}) for suite in suites]
+            )
+        except AssuranceContractValidationError as error:
+            if error.code == "plan_schema_complexity_exceeded":
+                global_blocker("plan_schema_complexity_exceeded")
+                validate_configurations = False
 
     target_kind = target.get("target_kind") if target else None
     subject_kind = target.get("subject_kind") if target else None
@@ -1139,11 +1324,12 @@ def evaluate_preflight(
             suite_blocker("suite_execution_depth_unsupported")
         if plan.get("delivery_mode") not in suite.get("delivery_modes", []):
             suite_blocker("suite_delivery_mode_unsupported")
-        schema = suite.get("configuration_schema", {})
-        try:
-            validate_suite_configuration(schema, suite.get("configuration"))
-        except AssuranceContractValidationError:
-            suite_blocker("suite_configuration_invalid")
+        if validate_configurations:
+            schema = suite.get("configuration_schema", {})
+            try:
+                validate_suite_configuration(schema, suite.get("configuration"))
+            except AssuranceContractValidationError:
+                suite_blocker("suite_configuration_invalid")
         if any(role not in inputs for role in suite.get("required_input_roles", [])):
             suite_blocker("required_input_role_missing")
         if suite.get("worker_type") == "fairmind_worker" and not suite.get("runner_image_digest"):
