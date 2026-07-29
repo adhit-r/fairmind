@@ -8,7 +8,13 @@ This package contains deterministic research scaffolding for FairMind-E environm
 - `scripts/run_smoke.py`: dependency-free Python runner that emits CSV and SVG artifacts.
 - `results/*/smoke.csv`: generated deterministic CSV outputs.
 - `plots/*.svg`: generated summary plots.
-- `tests/test_smoke_harness.py`: stdlib unit tests for harness determinism and FairMind-E invariants.
+- `tests/`: stdlib unit tests for every package below (smoke, gate evaluation, profiles, measurement, hypotheses).
+- `profiles/`: M6 expert-panel assessment profiles plus their generator and answer key.
+- `panel/assignment_plan.csv`: counterbalanced rater-to-profile assignment for the panel study.
+- `evaluation/`: hand-labeled paper fixture set run against the production gate, with baseline comparisons.
+- `measurement/`: the real M5 measurement harness (four workloads, three provenance-mapped methods, mitigation pair-generators).
+- `analysis/`: H1-H4 hypothesis statistics and measurement-accuracy analysis (MAPE, Bland-Altman).
+- `paper/`: prior-art citation ledger and verified submission calendar.
 
 ## Run
 
@@ -66,3 +72,70 @@ uv run python ../../research/fairmind-e/tests/test_gate_evaluation.py
 ```
 
 The output is deterministic FairMind-E and baseline CSVs, a Markdown summary, and SVG plots. This validates gate-label behavior only; it is not a real emissions measurement study.
+
+## Expert-Panel Profiles (M6)
+
+The `profiles/` folder contains twelve synthetic assessment profiles for the expert-panel study. The set covers all nine cells of the impact x confidence decision matrix once, plus one extra profile for each conditional_go boundary cell adjacent to no_go (low+unknown and high+measured) and one extra for medium+estimated. Within each doubled cell the two profiles deliberately differ in mitigation or exception state so approval blocking varies while the recommendation does not.
+
+- `profiles/generate_profiles.py`: deterministic stdlib generator with a `--validate` mode that replays every profile through the production domain gate.
+- `profiles/profiles.json`: machine-readable profiles with engine-validated expected labels and ENV-1..6 coverage.
+- `profiles/PROFILES.md`: printable rater pack (system descriptions and submissions, no answer key).
+- `profiles/ANSWER_KEY.md`: expected labels, control coverage, and rationales; keep separate from the rater pack.
+- `panel/assignment_plan.csv`: 15 raters (5 GRC, 5 ML_ENG, 5 ESG) x 8 profiles each via a deterministic cyclic rotation; every profile receives exactly 10 ratings with at least 3 raters from each role, and presentation order rotates per rater.
+
+Run from the backend environment:
+
+```bash
+cd apps/backend
+uv run python ../../research/fairmind-e/profiles/generate_profiles.py --validate
+uv run python ../../research/fairmind-e/tests/test_profiles.py
+```
+
+Regenerating without validation is stdlib-only and can run from the repository root: `python3 research/fairmind-e/profiles/generate_profiles.py`. The profiles are fictional panel instruments, not real system measurements.
+
+## Measurement Study (M5)
+
+The `measurement/` package is the real measurement harness, distinct from the smoke harness above: `scripts/run_smoke.py` emits deterministic synthetic numbers for package validation and is never study data, while `measurement/harness.py` executes four real workloads on real hardware (W1 sklearn logistic regression, W2 pure-torch tiny transformer fine-tune, W3 numpy embedding plus top-k retrieval, W4 numpy batch embedding) and derives energy and carbon three ways per physical run: `codecarbon` (provenance `tool_estimated`), `cloud_billing` (operator-filled `measurement/cloud_billing_template.csv`, provenance `vendor_reported`), and `manual_flop` (documented per-workload analytic FLOP formulas, provenance `manual`). The same run measured three ways yields different provenance classes, therefore different confidence, and potentially different gate decisions at identical true impact.
+
+```bash
+python3 research/fairmind-e/measurement/harness.py --workload all --dry-run
+cd apps/backend
+uv run python ../../research/fairmind-e/measurement/harness.py --workload all --iterations 5 --mitigations
+uv run python ../../research/fairmind-e/tests/test_measurement_harness.py
+```
+
+Output contract: the smoke CSV columns plus `measurement_method`, `run_mode`, `method_available`. Honest degradation: when a dependency or billing entry is missing, the row keeps `method_available=false`, `provenance_class=unknown`, and empty measurement and gate fields; nothing is fabricated. Dry runs are labeled `run_mode=dry_run` and are never study data. Mitigation pairs (quantization, region_shift, batching, time_shift) go to a companion `*_mitigations.csv` with pre/post energy and intensity; region and time shifts recompute against the bundled PLACEHOLDER grid table in `measurement/grid_intensity.py`, which must be replaced with an authoritative source before submission. See `measurement/RUNBOOK.md` for the real-hardware protocol; `analysis/hypotheses.py` consumes both CSVs for MAPE/Bland-Altman and H4.
+
+## Hypothesis Analysis (H1-H4)
+
+The `analysis/` folder computes the pre-registered hypothesis statistics and the measurement-accuracy statistics from CSV inputs. It is stdlib-only and prefers scipy/sklearn when importable (the backend environment); every result records which implementation produced it, and bootstrap confidence intervals use a fixed seed so outputs are identical across environments.
+
+Inputs (schemas are documented constants at the top of `analysis/hypotheses.py`; `#`-prefixed lines are comments):
+
+- Panel responses: `rater_id, rater_role (GRC|ML_ENG|ESG), profile_id, recommendation (go|conditional_go|no_go), decision_confidence_1_5, decisive_controls (semicolon-joined ENV-1..ENV-6), time_to_decision_s`.
+- Measurement runs: the smoke-harness CSV contract above plus `measurement_method (codecarbon|cloud_billing|manual_flop)`; the optional harness columns `run_mode` and `method_available` are validated when present, and rows with `method_available=false` keep empty fields and are excluded from statistics, never imputed.
+- Coverage pre/post: `system_id, coverage_rate_pre, coverage_rate_post`.
+- Mitigation pairs: `workload_id, mitigation, intensity_pre, intensity_post, unit` (one shared unit).
+
+H1 uses the explicit ordinal go=0, conditional_go=1, no_go=2, so the expected Spearman correlation with confidence is negative. Expected labels and shown confidence join from `profiles/profiles.json` when present. See `analysis/DESIGN_NOTES.md` for what the survey instrument must capture; H2 requires a baseline condition that a ratings-only panel does not collect.
+
+Run from the repository root:
+
+```bash
+python3 research/fairmind-e/analysis/hypotheses.py --panel panel.csv --runs runs.csv --coverage coverage.csv --mitigation mitigations.csv --out results.json
+python3 -m unittest research/fairmind-e/tests/test_hypotheses.py
+```
+
+Or from the backend environment for the scipy/sklearn implementations:
+
+```bash
+cd apps/backend
+uv run python ../../research/fairmind-e/analysis/hypotheses.py --runs runs.csv
+uv run python ../../research/fairmind-e/tests/test_hypotheses.py
+```
+
+Demo inputs live in `analysis/fixtures/` and are labeled SYNTHETIC in both filename and header; they are hand-constructed test vectors, not study data.
+
+## Submission Materials
+
+`paper/PRIOR_ART_AND_VENUES.md` holds the live-verified (2026-07-30) prior-art citation ledger with per-work differentiation lines, the regulatory-framing evidence, and the verified submission calendar (CCAI workshop 2026-08-29; FAccT 2027 full paper 2026-11-03; ICT4S 2027 estimated late January 2027).
