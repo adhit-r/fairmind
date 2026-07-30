@@ -81,16 +81,36 @@ Closed or missed in this cycle: COMPASS 2026 (ran July 2026), AIES 2026,
 HotCarbon 2026, LOCO 2026, EAAMO 2026, ACM JRC "Computing within Planetary
 Boundaries" special issue (closed 2026-05-31).
 
-## 5. Two-stage plan
+## 5. Target plan (decided 2026-07-30)
 
-1. Stage 1 (now to 2026-08-29): 4-page CCAI Papers-track submission -
+Three targets, sequenced (same manuscript is never under review at two venues
+simultaneously):
+
+1. CCAI @ NeurIPS 2026 (deadline 2026-08-29): 4-page Papers-track submission -
    repositioned concept plus working implementation plus fixture ablation,
    clearly bounded. Non-archival; burns no novelty; stamps priority against the
-   converging groups.
-2. Stage 2 (to 2026-11-03): FAccT 2027 full paper if and only if the expert
-   panel (M6) is recruited in August and executed by mid-October. Otherwise
-   ICT4S 2027 (~late Jan 2027) is the primary full-paper target, with COMPASS
-   2027 / AIES 2027 / journals as fallbacks.
+   converging groups. Draft: paper/ccai2026/.
+2. arXiv preprint (September 2026): UNLOCKED - an endorsing professor is
+   available (decided 2026-07-30; supersedes the earlier no-arXiv constraint).
+   Post the full paper to cs.CY (primary), cross-list cs.SE or cs.LG.
+   Mechanics: create arXiv account, request an endorsement code at
+   arxiv.org/auth/endorse for cs.CY, professor enters the code; first-paper
+   moderation typically adds 1-3 business days.
+3. ACM COMPASS 2027 (CFP unannounced; watch compass.acm.org from Jan 2027,
+   deadline historically ~Feb-Mar): the full-paper primary target, with both
+   empirical studies (M5 + M6) integrated. Relaxed timeline: panel can run
+   September-December 2026.
+4. Journal (rolling): NOT simultaneous with COMPASS. Two legitimate shapes:
+   (a) extended journal version after COMPASS acceptance (30 percent or more
+   new material per ACM policy) - Sustainable Computing: Informatics and
+   Systems if extended around the measurement study, AI and Ethics if around
+   the governance mechanism; or (b) direct journal submission as fallback if
+   COMPASS rejects. A second option is a two-paper split: Paper A (system +
+   panel, COMPASS/AI and Ethics) and Paper B (measurement-accuracy +
+   calibration study, Sustainable Computing).
 
-Gating risk for Stage 2 remains recruitment of the 15-expert panel, not
-statistics or implementation.
+FAccT 2027 (2026-11-03) is no longer load-bearing: attempt only if the panel
+happens to complete by mid-October; nothing in the plan depends on it.
+
+Gating risk remains recruitment of the 15-expert panel, now with a
+September-December window instead of a September cliff.
