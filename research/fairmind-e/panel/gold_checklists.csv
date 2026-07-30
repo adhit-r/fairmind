@@ -1,0 +1,73 @@
+profile_id,control,applicable,requirement
+P01,ENV-1,yes,"Assessment boundary declared (system, lifecycle phase, functional unit)"
+P01,ENV-2,yes,Energy accounting (total kWh for the declared boundary)
+P01,ENV-3,yes,Dual carbon accounting (location-based and market-based kgCO2e)
+P01,ENV-4,yes,Per-functional-unit efficiency metric
+P01,ENV-5,yes,Evidence confidence (provenance class and disclosed uncertainty)
+P01,ENV-6,yes,Mitigation or owned exception for a conditional release
+P02,ENV-1,yes,"Assessment boundary declared (system, lifecycle phase, functional unit)"
+P02,ENV-2,yes,Energy accounting (total kWh for the declared boundary)
+P02,ENV-3,yes,Dual carbon accounting (location-based and market-based kgCO2e)
+P02,ENV-4,yes,Per-functional-unit efficiency metric
+P02,ENV-5,yes,Evidence confidence (provenance class and disclosed uncertainty)
+P02,ENV-6,yes,Mitigation or owned exception for a conditional release
+P03,ENV-1,yes,"Assessment boundary declared (system, lifecycle phase, functional unit)"
+P03,ENV-2,yes,Energy accounting (total kWh for the declared boundary)
+P03,ENV-3,yes,Dual carbon accounting (location-based and market-based kgCO2e)
+P03,ENV-4,yes,Per-functional-unit efficiency metric
+P03,ENV-5,yes,Evidence confidence (provenance class and disclosed uncertainty)
+P03,ENV-6,yes,Mitigation or owned exception for a conditional release
+P04,ENV-1,yes,"Assessment boundary declared (system, lifecycle phase, functional unit)"
+P04,ENV-2,yes,Energy accounting (total kWh for the declared boundary)
+P04,ENV-3,yes,Dual carbon accounting (location-based and market-based kgCO2e)
+P04,ENV-4,yes,Per-functional-unit efficiency metric
+P04,ENV-5,yes,Evidence confidence (provenance class and disclosed uncertainty)
+P04,ENV-6,yes,Mitigation or owned exception for a conditional release
+P05,ENV-1,yes,"Assessment boundary declared (system, lifecycle phase, functional unit)"
+P05,ENV-2,yes,Energy accounting (total kWh for the declared boundary)
+P05,ENV-3,yes,Dual carbon accounting (location-based and market-based kgCO2e)
+P05,ENV-4,yes,Per-functional-unit efficiency metric
+P05,ENV-5,yes,Evidence confidence (provenance class and disclosed uncertainty)
+P05,ENV-6,yes,Mitigation or owned exception for a conditional release
+P06,ENV-1,yes,"Assessment boundary declared (system, lifecycle phase, functional unit)"
+P06,ENV-2,yes,Energy accounting (total kWh for the declared boundary)
+P06,ENV-3,yes,Dual carbon accounting (location-based and market-based kgCO2e)
+P06,ENV-4,yes,Per-functional-unit efficiency metric
+P06,ENV-5,yes,Evidence confidence (provenance class and disclosed uncertainty)
+P06,ENV-6,yes,Mitigation or owned exception for a conditional release
+P07,ENV-1,yes,"Assessment boundary declared (system, lifecycle phase, functional unit)"
+P07,ENV-2,yes,Energy accounting (total kWh for the declared boundary)
+P07,ENV-3,yes,Dual carbon accounting (location-based and market-based kgCO2e)
+P07,ENV-4,yes,Per-functional-unit efficiency metric
+P07,ENV-5,yes,Evidence confidence (provenance class and disclosed uncertainty)
+P07,ENV-6,yes,Mitigation or owned exception for a conditional release
+P08,ENV-1,yes,"Assessment boundary declared (system, lifecycle phase, functional unit)"
+P08,ENV-2,yes,Energy accounting (total kWh for the declared boundary)
+P08,ENV-3,yes,Dual carbon accounting (location-based and market-based kgCO2e)
+P08,ENV-4,yes,Per-functional-unit efficiency metric
+P08,ENV-5,yes,Evidence confidence (provenance class and disclosed uncertainty)
+P08,ENV-6,yes,Mitigation or owned exception for a conditional release
+P09,ENV-1,yes,"Assessment boundary declared (system, lifecycle phase, functional unit)"
+P09,ENV-2,yes,Energy accounting (total kWh for the declared boundary)
+P09,ENV-3,yes,Dual carbon accounting (location-based and market-based kgCO2e)
+P09,ENV-4,yes,Per-functional-unit efficiency metric
+P09,ENV-5,yes,Evidence confidence (provenance class and disclosed uncertainty)
+P09,ENV-6,yes,Mitigation or owned exception for a conditional release
+P10,ENV-1,yes,"Assessment boundary declared (system, lifecycle phase, functional unit)"
+P10,ENV-2,yes,Energy accounting (total kWh for the declared boundary)
+P10,ENV-3,yes,Dual carbon accounting (location-based and market-based kgCO2e)
+P10,ENV-4,yes,Per-functional-unit efficiency metric
+P10,ENV-5,yes,Evidence confidence (provenance class and disclosed uncertainty)
+P10,ENV-6,yes,Mitigation or owned exception for a conditional release
+P11,ENV-1,yes,"Assessment boundary declared (system, lifecycle phase, functional unit)"
+P11,ENV-2,yes,Energy accounting (total kWh for the declared boundary)
+P11,ENV-3,yes,Dual carbon accounting (location-based and market-based kgCO2e)
+P11,ENV-4,yes,Per-functional-unit efficiency metric
+P11,ENV-5,yes,Evidence confidence (provenance class and disclosed uncertainty)
+P11,ENV-6,yes,Mitigation or owned exception for a conditional release
+P12,ENV-1,yes,"Assessment boundary declared (system, lifecycle phase, functional unit)"
+P12,ENV-2,yes,Energy accounting (total kWh for the declared boundary)
+P12,ENV-3,yes,Dual carbon accounting (location-based and market-based kgCO2e)
+P12,ENV-4,yes,Per-functional-unit efficiency metric
+P12,ENV-5,yes,Evidence confidence (provenance class and disclosed uncertainty)
+P12,ENV-6,yes,Mitigation or owned exception for a conditional release

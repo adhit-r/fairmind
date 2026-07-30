@@ -93,6 +93,42 @@ uv run python ../../research/fairmind-e/tests/test_profiles.py
 
 Regenerating without validation is stdlib-only and can run from the repository root: `python3 research/fairmind-e/profiles/generate_profiles.py`. The profiles are fictional panel instruments, not real system measurements.
 
+## Expert Panel Instrument (M6)
+
+The `panel/` folder turns the profiles into a runnable two-arm study.
+`INSTRUMENT.md` is the operator document: design, the exact question wording,
+the export contract, consent text, procedure, and claim boundaries.
+
+The two-arm split is load-bearing. Each rater assesses 8 profiles, 4 under the
+baseline arm (system description, boundary, raw measurements, stated source -
+no confidence score, tier, matrix, or coverage table) and 4 under the module
+arm (all of that plus the full FairMind-E output), on disjoint profile sets so
+no rater sees a profile twice. Arms are balanced on both margins: every rater
+splits 4/4 and every profile receives exactly 5 baseline and 5 module ratings.
+A single-condition instrument makes H2 uncomputable after collection; see
+`analysis/DESIGN_NOTES.md`.
+
+```bash
+python3 research/fairmind-e/panel/build_instrument.py --check
+python3 research/fairmind-e/panel/build_instrument.py
+python3 research/fairmind-e/panel/import_responses.py --responses raw_export.csv
+python3 research/fairmind-e/tests/test_panel_instrument.py
+```
+
+`build_instrument.py` writes `packets/R01.md`..`packets/R15.md` (one stimulus
+packet per rater, rendered per arm), `assignment_plan_arms.csv`, and
+`gold_checklists.csv` (the H2 denominator: all six ENV controls apply to every
+profile in the MVP control set). `import_responses.py` joins the raw survey
+export to roles and arms, scores coverage against the gold checklist, drops
+module-arm responses that fail the confidence-visibility manipulation check,
+and emits `responses/panel_responses.csv` plus `responses/coverage_pre_post.csv`
+for `analysis/hypotheses.py`. Malformed rows are reported and excluded, never
+imputed.
+
+The packets are fictional instruments, not measurements of real systems, and
+the panel measures reviewer behaviour under a controlled contrast rather than
+real-world release outcomes.
+
 ## Measurement Study (M5)
 
 The `measurement/` package is the real measurement harness, distinct from the smoke harness above: `scripts/run_smoke.py` emits deterministic synthetic numbers for package validation and is never study data, while `measurement/harness.py` executes four real workloads on real hardware (W1 sklearn logistic regression, W2 pure-torch tiny transformer fine-tune, W3 numpy embedding plus top-k retrieval, W4 numpy batch embedding) and derives energy and carbon three ways per physical run: `codecarbon` (provenance `tool_estimated`), `cloud_billing` (operator-filled `measurement/cloud_billing_template.csv`, provenance `vendor_reported`), and `manual_flop` (documented per-workload analytic FLOP formulas, provenance `manual`). The same run measured three ways yields different provenance classes, therefore different confidence, and potentially different gate decisions at identical true impact.
