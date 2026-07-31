@@ -132,6 +132,18 @@ export const API_ENDPOINTS = {
     evidenceItemLinks: (evidenceId: string) => `/api/v1/ai-governance/evidence-item/${evidenceId}/links`,
     evidenceItemLink: (evidenceId: string, linkId: string) => `/api/v1/ai-governance/evidence-item/${evidenceId}/links/${linkId}`,
     environmentalImpact: (systemId: string) => `/api/v1/systems/${systemId}/environmental-impact`,
+    environmentalHistory: (systemId: string) => `/api/v1/systems/${systemId}/environmental-impact/history`,
+    environmentalAssess: '/api/v1/ai-governance/environment/assess',
+    environmentalMitigation: (systemId: string, assessmentId: string) =>
+      `/api/v1/systems/${systemId}/environmental-impact/${assessmentId}/mitigation`,
+    environmentalApprove: (systemId: string, assessmentId: string) =>
+      `/api/v1/systems/${systemId}/environmental-impact/${assessmentId}/approve`,
+    environmentalExport: (systemId: string) => `/api/v1/systems/${systemId}/environmental-impact/export`,
+    environmentalEvidence: (systemId: string) => `/api/v1/systems/${systemId}/environmental-impact/evidence`,
+    environmentalBenchmarks: '/api/v1/environment/benchmarks',
+    environmentalControls: (systemId?: string) =>
+      systemId ? `/api/v1/environment/controls?system_id=${systemId}` : '/api/v1/environment/controls',
+    systemForModel: (modelId: string) => `/api/v1/ai-governance/models/${modelId}/system`,
     remediation: '/api/v1/ai-governance/remediation',
     updateRemediation: (taskId: string) => `/api/v1/ai-governance/remediation/${taskId}`,
     approvalRequests: '/api/v1/ai-governance/approval-requests',

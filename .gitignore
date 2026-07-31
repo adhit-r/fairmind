@@ -22,6 +22,7 @@ build/
 
 # Misc
 .DS_Store
+graphify-out/
 *.pem
 *.p12
 *.key
@@ -178,6 +179,7 @@ credentials*
 *.json
 !package.json
 !package-lock.json
+!docs/product/evidence-passport.schema.json
 !research/aibom-fairness-evidence/**/*.json
 !tsconfig.json
 !next.config.js
@@ -280,6 +282,11 @@ Thumbs.db
 *.mlmodel
 models/
 checkpoints/
+# The models/ rule above targets ML weight directories, but it also silently
+# excluded the frontend's /models route, so that page was never version
+# controlled. Keep application source tracked.
+!apps/frontend/src/app/**/models/
+!apps/frontend/src/app/**/models/**
 
 # Data files
 *.csv
@@ -335,6 +342,8 @@ test-results/
 !docs/assets/issues/*.png
 !assets/logo/*.png
 !assets/diagrams/*.png
+!outputs/fairmind-evidence-workbench/assets/fairmind-assurance-ledger-hero.png
+!outputs/fairmind-evidence-workbench/assets/fairmind-evidence-passport-social-square.png
 
 # Temporary documentation files
 .temp-docs/

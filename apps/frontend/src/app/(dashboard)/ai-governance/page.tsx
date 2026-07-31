@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useAIGovernance, useEnvironmentalImpact, type EnvironmentalImpactReport } from '@/lib/api/hooks/useAIGovernance'
+import { EnvironmentalAssessmentWorkbench } from '@/components/environmental/EnvironmentalAssessmentWorkbench'
 import { useCompliance } from '@/lib/api/hooks/useCompliance'
 import { useEvidence } from '@/lib/api/hooks/useEvidence'
 import { usePolicies } from '@/lib/api/hooks/usePolicies'
@@ -640,6 +641,10 @@ export default function AIGovernancePage() {
         </TabsContent>
 
         <TabsContent value="environmental-impact" className="space-y-6">
+          {/* Interactive workbench: run assessments, record mitigations, sign
+              off, and export. The section below it stays as the detailed
+              read-only breakdown of the returned packet. */}
+          <EnvironmentalAssessmentWorkbench systemId={selectedSystem.id} />
           <EnvironmentalImpactSection
             systemName={selectedSystem.name}
             data={environmentalImpact}
