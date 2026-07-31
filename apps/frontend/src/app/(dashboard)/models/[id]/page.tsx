@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { use, useState } from 'react'
 import { useModel } from '@/lib/api/hooks/useModel'
 import { useDatasets } from '@/lib/api/hooks/useDatasets'
 import { Card } from '@/components/ui/card'
@@ -52,8 +52,12 @@ import {
     Cell
 } from 'recharts'
 
-export default function ModelDetailsPage({ params }: { params: { id: string } }) {
-    const { model, loading, error, runTest, testing, testResult, testError } = useModel(params.id)
+// Next.js 16 delivers route params as a Promise; reading a property off it
+// directly yields undefined, so the model was never fetched. Sibling dynamic
+// routes already unwrap with use().
+export default function ModelDetailsPage({ params }: { params: Promise<{ id: string }> }) {
+    const { id } = use(params)
+    const { model, loading, error, runTest, testing, testResult, testError } = useModel(id)
     const { datasets, loading: loadingDatasets } = useDatasets()
     const [dialogOpen, setDialogOpen] = useState(false)
 
@@ -397,7 +401,7 @@ export default function ModelDetailsPage({ params }: { params: { id: string } })
             {/* Environmental governance: assess this model's environmental
                 evidence and see the release gate without leaving evaluation. */}
             <div className="pt-4 border-t-4 border-black">
-                <ModelEnvironmentalPanel modelId={params.id} modelName={model.name} />
+                <ModelEnvironmentalPanel modelId={id} modelName={model.name} />
             </div>
         </div>
     )

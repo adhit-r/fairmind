@@ -77,6 +77,21 @@ const classifyError = (error: any, response?: Response): ApiError => {
       }
     }
 
+    // Other 4xx responses are definitive client errors: the server understood
+    // the request and rejected it, so repeating it verbatim cannot succeed.
+    // Without this branch they fell through to the unknown-error default and
+    // were retried three times with exponential backoff, delaying the real
+    // message to the user by seconds and re-sending state-changing requests.
+    // 408 and 429 are the exceptions that a retry can legitimately clear.
+    if (response.status >= 400 && response.status < 500) {
+      return {
+        message: `Request rejected (HTTP ${response.status})`,
+        status: response.status,
+        type: 'client',
+        canRetry: response.status === 408 || response.status === 429,
+      }
+    }
+
     if (response.status >= 500) {
       return {
         message: 'Server error occurred',

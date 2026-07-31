@@ -270,9 +270,9 @@ export function EnvironmentalAssessmentWorkbench({
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label className="font-bold">Lifecycle phase</Label>
+              <Label className="font-bold" htmlFor="env-phase">Lifecycle phase</Label>
               <Select value={phase} onValueChange={(v) => setPhase(v as LifecyclePhase)}>
-                <SelectTrigger className="border-2 border-black">
+                <SelectTrigger className="border-2 border-black" id="env-phase">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -286,9 +286,9 @@ export function EnvironmentalAssessmentWorkbench({
             </div>
 
             <div className="space-y-2">
-              <Label className="font-bold">Measurement provenance</Label>
+              <Label className="font-bold" htmlFor="env-provenance">Measurement provenance</Label>
               <Select value={provenance} onValueChange={(v) => setProvenance(v as ProvenanceClass)}>
-                <SelectTrigger className="border-2 border-black">
+                <SelectTrigger className="border-2 border-black" id="env-provenance">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -305,8 +305,9 @@ export function EnvironmentalAssessmentWorkbench({
             </div>
 
             <div className="space-y-2">
-              <Label className="font-bold">Functional unit</Label>
+              <Label className="font-bold" htmlFor="env-functional-unit">Functional unit</Label>
               <Input
+                id="env-functional-unit"
                 className="border-2 border-black"
                 value={functionalUnit}
                 onChange={(e) => setFunctionalUnit(e.target.value)}
@@ -315,8 +316,9 @@ export function EnvironmentalAssessmentWorkbench({
             </div>
 
             <div className="space-y-2">
-              <Label className="font-bold">Uncertainty (percent)</Label>
+              <Label className="font-bold" htmlFor="env-uncertainty">Uncertainty (percent)</Label>
               <Input
+                id="env-uncertainty"
                 className="border-2 border-black"
                 value={uncertainty}
                 onChange={(e) => setUncertainty(e.target.value)}
@@ -326,8 +328,9 @@ export function EnvironmentalAssessmentWorkbench({
             </div>
 
             <div className="space-y-2 md:col-span-2">
-              <Label className="font-bold">Assessment boundary</Label>
+              <Label className="font-bold" htmlFor="env-boundary">Assessment boundary</Label>
               <Input
+                id="env-boundary"
                 className="border-2 border-black"
                 value={boundary}
                 onChange={(e) => setBoundary(e.target.value)}
@@ -336,8 +339,9 @@ export function EnvironmentalAssessmentWorkbench({
             </div>
 
             <div className="space-y-2">
-              <Label className="font-bold">Total energy (kWh)</Label>
+              <Label className="font-bold" htmlFor="env-kwh">Total energy (kWh)</Label>
               <Input
+                id="env-kwh"
                 className="border-2 border-black"
                 value={kwh}
                 onChange={(e) => setKwh(e.target.value)}
@@ -345,8 +349,9 @@ export function EnvironmentalAssessmentWorkbench({
               />
             </div>
             <div className="space-y-2">
-              <Label className="font-bold">Carbon, location-based (kg CO2e)</Label>
+              <Label className="font-bold" htmlFor="env-co2-location">Carbon, location-based (kg CO2e)</Label>
               <Input
+                id="env-co2-location"
                 className="border-2 border-black"
                 value={co2Location}
                 onChange={(e) => setCo2Location(e.target.value)}
@@ -354,8 +359,9 @@ export function EnvironmentalAssessmentWorkbench({
               />
             </div>
             <div className="space-y-2">
-              <Label className="font-bold">Carbon, market-based (kg CO2e)</Label>
+              <Label className="font-bold" htmlFor="env-co2-market">Carbon, market-based (kg CO2e)</Label>
               <Input
+                id="env-co2-market"
                 className="border-2 border-black"
                 value={co2Market}
                 onChange={(e) => setCo2Market(e.target.value)}
@@ -363,8 +369,9 @@ export function EnvironmentalAssessmentWorkbench({
               />
             </div>
             <div className="space-y-2">
-              <Label className="font-bold">Per 1000 requests (kg CO2e)</Label>
+              <Label className="font-bold" htmlFor="env-per-1k">Per 1000 requests (kg CO2e)</Label>
               <Input
+                id="env-per-1k"
                 className="border-2 border-black"
                 value={per1kRequests}
                 onChange={(e) => setPer1kRequests(e.target.value)}
@@ -372,8 +379,9 @@ export function EnvironmentalAssessmentWorkbench({
               />
             </div>
             <div className="space-y-2">
-              <Label className="font-bold">Per 1M tokens (kg CO2e)</Label>
+              <Label className="font-bold" htmlFor="env-per-1m">Per 1M tokens (kg CO2e)</Label>
               <Input
+                id="env-per-1m"
                 className="border-2 border-black"
                 value={per1mTokens}
                 onChange={(e) => setPer1mTokens(e.target.value)}
