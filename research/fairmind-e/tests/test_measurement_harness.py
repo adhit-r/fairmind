@@ -75,11 +75,19 @@ class DryRunSchemaTest(unittest.TestCase):
             with output.open(newline="", encoding="utf-8") as handle:
                 header = next(csv.reader(handle))
             self.assertEqual(header, harness.MEASUREMENT_CSV_COLUMNS)
-            # Contract: exactly the smoke columns plus the three new ones.
+            # Contract: exactly the smoke columns plus the harness additions.
+            # started_at/ended_at bracket the workload so an independently
+            # sampled power log can be integrated over that exact window.
             self.assertEqual(
                 harness.MEASUREMENT_CSV_COLUMNS,
                 list(harness._SMOKE.CSV_COLUMNS)
-                + ["measurement_method", "run_mode", "method_available"],
+                + [
+                    "measurement_method",
+                    "run_mode",
+                    "method_available",
+                    "started_at",
+                    "ended_at",
+                ],
             )
 
             rows = read_rows(output)
@@ -482,6 +490,40 @@ class GridIntensityTableTest(unittest.TestCase):
             grid_intensity.intensities_for("ATL")
         with self.assertRaises(ValueError):
             grid_intensity.hourly_location_intensity("IND", 24)
+
+
+
+class RunWindowTest(unittest.TestCase):
+    """The power reference aligns on these timestamps, so they must be real."""
+
+    def test_both_methods_of_one_iteration_share_one_window(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = pathlib.Path(tmp) / "runs.csv"
+            harness.main([
+                "--workload", "w1", "--iterations", "1", "--dry-run",
+                "--output", str(output),
+            ])
+            rows = [r for r in read_rows(output) if r["method_available"] == "true"]
+            self.assertTrue(rows, "expected at least one available method")
+            windows = {(r["started_at"], r["ended_at"]) for r in rows}
+            # codecarbon and manual_flop describe the SAME physical run, so a
+            # divergent window would misattribute power samples between them.
+            self.assertEqual(len(windows), 1)
+            started, ended = windows.pop()
+            self.assertTrue(started and ended, "timestamps must be populated")
+            self.assertGreater(float(ended), float(started))
+
+    def test_unavailable_methods_carry_no_window(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = pathlib.Path(tmp) / "runs.csv"
+            harness.main([
+                "--workload", "w1", "--iterations", "1", "--dry-run",
+                "--output", str(output),
+            ])
+            for row in read_rows(output):
+                if row["method_available"] == "false":
+                    self.assertEqual(row["started_at"], "")
+                    self.assertEqual(row["ended_at"], "")
 
 
 if __name__ == "__main__":

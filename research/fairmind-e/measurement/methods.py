@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import csv
 import dataclasses
+import time
 import pathlib
 from typing import Any
 
@@ -100,6 +101,17 @@ class RunResult:
     codecarbon_reason: str
     codecarbon_energy_kwh: float | None = None
     codecarbon_emissions_kg: float | None = None
+    # Unix epoch seconds bracketing the workload itself, so an independently
+    # sampled power log can be integrated over exactly this window.
+    started_at: float | None = None
+    ended_at: float | None = None
+
+
+def _timed_run(module: Any, config: dict[str, Any], seed: int) -> tuple[dict[str, Any], float, float]:
+    """Run the workload, returning its result and the wall-clock window."""
+    started = time.time()
+    result = module.run(config, seed)
+    return result, started, time.time()
 
 
 def execute_workload(
@@ -120,25 +132,30 @@ def execute_workload(
     """
 
     if not want_codecarbon:
-        result = module.run(config, seed)
+        result, started, ended = _timed_run(module, config, seed)
         return RunResult(
             duration_seconds=result["duration_seconds"],
             work_metrics=result["work_metrics"],
             codecarbon_available=False,
             codecarbon_reason="method not requested",
+            started_at=started,
+            ended_at=ended,
         )
 
     cc_ok, cc_reason = probe_codecarbon()
     if not cc_ok:
-        result = module.run(config, seed)
+        result, started, ended = _timed_run(module, config, seed)
         return RunResult(
             duration_seconds=result["duration_seconds"],
             work_metrics=result["work_metrics"],
             codecarbon_available=False,
             codecarbon_reason=cc_reason,
+            started_at=started,
+            ended_at=ended,
         )
 
     result: dict[str, Any] | None = None
+    started = ended = None
     try:
         from codecarbon import OfflineEmissionsTracker
 
@@ -150,7 +167,7 @@ def execute_workload(
         )
         tracker.start()
         try:
-            result = module.run(config, seed)
+            result, started, ended = _timed_run(module, config, seed)
         finally:
             stop_emissions = tracker.stop()
         data = getattr(tracker, "final_emissions_data", None)
@@ -167,6 +184,8 @@ def execute_workload(
                     "codecarbon ran but returned no energy figure; "
                     "recorded unavailable rather than fabricating one"
                 ),
+                started_at=started,
+                ended_at=ended,
             )
         return RunResult(
             duration_seconds=result["duration_seconds"],
@@ -175,15 +194,19 @@ def execute_workload(
             codecarbon_reason=cc_reason,
             codecarbon_energy_kwh=float(energy_kwh),
             codecarbon_emissions_kg=float(emissions_kg),
+            started_at=started,
+            ended_at=ended,
         )
     except Exception as exc:  # tracker fault must not lose the real run
         if result is None:
-            result = module.run(config, seed)
+            result, started, ended = _timed_run(module, config, seed)
         return RunResult(
             duration_seconds=result["duration_seconds"],
             work_metrics=result["work_metrics"],
             codecarbon_available=False,
             codecarbon_reason=f"codecarbon failed: {exc}",
+            started_at=started,
+            ended_at=ended,
         )
 
 

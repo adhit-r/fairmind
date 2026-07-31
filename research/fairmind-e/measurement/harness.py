@@ -78,6 +78,10 @@ MEASUREMENT_CSV_COLUMNS = list(_SMOKE.CSV_COLUMNS) + [
     "measurement_method",
     "run_mode",
     "method_available",
+    # Wall-clock window of the workload itself, so an independently sampled
+    # power log can be integrated over exactly the interval it occupied.
+    "started_at",
+    "ended_at",
 ]
 
 
@@ -114,6 +118,8 @@ def build_row(
     market_kg: float | None,
     mitigation_readiness: str,
     notes: str,
+    started_at: float | None = None,
+    ended_at: float | None = None,
 ) -> dict[str, str]:
     """Assemble one contract row. Empty strings mark absent real figures."""
 
@@ -161,6 +167,8 @@ def build_row(
         "measurement_method": method,
         "run_mode": run_mode,
         "method_available": "true" if method_available else "false",
+        "started_at": "" if started_at is None else f"{started_at:.3f}",
+        "ended_at": "" if ended_at is None else f"{ended_at:.3f}",
     }
 
 
@@ -237,6 +245,8 @@ def _codecarbon_row(
         market_kg=None,
         mitigation_readiness="none",
         notes=notes,
+        started_at=run_result.started_at,
+        ended_at=run_result.ended_at,
     )
 
 
@@ -250,6 +260,8 @@ def _manual_row(
     gflops_per_watt: float,
     pue: float,
     duration_seconds: float | None,
+    started_at: float | None = None,
+    ended_at: float | None = None,
 ) -> dict[str, str]:
     flops = module.flop_estimate(config)
     energy = methods.manual_energy_kwh(flops, gflops_per_watt, pue)
@@ -278,6 +290,8 @@ def _manual_row(
         market_kg=market_kg,
         mitigation_readiness="none",
         notes=notes,
+        started_at=started_at,
+        ended_at=ended_at,
     )
 
 
@@ -461,6 +475,8 @@ def run_study(args: argparse.Namespace) -> tuple[list[dict[str, str]], list[str]
                         gflops_per_watt=args.gflops_per_watt,
                         pue=args.pue,
                         duration_seconds=run_result.duration_seconds,
+                        started_at=run_result.started_at,
+                        ended_at=run_result.ended_at,
                     )
                 rows.append(row)
                 state = "ok" if row["method_available"] == "true" else row["notes"]
