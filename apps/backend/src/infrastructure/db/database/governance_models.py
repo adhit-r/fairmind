@@ -149,6 +149,11 @@ class GovernanceAISystem(Base):
 
     id = Column(String, primary_key=True, default=_new_id)
     workspace_id = Column(String, ForeignKey("governance_workspaces.id"), nullable=False, index=True)
+    # Links a governed system to the registered model it governs, so the model
+    # evaluation flow can reach this system's governance record (and its
+    # environmental assessments) directly. Nullable: a governed system may
+    # describe a process or a vendor system with no model row in this platform.
+    model_id = Column(String, nullable=True, index=True)
     name = Column(String, nullable=False)
     system_type = Column(String, nullable=True)
     version = Column(String, nullable=True)
@@ -175,6 +180,7 @@ class GovernanceAISystem(Base):
 
     __table_args__ = (
         Index("idx_governance_ai_systems_workspace_id", "workspace_id"),
+        Index("idx_governance_ai_systems_model_id", "model_id"),
     )
 
     def __repr__(self) -> str:

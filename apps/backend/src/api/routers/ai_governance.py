@@ -198,7 +198,40 @@ def _ensure_tables(db: Session) -> None:
     from database.connection import Base, db_manager
 
     Base.metadata.create_all(bind=db_manager.engine)
+    _ensure_model_link_column(db)
     _tables_ready = True
+
+
+def _ensure_model_link_column(db: Session) -> None:
+    """Add governance_ai_systems.model_id to databases created before it existed.
+
+    create_all() does not alter existing tables, so a runtime patch keeps
+    already-provisioned dev and test databases usable without running the SQL
+    migration by hand. Production applies migrations/011_governance_system_model_link.sql,
+    which also adds the foreign key and the uniqueness guarantee.
+    """
+    dialect = db.bind.dialect.name if db.bind is not None else "sqlite"
+    try:
+        if dialect == "sqlite":
+            existing = {
+                row[1]
+                for row in db.execute(text("PRAGMA table_info(governance_ai_systems)")).fetchall()
+            }
+            if "model_id" not in existing:
+                db.execute(text("ALTER TABLE governance_ai_systems ADD COLUMN model_id TEXT"))
+        else:
+            db.execute(
+                text("ALTER TABLE governance_ai_systems ADD COLUMN IF NOT EXISTS model_id VARCHAR(255)")
+            )
+        db.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS idx_governance_ai_systems_model_id "
+                "ON governance_ai_systems (model_id)"
+            )
+        )
+        db.commit()
+    except Exception:  # pragma: no cover - never block startup on a patch attempt
+        db.rollback()
 
 
 class PolicyCreateRequest(BaseModel):
@@ -271,6 +304,9 @@ class AISystemCreateRequest(BaseModel):
     risk_tier: str = Field(pattern="^(low|medium|high|critical)$")
     lifecycle_stage: str = Field(pattern="^(onboard|assess|govern|remediate|operate)$")
     metadata: Dict[str, Any] = Field(default_factory=dict)
+    # Registered model this system governs. Lets the model evaluation flow
+    # resolve its governance record and environmental gate.
+    model_id: Optional[str] = None
 
 
 class RemediationCreateRequest(BaseModel):
@@ -901,16 +937,31 @@ async def create_ai_system(request: AISystemCreateRequest, db: Session = Depends
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace not found")
 
+    # One governed system per model: a second record would make "the
+    # environmental gate for this model" ambiguous, and the gate must have
+    # exactly one answer.
+    if request.model_id:
+        existing = db.execute(
+            text("SELECT id FROM governance_ai_systems WHERE model_id = :model_id"),
+            {"model_id": request.model_id},
+        ).fetchone()
+        if existing:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Model {request.model_id} is already governed by system {existing[0]}",
+            )
+
     system_id = str(uuid.uuid4())
     now = _utc_now_iso()
     db.execute(
         text(
-            "INSERT INTO governance_ai_systems (id, workspace_id, name, owner, risk_tier, lifecycle_stage, metadata_json, created_at, updated_at) "
-            "VALUES (:id, :workspace_id, :name, :owner, :risk_tier, :lifecycle_stage, :metadata_json, :created_at, :updated_at)"
+            "INSERT INTO governance_ai_systems (id, workspace_id, model_id, name, owner, risk_tier, lifecycle_stage, metadata_json, created_at, updated_at) "
+            "VALUES (:id, :workspace_id, :model_id, :name, :owner, :risk_tier, :lifecycle_stage, :metadata_json, :created_at, :updated_at)"
         ),
         {
             "id": system_id,
             "workspace_id": request.workspace_id,
+            "model_id": request.model_id,
             "name": request.name,
             "owner": request.owner,
             "risk_tier": request.risk_tier,
@@ -924,6 +975,7 @@ async def create_ai_system(request: AISystemCreateRequest, db: Session = Depends
     return {
         "id": system_id,
         "workspaceId": request.workspace_id,
+        "modelId": request.model_id,
         "name": request.name,
         "owner": request.owner,
         "riskTier": request.risk_tier,
@@ -956,6 +1008,33 @@ async def list_ai_systems(
             )
         ).fetchall()
     return [_build_ai_system_payload(db, row) for row in rows]
+
+
+@router.get("/models/{model_id}/system")
+async def get_system_for_model(model_id: str, db: Session = Depends(get_db)):
+    """Resolve the governed system for a registered model.
+
+    The model evaluation flow calls this to find where a model's governance
+    record, environmental assessments, and release gate live. Returns
+    ``{"governed": false}`` rather than 404 when the model has not been
+    registered for governance, so the UI can offer to register it instead of
+    treating a normal state as an error.
+    """
+    _ensure_tables(db)
+    row = db.execute(
+        text(
+            "SELECT id, workspace_id, name, owner, risk_tier, lifecycle_stage, metadata_json, created_at, updated_at "
+            "FROM governance_ai_systems WHERE model_id = :model_id"
+        ),
+        {"model_id": model_id},
+    ).fetchone()
+    if not row:
+        return {"governed": False, "modelId": model_id, "system": None}
+    return {
+        "governed": True,
+        "modelId": model_id,
+        "system": _build_ai_system_payload(db, row),
+    }
 
 
 @router.get("/systems/{system_id}")
