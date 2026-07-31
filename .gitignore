@@ -282,11 +282,6 @@ Thumbs.db
 *.mlmodel
 models/
 checkpoints/
-# The models/ rule above targets ML weight directories, but it also silently
-# excluded the frontend's /models route, so that page was never version
-# controlled. Keep application source tracked.
-!apps/frontend/src/app/**/models/
-!apps/frontend/src/app/**/models/**
 
 # Data files
 *.csv
@@ -355,3 +350,37 @@ apps/frontend-archive/.next/
 apps/frontend-archive/out/
 apps/frontend-archive/build/
 apps/frontend-archive/dist/
+
+# ---------------------------------------------------------------------------
+# Application source is always tracked.
+#
+# The broad artifact rules above (models/, datasets/, data/, checkpoints/) are
+# meant for ML weights and data files, but they match ANY directory with those
+# names, which silently excluded real application source: the frontend /models
+# and /datasets routes and the backend model service and API model modules had
+# never been version controlled, so a fresh clone was missing them.
+#
+# Git cannot re-include a file whose parent directory is excluded, so each
+# directory is re-included before its contents.
+# ---------------------------------------------------------------------------
+# Re-include the directories (and any nesting) so git descends into them...
+!apps/*/src/**/models/
+!apps/*/src/**/models/**/
+!apps/*/src/**/datasets/
+!apps/*/src/**/datasets/**/
+!apps/backend/api/models/
+!apps/backend/api/models/**/
+
+# ...then re-include source files only, so the artifact rules above still
+# apply to any weights, data, or JSON that lands in these directories.
+!apps/*/src/**/models/**/*.ts
+!apps/*/src/**/models/**/*.tsx
+!apps/*/src/**/models/**/*.py
+!apps/*/src/**/datasets/**/*.ts
+!apps/*/src/**/datasets/**/*.tsx
+!apps/*/src/**/datasets/**/*.py
+!apps/backend/api/models/**/*.py
+
+# Re-exclude the vendored bias-bench clone, which carries its own .git and is
+# deliberately not tracked here.
+apps/backend/src/domain/bias/bias_bench_repo/
