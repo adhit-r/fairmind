@@ -22,6 +22,54 @@ Any import that fails is not fatal: the harness records the affected
 workload or method as `method_available=false` and proceeds with what is
 real. Do not fake availability; the honest gap is part of the study.
 
+### 1a. Choose the measurement host deliberately
+
+The host decides what `codecarbon` can actually observe, and therefore what
+the study is entitled to claim.
+
+- **Linux with Intel or AMD RAPL, or an NVIDIA GPU**: codecarbon reads
+  hardware energy counters. This is the configuration the study wants.
+- **Apple Silicon**: there are no RAPL counters, and `powermetrics` needs
+  root, so codecarbon logs `No CPU tracking mode found. Falling back on CPU
+  load mode` and derives power from CPU utilisation against a TDP constant.
+  Confirmed on an Apple M1 Pro on 2026-07-31.
+
+The fallback is still legitimately `tool_estimated` provenance, because it is
+exactly that: a tool's estimate. But it is a load model rather than a
+hardware reading, so a study run on Apple Silicon compares an estimate
+against an estimate, not an estimate against a measurement. If the paper
+reports MAPE or Bland-Altman agreement from such a run, it must say so in the
+limitations, and the `measured` provenance class stays unclaimed because no
+hardware telemetry was available. Prefer a RAPL-capable Linux host for the
+study of record.
+
+There is a useful observation here for the paper: the same tool yields
+different evidence quality depending on the host, which is the module's own
+thesis appearing in its instrumentation.
+
+### 1b. Scale the workloads to the sampling window
+
+In real mode codecarbon samples power every 15 seconds. A workload that
+finishes faster than one sampling interval produces an energy figure
+extrapolated from almost no samples, which is not a measurement worth
+reporting.
+
+Pilot result on an Apple M1 Pro (2026-07-31): W1 at its default config
+completed in **0.93 s**, far below the sampling window. Time each workload
+once before the real run:
+
+```bash
+cd apps/backend
+uv run python ../../research/fairmind-e/measurement/harness.py \
+    --workload w1 --iterations 1 --output /tmp/pilot.csv
+```
+
+If `duration_seconds` is under roughly 60, raise that workload's `repeats`
+(or `steps` for W2) through `--config-overrides overrides.json` until each
+iteration spans several sampling intervals, and archive the override file
+with the results. Every workload should clear this check before the
+five-iteration run begins.
+
 Verify the workloads and methods resolve:
 
 ```bash
