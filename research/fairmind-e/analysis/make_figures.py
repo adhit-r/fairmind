@@ -98,7 +98,7 @@ def figure_energy_and_matrix(runs: list[dict[str, str]], out: Path) -> None:
     Sized to the 5.5 inch text block so LaTeX does not rescale it and shrink
     the type below legibility.
     """
-    fig, (ax_a, ax_b) = plt.subplots(1, 2, figsize=(5.5, 2.6), width_ratios=[1.0, 1.02])
+    fig, (ax_a, ax_b) = plt.subplots(1, 2, figsize=(5.5, 2.18), width_ratios=[1.0, 1.02])
     fig.subplots_adjust(wspace=0.40, top=0.84, bottom=0.24)
 
     # --- Panel A: per-workload energy by method -------------------------------
@@ -164,8 +164,12 @@ def figure_energy_and_matrix(runs: list[dict[str, str]], out: Path) -> None:
         ax_b.plot(col + 0.85, 2.84, marker=METHOD_STYLE[method]["marker"], markersize=3.6,
                   color=colour, markeredgecolor="white", markeredgewidth=0.5, zorder=5)
 
+    # Display names match the paper, which renames the bands to keep them
+    # distinct from the identically-worded provenance classes.
+    band_label = {"measured": "high", "estimated": "moderate", "unknown": "low"}
     for col, band in enumerate(BANDS):
-        ax_b.text(col + 0.5, 3.08, band, ha="center", va="bottom", fontsize=5.5, color=MUTED)
+        ax_b.text(col + 0.5, 3.08, band_label[band], ha="center", va="bottom",
+                  fontsize=6.0, color=MUTED)
     for row, tier in enumerate(TIERS):
         ax_b.text(-0.14, 2.5 - row, tier, ha="right", va="center", fontsize=6.4, color=MUTED)
     ax_b.text(1.5, 3.44, "evidence confidence", ha="center", fontsize=6.5, color=INK)
@@ -181,58 +185,84 @@ def figure_energy_and_matrix(runs: list[dict[str, str]], out: Path) -> None:
 
 
 def figure_mitigations(path: Path, out: Path) -> None:
-    """Percent reduction per mitigation pair, including the one that backfired."""
+    """Mitigation outcomes, split by what was actually done.
+
+    Only three pairs are physical reruns. The region and time shifts recompute
+    one measured run against a bundled emission-factor table with no rerun, so
+    they are identical across workloads by construction; drawing them as eight
+    independent bars would imply evidence that does not exist. They are
+    collapsed to one bar each and labelled as accounting scenarios.
+    """
     with path.open(encoding="utf-8") as handle:
         rows = [r for r in csv.DictReader(handle) if r.get("method_available") == "true"]
 
-    items = []
-    for r in rows:
+    # "quantization" in the harness is a dtype cast, not true quantisation.
+    display = {"quantization": "reduced precision"}
+
+    def pct(r):
         pre, post = float(r["pre_location_kg_co2e"]), float(r["post_location_kg_co2e"])
-        items.append(
-            (
-                f"{r['mitigation_id'].replace('_', ' ')} - {WORKLOAD_LABEL[r['workload_id']].replace(chr(10), ' ')}",
-                (pre - post) / pre * 100.0,
-            )
-        )
-    items.sort(key=lambda t: t[1])
+        return (pre - post) / pre * 100.0
 
-    fig, ax = plt.subplots(figsize=(5.5, 2.7))
-    labels = [t[0] for t in items]
-    values = [t[1] for t in items]
-    # The backfiring pair is about -3976%, which would flatten every other bar,
-    # so the axis is clipped and that bar carries its true value inside it.
-    floor = -120.0
-    drawn = [max(v, floor) for v in values]
-    colours = [BLUE if v >= 0 else VERMILLION for v in values]
-
-    bars = ax.barh(range(len(values)), drawn, color=colours, edgecolor="white",
-                   linewidth=0.7, height=0.66)
-    for i, (actual, drawn_v) in enumerate(zip(values, drawn)):
-        if actual < floor:
-            # Label inside the bar so it cannot collide with the category axis,
-            # plus a break marker showing the bar is truncated.
-            ax.text(floor + 5, i, f"{actual:,.0f}%", va="center", ha="left",
-                    fontsize=6.5, color="white")
-            ax.plot([floor], [i], marker="<", markersize=4.5, color=VERMILLION,
-                    markeredgecolor="white", markeredgewidth=0.5, clip_on=False)
+    physical, accounting = [], {}
+    for r in rows:
+        if "no rerun performed" in (r.get("notes") or ""):
+            accounting.setdefault(r["mitigation_id"], []).append(pct(r))
         else:
-            ax.text(drawn_v + 2.5, i, f"{actual:.1f}%", va="center", ha="left",
+            mid = display.get(r["mitigation_id"], r["mitigation_id"].replace("_", " "))
+            name = f"{mid} - {WORKLOAD_LABEL[r['workload_id']]}"
+            physical.append((name, pct(r)))
+
+    physical.sort(key=lambda t: t[1])
+    entries = [(n, v, True) for n, v in physical]
+    entries.append((None, None, None))  # separator row
+    for mid, vals in sorted(accounting.items()):
+        entries.append((
+            f"{display.get(mid, mid.replace('_', ' '))} (x{len(vals)} workloads)",
+            statistics.mean(vals), False,
+        ))
+
+    fig, ax = plt.subplots(figsize=(5.5, 2.05))
+    floor = -120.0
+    ypos, labels = [], []
+    for i, (name, value, is_physical) in enumerate(entries):
+        ypos.append(i)
+        if name is None:
+            labels.append("")
+            continue
+        labels.append(name)
+        drawn = max(value, floor)
+        colour = BLUE if value >= 0 else VERMILLION
+        ax.barh(i, drawn, color=colour, edgecolor="white", linewidth=0.7, height=0.62,
+                hatch="" if is_physical else "///", zorder=2)
+        if value < floor:
+            ax.text(floor + 5, i, f"{value:,.0f}%", va="center", ha="left",
+                    fontsize=6.5, color="white", zorder=3)
+            ax.plot([floor], [i], marker="<", markersize=4.5, color=VERMILLION,
+                    markeredgecolor="white", markeredgewidth=0.5, clip_on=False, zorder=3)
+        else:
+            ax.text(drawn + 2.5, i, f"{value:.1f}%", va="center", ha="left",
                     fontsize=6.5, color=INK)
 
     ax.axvline(0, color=MUTED, linewidth=0.8)
     ax.axvline(20, color=GREEN, linewidth=1.0, linestyle=(0, (4, 3)))
-    ax.text(22, -0.75, "H4 target: 20%", fontsize=6.3, color=GREEN, va="center")
-    ax.set_yticks(range(len(labels)))
-    ax.set_yticklabels(labels, fontsize=6.3)
+    ax.text(22, -0.85, "20% target", fontsize=6.3, color=GREEN, va="center")
+    ax.set_yticks(ypos)
+    ax.set_yticklabels(labels, fontsize=6.4)
     ax.set_xlabel("Reduction in carbon intensity (%), positive is better", fontsize=7)
     ax.tick_params(axis="x", labelsize=6.5)
     ax.set_xlim(floor - 6, 116)
-    ax.set_ylim(-1.2, len(values) - 0.4)
+    ax.set_ylim(-1.3, len(entries) - 0.4)
     ax.set_axisbelow(True)
     ax.xaxis.grid(True, color=GRID, linewidth=0.5)
     for side in ("top", "right", "left"):
         ax.spines[side].set_visible(False)
-    ax.set_title("Ten of eleven mitigations reduced intensity; one inverted the mean",
+    # barh puts index 0 at the bottom, so the physical group sits low and the
+    # accounting group high; label each where it actually is.
+    ax.text(floor - 4, len(physical) - 0.32, "physical reruns", fontsize=6.4,
+            color=MUTED, style="italic")
+    ax.text(floor - 4, len(entries) - 0.72, "accounting scenarios (hatched, no rerun)",
+            fontsize=6.4, color=MUTED, style="italic")
+    ax.set_title("Mitigation outcomes, separated by what was actually executed",
                  loc="left", fontsize=7.5, color=INK, pad=6)
     fig.savefig(out)
     plt.close(fig)

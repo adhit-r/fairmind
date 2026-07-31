@@ -16,7 +16,7 @@
 
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
-\usepackage{hyperref}
+\usepackage[hidelinks]{hyperref}
 \usepackage{url}
 \usepackage{booktabs}
 \usepackage{amsfonts}
@@ -44,17 +44,19 @@ governance module deployed inside \platname, that makes measurement provenance
 a first-class release criterion: a provenance-derived confidence score crossed
 with an impact tier resolves to \emph{go}, \emph{conditional\_go}, or
 \emph{no\_go}, and blocks the platform's deployment-approval workflow. In a
-measurement study over four workloads, five iterations each, with every
-physical run measured by both a software power tracker and an analytic FLOP
-model, the release decision changed on \textbf{20 of 20 paired runs} while the
-impact tier stayed \emph{low} throughout: the same run was released
-unconditionally under one measurement method and held for mitigation under the
-other, purely because of how the number was obtained. The two methods disagreed
-on magnitude by 123 percent MAPE. A mitigation experiment sharpened the point
-in the opposite direction: quantising a fine-tune to \texttt{bfloat16} on a
-host with no optimised kernel made it 46 times slower and burned roughly 40
-times the energy, so a routine ``we quantised, therefore we cut carbon'' claim
-was false by an order of magnitude in the harmful direction. Evidence quality,
+measurement study over four workloads, five iterations each, every physical run
+was assessed by a software power tracker and an analytic FLOP model. The two
+disagreed on magnitude by 123--169 percent MAPE depending on which is taken as
+reference, and because the policy assigns confidence by provenance class, that
+disagreement placed them in different columns of the matrix on all 20 paired
+runs while the impact tier stayed \emph{low} throughout. We are explicit that
+this split is a consequence of the policy rather than an independent
+confirmation of it; what the runs establish empirically is the size of the
+method disagreement and the behaviour under mitigation. There a routine claim
+failed outright: casting a fine-tune to \texttt{bfloat16} on a host with no
+optimised kernel made it 46 times slower, and the tracker estimated roughly 41
+times the energy, so ``we reduced precision, therefore we cut carbon'' was
+false in the harmful direction. Evidence quality,
 not only impact magnitude, decides whether an environmental claim can carry a
 release.
 \end{abstract}
@@ -82,19 +84,21 @@ reliability varies sharply with disclosure: metadata-completeness tiers across
 [8], and spend-based fallbacks in tiered Scope~3 accounting overestimate by
 10--40$\times$ [9]. Adjacent work has begun to act on estimate trust, through
 conformal calibration inside a carbon budget gate [10] and confidence-gated
-filtering of industrial emissions predictions [11]. The two literatures have
-not been connected: a system can sit comfortably under its carbon budget while
-its carbon number is untrustworthy, and every published gate would pass it.
+filtering of industrial emissions predictions [11]. Those act on the
+statistical spread of an estimate: conformal calibration can block a
+wide-interval prediction. None acts on where the number came from, so a
+precise-looking figure from a weak source, a narrow interval on a
+vendor-reported or analytic estimate, passes every published gate while
+sitting comfortably under budget.
 
-Our claim is narrow and, to our knowledge, unheld: environmental \emph{evidence
-quality}, not only impact magnitude, should gate AI deployment. The
-intellectual ancestry is the data-quality tradition in life-cycle assessment,
-where pedigree matrices and data quality indicators grade the provenance of an
-inventory figure [12], and the NUSAP uncertainty pedigree [13]. Recent work
-recommends indicator-style disclosure for AI-assisted product footprinting but
-proposes no score, no thresholds, and no gate [14]. We invert that tradition:
-where it assesses AI that produces carbon numbers, we score carbon numbers to
-gate the AI.
+Our claim is narrow: environmental \emph{evidence quality}, not only impact
+magnitude, should gate AI deployment. The ancestry is the data-quality
+tradition in life-cycle assessment, where pedigree matrices grade the
+provenance of an inventory figure [12], and the NUSAP uncertainty pedigree
+[13]; recent work recommends indicator-style disclosure for AI-assisted
+footprinting but proposes no score, thresholds, or gate [14]. We invert it:
+where that work assesses AI producing carbon numbers, we score carbon numbers
+to gate the AI.
 
 \section{Mechanism}
 
@@ -111,9 +115,10 @@ so a precise-looking number cannot launder a weak source.
 
 \paragraph{Tiers and the decision matrix.} Metrics map to low, medium, or high
 impact per lifecycle phase, using location-based carbon so market instruments
-cannot lower a gate outcome. Confidence bands (measured $\geq 0.70$; estimated
-0.35--0.69; unknown $< 0.35$) cross with impact tiers into the matrix shown in
-Figure~\ref{fig:main}(b). Confidence 0.0 short-circuits to \emph{no\_go} before
+cannot lower a gate outcome. Confidence bands, named to stay distinct from the
+provenance classes above (\emph{high} $\geq 0.70$; \emph{moderate}
+$0.35 \leq c < 0.70$; \emph{low} $0 < c < 0.35$; \emph{undisclosed} $c = 0$),
+cross with impact tiers into the matrix shown in Figure~\ref{fig:main}(b). Confidence 0.0 short-circuits to \emph{no\_go} before
 matrix lookup: an undisclosed claim never passes. A \emph{conditional\_go}
 cannot be approved until it carries a dated, owned mitigation or an explicit
 exception with owner, expiry, and rationale, which makes reviewer overrides
@@ -129,91 +134,100 @@ emissions and never improve any gate output.
 engine is a framework-agnostic Python package with 57 unit tests covering every
 matrix cell, band boundary, provenance cap, and the undisclosed-evidence
 short-circuit. Assessments persist as versioned governance evidence, and a
-release gate hooks the platform's existing deployment-approval workflow,
-returning HTTP 409 with the blocking reason when the latest assessment is
-\emph{no\_go} or an unmitigated \emph{conditional\_go}. Reviewers get an
-interface showing the matrix position, control coverage, mitigation tracker,
-and version trail, and disclosures export in a format shaped to the European
-sustainability reporting standard for climate change [15].
+release gate hooks the platform's deployment-approval workflow, returning HTTP
+409 with the blocking reason when the latest assessment is \emph{no\_go} or an
+unmitigated \emph{conditional\_go}. Reviewers see the matrix position, control
+coverage, mitigations, and version trail; disclosures export in a form shaped
+to the European climate reporting standard [15].
 
-On a 14-case hand-labelled fixture set spanning all matrix cells, mitigation
-states, exception paths, and offset disclosures, the full mechanism reproduces
-14/14 expected labels, while ablations degrade sharply: a carbon-only gate
-manages 7/14, a generic sustainability score 6/14, and no environmental gate
-3/14, with removing only the exception path or the mitigation review costing
-one to three cases each. The authors wrote both the fixtures and the engine,
-so this is a consistency illustration showing the confidence dimension is
-load-bearing, not an empirical validation. That is what the next section is
-for.
+A 14-case hand-labelled fixture set spanning all matrix cells, mitigation
+states, exception paths, and offset disclosures serves as a \emph{conformance
+test}: the implementation reproduces 14/14 of the specified labels, and
+ablations that drop the confidence dimension reproduce far fewer. Since the
+authors wrote the fixtures, the labels, the engine, and the ablations, this
+establishes only that the code implements the stated policy. It is not
+evidence that the policy decides correctly, and we do not report it as a
+baseline comparison.
 
-\section{Measurement study: provenance decided the release}
+\section{Measurement study: what the runs show, and what they cannot}
 
 \begin{figure}[t]
   \centering
   \includegraphics[width=\linewidth]{figures/fig1_provenance_decides.pdf}
-  \caption{Four workloads, five iterations each, every physical run measured
-  twice. (a) The two methods disagree on energy by 123 percent MAPE, and not
-  in a consistent direction. (b) The production decision matrix; outlined
-  cells mark where the study's runs landed. Both methods put every run in the
-  same \emph{low} impact row, so magnitude drove nothing: the column moved
-  because provenance moved, and with it the release decision.}
+  \caption{Four workloads, five iterations each, every run assessed twice.
+  (a) The empirical result: the methods disagree by 123--169 percent MAPE
+  depending on reference; points are iterations, bars their means. (b) Where
+  those runs land. Both put every run in the same \emph{low} row, so the column
+  moved because provenance moved. With confidence assigned per provenance
+  class, the differing outcome follows from the policy once both sit in one
+  tier: the panel illustrates the mechanism rather than validating it.}
   \label{fig:main}
 \end{figure}
 
 Four workloads (classical ML training, transformer fine-tune, RAG inference,
 batch embeddings) ran five iterations each on a single host. Every physical run
-was measured three ways: a software power tracker
+was assessed by three evidence paths: a software power tracker
 (\emph{tool\_estimated}), operator-filled cloud billing
 (\emph{vendor\_reported}), and a documented analytic FLOP model
-(\emph{manual}). The harness never fabricates: cloud billing lags execution by
-hours to days, so its 20 records are explicit unavailable entries with a stated
-reason rather than imputed numbers. All runs were replayed through the
+(\emph{manual}). Only two yielded figures. The harness never fabricates: cloud
+billing lags execution by hours to days, so its 20 records are explicit
+unavailable entries with a stated reason. All runs were replayed through the
 production engine, not a reimplementation.
 
-\textbf{The decision changed on 20 of 20 paired runs.} The power tracker mapped
-to \emph{tool\_estimated}, confidence 0.72, the \emph{measured} band, and
-\emph{go}; the FLOP model mapped to \emph{manual}, confidence 0.30, the
-\emph{unknown} band, and \emph{conditional\_go}. The impact tier was
-\emph{low} in every case (Figure~\ref{fig:main}(b)), so nothing about the
-magnitude produced the difference. The same physical run was released
-unconditionally under one measurement method and held for mitigation under the
-other, purely because of how the number was obtained. A carbon-budget gate or
-a readiness-level gate sees \emph{low} impact in both columns and passes both.
+\textbf{The empirical finding is the disagreement.} MAPE is 122.6 percent with
+the tracker as reference and 169.1 percent with the FLOP model as reference,
+from 52 to 298 percent by workload, with Bland-Altman limits of agreement
+spanning $-1.15{\times}10^{-3}$ to $1.79{\times}10^{-3}$~kWh
+(Figure~\ref{fig:main}(a)). Two methods a practitioner might reasonably choose
+disagree by more than a factor of two on the same physical run.
 
-Method agreement is poor in its own right: MAPE 122.6 percent with the tracker
-as reference and 169.1 percent with the FLOP model as reference, ranging from
-52 to 298 percent by workload, with Bland-Altman limits of agreement spanning
-$-1.15{\times}10^{-3}$ to $1.79{\times}10^{-3}$~kWh.
+\textbf{The decision split is a policy consequence, stated as such.} The
+tracker maps to \emph{tool\_estimated}, confidence 0.72, \emph{high} band,
+\emph{go}; the FLOP model to \emph{manual}, 0.30, \emph{low} band,
+\emph{conditional\_go}, on all 20 runs. Confidence is a constant per provenance
+class and the tier was \emph{low} throughout, so once both sit in one tier the
+matrix entails that the outcomes differ: the count follows from the policy and
+is not independent evidence for it. What it does establish is that the
+mechanism runs end to end on real measurements, and that a magnitude-only gate
+is structurally blind to this split. Whether the hierarchy is \emph{correct}
+needs calibration against an independent power reference: the essential next
+experiment.
 
 \begin{figure}[t]
   \centering
   \includegraphics[width=\linewidth]{figures/fig2_mitigations.pdf}
-  \caption{Mitigation outcomes. Ten of eleven pairs reduced carbon intensity,
-  four of them past the 20 percent target. One inverted the mean: quantising
-  the fine-tune from \texttt{float32} to \texttt{bfloat16} on a host with no
-  optimised kernel took it from 62.7\,s to 2887.6\,s and burned roughly 40
-  times the energy. That bar is truncated and labelled with its true value.}
+  \caption{Mitigation outcomes, separated by what was executed. Hatched bars
+  are accounting scenarios: one measured run recomputed against a bundled
+  emission-factor table with no rerun, hence identical across workloads and
+  collapsed to one bar each. Solid bars are the three physical reruns. Casting
+  the fine-tune to \texttt{bfloat16} on a host with no optimised kernel took it
+  from 62.7\,s to 2887.6\,s; its bar is truncated.}
   \label{fig:mitigations}
 \end{figure}
 
-\paragraph{Mitigations, and a claim that was false in the harmful direction.}
-Four interventions were measured as pre/post pairs
-(Figure~\ref{fig:mitigations}). The pre-registered test that mitigations
-reduce intensity by more than 20 percent is \textbf{not supported}: paired
-$t = -0.859$, $p = 0.410$ over 11 pairs, mean reduction $-311$ percent. Ten of
-eleven pairs did reduce, with a median of 33.9 percent. One pair inverted the
-mean: quantising the fine-tune from \texttt{float32} to \texttt{bfloat16} made
-it 46 times slower, because the host had no optimised reduced-precision kernel,
-and burned roughly 40 times the energy. Reporting only the median, or dropping
-the outlier, would be cherry-picking, so the pre-registered result stands as
-computed.
+\paragraph{Mitigations: three reruns and eight accounting scenarios.} We
+pre-registered a paired test that mitigations cut intensity by more than 20
+percent. We do not report it, because the pairs are not exchangeable
+replications (Figure~\ref{fig:mitigations}): only three are physical reruns,
+while the region and time shifts recompute one measured run against a bundled
+emission-factor table with no rerun at all, which is why they are identical
+across workloads. Pooling accounting scenarios with physical reruns, and
+different interventions with each other, would give a fictitious degrees of
+freedom; we report the classes separately instead.
 
-This is the mitigation analogue of the paper's argument. ``We quantised the
-model, therefore we cut carbon'' is a routine and entirely plausible claim; on
-this hardware it was false by more than an order of magnitude, in the harmful
-direction. A gate that accepts asserted mitigations would have recorded a
-reduction that never happened, which is why ENV-6 requires the mitigation to be
-documented and re-measured rather than declared.
+Factor substitution alone implies 94.2 percent for a region shift and 33.9 for
+a time shift, identical by construction across workloads. Of the three physical
+reruns, batching cut intensity 22.8 percent and a reduced-precision cast on RAG
+17.5 percent. The third inverted: casting the fine-tune to \texttt{bfloat16}
+made it 46 times slower on a host with no optimised kernel, and the tracker
+estimated roughly 41 times the energy. The runtime regression is directly
+measured; the energy figure inherits the tracker's power model.
+
+This is the mitigation analogue of the paper's argument. ``We reduced
+precision, therefore we cut carbon'' is routine and entirely plausible; here it
+was false in the harmful direction. A gate that accepts asserted mitigations
+would have logged a reduction that never happened, which is why ENV-6 requires
+the mitigation to be documented and re-measured rather than declared.
 
 \paragraph{Expert panel (registered, in progress).} Twelve engine-validated
 profiles covering all nine matrix cells are rated by 15 reviewers across
@@ -230,26 +244,23 @@ Environmental reporting for AI is moving from voluntary to mandatory, but
 mandatory reporting only reduces emissions if the reported numbers are
 trustworthy enough to act on. Our measurement study shows the gap is not
 hypothetical: two standard methods applied to the same run disagreed by more
-than 100 percent and implied opposite release decisions, and a textbook
-efficiency intervention increased emissions fortyfold while a
-declaration-based gate would have logged it as a reduction. Making evidence
-quality a release criterion changes the incentive directly: a team that cannot
-substantiate its number cannot ship unconditionally, so measurement effort
-becomes the cheapest path to approval rather than an unrewarded cost. This is
-a leverage point rather than direct abatement: it does not itself cut
-emissions, it makes the reductions others report verifiable and therefore
-actionable. The near-term channel is regulatory: Article 40's harmonised
-standards for resource-performance reporting do not yet exist [4, 16], and a
-provenance-scored, platform-integrated gate is a concrete, testable proposal
-for what they could require.
+than a factor of two, and a textbook efficiency intervention made a workload 46
+times slower while a declaration-based gate would have logged it as a
+reduction. Making evidence quality a release criterion changes the incentive directly: a
+team that cannot substantiate its number cannot ship unconditionally, so
+measurement effort becomes the cheapest path to approval rather than an
+unrewarded cost. This is a leverage point, not abatement: it does not cut
+emissions, it makes reported reductions verifiable and therefore actionable.
+The near-term channel is regulatory, since Article 40's harmonised standards do
+not yet exist [4, 16].
 
-\paragraph{Limitations.} The study host exposes no hardware energy counters, so
-the tracker fell back to load-based estimation: this study compares an estimate
-against an estimate and never claims the \emph{measured} provenance class.
-These are benchmark workloads, so only the low-impact row is exercised and the
-provisional thresholds cannot be recalibrated from this data. The FLOP model
-uses placeholder efficiency constants, and the panel targets 15 raters, sized
-for feasibility rather than power. Code, data, and figure scripts are public.
+\paragraph{Limitations.} The host exposes no hardware energy counters, so the
+tracker fell back to load-based estimation: this study compares an estimate
+against an estimate and never claims the \emph{measured} class. These are
+benchmark workloads, so only the low-impact row is exercised and the
+provisional thresholds cannot be recalibrated here. The FLOP model uses
+placeholder constants, and confidence is not calibrated against an independent
+power reference. Artifacts are withheld for anonymity.
 
 \begin{ack}
 Withheld for double-blind review.

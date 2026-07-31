@@ -39,6 +39,54 @@ WORKLOAD_PHASE = {
     "batch_embeddings": "inference",
 }
 
+#: How many functional units one run of each inference workload covers, as a
+#: product of config keys. Derived from the workload module's own REAL_CONFIG
+#: with the study's overrides applied, so the replay reproduces from committed
+#: artifacts alone rather than from a hand-written units file.
+UNIT_FACTORS = {
+    "rag_inference": ("n_queries", "repeats"),
+    "batch_embeddings": ("n_items", "repeats"),
+}
+
+WORKLOAD_MODULES = {
+    "classical_ml_training": "w1_classical_ml",
+    "transformer_finetune": "w2_finetune",
+    "rag_inference": "w3_rag",
+    "batch_embeddings": "w4_batch_embed",
+}
+
+
+def derive_units_per_run(overrides_path: Path | None) -> dict[str, float]:
+    """Compute functional units per run for the phase-tiered inference workloads.
+
+    Reads each workload module's REAL_CONFIG and applies the same override file
+    the measurement run used, so the numbers cannot drift from the study.
+    """
+    import importlib.util
+
+    overrides: dict[str, dict[str, Any]] = {}
+    if overrides_path and overrides_path.exists():
+        raw = json.loads(overrides_path.read_text(encoding="utf-8"))
+        overrides = {k: v for k, v in raw.items() if isinstance(v, dict)}
+
+    workload_dir = Path(__file__).resolve().parents[1] / "measurement" / "workloads"
+    units: dict[str, float] = {}
+    for workload_id, keys in UNIT_FACTORS.items():
+        module_path = workload_dir / f"{WORKLOAD_MODULES[workload_id]}.py"
+        if not module_path.exists():
+            continue
+        spec = importlib.util.spec_from_file_location(workload_id, module_path)
+        module = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(module)
+        config = dict(module.REAL_CONFIG)
+        config.update(overrides.get(workload_id, {}))
+        total = 1.0
+        for key in keys:
+            total *= float(config[key])
+        units[workload_id] = total
+    return units
+
 
 def load_engine():
     """Import the production engine, putting the backend root on the path.
@@ -103,19 +151,27 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--runs", required=True, type=Path)
     parser.add_argument(
+        "--overrides",
+        type=Path,
+        default=Path(__file__).resolve().parents[1] / "measurement" / "overrides_m1.json",
+        help="workload override file used for the run; units are derived from it",
+    )
+    parser.add_argument(
         "--units",
         type=Path,
         default=None,
-        help="optional JSON mapping workload_id to functional units per run",
+        help="optional JSON of workload_id to functional units per run, overriding derivation",
     )
     parser.add_argument("--out", type=Path, default=None)
     args = parser.parse_args(argv)
 
     run_assessment = load_engine()
 
-    units_per_run: dict[str, float] = {}
+    # Derived by default so the documented command reproduces unaided; an
+    # explicit --units file still wins if one is supplied.
+    units_per_run = derive_units_per_run(args.overrides)
     if args.units and args.units.exists():
-        units_per_run = json.loads(args.units.read_text(encoding="utf-8"))
+        units_per_run.update(json.loads(args.units.read_text(encoding="utf-8")))
 
     with args.runs.open(encoding="utf-8") as handle:
         rows = [r for r in csv.DictReader(handle) if r.get("method_available") == "true"]
