@@ -129,6 +129,15 @@ The packets are fictional instruments, not measurements of real systems, and
 the panel measures reviewer behaviour under a controlled contrast rather than
 real-world release outcomes.
 
+`RECRUITMENT.md` is the pack for assembling the panel: role definitions and
+qualifying criteria, sourcing channels, per-role outreach templates, the
+screening questions, the rater-identifier and linking-list protocol that keeps
+the anonymity promise in the consent text, a six-week cadence, and the
+pre-recruitment checklist (institutional review first). `recruitment_tracker.csv`
+tracks outreach by rater identifier and deliberately holds no names; the
+name-to-identifier linking list lives outside this repository and is never
+committed.
+
 ## Measurement Study (M5)
 
 The `measurement/` package is the real measurement harness, distinct from the smoke harness above: `scripts/run_smoke.py` emits deterministic synthetic numbers for package validation and is never study data, while `measurement/harness.py` executes four real workloads on real hardware (W1 sklearn logistic regression, W2 pure-torch tiny transformer fine-tune, W3 numpy embedding plus top-k retrieval, W4 numpy batch embedding) and derives energy and carbon three ways per physical run: `codecarbon` (provenance `tool_estimated`), `cloud_billing` (operator-filled `measurement/cloud_billing_template.csv`, provenance `vendor_reported`), and `manual_flop` (documented per-workload analytic FLOP formulas, provenance `manual`). The same run measured three ways yields different provenance classes, therefore different confidence, and potentially different gate decisions at identical true impact.
