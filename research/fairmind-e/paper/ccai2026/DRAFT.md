@@ -175,22 +175,44 @@ defensibility of provenance caps - while changes are still cheap.
 
 ---
 
-## Porting checklist (not part of the paper)
+## Port status (not part of the paper)
 
-- CCAI template (NeurIPS-based), 4 pages excluding references; anonymize if
-  the 2026 call requires it (2025 call was single-blind; verify).
-- Figure 1: decision matrix (render from the table above; keep the
-  confidence-0.0 short-circuit annotation).
-- Figure 2 (optional, space permitting): ablation bar chart - reuse
-  research/fairmind-e/evaluation/plots/paper_baseline_accuracy.svg.
-- References: pull every work named in Sections 1-2 from
-  paper/PRIOR_ART_AND_VENUES.md (citation ledger has the differentiation
-  lines; cite current versions - CAGG v2, G-TRACE v3, IEEE Access version of
-  the scoping review, journal version of Tkachenko; add CEN/CLC/TR 18145,
-  ISO/IEC TR 20226, EU AI Act Art. 40/Annex XI, Weidema and Wesnaes 1996,
-  Funtowicz and Ravetz 1990).
-- Statements: CCAI asks for a pathway-to-impact statement (Section 5 covers
-  it); add the standard limitations sentence on single-site measurement and
-  panel size if space allows.
-- Repository link: add after acceptance decision if anonymity rules require
-  withholding it at submission.
+DONE. `submission.tex` is the submission-ready port, built on the official
+`tackling_climate_workshop_style.sty` downloaded from climatechange.ai on
+2026-07-31. Compile with `tectonic submission.tex`.
+
+Verified against the live call:
+
+- Official style file, loaded with no options, so the style anonymizes the
+  author block and adds review line numbers. Never add `final`; add
+  `preprint` only for the arXiv posting after the decision.
+- Double-blind (confirmed on the 2026 call; the earlier assumption of
+  single-blind was wrong). Author renders as "Anonymous Author(s)",
+  acknowledgments auto-hide via the `ack` environment, and the system,
+  platform, and repository names are withheld behind the `\sysname` and
+  `\platname` macros. Verified: zero identifying strings in the source.
+- Length: content ends on page 4, references run to page 5 and do not count
+  toward the limit.
+- Pathway-to-climate-impact statement is its own section, arguing the
+  incentive mechanism (evidence quality as a release criterion makes
+  measurement effort the cheapest path to approval) and labelling the work a
+  leverage point rather than direct abatement.
+- Limitations paragraph included.
+- Both tables use booktabs with no vertical rules, per the style guidance.
+
+Before submitting:
+
+- Create the OpenReview account. The portal at
+  openreview.net/group?id=NeurIPS.cc/2026/Workshop/TCCML opens around
+  2026-08-10; account creation itself can take up to two weeks, so do it now.
+- Deadline 2026-08-29, 23:59 AoE.
+- Confirm the co-author (instrument design lead): name, affiliation, consent.
+  The submission is anonymous, so this only has to be settled before the
+  camera-ready or preprint, but settle it early.
+- Optional if space allows: an ablation bar chart from
+  research/fairmind-e/evaluation/plots/paper_baseline_accuracy.svg. The
+  ablation currently reads as a table, which is more compact.
+
+For the camera-ready or arXiv preprint: flip `\sysname` to FairMind-E,
+`\platname` to FairMind, restore the author block and acknowledgments, add the
+repository link, and add the `preprint` style option for arXiv.

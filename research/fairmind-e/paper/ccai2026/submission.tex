@@ -1,0 +1,320 @@
+% Tackling Climate Change with Machine Learning @ NeurIPS 2026 - Papers track.
+% Submission version: no style options, so the style file anonymizes the
+% authors and adds review line numbers. Do NOT add [final]; use [preprint] only
+% for the arXiv posting after the workshop decision.
+%
+% Anonymization: the system, platform, and repository names are withheld via
+% the \sysname / \platname macros below. Flip them back for the preprint and
+% camera-ready.
+
+\documentclass{article}
+
+\usepackage[nonatbib]{tackling_climate_workshop_style}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{amsfonts}
+\usepackage{nicefrac}
+\usepackage{microtype}
+
+% Double-blind placeholders. Camera-ready values are in DRAFT.md.
+\newcommand{\sysname}{\textsc{EvidenceGate}}
+\newcommand{\platname}{an open-source AI governance platform}
+
+\title{Gating AI Deployment on Environmental Evidence Quality}
+
+\author{Anonymous Author(s)}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Carbon-aware governance proposals gate AI deployment on impact magnitude: a
+carbon budget, a readiness level, or a risk rating. None of them asks whether
+the carbon number itself can be trusted. We present \sysname, an environmental
+governance module deployed inside \platname, that makes measurement provenance
+a first-class release criterion. Each assessment maps its measurement source to
+one of five provenance classes, which cap a numeric evidence-confidence score
+(vendor-reported figures cap at 0.60; undisclosed provenance forces 0.0);
+confidence crossed with an impact tier in a $3{\times}3$ decision matrix yields
+\emph{go}, \emph{conditional\_go}, or \emph{no\_go}, and the recommendation
+blocks the platform's deployment-approval workflow. Offsets and renewable
+certificates never improve confidence, tier, or recommendation. On a 14-case
+hand-labeled fixture set the full mechanism reproduces all expected decisions,
+while ablated gates that see only carbon magnitude agree with at most half of
+them: a consistency check, not a field result, which is why we also present the
+design of two registered studies now instrumented and ready to run. A
+measurement study measures identical workloads three ways, so the same true
+impact carries different confidence and can flip the gate; a two-arm expert
+panel tests whether the matrix changes reviewer coverage and agreement. We seek
+workshop feedback on both designs before data collection completes.
+\end{abstract}
+
+\section{The gap: a measurement layer with no trust layer}
+
+Regulators and standards bodies are building the measurement layer for AI's
+environmental footprint: quantification-methods inventories [1], sustainability
+overviews [2], measurement frameworks in progress, and a G7-commissioned
+inventory cataloguing thirteen measurement, monitoring, and reporting
+initiatives [3]. The EU AI Act anticipates harmonised standards for
+``reporting and documentation processes to improve AI systems' resource
+performance'' (Article 40), and general-purpose AI documentation must state
+known or estimated energy consumption (Annex XI) [4]. Yet none of these
+instruments, and none of the thirteen catalogued initiatives, defines how the
+\emph{quality} of an environmental claim should condition a deployment
+decision.
+
+Recent governance research gates on magnitude. Carbon-aware governance gates
+embed carbon budgets in governance layers, recording provenance only in audit
+logs [5]. Sustainability-pyramid frameworks gate on readiness levels, arguing
+that launch blocking without carbon sign-off creates financial-grade controls
+[6]. Risk-management integrations treat AI carbon as a risk dimension in
+banking frameworks [7]. Meanwhile, measurement research has established that
+reliability varies sharply with disclosure: metadata-completeness tiers across
+5{,}227 public models span roughly $1.2\times$ to $2\times$ estimation error
+[8], and spend-based fallbacks in tiered Scope~3 accounting overestimate by
+10--40$\times$ [9]. Adjacent work has begun to act on estimate trust, through
+conformal calibration inside a carbon budget gate [10] and confidence-gated
+filtering of industrial emissions predictions [11], and evidence-driven release
+gates are established for functional quality [12]. The two literatures have not
+been connected: a system can sit comfortably under its carbon budget while its
+carbon number is untrustworthy, and every published gate would pass it.
+
+Our claim is narrow and, to our knowledge, unheld: environmental \emph{evidence
+quality}, not only impact magnitude, should gate AI deployment, operationalized
+as a provenance-derived confidence score crossed with an impact tier. The
+intellectual ancestry is the data-quality tradition in life-cycle assessment,
+where pedigree matrices and data quality indicators grade the provenance of an
+inventory figure [13], and the NUSAP uncertainty pedigree [14]. Recent work
+recommends indicator-style disclosure for AI-assisted product footprinting but
+proposes no score, no thresholds, and no gate [15]. We invert that tradition:
+where it assesses AI that produces carbon numbers, we score carbon numbers to
+gate the AI.
+
+\section{Mechanism}
+
+\paragraph{Provenance classes and confidence.} Every assessment declares its
+measurement source, normalized to one of five provenance classes with bounded
+confidence ranges: \emph{measured} (hardware telemetry; 0.85--1.00),
+\emph{tool\_estimated} (software power trackers; 0.60--0.85),
+\emph{vendor\_reported} (cloud-provider figures; 0.40--0.60), \emph{manual}
+(analytic FLOP estimates; 0.20--0.40), and \emph{unknown} (0.0). A
+caller-supplied score is honoured but never allowed to exceed its provenance
+cap: a claimed 0.95 on vendor-reported data becomes 0.60, and unknown
+provenance forces 0.0 regardless of any claimed score. Provenance is
+categorical and reported separately from quantified uncertainty, so a
+precise-looking number cannot launder a weak source.
+
+\paragraph{Impact tiers.} Metrics map to low, medium, or high impact per
+lifecycle phase (training, fine-tuning, inference, and LLM inference), using
+location-based carbon for tiering so market instruments cannot lower a gate
+outcome. Thresholds are explicitly provisional and are recalibrated from the
+measurement study (Section \ref{sec:studies}); an intensity-versus-baseline
+ratio can raise a tier at any confidence but lower it only with measured-grade
+confidence.
+
+\paragraph{The decision matrix.} Confidence bands (measured $\geq 0.70$;
+estimated 0.35--0.69; unknown $< 0.35$) cross with impact tiers
+(Table~\ref{tab:matrix}). Confidence 0.0 short-circuits to \emph{no\_go} before
+matrix lookup: an undisclosed claim never passes. A \emph{conditional\_go}
+cannot be approved until it carries a dated, owned mitigation or an explicit
+exception with owner, expiry, and rationale, which makes reviewer overrides
+auditable rather than informal. Six controls (ENV-1 to ENV-6: boundary, energy
+accounting, dual location and market carbon, per-functional-unit efficiency,
+evidence confidence with disclosed uncertainty, and mitigation or exception)
+define coverage. Disclosed offsets are recorded but never subtracted from
+emissions and never improve any gate output.
+
+\begin{table}[h]
+  \caption{The impact by evidence-confidence decision matrix. Confidence
+  exactly 0.0, meaning undisclosed provenance, returns \emph{no\_go} for every
+  tier before matrix lookup.}
+  \label{tab:matrix}
+  \centering
+  \begin{tabular}{lccc}
+    \toprule
+    Impact & measured & estimated & unknown \\
+    \midrule
+    low    & go              & go              & conditional\_go \\
+    medium & conditional\_go & conditional\_go & no\_go \\
+    high   & conditional\_go & no\_go          & no\_go \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{Implementation and consistency evaluation}
+
+\sysname{} ships inside \platname, not as a standalone proposal. The decision
+engine is a framework-agnostic Python package with 57 unit tests covering every
+matrix cell, band boundary, provenance cap, and the undisclosed-evidence
+short-circuit. Assessments persist as versioned governance evidence, and a
+release gate hooks the platform's existing deployment-approval workflow,
+returning HTTP 409 with the blocking reason when the latest assessment is
+\emph{no\_go} or an unmitigated \emph{conditional\_go} (15 integration tests).
+Reviewers get an interface showing the matrix position, control coverage,
+mitigation tracker, and version trail, and disclosures export in a format
+shaped to the European sustainability reporting standard for climate change
+[16]. Given the same assessment payload the gate decision is deterministic and
+reproducible.
+
+\paragraph{Fixture consistency check.} On 14 hand-labeled cases spanning all
+matrix cells, mitigation states, exception paths, and offset disclosures, the
+full mechanism reproduces 14/14 expected labels. Ablations degrade sharply
+(Table~\ref{tab:ablation}). We state the boundary plainly: the authors wrote
+both the fixtures and the engine, so this is a consistency and ablation
+illustration, evidence that the confidence dimension is load-bearing within the
+mechanism, and not an empirical validation. That is what the two studies below
+are for.
+
+\begin{table}[h]
+  \caption{Hand-labeled fixture ablation over 14 cases. A consistency check on
+  author-written fixtures, not an empirical validation; reported to show that
+  the evidence-confidence dimension is load-bearing.}
+  \label{tab:ablation}
+  \centering
+  \begin{tabular}{lcc}
+    \toprule
+    Gate variant & Exact matches & Accuracy \\
+    \midrule
+    Full mechanism                & 14/14 & 100.0\% \\
+    No exception path             & 13/14 & 92.9\% \\
+    Offset-credit gate            & 13/14 & 92.9\% \\
+    No mitigation-review gate     & 11/14 & 78.6\% \\
+    Carbon-only gate              & 7/14  & 50.0\% \\
+    Generic sustainability score  & 6/14  & 42.9\% \\
+    No environmental gate         & 3/14  & 21.4\% \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{Registered validation studies}
+\label{sec:studies}
+
+\paragraph{Measurement study.} Four workloads (classical ML training,
+transformer fine-tune, retrieval-augmented inference, and batch embeddings)
+across five iterations, with each physical run measured three ways: a software
+power tracker (\emph{tool\_estimated}), operator-filled cloud billing
+(\emph{vendor\_reported}), and a documented analytic FLOP estimate
+(\emph{manual}). The harness never fabricates a measurement; missing
+dependencies or billing entries produce rows explicitly marked unavailable.
+Outputs feed method-agreement statistics, pairwise MAPE and Bland-Altman limits
+of agreement, that recalibrate the provisional thresholds and confidence
+ranges. The design isolates the central question: the same run, at identical
+true impact, carries different provenance under each method, so we can report
+how often the gate decision flips on provenance alone, a quantity no
+magnitude-only gate can express.
+
+\paragraph{Expert panel.} Twelve synthetic system profiles cover all nine
+matrix cells, with the boundary cells doubled, and each profile is validated
+against the production engine so its expected labels are the engine's own
+output. Fifteen raters, five each from governance/risk/compliance, ML
+engineering, and sustainability roles, rate eight profiles apiece under a
+counterbalanced assignment giving ten ratings per profile with at least three
+per role. Two arms: baseline, showing raw measurements only, and module,
+showing the full \sysname{} output. Pre-registered hypotheses are H1, that
+displayed confidence correlates negatively with the recommendation ordinal
+(Spearman); H2, that the module arm raises ENV control coverage against a
+per-profile gold checklist (Wilcoxon signed-rank on paired coverage rates); and
+H3, that the matrix improves inter-rater agreement (mean pairwise Cohen's
+$\kappa$ and Fleiss' $\kappa$ with bootstrapped intervals, target
+$\kappa > 0.60$). The analysis pipeline is implemented with exact statistics,
+environment-independent bootstrap intervals, and hand-verified test vectors, so
+results are computable the day collection closes.
+
+\section{Pathway to climate impact}
+
+Environmental reporting for AI is moving from voluntary to mandatory, but
+mandatory reporting only reduces emissions if the reported numbers are
+trustworthy enough to act on. Today a deployment decision can be signed off
+against a carbon figure with no disclosed provenance, and every published
+governance gate would permit it; the incentive to invest in real measurement is
+correspondingly weak. Making evidence quality a release criterion changes that
+incentive directly: a team that cannot substantiate its number cannot ship
+unconditionally, so measurement effort becomes the cheapest path to approval
+rather than an unrewarded cost. This is a leverage point rather than a direct
+abatement: it does not itself cut emissions, it makes the reductions others
+report verifiable and therefore actionable.
+
+The near-term channel is regulatory. Article 40's harmonised standards for
+resource-performance reporting do not yet exist, and the standards bodies'
+current deliverables contain no environmental item [4, 17]. A
+provenance-scored, platform-integrated gate is a concrete and testable proposal
+for what those standards could require: anticipatory infrastructure rather than
+commentary. The mechanism is deployed in an open-source platform, the fixtures,
+profiles, harness, and analysis code are public, and both studies are designed
+for independent replication. We ask the workshop for critique of the two study
+designs, particularly the panel's baseline-arm construction and the
+defensibility of the provenance caps, while changes are still cheap.
+
+\paragraph{Limitations.} The fixture evaluation is author-constructed and
+non-empirical by design. The measurement study is single-site in its first run.
+The panel targets fifteen raters, sized for feasibility rather than power
+against small effects, and impact-tier thresholds remain provisional until
+recalibrated.
+
+\begin{ack}
+Withheld for double-blind review.
+\end{ack}
+
+\section*{References}
+
+\small
+
+[1] CEN/CLC/TR 18145:2025. {\it Environmentally sustainable artificial
+intelligence: quantification methods inventory.} 2025.
+
+[2] ISO/IEC TR 20226:2025. {\it Artificial intelligence: environmental
+sustainability aspects.} 2025.
+
+[3] G7 French Presidency (2026) {\it Overview of initiatives for the
+measurement and monitoring of energy and resource use of AI models.} May 2026.
+
+[4] Regulation (EU) 2024/1689 (Artificial Intelligence Act), Article 40 and
+Annex XI \S1(2d). 2024.
+
+[5] Carbon-aware governance gates: embedding carbon budgets, energy provenance,
+and sustainability-aware validation in governance layers. arXiv:2602.19718v2,
+2026.
+
+[6] G-TRACE: an AI sustainability pyramid for carbon-aware governance
+readiness. arXiv:2511.04776v3, 2026.
+
+[7] Tkachenko, N.\ (2025) Sustainable integration of frontier AI in banking.
+{\it Journal of Financial Compliance.}
+
+[8] Hugging Carbon: estimation reliability tiers for the carbon footprint of
+5{,}227 public models. arXiv:2605.01549v2, 2026.
+
+[9] A four-tier Scope 3 methodology for AI inference under CSRD.
+arXiv:2606.10660, 2026.
+
+[10] Green SARC: predictive cost and carbon governance for agentic AI with
+split-conformal calibration. arXiv:2606.15954, 2026.
+
+[11] Trust-aware predictive emissions monitoring: confidence-gated filtering of
+industrial emissions estimates. arXiv:2606.06156, 2026.
+
+[12] Automated self-testing as a quality gate: evidence-driven release
+decisions. arXiv:2603.15676, 2026.
+
+[13] Weidema, B.P.\ \& Wesn\ae s, M.S.\ (1996) Data quality management for life
+cycle inventories: an example of using data quality indicators. {\it Journal of
+Cleaner Production} {\bf 4}(3--4):167--174.
+
+[14] Funtowicz, S.O.\ \& Ravetz, J.R.\ (1990) {\it Uncertainty and Quality in
+Science for Policy.} Dordrecht: Kluwer.
+
+[15] Criteria for credible AI-assisted carbon footprinting systems.
+arXiv:2509.00240, 2025.
+
+[16] Directive (EU) 2022/2464 (Corporate Sustainability Reporting Directive)
+and ESRS E1, Climate change. 2023.
+
+[17] Regulating the environmental footprint of AI: the regulatory landscape.
+arXiv:2603.00068, 2026.
+
+\end{document}
