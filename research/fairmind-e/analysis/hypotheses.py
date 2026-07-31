@@ -967,8 +967,66 @@ def load_coverage(path: pathlib.Path) -> list[dict[str, Any]]:
     return rows
 
 
+#: The measurement harness emits a richer, differently named mitigation file
+#: than the H4 contract above (it carries pre/post energy, both carbon bases,
+#: and computed deltas). Rather than make the operator hand-convert it, the
+#: loader accepts that shape natively and maps it onto the contract. The
+#: location-based figure is the intensity, matching the engine's own tiering
+#: rule that market instruments must not be able to lower a gate outcome.
+HARNESS_MITIGATION_COLUMNS = (
+    "mitigation_id",
+    "workload_id",
+    "pre_location_kg_co2e",
+    "post_location_kg_co2e",
+)
+HARNESS_MITIGATION_UNIT = "kg_co2e_location_per_run"
+
+
+def _adapt_harness_mitigation_rows(path: pathlib.Path) -> list[dict[str, str]] | None:
+    """Return contract-shaped rows if this file is a harness mitigation CSV."""
+    with path.open(encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        fieldnames = reader.fieldnames or []
+        if not all(column in fieldnames for column in HARNESS_MITIGATION_COLUMNS):
+            return None
+        adapted: list[dict[str, str]] = []
+        for raw in reader:
+            # Rows the harness could not compute are honest gaps, not zeros.
+            if raw.get("method_available") not in (None, "", "true"):
+                continue
+            pre = (raw.get("pre_location_kg_co2e") or "").strip()
+            post = (raw.get("post_location_kg_co2e") or "").strip()
+            if not pre or not post:
+                continue
+            adapted.append(
+                {
+                    "workload_id": raw["workload_id"],
+                    "mitigation": raw["mitigation_id"],
+                    "intensity_pre": pre,
+                    "intensity_post": post,
+                    "unit": HARNESS_MITIGATION_UNIT,
+                }
+            )
+    return adapted
+
+
 def load_mitigation(path: pathlib.Path) -> list[dict[str, Any]]:
-    rows = load_csv_rows(path, MITIGATION_SCHEMA, "mitigation pairs")
+    adapted = _adapt_harness_mitigation_rows(path)
+    if adapted is not None:
+        label = f"mitigation pairs (harness form) CSV {path}"
+        if not adapted:
+            raise SchemaError(f"{label}: no computable mitigation pairs")
+        rows = []
+        for index, raw_row in enumerate(adapted, start=1):
+            context = f"{label} data row {index}"
+            rows.append(
+                {
+                    column: _parse_cell(column, spec, raw_row[column], context)
+                    for column, spec in MITIGATION_SCHEMA.items()
+                }
+            )
+    else:
+        rows = load_csv_rows(path, MITIGATION_SCHEMA, "mitigation pairs")
     seen: set[tuple[str, str]] = set()
     for row in rows:
         key = (row["workload_id"], row["mitigation"])

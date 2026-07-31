@@ -1,0 +1,15 @@
+{
+  "_comment": "Workload scaling for the Apple M1 Pro study host, 2026-07-31. At the default REAL_CONFIG each iteration finished in 2.0s (W1), 12.0s (W2), 60.5s (W3) and 12.4s (W4). CodeCarbon samples power every 15s in real mode, so anything under about 60s yields an energy figure extrapolated from too few samples. These values target roughly 80s per iteration, giving five or more sampling windows per run. Scaling uses the linear repeat knobs only, so the analytic FLOP estimate scales with the real work and the two methods stay comparable. Archive this file with the results.",
+  "classical_ml_training": {
+    "repeats": 120
+  },
+  "transformer_finetune": {
+    "steps": 2600
+  },
+  "rag_inference": {
+    "repeats": 7
+  },
+  "batch_embeddings": {
+    "repeats": 32
+  }
+}
