@@ -159,6 +159,37 @@ def integrate(samples: list[Sample], start: float, end: float) -> tuple[float, i
     return joules / 3_600_000.0, len(inside), mean_w
 
 
+def background_samples(samples: list[Sample], windows: list[tuple[float, float]]) -> list[Sample]:
+    """Samples that fall in no run window.
+
+    The harness leaves gaps between runs for config building, tracker start and
+    stop, and CSV writing. Nothing under measurement is executing then, so the
+    power drawn in those gaps is background load observed at that moment. That
+    is a far better estimator than one global idle constant when the background
+    is itself varying, which is exactly the case this function exists for.
+    """
+    return [
+        s
+        for s in samples
+        if not any(start <= s.midpoint <= end for start, end in windows)
+    ]
+
+
+def local_background(
+    background: list[Sample], centre: float, radius_s: float = 180.0
+) -> tuple[float | None, int]:
+    """Median background watts observed near ``centre``.
+
+    Median rather than mean because background load is spiky; a single browser
+    wake should not move the estimate. Returns (watts, n_samples), with None
+    when no background sample lies within the radius.
+    """
+    nearby = [s.watts for s in background if abs(s.midpoint - centre) <= radius_s]
+    if not nearby:
+        return None, 0
+    return statistics.median(nearby), len(nearby)
+
+
 def idle_baseline(samples: list[Sample], start: float, end: float) -> float:
     """Mean watts over an idle window, for marginal-energy attribution."""
     _, count, mean_w = integrate(samples, start, end)
@@ -177,6 +208,12 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="idle SoC watts to subtract for marginal attribution; both figures are reported",
     )
+    parser.add_argument(
+        "--contamination-threshold",
+        type=float,
+        default=0.35,
+        help="flag a run when background is this fraction or more of its mean draw",
+    )
     parser.add_argument("--out", type=Path, default=None)
     args = parser.parse_args(argv)
 
@@ -185,6 +222,17 @@ def main(argv: list[str] | None = None) -> int:
 
     with args.runs.open(encoding="utf-8") as handle:
         rows = list(csv.DictReader(handle))
+
+    # Every run window, so samples in the gaps between them can be identified
+    # as background rather than workload.
+    windows: list[tuple[float, float]] = []
+    for row in rows:
+        if row.get("method_available") != "true":
+            continue
+        a, b = (row.get("started_at") or "").strip(), (row.get("ended_at") or "").strip()
+        if a and b:
+            windows.append((float(a), float(b)))
+    background = background_samples(samples, windows)
 
     seen: set[tuple[str, str]] = set()
     out_rows: list[dict[str, object]] = []
@@ -205,10 +253,27 @@ def main(argv: list[str] | None = None) -> int:
             unmatched += 1
             continue
         duration = end - start
+
+        # Background observed near this run beats one global constant when the
+        # machine is busy, because the load itself drifts.
+        local_w, local_n = local_background(background, (start + end) / 2.0)
+        baseline_w = local_w if local_w is not None else args.baseline_w
+        baseline_source = "local_gap_median" if local_w is not None else (
+            "global_idle_flag" if args.baseline_w is not None else "none"
+        )
+
         marginal = ""
-        if args.baseline_w is not None:
-            marginal_kwh = max(0.0, (mean_w - args.baseline_w) * duration / 3_600_000.0)
+        if baseline_w is not None:
+            marginal_kwh = max(0.0, (mean_w - baseline_w) * duration / 3_600_000.0)
             marginal = f"{marginal_kwh:.6e}"
+
+        # What fraction of the observed draw is background rather than work.
+        # At 1.0 the run is indistinguishable from an idle machine.
+        contamination = "" if baseline_w is None or mean_w <= 0 else f"{min(baseline_w / mean_w, 1.0):.4f}"
+        contaminated = ""
+        if contamination != "":
+            contaminated = "true" if float(contamination) > args.contamination_threshold else "false"
+
         out_rows.append(
             {
                 "workload_id": row["workload_id"],
@@ -218,13 +283,20 @@ def main(argv: list[str] | None = None) -> int:
                 "mean_watts": f"{mean_w:.3f}",
                 "reference_kwh_total": f"{kwh:.6e}",
                 "reference_kwh_marginal": marginal,
+                "background_watts": "" if baseline_w is None else f"{baseline_w:.3f}",
+                "background_source": baseline_source,
+                "n_background_samples": local_n,
+                "contamination_ratio": contamination,
+                "contaminated": contaminated,
                 "source": f"powermetrics {samples[0].source_label} rail, SoC only, vendor power model",
             }
         )
 
     fieldnames = [
         "workload_id", "run_id", "duration_seconds", "n_power_samples", "mean_watts",
-        "reference_kwh_total", "reference_kwh_marginal", "source",
+        "reference_kwh_total", "reference_kwh_marginal", "background_watts",
+        "background_source", "n_background_samples", "contamination_ratio",
+        "contaminated", "source",
     ]
     if args.out:
         with args.out.open("w", encoding="utf-8", newline="") as handle:
@@ -238,7 +310,17 @@ def main(argv: list[str] | None = None) -> int:
             print(",".join(str(r[f]) for f in fieldnames))
 
     print(f"parsed {len(samples)} power samples spanning {span[1] - span[0]:.1f}s")
+    print(f"background samples between runs: {len(background)}")
     print(f"matched {len(out_rows)} runs; {unmatched} runs had no samples in their window")
+    flagged = [r for r in out_rows if r.get("contaminated") == "true"]
+    if flagged:
+        ratios = [float(r["contamination_ratio"]) for r in flagged]
+        print(
+            f"CONTAMINATION: {len(flagged)} of {len(out_rows)} runs have background at or above "
+            f"{args.contamination_threshold:.0%} of their draw (worst {max(ratios):.0%}). "
+            "These runs measure the machine more than the workload; exclude them or widen the "
+            "reported uncertainty."
+        )
     if unmatched:
         print("unmatched runs usually mean the power log did not cover the whole study")
     return 0

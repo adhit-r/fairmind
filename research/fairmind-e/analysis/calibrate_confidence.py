@@ -47,15 +47,41 @@ from pathlib import Path
 REFERENCE_COLUMNS = ("reference_kwh_total", "reference_kwh_marginal")
 
 
-def load_reference(path: Path, column: str) -> dict[tuple[str, str], float]:
+def load_reference(
+    path: Path, column: str, max_contamination: float | None
+) -> tuple[dict[tuple[str, str], float], dict[str, object]]:
+    """Load reference energies, optionally dropping background-dominated runs.
+
+    Returns (values, contamination report). Runs whose background draw is a
+    large fraction of their total are excluded rather than silently averaged
+    in: on a busy machine those rows describe the machine, not the workload.
+    """
     out: dict[tuple[str, str], float] = {}
+    ratios: list[float] = []
+    excluded: list[dict[str, object]] = []
     with path.open(encoding="utf-8") as handle:
         for row in csv.DictReader(handle):
             raw = (row.get(column) or "").strip()
             if not raw:
                 continue
-            out[(row["workload_id"], row["run_id"])] = float(raw)
-    return out
+            key = (row["workload_id"], row["run_id"])
+            ratio_raw = (row.get("contamination_ratio") or "").strip()
+            ratio = float(ratio_raw) if ratio_raw else None
+            if ratio is not None:
+                ratios.append(ratio)
+                if max_contamination is not None and ratio > max_contamination:
+                    excluded.append({**{"workload_id": key[0], "run_id": key[1]},
+                                     "contamination_ratio": ratio})
+                    continue
+            out[key] = float(raw)
+    report: dict[str, object] = {
+        "threshold": max_contamination,
+        "n_excluded": len(excluded),
+        "excluded": excluded[:20],
+        "median_contamination": round(statistics.median(ratios), 4) if ratios else None,
+        "max_contamination": round(max(ratios), 4) if ratios else None,
+    }
+    return out, report
 
 
 def load_runs(path: Path) -> list[dict[str, str]]:
@@ -95,10 +121,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--runs", required=True, type=Path)
     parser.add_argument("--reference", required=True, type=Path)
     parser.add_argument("--reference-column", default=REFERENCE_COLUMNS[0], choices=REFERENCE_COLUMNS)
+    parser.add_argument(
+        "--max-contamination",
+        type=float,
+        default=0.35,
+        help="drop runs whose background exceeds this fraction of their draw",
+    )
     parser.add_argument("--out", type=Path, default=None)
     args = parser.parse_args(argv)
 
-    reference = load_reference(args.reference, args.reference_column)
+    reference, contamination = load_reference(
+        args.reference, args.reference_column, args.max_contamination
+    )
     if not reference:
         raise SystemExit(f"no usable values in {args.reference} column {args.reference_column}")
     runs = load_runs(args.runs)
@@ -141,8 +175,27 @@ def main(argv: list[str] | None = None) -> int:
             ),
         },
         "n_runs_skipped": skipped,
+        "contamination": contamination,
         "methods": {},
     }
+
+    # The confound that matters when the host is busy. Both the reference and a
+    # CPU-load tracker observe the whole machine, so background work inflates
+    # them together while leaving a purely analytic estimate untouched. That
+    # pushes the tracker to look closer to the reference for a reason unrelated
+    # to measurement quality, which would manufacture a flattering confirmation.
+    median_c = contamination.get("median_contamination")
+    if median_c is not None and median_c > 0.15:
+        summary["validity_warning"] = (
+            f"background load is a median {median_c:.0%} of observed draw. Both the "
+            "reference and a whole-machine load tracker include that background, while "
+            "an analytic estimate does not, so this comparison is biased toward the "
+            "tracker for reasons unrelated to measurement quality. A confirmation of "
+            "the confidence ordering under these conditions is not trustworthy; a "
+            "refutation is, since the bias runs the other way. Prefer the marginal "
+            "reference column and re-run on a quiet host before publishing a positive "
+            "result."
+        )
 
     rows_for_rank: list[tuple[float, float]] = []
     for method, records in sorted(per_method.items()):
@@ -186,6 +239,9 @@ def main(argv: list[str] | None = None) -> int:
             "median_abs_pct_error_higher": hi_err,
             "median_abs_pct_error_lower": lo_err,
             "ordering_holds": hi_err < lo_err,
+            "trustworthy_direction": (
+                "refutation" if "validity_warning" in summary else "either"
+            ),
             "reading": (
                 f"the method the policy trusts more ({hi_name}, confidence "
                 f"{hi['assigned_confidence']}) is {'closer to' if hi_err < lo_err else 'NOT closer to'} "
