@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import base64
-from copy import deepcopy
-from dataclasses import replace
-from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 import uuid
+from copy import deepcopy
+from dataclasses import replace
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import create_engine, event, func, select, text
@@ -16,6 +16,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+import src.application.services.evaluation_workbench_service as evaluation_service_module
+import src.domain.assurance.evaluation_v2 as evaluation_v2_module
 from database.connection import Base, DatabaseManager
 from database.governance_models import (
     GovernanceAISystem,
@@ -31,17 +33,15 @@ from database.governance_models import (
     GovernanceWorkspace,
 )
 from database.models import Organization, OrganizationMember, User
-import src.application.services.evaluation_workbench_service as evaluation_service_module
-import src.domain.assurance.evaluation_v2 as evaluation_v2_module
+from src.application.ports.evaluation_workbench import FrozenJsonObject
 from src.application.services.evaluation_workbench_service import (
     EvaluationWorkbenchError,
     EvaluationWorkbenchService,
     assurance_request_hash,
 )
-from src.application.ports.evaluation_workbench import FrozenJsonObject
 from src.domain.assurance.evaluation_v2 import (
-    AssuranceContractValidationError,
     MAX_EXECUTION_ENVELOPE_BYTES,
+    AssuranceContractValidationError,
     canonical_json,
     canonical_sha256,
 )
@@ -51,7 +51,7 @@ from src.infrastructure.db.repositories.evaluation_workbench_repository import (
 )
 from tests.evaluation_workbench_sqlite import (
     allow_deliberate_check_constraint_corruption,
-    install_013a_for_application_verifier_harness,
+    install_authoritative_assurance_fixtures_for_application_verifier_harness,
 )
 
 ORG = str(uuid.uuid4())
@@ -83,9 +83,7 @@ def test_envelope_nonce_verifier_rejects_noncanonical_pad_bits() -> None:
     assert base64.urlsafe_b64decode(noncanonical_nonce + "=") == b"\x00" * 32
 
     with pytest.raises(EvaluationWorkbenchError) as caught:
-        evaluation_service_module._verified_envelope_nonce(
-            {"nonce": noncanonical_nonce}
-        )
+        evaluation_service_module._verified_envelope_nonce({"nonce": noncanonical_nonce})
 
     assert caught.value.detail() == BINDING_INTEGRITY_DETAIL
 
@@ -115,7 +113,7 @@ def repository_fixture():
         connection.execute("PRAGMA foreign_keys = ON")
 
     Base.metadata.create_all(engine)
-    install_013a_for_application_verifier_harness(engine)
+    install_authoritative_assurance_fixtures_for_application_verifier_harness(engine)
     factory = sessionmaker(bind=engine)
     session = factory()
     user_uuid = uuid.UUID(USER)
@@ -189,9 +187,7 @@ def _target_payload(key: str = "agent-prod") -> dict:
         "connectorBindingId": "connector-1",
         "manifest": {
             "schemaVersion": "2.0.0",
-            "inputs": {
-                "scenario_set": {"kind": "content_digest", "sha256": "c" * 64}
-            },
+            "inputs": {"scenario_set": {"kind": "content_digest", "sha256": "c" * 64}},
         },
     }
 
@@ -212,9 +208,7 @@ def _suite_payload(name: str = "agent-safety") -> dict:
         "configurationSchema": {
             "type": "object",
             "required": ["threshold"],
-            "properties": {
-                "threshold": {"type": "number", "minimum": 0, "maximum": 1}
-            },
+            "properties": {"threshold": {"type": "number", "minimum": 0, "maximum": 1}},
             "additionalProperties": False,
         },
         "configurationDefaults": {"threshold": 0.5},
@@ -327,9 +321,7 @@ def test_created_run_persists_an_independent_nonce_witness(repository_fixture) -
     _, run = _create_active_plan_and_run(service)
 
     runs = GovernanceEvaluationRun.__table__
-    row_nonce = session.scalar(
-        select(runs.c.envelope_nonce).where(runs.c.id == run["id"])
-    )
+    row_nonce = session.scalar(select(runs.c.envelope_nonce).where(runs.c.id == run["id"]))
     _, record, _ = _stored_run_and_graph(session, run["id"])
 
     assert row_nonce == run["envelope"]["nonce"]
@@ -361,17 +353,13 @@ def test_repository_decodes_canonical_suite_result_and_limitations(
     service = _service(session)
     _, run = _create_active_plan_and_run(service)
     table = GovernanceEvaluationRunSuiteExecution.__table__
-    row = dict(
-        session.execute(select(table).where(table.c.run_id == run["id"])).mappings().one()
-    )
+    row = dict(session.execute(select(table).where(table.c.run_id == run["id"])).mappings().one())
     row["result_summary_json"] = canonical_json(
         {"metrics": {"failureRate": 0.25}, "sampleCount": 4}
     )
     row["limitations_json"] = canonical_json(["Synthetic cases only."])
 
-    execution = SqlAlchemyEvaluationWorkbenchRepository(
-        session
-    )._suite_execution_record(row)
+    execution = SqlAlchemyEvaluationWorkbenchRepository(session)._suite_execution_record(row)
 
     assert execution.result_summary is not None
     assert execution.result_summary.to_dict() == {
@@ -404,9 +392,7 @@ def test_repository_rejects_malformed_or_unbounded_suite_projection_json(
     service = _service(session)
     _, run = _create_active_plan_and_run(service)
     table = GovernanceEvaluationRunSuiteExecution.__table__
-    row = dict(
-        session.execute(select(table).where(table.c.run_id == run["id"])).mappings().one()
-    )
+    row = dict(session.execute(select(table).where(table.c.run_id == run["id"])).mappings().one())
     row[column] = raw
 
     with pytest.raises(EvaluationWorkbenchError) as caught:
@@ -580,14 +566,11 @@ def test_suite_manifest_hostile_encoding_is_a_generic_integrity_error(
         manifest = json.loads(raw)
         duplicate_key = next(iter(manifest))
         hostile = raw[:-1] + (
-            f",{canonical_json(duplicate_key)}:{canonical_json(manifest[duplicate_key])}"
-            "}"
+            f",{canonical_json(duplicate_key)}:{canonical_json(manifest[duplicate_key])}" "}"
         )
     else:
         hostile = "{"
-    session.execute(
-        table.update().where(table.c.id == suite_id).values(manifest_json=hostile)
-    )
+    session.execute(table.update().where(table.c.id == suite_id).values(manifest_json=hostile))
     session.commit()
 
     with pytest.raises(EvaluationWorkbenchError) as caught:
@@ -682,10 +665,7 @@ def _rehash_plan_graph(graph):
         target=evaluation_service_module._target_domain(graph.target),
         plan=evaluation_service_module._requested_plan_domain(graph),
         trust_policy=evaluation_service_module._trust_domain(graph.trust_policy),
-        suites=[
-            evaluation_service_module._suite_domain(selection)
-            for selection in graph.suites
-        ],
+        suites=[evaluation_service_module._suite_domain(selection) for selection in graph.suites],
     )
     return replace(
         graph,
@@ -800,9 +780,7 @@ def test_create_run_rejects_tampered_persistence_record_and_rolls_back(
     idempotency_before = session.scalar(
         select(func.count()).select_from(GovernanceIdempotencyRecord)
     )
-    audit_before = session.scalar(
-        select(func.count()).select_from(GovernanceEvaluationAuditEvent)
-    )
+    audit_before = session.scalar(select(func.count()).select_from(GovernanceEvaluationAuditEvent))
     persist_run = repository.persist_run
 
     def persist_tampered(command):
@@ -829,12 +807,14 @@ def test_create_run_rejects_tampered_persistence_record_and_rolls_back(
 
     assert caught.value.detail() == BINDING_INTEGRITY_DETAIL
     assert session.scalar(select(func.count()).select_from(GovernanceEvaluationRun)) == 0
-    assert session.scalar(
-        select(func.count()).select_from(GovernanceIdempotencyRecord)
-    ) == idempotency_before + 1
-    assert session.scalar(
-        select(func.count()).select_from(GovernanceEvaluationAuditEvent)
-    ) == audit_before + 1
+    assert (
+        session.scalar(select(func.count()).select_from(GovernanceIdempotencyRecord))
+        == idempotency_before + 1
+    )
+    assert (
+        session.scalar(select(func.count()).select_from(GovernanceEvaluationAuditEvent))
+        == audit_before + 1
+    )
 
 
 @pytest.mark.parametrize("read_method", ["detail", "list"])
@@ -925,9 +905,7 @@ def test_run_read_rejects_duplicate_names_in_stored_envelope(repository_fixture)
             id="nonfinite-number",
         ),
         pytest.param(
-            lambda _canonical: '{"padding":"'
-            + ("x" * MAX_EXECUTION_ENVELOPE_BYTES)
-            + '"}',
+            lambda _canonical: '{"padding":"' + ("x" * MAX_EXECUTION_ENVELOPE_BYTES) + '"}',
             id="oversized-payload",
         ),
     ],
@@ -968,12 +946,7 @@ def test_run_read_rejects_invalid_layer_verdict_encodings_before_verification(
     _, run = _create_active_plan_and_run(service)
     execution_id = run["suiteExecutions"][0]["id"]
     if encoding_case == "duplicate-name":
-        raw = (
-            "{"
-            f'"{execution_id}":"insufficient",'
-            f'"{execution_id}":"insufficient"'
-            "}"
-        )
+        raw = "{" f'"{execution_id}":"insufficient",' f'"{execution_id}":"insufficient"' "}"
     elif encoding_case == "noncanonical-whitespace":
         raw = canonical_json(run["layerVerdicts"]) + "\n"
     else:
@@ -1291,10 +1264,7 @@ def test_run_read_maps_raw_malformed_suite_ordinal_to_generic_integrity_error(
     _, run = _create_active_plan_and_run(service)
     session.execute(
         GovernanceEvaluationRunSuiteExecution.__table__.update()
-        .where(
-            GovernanceEvaluationRunSuiteExecution.id
-            == run["suiteExecutions"][0]["id"]
-        )
+        .where(GovernanceEvaluationRunSuiteExecution.id == run["suiteExecutions"][0]["id"])
         .values(ordinal="FM_SENTINEL_ORDINAL")
     )
     session.commit()
@@ -1532,9 +1502,7 @@ def test_run_verifier_rejects_incoherent_or_unbounded_suite_evidence_projections
     elif case == "oversized-result-summary":
         execution = replace(
             execution,
-            result_summary=FrozenJsonObject.from_mapping(
-                {"summary": "x" * (64 * 1024)}
-            ),
+            result_summary=FrozenJsonObject.from_mapping({"summary": "x" * (64 * 1024)}),
         )
     else:
         execution = replace(execution, limitations=("x" * (8 * 1024),))
@@ -1557,9 +1525,7 @@ def test_run_verifier_rejects_outcome_that_does_not_match_suite_aggregate(
         _with_complete_evidence_link(record.suite_executions[0]),
         technical_status="succeeded",
         evidence_result_status="failed",
-        result_summary=FrozenJsonObject.from_mapping(
-            {"failedCases": 1, "sampleCount": 4}
-        ),
+        result_summary=FrozenJsonObject.from_mapping({"failedCases": 1, "sampleCount": 4}),
         limitations=("Synthetic cases only.",),
         started_at=record.suite_executions[0].created_at,
         completed_at=record.suite_executions[0].updated_at,
@@ -1604,10 +1570,7 @@ def test_suite_evidence_outcome_aggregate_uses_fail_closed_priority(
             replace(template, evidence_result_status=outcome)
             for outcome in reversed(priority[index:])
         )
-        assert (
-            evaluation_service_module._aggregate_suite_evidence_outcome(executions)
-            == expected
-        )
+        assert evaluation_service_module._aggregate_suite_evidence_outcome(executions) == expected
 
 
 @pytest.mark.parametrize(
@@ -1999,9 +1962,7 @@ def test_plan_and_run_are_bound_atomically_to_exact_suite_versions(repository_fi
     assert len(run["suiteExecutions"]) == 2
     assert len({item["id"] for item in run["suiteExecutions"]}) == 2
     assert run["layerVerdicts"] == {
-        "suites": {
-            execution["id"]: "insufficient" for execution in run["suiteExecutions"]
-        },
+        "suites": {execution["id"]: "insufficient" for execution in run["suiteExecutions"]},
         "modalities": {},
         "components": {},
         "riskDimensions": {},
@@ -2098,9 +2059,7 @@ def test_plan_schema_complexity_is_rejected_before_plan_persistence(
     ).body
     schema = {
         "type": "object",
-        "properties": {
-            f"flag_{index}": {"type": "boolean"} for index in range(180)
-        },
+        "properties": {f"flag_{index}": {"type": "boolean"} for index in range(180)},
         "additionalProperties": False,
     }
     suite_ids = []
@@ -2139,15 +2098,15 @@ def test_plan_schema_complexity_is_rejected_before_plan_persistence(
 
     assert caught.value.code == "plan_schema_complexity_exceeded"
     assert caught.value.status_code == 422
-    assert session.scalar(
-        select(func.count()).select_from(GovernanceEvaluationPlan.__table__)
-    ) == 0
-    assert session.scalar(
-        select(func.count()).select_from(GovernanceIdempotencyRecord.__table__)
-    ) == idempotency_before + 1
-    assert session.scalar(
-        select(func.count()).select_from(GovernanceEvaluationAuditEvent.__table__)
-    ) == audit_before + 1
+    assert session.scalar(select(func.count()).select_from(GovernanceEvaluationPlan.__table__)) == 0
+    assert (
+        session.scalar(select(func.count()).select_from(GovernanceIdempotencyRecord.__table__))
+        == idempotency_before + 1
+    )
+    assert (
+        session.scalar(select(func.count()).select_from(GovernanceEvaluationAuditEvent.__table__))
+        == audit_before + 1
+    )
 
 
 def test_envelope_size_preflight_blocks_activation_and_run_before_persistence(
@@ -2212,8 +2171,7 @@ def test_envelope_size_preflight_blocks_activation_and_run_before_persistence(
 
     plan_payload = _plan_payload(target["id"], suite_ids)
     plan_payload["suites"] = [
-        {"suiteVersionId": suite_id, "configuration": configuration}
-        for suite_id in suite_ids
+        {"suiteVersionId": suite_id, "configuration": configuration} for suite_id in suite_ids
     ]
     plan = service.create_plan(
         org_id=ORG,
@@ -2238,14 +2196,18 @@ def test_envelope_size_preflight_blocks_activation_and_run_before_persistence(
     assert "execution_envelope_size_exceeded" in {
         blocker["code"] for blocker in activation_error.value.details["blockers"]
     }
-    assert session.scalar(
-        select(GovernanceEvaluationPlan.__table__.c.status).where(
-            GovernanceEvaluationPlan.__table__.c.id == plan["id"]
+    assert (
+        session.scalar(
+            select(GovernanceEvaluationPlan.__table__.c.status).where(
+                GovernanceEvaluationPlan.__table__.c.id == plan["id"]
+            )
         )
-    ) == "draft"
-    assert session.scalar(
-        select(func.count()).select_from(GovernanceIdempotencyRecord)
-    ) == idempotency_before_activation + 1
+        == "draft"
+    )
+    assert (
+        session.scalar(select(func.count()).select_from(GovernanceIdempotencyRecord))
+        == idempotency_before_activation + 1
+    )
 
     session.execute(
         GovernanceEvaluationPlan.__table__.update()
@@ -2269,15 +2231,11 @@ def test_envelope_size_preflight_blocks_activation_and_run_before_persistence(
     assert "execution_envelope_size_exceeded" in {
         blocker["code"] for blocker in run_error.value.details["blockers"]
     }
+    assert session.scalar(select(func.count()).select_from(GovernanceEvaluationRun.__table__)) == 0
     assert (
-        session.scalar(
-            select(func.count()).select_from(GovernanceEvaluationRun.__table__)
-        )
-        == 0
+        session.scalar(select(func.count()).select_from(GovernanceIdempotencyRecord))
+        == idempotency_before_run + 1
     )
-    assert session.scalar(
-        select(func.count()).select_from(GovernanceIdempotencyRecord)
-    ) == idempotency_before_run + 1
 
 
 def test_actual_envelope_overflow_returns_compact_409_without_persistence(
@@ -2331,16 +2289,9 @@ def test_actual_envelope_overflow_returns_compact_409_without_persistence(
         "message": "The execution envelope exceeds the bounded assurance contract.",
     }
     assert caught.value.status_code == 409
+    assert session.scalar(select(func.count()).select_from(GovernanceEvaluationRun.__table__)) == 0
     assert (
-        session.scalar(
-            select(func.count()).select_from(GovernanceEvaluationRun.__table__)
-        )
-        == 0
-    )
-    assert (
-        session.scalar(
-            select(func.count()).select_from(GovernanceIdempotencyRecord.__table__)
-        )
+        session.scalar(select(func.count()).select_from(GovernanceIdempotencyRecord.__table__))
         == idempotency_before + 1
     )
 
@@ -2628,10 +2579,7 @@ def test_run_reads_fail_closed_when_the_audit_chain_is_tampered(
 
     if tamper == "head-hash":
         session.execute(
-            text(
-                "DROP TRIGGER IF EXISTS "
-                "governance_evaluation_audit_chain_heads_guard_update"
-            )
+            text("DROP TRIGGER IF EXISTS " "governance_evaluation_audit_chain_heads_guard_update")
         )
         session.execute(
             text(
@@ -2642,10 +2590,7 @@ def test_run_reads_fail_closed_when_the_audit_chain_is_tampered(
         )
     else:
         session.execute(
-            text(
-                "DROP TRIGGER IF EXISTS "
-                "governance_evaluation_audit_events_no_update"
-            )
+            text("DROP TRIGGER IF EXISTS " "governance_evaluation_audit_events_no_update")
         )
         if tamper == "event-payload":
             session.execute(

@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import base64
 import binascii
-from collections.abc import Mapping
-from dataclasses import dataclass
-from datetime import datetime, timezone
 import hashlib
 import hmac
 import re
+from collections.abc import Mapping
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from types import MappingProxyType
 
 from src.application.ports.evidence_admission import (
@@ -17,20 +17,19 @@ from src.application.ports.evidence_admission import (
     ExpectedServerBinding,
     TrustedSigningKey,
 )
+from src.domain.assurance.evaluation_v2 import canonical_sha256
 from src.domain.assurance.evidence_passport_v2 import (
     EvidencePassportV2ValidationError,
     evidence_passport_v2_content_hash,
     evidence_passport_v2_signature_bytes,
     normalize_evidence_passport_v2,
 )
-from src.domain.assurance.evaluation_v2 import canonical_sha256
 
 
 class EvidenceAuthenticityError(ValueError):
     """Stable, non-admission authenticity failure safe for caller handling."""
 
 
-_TRUSTED_SOURCE_TYPES = frozenset({"fairmind_worker", "external_provider"})
 _PUBLIC_JWK_KEYS = frozenset({"kty", "crv", "x"})
 _BASE64URL = re.compile(r"^[A-Za-z0-9_-]{43}$")
 VERIFIER_CONTRACT = "fairmind/evidence-passport-v2/verified-admission"
@@ -43,46 +42,6 @@ _EVALUATOR_PROJECTION_KEYS = (
     "adapterVersion",
     "resultContractVersion",
 )
-
-
-def _validate_issuer_restrictions(
-    *,
-    source_type: str,
-    suite_version_id: str,
-    target_version_id: str,
-    source_restrictions: tuple[str, ...],
-    suite_restrictions: tuple[str, ...],
-    target_restrictions: tuple[str, ...],
-    known_suite_ids: frozenset[str],
-    known_target_ids: frozenset[str],
-) -> None:
-    """Apply the Task 12 closed issuer-restriction semantics.
-
-    Empty canonical arrays are unrestricted. Non-empty arrays are exact
-    allow-lists, and every value must belong to the closed server catalog.
-    """
-    if source_type not in _TRUSTED_SOURCE_TYPES:
-        raise EvidenceAuthenticityError("issuer source restriction is invalid")
-    for values in (source_restrictions, suite_restrictions, target_restrictions):
-        if len(values) != len(set(values)) or any(
-            not isinstance(value, str) or not value for value in values
-        ):
-            raise EvidenceAuthenticityError("issuer restriction is malformed")
-    if source_restrictions and (
-        any(value not in _TRUSTED_SOURCE_TYPES for value in source_restrictions)
-        or source_type not in source_restrictions
-    ):
-        raise EvidenceAuthenticityError("issuer source is restricted")
-    if suite_restrictions and (
-        any(value not in known_suite_ids for value in suite_restrictions)
-        or suite_version_id not in suite_restrictions
-    ):
-        raise EvidenceAuthenticityError("issuer suite is restricted")
-    if target_restrictions and (
-        any(value not in known_target_ids for value in target_restrictions)
-        or target_version_id not in target_restrictions
-    ):
-        raise EvidenceAuthenticityError("issuer target is restricted")
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -169,6 +128,7 @@ class AuthenticityCandidate:
     """Authenticity facts only; an outer admission workflow makes decisions."""
 
     content_hash: str
+    passport_snapshot_hash: str
     signature_input_hash: str
     execution_binding_hash: str
     evaluator_projection_hash: str
@@ -260,12 +220,12 @@ class EvidenceAuthenticityService:
 
         normalized_result = _mapping(normalized.get("result"), label="result")
         evaluator_projection = {
-            key: _text(evaluator, key, label="evaluator")
-            for key in _EVALUATOR_PROJECTION_KEYS
+            key: _text(evaluator, key, label="evaluator") for key in _EVALUATOR_PROJECTION_KEYS
         }
 
         return AuthenticityCandidate(
             content_hash=content_hash,
+            passport_snapshot_hash=canonical_sha256(_plain_value(normalized)),
             signature_input_hash=hashlib.sha256(signing_input).hexdigest(),
             execution_binding_hash=canonical_sha256(_plain_value(expected.execution_binding)),
             evaluator_projection_hash=canonical_sha256(evaluator_projection),
@@ -281,9 +241,7 @@ class EvidenceAuthenticityService:
         )
 
     @staticmethod
-    def _verify_binding(
-        passport: Mapping[str, object], expected: ExpectedServerBinding
-    ) -> None:
+    def _verify_binding(passport: Mapping[str, object], expected: ExpectedServerBinding) -> None:
         if passport.get("organizationId") != expected.organization_id:
             raise EvidenceAuthenticityError("tenant organization does not match")
         if passport.get("workspaceId") != expected.workspace_id:
@@ -295,9 +253,7 @@ class EvidenceAuthenticityService:
             raise EvidenceAuthenticityError("execution binding does not match")
 
     @staticmethod
-    def _verify_key_window(
-        key: TrustedSigningKey, signed_at: datetime, now: datetime
-    ) -> None:
+    def _verify_key_window(key: TrustedSigningKey, signed_at: datetime, now: datetime) -> None:
         valid_from = _as_utc(key.valid_from)
         valid_until = _as_utc(key.valid_until)
         revoked_at = _as_utc(key.revoked_at) if key.revoked_at is not None else None

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from contextlib import contextmanager
 from collections.abc import Iterator
+from contextlib import contextmanager
 
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
@@ -28,13 +28,15 @@ _OPERATIONAL_EVALUATION_TABLES = (
 )
 
 
-def install_013a_for_application_verifier_harness(engine: Engine) -> None:
-    """Install real 013a/013b storage, then permit privileged corruption.
+def install_authoritative_assurance_fixtures_for_application_verifier_harness(
+    engine: Engine,
+) -> None:
+    """Replace structural ORM DDL with authoritative 013a/013b/013c fixtures.
 
     These repository and route tests corrupt persisted rows to prove the
     application verifier fails closed. Migration tests remain the authority for
-    database-trigger enforcement, so this helper removes only triggers attached
-    to the six operational evaluation tables after the real schemas are installed.
+    database-trigger enforcement. After installing the real schemas, this helper
+    removes only triggers attached to the operational evaluation tables.
     """
 
     raw_connection = engine.raw_connection()
@@ -43,12 +45,8 @@ def install_013a_for_application_verifier_harness(engine: Engine) -> None:
         # ``Base.create_all`` intentionally installs a false sentinel on this
         # migration-owned table.  Replace that empty bootstrap table so the
         # real 013b fixture can create its authoritative schema.
-        raw_connection.execute(
-            "DROP TABLE IF EXISTS governance_evaluation_audit_chain_heads"
-        )
-        raw_connection.execute(
-            "DROP TABLE IF EXISTS governance_evidence_verification_receipts"
-        )
+        raw_connection.execute("DROP TABLE IF EXISTS governance_evaluation_audit_chain_heads")
+        raw_connection.execute("DROP TABLE IF EXISTS governance_evidence_verification_receipts")
         raw_connection.executescript(trust_integrity_sql_for("sqlite"))
         raw_connection.executescript(verification_receipt_sql_for("sqlite"))
         cursor = raw_connection.cursor()

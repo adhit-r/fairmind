@@ -37,7 +37,7 @@ from src.infrastructure.db.repositories.evaluation_workbench_repository import (
     SqlAlchemyEvaluationWorkbenchUnitOfWork,
 )
 from tests.evaluation_workbench_sqlite import (
-    install_013a_for_application_verifier_harness,
+    install_authoritative_assurance_fixtures_for_application_verifier_harness,
 )
 
 ORG = str(uuid.uuid4())
@@ -58,7 +58,7 @@ def audit_session():
         connection.execute("PRAGMA foreign_keys = ON")
 
     Base.metadata.create_all(engine)
-    install_013a_for_application_verifier_harness(engine)
+    install_authoritative_assurance_fixtures_for_application_verifier_harness(engine)
     session = sessionmaker(bind=engine)()
     actor_uuid = uuid.UUID(ACTOR)
     session.execute(

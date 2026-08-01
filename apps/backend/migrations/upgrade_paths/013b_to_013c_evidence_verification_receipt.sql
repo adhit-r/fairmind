@@ -48,7 +48,7 @@ DECLARE
     expected_013b CONSTANT TEXT :=
         'd2d336d7f9fc99b0c259c6b54fc3a975267e84e055b40fdc97dc675184ef9c2f';
     expected_013c CONSTANT TEXT :=
-        'e3cece71a7eb9781bfe5cf44a49678be299506a9312bfe4ca4bb8e425b937d87';
+        'b121f3d1d8723da5b932231e234270cf037dfa239151ec5a518184915032dbae';
 BEGIN
     SELECT migration_checksum INTO recorded_013b
     FROM fairmind_operator_migration_ledger
@@ -99,7 +99,7 @@ BEGIN
       AND NOT attribute_entry.attisdropped
       AND attribute_entry.atttypid = 'pg_catalog.text'::regtype
       AND attribute_entry.attnotnull;
-    IF matched_count <> 34 THEN
+    IF matched_count <> 35 THEN
         RAISE EXCEPTION '013c verification receipt column catalog is incomplete';
     END IF;
 
@@ -109,7 +109,8 @@ BEGIN
             ('governance_evidence_verification_receipts_guard_insert'),
             ('governance_evidence_verification_receipts_no_update'),
             ('governance_evidence_verification_receipts_no_delete'),
-            ('governance_evidence_admissions_require_receipt_013c')
+            ('governance_evidence_admissions_require_receipt_013c'),
+            ('governance_evidence_receipts_require_verified_admission_013c')
     ) AS required(trigger_name)
     JOIN pg_catalog.pg_namespace AS namespace_entry
       ON namespace_entry.nspname = trusted_schema
@@ -119,7 +120,7 @@ BEGIN
       ON trigger_entry.tgrelid = table_entry.oid
      AND trigger_entry.tgname = required.trigger_name
      AND trigger_entry.tgenabled IN ('O', 'A');
-    IF matched_count <> 4 THEN
+    IF matched_count <> 5 THEN
         RAISE EXCEPTION '013c verification receipt trigger catalog is incomplete';
     END IF;
 
@@ -127,8 +128,29 @@ BEGIN
     FROM (
         VALUES
             ('fairmind_jsonb_object_member_count_013c', 'p_value text'),
+            (
+                'fairmind_verification_receipt_is_relationally_valid_013c',
+                'p_receipt governance_evidence_verification_receipts'
+            ),
+            (
+                'fairmind_verified_admission_has_exact_receipt_013c',
+                'p_admission governance_evidence_admissions'
+            ),
+            (
+                'fairmind_verification_receipt_matches_admission_013c',
+                'p_receipt governance_evidence_verification_receipts, '
+                || 'p_admission governance_evidence_admissions'
+            ),
+            (
+                'fairmind_verification_receipt_has_exact_verified_admission_013c',
+                'p_receipt governance_evidence_verification_receipts'
+            ),
             ('guard_governance_evidence_verification_receipt_013c', ''),
-            ('guard_governance_evidence_admission_receipt_013c', '')
+            ('guard_governance_evidence_admission_receipt_013c', ''),
+            (
+                'guard_governance_evidence_verification_receipt_parent_013c',
+                ''
+            )
     ) AS required(function_name, identity_arguments)
     JOIN pg_catalog.pg_namespace AS namespace_entry
       ON namespace_entry.nspname = trusted_schema
@@ -142,8 +164,41 @@ BEGIN
          'search_path=pg_catalog, ' || pg_catalog.quote_ident(trusted_schema)
          || ', pg_temp'
      ]::TEXT[];
-    IF matched_count <> 3 THEN
+    IF matched_count <> 8 THEN
         RAISE EXCEPTION '013c verification receipt function catalog is incomplete';
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM governance_evidence_verification_receipts AS receipt
+        WHERE NOT fairmind_verification_receipt_is_relationally_valid_013c(
+            receipt
+        )
+    ) THEN
+        RAISE EXCEPTION 'verification receipt relational binding drift';
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM governance_evidence_verification_receipts AS receipt
+        WHERE NOT
+            fairmind_verification_receipt_has_exact_verified_admission_013c(
+                receipt
+            )
+    ) THEN
+        RAISE EXCEPTION
+            'verification receipt lacks exact verified v2 admission';
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM governance_evidence_admissions AS admission
+        WHERE admission.contract_version = '2.0.0'
+          AND admission.admission_status = 'verified'
+          AND NOT fairmind_verified_admission_has_exact_receipt_013c(admission)
+    ) THEN
+        RAISE EXCEPTION
+            'verified v2 admission lacks exact verification receipt';
     END IF;
 END;
 $fairmind_operator_postcondition$ LANGUAGE plpgsql;
@@ -152,7 +207,7 @@ INSERT INTO fairmind_operator_migration_ledger (
     migration_key, migration_checksum
 ) VALUES (
     '013b-to-013c-evidence-verification-receipt-v1',
-    'e3cece71a7eb9781bfe5cf44a49678be299506a9312bfe4ca4bb8e425b937d87'
+    'b121f3d1d8723da5b932231e234270cf037dfa239151ec5a518184915032dbae'
 )
 ON CONFLICT (migration_key) DO NOTHING;
 
@@ -163,7 +218,7 @@ BEGIN
         WHERE migration_key =
               '013b-to-013c-evidence-verification-receipt-v1'
           AND migration_checksum =
-              'e3cece71a7eb9781bfe5cf44a49678be299506a9312bfe4ca4bb8e425b937d87'
+              'b121f3d1d8723da5b932231e234270cf037dfa239151ec5a518184915032dbae'
     ) THEN
         RAISE EXCEPTION '013c operator ledger write failed';
     END IF;

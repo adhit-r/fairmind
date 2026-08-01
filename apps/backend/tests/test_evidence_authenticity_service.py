@@ -3,18 +3,19 @@
 from __future__ import annotations
 
 import base64
-from dataclasses import fields
-from datetime import datetime, timedelta, timezone
 import copy
 import hashlib
 import inspect
 import json
+from dataclasses import fields
+from datetime import datetime, timedelta, timezone
 from typing import Mapping
 
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
+import src.application.services.evidence_authenticity_service as admission_service_module
 from src.application.ports.evidence_admission import (
     EvidenceSignatureVerifier,
     ExpectedServerBinding,
@@ -25,19 +26,18 @@ from src.application.services.evidence_authenticity_service import (
     EvidenceAuthenticityError,
     EvidenceAuthenticityService,
 )
-from src.domain.assurance.evidence_passport_v2 import (
-    evidence_passport_v2_content_hash,
-    evidence_passport_v2_signature_bytes,
-    expected_execution_binding_v2,
-    parse_evidence_passport_v2,
-)
 from src.domain.assurance.evaluation_v2 import (
     build_execution_envelope_v2,
     canonical_sha256,
 )
+from src.domain.assurance.evidence_passport_v2 import (
+    evidence_passport_v2_content_hash,
+    evidence_passport_v2_signature_bytes,
+    expected_execution_binding_v2,
+    normalize_evidence_passport_v2,
+    parse_evidence_passport_v2,
+)
 from src.infrastructure.security import Ed25519EvidenceVerifier
-import src.application.services.evidence_authenticity_service as admission_service_module
-
 
 NOW = datetime(2026, 8, 1, 12, 1, tzinfo=timezone.utc)
 _BINDING_FIELD_PATHS = (
@@ -127,9 +127,7 @@ def _envelope() -> dict[str, object]:
                 "adapterVersion": "0.3.0",
                 "resultContractVersion": "1.0.0",
                 "configuration": {"threshold": 0.5, "locale": "de-DE"},
-                "configurationHash": canonical_sha256(
-                    {"threshold": 0.5, "locale": "de-DE"}
-                ),
+                "configurationHash": canonical_sha256({"threshold": 0.5, "locale": "de-DE"}),
                 "inputRoles": ["scenario_set"],
                 "budgets": {"maxCases": 200},
                 "inputs": {"scenario_set": {"kind": "content_digest", "sha256": "f" * 64}},
@@ -193,9 +191,21 @@ def _payload() -> dict[str, object]:
         "result": {
             "technicalStatus": "succeeded",
             "evidenceResultStatus": "failed",
-            "summary": {"caseCount": 200, "attackSuccessRate": 0.17, "label": "adversarial-evaluation"},
+            "summary": {
+                "caseCount": 200,
+                "attackSuccessRate": 0.17,
+                "label": "adversarial-evaluation",
+            },
         },
-        "artifacts": [{"artifactId": "artifact-001", "role": "report", "sha256": "0" * 64, "mediaType": "application/json", "sizeBytes": 4096}],
+        "artifacts": [
+            {
+                "artifactId": "artifact-001",
+                "role": "report",
+                "sha256": "0" * 64,
+                "mediaType": "application/json",
+                "sizeBytes": 4096,
+            }
+        ],
         "limitations": ["Candidate-only evidence excludes unsupported provider features."],
         "capturedAt": "2026-08-01T12:00:00+00:00",
         "expiresAt": "2026-08-02T12:00:00+00:00",
@@ -279,10 +289,15 @@ def test_valid_passport_returns_candidate_only_with_frozen_normalized_result() -
 def test_candidate_binds_the_exact_domain_separated_signature_input_hash() -> None:
     candidate, _ = _assess()
 
-    expected = hashlib.sha256(
-        evidence_passport_v2_signature_bytes(_payload())
-    ).hexdigest()
+    expected = hashlib.sha256(evidence_passport_v2_signature_bytes(_payload())).hexdigest()
     assert candidate.signature_input_hash == expected
+
+
+def test_candidate_binds_the_complete_normalized_passport_snapshot_hash() -> None:
+    candidate, _ = _assess()
+
+    expected = canonical_sha256(normalize_evidence_passport_v2(_payload()))
+    assert candidate.passport_snapshot_hash == expected
 
 
 def test_candidate_binds_the_complete_signed_evaluator_projection_hash() -> None:
@@ -312,12 +327,8 @@ def test_candidate_binds_the_complete_signed_evaluator_projection_hash() -> None
 def test_candidate_freezes_public_key_fingerprint_and_verifier_contract() -> None:
     candidate, _ = _assess()
 
-    assert candidate.public_key_fingerprint == canonical_sha256(
-        dict(_trusted_key().public_jwk)
-    )
-    assert candidate.verifier_contract == (
-        "fairmind/evidence-passport-v2/verified-admission"
-    )
+    assert candidate.public_key_fingerprint == canonical_sha256(dict(_trusted_key().public_jwk))
+    assert candidate.verifier_contract == ("fairmind/evidence-passport-v2/verified-admission")
     assert candidate.verifier_version == "2.0.0"
 
 
@@ -341,8 +352,7 @@ def test_malformed_or_noncanonical_public_jwk_is_rejected_before_crypto(
     assert verifier.calls == []
 
 
-def test_real_ed25519_signature_verifies_end_to_end_and_detects_resigned_hash_tampering(
-) -> None:
+def test_real_ed25519_signature_verifies_end_to_end_and_detects_resigned_hash_tampering() -> None:
     private_key = Ed25519PrivateKey.generate()
     public_key = private_key.public_key().public_bytes(
         encoding=serialization.Encoding.Raw,
@@ -352,9 +362,7 @@ def test_real_ed25519_signature_verifies_end_to_end_and_detects_resigned_hash_ta
     payload = _payload()
     signature = copy.deepcopy(payload["signature"])
     assert isinstance(signature, dict)
-    signature["value"] = _b64url(
-        private_key.sign(evidence_passport_v2_signature_bytes(payload))
-    )
+    signature["value"] = _b64url(private_key.sign(evidence_passport_v2_signature_bytes(payload)))
     payload["signature"] = signature
     trusted_key = _trusted_key(public_jwk=public_jwk)
     service = EvidenceAuthenticityService(Ed25519EvidenceVerifier())
@@ -527,47 +535,3 @@ def test_service_has_no_persistence_collaborator() -> None:
     parameters = tuple(inspect.signature(EvidenceAuthenticityService).parameters)
     assert parameters == ("verifier",)
     assert isinstance(RecordingVerifier(), EvidenceSignatureVerifier)
-
-
-def test_empty_canonical_issuer_restrictions_are_unrestricted() -> None:
-    admission_service_module._validate_issuer_restrictions(
-        source_type="external_provider",
-        suite_version_id="suite-version-001",
-        target_version_id="target-version-001",
-        source_restrictions=(),
-        suite_restrictions=(),
-        target_restrictions=(),
-        known_suite_ids=frozenset(),
-        known_target_ids=frozenset(),
-    )
-
-
-@pytest.mark.parametrize(
-    ("changes", "message"),
-    (
-        ({"source_restrictions": ("external_provider", "external_provider")}, "malformed"),
-        ({"source_restrictions": ("unknown_source",)}, "restricted"),
-        ({"source_restrictions": ("fairmind_worker",)}, "restricted"),
-        ({"suite_restrictions": ("unknown-suite",)}, "restricted"),
-        ({"suite_restrictions": ("suite-version-002",)}, "restricted"),
-        ({"target_restrictions": ("unknown-target",)}, "restricted"),
-        ({"target_restrictions": ("target-version-002",)}, "restricted"),
-    ),
-)
-def test_nonempty_issuer_restrictions_are_closed_exact_allowlists(
-    changes: Mapping[str, tuple[str, ...]], message: str
-) -> None:
-    values = {
-        "source_type": "external_provider",
-        "suite_version_id": "suite-version-001",
-        "target_version_id": "target-version-001",
-        "source_restrictions": (),
-        "suite_restrictions": (),
-        "target_restrictions": (),
-        "known_suite_ids": frozenset({"suite-version-001", "suite-version-002"}),
-        "known_target_ids": frozenset({"target-version-001", "target-version-002"}),
-    }
-    values.update(changes)
-
-    with pytest.raises(EvidenceAuthenticityError, match=message):
-        admission_service_module._validate_issuer_restrictions(**values)

@@ -35,7 +35,7 @@ from database.models import Organization, OrganizationMember, User
 from src.domain.assurance.evaluation_v2 import canonical_json, canonical_sha256
 from tests.evaluation_workbench_sqlite import (
     allow_deliberate_check_constraint_corruption,
-    install_013a_for_application_verifier_harness,
+    install_authoritative_assurance_fixtures_for_application_verifier_harness,
 )
 
 app = FastAPI()
@@ -85,7 +85,7 @@ def workbench_client():
         connection.execute("PRAGMA foreign_keys = ON")
 
     Base.metadata.create_all(engine)
-    install_013a_for_application_verifier_harness(engine)
+    install_authoritative_assurance_fixtures_for_application_verifier_harness(engine)
     factory = sessionmaker(bind=engine)
     session = factory()
     for user_id in (USER, VIEWER):

@@ -2,6 +2,8 @@
 -- PostgreSQL remains the release authority. The receipt is an application and
 -- relational integrity record; RFC 8785 hashing and Ed25519 verification stay
 -- in the application kernel.
+-- SQLite cannot defer a receipt-side inverse trigger, so PostgreSQL alone
+-- guarantees at commit that every receipt belongs to a verified V2 admission.
 
 PRAGMA foreign_keys = OFF;
 BEGIN IMMEDIATE;
@@ -51,6 +53,7 @@ CREATE TABLE IF NOT EXISTS governance_evidence_verification_receipts (
     admission_id TEXT NOT NULL,
     admission_contract_version TEXT NOT NULL,
     passport_content_hash TEXT NOT NULL,
+    passport_snapshot_hash TEXT NOT NULL,
     signature_input_hash TEXT NOT NULL,
     execution_binding_hash TEXT NOT NULL,
     execution_binding_json TEXT NOT NULL,
@@ -76,13 +79,11 @@ CREATE TABLE IF NOT EXISTS governance_evidence_verification_receipts (
     verified_at TEXT NOT NULL,
     CONSTRAINT uq_governance_evidence_verification_receipt_admission
         UNIQUE (admission_id),
-    CONSTRAINT uq_governance_evidence_verification_receipt_scope UNIQUE (
-        admission_id, admission_contract_version, run_id, suite_execution_id, evidence_run_id,
-        passport_revision_id, workspace_id, system_id, org_id
-    ),
     CONSTRAINT ck_governance_evidence_verification_receipt_hashes CHECK (
         length(passport_content_hash) = 64
         AND passport_content_hash NOT GLOB '*[^0-9a-f]*'
+        AND length(passport_snapshot_hash) = 64
+        AND passport_snapshot_hash NOT GLOB '*[^0-9a-f]*'
         AND length(signature_input_hash) = 64
         AND signature_input_hash NOT GLOB '*[^0-9a-f]*'
         AND length(execution_binding_hash) = 64
@@ -98,6 +99,9 @@ CREATE TABLE IF NOT EXISTS governance_evidence_verification_receipts (
         json_valid(execution_binding_json)
         AND json_type(execution_binding_json) = 'object'
         AND json(execution_binding_json) = execution_binding_json
+        AND json_type(execution_binding_json, '$.target') = 'object'
+        AND json_type(execution_binding_json, '$.suite') = 'object'
+        AND json_type(execution_binding_json, '$.trustPolicy') = 'object'
         AND json_valid(public_jwk_json)
         AND json_type(public_jwk_json) = 'object'
         AND json(public_jwk_json) = public_jwk_json
@@ -195,6 +199,92 @@ CREATE INDEX IF NOT EXISTS idx_governance_evidence_verification_receipts_scope
         org_id, system_id, run_id, suite_execution_id
     );
 
+DROP VIEW IF EXISTS
+    governance_evidence_verification_receipt_admission_matches_013c;
+CREATE VIEW governance_evidence_verification_receipt_admission_matches_013c AS
+SELECT receipt.id AS receipt_id, admission.id AS admission_id
+FROM governance_evidence_verification_receipts AS receipt
+JOIN governance_evidence_admissions AS admission
+  ON admission.id = receipt.admission_id
+ AND admission.contract_version = receipt.admission_contract_version
+ AND admission.run_id = receipt.run_id
+ AND admission.suite_execution_id = receipt.suite_execution_id
+ AND admission.evidence_run_id = receipt.evidence_run_id
+ AND admission.passport_revision_id = receipt.passport_revision_id
+ AND admission.workspace_id = receipt.workspace_id
+ AND admission.system_id = receipt.system_id
+ AND admission.org_id = receipt.org_id
+ AND admission.trust_policy_version_id = receipt.trust_policy_version_id
+ AND admission.issuer_id = receipt.issuer_id
+ AND admission.signing_key_id = receipt.signing_key_id
+ AND admission.signer_key_id = receipt.signer_key_id
+ AND admission.signer_algorithm = receipt.signer_algorithm
+JOIN governance_evidence_runs AS evidence
+  ON evidence.id = receipt.evidence_run_id
+ AND evidence.workspace_id = receipt.workspace_id
+ AND evidence.system_id = receipt.system_id
+ AND evidence.org_id = receipt.org_id
+JOIN governance_evidence_passport_revisions AS revision
+  ON revision.id = receipt.passport_revision_id
+ AND revision.evidence_run_id = evidence.id
+ AND revision.system_id = evidence.system_id
+ AND revision.org_id = evidence.org_id
+JOIN governance_evidence_trust_policy_versions AS policy
+  ON policy.id = receipt.trust_policy_version_id
+ AND policy.org_id = receipt.org_id
+JOIN governance_evidence_signing_keys AS signing_key
+  ON signing_key.id = receipt.signing_key_id
+ AND signing_key.issuer_id = receipt.issuer_id
+ AND signing_key.org_id = receipt.org_id
+ AND signing_key.key_id = receipt.signer_key_id
+JOIN governance_evaluation_runs AS run
+  ON run.id = receipt.run_id
+ AND run.workspace_id = receipt.workspace_id
+ AND run.system_id = receipt.system_id
+ AND run.org_id = receipt.org_id
+WHERE admission.contract_version = '2.0.0'
+  AND admission.admission_status = 'verified'
+  AND admission.freshness_status = 'current'
+  AND admission.reasons_json = '[]'
+  AND admission.checked_by = 'fairmind/evidence-admission-service'
+  AND admission.checked_at = receipt.verified_at
+  AND admission.created_at = receipt.verified_at
+  AND admission.envelope_id = run.envelope_id
+  AND admission.envelope_hash = run.envelope_hash
+  AND admission.envelope_nonce = run.envelope_nonce
+  AND admission.envelope_id = json_extract(
+      receipt.execution_binding_json, '$.envelopeId'
+  )
+  AND admission.envelope_hash = json_extract(
+      receipt.execution_binding_json, '$.envelopeHash'
+  )
+  AND admission.envelope_nonce = json_extract(
+      receipt.execution_binding_json, '$.nonce'
+  )
+  AND admission.submitted_by = revision.created_by
+  AND admission.captured_at = evidence.captured_at
+  AND admission.captured_at = json_extract(
+      revision.snapshot_json, '$.capturedAt'
+  )
+  AND admission.signed_at = json_extract(
+      revision.snapshot_json, '$.signature.signedAt'
+  )
+  AND admission.effective_expires_at = evidence.expires_at
+  AND policy.maximum_evidence_age_seconds > 0
+  AND julianday(admission.effective_expires_at) = min(
+      julianday(json_extract(revision.snapshot_json, '$.expiresAt')),
+      julianday(
+          admission.captured_at,
+          '+' || policy.maximum_evidence_age_seconds || ' seconds'
+      ),
+      julianday(signing_key.valid_until)
+  )
+  AND julianday(signing_key.valid_from) <= julianday(admission.signed_at)
+  AND julianday(admission.captured_at) <= julianday(admission.signed_at)
+  AND julianday(admission.signed_at) <= julianday(receipt.verified_at)
+  AND julianday(receipt.verified_at) <
+      julianday(admission.effective_expires_at);
+
 DROP TRIGGER IF EXISTS governance_evidence_verification_receipts_guard_insert;
 CREATE TRIGGER governance_evidence_verification_receipts_guard_insert
 BEFORE INSERT ON governance_evidence_verification_receipts
@@ -256,6 +346,72 @@ BEGIN
           AND evidence.system_id = NEW.system_id
           AND evidence.org_id = NEW.org_id
           AND evidence.schema_version = '2.0.0'
+          AND evidence.capability_state = 'available'
+          AND evidence.content_hash = NEW.passport_content_hash
+          AND evidence.run_id = NEW.suite_execution_id
+          AND evidence.assurance_source = 'evaluation'
+          AND evidence.source_type = NEW.source_type
+          AND evidence.source_identifier = NEW.evaluator_id
+          AND json(evidence.provenance_json) = json('{}')
+          AND evidence.result = json_extract(
+              revision.snapshot_json, '$.result.evidenceResultStatus'
+          )
+          AND json(evidence.artifact_refs_json) = json(
+              json_extract(revision.snapshot_json, '$.artifacts')
+          )
+          AND json(evidence.limitations_json) = json(
+              json_extract(revision.snapshot_json, '$.limitations')
+          )
+          AND evidence.captured_at = json_extract(
+              revision.snapshot_json, '$.capturedAt'
+          )
+          AND (SELECT count(*) FROM json_each(revision.snapshot_json)) = 16
+          AND (
+              SELECT count(*)
+              FROM json_each(json_extract(revision.snapshot_json, '$.result'))
+          ) = 3
+          AND (
+              SELECT count(*)
+              FROM json_each(
+                  json_extract(revision.snapshot_json, '$.signature')
+              )
+          ) = 5
+          AND json_extract(revision.snapshot_json, '$.schemaVersion') = '2.0.0'
+          AND json_extract(revision.snapshot_json, '$.claimBoundary')
+              = 'supporting_evidence_only'
+          AND json_extract(revision.snapshot_json, '$.organizationId') = NEW.org_id
+          AND json_extract(revision.snapshot_json, '$.workspaceId')
+              = NEW.workspace_id
+          AND json_extract(revision.snapshot_json, '$.systemId') = NEW.system_id
+          AND json_extract(revision.snapshot_json, '$.passportId')
+              = evidence.passport_id
+          AND revision.passport_id = evidence.passport_id
+          AND json_type(revision.snapshot_json, '$.passportRevision') = 'integer'
+          AND json_extract(revision.snapshot_json, '$.passportRevision')
+              = revision.passport_revision
+          AND json_type(revision.snapshot_json, '$.artifacts') = 'array'
+          AND json_type(revision.snapshot_json, '$.limitations') = 'array'
+          AND json_type(revision.snapshot_json, '$.result') = 'object'
+          AND json_type(revision.snapshot_json, '$.signature.value') = 'text'
+          AND length(json_extract(revision.snapshot_json, '$.signature.value'))
+              = 86
+          AND json_extract(revision.snapshot_json, '$.signature.value')
+              NOT GLOB '*[^A-Za-z0-9_-]*'
+          AND (SELECT count(*) FROM json_each(NEW.execution_binding_json)) = 16
+          AND (
+              SELECT count(*)
+              FROM json_each(json_extract(NEW.execution_binding_json, '$.target'))
+          ) = 3
+          AND (
+              SELECT count(*)
+              FROM json_each(json_extract(NEW.execution_binding_json, '$.suite'))
+          ) = 4
+          AND (
+              SELECT count(*)
+              FROM json_each(
+                  json_extract(NEW.execution_binding_json, '$.trustPolicy')
+              )
+          ) = 2
           AND revision.canonical_content_hash = NEW.passport_content_hash
           AND json_extract(revision.snapshot_json, '$.contentHash')
               = NEW.passport_content_hash
@@ -263,6 +419,12 @@ BEGIN
               = json(NEW.execution_binding_json)
           AND json_extract(revision.snapshot_json, '$.evaluator')
               = json(NEW.evaluator_projection_json)
+          AND json_extract(revision.snapshot_json, '$.signature.issuerId')
+              = NEW.issuer_key
+          AND json_extract(revision.snapshot_json, '$.signature.keyId')
+              = NEW.signer_key_id
+          AND json_extract(revision.snapshot_json, '$.signature.algorithm')
+              = NEW.signer_algorithm
           AND policy.policy_hash = NEW.trust_policy_hash
           AND policy.status = 'active'
           AND plan.trust_policy_version_id = policy.id
@@ -343,55 +505,27 @@ END;
 
 DROP TRIGGER IF EXISTS governance_evidence_admissions_require_receipt_013c;
 CREATE TRIGGER governance_evidence_admissions_require_receipt_013c
-BEFORE INSERT ON governance_evidence_admissions
+AFTER INSERT ON governance_evidence_admissions
 FOR EACH ROW
 WHEN NEW.contract_version = '2.0.0' AND NEW.admission_status = 'verified'
 BEGIN
     SELECT CASE WHEN NOT EXISTS (
         SELECT 1
-        FROM governance_evidence_verification_receipts AS receipt
-        WHERE receipt.admission_id = NEW.id
-          AND receipt.admission_contract_version = NEW.contract_version
-          AND receipt.run_id = NEW.run_id
-          AND receipt.suite_execution_id = NEW.suite_execution_id
-          AND receipt.evidence_run_id = NEW.evidence_run_id
-          AND receipt.passport_revision_id = NEW.passport_revision_id
-          AND receipt.workspace_id = NEW.workspace_id
-          AND receipt.system_id = NEW.system_id
-          AND receipt.org_id = NEW.org_id
-          AND receipt.trust_policy_version_id = NEW.trust_policy_version_id
-          AND receipt.issuer_id = NEW.issuer_id
-          AND receipt.signing_key_id = NEW.signing_key_id
-          AND receipt.signer_key_id = NEW.signer_key_id
-          AND receipt.signer_algorithm = NEW.signer_algorithm
-          AND receipt.verified_at = NEW.checked_at
+        FROM governance_evidence_verification_receipt_admission_matches_013c
+        WHERE admission_id = NEW.id
     ) THEN RAISE(ABORT, 'verified admission requires exact verification receipt') END;
 END;
 
 DROP TRIGGER IF EXISTS governance_evidence_admissions_require_receipt_update_013c;
 CREATE TRIGGER governance_evidence_admissions_require_receipt_update_013c
-BEFORE UPDATE ON governance_evidence_admissions
+AFTER UPDATE ON governance_evidence_admissions
 FOR EACH ROW
 WHEN NEW.contract_version = '2.0.0' AND NEW.admission_status = 'verified'
 BEGIN
     SELECT CASE WHEN NOT EXISTS (
         SELECT 1
-        FROM governance_evidence_verification_receipts AS receipt
-        WHERE receipt.admission_id = NEW.id
-          AND receipt.admission_contract_version = NEW.contract_version
-          AND receipt.run_id = NEW.run_id
-          AND receipt.suite_execution_id = NEW.suite_execution_id
-          AND receipt.evidence_run_id = NEW.evidence_run_id
-          AND receipt.passport_revision_id = NEW.passport_revision_id
-          AND receipt.workspace_id = NEW.workspace_id
-          AND receipt.system_id = NEW.system_id
-          AND receipt.org_id = NEW.org_id
-          AND receipt.trust_policy_version_id = NEW.trust_policy_version_id
-          AND receipt.issuer_id = NEW.issuer_id
-          AND receipt.signing_key_id = NEW.signing_key_id
-          AND receipt.signer_key_id = NEW.signer_key_id
-          AND receipt.signer_algorithm = NEW.signer_algorithm
-          AND receipt.verified_at = NEW.checked_at
+        FROM governance_evidence_verification_receipt_admission_matches_013c
+        WHERE admission_id = NEW.id
     ) THEN RAISE(ABORT, 'verified admission requires exact verification receipt') END;
 END;
 
@@ -408,6 +542,263 @@ BEFORE DELETE ON governance_evidence_verification_receipts
 BEGIN
     SELECT RAISE(ABORT, 'verification receipts are append-only');
 END;
+
+-- Run on every first install and replay, after all 013c guards exist. This
+-- prevents a disabled-trigger or privileged-write incident from being blessed
+-- later by a successful migration/startup catalog check.
+-- Mutable lifecycle states are insert-time trust gates above, not historical
+-- replay facts, so retirement or revocation does not invalidate an old row.
+CREATE TEMP TABLE fairmind_013c_relational_receipt_assertion (
+    ok INTEGER
+        CONSTRAINT "verification receipt relational binding drift"
+        CHECK (ok = 1)
+);
+INSERT INTO fairmind_013c_relational_receipt_assertion(ok)
+SELECT 0
+FROM governance_evidence_verification_receipts AS receipt
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM governance_evidence_runs AS evidence
+    JOIN governance_evidence_passport_revisions AS revision
+      ON revision.id = receipt.passport_revision_id
+     AND revision.evidence_run_id = evidence.id
+     AND revision.system_id = evidence.system_id
+     AND revision.org_id = evidence.org_id
+    JOIN governance_evidence_trust_policy_versions AS policy
+      ON policy.id = receipt.trust_policy_version_id
+     AND policy.org_id = evidence.org_id
+    JOIN governance_evidence_issuers AS issuer
+      ON issuer.id = receipt.issuer_id
+     AND issuer.org_id = evidence.org_id
+    JOIN governance_evidence_signing_keys AS signing_key
+      ON signing_key.id = receipt.signing_key_id
+     AND signing_key.issuer_id = issuer.id
+     AND signing_key.org_id = evidence.org_id
+    JOIN governance_evaluation_runs AS run
+      ON run.id = receipt.run_id
+     AND run.workspace_id = evidence.workspace_id
+     AND run.system_id = evidence.system_id
+     AND run.org_id = evidence.org_id
+    JOIN governance_evaluation_plans AS plan
+      ON plan.id = run.plan_id
+     AND plan.contract_version = run.contract_version
+     AND plan.workspace_id = run.workspace_id
+     AND plan.system_id = run.system_id
+     AND plan.org_id = run.org_id
+    JOIN governance_evaluation_target_versions AS target
+      ON target.id = plan.target_version_id
+     AND target.workspace_id = plan.workspace_id
+     AND target.system_id = plan.system_id
+     AND target.org_id = plan.org_id
+    JOIN governance_evaluation_run_suite_executions AS execution
+      ON execution.id = receipt.suite_execution_id
+     AND execution.run_id = run.id
+     AND execution.workspace_id = run.workspace_id
+     AND execution.system_id = run.system_id
+     AND execution.org_id = run.org_id
+    JOIN governance_evaluation_plan_suites AS selection
+      ON selection.plan_id = plan.id
+     AND selection.workspace_id = plan.workspace_id
+     AND selection.system_id = plan.system_id
+     AND selection.org_id = plan.org_id
+     AND selection.ordinal = execution.ordinal
+     AND selection.suite_version_id = execution.suite_version_id
+     AND selection.suite_owner_scope = execution.suite_owner_scope
+    JOIN governance_evaluation_suite_versions AS suite
+      ON suite.id = execution.suite_version_id
+     AND suite.owner_scope = execution.suite_owner_scope
+    WHERE evidence.id = receipt.evidence_run_id
+      AND evidence.workspace_id = receipt.workspace_id
+      AND evidence.system_id = receipt.system_id
+      AND evidence.org_id = receipt.org_id
+      AND evidence.schema_version = '2.0.0'
+      AND evidence.capability_state = 'available'
+      AND evidence.content_hash = receipt.passport_content_hash
+      AND evidence.run_id = receipt.suite_execution_id
+      AND evidence.assurance_source = 'evaluation'
+      AND evidence.source_type = receipt.source_type
+      AND evidence.source_identifier = receipt.evaluator_id
+      AND json(evidence.provenance_json) = json('{}')
+      AND evidence.result = json_extract(
+          revision.snapshot_json, '$.result.evidenceResultStatus'
+      )
+      AND json(evidence.artifact_refs_json) = json(
+          json_extract(revision.snapshot_json, '$.artifacts')
+      )
+      AND json(evidence.limitations_json) = json(
+          json_extract(revision.snapshot_json, '$.limitations')
+      )
+      AND evidence.captured_at = json_extract(
+          revision.snapshot_json, '$.capturedAt'
+      )
+      AND (SELECT count(*) FROM json_each(revision.snapshot_json)) = 16
+      AND (
+          SELECT count(*)
+          FROM json_each(json_extract(revision.snapshot_json, '$.result'))
+      ) = 3
+      AND (
+          SELECT count(*)
+          FROM json_each(json_extract(revision.snapshot_json, '$.signature'))
+      ) = 5
+      AND json_extract(revision.snapshot_json, '$.schemaVersion') = '2.0.0'
+      AND json_extract(revision.snapshot_json, '$.claimBoundary')
+          = 'supporting_evidence_only'
+      AND json_extract(revision.snapshot_json, '$.organizationId') = receipt.org_id
+      AND json_extract(revision.snapshot_json, '$.workspaceId')
+          = receipt.workspace_id
+      AND json_extract(revision.snapshot_json, '$.systemId') = receipt.system_id
+      AND json_extract(revision.snapshot_json, '$.passportId')
+          = evidence.passport_id
+      AND revision.passport_id = evidence.passport_id
+      AND json_type(revision.snapshot_json, '$.passportRevision') = 'integer'
+      AND json_extract(revision.snapshot_json, '$.passportRevision')
+          = revision.passport_revision
+      AND json_type(revision.snapshot_json, '$.artifacts') = 'array'
+      AND json_type(revision.snapshot_json, '$.limitations') = 'array'
+      AND json_type(revision.snapshot_json, '$.result') = 'object'
+      AND json_type(revision.snapshot_json, '$.signature.value') = 'text'
+      AND length(json_extract(revision.snapshot_json, '$.signature.value')) = 86
+      AND json_extract(revision.snapshot_json, '$.signature.value')
+          NOT GLOB '*[^A-Za-z0-9_-]*'
+      AND (SELECT count(*) FROM json_each(receipt.execution_binding_json)) = 16
+      AND (
+          SELECT count(*)
+          FROM json_each(json_extract(receipt.execution_binding_json, '$.target'))
+      ) = 3
+      AND (
+          SELECT count(*)
+          FROM json_each(json_extract(receipt.execution_binding_json, '$.suite'))
+      ) = 4
+      AND (
+          SELECT count(*)
+          FROM json_each(
+              json_extract(receipt.execution_binding_json, '$.trustPolicy')
+          )
+      ) = 2
+      AND revision.canonical_content_hash = receipt.passport_content_hash
+      AND json_extract(revision.snapshot_json, '$.contentHash')
+          = receipt.passport_content_hash
+      AND json_extract(revision.snapshot_json, '$.executionBinding')
+          = json(receipt.execution_binding_json)
+      AND json_extract(revision.snapshot_json, '$.evaluator')
+          = json(receipt.evaluator_projection_json)
+      AND json_extract(revision.snapshot_json, '$.signature.issuerId')
+          = receipt.issuer_key
+      AND json_extract(revision.snapshot_json, '$.signature.keyId')
+          = receipt.signer_key_id
+      AND json_extract(revision.snapshot_json, '$.signature.algorithm')
+          = receipt.signer_algorithm
+      AND policy.policy_hash = receipt.trust_policy_hash
+      AND plan.trust_policy_version_id = policy.id
+      AND issuer.issuer_key = receipt.issuer_key
+      AND signing_key.key_id = receipt.signer_key_id
+      AND signing_key.algorithm = receipt.signer_algorithm
+      AND signing_key.public_jwk_json = receipt.public_jwk_json
+      AND run.contract_version = '2.0.0'
+      AND json_extract(
+          receipt.execution_binding_json,
+          '$.trustPolicy.trustPolicyVersionId'
+      ) = policy.id
+      AND json_extract(
+          receipt.execution_binding_json, '$.trustPolicy.policyHash'
+      ) = policy.policy_hash
+      AND json_extract(receipt.execution_binding_json, '$.envelopeId')
+          = run.envelope_id
+      AND json_extract(receipt.execution_binding_json, '$.envelopeHash')
+          = run.envelope_hash
+      AND json_extract(receipt.execution_binding_json, '$.nonce')
+          = run.envelope_nonce
+      AND json_extract(receipt.execution_binding_json, '$.planId') = plan.id
+      AND json_extract(receipt.execution_binding_json, '$.planContentHash')
+          = plan.plan_content_hash
+      AND json_extract(
+          receipt.execution_binding_json, '$.target.targetVersionId'
+      ) = target.id
+      AND json_extract(
+          receipt.execution_binding_json, '$.target.subjectDigest'
+      ) = target.subject_digest
+      AND json_extract(
+          receipt.execution_binding_json, '$.target.manifestDigest'
+      ) = target.manifest_digest
+      AND execution.suite_version_id = json_extract(
+          receipt.execution_binding_json, '$.suite.suiteVersionId'
+      )
+      AND json_extract(
+          receipt.execution_binding_json, '$.suite.manifestDigest'
+      ) = suite.manifest_digest
+      AND json_extract(
+          receipt.execution_binding_json, '$.suite.configurationHash'
+      ) = selection.configuration_hash
+      AND json_extract(receipt.execution_binding_json, '$.lifecyclePhase')
+          = run.lifecycle_phase
+      AND json_extract(receipt.execution_binding_json, '$.executionDepth')
+          = plan.execution_depth
+      AND json_extract(receipt.execution_binding_json, '$.enforcementMode')
+          = plan.enforcement_mode
+      AND json_extract(receipt.execution_binding_json, '$.deliveryMode')
+          = plan.delivery_mode
+      AND receipt.source_type = plan.delivery_mode
+      AND receipt.adapter_name = suite.adapter_name
+      AND receipt.adapter_version = suite.adapter_version
+      AND receipt.result_contract_version = suite.result_contract_version
+      AND receipt.run_id = json_extract(
+          receipt.execution_binding_json, '$.runId'
+      )
+      AND receipt.suite_execution_id = json_extract(
+          receipt.execution_binding_json, '$.suite.suiteExecutionId'
+      )
+      AND receipt.workspace_id = json_extract(
+          receipt.execution_binding_json, '$.workspaceId'
+      )
+      AND receipt.system_id = json_extract(
+          receipt.execution_binding_json, '$.systemId'
+      )
+      AND receipt.org_id = json_extract(
+          receipt.execution_binding_json, '$.organizationId'
+      )
+      AND json_extract(run.envelope_json, '$.requestedAt')
+          <= json_extract(revision.snapshot_json, '$.capturedAt')
+      AND json_extract(revision.snapshot_json, '$.capturedAt')
+          <= json_extract(revision.snapshot_json, '$.signature.signedAt')
+      AND json_extract(revision.snapshot_json, '$.signature.signedAt')
+          <= receipt.verified_at
+)
+LIMIT 1;
+DROP TABLE fairmind_013c_relational_receipt_assertion;
+
+CREATE TEMP TABLE fairmind_013c_receipt_parent_assertion (
+    ok INTEGER
+        CONSTRAINT "verification receipt lacks exact verified v2 admission"
+        CHECK (ok = 1)
+);
+INSERT INTO fairmind_013c_receipt_parent_assertion(ok)
+SELECT 0
+FROM governance_evidence_verification_receipts AS receipt
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM governance_evidence_verification_receipt_admission_matches_013c AS exact
+    WHERE exact.receipt_id = receipt.id
+)
+LIMIT 1;
+DROP TABLE fairmind_013c_receipt_parent_assertion;
+
+CREATE TEMP TABLE fairmind_013c_exact_receipt_assertion (
+    ok INTEGER
+        CONSTRAINT "verified v2 admission lacks exact verification receipt"
+        CHECK (ok = 1)
+);
+INSERT INTO fairmind_013c_exact_receipt_assertion(ok)
+SELECT 0
+FROM governance_evidence_admissions AS admission
+WHERE admission.contract_version = '2.0.0'
+  AND admission.admission_status = 'verified'
+  AND NOT EXISTS (
+      SELECT 1
+      FROM governance_evidence_verification_receipt_admission_matches_013c AS exact
+      WHERE exact.admission_id = admission.id
+  )
+LIMIT 1;
+DROP TABLE fairmind_013c_exact_receipt_assertion;
 
 CREATE TEMP TABLE fairmind_013c_fk_assertion (
     ok INTEGER CONSTRAINT "foreign key violation after 013c" CHECK (ok = 1)

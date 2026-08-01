@@ -1,29 +1,32 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import sqlite3
 import subprocess
+import uuid
+from pathlib import Path
 from types import MappingProxyType
 from typing import Mapping
-import uuid
 
 import pytest
 from sqlalchemy import create_engine, text
 
 from config.migration_integrity import (
+    FROZEN_013B_OPERATOR_V2_CHECKSUM,
+    FROZEN_013C_OPERATOR_CHECKSUM,
     FROZEN_POSTGRESQL_ASSURANCE_CATALOGS,
-    FrozenPostgreSQLCatalog,
-    FrozenMigration,
-    MigrationIntegrityError,
+    FROZEN_SQLITE_013C_FIXTURE_CHECKSUM,
     POSTGRESQL_ASSURANCE_CATALOG_SPEC,
     POSTGRESQL_ASSURANCE_FUNCTIONS,
     POSTGRESQL_ASSURANCE_REQUIRED_TRIGGERS,
-    PostgreSQLCatalogSpec,
     SQLITE_ASSURANCE_INDEXES,
     SQLITE_ASSURANCE_TABLES,
     SQLITE_ASSURANCE_TRIGGERS,
     SQLITE_ASSURANCE_VIEWS,
+    FrozenMigration,
+    FrozenPostgreSQLCatalog,
+    MigrationIntegrityError,
+    PostgreSQLCatalogSpec,
     bind_postgresql_engine_search_path,
     normalized_database_identity,
     postgresql_assurance_catalog_digest,
@@ -39,7 +42,6 @@ from config.migration_integrity import (
     verify_sqlite_assurance_schema,
 )
 
-
 MIGRATIONS = Path(__file__).parents[1] / "migrations"
 POSTGRES_URL = os.getenv("FAIRMIND_TEST_POSTGRES_URL")
 POSTGRES_BASE_CHAIN = (
@@ -52,9 +54,86 @@ POSTGRES_BASE_CHAIN = (
 POSTGRES_OPERATOR_CHAIN = (
     "upgrade_paths/012_to_013_evaluation_v2.sql",
     "upgrade_paths/013_to_013a_evaluation_binding_integrity.sql",
-    "upgrade_paths/013a_to_013b_evaluation_assurance_trust_integrity.sql",
+    "upgrade_paths/013a_to_013b_evaluation_assurance_trust_integrity_v2.sql",
     "upgrade_paths/013b_to_013c_evidence_verification_receipt.sql",
 )
+POSTGRESQL_013B_PREREQUISITE_CONSTRAINTS = frozenset(
+    {
+        ("governance_evaluation_plans", "uq_governance_evaluation_plan_contract_tenant"),
+        ("governance_evaluation_runs", "fk_governance_evaluation_run_plan_contract"),
+        (
+            "governance_evaluation_target_versions",
+            "uq_governance_evaluation_target_kind_tenant",
+        ),
+        (
+            "governance_evaluation_plans",
+            "fk_governance_evaluation_plan_target_version",
+        ),
+        (
+            "governance_evaluation_suite_versions",
+            "ck_governance_evaluation_suite_canonical_ref",
+        ),
+        (
+            "governance_evaluation_runs",
+            "uq_governance_evaluation_run_v2_envelope_scope",
+        ),
+        (
+            "governance_evaluation_runs",
+            "uq_governance_evaluation_run_org_envelope_nonce",
+        ),
+        (
+            "governance_evaluation_runs",
+            "ck_governance_evaluation_run_technical_status",
+        ),
+        (
+            "governance_evaluation_runs",
+            "ck_governance_evaluation_run_evidence_link_state",
+        ),
+        ("governance_evaluation_runs", "ck_governance_evaluation_run_timestamps"),
+        (
+            "governance_evaluation_runs",
+            "ck_governance_evaluation_run_v2_projection_freeze",
+        ),
+        (
+            "governance_evaluation_runs",
+            "ck_governance_evaluation_run_envelope_nonce",
+        ),
+        (
+            "governance_evaluation_runs",
+            "ck_governance_evaluation_run_timestamp_canonical",
+        ),
+        (
+            "governance_evaluation_runs",
+            "ck_governance_evaluation_run_timestamp_order",
+        ),
+        (
+            "governance_evaluation_run_suite_executions",
+            "ck_governance_evaluation_suite_execution_timestamps",
+        ),
+        (
+            "governance_evaluation_run_suite_executions",
+            "ck_governance_evaluation_suite_execution_projection_freeze",
+        ),
+        (
+            "governance_evaluation_run_suite_executions",
+            "ck_governance_evaluation_suite_execution_timestamp_canonical",
+        ),
+        (
+            "governance_evaluation_run_suite_executions",
+            "ck_governance_evaluation_suite_execution_timestamp_order",
+        ),
+    }
+)
+POSTGRESQL_013B_RETAINED_PREREQUISITE_CONSTRAINTS = POSTGRESQL_013B_PREREQUISITE_CONSTRAINTS - {
+    (
+        "governance_evaluation_runs",
+        "ck_governance_evaluation_run_v2_projection_freeze",
+    ),
+    (
+        "governance_evaluation_run_suite_executions",
+        "ck_governance_evaluation_suite_execution_projection_freeze",
+    ),
+}
 
 
 def _install_sqlite_assurance_chain(database_path: Path) -> None:
@@ -76,8 +155,7 @@ def _install_sqlite_assurance_chain(database_path: Path) -> None:
         connection.executescript(sql_013a("sqlite"))
         connection.executescript(
             (
-                MIGRATIONS
-                / "fixtures/013b_evaluation_assurance_trust_integrity.sqlite.sql"
+                MIGRATIONS / "fixtures/013b_evaluation_assurance_trust_integrity.sqlite.sql"
             ).read_text(encoding="utf-8")
         )
         connection.executescript(sql_013c("sqlite"))
@@ -141,6 +219,34 @@ def _run_postgresql_operator_migration(
     )
 
 
+def _postgresql_013b_prerequisite_definitions(
+    connection,
+    *,
+    schema_name: str,
+    expected: frozenset[tuple[str, str]] = POSTGRESQL_013B_PREREQUISITE_CONSTRAINTS,
+) -> dict[tuple[str, str], str]:
+    constraint_names = [constraint_name for _table_name, constraint_name in expected]
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT relation_entry.relname, constraint_entry.conname, "
+            "pg_catalog.pg_get_constraintdef(constraint_entry.oid, true) "
+            "FROM pg_catalog.pg_constraint AS constraint_entry "
+            "JOIN pg_catalog.pg_class AS relation_entry "
+            "ON relation_entry.oid = constraint_entry.conrelid "
+            "JOIN pg_catalog.pg_namespace AS namespace_entry "
+            "ON namespace_entry.oid = relation_entry.relnamespace "
+            "WHERE namespace_entry.nspname = %s "
+            "AND constraint_entry.conname = ANY(%s)",
+            (schema_name, constraint_names),
+        )
+        installed = {
+            (str(table_name), str(constraint_name)): str(definition)
+            for table_name, constraint_name, definition in cursor.fetchall()
+        }
+    assert set(installed) == set(expected)
+    return installed
+
+
 def _install_minimal_postgresql_assurance_catalog(
     connection,
     *,
@@ -148,9 +254,7 @@ def _install_minimal_postgresql_assurance_catalog(
 ) -> PostgreSQLCatalogSpec:
     """Install a real, small catalog for native fingerprint behavior tests."""
     connection.exec_driver_sql(f'CREATE SCHEMA "{schema_name}"')
-    connection.exec_driver_sql(
-        f'REVOKE CREATE ON SCHEMA "{schema_name}" FROM PUBLIC'
-    )
+    connection.exec_driver_sql(f'REVOKE CREATE ON SCHEMA "{schema_name}" FROM PUBLIC')
     connection.exec_driver_sql(
         f'CREATE TABLE "{schema_name}".guarded_events '
         "(id TEXT PRIMARY KEY, payload TEXT NOT NULL)"
@@ -219,9 +323,7 @@ def test_postgresql_ledger_requires_every_exact_frozen_checksum() -> None:
             ),
             {"checksum_a": "a" * 64, "checksum_b": "b" * 64},
         )
-        verify_postgresql_migration_ledger(
-            connection, trusted_schema="trusted", expected=expected
-        )
+        verify_postgresql_migration_ledger(connection, trusted_schema="trusted", expected=expected)
 
         connection.execute(
             text(
@@ -298,9 +400,7 @@ def test_database_identity_normalizes_driver_defaults_without_exposing_secrets()
     first = normalized_database_identity(
         "postgresql+psycopg2://assurance:secret-one@LOCALHOST:5432/fairmind?ssl=true"
     )
-    second = normalized_database_identity(
-        "postgresql://assurance:secret-two@localhost/fairmind"
-    )
+    second = normalized_database_identity("postgresql://assurance:secret-two@localhost/fairmind")
     assert first == second
 
     with pytest.raises(MigrationIntegrityError) as caught:
@@ -400,10 +500,7 @@ def test_sqlite_in_memory_identity_requires_the_same_engine_instance() -> None:
 
 
 def test_postgresql_runtime_search_path_is_fixed_and_identifier_safe() -> None:
-    assert (
-        postgresql_runtime_search_path('tenant"schema')
-        == 'pg_catalog,"tenant""schema",pg_temp'
-    )
+    assert postgresql_runtime_search_path('tenant"schema') == 'pg_catalog,"tenant""schema",pg_temp'
     for schema in (
         "",
         "pg_catalog",
@@ -474,12 +571,14 @@ def test_production_postgresql_manifest_covers_audit_immutability() -> None:
         "governance_evaluation_audit_events_guard_head_insert",
         "governance_evaluation_audit_events_advance_head",
     } <= POSTGRESQL_ASSURANCE_REQUIRED_TRIGGERS
-    assert "governance_evaluation_audit_events" in (
-        POSTGRESQL_ASSURANCE_CATALOG_SPEC.relations
-    )
-    assert "guard_governance_evidence_admission_signer_013b" in (
-        POSTGRESQL_ASSURANCE_FUNCTIONS
-    )
+    assert "governance_evaluation_audit_events" in (POSTGRESQL_ASSURANCE_CATALOG_SPEC.relations)
+    assert "guard_governance_evidence_admission_signer_013b" in (POSTGRESQL_ASSURANCE_FUNCTIONS)
+    assert {
+        "fairmind_verification_receipt_is_relationally_valid_013c",
+        "fairmind_verification_receipt_matches_admission_013c",
+        "fairmind_verification_receipt_has_exact_verified_admission_013c",
+        "fairmind_verified_admission_has_exact_receipt_013c",
+    } <= POSTGRESQL_ASSURANCE_FUNCTIONS
     assert "governance_evidence_admissions_guard_signer_insert" in (
         POSTGRESQL_ASSURANCE_REQUIRED_TRIGGERS
     )
@@ -488,10 +587,7 @@ def test_production_postgresql_manifest_covers_audit_immutability() -> None:
     frozen = FROZEN_POSTGRESQL_ASSURANCE_CATALOGS[14]
     assert frozen.spec is POSTGRESQL_ASSURANCE_CATALOG_SPEC
     assert frozen.postgresql_major == 14
-    assert (
-        frozen.digest
-        == "47739c29a794d0e20bc3b5178551d92d1ab11656d202f755dc47bfe736124d3d"
-    )
+    assert frozen.digest == "714fc4ea6f69085ad13bdc3142d38432e405cc17d33d77f93161f3e957f3c9c6"
     validate_frozen_postgresql_catalog(frozen)
 
 
@@ -556,6 +652,30 @@ def test_bundled_checksum_manifest_detects_source_drift(tmp_path: Path) -> None:
         verify_bundled_migration_checksums(expected=expected)
 
 
+def test_013c_operator_source_checksum_is_frozen() -> None:
+    import hashlib
+
+    operator = MIGRATIONS / "upgrade_paths/013b_to_013c_evidence_verification_receipt.sql"
+    assert hashlib.sha256(operator.read_bytes()).hexdigest() == (FROZEN_013C_OPERATOR_CHECKSUM)
+
+
+def test_sqlite_013c_fixture_source_checksum_is_frozen() -> None:
+    import hashlib
+
+    fixture = MIGRATIONS / "fixtures/013c_evidence_verification_receipt.sqlite.sql"
+    assert hashlib.sha256(fixture.read_bytes()).hexdigest() == (FROZEN_SQLITE_013C_FIXTURE_CHECKSUM)
+
+
+def test_013b_v2_operator_source_checksum_and_c_collation_are_frozen() -> None:
+    import hashlib
+
+    operator = MIGRATIONS / "upgrade_paths/013a_to_013b_evaluation_assurance_trust_integrity_v2.sql"
+    payload = operator.read_text(encoding="utf-8")
+    assert hashlib.sha256(payload.encode("utf-8")).hexdigest() == (FROZEN_013B_OPERATOR_V2_CHECKSUM)
+    assert payload.count("E'\\n' ORDER BY") == 4
+    assert payload.count('COLLATE pg_catalog."C"') == 7
+
+
 def test_sqlite_startup_check_accepts_the_frozen_013c_catalog(
     tmp_path: Path,
 ) -> None:
@@ -567,28 +687,42 @@ def test_sqlite_startup_check_accepts_the_frozen_013c_catalog(
         verify_sqlite_assurance_schema(connection)
 
 
+def test_sqlite_startup_check_rejects_fixture_source_checksum_drift(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database_path = tmp_path / "assurance.sqlite3"
+    _install_sqlite_assurance_chain(database_path)
+    engine = create_engine(f"sqlite:///{database_path}")
+    monkeypatch.setattr(
+        "config.migration_integrity.FROZEN_SQLITE_013C_FIXTURE_CHECKSUM",
+        "0" * 64,
+    )
+    with engine.connect() as connection:
+        connection.exec_driver_sql("PRAGMA foreign_keys = ON")
+        with pytest.raises(
+            MigrationIntegrityError,
+            match="bundled fixture checksum drift",
+        ):
+            verify_sqlite_assurance_schema(connection)
+
+
 def test_sqlite_startup_check_rejects_names_with_empty_tables_and_noop_guards() -> None:
     engine = create_engine("sqlite:///:memory:")
     with engine.connect() as connection:
         connection.exec_driver_sql("PRAGMA foreign_keys = ON")
         for table_name in sorted(SQLITE_ASSURANCE_TABLES):
-            connection.exec_driver_sql(
-                f'CREATE TABLE "{table_name}" (id TEXT PRIMARY KEY)'
-            )
+            connection.exec_driver_sql(f'CREATE TABLE "{table_name}" (id TEXT PRIMARY KEY)')
         anchor = sorted(SQLITE_ASSURANCE_TABLES)[0]
         for index_name in sorted(SQLITE_ASSURANCE_INDEXES):
-            connection.exec_driver_sql(
-                f'CREATE INDEX "{index_name}" ON "{anchor}" (id)'
-            )
+            connection.exec_driver_sql(f'CREATE INDEX "{index_name}" ON "{anchor}" (id)')
         for trigger_name in sorted(SQLITE_ASSURANCE_TRIGGERS):
             connection.exec_driver_sql(
                 f'CREATE TRIGGER "{trigger_name}" BEFORE UPDATE ON "{anchor}" '
                 "BEGIN SELECT 1; END"
             )
         for view_name in sorted(SQLITE_ASSURANCE_VIEWS):
-            connection.exec_driver_sql(
-                f'CREATE VIEW "{view_name}" AS SELECT id FROM "{anchor}"'
-            )
+            connection.exec_driver_sql(f'CREATE VIEW "{view_name}" AS SELECT id FROM "{anchor}"')
 
         with pytest.raises(MigrationIntegrityError, match="catalog definition drift"):
             verify_sqlite_assurance_schema(connection)
@@ -614,9 +748,7 @@ def test_sqlite_startup_check_rejects_noop_replacement_of_real_guard(
     engine = create_engine(f"sqlite:///{database_path}")
     with engine.connect() as connection:
         connection.exec_driver_sql("PRAGMA foreign_keys = ON")
-        connection.exec_driver_sql(
-            "DROP TRIGGER governance_evaluation_decisions_no_delete"
-        )
+        connection.exec_driver_sql("DROP TRIGGER governance_evaluation_decisions_no_delete")
         connection.exec_driver_sql(
             "CREATE TRIGGER governance_evaluation_decisions_no_delete "
             "BEFORE DELETE ON governance_evaluation_decisions "
@@ -634,9 +766,7 @@ def test_sqlite_startup_check_rejects_hostile_eligibility_view_replacement(
     engine = create_engine(f"sqlite:///{database_path}")
     with engine.connect() as connection:
         connection.exec_driver_sql("PRAGMA foreign_keys = ON")
-        connection.exec_driver_sql(
-            "DROP VIEW governance_evidence_admission_v2_current_eligibility"
-        )
+        connection.exec_driver_sql("DROP VIEW governance_evidence_admission_v2_current_eligibility")
         connection.exec_driver_sql(
             "CREATE VIEW governance_evidence_admission_v2_current_eligibility "
             "AS SELECT id AS admission_id FROM governance_evidence_admissions"
@@ -758,9 +888,7 @@ def test_postgresql_startup_verifies_path_ledger_then_frozen_catalog(
     monkeypatch.setattr(
         migration_module,
         "verify_postgresql_migration_ledger",
-        lambda _connection, *, trusted_schema: events.append(
-            f"ledger:{trusted_schema}"
-        ),
+        lambda _connection, *, trusted_schema: events.append(f"ledger:{trusted_schema}"),
     )
 
     def verify_catalog(
@@ -875,29 +1003,21 @@ async def test_database_initialization_failure_closes_every_resource(
     monkeypatch.setattr(database_module, "Database", FakeDatabase)
     monkeypatch.setattr(database_module.asyncpg, "create_pool", fake_create_pool)
     monkeypatch.setattr(database_module, "create_engine", lambda *_a, **_k: FakeEngine())
-    monkeypatch.setattr(
-        database_module, "bind_postgresql_engine_search_path", lambda *_args: None
-    )
-    monkeypatch.setattr(
-        database_module, "verify_database_identities", lambda *_args: None
-    )
+    monkeypatch.setattr(database_module, "bind_postgresql_engine_search_path", lambda *_args: None)
+    monkeypatch.setattr(database_module, "verify_database_identities", lambda *_args: None)
     monkeypatch.setattr(
         database_module,
         "_get_repository_database_manager",
         lambda: type("RepositoryManager", (), {"engine": FakeEngine()})(),
     )
-    monkeypatch.setattr(
-        database_module, "verify_assurance_migration_integrity", fail_integrity
-    )
+    monkeypatch.setattr(database_module, "verify_assurance_migration_integrity", fail_integrity)
     monkeypatch.setattr(
         database_module.settings,
         "database_url",
         "postgresql://user:password@localhost/fairmind",
     )
     monkeypatch.setattr(database_module.settings, "assurance_v2_enabled", True)
-    monkeypatch.setattr(
-        database_module.settings, "assurance_migration_schema", "trusted"
-    )
+    monkeypatch.setattr(database_module.settings, "assurance_migration_schema", "trusted")
 
     manager = database_module.DatabaseManager()
     with pytest.raises(MigrationIntegrityError, match="forced integrity failure"):
@@ -994,9 +1114,7 @@ async def test_postgresql_runtime_families_receive_one_fixed_search_path(
         "postgresql://assurance:secret@db/fairmind",
     )
     monkeypatch.setattr(database_module.settings, "assurance_v2_enabled", True)
-    monkeypatch.setattr(
-        database_module.settings, "assurance_migration_schema", "trusted"
-    )
+    monkeypatch.setattr(database_module.settings, "assurance_migration_schema", "trusted")
 
     manager = database_module.DatabaseManager()
     try:
@@ -1052,9 +1170,7 @@ async def test_disabled_v2_preserves_legacy_postgresql_startup_without_schema(
 
     monkeypatch.setattr(database_module, "Database", FakeDatabase)
     monkeypatch.setattr(database_module.asyncpg, "create_pool", fake_create_pool)
-    monkeypatch.setattr(
-        database_module, "create_engine", lambda *_args, **_kwargs: FakeEngine()
-    )
+    monkeypatch.setattr(database_module, "create_engine", lambda *_args, **_kwargs: FakeEngine())
     monkeypatch.setattr(
         database_module,
         "bind_postgresql_engine_search_path",
@@ -1105,20 +1221,14 @@ def test_repository_postgresql_binding_tracks_the_v2_feature_flag(
         "bind_postgresql_engine_search_path",
         lambda engine, schema: bound.append((engine, schema)),
     )
-    monkeypatch.setattr(
-        repository_database_module.settings, "assurance_v2_enabled", False
-    )
-    monkeypatch.setattr(
-        repository_database_module.settings, "assurance_migration_schema", None
-    )
+    monkeypatch.setattr(repository_database_module.settings, "assurance_v2_enabled", False)
+    monkeypatch.setattr(repository_database_module.settings, "assurance_migration_schema", None)
     repository_database_module.DatabaseManager(
         database_url="postgresql://legacy:secret@localhost/fairmind"
     )
     assert bound == []
 
-    monkeypatch.setattr(
-        repository_database_module.settings, "assurance_v2_enabled", True
-    )
+    monkeypatch.setattr(repository_database_module.settings, "assurance_v2_enabled", True)
     repository_database_module.DatabaseManager(
         database_url="postgresql://assurance:secret@localhost/fairmind",
         trusted_schema="trusted",
@@ -1200,9 +1310,7 @@ async def test_sqlite_v2_startup_rejects_a_different_repository_database(
         engine = repository_engine
 
     monkeypatch.setattr(database_module, "Database", FakeDatabase)
-    monkeypatch.setattr(
-        database_module, "create_engine", lambda *_args, **_kwargs: primary_engine
-    )
+    monkeypatch.setattr(database_module, "create_engine", lambda *_args, **_kwargs: primary_engine)
     monkeypatch.setattr(database_module.event, "listen", lambda *_args: None)
     monkeypatch.setattr(
         database_module, "_get_repository_database_manager", lambda: FakeRepositoryManager()
@@ -1210,9 +1318,7 @@ async def test_sqlite_v2_startup_rejects_a_different_repository_database(
     monkeypatch.setattr(
         database_module, "verify_assurance_migration_integrity", lambda *_args, **_kwargs: None
     )
-    monkeypatch.setattr(
-        database_module.settings, "database_url", f"sqlite:///{primary_path}"
-    )
+    monkeypatch.setattr(database_module.settings, "database_url", f"sqlite:///{primary_path}")
     monkeypatch.setattr(database_module.settings, "assurance_v2_enabled", True)
 
     manager = database_module.DatabaseManager()
@@ -1246,9 +1352,7 @@ async def test_async_sqlite_enforces_foreign_keys_on_every_acquired_connection(
     try:
         await manager.initialize()
         assert manager.database is not None
-        await manager.database.execute(
-            "CREATE TABLE async_fk_parent (id TEXT PRIMARY KEY)"
-        )
+        await manager.database.execute("CREATE TABLE async_fk_parent (id TEXT PRIMARY KEY)")
         await manager.database.execute(
             "CREATE TABLE async_fk_child ("
             "id TEXT PRIMARY KEY, parent_id TEXT NOT NULL, "
@@ -1256,8 +1360,7 @@ async def test_async_sqlite_enforces_foreign_keys_on_every_acquired_connection(
         )
         with pytest.raises(Exception, match="FOREIGN KEY constraint failed"):
             await manager.database.execute(
-                "INSERT INTO async_fk_child (id, parent_id) "
-                "VALUES ('child-a', 'missing-parent')"
+                "INSERT INTO async_fk_child (id, parent_id) " "VALUES ('child-a', 'missing-parent')"
             )
     finally:
         await manager.disconnect()
@@ -1267,8 +1370,88 @@ async def test_async_sqlite_enforces_foreign_keys_on_every_acquired_connection(
     not POSTGRES_URL,
     reason="requires FAIRMIND_TEST_POSTGRES_URL pointing to disposable PostgreSQL",
 )
-def test_native_production_catalog_freeze_matches_two_operator_installs_and_tamper_fails(
-) -> None:
+def test_native_non_c_locale_013b_v2_uses_exact_frozen_prerequisites() -> None:
+    import psycopg2
+    from psycopg2 import sql
+
+    assert POSTGRES_URL is not None
+    schema_name = f"fm_013b_v2_{uuid.uuid4().hex[:12]}"
+    connection = psycopg2.connect(POSTGRES_URL)
+    connection.autocommit = True
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT datcollate FROM pg_catalog.pg_database "
+                "WHERE datname = pg_catalog.current_database()"
+            )
+            database_collation = str(cursor.fetchone()[0])
+        if database_collation in {"C", "POSIX"}:
+            pytest.skip("requires a native PostgreSQL database with non-C collation")
+
+        _install_postgresql_base_through_012(POSTGRES_URL, schema_name)
+        for migration_name in POSTGRES_OPERATOR_CHAIN[:2]:
+            result = _run_postgresql_operator_migration(
+                POSTGRES_URL,
+                schema_name,
+                migration_name,
+            )
+            assert result.returncode == 0, result.stderr
+
+        before = _postgresql_013b_prerequisite_definitions(
+            connection,
+            schema_name=schema_name,
+        )
+        first = _run_postgresql_operator_migration(
+            POSTGRES_URL,
+            schema_name,
+            POSTGRES_OPERATOR_CHAIN[2],
+        )
+        assert first.returncode == 0, first.stderr
+        replay = _run_postgresql_operator_migration(
+            POSTGRES_URL,
+            schema_name,
+            POSTGRES_OPERATOR_CHAIN[2],
+        )
+        assert replay.returncode == 0, replay.stderr
+        after = _postgresql_013b_prerequisite_definitions(
+            connection,
+            schema_name=schema_name,
+            expected=POSTGRESQL_013B_RETAINED_PREREQUISITE_CONSTRAINTS,
+        )
+
+        assert after == {
+            key: before[key] for key in POSTGRESQL_013B_RETAINED_PREREQUISITE_CONSTRAINTS
+        }
+        with connection.cursor() as cursor:
+            cursor.execute(
+                sql.SQL(
+                    "SELECT migration_checksum FROM {}."
+                    "fairmind_operator_migration_ledger "
+                    "WHERE migration_key = "
+                    "'013a-to-013b-evaluation-assurance-trust-integrity-v1'"
+                ).format(sql.Identifier(schema_name))
+            )
+            assert cursor.fetchone() == (
+                "d2d336d7f9fc99b0c259c6b54fc3a975267e84e055b40fdc97dc675184ef9c2f",
+            )
+    finally:
+        connection.close()
+        cleanup = psycopg2.connect(POSTGRES_URL)
+        cleanup.autocommit = True
+        try:
+            with cleanup.cursor() as cursor:
+                cursor.execute(
+                    sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(sql.Identifier(schema_name))
+                )
+        finally:
+            cleanup.close()
+
+
+@pytest.mark.skipif(
+    not POSTGRES_URL,
+    reason="requires FAIRMIND_TEST_POSTGRES_URL pointing to disposable PostgreSQL",
+)
+def test_native_production_catalog_freeze_matches_two_operator_installs_and_tamper_fails() -> None:
     import psycopg2
     from psycopg2 import sql
 
@@ -1385,9 +1568,7 @@ def test_native_postgresql_trusted_schema_cannot_be_shadowed() -> None:
             connection.exec_driver_sql(
                 f'SET LOCAL search_path TO "{shadow_schema}", "{trusted_schema}"'
             )
-            with pytest.raises(
-                MigrationIntegrityError, match="migration-a.*checksum drift"
-            ):
+            with pytest.raises(MigrationIntegrityError, match="migration-a.*checksum drift"):
                 verify_postgresql_migration_ledger(
                     connection,
                     trusted_schema=trusted_schema,
@@ -1411,9 +1592,7 @@ def test_native_postgresql_catalog_rejects_missing_trigger_and_noop_function() -
     spec = PostgreSQLCatalogSpec(
         relations=frozenset({"guarded_events"}),
         functions=frozenset({"guard_guarded_events"}),
-        required_triggers=frozenset(
-            {"guarded_events_no_update", "guarded_events_no_delete"}
-        ),
+        required_triggers=frozenset({"guarded_events_no_update", "guarded_events_no_delete"}),
     )
     try:
         with engine.begin() as connection:
@@ -1453,8 +1632,7 @@ def test_native_postgresql_catalog_rejects_missing_trigger_and_noop_function() -
             )
 
             connection.exec_driver_sql(
-                f'DROP TRIGGER guarded_events_no_delete '
-                f'ON "{trusted_schema}".guarded_events'
+                f"DROP TRIGGER guarded_events_no_delete " f'ON "{trusted_schema}".guarded_events'
             )
             with pytest.raises(MigrationIntegrityError, match="required triggers"):
                 verify_postgresql_assurance_catalog(
@@ -1463,7 +1641,7 @@ def test_native_postgresql_catalog_rejects_missing_trigger_and_noop_function() -
                     frozen_by_major={major: frozen},
                 )
             connection.exec_driver_sql(
-                f'CREATE TRIGGER guarded_events_no_delete BEFORE DELETE '
+                f"CREATE TRIGGER guarded_events_no_delete BEFORE DELETE "
                 f'ON "{trusted_schema}".guarded_events FOR EACH ROW '
                 f'EXECUTE FUNCTION "{trusted_schema}".guard_guarded_events()'
             )
@@ -1511,7 +1689,7 @@ def test_native_postgresql_catalog_requires_fixed_function_search_path() -> None
                 "RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$"
             )
             connection.exec_driver_sql(
-                f'CREATE TRIGGER guarded_events_no_update BEFORE UPDATE '
+                f"CREATE TRIGGER guarded_events_no_update BEFORE UPDATE "
                 f'ON "{trusted_schema}".guarded_events FOR EACH ROW '
                 f'EXECUTE FUNCTION "{trusted_schema}".guard_guarded_events()'
             )
@@ -1555,7 +1733,7 @@ def test_native_postgresql_catalog_normalizes_schema_and_rejects_public_create()
                     "AS $$ BEGIN RAISE EXCEPTION 'append-only'; END $$"
                 )
                 connection.exec_driver_sql(
-                    f'CREATE TRIGGER guarded_events_no_update BEFORE UPDATE '
+                    f"CREATE TRIGGER guarded_events_no_update BEFORE UPDATE "
                     f'ON "{schema}".guarded_events FOR EACH ROW '
                     f'EXECUTE FUNCTION "{schema}".guard_guarded_events()'
                 )
@@ -1567,18 +1745,14 @@ def test_native_postgresql_catalog_normalizes_schema_and_rejects_public_create()
                     )
                 )
 
-                connection.exec_driver_sql(
-                    f'GRANT CREATE ON SCHEMA "{schema}" TO PUBLIC'
-                )
+                connection.exec_driver_sql(f'GRANT CREATE ON SCHEMA "{schema}" TO PUBLIC')
                 with pytest.raises(MigrationIntegrityError, match="PUBLIC CREATE"):
                     postgresql_assurance_catalog_digest(
                         connection,
                         trusted_schema=schema,
                         spec=spec,
                     )
-                connection.exec_driver_sql(
-                    f'REVOKE CREATE ON SCHEMA "{schema}" FROM PUBLIC'
-                )
+                connection.exec_driver_sql(f'REVOKE CREATE ON SCHEMA "{schema}" FROM PUBLIC')
 
         assert digests[0] == digests[1]
     finally:
@@ -1629,8 +1803,7 @@ def test_native_postgresql_catalog_detects_user_rewrite_rule_drift() -> None:
                 )
 
             connection.exec_driver_sql(
-                "DROP RULE guarded_events_audit ON "
-                f'"{trusted_schema}".guarded_events'
+                "DROP RULE guarded_events_audit ON " f'"{trusted_schema}".guarded_events'
             )
             connection.exec_driver_sql(
                 "CREATE RULE guarded_events_audit AS ON UPDATE TO "
@@ -1644,9 +1817,7 @@ def test_native_postgresql_catalog_detects_user_rewrite_rule_drift() -> None:
             assert changed_digest not in {baseline_digest, added_digest}
     finally:
         with engine.begin() as connection:
-            connection.exec_driver_sql(
-                f'DROP SCHEMA IF EXISTS "{trusted_schema}" CASCADE'
-            )
+            connection.exec_driver_sql(f'DROP SCHEMA IF EXISTS "{trusted_schema}" CASCADE')
         engine.dispose()
 
 
@@ -1654,8 +1825,7 @@ def test_native_postgresql_catalog_detects_user_rewrite_rule_drift() -> None:
     not POSTGRES_URL,
     reason="requires FAIRMIND_TEST_POSTGRES_URL pointing to disposable PostgreSQL",
 )
-def test_native_postgresql_catalog_detects_schema_relation_and_function_acl_drift(
-) -> None:
+def test_native_postgresql_catalog_detects_schema_relation_and_function_acl_drift() -> None:
     trusted_schema = f"fm_acl_catalog_{uuid.uuid4().hex[:12]}"
     engine = create_engine(POSTGRES_URL)
     bind_postgresql_engine_search_path(engine, trusted_schema)
@@ -1717,9 +1887,7 @@ def test_native_postgresql_catalog_detects_schema_relation_and_function_acl_drif
                 )
     finally:
         with engine.begin() as connection:
-            connection.exec_driver_sql(
-                f'DROP SCHEMA IF EXISTS "{trusted_schema}" CASCADE'
-            )
+            connection.exec_driver_sql(f'DROP SCHEMA IF EXISTS "{trusted_schema}" CASCADE')
         engine.dispose()
 
 
@@ -1727,8 +1895,7 @@ def test_native_postgresql_catalog_detects_schema_relation_and_function_acl_drif
     not POSTGRES_URL,
     reason="requires FAIRMIND_TEST_POSTGRES_URL pointing to disposable PostgreSQL",
 )
-def test_native_postgresql_catalog_detects_owner_and_role_membership_authority_drift(
-) -> None:
+def test_native_postgresql_catalog_detects_owner_and_role_membership_authority_drift() -> None:
     trusted_schema = f"fm_owner_catalog_{uuid.uuid4().hex[:12]}"
     owner_role = f"fm_owner_{uuid.uuid4().hex[:12]}"
     member_role = f"fm_member_{uuid.uuid4().hex[:12]}"
@@ -1742,12 +1909,10 @@ def test_native_postgresql_catalog_detects_owner_and_role_membership_authority_d
                 connection,
                 schema_name=trusted_schema,
             )
-            _major, original_owner_digest, _original_frozen = (
-                _freeze_native_postgresql_catalog(
-                    connection,
-                    schema_name=trusted_schema,
-                    spec=spec,
-                )
+            _major, original_owner_digest, _original_frozen = _freeze_native_postgresql_catalog(
+                connection,
+                schema_name=trusted_schema,
+                spec=spec,
             )
 
             connection.exec_driver_sql(
@@ -1757,9 +1922,7 @@ def test_native_postgresql_catalog_detects_owner_and_role_membership_authority_d
                 f'ALTER FUNCTION "{trusted_schema}".guard_guarded_events() '
                 f'OWNER TO "{owner_role}"'
             )
-            connection.exec_driver_sql(
-                f'ALTER SCHEMA "{trusted_schema}" OWNER TO "{owner_role}"'
-            )
+            connection.exec_driver_sql(f'ALTER SCHEMA "{trusted_schema}" OWNER TO "{owner_role}"')
             _major, transferred_owner_digest, transferred_frozen = (
                 _freeze_native_postgresql_catalog(
                     connection,
@@ -1769,9 +1932,7 @@ def test_native_postgresql_catalog_detects_owner_and_role_membership_authority_d
             )
             assert transferred_owner_digest != original_owner_digest
 
-            connection.exec_driver_sql(
-                f'GRANT "{owner_role}" TO "{member_role}"'
-            )
+            connection.exec_driver_sql(f'GRANT "{owner_role}" TO "{member_role}"')
             assert (
                 postgresql_assurance_catalog_digest(
                     connection,
@@ -1790,9 +1951,7 @@ def test_native_postgresql_catalog_detects_owner_and_role_membership_authority_d
         cleanup_engine = create_engine(POSTGRES_URL)
         try:
             with cleanup_engine.begin() as connection:
-                connection.exec_driver_sql(
-                    f'DROP SCHEMA IF EXISTS "{trusted_schema}" CASCADE'
-                )
+                connection.exec_driver_sql(f'DROP SCHEMA IF EXISTS "{trusted_schema}" CASCADE')
                 connection.exec_driver_sql(f'DROP ROLE IF EXISTS "{member_role}"')
                 connection.exec_driver_sql(f'DROP ROLE IF EXISTS "{owner_role}"')
         finally:
@@ -1804,8 +1963,7 @@ def test_native_postgresql_catalog_detects_owner_and_role_membership_authority_d
     not POSTGRES_URL,
     reason="requires FAIRMIND_TEST_POSTGRES_URL pointing to disposable PostgreSQL",
 )
-def test_native_postgresql_catalog_normalizes_rules_and_acls_across_schema_names(
-) -> None:
+def test_native_postgresql_catalog_normalizes_rules_and_acls_across_schema_names() -> None:
     schemas = [f"fm_authority_norm_{uuid.uuid4().hex[:12]}" for _ in range(2)]
     engines = [create_engine(POSTGRES_URL) for _ in schemas]
     try:
@@ -1817,9 +1975,7 @@ def test_native_postgresql_catalog_normalizes_rules_and_acls_across_schema_names
                     connection,
                     schema_name=schema,
                 )
-                connection.exec_driver_sql(
-                    f'GRANT USAGE ON SCHEMA "{schema}" TO PUBLIC'
-                )
+                connection.exec_driver_sql(f'GRANT USAGE ON SCHEMA "{schema}" TO PUBLIC')
                 connection.exec_driver_sql(
                     f'GRANT SELECT ON TABLE "{schema}".guarded_events TO PUBLIC'
                 )
@@ -1859,36 +2015,26 @@ def test_native_postgresql_checkout_blocks_default_user_and_temp_shadowing() -> 
             connection.exec_driver_sql(f'CREATE SCHEMA "{trusted_schema}"')
             connection.exec_driver_sql(f'CREATE SCHEMA "{hostile_schema}"')
             connection.exec_driver_sql(
-                f'CREATE TABLE "{trusted_schema}".critical_relation '
-                "(source TEXT NOT NULL)"
+                f'CREATE TABLE "{trusted_schema}".critical_relation ' "(source TEXT NOT NULL)"
             )
             connection.exec_driver_sql(
-                f'CREATE TABLE "{hostile_schema}".critical_relation '
-                "(source TEXT NOT NULL)"
+                f'CREATE TABLE "{hostile_schema}".critical_relation ' "(source TEXT NOT NULL)"
             )
             connection.exec_driver_sql(
-                f'INSERT INTO "{trusted_schema}".critical_relation VALUES (\'trusted\')'
+                f"INSERT INTO \"{trusted_schema}\".critical_relation VALUES ('trusted')"
             )
             connection.exec_driver_sql(
-                f'INSERT INTO "{hostile_schema}".critical_relation VALUES (\'hostile\')'
+                f"INSERT INTO \"{hostile_schema}\".critical_relation VALUES ('hostile')"
             )
-            connection.exec_driver_sql(
-                "CREATE TEMP TABLE critical_relation (source TEXT NOT NULL)"
-            )
-            connection.exec_driver_sql(
-                "INSERT INTO pg_temp.critical_relation VALUES ('temporary')"
-            )
-            connection.exec_driver_sql(
-                f'SET search_path TO "$user", "{hostile_schema}", pg_temp'
-            )
+            connection.exec_driver_sql("CREATE TEMP TABLE critical_relation (source TEXT NOT NULL)")
+            connection.exec_driver_sql("INSERT INTO pg_temp.critical_relation VALUES ('temporary')")
+            connection.exec_driver_sql(f'SET search_path TO "$user", "{hostile_schema}", pg_temp')
 
         with engine.connect() as connection:
             assert connection.scalar(text("SELECT current_setting('search_path')")) == (
                 postgresql_runtime_search_path(trusted_schema)
             )
-            assert connection.scalar(text("SELECT source FROM critical_relation")) == (
-                "trusted"
-            )
+            assert connection.scalar(text("SELECT source FROM critical_relation")) == ("trusted")
             assert connection.scalar(
                 text(
                     "SELECT 'critical_relation'::regclass::oid = "

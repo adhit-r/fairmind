@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import hashlib
-from pathlib import Path
 import sqlite3
+from pathlib import Path
 
 import pytest
 
@@ -16,9 +16,7 @@ SQLITE_013C = MIGRATIONS / "fixtures/013c_evidence_verification_receipt.sqlite.s
 
 
 def _installed_connection() -> sqlite3.Connection:
-    from migrations.evaluation_assurance_trust_integrity_migration import (
-        sql_for as sql_013b,
-    )
+    from migrations.evaluation_assurance_trust_integrity_migration import sql_for as sql_013b
     from migrations.evaluation_assurance_v2_migration import sql_for as sql_013
     from migrations.evaluation_binding_integrity_migration import sql_for as sql_013a
     from migrations.evaluation_runs_migration import sql_for as sql_012
@@ -34,9 +32,7 @@ def _installed_connection() -> sqlite3.Connection:
     connection.executescript(sql_013("sqlite"))
     connection.executescript(sql_013a("sqlite"))
     connection.executescript(sql_013b("sqlite"))
-    payload = SQLITE_013C.read_text(encoding="utf-8") if SQLITE_013C.exists() else ""
-    assert payload, "013c SQLite receipt migration is absent"
-    connection.executescript(payload)
+    connection.executescript(SQLITE_013C.read_text(encoding="utf-8"))
     return connection
 
 
@@ -107,9 +103,7 @@ def _seed_receipt_parents(connection: sqlite3.Connection) -> None:
         NOW,
     )
 
-    public_jwk = canonical_json(
-        {"crv": "Ed25519", "kty": "OKP", "x": "A" * 43}
-    )
+    public_jwk = canonical_json({"crv": "Ed25519", "kty": "OKP", "x": "A" * 43})
     evaluator = {
         "issuerId": "issuer-key-a",
         "evaluatorId": "evaluator-a",
@@ -119,11 +113,32 @@ def _seed_receipt_parents(connection: sqlite3.Connection) -> None:
         "resultContractVersion": "1.0.0",
     }
     snapshot = {
+        "schemaVersion": "2.0.0",
+        "passportId": "passport-a",
+        "passportRevision": 1,
+        "claimBoundary": "supporting_evidence_only",
+        "organizationId": "org-a",
+        "workspaceId": "ws-a",
+        "systemId": "sys-a",
         "capturedAt": NOW,
         "contentHash": "c" * 64,
         "executionBinding": _binding(),
         "evaluator": evaluator,
-        "signature": {"signedAt": LATER},
+        "expiresAt": EXPIRES,
+        "result": {
+            "technicalStatus": "succeeded",
+            "evidenceResultStatus": "failed",
+            "summary": {},
+        },
+        "artifacts": [],
+        "limitations": [],
+        "signature": {
+            "algorithm": "Ed25519",
+            "issuerId": "issuer-key-a",
+            "keyId": "key-a",
+            "signedAt": LATER,
+            "value": "A" * 86,
+        },
     }
     connection.execute(
         """
@@ -156,7 +171,7 @@ def _seed_receipt_parents(connection: sqlite3.Connection) -> None:
             limitations_json, captured_at, expires_at, evidence_id, created_at
         ) VALUES ('evidence-a', 'org-a', 'sys-a', 'ws-a', 'passport-a', '2.0.0',
                   'available', 'evaluation', 'external_provider', 'evaluator-a',
-                  'provider-run-a', ?, 'failed', '{}', '[]', '[]', ?, ?, NULL, ?)
+                  'execution-a', ?, 'failed', '{}', '[]', '[]', ?, ?, NULL, ?)
         """,
         ("c" * 64, NOW, EXPIRES, NOW),
     )
@@ -178,9 +193,12 @@ def _insert_receipt(
     *,
     binding: dict[str, object] | None = None,
 ) -> None:
-    from tests.test_evaluation_assurance_trust_integrity_sqlite_migration import LATEST
+    from tests.test_evaluation_assurance_trust_integrity_sqlite_migration import (
+        LATER,
+        LATEST,
+    )
 
-    binding = binding or _binding()
+    binding = _binding() if binding is None else binding
     evaluator = {
         "issuerId": "issuer-key-a",
         "evaluatorId": "evaluator-a",
@@ -190,13 +208,28 @@ def _insert_receipt(
         "resultContractVersion": "1.0.0",
     }
     public_jwk = {"crv": "Ed25519", "kty": "OKP", "x": "A" * 43}
+    signature_projection = {
+        "contentHash": "c" * 64,
+        "protected": {
+            "algorithm": "Ed25519",
+            "issuerId": "issuer-key-a",
+            "keyId": "key-a",
+            "signedAt": LATER,
+        },
+        "schemaVersion": "fairmind/evidence-signature/2.0.0",
+    }
+    snapshot_json = connection.execute(
+        "SELECT snapshot_json FROM governance_evidence_passport_revisions "
+        "WHERE id = 'revision-a'"
+    ).fetchone()[0]
     connection.execute(
         """
         INSERT INTO governance_evidence_verification_receipts (
             id, org_id, workspace_id, system_id, run_id, suite_execution_id,
             evidence_run_id, passport_revision_id, admission_id,
             admission_contract_version, passport_content_hash,
-            signature_input_hash, execution_binding_hash, execution_binding_json,
+            passport_snapshot_hash, signature_input_hash, execution_binding_hash,
+            execution_binding_json,
             trust_policy_version_id, trust_policy_hash, issuer_id, issuer_key,
             signing_key_id, signer_key_id, signer_algorithm, public_jwk_json,
             public_key_fingerprint, evaluator_issuer_id, evaluator_id, source_type,
@@ -205,7 +238,7 @@ def _insert_receipt(
             verifier_contract, verifier_version, verified_at
         ) VALUES (
             'receipt-a', 'org-a', 'ws-a', 'sys-a', 'run-a', 'execution-a',
-            'evidence-a', 'revision-a', 'admission-a', '2.0.0', ?, ?, ?, ?,
+            'evidence-a', 'revision-a', 'admission-a', '2.0.0', ?, ?, ?, ?, ?,
             'policy-a', ?, 'issuer-a', 'issuer-key-a', 'signing-a', 'key-a',
             'Ed25519', ?, ?, 'issuer-key-a', 'evaluator-a', 'external_provider',
             'inspect', '1.0.0', '1.0.0', ?, ?,
@@ -214,7 +247,8 @@ def _insert_receipt(
         """,
         (
             "c" * 64,
-            "d" * 64,
+            hashlib.sha256(snapshot_json.encode("utf-8")).hexdigest(),
+            canonical_sha256(signature_projection),
             canonical_sha256(binding),
             canonical_json(binding),
             "a" * 64,
@@ -227,7 +261,11 @@ def _insert_receipt(
     )
 
 
-def _insert_verified_admission(connection: sqlite3.Connection) -> None:
+def _insert_verified_admission(
+    connection: sqlite3.Connection,
+    *,
+    status: str = "verified",
+) -> None:
     from tests.test_evaluation_assurance_trust_integrity_sqlite_migration import (
         EXPIRES,
         LATER,
@@ -247,12 +285,13 @@ def _insert_verified_admission(connection: sqlite3.Connection) -> None:
             effective_expires_at
         ) VALUES (
             'admission-a', 'org-a', 'ws-a', 'sys-a', 'evidence-a', 'revision-a',
-            'policy-a', 'execution-a', ?, 'verified', 'current', 'issuer-a',
-            'signing-a', 'key-a', 'Ed25519', '[]', 'admission-service', ?, ?,
+            'policy-a', 'execution-a', ?, ?, 'current', 'issuer-a',
+            'signing-a', 'key-a', 'Ed25519', '[]',
+            'fairmind/evidence-admission-service', ?, ?,
             '2.0.0', 'run-a', 'envelope-a', ?, 'submitter-a', ?, ?, ?
         )
         """,
-        ("a" * 64, LATEST, LATEST, "A" * 43, NOW, LATER, EXPIRES),
+        ("a" * 64, status, LATEST, LATEST, "A" * 43, NOW, LATER, EXPIRES),
     )
 
 
@@ -282,6 +321,7 @@ def test_sqlite_013c_adds_closed_append_only_verification_receipts() -> None:
         "admission_id",
         "admission_contract_version",
         "passport_content_hash",
+        "passport_snapshot_hash",
         "signature_input_hash",
         "execution_binding_hash",
         "execution_binding_json",
@@ -323,7 +363,7 @@ def test_sqlite_013c_adds_closed_append_only_verification_receipts() -> None:
     } <= trigger_names
 
 
-def test_verification_receipt_model_matches_the_additive_table() -> None:
+def test_verification_receipt_orm_is_structural_only() -> None:
     model = getattr(governance_models, "GovernanceEvidenceVerificationReceipt", None)
     assert model is not None, "verification receipt ORM model is absent"
     assert set(model.__table__.columns.keys()) == {
@@ -338,6 +378,7 @@ def test_verification_receipt_model_matches_the_additive_table() -> None:
         "admission_id",
         "admission_contract_version",
         "passport_content_hash",
+        "passport_snapshot_hash",
         "signature_input_hash",
         "execution_binding_hash",
         "execution_binding_json",
@@ -362,12 +403,9 @@ def test_verification_receipt_model_matches_the_additive_table() -> None:
         "verifier_version",
         "verified_at",
     }
-    constraint_names = {
-        constraint.name for constraint in model.__table__.constraints
-    }
+    constraint_names = {constraint.name for constraint in model.__table__.constraints}
     assert {
         "uq_governance_evidence_verification_receipt_admission",
-        "uq_governance_evidence_verification_receipt_scope",
         "fk_governance_evidence_verification_receipt_admission",
         "ck_governance_evidence_verification_receipt_contract",
         "ck_governance_evidence_verification_receipt_hashes",
@@ -380,43 +418,99 @@ def test_verification_receipt_model_matches_the_additive_table() -> None:
     )
     assert admission_fk.deferrable is True
     assert admission_fk.initially == "DEFERRED"
+    assert model.__table__.c.admission_id.index in (False, None)
+
+
+def test_application_harness_replaces_structural_orm_receipt_ddl() -> None:
+    from sqlalchemy import create_engine, event
+    from sqlalchemy.pool import StaticPool
+
+    from tests.evaluation_workbench_sqlite import (
+        install_authoritative_assurance_fixtures_for_application_verifier_harness,
+    )
+
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+
+    @event.listens_for(engine, "connect")
+    def _foreign_keys(connection, _record) -> None:
+        connection.execute("PRAGMA foreign_keys = ON")
+
+    governance_models.Base.metadata.create_all(engine)
+    with engine.connect() as connection:
+        structural_sql = connection.exec_driver_sql(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' "
+            "AND name = 'governance_evidence_verification_receipts'"
+        ).scalar_one()
+    assert "json_valid(execution_binding_json)" not in structural_sql
+
+    install_authoritative_assurance_fixtures_for_application_verifier_harness(engine)
+    with engine.connect() as connection:
+        authoritative_sql = connection.exec_driver_sql(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' "
+            "AND name = 'governance_evidence_verification_receipts'"
+        ).scalar_one()
+        trigger_count = connection.exec_driver_sql(
+            "SELECT count(*) FROM sqlite_master WHERE type = 'trigger' "
+            "AND tbl_name = 'governance_evidence_verification_receipts'"
+        ).scalar_one()
+    engine.dispose()
+
+    assert "json_valid(execution_binding_json)" in authoritative_sql
+    assert "uq_governance_evidence_verification_receipt_scope" not in authoritative_sql
+    assert trigger_count == 3
 
 
 def test_postgresql_013c_source_freezes_the_narrow_database_claim() -> None:
-    payload = (MIGRATIONS / "013c_evidence_verification_receipt.sql").read_text(
-        encoding="utf-8"
-    )
+    payload = (MIGRATIONS / "013c_evidence_verification_receipt.sql").read_text(encoding="utf-8")
 
     assert hashlib.sha256(payload.encode("utf-8")).hexdigest() == (
-        "e3cece71a7eb9781bfe5cf44a49678be299506a9312bfe4ca4bb8e425b937d87"
+        "b121f3d1d8723da5b932231e234270cf037dfa239151ec5a518184915032dbae"
     )
     assert "jsonb_object_length" not in payload
     assert (
-        "CREATE CONSTRAINT TRIGGER "
-        "governance_evidence_admissions_require_receipt_013c"
+        "CREATE CONSTRAINT TRIGGER " "governance_evidence_admissions_require_receipt_013c"
     ) in payload
     assert "DEFERRABLE INITIALLY DEFERRED" in payload
     assert "migration 013c refuses pre-existing verified v2 admissions" in payload
     assert "It does not make the receipt independently" in payload
+    assert "fairmind_verification_receipt_is_relationally_valid_013c" in payload
+    assert "fairmind_verification_receipt_has_exact_verified_admission_013c" in payload
+    assert "verification receipt relational binding drift" in payload
+    assert "verification receipt lacks exact verified v2 admission" in payload
+    assert payload.count("pg_catalog.sha256(") >= 7
+    stable_predicate = payload[
+        payload.index("fairmind_verification_receipt_is_relationally_valid_013c") : payload.index(
+            "CREATE OR REPLACE FUNCTION " "guard_governance_evidence_verification_receipt_013c"
+        )
+    ]
+    assert "policy.status" not in stable_predicate
+    assert "issuer.status" not in stable_predicate
+    assert "signing_key.revoked_at" not in stable_predicate
 
 
 def test_013c_operator_upgrade_pins_the_013b_prerequisite_and_ledger() -> None:
     payload = (
-        MIGRATIONS
-        / "upgrade_paths/013b_to_013c_evidence_verification_receipt.sql"
+        MIGRATIONS / "upgrade_paths/013b_to_013c_evidence_verification_receipt.sql"
     ).read_text(encoding="utf-8")
 
     assert "pg_advisory_xact_lock" in payload
     assert "\\ir ../013c_evidence_verification_receipt.sql" in payload
-    assert payload.count(
-        "d2d336d7f9fc99b0c259c6b54fc3a975267e84e055b40fdc97dc675184ef9c2f"
-    ) == 1
-    assert payload.count(
-        "e3cece71a7eb9781bfe5cf44a49678be299506a9312bfe4ca4bb8e425b937d87"
-    ) >= 3
-    assert (
-        "preexisting 013c catalog exists without its immutable ledger row"
-        in payload
+    assert payload.count("d2d336d7f9fc99b0c259c6b54fc3a975267e84e055b40fdc97dc675184ef9c2f") == 1
+    assert payload.count("b121f3d1d8723da5b932231e234270cf037dfa239151ec5a518184915032dbae") >= 3
+    assert "preexisting 013c catalog exists without its immutable ledger row" in payload
+    assert "matched_count <> 8" in payload
+    assert payload.index("verification receipt relational binding drift") < payload.index(
+        "verification receipt lacks exact verified v2 admission"
+    )
+    assert payload.index("verification receipt lacks exact verified v2 admission") < payload.index(
+        "verified v2 admission lacks exact verification receipt"
+    )
+    assert payload.index("verified v2 admission lacks exact verification receipt") < (
+        payload.index("INSERT INTO fairmind_operator_migration_ledger")
     )
 
 
@@ -475,8 +569,7 @@ def test_receipt_first_composite_fk_allows_one_exact_verified_graph() -> None:
         "SELECT count(*) FROM governance_evidence_verification_receipts"
     ).fetchone() == (1,)
     assert connection.execute(
-        "SELECT admission_status FROM governance_evidence_admissions "
-        "WHERE id = 'admission-a'"
+        "SELECT admission_status FROM governance_evidence_admissions " "WHERE id = 'admission-a'"
     ).fetchone() == ("verified",)
 
 
@@ -530,6 +623,19 @@ def test_receipt_guard_rejects_every_mutated_execution_binding_leaf(
         _insert_receipt(connection, binding=binding)
 
 
+def test_receipt_guard_rejects_open_execution_binding_shape() -> None:
+    connection = _bound_graph_connection()
+    _seed_receipt_parents(connection)
+    binding = _binding()
+    binding["untrustedFutureField"] = "must-not-enter-the-receipt"
+
+    with pytest.raises(
+        sqlite3.IntegrityError,
+        match="verification receipt relational binding failed",
+    ):
+        _insert_receipt(connection, binding=binding)
+
+
 def test_receipts_are_append_only_and_013c_replay_preserves_verified_rows() -> None:
     connection = _bound_graph_connection()
     _seed_receipt_parents(connection)
@@ -546,14 +652,181 @@ def test_receipts_are_append_only_and_013c_replay_preserves_verified_rows() -> N
         )
     with pytest.raises(sqlite3.IntegrityError, match="append-only"):
         connection.execute(
-            "DELETE FROM governance_evidence_verification_receipts "
-            "WHERE id = 'receipt-a'"
+            "DELETE FROM governance_evidence_verification_receipts " "WHERE id = 'receipt-a'"
         )
 
     connection.executescript(SQLITE_013C.read_text(encoding="utf-8"))
     assert connection.execute(
         "SELECT admission_id FROM governance_evidence_verification_receipts"
     ).fetchone() == ("admission-a",)
+
+
+def test_sqlite_013c_replay_rejects_laundered_receiptless_verified_row() -> None:
+    connection = _bound_graph_connection()
+    _seed_receipt_parents(connection)
+    connection.commit()
+    connection.execute("BEGIN")
+    _insert_receipt(connection)
+    _insert_verified_admission(connection)
+    connection.commit()
+
+    no_delete = connection.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'trigger' "
+        "AND name = 'governance_evidence_verification_receipts_no_delete'"
+    ).fetchone()
+    assert no_delete is not None and no_delete[0]
+    connection.execute("DROP TRIGGER governance_evidence_verification_receipts_no_delete")
+    connection.execute(
+        "DELETE FROM governance_evidence_verification_receipts " "WHERE id = 'receipt-a'"
+    )
+    connection.execute(no_delete[0])
+    connection.commit()
+
+    with pytest.raises(
+        sqlite3.IntegrityError,
+        match="verified v2 admission lacks exact verification receipt",
+    ):
+        connection.executescript(SQLITE_013C.read_text(encoding="utf-8"))
+
+
+def test_sqlite_013c_replay_rejects_receipt_with_pending_parent() -> None:
+    connection = _bound_graph_connection()
+    _seed_receipt_parents(connection)
+    connection.commit()
+    connection.execute("BEGIN")
+    _insert_receipt(connection)
+    _insert_verified_admission(connection, status="pending")
+    connection.commit()
+
+    with pytest.raises(
+        sqlite3.IntegrityError,
+        match="verification receipt lacks exact verified v2 admission",
+    ):
+        connection.executescript(SQLITE_013C.read_text(encoding="utf-8"))
+
+
+def test_sqlite_013c_replay_rejects_present_but_corrupt_receipt() -> None:
+    connection = _bound_graph_connection()
+    _seed_receipt_parents(connection)
+    connection.commit()
+    connection.execute("BEGIN")
+    _insert_receipt(connection)
+    _insert_verified_admission(connection)
+    connection.commit()
+
+    no_update = connection.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'trigger' "
+        "AND name = 'governance_evidence_verification_receipts_no_update'"
+    ).fetchone()
+    assert no_update is not None and no_update[0]
+    connection.execute("DROP TRIGGER governance_evidence_verification_receipts_no_update")
+    connection.execute(
+        "UPDATE governance_evidence_verification_receipts "
+        "SET execution_binding_json = '{}', execution_binding_hash = ? "
+        "WHERE id = 'receipt-a'",
+        ("e" * 64,),
+    )
+    connection.execute(no_update[0])
+    connection.commit()
+
+    with pytest.raises(
+        sqlite3.IntegrityError,
+        match="verification receipt relational binding drift",
+    ):
+        connection.executescript(SQLITE_013C.read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize(
+    ("column_name", "replacement"),
+    (
+        ("envelope_hash", "b" * 64),
+        ("submitted_by", "other-submitter"),
+        ("checked_at", "2026-07-20T00:03:00+00:00"),
+    ),
+)
+def test_sqlite_013c_replay_rejects_laundered_admission_projection(
+    column_name: str,
+    replacement: str,
+) -> None:
+    connection = _bound_graph_connection()
+    _seed_receipt_parents(connection)
+    connection.commit()
+    connection.execute("BEGIN")
+    _insert_receipt(connection)
+    _insert_verified_admission(connection)
+    connection.commit()
+
+    trigger_names = (
+        "governance_evidence_admissions_no_update",
+        "governance_evidence_admissions_require_receipt_update_013c",
+    )
+    trigger_sql = []
+    for trigger_name in trigger_names:
+        row = connection.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = ?",
+            (trigger_name,),
+        ).fetchone()
+        assert row is not None and row[0]
+        trigger_sql.append(row[0])
+
+    connection.execute("PRAGMA foreign_keys = OFF")
+    for trigger_name in trigger_names:
+        connection.execute(f'DROP TRIGGER "{trigger_name}"')
+    connection.execute(
+        f"UPDATE governance_evidence_admissions SET {column_name} = ? " "WHERE id = 'admission-a'",
+        (replacement,),
+    )
+    for statement in trigger_sql:
+        connection.execute(statement)
+    connection.commit()
+    connection.execute("PRAGMA foreign_keys = ON")
+
+    with pytest.raises(
+        sqlite3.IntegrityError,
+        match="verification receipt lacks exact verified v2 admission",
+    ):
+        connection.executescript(SQLITE_013C.read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize(
+    ("column_name", "replacement"),
+    (
+        ("result", "passed"),
+        ("artifact_refs_json", '[{"artifactId":"forged"}]'),
+        ("limitations_json", '["forged"]'),
+    ),
+)
+def test_sqlite_013c_replay_rejects_laundered_evidence_projection(
+    column_name: str,
+    replacement: str,
+) -> None:
+    connection = _bound_graph_connection()
+    _seed_receipt_parents(connection)
+    connection.commit()
+    connection.execute("BEGIN")
+    _insert_receipt(connection)
+    _insert_verified_admission(connection)
+    connection.commit()
+
+    trigger_name = "governance_evidence_runs_immutable_update"
+    trigger = connection.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = ?",
+        (trigger_name,),
+    ).fetchone()
+    assert trigger is not None and trigger[0]
+    connection.execute(f'DROP TRIGGER "{trigger_name}"')
+    connection.execute(
+        f"UPDATE governance_evidence_runs SET {column_name} = ? " "WHERE id = 'evidence-a'",
+        (replacement,),
+    )
+    connection.execute(trigger[0])
+    connection.commit()
+
+    with pytest.raises(
+        sqlite3.IntegrityError,
+        match="verification receipt relational binding drift",
+    ):
+        connection.executescript(SQLITE_013C.read_text(encoding="utf-8"))
 
 
 def test_013c_refuses_to_fabricate_receipts_for_historical_verified_v2_rows() -> None:
@@ -567,7 +840,10 @@ def test_013c_refuses_to_fabricate_receipts_for_historical_verified_v2_rows() ->
         match="013c refuses pre-existing verified v2 admissions",
     ):
         connection.executescript(SQLITE_013C.read_text(encoding="utf-8"))
-    assert connection.execute(
-        "SELECT name FROM sqlite_master WHERE type = 'table' "
-        "AND name = 'governance_evidence_verification_receipts'"
-    ).fetchone() is None
+    assert (
+        connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' "
+            "AND name = 'governance_evidence_verification_receipts'"
+        ).fetchone()
+        is None
+    )

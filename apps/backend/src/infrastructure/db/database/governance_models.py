@@ -58,9 +58,7 @@ def _digits_only(expression: str, length: int) -> str:
 def _canonical_envelope_nonce(column: str) -> str:
     """Portable predicate for canonical unpadded base64url encoding of 32 bytes."""
     stripped = column
-    for character in (
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-"
-    ):
+    for character in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-":
         stripped = f"replace({stripped}, '{character}', '')"
     return (
         f"length({column}) = 43 AND length({stripped}) = 0 "
@@ -594,15 +592,25 @@ class GovernanceEvaluationTargetVersion(Base):
 
     __table_args__ = (
         UniqueConstraint(
-            "id", "workspace_id", "system_id", "org_id",
+            "id",
+            "workspace_id",
+            "system_id",
+            "org_id",
             name="uq_governance_evaluation_target_tenant",
         ),
         UniqueConstraint(
-            "id", "target_kind", "workspace_id", "system_id", "org_id",
+            "id",
+            "target_kind",
+            "workspace_id",
+            "system_id",
+            "org_id",
             name="uq_governance_evaluation_target_kind_tenant",
         ),
         UniqueConstraint(
-            "org_id", "system_id", "target_key", "version",
+            "org_id",
+            "system_id",
+            "target_key",
+            "version",
             name="uq_governance_evaluation_target_version",
         ),
         ForeignKeyConstraint(
@@ -695,12 +703,13 @@ class GovernanceEvaluationSuiteVersion(Base):
 
     __table_args__ = (
         UniqueConstraint(
-            "owner_scope", "namespace", "name", "version",
+            "owner_scope",
+            "namespace",
+            "name",
+            "version",
             name="uq_governance_evaluation_suite_owner_identity",
         ),
-        UniqueConstraint(
-            "id", "owner_scope", name="uq_governance_evaluation_suite_scope"
-        ),
+        UniqueConstraint("id", "owner_scope", name="uq_governance_evaluation_suite_scope"),
         CheckConstraint(
             "(owner_org_id IS NULL AND owner_scope = 'platform') OR "
             "(owner_org_id IS NOT NULL AND owner_scope = owner_org_id)",
@@ -752,9 +761,7 @@ class GovernanceEvidenceIssuer(Base):
 
     __table_args__ = (
         UniqueConstraint("id", "org_id", name="uq_governance_evidence_issuer_tenant"),
-        UniqueConstraint(
-            "org_id", "issuer_key", name="uq_governance_evidence_issuer_key"
-        ),
+        UniqueConstraint("org_id", "issuer_key", name="uq_governance_evidence_issuer_key"),
         CheckConstraint(
             "status IN ('active', 'revoked')",
             name="ck_governance_evidence_issuer_status",
@@ -785,11 +792,15 @@ class GovernanceEvidenceSigningKey(Base):
 
     __table_args__ = (
         UniqueConstraint(
-            "id", "issuer_id", "org_id",
+            "id",
+            "issuer_id",
+            "org_id",
             name="uq_governance_evidence_signing_key_tenant",
         ),
         UniqueConstraint(
-            "org_id", "issuer_id", "key_id",
+            "org_id",
+            "issuer_id",
+            "key_id",
             name="uq_governance_evidence_signing_key_id",
         ),
         ForeignKeyConstraint(
@@ -834,12 +845,8 @@ class GovernanceEvidenceTrustPolicyVersion(Base):
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
 
     __table_args__ = (
-        UniqueConstraint(
-            "id", "org_id", name="uq_governance_evidence_trust_policy_tenant"
-        ),
-        UniqueConstraint(
-            "org_id", "version", name="uq_governance_evidence_trust_policy_version"
-        ),
+        UniqueConstraint("id", "org_id", name="uq_governance_evidence_trust_policy_tenant"),
+        UniqueConstraint("org_id", "version", name="uq_governance_evidence_trust_policy_version"),
         CheckConstraint(
             _lower_hex64("policy_hash"),
             name="ck_governance_evidence_trust_policy_hash",
@@ -882,15 +889,21 @@ class GovernanceEvaluationPlanSuite(Base):
 
     __table_args__ = (
         UniqueConstraint(
-            "id", "plan_id", "workspace_id", "system_id", "org_id",
+            "id",
+            "plan_id",
+            "workspace_id",
+            "system_id",
+            "org_id",
             name="uq_governance_evaluation_plan_suite_tenant",
         ),
         UniqueConstraint(
-            "plan_id", "ordinal",
+            "plan_id",
+            "ordinal",
             name="uq_governance_evaluation_plan_suite_ordinal",
         ),
         UniqueConstraint(
-            "plan_id", "suite_version_id",
+            "plan_id",
+            "suite_version_id",
             name="uq_governance_evaluation_plan_suite_version",
         ),
         ForeignKeyConstraint(
@@ -913,9 +926,7 @@ class GovernanceEvaluationPlanSuite(Base):
             "suite_owner_scope IN ('platform', org_id)",
             name="ck_governance_evaluation_plan_suite_owner",
         ),
-        CheckConstraint(
-            "ordinal >= 0", name="ck_governance_evaluation_plan_suite_ordinal"
-        ),
+        CheckConstraint("ordinal >= 0", name="ck_governance_evaluation_plan_suite_ordinal"),
         CheckConstraint(
             _lower_hex64("configuration_hash"),
             name="ck_governance_evaluation_plan_suite_configuration_hash",
@@ -954,19 +965,28 @@ class GovernanceEvaluationRunSuiteExecution(Base):
 
     __table_args__ = (
         UniqueConstraint(
-            "id", "run_id", "workspace_id", "system_id", "org_id",
+            "id",
+            "run_id",
+            "workspace_id",
+            "system_id",
+            "org_id",
             name="uq_governance_evaluation_suite_execution_tenant",
         ),
         UniqueConstraint(
-            "id", "workspace_id", "system_id", "org_id",
+            "id",
+            "workspace_id",
+            "system_id",
+            "org_id",
             name="uq_governance_evaluation_suite_execution_scope",
         ),
         UniqueConstraint(
-            "run_id", "ordinal",
+            "run_id",
+            "ordinal",
             name="uq_governance_evaluation_suite_execution_ordinal",
         ),
         UniqueConstraint(
-            "run_id", "suite_version_id",
+            "run_id",
+            "suite_version_id",
             name="uq_governance_evaluation_suite_execution_suite",
         ),
         ForeignKeyConstraint(
@@ -1007,9 +1027,7 @@ class GovernanceEvaluationRunSuiteExecution(Base):
             "suite_owner_scope IN ('platform', org_id)",
             name="ck_governance_evaluation_suite_execution_owner",
         ),
-        CheckConstraint(
-            "ordinal >= 0", name="ck_governance_evaluation_suite_execution_ordinal"
-        ),
+        CheckConstraint("ordinal >= 0", name="ck_governance_evaluation_suite_execution_ordinal"),
         CheckConstraint(
             "technical_status IN ('awaiting_evidence', 'queued', 'leased', 'running', "
             "'succeeded', 'failed', 'timed_out', 'cancelled')",
@@ -1128,11 +1146,16 @@ class GovernanceEvidenceAdmission(Base):
 
     __table_args__ = (
         UniqueConstraint(
-            "id", "evidence_run_id", "passport_revision_id", "system_id", "org_id",
+            "id",
+            "evidence_run_id",
+            "passport_revision_id",
+            "system_id",
+            "org_id",
             name="uq_governance_evidence_admission_tenant",
         ),
         UniqueConstraint(
-            "passport_revision_id", "trust_policy_version_id",
+            "passport_revision_id",
+            "trust_policy_version_id",
             name="uq_governance_evidence_admission_policy",
         ),
         UniqueConstraint(
@@ -1306,7 +1329,7 @@ class GovernanceEvidenceAdmission(Base):
 
 
 class GovernanceEvidenceVerificationReceipt(Base):
-    """Append-only server verification facts for one exact V2 admission."""
+    """Structural ORM projection; migration 013c owns closed receipt authority."""
 
     __tablename__ = "governance_evidence_verification_receipts"
 
@@ -1318,9 +1341,10 @@ class GovernanceEvidenceVerificationReceipt(Base):
     suite_execution_id = Column(String, nullable=False, index=True)
     evidence_run_id = Column(String, nullable=False, index=True)
     passport_revision_id = Column(String, nullable=False, index=True)
-    admission_id = Column(String, nullable=False, index=True)
+    admission_id = Column(String, nullable=False)
     admission_contract_version = Column(String, nullable=False)
     passport_content_hash = Column(String, nullable=False)
+    passport_snapshot_hash = Column(String, nullable=False)
     signature_input_hash = Column(String, nullable=False)
     execution_binding_hash = Column(String, nullable=False)
     execution_binding_json = Column(Text, nullable=False)
@@ -1349,18 +1373,6 @@ class GovernanceEvidenceVerificationReceipt(Base):
         UniqueConstraint(
             "admission_id",
             name="uq_governance_evidence_verification_receipt_admission",
-        ),
-        UniqueConstraint(
-            "admission_id",
-            "admission_contract_version",
-            "run_id",
-            "suite_execution_id",
-            "evidence_run_id",
-            "passport_revision_id",
-            "workspace_id",
-            "system_id",
-            "org_id",
-            name="uq_governance_evidence_verification_receipt_scope",
         ),
         ForeignKeyConstraint(
             ["evidence_run_id", "workspace_id", "system_id", "org_id"],
@@ -1474,6 +1486,7 @@ class GovernanceEvidenceVerificationReceipt(Base):
         ),
         CheckConstraint(
             f"{_lower_hex64('passport_content_hash')} AND "
+            f"{_lower_hex64('passport_snapshot_hash')} AND "
             f"{_lower_hex64('signature_input_hash')} AND "
             f"{_lower_hex64('execution_binding_hash')} AND "
             f"{_lower_hex64('trust_policy_hash')} AND "
@@ -1518,7 +1531,9 @@ class GovernanceEvidenceReview(Base):
     __table_args__ = (
         UniqueConstraint("id", "org_id", name="uq_governance_evidence_review_tenant"),
         UniqueConstraint(
-            "passport_revision_id", "admission_id", "review_version",
+            "passport_revision_id",
+            "admission_id",
+            "review_version",
             name="uq_governance_evidence_review_version",
         ),
         UniqueConstraint(
@@ -1537,8 +1552,11 @@ class GovernanceEvidenceReview(Base):
         ),
         ForeignKeyConstraint(
             [
-                "admission_id", "evidence_run_id", "passport_revision_id",
-                "system_id", "org_id",
+                "admission_id",
+                "evidence_run_id",
+                "passport_revision_id",
+                "system_id",
+                "org_id",
             ],
             [
                 "governance_evidence_admissions.id",
@@ -1577,9 +1595,7 @@ class GovernanceEvidenceReview(Base):
             "decision IN ('accepted', 'rejected')",
             name="ck_governance_evidence_review_decision",
         ),
-        CheckConstraint(
-            "review_version >= 1", name="ck_governance_evidence_review_version"
-        ),
+        CheckConstraint("review_version >= 1", name="ck_governance_evidence_review_version"),
         Index(
             "idx_governance_evidence_reviews_admission_version",
             "admission_id",
@@ -1704,8 +1720,7 @@ class GovernanceEvidenceNonceClaim(Base):
             name="fk_governance_evidence_nonce_claim_suite_execution",
         ),
         CheckConstraint(
-            "run_contract_version = '2.0.0' "
-            "AND admission_contract_version = '2.0.0'",
+            "run_contract_version = '2.0.0' " "AND admission_contract_version = '2.0.0'",
             name="ck_governance_evidence_nonce_claim_contract_versions",
         ),
         CheckConstraint(
@@ -2021,12 +2036,13 @@ class GovernanceIdempotencyRecord(Base):
 
     __table_args__ = (
         UniqueConstraint(
-            "org_id", "actor_id", "operation", "key_hash",
+            "org_id",
+            "actor_id",
+            "operation",
+            "key_hash",
             name="uq_governance_idempotency_identity",
         ),
-        CheckConstraint(
-            _lower_hex64("key_hash"), name="ck_governance_idempotency_key_hash"
-        ),
+        CheckConstraint(_lower_hex64("key_hash"), name="ck_governance_idempotency_key_hash"),
         CheckConstraint(
             _lower_hex64("request_hash"), name="ck_governance_idempotency_request_hash"
         ),
@@ -2064,11 +2080,13 @@ class GovernanceEvaluationAuditEvent(Base):
 
     __table_args__ = (
         UniqueConstraint(
-            "org_id", "sequence_number",
+            "org_id",
+            "sequence_number",
             name="uq_governance_evaluation_audit_sequence",
         ),
         UniqueConstraint(
-            "org_id", "event_hash",
+            "org_id",
+            "event_hash",
             name="uq_governance_evaluation_audit_hash",
         ),
         CheckConstraint(

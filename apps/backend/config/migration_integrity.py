@@ -67,11 +67,14 @@ _MIGRATIONS = _BACKEND_ROOT / "migrations"
 # This checksum is frozen from the reviewed direct PostgreSQL payload. Never
 # derive it from the bundled file during verification: doing so would bless
 # source drift instead of detecting it.
-_FROZEN_013B_CHECKSUM = (
-    "d2d336d7f9fc99b0c259c6b54fc3a975267e84e055b40fdc97dc675184ef9c2f"
+_FROZEN_013B_CHECKSUM = "d2d336d7f9fc99b0c259c6b54fc3a975267e84e055b40fdc97dc675184ef9c2f"
+FROZEN_013B_OPERATOR_V2_CHECKSUM = (
+    "1ad3a12f814f537c130ffbbc326bee3c7408ec90795d31925b459b9a05486fe0"
 )
-_FROZEN_013C_CHECKSUM = (
-    "e3cece71a7eb9781bfe5cf44a49678be299506a9312bfe4ca4bb8e425b937d87"
+_FROZEN_013C_CHECKSUM = "b121f3d1d8723da5b932231e234270cf037dfa239151ec5a518184915032dbae"
+FROZEN_013C_OPERATOR_CHECKSUM = "8f7ec1bda9041f16a03ace75202e590fc8a92947495a792f1b886a55fe621040"
+FROZEN_SQLITE_013C_FIXTURE_CHECKSUM = (
+    "876c377bfb6063b063c0f6cbd20d31089187f0ceae7d40d5ba1ab44c81ecb50d"
 )
 
 FROZEN_ASSURANCE_MIGRATIONS = (
@@ -137,6 +140,10 @@ POSTGRESQL_ASSURANCE_FUNCTIONS = frozenset(
         "fairmind_expected_decision_evidence_set_013b",
         "fairmind_is_exact_decision_evidence_set_shape_013b",
         "fairmind_jsonb_object_member_count_013c",
+        "fairmind_verification_receipt_has_exact_verified_admission_013c",
+        "fairmind_verification_receipt_is_relationally_valid_013c",
+        "fairmind_verification_receipt_matches_admission_013c",
+        "fairmind_verified_admission_has_exact_receipt_013c",
         "fairmind_freshness_transition_allowed",
         "fairmind_initial_layer_verdicts_v1_for_run",
         "fairmind_is_canonical_utc_timestamp",
@@ -166,6 +173,7 @@ POSTGRESQL_ASSURANCE_FUNCTIONS = frozenset(
         "guard_governance_evidence_signing_key_013b",
         "guard_governance_evidence_trust_policy_013b",
         "guard_governance_evidence_verification_receipt_013c",
+        "guard_governance_evidence_verification_receipt_parent_013c",
         "reject_governance_evaluation_013b_mutation",
         "reject_governance_evaluation_audit_mutation",
     }
@@ -205,6 +213,7 @@ POSTGRESQL_ASSURANCE_REQUIRED_TRIGGERS = frozenset(
         "governance_evidence_admissions_no_update",
         "governance_evidence_admissions_guard_signer_insert",
         "governance_evidence_admissions_require_receipt_013c",
+        "governance_evidence_receipts_require_verified_admission_013c",
         "governance_evidence_issuers_guard_delete",
         "governance_evidence_issuers_guard_insert",
         "governance_evidence_issuers_guard_update",
@@ -237,16 +246,12 @@ POSTGRESQL_ASSURANCE_CATALOG_SPEC = PostgreSQLCatalogSpec(
 # PostgreSQL 14 and cross-checked against a direct-payload installation. The
 # PostgreSQL major is part of the canonical catalog payload because PostgreSQL
 # deparser output can change across major versions.
-FROZEN_POSTGRESQL_ASSURANCE_CATALOGS: Mapping[
-    int, FrozenPostgreSQLCatalog
-] = MappingProxyType(
+FROZEN_POSTGRESQL_ASSURANCE_CATALOGS: Mapping[int, FrozenPostgreSQLCatalog] = MappingProxyType(
     {
         14: FrozenPostgreSQLCatalog(
             spec=POSTGRESQL_ASSURANCE_CATALOG_SPEC,
             postgresql_major=14,
-            digest=(
-                "47739c29a794d0e20bc3b5178551d92d1ab11656d202f755dc47bfe736124d3d"
-            ),
+            digest=("714fc4ea6f69085ad13bdc3142d38432e405cc17d33d77f93161f3e957f3c9c6"),
         )
     }
 )
@@ -395,6 +400,7 @@ SQLITE_ASSURANCE_TRIGGERS = frozenset(
 SQLITE_ASSURANCE_VIEWS = frozenset(
     {
         "governance_evidence_admission_v2_current_eligibility",
+        "governance_evidence_verification_receipt_admission_matches_013c",
     }
 )
 
@@ -403,9 +409,7 @@ SQLITE_ASSURANCE_VIEWS = frozenset(
 # this freezes table columns/checks/FKs, explicit indexes, trigger bodies, and
 # security-critical view definitions.
 # Replace only after the complete 013c SQLite fixture has passed review.
-SQLITE_ASSURANCE_CATALOG_DIGEST = (
-    "a0812fa421ab7a172045d8f9845389cc5876bc1388ed9ef4cef8793fde2697d1"
-)
+SQLITE_ASSURANCE_CATALOG_DIGEST = "4e73091e481f1259ce830c6697d678e3f60d368d3d0b4deec1911cb2516b8b82"
 
 _SQLITE_ASSURANCE_OBJECTS = {
     "table": SQLITE_ASSURANCE_TABLES,
@@ -419,18 +423,14 @@ _TRUSTED_SCHEMA_SENTINEL = "__fairmind_trusted_schema__"
 
 def _validate_trusted_schema_name(trusted_schema: str) -> str:
     if not isinstance(trusted_schema, str) or not trusted_schema:
-        raise MigrationIntegrityError(
-            "a trusted PostgreSQL migration schema is required"
-        )
+        raise MigrationIntegrityError("a trusted PostgreSQL migration schema is required")
     lowered = trusted_schema.lower()
     if (
         "\x00" in trusted_schema
         or lowered in {"information_schema", "temp"}
         or lowered.startswith("pg_")
     ):
-        raise MigrationIntegrityError(
-            "a trusted PostgreSQL migration schema is required"
-        )
+        raise MigrationIntegrityError("a trusted PostgreSQL migration schema is required")
     return trusted_schema
 
 
@@ -457,9 +457,7 @@ def _parse_postgresql_search_path(value: str) -> tuple[str, ...]:
             )
         )
     except (csv.Error, StopIteration) as error:
-        raise MigrationIntegrityError(
-            "PostgreSQL search_path cannot be validated"
-        ) from error
+        raise MigrationIntegrityError("PostgreSQL search_path cannot be validated") from error
     return tuple(part.strip() for part in parsed)
 
 
@@ -470,9 +468,7 @@ def _assert_postgresql_runtime_search_path(connection, trusted_schema: str) -> N
             text("SELECT pg_catalog.current_setting('search_path')")
         ).scalar_one()
     except SQLAlchemyError as error:
-        raise MigrationIntegrityError(
-            "PostgreSQL search_path cannot be validated"
-        ) from error
+        raise MigrationIntegrityError("PostgreSQL search_path cannot be validated") from error
     if _parse_postgresql_search_path(str(actual)) != spec:
         raise MigrationIntegrityError("PostgreSQL runtime search_path is not fixed")
 
@@ -489,23 +485,18 @@ def bind_postgresql_engine_search_path(engine, trusted_schema: str) -> None:
     prior = getattr(engine, "_fairmind_assurance_search_path", None)
     if prior is not None:
         if prior != runtime_path:
-            raise MigrationIntegrityError(
-                "PostgreSQL engine search_path is already bound"
-            )
+            raise MigrationIntegrityError("PostgreSQL engine search_path is already bound")
         return
 
     def _reset_search_path(dbapi_connection, _connection_record, _connection_proxy):
         cursor = dbapi_connection.cursor()
         try:
             cursor.execute(
-                "SELECT pg_catalog.set_config("
-                f"'search_path', '{runtime_path_literal}', false)"
+                "SELECT pg_catalog.set_config(" f"'search_path', '{runtime_path_literal}', false)"
             )
             configured = cursor.fetchone()
             if configured is None or str(configured[0]) != runtime_path:
-                raise MigrationIntegrityError(
-                    "PostgreSQL runtime search_path could not be fixed"
-                )
+                raise MigrationIntegrityError("PostgreSQL runtime search_path could not be fixed")
         finally:
             cursor.close()
 
@@ -522,18 +513,13 @@ def _coerce_database_url(source):
     try:
         return make_url(str(candidate))
     except Exception as error:
-        raise MigrationIntegrityError(
-            "runtime database identity cannot be parsed"
-        ) from error
+        raise MigrationIntegrityError("runtime database identity cannot be parsed") from error
 
 
 def _assert_unambiguous_postgresql_endpoint(url) -> None:
     query_keys = {str(key).lower() for key in url.query}
     authority_host = str(url.host or "")
-    if (
-        query_keys.intersection({"host", "hostaddr", "port"})
-        or "," in authority_host
-    ):
+    if query_keys.intersection({"host", "hostaddr", "port"}) or "," in authority_host:
         raise MigrationIntegrityError(
             "PostgreSQL runtime database identity has ambiguous endpoint routing"
         )
@@ -564,13 +550,8 @@ def verify_database_identities(*sources) -> None:
     """Fail closed unless every runtime family targets one physical database."""
     identities = tuple(normalized_database_identity(source) for source in sources)
     if len(identities) < 2:
-        raise MigrationIntegrityError(
-            "at least two runtime database identities are required"
-        )
-    if (
-        identities[0].backend == "sqlite"
-        and identities[0].database in {None, "", ":memory:"}
-    ):
+        raise MigrationIntegrityError("at least two runtime database identities are required")
+    if identities[0].backend == "sqlite" and identities[0].database in {None, "", ":memory:"}:
         if all(source is sources[0] for source in sources[1:]):
             return
         raise MigrationIntegrityError("SQLite runtime database identities differ")
@@ -626,27 +607,29 @@ def _postgresql_assurance_catalog_payload(
     schema = _validate_trusted_schema_name(trusted_schema)
     _validate_postgresql_catalog_spec(spec)
     if getattr(connection.dialect, "name", None) != "postgresql":
-        raise MigrationIntegrityError(
-            "PostgreSQL assurance catalog requires PostgreSQL"
-        )
+        raise MigrationIntegrityError("PostgreSQL assurance catalog requires PostgreSQL")
     _assert_postgresql_runtime_search_path(connection, schema)
 
     try:
-        schema_row = connection.execute(
-            text(
-                "SELECT n.oid AS schema_oid, n.nspowner AS schema_owner_oid, "
-                "(SESSION_USER::pg_catalog.regrole)::oid AS session_user_oid, "
-                "(CURRENT_USER::pg_catalog.regrole)::oid AS current_user_oid, "
-                "(n.nspowner = (SESSION_USER::pg_catalog.regrole)::oid) "
-                "AS owner_is_session_user, "
-                "(n.nspowner = (CURRENT_USER::pg_catalog.regrole)::oid) "
-                "AS owner_is_current_user, "
-                "pg_catalog.has_schema_privilege('public', n.oid, 'CREATE') "
-                "AS public_create "
-                "FROM pg_catalog.pg_namespace AS n WHERE n.nspname = :schema"
-            ),
-            {"schema": schema},
-        ).mappings().one_or_none()
+        schema_row = (
+            connection.execute(
+                text(
+                    "SELECT n.oid AS schema_oid, n.nspowner AS schema_owner_oid, "
+                    "(SESSION_USER::pg_catalog.regrole)::oid AS session_user_oid, "
+                    "(CURRENT_USER::pg_catalog.regrole)::oid AS current_user_oid, "
+                    "(n.nspowner = (SESSION_USER::pg_catalog.regrole)::oid) "
+                    "AS owner_is_session_user, "
+                    "(n.nspowner = (CURRENT_USER::pg_catalog.regrole)::oid) "
+                    "AS owner_is_current_user, "
+                    "pg_catalog.has_schema_privilege('public', n.oid, 'CREATE') "
+                    "AS public_create "
+                    "FROM pg_catalog.pg_namespace AS n WHERE n.nspname = :schema"
+                ),
+                {"schema": schema},
+            )
+            .mappings()
+            .one_or_none()
+        )
     except SQLAlchemyError as error:
         raise MigrationIntegrityError(
             "trusted PostgreSQL migration schema cannot be validated"
@@ -656,9 +639,7 @@ def _postgresql_assurance_catalog_payload(
             f"trusted PostgreSQL migration schema {schema!r} does not exist"
         )
     if bool(schema_row["public_create"]):
-        raise MigrationIntegrityError(
-            "trusted PostgreSQL migration schema grants PUBLIC CREATE"
-        )
+        raise MigrationIntegrityError("trusted PostgreSQL migration schema grants PUBLIC CREATE")
 
     try:
         relation_rows = _mapping_rows(
@@ -864,14 +845,10 @@ def _postgresql_assurance_catalog_payload(
             )
         )
     except SQLAlchemyError as error:
-        raise MigrationIntegrityError(
-            "PostgreSQL assurance catalog cannot be inspected"
-        ) from error
+        raise MigrationIntegrityError("PostgreSQL assurance catalog cannot be inspected") from error
 
     expected_relations = set(spec.relations)
-    selected_relations = [
-        row for row in relation_rows if str(row["relname"]) in expected_relations
-    ]
+    selected_relations = [row for row in relation_rows if str(row["relname"]) in expected_relations]
     installed_relations = {str(row["relname"]) for row in selected_relations}
     missing_relations = sorted(expected_relations - installed_relations)
     if missing_relations:
@@ -880,30 +857,18 @@ def _postgresql_assurance_catalog_payload(
             + ", ".join(missing_relations)
         )
     if any(not bool(row["owner_matches_schema"]) for row in selected_relations):
-        raise MigrationIntegrityError(
-            "PostgreSQL assurance relation ownership invariant failed"
-        )
+        raise MigrationIntegrityError("PostgreSQL assurance relation ownership invariant failed")
 
-    selected_columns = [
-        row for row in column_rows if str(row["relname"]) in expected_relations
-    ]
+    selected_columns = [row for row in column_rows if str(row["relname"]) in expected_relations]
     selected_constraints = [
         row for row in constraint_rows if str(row["relname"]) in expected_relations
     ]
-    selected_indexes = [
-        row for row in index_rows if str(row["relname"]) in expected_relations
-    ]
+    selected_indexes = [row for row in index_rows if str(row["relname"]) in expected_relations]
     if any(not bool(row["owner_matches_schema"]) for row in selected_indexes):
-        raise MigrationIntegrityError(
-            "PostgreSQL assurance index ownership invariant failed"
-        )
-    selected_triggers = [
-        row for row in trigger_rows if str(row["relname"]) in expected_relations
-    ]
+        raise MigrationIntegrityError("PostgreSQL assurance index ownership invariant failed")
+    selected_triggers = [row for row in trigger_rows if str(row["relname"]) in expected_relations]
     selected_rewrite_rules = [
-        row
-        for row in rewrite_rule_rows
-        if str(row["relname"]) in expected_relations
+        row for row in rewrite_rule_rows if str(row["relname"]) in expected_relations
     ]
     installed_triggers = {str(row["tgname"]) for row in selected_triggers}
     missing_triggers = sorted(set(spec.required_triggers) - installed_triggers)
@@ -913,9 +878,7 @@ def _postgresql_assurance_catalog_payload(
             + ", ".join(missing_triggers)
         )
     disabled_triggers = sorted(
-        str(row["tgname"])
-        for row in selected_triggers
-        if str(row["tgenabled"]) not in {"O", "A"}
+        str(row["tgname"]) for row in selected_triggers if str(row["tgenabled"]) not in {"O", "A"}
     )
     if disabled_triggers:
         raise MigrationIntegrityError(
@@ -924,9 +887,7 @@ def _postgresql_assurance_catalog_payload(
         )
 
     expected_functions = set(spec.functions)
-    selected_functions = [
-        row for row in function_rows if str(row["proname"]) in expected_functions
-    ]
+    selected_functions = [row for row in function_rows if str(row["proname"]) in expected_functions]
     installed_functions = {str(row["proname"]) for row in selected_functions}
     missing_functions = sorted(expected_functions - installed_functions)
     if missing_functions:
@@ -935,19 +896,13 @@ def _postgresql_assurance_catalog_payload(
             + ", ".join(missing_functions)
         )
     if any(not bool(row["owner_matches_schema"]) for row in selected_functions):
-        raise MigrationIntegrityError(
-            "PostgreSQL assurance function ownership invariant failed"
-        )
+        raise MigrationIntegrityError("PostgreSQL assurance function ownership invariant failed")
 
     selected_relation_acls = [
-        row
-        for row in relation_acl_rows
-        if str(row["relname"]) in expected_relations
+        row for row in relation_acl_rows if str(row["relname"]) in expected_relations
     ]
     selected_function_acls = [
-        row
-        for row in function_acl_rows
-        if str(row["proname"]) in expected_functions
+        row for row in function_acl_rows if str(row["proname"]) in expected_functions
     ]
 
     schema_owner_oid = int(schema_row["schema_owner_oid"])
@@ -981,10 +936,7 @@ def _postgresql_assurance_catalog_payload(
         for row in role_membership_rows:
             granted_role_oid = int(row["granted_role_oid"])
             member_role_oid = int(row["member_role_oid"])
-            if (
-                granted_role_oid in authority_role_oids
-                or member_role_oid in authority_role_oids
-            ):
+            if granted_role_oid in authority_role_oids or member_role_oid in authority_role_oids:
                 authority_role_oids.update((granted_role_oid, member_role_oid))
         if len(authority_role_oids) == prior_count:
             break
@@ -1002,9 +954,7 @@ def _postgresql_assurance_catalog_payload(
     )
     missing_authority_roles = sorted(authority_role_oids - roles_by_oid.keys())
     if missing_authority_roles:
-        raise MigrationIntegrityError(
-            "PostgreSQL assurance role authority cannot be validated"
-        )
+        raise MigrationIntegrityError("PostgreSQL assurance role authority cannot be validated")
 
     def canonical_role_identity(role_oid: int) -> str:
         if role_oid == 0:
@@ -1027,12 +977,8 @@ def _postgresql_assurance_catalog_payload(
                 for key, value in row.items()
                 if key not in {"grantor_oid", "grantee_oid"}
             }
-            item["grantor_identity"] = canonical_role_identity(
-                int(row["grantor_oid"])
-            )
-            item["grantee_identity"] = canonical_role_identity(
-                int(row["grantee_oid"])
-            )
+            item["grantor_identity"] = canonical_role_identity(int(row["grantor_oid"]))
+            item["grantee_identity"] = canonical_role_identity(int(row["grantee_oid"]))
             normalized.append(item)
         return sorted(
             normalized,
@@ -1078,15 +1024,9 @@ def _postgresql_assurance_catalog_payload(
     normalized_role_memberships = sorted(
         (
             {
-                "granted_role_identity": canonical_role_identity(
-                    int(row["granted_role_oid"])
-                ),
-                "member_role_identity": canonical_role_identity(
-                    int(row["member_role_oid"])
-                ),
-                "grantor_role_identity": canonical_role_identity(
-                    int(row["grantor_role_oid"])
-                ),
+                "granted_role_identity": canonical_role_identity(int(row["granted_role_oid"])),
+                "member_role_identity": canonical_role_identity(int(row["member_role_oid"])),
+                "grantor_role_identity": canonical_role_identity(int(row["grantor_role_oid"])),
                 "admin_option": bool(row["admin_option"]),
             }
             for row in selected_role_memberships
@@ -1110,9 +1050,7 @@ def _postgresql_assurance_catalog_payload(
         if len(search_paths) != 1 or (
             _parse_postgresql_search_path(search_paths[0]) != expected_function_path
         ):
-            raise MigrationIntegrityError(
-                "PostgreSQL assurance function lacks a fixed search_path"
-            )
+            raise MigrationIntegrityError("PostgreSQL assurance function lacks a fixed search_path")
 
     def normalized_rows(
         rows: Iterable[Mapping[str, object]],
@@ -1135,9 +1073,7 @@ def _postgresql_assurance_catalog_payload(
                     )
                 elif key == "proconfig":
                     item[key] = sorted(
-                        _normalize_postgresql_definition(
-                            str(config), trusted_schema=schema
-                        )
+                        _normalize_postgresql_definition(str(config), trusted_schema=schema)
                         for config in (value or ())
                     )
                 else:
@@ -1201,13 +1137,9 @@ def postgresql_server_major(connection) -> int:
         ).scalar_one()
         major = int(str(version_number)) // 10000
     except (SQLAlchemyError, TypeError, ValueError) as error:
-        raise MigrationIntegrityError(
-            "PostgreSQL server major cannot be validated"
-        ) from error
+        raise MigrationIntegrityError("PostgreSQL server major cannot be validated") from error
     if major <= 0:
-        raise MigrationIntegrityError(
-            "PostgreSQL server major cannot be validated"
-        )
+        raise MigrationIntegrityError("PostgreSQL server major cannot be validated")
     return major
 
 
@@ -1221,20 +1153,13 @@ def validate_frozen_postgresql_catalog(
         or not isinstance(frozen.postgresql_major, int)
         or frozen.postgresql_major <= 0
     ):
-        raise MigrationIntegrityError(
-            "PostgreSQL assurance catalog major is invalid"
-        )
+        raise MigrationIntegrityError("PostgreSQL assurance catalog major is invalid")
     if (
         len(frozen.digest) != 64
         or frozen.digest == "0" * 64
-        or any(
-            character not in "0123456789abcdef"
-            for character in frozen.digest
-        )
+        or any(character not in "0123456789abcdef" for character in frozen.digest)
     ):
-        raise MigrationIntegrityError(
-            "PostgreSQL assurance catalog digest is invalid"
-        )
+        raise MigrationIntegrityError("PostgreSQL assurance catalog digest is invalid")
 
 
 def select_frozen_postgresql_catalog(
@@ -1246,8 +1171,7 @@ def select_frozen_postgresql_catalog(
         frozen = frozen_by_major[postgresql_major]
     except KeyError as error:
         raise MigrationIntegrityError(
-            "PostgreSQL assurance catalog is not frozen for server major "
-            f"{postgresql_major}"
+            "PostgreSQL assurance catalog is not frozen for server major " f"{postgresql_major}"
         ) from error
     validate_frozen_postgresql_catalog(frozen)
     if frozen.postgresql_major != postgresql_major:
@@ -1272,9 +1196,7 @@ def verify_postgresql_assurance_catalog(
         spec=frozen.spec,
     )
     if actual != frozen.digest:
-        raise MigrationIntegrityError(
-            "PostgreSQL assurance catalog definition drift"
-        )
+        raise MigrationIntegrityError("PostgreSQL assurance catalog definition drift")
 
 
 def _as_tuple(expected: Iterable[FrozenMigration]) -> tuple[FrozenMigration, ...]:
@@ -1288,9 +1210,7 @@ def _as_tuple(expected: Iterable[FrozenMigration]) -> tuple[FrozenMigration, ...
         if len(item.checksum) != 64 or any(
             character not in "0123456789abcdef" for character in item.checksum
         ):
-            raise MigrationIntegrityError(
-                f"{item.ledger_key} has an invalid frozen checksum"
-            )
+            raise MigrationIntegrityError(f"{item.ledger_key} has an invalid frozen checksum")
     return frozen
 
 
@@ -1306,9 +1226,7 @@ def verify_bundled_migration_checksums(
                 f"{item.ledger_key} bundled source is unavailable"
             ) from error
         if actual != item.checksum:
-            raise MigrationIntegrityError(
-                f"{item.ledger_key} bundled source checksum drift"
-            )
+            raise MigrationIntegrityError(f"{item.ledger_key} bundled source checksum drift")
 
 
 def verify_postgresql_migration_ledger(
@@ -1330,9 +1248,7 @@ def verify_postgresql_migration_ledger(
         raise MigrationIntegrityError(
             f"trusted PostgreSQL migration schema {trusted_schema!r} does not exist"
         )
-    quoted_schema = connection.dialect.identifier_preparer.quote_schema(
-        trusted_schema
-    )
+    quoted_schema = connection.dialect.identifier_preparer.quote_schema(trusted_schema)
     try:
         rows = connection.execute(
             text(
@@ -1341,9 +1257,7 @@ def verify_postgresql_migration_ledger(
             )
         ).all()
     except SQLAlchemyError as error:
-        raise MigrationIntegrityError(
-            "assurance migration ledger is unavailable"
-        ) from error
+        raise MigrationIntegrityError("assurance migration ledger is unavailable") from error
 
     installed = {str(key): str(checksum) for key, checksum in rows}
     for item in frozen:
@@ -1370,6 +1284,16 @@ def _sqlite_catalog_digest(
 
 def verify_sqlite_assurance_schema(connection) -> None:
     """Validate the parity fixture without inventing a PostgreSQL ledger."""
+    fixture_path = _MIGRATIONS / "fixtures" / "013c_evidence_verification_receipt.sqlite.sql"
+    try:
+        fixture_checksum = hashlib.sha256(fixture_path.read_bytes()).hexdigest()
+    except OSError as error:
+        raise MigrationIntegrityError(
+            "SQLite 013c bundled fixture source is unavailable"
+        ) from error
+    if fixture_checksum != FROZEN_SQLITE_013C_FIXTURE_CHECKSUM:
+        raise MigrationIntegrityError("SQLite 013c bundled fixture checksum drift")
+
     foreign_keys = connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one()
     if foreign_keys != 1:
         raise MigrationIntegrityError("SQLite foreign_keys must be enabled")
@@ -1381,22 +1305,16 @@ def verify_sqlite_assurance_schema(connection) -> None:
     installed = {(object_type, name): sql for object_type, name, sql in rows}
     selected: list[tuple[str, str, str]] = []
     for object_type, required_names in _SQLITE_ASSURANCE_OBJECTS.items():
-        missing = sorted(
-            name for name in required_names if (object_type, name) not in installed
-        )
+        missing = sorted(name for name in required_names if (object_type, name) not in installed)
         if missing:
             raise MigrationIntegrityError(
-                f"SQLite assurance schema is missing required {object_type}s: "
-                + ", ".join(missing)
+                f"SQLite assurance schema is missing required {object_type}s: " + ", ".join(missing)
             )
         selected.extend(
-            (object_type, name, installed[(object_type, name)])
-            for name in required_names
+            (object_type, name, installed[(object_type, name)]) for name in required_names
         )
     if _sqlite_catalog_digest(selected) != SQLITE_ASSURANCE_CATALOG_DIGEST:
-        raise MigrationIntegrityError(
-            "SQLite assurance catalog definition drift"
-        )
+        raise MigrationIntegrityError("SQLite assurance catalog definition drift")
     violations = connection.exec_driver_sql("PRAGMA foreign_key_check").first()
     if violations is not None:
         raise MigrationIntegrityError("SQLite assurance foreign-key check failed")
@@ -1431,6 +1349,4 @@ def verify_assurance_migration_integrity(
         with engine.connect() as connection:
             verify_sqlite_assurance_schema(connection)
         return
-    raise MigrationIntegrityError(
-        f"unsupported database dialect for assurance v2: {dialect}"
-    )
+    raise MigrationIntegrityError(f"unsupported database dialect for assurance v2: {dialect}")

@@ -12,21 +12,21 @@ import hashlib
 import importlib
 import json
 import os
-from pathlib import Path
 import re
 import subprocess
 import uuid
 from datetime import UTC, timedelta
+from pathlib import Path
 
 import pytest
 
-
 MIGRATIONS = Path(__file__).parents[1] / "migrations"
 DIRECT_PATH = MIGRATIONS / "013b_evaluation_assurance_trust_integrity.sql"
-OPERATOR_PATH = (
-    MIGRATIONS
-    / "upgrade_paths"
-    / "013a_to_013b_evaluation_assurance_trust_integrity.sql"
+OPERATOR_V1_PATH = (
+    MIGRATIONS / "upgrade_paths" / "013a_to_013b_evaluation_assurance_trust_integrity.sql"
+)
+OPERATOR_V2_PATH = (
+    MIGRATIONS / "upgrade_paths" / "013a_to_013b_evaluation_assurance_trust_integrity_v2.sql"
 )
 POSTGRES_URL = os.getenv("FAIRMIND_TEST_POSTGRES_URL")
 MIGRATION_CHAIN = (
@@ -561,11 +561,13 @@ def _run_operator_upgrade(schema_name: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [
             "psql",
+            "-X",
+            "-w",
             POSTGRES_URL,
             "-v",
             "ON_ERROR_STOP=1",
             "-f",
-            str(OPERATOR_PATH),
+            str(OPERATOR_V2_PATH),
         ],
         env=environment,
         text=True,
@@ -576,15 +578,13 @@ def _run_operator_upgrade(schema_name: str) -> subprocess.CompletedProcess[str]:
 
 def _install_valid_operator_prerequisite_ledger(connection) -> None:
     with connection.cursor() as cursor:
-        cursor.execute(
-            """
+        cursor.execute("""
             CREATE TABLE fairmind_operator_migration_ledger (
                 migration_key TEXT PRIMARY KEY,
                 migration_checksum TEXT NOT NULL,
                 applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
-            """
-        )
+            """)
         cursor.execute(
             """
             INSERT INTO fairmind_operator_migration_ledger (
@@ -601,9 +601,7 @@ def _install_valid_operator_prerequisite_ledger(connection) -> None:
 
 
 def test_selector_returns_frozen_direct_payload_and_rejects_unknown_dialect() -> None:
-    migration = importlib.import_module(
-        "migrations.evaluation_assurance_trust_integrity_migration"
-    )
+    migration = importlib.import_module("migrations.evaluation_assurance_trust_integrity_migration")
     assert migration.sql_for("postgresql") == DIRECT_PATH.read_text(encoding="utf-8")
     with pytest.raises(ValueError, match="Unsupported migration dialect: mysql"):
         migration.sql_for("mysql")
@@ -611,7 +609,7 @@ def test_selector_returns_frozen_direct_payload_and_rejects_unknown_dialect() ->
 
 def test_operator_upgrade_pins_exact_payload_and_both_prerequisites() -> None:
     direct = DIRECT_PATH.read_text(encoding="utf-8")
-    operator = OPERATOR_PATH.read_text(encoding="utf-8")
+    operator = OPERATOR_V1_PATH.read_text(encoding="utf-8")
     direct_checksum = hashlib.sha256(direct.encode("utf-8")).hexdigest()
     checksum_013 = hashlib.sha256(
         (MIGRATIONS / "013_evaluation_assurance_contract_v2.sql").read_bytes()
@@ -620,12 +618,8 @@ def test_operator_upgrade_pins_exact_payload_and_both_prerequisites() -> None:
         (MIGRATIONS / "013a_evaluation_binding_integrity.sql").read_bytes()
     ).hexdigest()
 
-    assert checksum_013 == (
-        "3e09436746296c397a8719ed633b91636b53ee8710f990b45576da4ef55ff2dd"
-    )
-    assert checksum_013a == (
-        "92fa0dbfd9f940e070439768b2f70faf3627ec589ae9b413c7730c6efd90d6a8"
-    )
+    assert checksum_013 == ("3e09436746296c397a8719ed633b91636b53ee8710f990b45576da4ef55ff2dd")
+    assert checksum_013a == ("92fa0dbfd9f940e070439768b2f70faf3627ec589ae9b413c7730c6efd90d6a8")
     assert "012-to-013-evaluation-v2-v1" in operator
     assert "013-to-013a-evaluation-binding-integrity-v1" in operator
     assert "013a-to-013b-evaluation-assurance-trust-integrity-v1" in operator
@@ -715,10 +709,7 @@ def test_direct_schema_declares_exact_scope_keys_guards_and_indexes() -> None:
     assert "governance_evidence_signing_keys_guard_insert" in direct
     assert "governance_evidence_admissions_guard_signer_insert" in direct
     assert "guard_governance_evidence_admission_signer_013b" in direct
-    assert (
-        "ADD CONSTRAINT fk_governance_evidence_admission_signer_key_identity"
-        not in direct
-    )
+    assert "ADD CONSTRAINT fk_governance_evidence_admission_signer_key_identity" not in direct
 
 
 def test_security_critical_013b_functions_pin_the_trusted_search_path() -> None:
@@ -762,19 +753,16 @@ def test_security_critical_013b_functions_pin_the_trusted_search_path() -> None:
         "reject_governance_evaluation_audit_mutation()",
     ):
         assert (
-            f"ALTER FUNCTION {inherited_function}\n"
-            "    SET search_path FROM CURRENT;"
+            f"ALTER FUNCTION {inherited_function}\n" "    SET search_path FROM CURRENT;"
         ) in direct
     assert "'search_path'," in direct
-    assert (
-        "pg_catalog.quote_ident(trusted_schema) || ', pg_temp',\n        true"
-    ) in direct
+    assert ("pg_catalog.quote_ident(trusted_schema) || ', pg_temp',\n        true") in direct
     assert "SET search_path TO pg_catalog, %I, pg_temp" in direct
 
 
 def test_operator_preserves_013a_guard_identity_while_removing_temporary_freezes() -> None:
     direct = DIRECT_PATH.read_text(encoding="utf-8")
-    operator = OPERATOR_PATH.read_text(encoding="utf-8")
+    operator = OPERATOR_V1_PATH.read_text(encoding="utf-8")
     untouched_prerequisite_triggers = (
         "governance_evaluation_target_versions_guard_update",
         "governance_evaluation_suite_versions_guard_update",
@@ -792,14 +780,10 @@ def test_operator_preserves_013a_guard_identity_while_removing_temporary_freezes
     # bodies and CHECKs whose 013a contract explicitly froze evidence/decision
     # projections "until migration 013b".
     assert "CREATE OR REPLACE FUNCTION guard_governance_evaluation_run_v2()" in direct
-    assert (
-        "CREATE OR REPLACE FUNCTION guard_governance_evaluation_suite_execution()"
-        in direct
-    )
+    assert "CREATE OR REPLACE FUNCTION guard_governance_evaluation_suite_execution()" in direct
     assert "DROP TRIGGER IF EXISTS governance_evaluation_runs_v2_guard_update" not in direct
     assert (
-        "DROP TRIGGER IF EXISTS governance_evaluation_suite_executions_guard_update"
-        not in direct
+        "DROP TRIGGER IF EXISTS governance_evaluation_suite_executions_guard_update" not in direct
     )
     assert "DROP CONSTRAINT IF EXISTS ck_governance_evaluation_run_v2_projection_freeze" in direct
     assert "DROP CONSTRAINT IF EXISTS" in direct
@@ -818,9 +802,7 @@ def test_operator_preserves_013a_guard_identity_while_removing_temporary_freezes
 
 def test_operator_upgrade_runs_through_psql_and_replays_with_exact_ledger() -> None:
     if not POSTGRES_URL:
-        pytest.skip(
-            "requires FAIRMIND_TEST_POSTGRES_URL pointing to disposable PostgreSQL"
-        )
+        pytest.skip("requires FAIRMIND_TEST_POSTGRES_URL pointing to disposable PostgreSQL")
     import psycopg2
     from psycopg2 import sql
 
@@ -830,15 +812,13 @@ def test_operator_upgrade_runs_through_psql_and_replays_with_exact_ledger() -> N
     try:
         _create_schema_through_013a(connection, schema_name)
         with connection.cursor() as cursor:
-            cursor.execute(
-                """
+            cursor.execute("""
                 CREATE TABLE fairmind_operator_migration_ledger (
                     migration_key TEXT PRIMARY KEY,
                     migration_checksum TEXT NOT NULL,
                     applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
-                """
-            )
+                """)
             cursor.execute(
                 """
                 INSERT INTO fairmind_operator_migration_ledger (
@@ -862,12 +842,8 @@ def test_operator_upgrade_runs_through_psql_and_replays_with_exact_ledger() -> N
                 "WHERE migration_key="
                 "'013a-to-013b-evaluation-assurance-trust-integrity-v1'"
             )
-            assert cursor.fetchone() == (
-                hashlib.sha256(DIRECT_PATH.read_bytes()).hexdigest(),
-            )
-            cursor.execute(
-                "SELECT count(*) FROM fairmind_operator_migration_ledger"
-            )
+            assert cursor.fetchone() == (hashlib.sha256(DIRECT_PATH.read_bytes()).hexdigest(),)
+            cursor.execute("SELECT count(*) FROM fairmind_operator_migration_ledger")
             assert cursor.fetchone() == (3,)
     finally:
         connection.close()
@@ -876,9 +852,7 @@ def test_operator_upgrade_runs_through_psql_and_replays_with_exact_ledger() -> N
         try:
             with cleanup.cursor() as cursor:
                 cursor.execute(
-                    sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(
-                        sql.Identifier(schema_name)
-                    )
+                    sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(sql.Identifier(schema_name))
                 )
         finally:
             cleanup.close()
@@ -889,9 +863,7 @@ def test_operator_upgrade_aborts_atomically_on_prerequisite_ledger_failure(
     failure_mode: str,
 ) -> None:
     if not POSTGRES_URL:
-        pytest.skip(
-            "requires FAIRMIND_TEST_POSTGRES_URL pointing to disposable PostgreSQL"
-        )
+        pytest.skip("requires FAIRMIND_TEST_POSTGRES_URL pointing to disposable PostgreSQL")
     import psycopg2
     from psycopg2 import sql
 
@@ -901,15 +873,13 @@ def test_operator_upgrade_aborts_atomically_on_prerequisite_ledger_failure(
     try:
         _create_schema_through_013a(connection, schema_name)
         with connection.cursor() as cursor:
-            cursor.execute(
-                """
+            cursor.execute("""
                 CREATE TABLE fairmind_operator_migration_ledger (
                     migration_key TEXT PRIMARY KEY,
                     migration_checksum TEXT NOT NULL,
                     applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
-                """
-            )
+                """)
             checksum_013 = (
                 "0" * 64
                 if failure_mode == "drifted_013"
@@ -926,18 +896,13 @@ def test_operator_upgrade_aborts_atomically_on_prerequisite_ledger_failure(
                     "INSERT INTO fairmind_operator_migration_ledger "
                     "(migration_key, migration_checksum) VALUES "
                     "('013-to-013a-evaluation-binding-integrity-v1', %s)",
-                    (
-                        "92fa0dbfd9f940e070439768b2f70faf3627ec589ae9b413c7730c6efd90d6a8",
-                    ),
+                    ("92fa0dbfd9f940e070439768b2f70faf3627ec589ae9b413c7730c6efd90d6a8",),
                 )
         result = _run_operator_upgrade(schema_name)
         assert result.returncode != 0
         assert "prerequisite" in result.stderr
         with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT pg_catalog.to_regclass("
-                "'governance_evidence_nonce_claims')"
-            )
+            cursor.execute("SELECT pg_catalog.to_regclass(" "'governance_evidence_nonce_claims')")
             assert cursor.fetchone() == (None,)
             cursor.execute(
                 "SELECT count(*) FROM fairmind_operator_migration_ledger "
@@ -952,9 +917,7 @@ def test_operator_upgrade_aborts_atomically_on_prerequisite_ledger_failure(
         try:
             with cleanup.cursor() as cursor:
                 cursor.execute(
-                    sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(
-                        sql.Identifier(schema_name)
-                    )
+                    sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(sql.Identifier(schema_name))
                 )
         finally:
             cleanup.close()
@@ -971,9 +934,7 @@ def test_operator_upgrade_aborts_atomically_on_prerequisite_ledger_failure(
 )
 def test_operator_upgrade_rolls_back_on_catalog_drift(drift_mode: str) -> None:
     if not POSTGRES_URL:
-        pytest.skip(
-            "requires FAIRMIND_TEST_POSTGRES_URL pointing to disposable PostgreSQL"
-        )
+        pytest.skip("requires FAIRMIND_TEST_POSTGRES_URL pointing to disposable PostgreSQL")
     import psycopg2
     from psycopg2 import sql
 
@@ -995,8 +956,7 @@ def test_operator_upgrade_rolls_back_on_catalog_drift(drift_mode: str) -> None:
                     "ON governance_evaluation_target_versions"
                 )
             elif drift_mode == "noop_frozen_audit_guard_function":
-                cursor.execute(
-                    """
+                cursor.execute("""
                     CREATE OR REPLACE FUNCTION
                         reject_governance_evaluation_audit_mutation()
                     RETURNS trigger
@@ -1006,11 +966,9 @@ def test_operator_upgrade_rolls_back_on_catalog_drift(drift_mode: str) -> None:
                         RETURN NEW;
                     END;
                     $$
-                    """
-                )
+                    """)
             else:
-                cursor.execute(
-                    """
+                cursor.execute("""
                     CREATE TABLE governance_evidence_nonce_claims (
                         id TEXT PRIMARY KEY,
                         org_id TEXT NOT NULL,
@@ -1033,8 +991,7 @@ def test_operator_upgrade_rolls_back_on_catalog_drift(drift_mode: str) -> None:
                                 suite_execution_id, envelope_id, envelope_nonce
                             )
                     )
-                    """
-                )
+                    """)
 
         result = _run_operator_upgrade(schema_name)
         assert result.returncode != 0
@@ -1055,8 +1012,7 @@ def test_operator_upgrade_rolls_back_on_catalog_drift(drift_mode: str) -> None:
             assert cursor.fetchone() == (0,)
             if drift_mode != "malformed_nonce_claim_table":
                 cursor.execute(
-                    "SELECT pg_catalog.to_regclass("
-                    "'governance_evidence_nonce_claims')"
+                    "SELECT pg_catalog.to_regclass(" "'governance_evidence_nonce_claims')"
                 )
                 assert cursor.fetchone() == (None,)
             else:
@@ -1078,9 +1034,7 @@ def test_operator_upgrade_rolls_back_on_catalog_drift(drift_mode: str) -> None:
         try:
             with cleanup.cursor() as cursor:
                 cursor.execute(
-                    sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(
-                        sql.Identifier(schema_name)
-                    )
+                    sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(sql.Identifier(schema_name))
                 )
         finally:
             cleanup.close()
@@ -1089,9 +1043,7 @@ def test_operator_upgrade_rolls_back_on_catalog_drift(drift_mode: str) -> None:
 @pytest.fixture
 def postgres_013b_connection():
     if not POSTGRES_URL:
-        pytest.skip(
-            "requires FAIRMIND_TEST_POSTGRES_URL pointing to disposable PostgreSQL"
-        )
+        pytest.skip("requires FAIRMIND_TEST_POSTGRES_URL pointing to disposable PostgreSQL")
     import psycopg2
     from psycopg2 import sql
 
@@ -1116,9 +1068,7 @@ def postgres_013b_connection():
         try:
             with cleanup.cursor() as cursor:
                 cursor.execute(
-                    sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(
-                        sql.Identifier(schema_name)
-                    )
+                    sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(sql.Identifier(schema_name))
                 )
         finally:
             cleanup.close()
@@ -1127,9 +1077,7 @@ def postgres_013b_connection():
 @pytest.fixture
 def postgres_seeded_upgrade_connection():
     if not POSTGRES_URL:
-        pytest.skip(
-            "requires FAIRMIND_TEST_POSTGRES_URL pointing to disposable PostgreSQL"
-        )
+        pytest.skip("requires FAIRMIND_TEST_POSTGRES_URL pointing to disposable PostgreSQL")
     import psycopg2
     from psycopg2 import sql
 
@@ -1153,9 +1101,7 @@ def postgres_seeded_upgrade_connection():
         try:
             with cleanup.cursor() as cursor:
                 cursor.execute(
-                    sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(
-                        sql.Identifier(schema_name)
-                    )
+                    sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(sql.Identifier(schema_name))
                 )
         finally:
             cleanup.close()
@@ -1260,8 +1206,7 @@ def test_postgresql_guard_queries_ignore_hostile_caller_search_path(
             )
         )
         cursor.execute(
-            sql.SQL(
-                """
+            sql.SQL("""
                 INSERT INTO {}.governance_evidence_nonce_claims (
                     id, org_id, workspace_id, system_id, run_id,
                     run_contract_version, suite_execution_id, admission_id,
@@ -1272,13 +1217,10 @@ def test_postgresql_guard_queries_ignore_hostile_caller_search_path(
                           '2.0.0', 'execution-a', 'admission-v2', '2.0.0',
                           'evidence-v2', 'revision-v2', 'envelope-a', %s, %s,
                           'actor-a', '2026-07-20T00:00:10+00:00')
-                """
-            ).format(sql.Identifier(trusted_schema)),
+                """).format(sql.Identifier(trusted_schema)),
             (HASH_A, NONCE_A),
         )
-        cursor.execute(
-            sql.SQL(
-                """
+        cursor.execute(sql.SQL("""
                 INSERT INTO {}.governance_evaluation_suite_evidence_links (
                     id, org_id, workspace_id, system_id, run_id,
                     suite_execution_id, admission_id, admission_contract_version,
@@ -1288,12 +1230,9 @@ def test_postgresql_guard_queries_ignore_hostile_caller_search_path(
                           'execution-a', 'admission-v2', '2.0.0', 'evidence-v2',
                           'revision-v2', 'claim-shadow-safe', 'actor-b',
                           '2026-07-20T00:00:11+00:00')
-                """
-            ).format(sql.Identifier(trusted_schema))
-        )
+                """).format(sql.Identifier(trusted_schema)))
         cursor.execute(
-            sql.SQL(
-                """
+            sql.SQL("""
                 INSERT INTO {}.governance_evaluation_audit_events (
                     id, org_id, sequence_number, actor_id, action, outcome,
                     resource_type, resource_id, details_json, previous_hash,
@@ -1301,8 +1240,7 @@ def test_postgresql_guard_queries_ignore_hostile_caller_search_path(
                 ) VALUES ('audit-shadow-safe', 'org-a', 3, 'actor-a', 'valid',
                           'success', 'run', 'run-a', '{{}}', %s, %s,
                           '2026-07-20T00:00:10+00:00')
-                """
-            ).format(sql.Identifier(trusted_schema)),
+                """).format(sql.Identifier(trusted_schema)),
             (HASH_B, "c" * 64),
         )
         cursor.execute(
@@ -1370,18 +1308,15 @@ def test_postgresql_factual_upgrade_rewrites_only_v2_projection_and_backfills_sc
         assert cursor.fetchone() == (2, HASH_B)
 
         cursor.execute(
-            "SELECT pg_catalog.set_config('fairmind.migration_schema', "
-            "current_schema(), false)"
+            "SELECT pg_catalog.set_config('fairmind.migration_schema', " "current_schema(), false)"
         )
         cursor.execute(DIRECT_PATH.read_text(encoding="utf-8"))
         cursor.execute(
-            "SELECT count(*) FROM governance_evidence_admissions "
-            "WHERE id='admission-old'"
+            "SELECT count(*) FROM governance_evidence_admissions " "WHERE id='admission-old'"
         )
         assert cursor.fetchone() == (1,)
         cursor.execute(
-            "SELECT count(*) FROM governance_evaluation_audit_events "
-            "WHERE org_id='org-a'"
+            "SELECT count(*) FROM governance_evaluation_audit_events " "WHERE org_id='org-a'"
         )
         assert cursor.fetchone() == (2,)
 
@@ -1617,9 +1552,7 @@ def test_postgresql_admission_checks_key_window_at_microsecond_boundaries(
             connection,
             captured_at=_canonical_utc(current_time - timedelta(minutes=1)),
             signed_at=_canonical_utc(signed_after_end),
-            effective_expires_at=_canonical_utc(
-                signed_after_end + timedelta(seconds=1)
-            ),
+            effective_expires_at=_canonical_utc(signed_after_end + timedelta(seconds=1)),
             key_valid_from=_canonical_utc(current_time - timedelta(days=1)),
             key_valid_until=_canonical_utc(key_end),
         )
@@ -1645,13 +1578,9 @@ def test_postgresql_admission_rejects_key_that_is_not_yet_current(
             connection,
             captured_at=_canonical_utc(current_time),
             signed_at=_canonical_utc(key_start),
-            effective_expires_at=_canonical_utc(
-                current_time + timedelta(minutes=3)
-            ),
+            effective_expires_at=_canonical_utc(current_time + timedelta(minutes=3)),
             key_valid_from=_canonical_utc(key_start),
-            key_valid_until=_canonical_utc(
-                current_time + timedelta(minutes=10)
-            ),
+            key_valid_until=_canonical_utc(current_time + timedelta(minutes=10)),
         )
     connection.rollback()
 
@@ -1679,9 +1608,7 @@ def test_postgresql_admission_rejects_capture_beyond_fixed_future_skew(
             signed_at=canonical_captured_at,
             created_at=canonical_captured_at,
             checked_at=canonical_captured_at,
-            effective_expires_at=_canonical_utc(
-                captured_at + timedelta(minutes=1)
-            ),
+            effective_expires_at=_canonical_utc(captured_at + timedelta(minutes=1)),
         )
     connection.rollback()
 
@@ -1907,8 +1834,7 @@ def test_postgresql_authority_chain_rejects_backdated_events(
     if stage == "link":
         with pytest.raises(psycopg2.Error, match="evidence link timestamp is not causal"):
             with connection.cursor() as cursor:
-                cursor.execute(
-                    """
+                cursor.execute("""
                     INSERT INTO governance_evaluation_suite_evidence_links (
                         id, org_id, workspace_id, system_id, run_id,
                         suite_execution_id, admission_id,
@@ -1918,13 +1844,11 @@ def test_postgresql_authority_chain_rejects_backdated_events(
                               'run-a', 'execution-a', 'admission-v2', '2.0.0',
                               'evidence-v2', 'revision-v2', 'claim-a', 'actor-b',
                               '2026-07-20T00:00:09+00:00')
-                    """
-                )
+                    """)
         return
 
     with connection.cursor() as cursor:
-        cursor.execute(
-            """
+        cursor.execute("""
             INSERT INTO governance_evaluation_suite_evidence_links (
                 id, org_id, workspace_id, system_id, run_id, suite_execution_id,
                 admission_id, admission_contract_version, evidence_run_id,
@@ -1933,13 +1857,11 @@ def test_postgresql_authority_chain_rejects_backdated_events(
                       'execution-a', 'admission-v2', '2.0.0', 'evidence-v2',
                       'revision-v2', 'claim-a', 'actor-b',
                       '2026-07-20T00:00:11+00:00')
-            """
-        )
+            """)
     if stage == "review":
         with pytest.raises(psycopg2.Error, match="review timestamp is not causal"):
             with connection.cursor() as cursor:
-                cursor.execute(
-                    """
+                cursor.execute("""
                     INSERT INTO governance_evidence_reviews (
                         id, org_id, system_id, evidence_run_id,
                         passport_revision_id, admission_id, decision, rationale,
@@ -1950,13 +1872,11 @@ def test_postgresql_authority_chain_rejects_backdated_events(
                               'Should fail', 'actor-c', 1,
                               '2026-07-20T00:00:10+00:00', 'ws-a', 'run-a',
                               'execution-a', '2.0.0')
-                    """
-                )
+                    """)
         return
 
     with connection.cursor() as cursor:
-        cursor.execute(
-            """
+        cursor.execute("""
             INSERT INTO governance_evidence_reviews (
                 id, org_id, system_id, evidence_run_id, passport_revision_id,
                 admission_id, decision, rationale, reviewed_by, review_version,
@@ -1966,8 +1886,7 @@ def test_postgresql_authority_chain_rejects_backdated_events(
                       'revision-v2', 'admission-v2', 'accepted', 'Accepted',
                       'actor-c', 1, '2026-07-20T00:00:13+00:00', 'ws-a',
                       'run-a', 'execution-a', '2.0.0')
-            """
-        )
+            """)
         cursor.execute(
             "UPDATE governance_evaluation_runs SET technical_status='running', "
             "started_at='2026-07-20T00:00:02+00:00', "
@@ -1978,8 +1897,7 @@ def test_postgresql_authority_chain_rejects_backdated_events(
             "SET technical_status='running', started_at='2026-07-20T00:00:03+00:00', "
             "updated_at='2026-07-20T00:00:03+00:00' WHERE id='execution-a'"
         )
-        cursor.execute(
-            """
+        cursor.execute("""
             UPDATE governance_evaluation_run_suite_executions
             SET technical_status='succeeded', evidence_result_status='failed',
                 completed_at='2026-07-20T00:00:04+00:00',
@@ -1989,8 +1907,7 @@ def test_postgresql_authority_chain_rejects_backdated_events(
                 limitations_json='[]', review_status='accepted',
                 updated_at='2026-07-20T00:00:14+00:00'
             WHERE id='execution-a'
-            """
-        )
+            """)
         cursor.execute(
             "UPDATE governance_evaluation_runs SET technical_status='succeeded', "
             "evidence_outcome='failed', completed_at='2026-07-20T00:00:05+00:00', "
@@ -2007,9 +1924,7 @@ def test_postgresql_authority_chain_rejects_backdated_events(
         sort_keys=True,
         separators=(",", ":"),
     )
-    evidence_set_json, evidence_set_hash = _decision_evidence_set(
-        "link-chain", "review-chain"
-    )
+    evidence_set_json, evidence_set_hash = _decision_evidence_set("link-chain", "review-chain")
     with pytest.raises(psycopg2.Error, match="decision timestamp is not causal"):
         with connection.cursor() as cursor:
             cursor.execute("BEGIN")
@@ -2055,9 +1970,7 @@ def test_postgresql_admission_checked_at_honors_fixed_future_skew(
     ):
         _prepare_verified_v2_admission(
             connection,
-            checked_at=_canonical_utc(
-                current_time + timedelta(minutes=6)
-            ),
+            checked_at=_canonical_utc(current_time + timedelta(minutes=6)),
         )
     connection.rollback()
 
@@ -2083,8 +1996,7 @@ def test_postgresql_authority_timestamps_are_canonical_and_skew_bounded(
         )
     elif stage == "review":
         with connection.cursor() as cursor:
-            cursor.execute(
-                """
+            cursor.execute("""
                 INSERT INTO governance_evaluation_suite_evidence_links (
                     id, org_id, workspace_id, system_id, run_id,
                     suite_execution_id, admission_id,
@@ -2094,8 +2006,7 @@ def test_postgresql_authority_timestamps_are_canonical_and_skew_bounded(
                           'execution-a', 'admission-v2', '2.0.0', 'evidence-v2',
                           'revision-v2', 'claim-a', 'actor-b',
                           '2026-07-20T00:00:11+00:00')
-                """
-            )
+                """)
 
     with connection.cursor() as cursor:
         cursor.execute("BEGIN")
@@ -2104,9 +2015,7 @@ def test_postgresql_authority_timestamps_are_canonical_and_skew_bounded(
     timestamp = (
         "2026-07-20T00:00:14Z"
         if timestamp_kind == "noncanonical"
-        else _canonical_utc(
-            current_time + timedelta(minutes=6)
-        )
+        else _canonical_utc(current_time + timedelta(minutes=6))
     )
 
     expected = {
@@ -2272,8 +2181,7 @@ def test_postgresql_link_guard_rechecks_verified_signer_key_identity(
 
     with pytest.raises(psycopg2.Error, match="eligible claimed admission"):
         with connection.cursor() as cursor:
-            cursor.execute(
-                """
+            cursor.execute("""
                 INSERT INTO governance_evaluation_suite_evidence_links (
                     id, org_id, workspace_id, system_id, run_id,
                     suite_execution_id, admission_id,
@@ -2283,8 +2191,7 @@ def test_postgresql_link_guard_rechecks_verified_signer_key_identity(
                           'run-a', 'execution-a', 'admission-v2', '2.0.0',
                           'evidence-v2', 'revision-v2', 'claim-a', 'actor-b',
                           '2026-07-20T00:00:11+00:00')
-                """
-            )
+                """)
 
 
 def test_postgresql_link_guard_rechecks_revoked_signing_key(
@@ -2304,8 +2211,7 @@ def test_postgresql_link_guard_rechecks_revoked_signing_key(
 
     with pytest.raises(psycopg2.Error, match="eligible claimed admission"):
         with connection.cursor() as cursor:
-            cursor.execute(
-                """
+            cursor.execute("""
                 INSERT INTO governance_evaluation_suite_evidence_links (
                     id, org_id, workspace_id, system_id, run_id,
                     suite_execution_id, admission_id,
@@ -2315,8 +2221,7 @@ def test_postgresql_link_guard_rechecks_revoked_signing_key(
                           'run-a', 'execution-a', 'admission-v2', '2.0.0',
                           'evidence-v2', 'revision-v2', 'claim-a', 'actor-b',
                           '2026-07-20T00:00:11+00:00')
-                """
-            )
+                """)
 
 
 def test_postgresql_decision_guard_rechecks_verified_signer_key_identity(
@@ -2669,8 +2574,7 @@ def test_postgresql_exact_v2_link_review_and_decision_graph(
     _prepare_verified_v2_admission(connection)
     _insert_nonce_claim(connection)
     with connection.cursor() as cursor:
-        cursor.execute(
-            """
+        cursor.execute("""
             INSERT INTO governance_evaluation_suite_evidence_links (
                 id, org_id, workspace_id, system_id, run_id, suite_execution_id,
                 admission_id, admission_contract_version, evidence_run_id,
@@ -2678,8 +2582,7 @@ def test_postgresql_exact_v2_link_review_and_decision_graph(
             ) VALUES ('link-a', 'org-a', 'ws-a', 'sys-a', 'run-a', 'execution-a',
                       'admission-v2', '2.0.0', 'evidence-v2', 'revision-v2',
                       'claim-a', 'actor-b', '2026-07-20T00:00:11+00:00')
-            """
-        )
+            """)
         cursor.execute(
             "UPDATE governance_evaluation_runs SET technical_status='running', "
             "started_at='2026-07-20T00:00:02+00:00', "
@@ -2690,8 +2593,7 @@ def test_postgresql_exact_v2_link_review_and_decision_graph(
             "SET technical_status='running', started_at='2026-07-20T00:00:03+00:00', "
             "updated_at='2026-07-20T00:00:03+00:00' WHERE id='execution-a'"
         )
-        cursor.execute(
-            """
+        cursor.execute("""
             UPDATE governance_evaluation_run_suite_executions
             SET technical_status='succeeded', evidence_result_status='failed',
                 completed_at='2026-07-20T00:00:04+00:00',
@@ -2700,8 +2602,7 @@ def test_postgresql_exact_v2_link_review_and_decision_graph(
                 linked_at='2026-07-20T00:00:11+00:00', result_summary_json='{}',
                 limitations_json='[]', updated_at='2026-07-20T00:00:11+00:00'
             WHERE id='execution-a'
-            """
-        )
+            """)
         cursor.execute(
             "UPDATE governance_evaluation_runs SET technical_status='succeeded', "
             "completed_at='2026-07-20T00:00:05+00:00', "
@@ -2742,13 +2643,10 @@ def test_postgresql_exact_v2_link_review_and_decision_graph(
         sort_keys=True,
         separators=(",", ":"),
     )
-    evidence_set_json, evidence_set_hash = _decision_evidence_set(
-        "link-a", "review-v2"
-    )
+    evidence_set_json, evidence_set_hash = _decision_evidence_set("link-a", "review-v2")
     with connection.cursor() as cursor:
         cursor.execute("BEGIN")
-        cursor.execute(
-            """
+        cursor.execute("""
             INSERT INTO governance_evidence_reviews (
                 id, org_id, system_id, evidence_run_id, passport_revision_id,
                 admission_id, decision, rationale, reviewed_by, review_version,
@@ -2758,8 +2656,7 @@ def test_postgresql_exact_v2_link_review_and_decision_graph(
                       'admission-v2', 'accepted', 'Accepted evidence', 'actor-c', 1,
                       '2026-07-20T00:00:13+00:00', 'ws-a', 'run-a',
                       'execution-a', '2.0.0')
-            """
-        )
+            """)
         cursor.execute(
             "UPDATE governance_evaluation_run_suite_executions "
             "SET review_status='accepted', updated_at='2026-07-20T00:00:14+00:00' "
@@ -2797,8 +2694,7 @@ def test_postgresql_exact_v2_link_review_and_decision_graph(
         match="reviews are frozen after governance decision",
     ):
         with connection.cursor() as cursor:
-            cursor.execute(
-                """
+            cursor.execute("""
                 INSERT INTO governance_evidence_reviews (
                     id, org_id, system_id, evidence_run_id, passport_revision_id,
                     admission_id, decision, rationale, reviewed_by, review_version,
@@ -2808,8 +2704,7 @@ def test_postgresql_exact_v2_link_review_and_decision_graph(
                           'revision-v2', 'admission-v2', 'accepted', 'Too late',
                           'actor-e', 2, '2026-07-20T00:00:17+00:00', 'ws-a',
                           'run-a', 'execution-a', '2.0.0')
-                """
-            )
+                """)
 
     for table_name in (
         "governance_evidence_admissions",
@@ -2984,9 +2879,7 @@ def test_postgresql_run_evidence_outcome_must_exactly_aggregate_suite_results(
             )
 
     with connection.cursor() as cursor:
-        cursor.execute(
-            "SELECT evidence_outcome FROM governance_evaluation_runs WHERE id='run-a'"
-        )
+        cursor.execute("SELECT evidence_outcome FROM governance_evaluation_runs WHERE id='run-a'")
         assert cursor.fetchone() == ("failed",)
 
 
@@ -2999,8 +2892,7 @@ def test_postgresql_review_rejects_submitter_and_unsupported_override(
     _prepare_verified_v2_admission(connection)
     _insert_nonce_claim(connection)
     with connection.cursor() as cursor:
-        cursor.execute(
-            """
+        cursor.execute("""
             INSERT INTO governance_evaluation_suite_evidence_links (
                 id, org_id, workspace_id, system_id, run_id, suite_execution_id,
                 admission_id, admission_contract_version, evidence_run_id,
@@ -3009,13 +2901,11 @@ def test_postgresql_review_rejects_submitter_and_unsupported_override(
                       'execution-a', 'admission-v2', '2.0.0', 'evidence-v2',
                       'revision-v2', 'claim-a', 'actor-b',
                       '2026-07-20T00:00:11+00:00')
-            """
-        )
+            """)
 
     with pytest.raises(psycopg2.Error, match="reviewer must differ from submitter"):
         with connection.cursor() as cursor:
-            cursor.execute(
-                """
+            cursor.execute("""
                 INSERT INTO governance_evidence_reviews (
                     id, org_id, system_id, evidence_run_id, passport_revision_id,
                     admission_id, decision, rationale, reviewed_by, review_version,
@@ -3025,13 +2915,11 @@ def test_postgresql_review_rejects_submitter_and_unsupported_override(
                           'revision-v2', 'admission-v2', 'accepted', 'Should fail',
                           'actor-a', 1, '2026-07-20T00:00:13+00:00', 'ws-a',
                           'run-a', 'execution-a', '2.0.0')
-                """
-            )
+                """)
 
     with pytest.raises(psycopg2.Error, match="owner override is not enabled"):
         with connection.cursor() as cursor:
-            cursor.execute(
-                """
+            cursor.execute("""
                 INSERT INTO governance_evidence_reviews (
                     id, org_id, system_id, evidence_run_id, passport_revision_id,
                     admission_id, decision, rationale, reviewed_by, review_version,
@@ -3042,8 +2930,7 @@ def test_postgresql_review_rejects_submitter_and_unsupported_override(
                           'Should fail', 'actor-c', 1, 'owner override',
                           '2026-07-20T00:00:13+00:00', 'ws-a', 'run-a',
                           'execution-a', '2.0.0')
-                """
-            )
+                """)
 
 
 def test_postgresql_reviews_require_sequential_cas_versions_and_bind_latest(
@@ -3055,8 +2942,7 @@ def test_postgresql_reviews_require_sequential_cas_versions_and_bind_latest(
     _prepare_verified_v2_admission(connection)
     _insert_nonce_claim(connection)
     with connection.cursor() as cursor:
-        cursor.execute(
-            """
+        cursor.execute("""
             INSERT INTO governance_evaluation_suite_evidence_links (
                 id, org_id, workspace_id, system_id, run_id, suite_execution_id,
                 admission_id, admission_contract_version, evidence_run_id,
@@ -3065,8 +2951,7 @@ def test_postgresql_reviews_require_sequential_cas_versions_and_bind_latest(
                       'execution-a', 'admission-v2', '2.0.0', 'evidence-v2',
                       'revision-v2', 'claim-a', 'actor-b',
                       '2026-07-20T00:00:11+00:00')
-            """
-        )
+            """)
 
     def insert_review(review_id: str, version: int, reviewed_at: str) -> None:
         with connection.cursor() as cursor:
@@ -3096,12 +2981,11 @@ def test_postgresql_reviews_require_sequential_cas_versions_and_bind_latest(
         insert_review("review-stale-cas", 2, "2026-07-20T00:00:15+00:00")
 
     with connection.cursor() as cursor:
-        cursor.execute(
-            "SELECT fairmind_expected_decision_evidence_set_013b('run-a')"
-        )
+        cursor.execute("SELECT fairmind_expected_decision_evidence_set_013b('run-a')")
         evidence_set = cursor.fetchone()[0]
     assert evidence_set["suites"][0]["reviewId"] == "review-cas-v2"
     assert evidence_set["suites"][0]["reviewVersion"] == 2
+
 
 @pytest.mark.parametrize(
     ("submitted_by", "decided_by", "expected"),
@@ -3253,27 +3137,18 @@ def test_postgresql_decision_requires_exact_hashed_evidence_set(
         link_id=link_id,
         review_id="review-evidence-set",
     )
-    evidence_set_json, evidence_set_hash = _decision_evidence_set(
-        link_id, "review-evidence-set"
-    )
+    evidence_set_json, evidence_set_hash = _decision_evidence_set(link_id, "review-evidence-set")
     if tamper == "graph":
         evidence_set_json = "{}"
         evidence_set_hash = hashlib.sha256(b"{}").hexdigest()
     elif tamper == "duplicate_key":
         parsed = json.loads(evidence_set_json)
-        encoded_target = json.dumps(
-            parsed["target"], sort_keys=True, separators=(",", ":")
-        )
-        encoded_suites = json.dumps(
-            parsed["suites"], sort_keys=True, separators=(",", ":")
-        )
+        encoded_target = json.dumps(parsed["target"], sort_keys=True, separators=(",", ":"))
+        encoded_suites = json.dumps(parsed["suites"], sort_keys=True, separators=(",", ":"))
         evidence_set_json = (
-            f'{{"target":{encoded_target},"target":{encoded_target},'
-            f'"suites":{encoded_suites}}}'
+            f'{{"target":{encoded_target},"target":{encoded_target},' f'"suites":{encoded_suites}}}'
         )
-        evidence_set_hash = hashlib.sha256(
-            evidence_set_json.encode("utf-8")
-        ).hexdigest()
+        evidence_set_hash = hashlib.sha256(evidence_set_json.encode("utf-8")).hexdigest()
     elif tamper in {"review_id", "review_version"}:
         parsed = json.loads(evidence_set_json)
         if tamper == "review_id":
@@ -3286,9 +3161,7 @@ def test_postgresql_decision_requires_exact_hashed_evidence_set(
             sort_keys=True,
             separators=(",", ":"),
         )
-        evidence_set_hash = hashlib.sha256(
-            evidence_set_json.encode("utf-8")
-        ).hexdigest()
+        evidence_set_hash = hashlib.sha256(evidence_set_json.encode("utf-8")).hexdigest()
     else:
         evidence_set_hash = HASH_B
     layers = json.dumps(
@@ -3517,9 +3390,7 @@ def test_postgresql_decision_rejects_labelled_current_but_expired_evidence(
         sort_keys=True,
         separators=(",", ":"),
     )
-    evidence_set_json, evidence_set_hash = _decision_evidence_set(
-        "link-expired", "review-expired"
-    )
+    evidence_set_json, evidence_set_hash = _decision_evidence_set("link-expired", "review-expired")
     with pytest.raises(
         psycopg2.Error,
         match="current reviewed verified evidence",
@@ -3647,14 +3518,12 @@ def test_postgresql_decision_rejects_invalidated_suite_projection(
         review_id="review-invalidated",
     )
     with connection.cursor() as cursor:
-        cursor.execute(
-            """
+        cursor.execute("""
             UPDATE governance_evaluation_run_suite_executions
             SET admission_status='expired', freshness_status='stale',
                 updated_at='2026-07-20T00:00:17+00:00'
             WHERE id='execution-a'
-            """
-        )
+            """)
 
     layers = json.dumps(
         {
@@ -3744,8 +3613,7 @@ def test_postgresql_same_envelope_nonce_is_scoped_per_suite_execution(
             (HASH_B, NOW),
         )
         cursor.execute(
-            "UPDATE governance_evaluation_suite_versions SET status='active' "
-            "WHERE id='suite-b'"
+            "UPDATE governance_evaluation_suite_versions SET status='active' " "WHERE id='suite-b'"
         )
         cursor.execute(
             """
@@ -3974,16 +3842,13 @@ def test_postgresql_audit_head_rejects_gap_wrong_tail_and_arbitrary_mutation(
     with pytest.raises(psycopg2.Error, match="cannot be deleted"):
         with connection.cursor() as cursor:
             cursor.execute(
-                "DELETE FROM governance_evaluation_audit_chain_heads "
-                "WHERE org_id='org-a'"
+                "DELETE FROM governance_evaluation_audit_chain_heads " "WHERE org_id='org-a'"
             )
 
 
 def test_postgresql_migration_rejects_preexisting_gapped_audit_chain_atomically() -> None:
     if not POSTGRES_URL:
-        pytest.skip(
-            "requires FAIRMIND_TEST_POSTGRES_URL pointing to disposable PostgreSQL"
-        )
+        pytest.skip("requires FAIRMIND_TEST_POSTGRES_URL pointing to disposable PostgreSQL")
     import psycopg2
     from psycopg2 import sql
 
@@ -4011,8 +3876,7 @@ def test_postgresql_migration_rejects_preexisting_gapped_audit_chain_atomically(
             with pytest.raises(psycopg2.Error, match="gapped or disconnected"):
                 cursor.execute(DIRECT_PATH.read_text(encoding="utf-8"))
             cursor.execute(
-                "SELECT pg_catalog.to_regclass("
-                "'governance_evaluation_audit_chain_heads')"
+                "SELECT pg_catalog.to_regclass(" "'governance_evaluation_audit_chain_heads')"
             )
             assert cursor.fetchone() == (None,)
     finally:
@@ -4022,9 +3886,7 @@ def test_postgresql_migration_rejects_preexisting_gapped_audit_chain_atomically(
         try:
             with cleanup.cursor() as cursor:
                 cursor.execute(
-                    sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(
-                        sql.Identifier(schema_name)
-                    )
+                    sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(sql.Identifier(schema_name))
                 )
         finally:
             cleanup.close()
