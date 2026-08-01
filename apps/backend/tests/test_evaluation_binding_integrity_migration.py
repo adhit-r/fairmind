@@ -372,7 +372,7 @@ def test_orm_run_and_suite_execution_publish_all_eight_states_and_timestamps() -
         )
 
 
-def test_orm_has_exact_target_parent_key_and_frozen_v2_projection_constraints() -> None:
+def test_orm_has_exact_target_parent_key_and_coherent_v2_projection_constraints() -> None:
     target_uniques = {
         tuple(constraint.columns.keys())
         for constraint in governance_models.GovernanceEvaluationTargetVersion.__table__.constraints
@@ -458,21 +458,25 @@ def test_orm_has_exact_target_parent_key_and_frozen_v2_projection_constraints() 
     assert plan_checks[
         "ck_governance_evaluation_plan_v2_requires_013a_migration"
     ] == "contract_version <> '2.0.0'"
-    assert "verdict_version = 0" in run_checks[
-        "ck_governance_evaluation_run_v2_projection_freeze"
+    run_projection = run_checks[
+        "ck_governance_evaluation_run_v2_projection_coherence"
     ]
-    assert "evidence_outcome = 'pending'" in run_checks[
-        "ck_governance_evaluation_run_v2_projection_freeze"
-    ]
-    assert "layer_verdicts_json = '{}'" not in run_checks[
-        "ck_governance_evaluation_run_v2_projection_freeze"
-    ]
+    assert "verdict_version = 0" in run_projection
+    assert "overall_verdict IN ('review', 'insufficient')" in run_projection
+    assert "layer_verdicts_schema_version = '1.0.0'" in run_projection
+    assert "layer_verdicts_json = '{}'" not in run_projection
     nonce_check = run_checks["ck_governance_evaluation_run_envelope_nonce"]
     assert "length(envelope_nonce) = 43" in nonce_check
     assert "contract_version <> '2.0.0'" in nonce_check
-    assert "evidence_result_status = 'pending'" in execution_checks[
-        "ck_governance_evaluation_suite_execution_projection_freeze"
+    execution_projection = execution_checks[
+        "ck_governance_evaluation_suite_execution_projection_coherence"
     ]
+    assert "evidence_result_status = 'pending'" in execution_projection
+    assert (
+        "admission_status IN ('verified', 'unverified', 'expired', 'superseded')"
+        in execution_projection
+    )
+    assert "evidence_run_id IS NOT NULL" in execution_projection
     assert "started_at <= completed_at" in run_checks[
         "ck_governance_evaluation_run_timestamp_order"
     ]

@@ -219,10 +219,13 @@ def test_models_expose_v2_tables_columns_and_vocabulary_constraints():
         "requested_by", "started_at", "completed_at", "failure_code", "failure_message",
         "created_at", "updated_at", "lifecycle_phase", "envelope_id", "envelope_json",
         "envelope_hash", "envelope_nonce", "evidence_outcome", "verdict_version",
+        "layer_verdicts_schema_version",
     )
     assert run_columns.contract_version.default.arg == "1.0.0"
     assert run_columns.evidence_outcome.default.arg == "pending"
     assert run_columns.verdict_version.default.arg == 0
+    assert run_columns.layer_verdicts_schema_version.nullable is True
+    assert run_columns.layer_verdicts_schema_version.default is None
 
 
 def test_plan_and_run_models_have_no_duplicate_declarations_or_constraints():
@@ -242,7 +245,7 @@ def test_plan_and_run_models_have_no_duplicate_declarations_or_constraints():
             "contract_version",
             "lifecycle_phase", "envelope_id", "envelope_json", "envelope_hash",
             "envelope_nonce",
-            "evidence_outcome", "verdict_version",
+            "evidence_outcome", "verdict_version", "layer_verdicts_schema_version",
         },
     }
     for class_name, assignment_names in expected_assignments.items():
@@ -333,12 +336,15 @@ def test_all_new_models_have_exact_columns_unique_constraint_names_and_vocabular
             "passport_revision_id", "trust_policy_version_id", "suite_execution_id",
             "envelope_hash", "admission_status", "freshness_status", "issuer_id",
             "signing_key_id", "signer_key_id", "signer_algorithm", "reasons_json",
-            "checked_by", "checked_at", "created_at",
+            "checked_by", "checked_at", "created_at", "contract_version", "run_id",
+            "envelope_id", "envelope_nonce", "submitted_by", "captured_at", "signed_at",
+            "effective_expires_at",
         ),
         "GovernanceEvidenceReview": (
             "id", "org_id", "system_id", "evidence_run_id", "passport_revision_id",
             "admission_id", "decision", "rationale", "reviewed_by", "review_version",
-            "separation_override_reason", "reviewed_at",
+            "separation_override_reason", "reviewed_at", "workspace_id", "run_id",
+            "suite_execution_id", "admission_contract_version",
         ),
         "GovernanceIdempotencyRecord": (
             "id", "org_id", "actor_id", "operation", "key_hash", "request_hash", "status",
@@ -356,6 +362,28 @@ def test_all_new_models_have_exact_columns_unique_constraint_names_and_vocabular
         assert tuple(table.columns.keys()) == columns
         names = [constraint.name for constraint in table.constraints if constraint.name]
         assert len(names) == len(set(names)), f"duplicate named constraint on {table.name}"
+
+    admission_columns = governance_models.GovernanceEvidenceAdmission.__table__.c
+    assert admission_columns.contract_version.default.arg == "1.0.0"
+    assert admission_columns.run_id.nullable is False
+    for optional_v2_column in (
+        "envelope_id",
+        "envelope_nonce",
+        "submitted_by",
+        "captured_at",
+        "signed_at",
+        "effective_expires_at",
+    ):
+        assert admission_columns[optional_v2_column].nullable is True
+
+    review_columns = governance_models.GovernanceEvidenceReview.__table__.c
+    for factual_scope_column in (
+        "workspace_id",
+        "run_id",
+        "suite_execution_id",
+        "admission_contract_version",
+    ):
+        assert review_columns[factual_scope_column].nullable is False
 
     vocabulary = {
         "GovernanceEvaluationSuiteVersion": ("draft", "active", "deprecated", "revoked"),

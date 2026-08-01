@@ -31,6 +31,8 @@ from src.domain.assurance.evidence_passport import (
 )
 
 CONTRACT_VERSION = "2.0.0"
+LAYER_VERDICTS_SCHEMA_VERSION = "1.0.0"
+LAYER_VERDICT_AXES = ("suites", "modalities", "components", "riskDimensions")
 TARGET_KINDS = frozenset(
     {
         "predictive_model",

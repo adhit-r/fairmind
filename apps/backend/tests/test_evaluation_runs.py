@@ -16,6 +16,7 @@ from sqlalchemy.pool import StaticPool
 
 from api.main import app
 from config.auth import TokenData, TokenType, UserRole, get_current_active_user
+from config.settings import settings
 from database.connection import Base, get_db
 from database.governance_models import (
     GovernanceAISystem,
@@ -225,6 +226,111 @@ def _workflow_detail(message: str, next_action: str) -> dict:
             "nextAction": next_action,
         }
     }
+
+
+def test_v1_mutations_are_quarantined_when_assurance_v2_is_enabled(
+    evaluation_client,
+) -> None:
+    client, session_factory, _ = evaluation_client
+    plan = _create_plan(client)
+    assert _activate(client, plan["id"]).status_code == 200
+    run_response = _create_run(client, plan["id"])
+    assert run_response.status_code == 201, run_response.text
+    run = run_response.json()
+
+    session = session_factory()
+    try:
+        before = {
+            "plans": len(
+                session.execute(
+                    select(GovernanceEvaluationPlan.__table__.c.id)
+                ).all()
+            ),
+            "runs": len(
+                session.execute(
+                    select(GovernanceEvaluationRun.__table__.c.id)
+                ).all()
+            ),
+            "audits": len(
+                session.execute(select(OrganizationAuditLog.__table__.c.id)).all()
+            ),
+        }
+    finally:
+        session.close()
+
+    expected = {
+        "detail": {
+            "code": "contract_upgrade_required",
+            "message": (
+                "Legacy evaluation mutations are disabled while Assurance V2 "
+                "is enabled."
+            ),
+            "nextAction": (
+                "Clone legacy records into a bound v2 plan and use the "
+                "evaluation-v2 workflow."
+            ),
+        }
+    }
+    original = settings.assurance_v2_enabled
+    try:
+        settings.assurance_v2_enabled = True
+        responses = (
+            client.post(_plans_url(), json=_plan_payload(name="Blocked legacy plan")),
+            _activate(client, plan["id"]),
+            _create_run(client, plan["id"]),
+            client.post(
+                f"{BASE}/{ORG_A}/systems/system-a/evaluation-runs/{run['id']}"
+                "/evidence-passport-link",
+                json={
+                    "evidenceRunId": "blocked-evidence",
+                    "passportRevisionId": "blocked-passport-revision",
+                },
+            ),
+        )
+        for response in responses:
+            assert response.status_code == 409
+            assert response.json() == expected
+
+        assert client.get(_plans_url()).status_code == 200
+        assert (
+            client.get(f"{_plans_url()}/{plan['id']}/preflight").status_code
+            == 200
+        )
+        assert (
+            client.get(
+                f"{BASE}/{ORG_A}/systems/system-a/evaluation-runs"
+            ).status_code
+            == 200
+        )
+        assert (
+            client.get(
+                f"{BASE}/{ORG_A}/systems/system-a/evaluation-runs/{run['id']}"
+            ).status_code
+            == 200
+        )
+    finally:
+        settings.assurance_v2_enabled = original
+
+    session = session_factory()
+    try:
+        after = {
+            "plans": len(
+                session.execute(
+                    select(GovernanceEvaluationPlan.__table__.c.id)
+                ).all()
+            ),
+            "runs": len(
+                session.execute(
+                    select(GovernanceEvaluationRun.__table__.c.id)
+                ).all()
+            ),
+            "audits": len(
+                session.execute(select(OrganizationAuditLog.__table__.c.id)).all()
+            ),
+        }
+    finally:
+        session.close()
+    assert after == before
 
 
 def _passport_snapshot(

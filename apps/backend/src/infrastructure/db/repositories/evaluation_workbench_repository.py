@@ -51,6 +51,7 @@ from src.application.ports.evaluation_workbench import (
 from src.domain.assurance.evaluation_v2 import (
     AssuranceContractValidationError,
     CONTRACT_VERSION,
+    LAYER_VERDICTS_SCHEMA_VERSION,
     MAX_BUDGETS_BYTES,
     MAX_CONFIGURATION_DEFAULTS_BYTES,
     MAX_CONFIGURATION_SCHEMA_BYTES,
@@ -63,9 +64,16 @@ from src.domain.assurance.evaluation_v2 import (
     canonical_json,
     canonical_sha256,
 )
+from src.infrastructure.db.repositories.evaluation_audit_chain import (
+    EvaluationAuditChainIntegrityError,
+    verify_evaluation_audit_chain,
+)
 
 _SQLITE_WRITE_LOCK = threading.RLock()
 _BINDING_INTEGRITY_MESSAGE = "Stored assurance bindings failed integrity verification."
+_AUDIT_CHAIN_INTEGRITY_MESSAGE = (
+    "Stored evaluation audit chain failed integrity verification."
+)
 _MAX_LAYER_VERDICTS_BYTES = 8 * 1024
 _MAX_SUITE_RESULT_SUMMARY_BYTES = 64 * 1024
 _MAX_BINDING_LIST_BYTES = 8 * 1024
@@ -1080,6 +1088,7 @@ class SqlAlchemyEvaluationWorkbenchRepository:
             technical_status=row["technical_status"],
             evidence_outcome=row["evidence_outcome"],
             overall_verdict=row["overall_verdict"],
+            layer_verdicts_schema_version=row["layer_verdicts_schema_version"],
             layer_verdicts=self._stored_json_object(
                 row["layer_verdicts_json"],
                 maximum_bytes=_MAX_LAYER_VERDICTS_BYTES,
@@ -1103,6 +1112,12 @@ class SqlAlchemyEvaluationWorkbenchRepository:
 
     def persist_run(self, command: PersistRunCommand) -> RunRecord:
         scope = command.graph.scope
+        if command.layer_verdicts_schema_version != LAYER_VERDICTS_SCHEMA_VERSION:
+            raise self._error(
+                "binding_integrity_error",
+                _BINDING_INTEGRITY_MESSAGE,
+                409,
+            )
         self.db.execute(
             insert(GovernanceEvaluationRun.__table__).values(
                 id=command.run_id,
@@ -1114,6 +1129,7 @@ class SqlAlchemyEvaluationWorkbenchRepository:
                 trigger=command.trigger,
                 technical_status=command.technical_status,
                 overall_verdict=command.overall_verdict,
+                layer_verdicts_schema_version=command.layer_verdicts_schema_version,
                 layer_verdicts_json=canonical_json(command.layer_verdicts.to_dict()),
                 requested_by=command.actor_id,
                 created_at=command.created_at,
@@ -1171,6 +1187,7 @@ class SqlAlchemyEvaluationWorkbenchRepository:
         scope = self._system_scope(org_id, system_id)
         if scope is None:
             return None
+        self._verify_audit_chain(org_id=org_id)
         rows = (
             self.db.execute(
                 select(GovernanceEvaluationRun.__table__)
@@ -1197,6 +1214,7 @@ class SqlAlchemyEvaluationWorkbenchRepository:
         scope = self._system_scope(org_id, system_id)
         if scope is None:
             return None
+        self._verify_audit_chain(org_id=org_id)
         row = (
             self.db.execute(
                 select(GovernanceEvaluationRun.__table__).where(
@@ -1211,6 +1229,16 @@ class SqlAlchemyEvaluationWorkbenchRepository:
             .one_or_none()
         )
         return self._run_record(row) if row else None
+
+    def _verify_audit_chain(self, *, org_id: str) -> None:
+        try:
+            verify_evaluation_audit_chain(self.db, org_id=org_id)
+        except EvaluationAuditChainIntegrityError as error:
+            raise self._error(
+                "audit_chain_integrity_error",
+                _AUDIT_CHAIN_INTEGRITY_MESSAGE,
+                409,
+            ) from error
 
 
 class SqlAlchemyEvaluationWorkbenchUnitOfWork:

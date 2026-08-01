@@ -447,6 +447,13 @@ class GovernanceEvidenceRun(Base):
         CheckConstraint(
             _lower_hex64("content_hash"), name="ck_governance_evidence_run_content_hash"
         ),
+        Index(
+            "idx_governance_evidence_runs_org_system_schema_created",
+            "org_id",
+            "system_id",
+            "schema_version",
+            "created_at",
+        ),
     )
 
 
@@ -752,6 +759,11 @@ class GovernanceEvidenceIssuer(Base):
             "status IN ('active', 'revoked')",
             name="ck_governance_evidence_issuer_status",
         ),
+        Index(
+            "idx_governance_evidence_issuers_org_status",
+            "org_id",
+            "status",
+        ),
     )
 
 
@@ -797,6 +809,13 @@ class GovernanceEvidenceSigningKey(Base):
             "(revoked_at IS NOT NULL AND revocation_reason IS NOT NULL)",
             name="ck_governance_evidence_signing_key_revocation",
         ),
+        Index(
+            "idx_governance_evidence_signing_keys_org_issuer_key_revoked",
+            "org_id",
+            "issuer_id",
+            "key_id",
+            "revoked_at",
+        ),
     )
 
 
@@ -836,6 +855,12 @@ class GovernanceEvidenceTrustPolicyVersion(Base):
         CheckConstraint(
             "status IN ('draft', 'active', 'retired')",
             name="ck_governance_evidence_trust_policy_status",
+        ),
+        Index(
+            "idx_governance_evidence_trust_policies_org_status_version",
+            "org_id",
+            "status",
+            "version",
         ),
     )
 
@@ -1038,13 +1063,18 @@ class GovernanceEvaluationRunSuiteExecution(Base):
             "('error', 'unavailable', 'insufficient_data', 'unknown')) "
             "OR (technical_status = 'cancelled' AND evidence_result_status IN "
             "('pending', 'unavailable', 'unknown'))) "
-            "AND admission_status = 'pending' "
+            "AND ((admission_status = 'pending' "
             "AND review_status = 'pending' "
             "AND freshness_status = 'current' "
             "AND evidence_run_id IS NULL AND passport_revision_id IS NULL "
             "AND linked_by IS NULL AND linked_at IS NULL "
-            "AND result_summary_json IS NULL AND limitations_json IS NULL",
-            name="ck_governance_evaluation_suite_execution_projection_freeze",
+            "AND result_summary_json IS NULL AND limitations_json IS NULL) "
+            "OR (admission_status IN "
+            "('verified', 'unverified', 'expired', 'superseded') "
+            "AND evidence_run_id IS NOT NULL AND passport_revision_id IS NOT NULL "
+            "AND linked_by IS NOT NULL AND linked_at IS NOT NULL "
+            "AND result_summary_json IS NOT NULL AND limitations_json IS NOT NULL))",
+            name="ck_governance_evaluation_suite_execution_projection_coherence",
         ),
         CheckConstraint(
             f"({_canonical_utc_timestamp('created_at', nullable=False)}) AND "
@@ -1087,6 +1117,14 @@ class GovernanceEvidenceAdmission(Base):
     checked_by = Column(String, nullable=False)
     checked_at = Column(String, nullable=False)
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    contract_version = Column(String, nullable=False, default="1.0.0")
+    run_id = Column(String, nullable=False)
+    envelope_id = Column(String, nullable=True)
+    envelope_nonce = Column(String, nullable=True)
+    submitted_by = Column(String, nullable=True)
+    captured_at = Column(String, nullable=True)
+    signed_at = Column(String, nullable=True)
+    effective_expires_at = Column(String, nullable=True)
 
     __table_args__ = (
         UniqueConstraint(
@@ -1096,6 +1134,33 @@ class GovernanceEvidenceAdmission(Base):
         UniqueConstraint(
             "passport_revision_id", "trust_policy_version_id",
             name="uq_governance_evidence_admission_policy",
+        ),
+        UniqueConstraint(
+            "id",
+            "contract_version",
+            "run_id",
+            "suite_execution_id",
+            "evidence_run_id",
+            "passport_revision_id",
+            "workspace_id",
+            "system_id",
+            "org_id",
+            name="uq_governance_evidence_admission_v2_scope",
+        ),
+        UniqueConstraint(
+            "id",
+            "contract_version",
+            "run_id",
+            "suite_execution_id",
+            "envelope_id",
+            "envelope_hash",
+            "envelope_nonce",
+            "evidence_run_id",
+            "passport_revision_id",
+            "workspace_id",
+            "system_id",
+            "org_id",
+            name="uq_governance_evidence_admission_v2_nonce_binding",
         ),
         ForeignKeyConstraint(
             ["passport_revision_id", "evidence_run_id", "system_id", "org_id"],
@@ -1114,13 +1179,42 @@ class GovernanceEvidenceAdmission(Base):
             ],
         ),
         ForeignKeyConstraint(
-            ["suite_execution_id", "workspace_id", "system_id", "org_id"],
+            [
+                "suite_execution_id",
+                "run_id",
+                "workspace_id",
+                "system_id",
+                "org_id",
+            ],
             [
                 "governance_evaluation_run_suite_executions.id",
+                "governance_evaluation_run_suite_executions.run_id",
                 "governance_evaluation_run_suite_executions.workspace_id",
                 "governance_evaluation_run_suite_executions.system_id",
                 "governance_evaluation_run_suite_executions.org_id",
             ],
+            name="fk_governance_evidence_admission_suite_execution_run_scope",
+        ),
+        ForeignKeyConstraint(
+            [
+                "run_id",
+                "contract_version",
+                "envelope_id",
+                "envelope_hash",
+                "workspace_id",
+                "system_id",
+                "org_id",
+            ],
+            [
+                "governance_evaluation_runs.id",
+                "governance_evaluation_runs.contract_version",
+                "governance_evaluation_runs.envelope_id",
+                "governance_evaluation_runs.envelope_hash",
+                "governance_evaluation_runs.workspace_id",
+                "governance_evaluation_runs.system_id",
+                "governance_evaluation_runs.org_id",
+            ],
+            name="fk_governance_evidence_admission_run_envelope_scope",
         ),
         ForeignKeyConstraint(
             ["signing_key_id", "issuer_id", "org_id"],
@@ -1150,6 +1244,64 @@ class GovernanceEvidenceAdmission(Base):
             "AND signer_key_id IS NOT NULL AND signer_algorithm = 'Ed25519')",
             name="ck_governance_evidence_admission_signer",
         ),
+        CheckConstraint(
+            "contract_version IN ('1.0.0', '2.0.0')",
+            name="ck_governance_evidence_admission_contract_version",
+        ),
+        CheckConstraint(
+            "contract_version = '1.0.0' OR "
+            "(run_id IS NOT NULL AND envelope_id IS NOT NULL "
+            "AND envelope_hash IS NOT NULL AND envelope_nonce IS NOT NULL "
+            "AND submitted_by IS NOT NULL "
+            "AND length(trim(submitted_by)) BETWEEN 1 AND 256 "
+            "AND captured_at IS NOT NULL "
+            "AND effective_expires_at IS NOT NULL)",
+            name="ck_governance_evidence_admission_v2_binding",
+        ),
+        CheckConstraint(
+            "contract_version = '1.0.0' OR "
+            f"(envelope_nonce IS NOT NULL AND ({_canonical_envelope_nonce('envelope_nonce')}))",
+            name="ck_governance_evidence_admission_envelope_nonce",
+        ),
+        CheckConstraint(
+            "contract_version = '1.0.0' OR ("
+            "(admission_status = 'verified' AND issuer_id IS NOT NULL "
+            "AND signing_key_id IS NOT NULL AND signer_key_id IS NOT NULL "
+            "AND signer_algorithm = 'Ed25519' AND signed_at IS NOT NULL) OR "
+            "(admission_status = 'unverified' "
+            "AND issuer_id IS NULL AND signing_key_id IS NULL "
+            "AND signer_key_id IS NULL AND signer_algorithm IS NULL "
+            "AND signed_at IS NULL) OR "
+            "(admission_status IN "
+            "('pending', 'expired', 'superseded', 'rejected', 'trust_error') "
+            "AND ((issuer_id IS NULL AND signing_key_id IS NULL "
+            "AND signer_key_id IS NULL AND signer_algorithm IS NULL "
+            "AND signed_at IS NULL) OR (issuer_id IS NOT NULL "
+            "AND signing_key_id IS NOT NULL AND signer_key_id IS NOT NULL "
+            "AND signer_algorithm = 'Ed25519' AND signed_at IS NOT NULL))))",
+            name="ck_governance_evidence_admission_v2_signer",
+        ),
+        CheckConstraint(
+            "contract_version = '1.0.0' OR ("
+            f"({_canonical_utc_timestamp('captured_at', nullable=False)}) AND "
+            f"({_canonical_utc_timestamp('signed_at')}) AND "
+            f"({_canonical_utc_timestamp('effective_expires_at', nullable=False)}))",
+            name="ck_governance_evidence_admission_v2_timestamps",
+        ),
+        CheckConstraint(
+            "contract_version = '1.0.0' OR ("
+            "captured_at <= effective_expires_at AND "
+            "(signed_at IS NULL OR (captured_at <= signed_at "
+            "AND signed_at <= effective_expires_at)))",
+            name="ck_governance_evidence_admission_v2_timestamp_order",
+        ),
+        Index(
+            "idx_governance_evidence_admissions_scope_execution_created",
+            "org_id",
+            "system_id",
+            "suite_execution_id",
+            "created_at",
+        ),
     )
 
 
@@ -1168,12 +1320,21 @@ class GovernanceEvidenceReview(Base):
     review_version = Column(Integer, nullable=False)
     separation_override_reason = Column(Text, nullable=True)
     reviewed_at = Column(String, nullable=False)
+    workspace_id = Column(String, nullable=False)
+    run_id = Column(String, nullable=False)
+    suite_execution_id = Column(String, nullable=False)
+    admission_contract_version = Column(String, nullable=False)
 
     __table_args__ = (
         UniqueConstraint("id", "org_id", name="uq_governance_evidence_review_tenant"),
         UniqueConstraint(
             "passport_revision_id", "admission_id", "review_version",
             name="uq_governance_evidence_review_version",
+        ),
+        UniqueConstraint(
+            "admission_id",
+            "review_version",
+            name="uq_governance_evidence_review_admission_version",
         ),
         ForeignKeyConstraint(
             ["passport_revision_id", "evidence_run_id", "system_id", "org_id"],
@@ -1197,12 +1358,455 @@ class GovernanceEvidenceReview(Base):
                 "governance_evidence_admissions.org_id",
             ],
         ),
+        ForeignKeyConstraint(
+            [
+                "admission_id",
+                "admission_contract_version",
+                "run_id",
+                "suite_execution_id",
+                "evidence_run_id",
+                "passport_revision_id",
+                "workspace_id",
+                "system_id",
+                "org_id",
+            ],
+            [
+                "governance_evidence_admissions.id",
+                "governance_evidence_admissions.contract_version",
+                "governance_evidence_admissions.run_id",
+                "governance_evidence_admissions.suite_execution_id",
+                "governance_evidence_admissions.evidence_run_id",
+                "governance_evidence_admissions.passport_revision_id",
+                "governance_evidence_admissions.workspace_id",
+                "governance_evidence_admissions.system_id",
+                "governance_evidence_admissions.org_id",
+            ],
+            name="fk_governance_evidence_review_admission_v2_scope",
+        ),
         CheckConstraint(
             "decision IN ('accepted', 'rejected')",
             name="ck_governance_evidence_review_decision",
         ),
         CheckConstraint(
             "review_version >= 1", name="ck_governance_evidence_review_version"
+        ),
+        Index(
+            "idx_governance_evidence_reviews_admission_version",
+            "admission_id",
+            review_version.desc(),
+        ),
+    )
+
+
+class GovernanceEvidenceNonceClaim(Base):
+    """Immutable replay claim for one admitted Passport and suite execution."""
+
+    __tablename__ = "governance_evidence_nonce_claims"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False)
+    workspace_id = Column(String, nullable=False)
+    system_id = Column(String, nullable=False)
+    run_id = Column(String, nullable=False)
+    run_contract_version = Column(String, nullable=False)
+    suite_execution_id = Column(String, nullable=False)
+    admission_id = Column(String, nullable=False)
+    admission_contract_version = Column(String, nullable=False)
+    evidence_run_id = Column(String, nullable=False)
+    passport_revision_id = Column(String, nullable=False)
+    envelope_id = Column(String, nullable=False)
+    envelope_hash = Column(String, nullable=False)
+    envelope_nonce = Column(String, nullable=False)
+    claimed_by = Column(String, nullable=False)
+    claimed_at = Column(String, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "admission_id",
+            name="uq_governance_evidence_nonce_claim_admission",
+        ),
+        UniqueConstraint(
+            "suite_execution_id",
+            "envelope_id",
+            "envelope_nonce",
+            name="uq_governance_evidence_nonce_claim_replay",
+        ),
+        UniqueConstraint(
+            "id",
+            "admission_id",
+            "admission_contract_version",
+            "run_id",
+            "suite_execution_id",
+            "evidence_run_id",
+            "passport_revision_id",
+            "workspace_id",
+            "system_id",
+            "org_id",
+            name="uq_governance_evidence_nonce_claim_tenant",
+        ),
+        ForeignKeyConstraint(
+            [
+                "admission_id",
+                "admission_contract_version",
+                "run_id",
+                "suite_execution_id",
+                "envelope_id",
+                "envelope_hash",
+                "envelope_nonce",
+                "evidence_run_id",
+                "passport_revision_id",
+                "workspace_id",
+                "system_id",
+                "org_id",
+            ],
+            [
+                "governance_evidence_admissions.id",
+                "governance_evidence_admissions.contract_version",
+                "governance_evidence_admissions.run_id",
+                "governance_evidence_admissions.suite_execution_id",
+                "governance_evidence_admissions.envelope_id",
+                "governance_evidence_admissions.envelope_hash",
+                "governance_evidence_admissions.envelope_nonce",
+                "governance_evidence_admissions.evidence_run_id",
+                "governance_evidence_admissions.passport_revision_id",
+                "governance_evidence_admissions.workspace_id",
+                "governance_evidence_admissions.system_id",
+                "governance_evidence_admissions.org_id",
+            ],
+            name="fk_governance_evidence_nonce_claim_admission",
+        ),
+        ForeignKeyConstraint(
+            [
+                "run_id",
+                "run_contract_version",
+                "envelope_id",
+                "envelope_hash",
+                "workspace_id",
+                "system_id",
+                "org_id",
+            ],
+            [
+                "governance_evaluation_runs.id",
+                "governance_evaluation_runs.contract_version",
+                "governance_evaluation_runs.envelope_id",
+                "governance_evaluation_runs.envelope_hash",
+                "governance_evaluation_runs.workspace_id",
+                "governance_evaluation_runs.system_id",
+                "governance_evaluation_runs.org_id",
+            ],
+            name="fk_governance_evidence_nonce_claim_run_envelope",
+        ),
+        ForeignKeyConstraint(
+            [
+                "suite_execution_id",
+                "run_id",
+                "workspace_id",
+                "system_id",
+                "org_id",
+            ],
+            [
+                "governance_evaluation_run_suite_executions.id",
+                "governance_evaluation_run_suite_executions.run_id",
+                "governance_evaluation_run_suite_executions.workspace_id",
+                "governance_evaluation_run_suite_executions.system_id",
+                "governance_evaluation_run_suite_executions.org_id",
+            ],
+            name="fk_governance_evidence_nonce_claim_suite_execution",
+        ),
+        CheckConstraint(
+            "run_contract_version = '2.0.0' "
+            "AND admission_contract_version = '2.0.0'",
+            name="ck_governance_evidence_nonce_claim_contract_versions",
+        ),
+        CheckConstraint(
+            _lower_hex64("envelope_hash"),
+            name="ck_governance_evidence_nonce_claim_envelope_hash",
+        ),
+        CheckConstraint(
+            _canonical_envelope_nonce("envelope_nonce"),
+            name="ck_governance_evidence_nonce_claim_envelope_nonce",
+        ),
+        Index(
+            "idx_governance_evidence_nonce_claims_scope_admission",
+            "org_id",
+            "system_id",
+            "admission_id",
+        ),
+    )
+
+
+class GovernanceEvaluationSuiteEvidenceLink(Base):
+    """Authoritative immutable link from one suite execution to admitted evidence."""
+
+    __tablename__ = "governance_evaluation_suite_evidence_links"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False)
+    workspace_id = Column(String, nullable=False)
+    system_id = Column(String, nullable=False)
+    run_id = Column(String, nullable=False)
+    suite_execution_id = Column(String, nullable=False)
+    admission_id = Column(String, nullable=False)
+    admission_contract_version = Column(String, nullable=False)
+    evidence_run_id = Column(String, nullable=False)
+    passport_revision_id = Column(String, nullable=False)
+    nonce_claim_id = Column(String, nullable=False)
+    linked_by = Column(String, nullable=False)
+    linked_at = Column(String, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "id",
+            "run_id",
+            "suite_execution_id",
+            "admission_id",
+            "admission_contract_version",
+            "evidence_run_id",
+            "passport_revision_id",
+            "nonce_claim_id",
+            "workspace_id",
+            "system_id",
+            "org_id",
+            name="uq_governance_evaluation_suite_evidence_link_tenant",
+        ),
+        UniqueConstraint(
+            "suite_execution_id",
+            name="uq_governance_evaluation_suite_evidence_link_suite_execution",
+        ),
+        UniqueConstraint(
+            "admission_id",
+            name="uq_governance_evaluation_suite_evidence_link_admission",
+        ),
+        UniqueConstraint(
+            "nonce_claim_id",
+            name="uq_governance_evaluation_suite_evidence_link_nonce_claim",
+        ),
+        ForeignKeyConstraint(
+            [
+                "suite_execution_id",
+                "run_id",
+                "workspace_id",
+                "system_id",
+                "org_id",
+            ],
+            [
+                "governance_evaluation_run_suite_executions.id",
+                "governance_evaluation_run_suite_executions.run_id",
+                "governance_evaluation_run_suite_executions.workspace_id",
+                "governance_evaluation_run_suite_executions.system_id",
+                "governance_evaluation_run_suite_executions.org_id",
+            ],
+            name="fk_governance_evaluation_suite_evidence_link_execution",
+        ),
+        ForeignKeyConstraint(
+            [
+                "admission_id",
+                "admission_contract_version",
+                "run_id",
+                "suite_execution_id",
+                "evidence_run_id",
+                "passport_revision_id",
+                "workspace_id",
+                "system_id",
+                "org_id",
+            ],
+            [
+                "governance_evidence_admissions.id",
+                "governance_evidence_admissions.contract_version",
+                "governance_evidence_admissions.run_id",
+                "governance_evidence_admissions.suite_execution_id",
+                "governance_evidence_admissions.evidence_run_id",
+                "governance_evidence_admissions.passport_revision_id",
+                "governance_evidence_admissions.workspace_id",
+                "governance_evidence_admissions.system_id",
+                "governance_evidence_admissions.org_id",
+            ],
+            name="fk_governance_evaluation_suite_evidence_link_admission",
+        ),
+        ForeignKeyConstraint(
+            [
+                "nonce_claim_id",
+                "admission_id",
+                "admission_contract_version",
+                "run_id",
+                "suite_execution_id",
+                "evidence_run_id",
+                "passport_revision_id",
+                "workspace_id",
+                "system_id",
+                "org_id",
+            ],
+            [
+                "governance_evidence_nonce_claims.id",
+                "governance_evidence_nonce_claims.admission_id",
+                "governance_evidence_nonce_claims.admission_contract_version",
+                "governance_evidence_nonce_claims.run_id",
+                "governance_evidence_nonce_claims.suite_execution_id",
+                "governance_evidence_nonce_claims.evidence_run_id",
+                "governance_evidence_nonce_claims.passport_revision_id",
+                "governance_evidence_nonce_claims.workspace_id",
+                "governance_evidence_nonce_claims.system_id",
+                "governance_evidence_nonce_claims.org_id",
+            ],
+            name="fk_governance_evaluation_suite_evidence_link_nonce_claim",
+        ),
+        CheckConstraint(
+            "admission_contract_version = '2.0.0'",
+            name="ck_governance_evaluation_suite_evidence_link_contract",
+        ),
+        Index(
+            "idx_governance_evaluation_suite_evidence_links_scope",
+            "org_id",
+            "system_id",
+            "run_id",
+            "suite_execution_id",
+        ),
+    )
+
+
+class GovernanceEvaluationDecision(Base):
+    """Immutable CAS decision history for one v2 evaluation run."""
+
+    __tablename__ = "governance_evaluation_decisions"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False)
+    workspace_id = Column(String, nullable=False)
+    system_id = Column(String, nullable=False)
+    run_id = Column(String, nullable=False)
+    run_contract_version = Column(String, nullable=False)
+    envelope_id = Column(String, nullable=False)
+    envelope_hash = Column(String, nullable=False)
+    verdict_version = Column(Integer, nullable=False)
+    overall_verdict = Column(String, nullable=False)
+    layer_verdicts_schema_version = Column(String, nullable=False)
+    layer_verdicts_json = Column(Text, nullable=False)
+    rationale = Column(Text, nullable=False)
+    decided_by = Column(String, nullable=False)
+    owner_override_reason = Column(Text, nullable=True)
+    evidence_set_json = Column(Text, nullable=False)
+    evidence_set_hash = Column(String, nullable=False)
+    decided_at = Column(String, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "id",
+            "run_id",
+            "verdict_version",
+            "workspace_id",
+            "system_id",
+            "org_id",
+            name="uq_governance_evaluation_decision_tenant",
+        ),
+        UniqueConstraint(
+            "run_id",
+            "verdict_version",
+            name="uq_governance_evaluation_decision_run_version",
+        ),
+        ForeignKeyConstraint(
+            [
+                "run_id",
+                "run_contract_version",
+                "envelope_id",
+                "envelope_hash",
+                "workspace_id",
+                "system_id",
+                "org_id",
+            ],
+            [
+                "governance_evaluation_runs.id",
+                "governance_evaluation_runs.contract_version",
+                "governance_evaluation_runs.envelope_id",
+                "governance_evaluation_runs.envelope_hash",
+                "governance_evaluation_runs.workspace_id",
+                "governance_evaluation_runs.system_id",
+                "governance_evaluation_runs.org_id",
+            ],
+            name="fk_governance_evaluation_decision_run_envelope",
+        ),
+        CheckConstraint(
+            "run_contract_version = '2.0.0'",
+            name="ck_governance_evaluation_decision_contract",
+        ),
+        CheckConstraint(
+            "verdict_version >= 1",
+            name="ck_governance_evaluation_decision_verdict_version",
+        ),
+        CheckConstraint(
+            "overall_verdict IN ('approved', 'conditional', 'review', 'blocked', "
+            "'insufficient')",
+            name="ck_governance_evaluation_decision_overall_verdict",
+        ),
+        CheckConstraint(
+            "layer_verdicts_schema_version = '1.0.0'",
+            name="ck_governance_evaluation_decision_layer_schema",
+        ),
+        CheckConstraint(
+            "length(trim(layer_verdicts_json)) BETWEEN 2 AND 1048576 "
+            "AND layer_verdicts_json LIKE '%\"suites\"%' "
+            "AND layer_verdicts_json LIKE '%\"modalities\"%' "
+            "AND layer_verdicts_json LIKE '%\"components\"%' "
+            "AND layer_verdicts_json LIKE '%\"riskDimensions\"%'",
+            name="ck_governance_evaluation_decision_layer_verdicts",
+        ),
+        CheckConstraint(
+            "length(trim(rationale)) BETWEEN 1 AND 4000",
+            name="ck_governance_evaluation_decision_rationale",
+        ),
+        CheckConstraint(
+            "owner_override_reason IS NULL OR "
+            "length(trim(owner_override_reason)) BETWEEN 1 AND 2000",
+            name="ck_governance_evaluation_decision_owner_override",
+        ),
+        CheckConstraint(
+            _lower_hex64("evidence_set_hash"),
+            name="ck_governance_evaluation_decision_evidence_set_hash",
+        ),
+        CheckConstraint(
+            "substr(trim(evidence_set_json), 1, 1) = '{' "
+            "AND substr(trim(evidence_set_json), -1, 1) = '}'",
+            name="ck_governance_evaluation_decision_evidence_set_object",
+        ),
+        CheckConstraint(
+            "length(evidence_set_json) BETWEEN 2 AND 1048576",
+            name="ck_governance_evaluation_decision_evidence_set_size",
+        ),
+        Index(
+            "idx_governance_evaluation_decisions_scope_version",
+            "org_id",
+            "system_id",
+            "run_id",
+            verdict_version.desc(),
+        ),
+    )
+
+
+class GovernanceEvaluationAuditChainHead(Base):
+    """Anchored relational tail for one organization's evaluation audit chain."""
+
+    __tablename__ = "governance_evaluation_audit_chain_heads"
+
+    org_id = Column(String, primary_key=True)
+    last_sequence_number = Column(Integer, nullable=False)
+    last_event_hash = Column(String, nullable=False)
+    updated_at = Column(String, nullable=False)
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["org_id", "last_sequence_number"],
+            [
+                "governance_evaluation_audit_events.org_id",
+                "governance_evaluation_audit_events.sequence_number",
+            ],
+            name="fk_governance_evaluation_audit_chain_head_tail",
+        ),
+        CheckConstraint(
+            "last_sequence_number >= 1",
+            name="ck_governance_evaluation_audit_chain_head_sequence",
+        ),
+        CheckConstraint(
+            _lower_hex64("last_event_hash"),
+            name="ck_governance_evaluation_audit_chain_head_hash",
         ),
     )
 
@@ -1458,6 +2062,7 @@ class GovernanceEvaluationRun(Base):
     envelope_nonce = Column(String, nullable=True)
     evidence_outcome = Column(String, nullable=False, default="pending")
     verdict_version = Column(Integer, nullable=False, default=0)
+    layer_verdicts_schema_version = Column(String, nullable=True)
 
     __table_args__ = (
         UniqueConstraint(
@@ -1616,10 +2221,21 @@ class GovernanceEvaluationRun(Base):
             name="ck_governance_evaluation_run_verdict_version",
         ),
         CheckConstraint(
-            "contract_version <> '2.0.0' OR "
-            "(evidence_outcome = 'pending' AND overall_verdict = 'insufficient' "
-            "AND verdict_version = 0)",
-            name="ck_governance_evaluation_run_v2_projection_freeze",
+            "(contract_version = '1.0.0' "
+            "AND layer_verdicts_schema_version IS NULL) OR "
+            "(contract_version = '2.0.0' "
+            "AND layer_verdicts_schema_version = '1.0.0' "
+            "AND layer_verdicts_json LIKE '%\"suites\"%' "
+            "AND layer_verdicts_json LIKE '%\"modalities\"%' "
+            "AND layer_verdicts_json LIKE '%\"components\"%' "
+            "AND layer_verdicts_json LIKE '%\"riskDimensions\"%' "
+            "AND ((verdict_version = 0 "
+            "AND overall_verdict IN ('review', 'insufficient') "
+            "AND layer_verdicts_json NOT LIKE '%\"approved\"%' "
+            "AND layer_verdicts_json NOT LIKE '%\"conditional\"%' "
+            "AND layer_verdicts_json NOT LIKE '%\"blocked\"%') "
+            "OR verdict_version >= 1))",
+            name="ck_governance_evaluation_run_v2_projection_coherence",
         ),
         CheckConstraint(
             "(envelope_id IS NULL AND envelope_json IS NULL AND envelope_hash IS NULL) OR "

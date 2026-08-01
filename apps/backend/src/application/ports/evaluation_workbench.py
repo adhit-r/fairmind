@@ -302,6 +302,7 @@ class PersistRunCommand:
     technical_status: str
     evidence_outcome: str
     overall_verdict: str
+    layer_verdicts_schema_version: str
     layer_verdicts: FrozenJsonObject
     created_at: str
     graph: PlanGraphRecord
@@ -346,6 +347,7 @@ class RunRecord:
     technical_status: str
     evidence_outcome: str
     overall_verdict: str
+    layer_verdicts_schema_version: str
     layer_verdicts: FrozenJsonObject
     suite_executions: tuple[SuiteExecutionRecord, ...]
     envelope_id: str

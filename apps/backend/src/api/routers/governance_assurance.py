@@ -16,6 +16,7 @@ from pydantic_core import PydanticCustomError
 from sqlalchemy.orm import Session
 
 from config.auth import TokenData, get_current_active_user
+from config.settings import settings
 from database.connection import get_db
 from src.application.services.framework_catalog_service import FrameworkCatalogService
 from src.application.ports.evidence_ingestion import (
@@ -877,6 +878,24 @@ def _evaluation_service(db: Session) -> EvaluationRunsService:
     return EvaluationRunsService(db)
 
 
+def _require_legacy_evaluation_mutation_enabled() -> None:
+    if settings.assurance_v2_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "contract_upgrade_required",
+                "message": (
+                    "Legacy evaluation mutations are disabled while Assurance V2 "
+                    "is enabled."
+                ),
+                "nextAction": (
+                    "Clone legacy records into a bound v2 plan and use the "
+                    "evaluation-v2 workflow."
+                ),
+            },
+        )
+
+
 def _raise_evaluation_error(error: EvaluationWorkflowError) -> None:
     raise HTTPException(status_code=error.status_code, detail=error.detail()) from error
 
@@ -919,6 +938,7 @@ def create_evaluation_plan(
     membership: OrgMembership = Depends(organization_membership),
     db: Session = Depends(get_db),
 ) -> dict:
+    _require_legacy_evaluation_mutation_enabled()
     authorization_service = _service(db)
     _require_mutation(membership, authorization_service)
     try:
@@ -962,6 +982,7 @@ def activate_evaluation_plan(
     membership: OrgMembership = Depends(organization_membership),
     db: Session = Depends(get_db),
 ) -> dict:
+    _require_legacy_evaluation_mutation_enabled()
     authorization_service = _service(db)
     _require_mutation(membership, authorization_service)
     try:
@@ -1012,6 +1033,7 @@ def create_evaluation_run(
     membership: OrgMembership = Depends(organization_membership),
     db: Session = Depends(get_db),
 ) -> dict:
+    _require_legacy_evaluation_mutation_enabled()
     authorization_service = _service(db)
     _require_mutation(membership, authorization_service)
     try:
@@ -1078,6 +1100,7 @@ def link_evaluation_run_passport(
     membership: OrgMembership = Depends(organization_membership),
     db: Session = Depends(get_db),
 ) -> dict:
+    _require_legacy_evaluation_mutation_enabled()
     authorization_service = _service(db)
     _require_mutation(membership, authorization_service)
     try:

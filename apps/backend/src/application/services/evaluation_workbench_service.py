@@ -34,6 +34,8 @@ from src.application.ports.evaluation_workbench import (
 from src.domain.assurance.evaluation_v2 import (
     AssuranceContractValidationError,
     CONTRACT_VERSION,
+    LAYER_VERDICT_AXES,
+    LAYER_VERDICTS_SCHEMA_VERSION,
     MAX_CONFIGURATION_DEFAULTS_BYTES,
     MAX_FAILURE_MESSAGE_BYTES,
     MAX_PLAN_CONFIGURATION_BYTES,
@@ -96,6 +98,17 @@ EVIDENCE_RESULTS = frozenset(
         "insufficient_data",
         "unknown",
     }
+)
+_EVIDENCE_OUTCOME_PRIORITY = (
+    "pending",
+    "failed",
+    "error",
+    "unavailable",
+    "insufficient_data",
+    "unknown",
+    "passed_with_limitations",
+    "informational",
+    "passed",
 )
 ADMISSION_STATUSES = frozenset(
     {"pending", "verified", "unverified", "expired", "superseded", "rejected", "trust_error"}
@@ -607,6 +620,7 @@ def _run_view(run: RunRecord) -> dict[str, object]:
         "technicalStatus": run.technical_status,
         "evidenceOutcome": run.evidence_outcome,
         "overallVerdict": run.overall_verdict,
+        "layerVerdictsSchemaVersion": run.layer_verdicts_schema_version,
         "layerVerdicts": run.layer_verdicts.to_dict(),
         "suiteExecutions": executions,
         "envelopeId": run.envelope_id,
@@ -952,6 +966,16 @@ def _verify_suite_execution_state(execution: SuiteExecutionRecord) -> None:
     _verify_suite_evidence_projections(execution)
 
 
+def _aggregate_suite_evidence_outcome(
+    executions: tuple[SuiteExecutionRecord, ...],
+) -> str:
+    outcomes = {execution.evidence_result_status for execution in executions}
+    for outcome in _EVIDENCE_OUTCOME_PRIORITY:
+        if outcome in outcomes:
+            return outcome
+    raise _binding_error("A run has no suite evidence outcome to aggregate.")
+
+
 def _verify_run_state(run: RunRecord, layer_verdicts: Mapping[str, object]) -> None:
     if (
         run.technical_status not in TECHNICAL_STATUSES
@@ -979,14 +1003,23 @@ def _verify_run_state(run: RunRecord, layer_verdicts: Mapping[str, object]) -> N
         failure_code=run.failure_code,
         failure_message=run.failure_message,
     )
+    if run.evidence_outcome != _aggregate_suite_evidence_outcome(
+        run.suite_executions
+    ):
+        raise _binding_error("The run evidence outcome is not the exact suite aggregate.")
     if run.technical_status == "succeeded" and any(
         execution.technical_status != "succeeded"
         for execution in run.suite_executions
     ):
         raise _binding_error("A succeeded run has a non-succeeded suite execution.")
+    layer_values = tuple(
+        verdict
+        for axis in LAYER_VERDICT_AXES
+        for verdict in layer_verdicts[axis].values()
+    )
     if run.verdict_version == 0 and (
-        run.overall_verdict != "insufficient"
-        or any(verdict != "insufficient" for verdict in layer_verdicts.values())
+        run.overall_verdict not in {"review", "insufficient"}
+        or any(verdict not in {"review", "insufficient"} for verdict in layer_values)
     ):
         raise _binding_error("An unversioned run carries governance decisions.")
     if run.verdict_version > 0 and (
@@ -1048,8 +1081,22 @@ def _verify_run_record_against_verified_graph(
             )
 
         layer_verdicts = run.layer_verdicts.to_dict()
-        if set(layer_verdicts) != set(execution_ids) or any(
-            verdict not in GOVERNANCE_VERDICTS for verdict in layer_verdicts.values()
+        if (
+            run.layer_verdicts_schema_version != LAYER_VERDICTS_SCHEMA_VERSION
+            or set(layer_verdicts) != set(LAYER_VERDICT_AXES)
+            or any(
+                not isinstance(layer_verdicts[axis], dict)
+                for axis in LAYER_VERDICT_AXES
+            )
+            or set(layer_verdicts["suites"]) != set(execution_ids)
+            or any(
+                not isinstance(key, str)
+                or not key
+                or len(key.encode("utf-8")) > 200
+                or verdict not in GOVERNANCE_VERDICTS
+                for axis in LAYER_VERDICT_AXES
+                for key, verdict in layer_verdicts[axis].items()
+            )
         ):
             raise _binding_error("The layered verdict keys do not match suite executions.")
         _verify_run_state(run, layer_verdicts)
@@ -1087,7 +1134,7 @@ def _verify_run_record_against_verified_graph(
         if error.code == "binding_integrity_error":
             raise
         raise _binding_error("A dependent run binding could not be reconstructed.") from error
-    except (AssuranceContractValidationError, TypeError, ValueError) as error:
+    except (AssuranceContractValidationError, TypeError, UnicodeError, ValueError) as error:
         raise _binding_error("The stored run violates the immutable contract.") from error
 
 
@@ -1781,7 +1828,14 @@ class EvaluationWorkbenchService:
                 )
             except AssuranceContractValidationError as error:
                 raise _translate(error) from error
-            layer_verdicts = {execution_id: "insufficient" for execution_id in execution_ids}
+            layer_verdicts = {
+                "suites": {
+                    execution_id: "insufficient" for execution_id in execution_ids
+                },
+                "modalities": {},
+                "components": {},
+                "riskDimensions": {},
+            }
             record = self.repository.persist_run(
                 PersistRunCommand(
                     run_id=run_id,
@@ -1795,6 +1849,7 @@ class EvaluationWorkbenchService:
                     technical_status="awaiting_evidence",
                     evidence_outcome="pending",
                     overall_verdict="insufficient",
+                    layer_verdicts_schema_version=LAYER_VERDICTS_SCHEMA_VERSION,
                     layer_verdicts=FrozenJsonObject.from_mapping(layer_verdicts),
                     created_at=_iso(now),
                     graph=graph,

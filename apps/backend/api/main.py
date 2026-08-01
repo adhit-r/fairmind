@@ -393,7 +393,15 @@ _include_router("api.routes.database", prefix="/api/v1", tags=["database"], attr
 _include_router("api.routes.database", prefix="/api/v1", tags=["main-api"], attr="main_router", required=True)
 _include_router("api.routes.ai_governance", prefix="/api/v1/ai-governance", tags=["ai-governance"], required=True)
 _include_router("api.routes.governance_assurance", prefix="/api/v1/ai-governance", tags=["governance-assurance"], required=True)
-_include_router("api.routes.evaluation_workbench", prefix="/api/v1/ai-governance", tags=["evaluation-workbench-v2"], required=True)
+if settings.assurance_v2_enabled:
+    _include_router(
+        "api.routes.evaluation_workbench",
+        prefix="/api/v1/ai-governance",
+        tags=["evaluation-workbench-v2"],
+        required=True,
+    )
+else:
+    logger.info("Assurance-contract v2 routes are disabled")
 _include_router("api.routes.environmental", tags=["environmental"], required=False)
 _include_router("api.routes.settings", prefix="/api/v1", tags=["settings"], required=False)
 

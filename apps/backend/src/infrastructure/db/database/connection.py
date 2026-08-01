@@ -5,12 +5,15 @@ Supports both PostgreSQL (Supabase) and SQLite for development
 
 import os
 import logging
-from typing import Optional
+from pathlib import Path
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import StaticPool
 from contextlib import contextmanager
+
+from config.migration_integrity import bind_postgresql_engine_search_path
+from config.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -28,16 +31,33 @@ def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record) -> None:
 class DatabaseManager:
     """Database connection manager with support for multiple databases"""
     
-    def __init__(self):
+    def __init__(
+        self,
+        database_url: str | None = None,
+        trusted_schema: str | None = None,
+    ):
         self.engine = None
         self.SessionLocal = None
+        self._database_url = database_url
+        self._trusted_schema = trusted_schema
         self._setup_connection()
     
     def _setup_connection(self):
         """Setup database connection based on environment"""
-        database_url = os.getenv("DATABASE_URL")
+        database_url = (
+            self._database_url
+            or os.getenv("DATABASE_URL")
+        )
+        if not database_url:
+            if settings.assurance_v2_enabled:
+                database_url = settings.database_url
+            else:
+                # V2 is opt-in. Preserve the repository manager's historical
+                # dedicated SQLite identity until the enabled startup path
+                # verifies both database authorities are equivalent.
+                database_url = f"sqlite:///{Path(__file__).parent.parent / 'fairmind.db'}"
         
-        if database_url and database_url.startswith("postgresql"):
+        if database_url.startswith("postgresql"):
             # PostgreSQL/Supabase connection
             self.engine = create_engine(
                 database_url,
@@ -45,20 +65,24 @@ class DatabaseManager:
                 pool_recycle=300,
                 echo=os.getenv("DEBUG", "false").lower() == "true"
             )
+            if settings.assurance_v2_enabled:
+                bind_postgresql_engine_search_path(
+                    self.engine,
+                    self._trusted_schema
+                    or settings.assurance_migration_schema
+                    or "",
+                )
             logger.info("Connected to PostgreSQL database")
         else:
-            # SQLite for development - use absolute path
-            import pathlib
-            db_path = pathlib.Path(__file__).parent.parent / "fairmind.db"
-            sqlite_url = database_url or f"sqlite:///{db_path}"
+            # SQLite for development; identity is checked against config startup.
             self.engine = create_engine(
-                sqlite_url,
+                database_url,
                 connect_args={"check_same_thread": False},
                 poolclass=StaticPool,
                 echo=os.getenv("DEBUG", "false").lower() == "true"
             )
             event.listen(self.engine, "connect", _enable_sqlite_foreign_keys)
-            logger.info(f"Connected to SQLite database: {db_path}")
+            logger.info("Connected to SQLite database")
         
         self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
     
@@ -105,4 +129,3 @@ def get_db():
     """Dependency for FastAPI to get database session"""
     with db_manager.get_session() as session:
         yield session
-

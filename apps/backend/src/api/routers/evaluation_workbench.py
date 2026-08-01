@@ -308,6 +308,13 @@ class SuiteExecutionResponse(StrictModel):
     failure_message: str | None = Field(alias="failureMessage")
 
 
+class LayerVerdictsResponse(StrictModel):
+    suites: dict[str, GovernanceVerdict]
+    modalities: dict[str, GovernanceVerdict]
+    components: dict[str, GovernanceVerdict]
+    risk_dimensions: dict[str, GovernanceVerdict] = Field(alias="riskDimensions")
+
+
 class EvaluationRunV2Response(StrictModel):
     id: str
     organization_id: str = Field(alias="organizationId")
@@ -320,7 +327,10 @@ class EvaluationRunV2Response(StrictModel):
     technical_status: TechnicalStatus = Field(alias="technicalStatus")
     evidence_outcome: EvidenceResultStatus = Field(alias="evidenceOutcome")
     overall_verdict: GovernanceVerdict = Field(alias="overallVerdict")
-    layer_verdicts: dict[str, GovernanceVerdict] = Field(alias="layerVerdicts")
+    layer_verdicts_schema_version: Literal["1.0.0"] = Field(
+        alias="layerVerdictsSchemaVersion"
+    )
+    layer_verdicts: LayerVerdictsResponse = Field(alias="layerVerdicts")
     suite_executions: list[SuiteExecutionResponse] = Field(alias="suiteExecutions")
     envelope_id: str = Field(alias="envelopeId")
     envelope: dict[str, Any]

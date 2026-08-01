@@ -5,7 +5,8 @@ run creates a unique empty schema and applies the production SQL chain.  The
 governance slice begins at migration 008, but exact user/organization seeding
 requires its identity/RBAC prerequisites, so 001 and corrected 007 are applied
 first.  The assurance migrations then run in the required order:
-008 -> 011 -> 012 -> 013 -> 013a.  Nothing depends on ORM-generated DDL.
+008 -> 011 -> 012 -> 013 -> 013a -> 013b. Nothing depends on ORM-generated
+DDL.
 """
 
 from __future__ import annotations
@@ -36,6 +37,9 @@ from src.application.services.evaluation_workbench_service import (
     EvaluationWorkbenchService,
 )
 from src.domain.assurance.evaluation_v2 import canonical_json, canonical_sha256
+from src.infrastructure.db.repositories.evaluation_audit_chain import (
+    verify_evaluation_audit_chain,
+)
 from src.infrastructure.db.repositories.evaluation_workbench_repository import (
     SqlAlchemyEvaluationWorkbenchUnitOfWork,
 )
@@ -65,6 +69,7 @@ ASSURANCE_MIGRATIONS = (
     "012_evaluation_runs.sql",
     "013_evaluation_assurance_contract_v2.sql",
     "013a_evaluation_binding_integrity.sql",
+    "013b_evaluation_assurance_trust_integrity.sql",
 )
 
 
@@ -137,7 +142,10 @@ def postgres_session_factory():
             cursor.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(schema_name)))
             cursor.execute(sql.SQL("SET search_path TO {}").format(sql.Identifier(schema_name)))
             for migration_name in (*IDENTITY_PREREQUISITES, *ASSURANCE_MIGRATIONS):
-                if migration_name == "013a_evaluation_binding_integrity.sql":
+                if migration_name in {
+                    "013a_evaluation_binding_integrity.sql",
+                    "013b_evaluation_assurance_trust_integrity.sql",
+                }:
                     cursor.execute(
                         "SELECT pg_catalog.set_config"
                         "('fairmind.migration_schema', %s, false)",
@@ -341,6 +349,8 @@ def _assert_valid_audit_chain(session) -> None:
         }
         assert row["event_hash"] == canonical_sha256(projection)
         previous_hash = row["event_hash"]
+
+    verify_evaluation_audit_chain(session, org_id=ORG_ID)
 
 
 def _assert_audit_event_is_database_append_only(

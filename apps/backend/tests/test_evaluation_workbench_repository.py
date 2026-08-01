@@ -61,6 +61,10 @@ BINDING_INTEGRITY_DETAIL = {
     "code": "binding_integrity_error",
     "message": "Stored assurance bindings failed integrity verification.",
 }
+AUDIT_CHAIN_INTEGRITY_DETAIL = {
+    "code": "audit_chain_integrity_error",
+    "message": "Stored evaluation audit chain failed integrity verification.",
+}
 
 
 def test_envelope_nonce_verifier_rejects_standard_base64_alphabet() -> None:
@@ -1542,7 +1546,7 @@ def test_run_verifier_rejects_incoherent_or_unbounded_suite_evidence_projections
     assert caught.value.detail() == BINDING_INTEGRITY_DETAIL
 
 
-def test_verdict_zero_accepts_valid_linked_evidence_without_deriving_run_outcome(
+def test_run_verifier_rejects_outcome_that_does_not_match_suite_aggregate(
     repository_fixture,
 ) -> None:
     session, _ = repository_fixture
@@ -1569,7 +1573,41 @@ def test_verdict_zero_accepts_valid_linked_evidence_without_deriving_run_outcome
         suite_executions=(execution,),
     )
 
-    evaluation_service_module._verify_run_record(linked, graph)
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        evaluation_service_module._verify_run_record(linked, graph)
+
+    assert caught.value.detail() == BINDING_INTEGRITY_DETAIL
+
+
+def test_suite_evidence_outcome_aggregate_uses_fail_closed_priority(
+    repository_fixture,
+) -> None:
+    session, _ = repository_fixture
+    service = _service(session)
+    _, run = _create_active_plan_and_run(service)
+    _, record, _ = _stored_run_and_graph(session, run["id"])
+    template = record.suite_executions[0]
+    priority = (
+        "pending",
+        "failed",
+        "error",
+        "unavailable",
+        "insufficient_data",
+        "unknown",
+        "passed_with_limitations",
+        "informational",
+        "passed",
+    )
+
+    for index, expected in enumerate(priority):
+        executions = tuple(
+            replace(template, evidence_result_status=outcome)
+            for outcome in reversed(priority[index:])
+        )
+        assert (
+            evaluation_service_module._aggregate_suite_evidence_outcome(executions)
+            == expected
+        )
 
 
 @pytest.mark.parametrize(
@@ -1606,7 +1644,7 @@ def test_complete_suite_evidence_links_remain_valid_across_admission_history(
     linked = replace(
         record,
         technical_status="succeeded",
-        evidence_outcome="pending",
+        evidence_outcome="failed",
         started_at=record.created_at,
         completed_at=record.updated_at,
         suite_executions=(execution,),
@@ -1648,7 +1686,7 @@ def test_accepted_suite_evidence_remains_readable_after_historical_rollover(
     historical = replace(
         record,
         technical_status="succeeded",
-        evidence_outcome="pending",
+        evidence_outcome="failed",
         started_at=record.created_at,
         completed_at=record.updated_at,
         suite_executions=(execution,),
@@ -1658,21 +1696,22 @@ def test_accepted_suite_evidence_remains_readable_after_historical_rollover(
 
 
 @pytest.mark.parametrize(
-    ("parent_status", "child_status"),
+    ("parent_status", "child_status", "is_exact_aggregate"),
     [
-        ("awaiting_evidence", "succeeded"),
-        ("queued", "succeeded"),
-        ("leased", "succeeded"),
-        ("running", "succeeded"),
-        ("failed", "running"),
-        ("timed_out", "succeeded"),
-        ("cancelled", "awaiting_evidence"),
+        ("awaiting_evidence", "succeeded", False),
+        ("queued", "succeeded", False),
+        ("leased", "succeeded", False),
+        ("running", "succeeded", False),
+        ("failed", "running", True),
+        ("timed_out", "succeeded", False),
+        ("cancelled", "awaiting_evidence", True),
     ],
 )
-def test_run_verifier_allows_child_ahead_and_abort_cleanup_state_mixtures(
+def test_run_verifier_requires_exact_outcome_during_child_ahead_and_cleanup_states(
     repository_fixture,
     parent_status: str,
     child_status: str,
+    is_exact_aggregate: bool,
 ) -> None:
     session, _ = repository_fixture
     service = _service(session)
@@ -1704,7 +1743,13 @@ def test_run_verifier_allows_child_ahead_and_abort_cleanup_state_mixtures(
         parent_changes["completed_at"] = record.updated_at
     transitional = replace(record, **parent_changes)
 
-    evaluation_service_module._verify_run_record(transitional, graph)
+    if is_exact_aggregate:
+        evaluation_service_module._verify_run_record(transitional, graph)
+    else:
+        with pytest.raises(EvaluationWorkbenchError) as caught:
+            evaluation_service_module._verify_run_record(transitional, graph)
+
+        assert caught.value.detail() == BINDING_INTEGRITY_DETAIL
 
 
 def test_succeeded_evaluator_with_failed_model_is_a_valid_forward_compatible_state(
@@ -1774,7 +1819,14 @@ def test_positive_verdict_version_allows_valid_layered_and_overall_decisions(
         evidence_outcome="failed",
         verdict_version=1,
         overall_verdict="conditional",
-        layer_verdicts=FrozenJsonObject.from_mapping({execution.id: "review"}),
+        layer_verdicts=FrozenJsonObject.from_mapping(
+            {
+                "suites": {execution.id: "review"},
+                "modalities": {},
+                "components": {},
+                "riskDimensions": {},
+            }
+        ),
         suite_executions=(execution,),
         started_at=record.created_at,
         completed_at=record.updated_at,
@@ -1795,7 +1847,14 @@ def test_positive_verdict_version_rejects_nonterminal_pending_execution(
         record,
         verdict_version=1,
         overall_verdict="conditional",
-        layer_verdicts=FrozenJsonObject.from_mapping({execution_id: "review"}),
+        layer_verdicts=FrozenJsonObject.from_mapping(
+            {
+                "suites": {execution_id: "review"},
+                "modalities": {},
+                "components": {},
+                "riskDimensions": {},
+            }
+        ),
     )
 
     with pytest.raises(EvaluationWorkbenchError) as caught:
@@ -1886,7 +1945,14 @@ def test_positive_verdict_version_requires_succeeded_verified_current_reviewed_s
         **run_changes,
         verdict_version=1,
         overall_verdict="conditional",
-        layer_verdicts=FrozenJsonObject.from_mapping({execution.id: "review"}),
+        layer_verdicts=FrozenJsonObject.from_mapping(
+            {
+                "suites": {execution.id: "review"},
+                "modalities": {},
+                "components": {},
+                "riskDimensions": {},
+            }
+        ),
         suite_executions=(execution,),
     )
 
@@ -1933,7 +1999,12 @@ def test_plan_and_run_are_bound_atomically_to_exact_suite_versions(repository_fi
     assert len(run["suiteExecutions"]) == 2
     assert len({item["id"] for item in run["suiteExecutions"]}) == 2
     assert run["layerVerdicts"] == {
-        execution["id"]: "insufficient" for execution in run["suiteExecutions"]
+        "suites": {
+            execution["id"]: "insufficient" for execution in run["suiteExecutions"]
+        },
+        "modalities": {},
+        "components": {},
+        "riskDimensions": {},
     }
     assert len(run["envelopeHash"]) == 64
     assert run["envelope"]["runId"] == run["id"]
@@ -1948,6 +2019,7 @@ def test_plan_and_run_are_bound_atomically_to_exact_suite_versions(repository_fi
         .one()
     )
     assert stored_run["contract_version"] == "2.0.0"
+    assert stored_run["layer_verdicts_schema_version"] == "1.0.0"
     assert stored_run["linked_passport_revision_id"] is None
 
 
@@ -2533,6 +2605,86 @@ def test_audit_hash_chain_recomputes_from_stored_rows(repository_fixture) -> Non
         previous_hash = event_row["event_hash"]
 
 
+@pytest.mark.parametrize("read_method", ["detail", "list"])
+@pytest.mark.parametrize(
+    "tamper",
+    [
+        "event-payload",
+        "sequence-gap",
+        "previous-hash",
+        "head-hash",
+    ],
+)
+def test_run_reads_fail_closed_when_the_audit_chain_is_tampered(
+    repository_fixture,
+    read_method: str,
+    tamper: str,
+) -> None:
+    """Catch missing runtime digest, continuity, and anchored-head verification."""
+
+    session, _ = repository_fixture
+    service = _service(session)
+    _, run = _create_active_plan_and_run(service)
+
+    if tamper == "head-hash":
+        session.execute(
+            text(
+                "DROP TRIGGER IF EXISTS "
+                "governance_evaluation_audit_chain_heads_guard_update"
+            )
+        )
+        session.execute(
+            text(
+                "UPDATE governance_evaluation_audit_chain_heads "
+                "SET last_event_hash = :tampered_hash WHERE org_id = :org_id"
+            ),
+            {"org_id": ORG, "tampered_hash": "0" * 64},
+        )
+    else:
+        session.execute(
+            text(
+                "DROP TRIGGER IF EXISTS "
+                "governance_evaluation_audit_events_no_update"
+            )
+        )
+        if tamper == "event-payload":
+            session.execute(
+                text(
+                    "UPDATE governance_evaluation_audit_events "
+                    "SET actor_id = 'tampered-actor' "
+                    "WHERE org_id = :org_id AND sequence_number = 1"
+                ),
+                {"org_id": ORG},
+            )
+        elif tamper == "sequence-gap":
+            session.execute(
+                text(
+                    "UPDATE governance_evaluation_audit_events "
+                    "SET sequence_number = 999 "
+                    "WHERE org_id = :org_id AND sequence_number = 2"
+                ),
+                {"org_id": ORG},
+            )
+        else:
+            session.execute(
+                text(
+                    "UPDATE governance_evaluation_audit_events "
+                    "SET previous_hash = :tampered_hash "
+                    "WHERE org_id = :org_id AND sequence_number = 2"
+                ),
+                {"org_id": ORG, "tampered_hash": "0" * 64},
+            )
+    session.commit()
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        if read_method == "detail":
+            service.get_run(org_id=ORG, system_id="system-a", run_id=run["id"])
+        else:
+            service.list_runs(org_id=ORG, system_id="system-a")
+
+    assert caught.value.detail() == AUDIT_CHAIN_INTEGRITY_DETAIL
+
+
 def test_live_and_expired_idempotency_records_are_handled_transactionally(
     repository_fixture,
 ) -> None:
@@ -2718,6 +2870,7 @@ def test_successful_evaluator_can_report_failed_model_without_governance_autodec
         .where(GovernanceEvaluationRun.id == run["id"])
         .values(
             technical_status="succeeded",
+            evidence_outcome="failed",
             overall_verdict="insufficient",
             started_at=completed_at,
             completed_at=completed_at,
@@ -2733,7 +2886,7 @@ def test_successful_evaluator_can_report_failed_model_without_governance_autodec
     )
     assert result is not None
     assert result["technicalStatus"] == "succeeded"
-    assert result["evidenceOutcome"] == "pending"
+    assert result["evidenceOutcome"] == "failed"
     assert result["suiteExecutions"][0]["technicalStatus"] == "succeeded"
     assert result["suiteExecutions"][0]["evidenceResultStatus"] == "failed"
     assert result["overallVerdict"] == "insufficient"

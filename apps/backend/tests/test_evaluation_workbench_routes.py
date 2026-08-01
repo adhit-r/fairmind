@@ -9,13 +9,14 @@ from types import SimpleNamespace
 import uuid
 
 import pytest
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event, func, select, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from api.main import app
+from api.routes.evaluation_workbench import router as evaluation_workbench_router
+from api.routes.governance_assurance import router as governance_assurance_router
 from config.auth import TokenData, TokenType, UserRole, get_current_active_user
 from database.connection import Base, get_db
 from database.governance_models import (
@@ -35,6 +36,18 @@ from src.domain.assurance.evaluation_v2 import canonical_json, canonical_sha256
 from tests.evaluation_workbench_sqlite import (
     allow_deliberate_check_constraint_corruption,
     install_013a_for_application_verifier_harness,
+)
+
+app = FastAPI()
+app.include_router(
+    governance_assurance_router,
+    prefix="/api/v1/ai-governance",
+    tags=["governance-assurance"],
+)
+app.include_router(
+    evaluation_workbench_router,
+    prefix="/api/v1/ai-governance",
+    tags=["evaluation-workbench-v2"],
 )
 
 ORG = str(uuid.uuid4())
@@ -343,7 +356,14 @@ def test_complete_additive_route_flow_and_three_axis_run(workbench_client) -> No
     assert body["technicalStatus"] == "awaiting_evidence"
     assert body["evidenceOutcome"] == "pending"
     assert body["overallVerdict"] == "insufficient"
+    assert body["layerVerdictsSchemaVersion"] == "1.0.0"
     assert len(body["suiteExecutions"]) == 1
+    assert body["layerVerdicts"] == {
+        "suites": {body["suiteExecutions"][0]["id"]: "insufficient"},
+        "modalities": {},
+        "components": {},
+        "riskDimensions": {},
+    }
     runs_url = f"{BASE}/systems/system-a/evaluation-v2/runs"
     assert client.get(runs_url).json()[0]["id"] == body["id"]
     assert client.get(f"{runs_url}/{body['id']}").json()["envelopeHash"] == body["envelopeHash"]
@@ -958,11 +978,21 @@ def test_openapi_exposes_strict_request_and_response_contracts() -> None:
         "technicalStatus",
         "evidenceOutcome",
         "overallVerdict",
+        "layerVerdictsSchemaVersion",
         "layerVerdicts",
         "suiteExecutions",
         "envelopeHash",
         "verdictVersion",
     }.issubset(run_response["required"])
+    assert run_response["properties"]["layerVerdictsSchemaVersion"]["const"] == "1.0.0"
+    layered_verdicts = schemas["LayerVerdictsResponse"]
+    assert layered_verdicts["additionalProperties"] is False
+    assert set(layered_verdicts["required"]) == {
+        "suites",
+        "modalities",
+        "components",
+        "riskDimensions",
+    }
     suite_execution = schemas["SuiteExecutionResponse"]
     assert run_response["properties"]["technicalStatus"]["enum"] == suite_execution[
         "properties"
@@ -1055,6 +1085,7 @@ def test_response_contract_keeps_execution_evidence_and_governance_axes_distinct
             .where(GovernanceEvaluationRun.id == run["id"])
             .values(
                 technical_status="succeeded",
+                evidence_outcome="failed",
                 overall_verdict="insufficient",
                 started_at=timestamp,
                 completed_at=timestamp,
@@ -1069,7 +1100,7 @@ def test_response_contract_keeps_execution_evidence_and_governance_axes_distinct
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["technicalStatus"] == "succeeded"
-    assert body["evidenceOutcome"] == "pending"
+    assert body["evidenceOutcome"] == "failed"
     assert body["suiteExecutions"][0]["technicalStatus"] == "succeeded"
     assert body["suiteExecutions"][0]["evidenceResultStatus"] == "failed"
     assert body["overallVerdict"] == "insufficient"

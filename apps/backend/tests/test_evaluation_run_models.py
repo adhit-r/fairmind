@@ -344,6 +344,7 @@ def test_models_expose_exact_columns_and_tenant_constraints() -> None:
         "envelope_nonce",
         "evidence_outcome",
         "verdict_version",
+        "layer_verdicts_schema_version",
     )
     assert ("id", "workspace_id", "org_id") in constraint_columns(
         GovernanceAISystem, UniqueConstraint
