@@ -19,6 +19,7 @@
 \usepackage[hidelinks]{hyperref}
 \usepackage{url}
 \usepackage{booktabs}
+\usepackage{amsmath}
 \usepackage{amsfonts}
 \usepackage{nicefrac}
 \usepackage{microtype}
@@ -262,6 +263,7 @@ provisional thresholds cannot be recalibrated here. The FLOP model uses
 placeholder constants, and confidence is not calibrated against an independent
 power reference. Artifacts are withheld for anonymity.
 
+
 \begin{ack}
 Withheld for double-blind review.
 \end{ack}
@@ -319,5 +321,73 @@ and ESRS E1, Climate change. 2023.
 
 [16] Regulating the environmental footprint of AI: the regulatory landscape.
 arXiv:2603.00068, 2026.
+
+\appendix
+\section*{Appendix A: Reproducibility}
+
+Supplementary; read at the reviewers' discretion. Every value below is taken
+from the committed study artifacts rather than restated from memory.
+
+\paragraph{Host and software.} Apple M1 Pro, arm64, macOS. Python 3.13,
+scikit-learn 1.9.0, numpy 2.4.6, torch 2.13.0, codecarbon 3.2.9. Mains power,
+other applications closed, warm-up iteration discarded.
+
+\paragraph{Tracker configuration and fallback.} \texttt{OfflineEmissionsTracker}
+with a country ISO code, sampling every 15\,s in real mode. On this host
+codecarbon logs \emph{No CPU tracking mode found. Falling back on CPU load
+mode}: Apple Silicon exposes no RAPL counters and \texttt{powermetrics}
+requires root, so its figures are a CPU-load model against a TDP constant, not
+a hardware reading. This is why the study never claims the \emph{measured}
+provenance class.
+
+\paragraph{Workloads.} Five iterations each, identical seed (1337) across
+iterations so spread isolates measurement noise rather than data variation.
+Configurations were scaled so each run spans several tracker sampling windows;
+at default sizes runs finished in 2.0--60.5\,s, below one window.
+
+\begin{center}
+\small
+\begin{tabular}{lll}
+\toprule
+Workload & Functional unit & Scaled configuration \\
+\midrule
+Classical ML training & 1000 training rows & 100k samples, 40 features, 5-fold, 200 iter, 120 repeats \\
+Transformer fine-tune & 1000 examples & $d_{model}$ 128, 2 layers, 4 heads, seq 128, batch 16, 2600 steps \\
+RAG inference & 1000 queries & 200k docs, $d$ 256, 5000 queries, batch 256, top-10, 7 repeats \\
+Batch embeddings & 10000 embeddings & 500k items, 384/512/256, batch 1024, 32 repeats \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{Analytic FLOP model.} Per workload, with \emph{placeholder}
+hardware constants of 4.0 GFLOP/s per watt and PUE 1.0:
+classical ML $= \text{repeats} \cdot \text{folds} \cdot 2 \cdot (n \cdot
+\frac{\text{folds}-1}{\text{folds}}) \cdot d \cdot \text{max\_iter}$;
+RAG $= \text{repeats} \cdot (2 n_q d_{in} d_{emb} + 2 n_q n_{docs} d_{emb})$;
+batch embeddings $= \text{repeats} \cdot (2 n d_{in} h + 2 n h d_{out})$.
+Documented simplifications (early solver convergence, activations, top-$k$
+selection) are recorded in each workload module.
+
+\paragraph{Impact-tier thresholds (provisional).} Training: low $<100$, high
+$>10^4$ kgCO2e. Fine-tune: low $<50$, high $>5000$ kgCO2e. Inference: low
+$<10^{-3}$, high $>10^{-2}$ kgCO2e per 1000 requests. LLM inference: low $<1$,
+high $>10$ kgCO2e per 1M tokens. Tiering uses location-based carbon. These
+remain provisional: benchmark-scale runs sit orders of magnitude below the low
+ceilings and cannot recalibrate them.
+
+\paragraph{Grid intensity.} Bundled placeholder table, 2023 edition, e.g.\ IND
+713 gCO2e/kWh location and market; SWE 41/30. Region and time-shift figures are
+recomputations against this table, not reruns, and must be replaced with an
+authoritative versioned source before any quantitative claim rests on them.
+
+\paragraph{Reproduce.} From the repository root, with the backend environment:
+run the harness (\texttt{--workload all --iterations 5 --seed 1337} with the
+archived override file), then replay every row through the production engine,
+then compute the agreement statistics. Functional units for the phase-tiered
+inference workloads are derived from each workload's configuration with the
+same overrides applied, so the replay reproduces without a hand-written mapping.
+Exact command lines, the override file, the machine state, and the raw run
+data are archived with the study and released with the artifact on acceptance;
+they are withheld here only to preserve anonymity.
 
 \end{document}

@@ -29,8 +29,19 @@ echo
 echo "powermetrics needs root. Only the sampler is elevated; the workloads are not."
 sudo -v
 
+# The suite runs far longer than sudo's credential timeout, so without a
+# keep-alive the stop step blocks on a fresh password prompt and the sampler
+# keeps writing until someone notices.
+sudo -n true 2>/dev/null || true
+( while true; do sudo -n true 2>/dev/null || true; sleep 60; done ) &
+SUDO_KEEPALIVE_PID=$!
+
 SAMPLER_PID=""
 cleanup() {
+  if [[ -n "${SUDO_KEEPALIVE_PID:-}" ]]; then
+    kill "${SUDO_KEEPALIVE_PID}" 2>/dev/null || true
+    SUDO_KEEPALIVE_PID=""
+  fi
   if [[ -n "${SAMPLER_PID}" ]]; then
     echo
     echo "Stopping power sampler..."
@@ -59,6 +70,7 @@ uv run python ../../research/fairmind-e/measurement/harness.py \
     --region IND \
     --seed 1337 \
     --config-overrides ../../research/fairmind-e/measurement/overrides_m1.json \
+    --gap-seconds "${GAP_SECONDS:-20}" \
     --output "${RUNS_CSV}"
 
 # Keep sampling briefly past the last run so its window is fully covered.
