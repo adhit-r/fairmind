@@ -1,0 +1,618 @@
+"""Rejected mutation audit-chain behavior for the evaluation workbench UoW."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import uuid
+
+import pytest
+from sqlalchemy import create_engine, event, func, select, update
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+
+from database.connection import Base
+from database.governance_models import (
+    GovernanceEvaluationAuditEvent,
+    GovernanceIdempotencyRecord,
+    GovernanceWorkspace,
+)
+from database.models import Organization, OrganizationMember, User
+from src.application.ports.evaluation_workbench import (
+    EvaluationWorkbenchError,
+    FrozenJsonObject,
+    MutationCommand,
+    MutationOutcome,
+)
+from src.infrastructure.db.repositories.evaluation_workbench_repository import (
+    SqlAlchemyEvaluationWorkbenchUnitOfWork,
+)
+from src.domain.assurance.evaluation_v2 import canonical_json, canonical_sha256
+from tests.evaluation_workbench_sqlite import (
+    install_013a_for_application_verifier_harness,
+)
+
+
+ORG = str(uuid.uuid4())
+OTHER_ORG = str(uuid.uuid4())
+ACTOR = str(uuid.uuid4())
+
+
+@pytest.fixture
+def audit_session():
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+
+    @event.listens_for(engine, "connect")
+    def _foreign_keys(connection, _record):
+        connection.execute("PRAGMA foreign_keys = ON")
+
+    Base.metadata.create_all(engine)
+    install_013a_for_application_verifier_harness(engine)
+    session = sessionmaker(bind=engine)()
+    actor_uuid = uuid.UUID(ACTOR)
+    session.execute(
+        User.__table__.insert().values(
+            id=actor_uuid,
+            email="audit-actor@example.test",
+            username=ACTOR,
+        )
+    )
+    for organization_id in (ORG, OTHER_ORG):
+        session.execute(
+            Organization.__table__.insert().values(
+                id=uuid.UUID(organization_id),
+                name=organization_id,
+                slug=organization_id,
+                owner_id=actor_uuid,
+            )
+        )
+        session.execute(
+            OrganizationMember.__table__.insert().values(
+                id=uuid.uuid4(),
+                org_id=uuid.UUID(organization_id),
+                user_id=actor_uuid,
+                role="admin",
+                status="active",
+            )
+        )
+    session.commit()
+    try:
+        yield session
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def _command(*, org_id: str = ORG, key: str = "rejected-key") -> MutationCommand:
+    return MutationCommand(
+        organization_id=org_id,
+        actor_id=ACTOR,
+        operation="evaluation-v2.test.mutation",
+        idempotency_key=key,
+        request_hash="a" * 64,
+    )
+
+
+def _success_outcome(*, resource_id: str = "success-resource") -> MutationOutcome:
+    return MutationOutcome(
+        body=FrozenJsonObject.from_mapping({"id": resource_id}),
+        status=201,
+        resource_type="evaluation_test_resource",
+        resource_id=resource_id,
+        audit_action="evaluation_v2.test.succeeded",
+        audit_details=FrozenJsonObject.from_mapping({"kind": "test"}),
+    )
+
+
+def _rejected_callback(
+    session,
+    *,
+    org_id: str = ORG,
+    workspace_id: str = "rolled-back-workspace",
+):
+    def callback(_now):
+        session.execute(
+            GovernanceWorkspace.__table__.insert().values(
+                id=workspace_id,
+                org_id=org_id,
+                name="Must roll back",
+            )
+        )
+        raise EvaluationWorkbenchError(
+            "test_rejected",
+            "Sensitive message must not enter the audit payload.",
+            status_code=422,
+            details={"secret": "never-audit", "submitted": {"token": "never"}},
+        )
+
+    return callback
+
+
+def _events(session, org_id: str = ORG):
+    return session.execute(
+        select(GovernanceEvaluationAuditEvent.__table__)
+        .where(GovernanceEvaluationAuditEvent.org_id == org_id)
+        .order_by(GovernanceEvaluationAuditEvent.sequence_number)
+    ).mappings().all()
+
+
+def test_rejected_callback_rolls_back_business_work_and_commits_one_redacted_event(
+    audit_session,
+) -> None:
+    unit_of_work = SqlAlchemyEvaluationWorkbenchUnitOfWork(audit_session)
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        unit_of_work.mutate(_command(), _rejected_callback(audit_session))
+
+    assert caught.value.detail() == {
+        "code": "evaluation_rejected",
+        "message": "The assurance mutation was rejected.",
+    }
+    assert caught.value.__cause__ is None
+    assert caught.value.__context__ is None
+    assert audit_session.execute(
+        select(GovernanceWorkspace.__table__).where(
+            GovernanceWorkspace.id == "rolled-back-workspace"
+        )
+    ).mappings().one_or_none() is None
+    rows = _events(audit_session)
+    assert len(rows) == 1
+    assert rows[0]["outcome"] == "rejected"
+    assert rows[0]["action"] == "evaluation_v2.mutation.rejected"
+    assert rows[0]["resource_type"] == "evaluation_idempotency_key_hash"
+    assert rows[0]["resource_id"] == hashlib.sha256(b"rejected-key").hexdigest()
+    expected_response_body = {
+        "_fairmindEvaluationMutationRejected": True,
+        "error": {
+            "code": "evaluation_rejected",
+            "message": "The assurance mutation was rejected.",
+        },
+    }
+    record = audit_session.execute(
+        select(GovernanceIdempotencyRecord.__table__)
+    ).mappings().one()
+    assert json.loads(rows[0]["details_json"]) == {
+        "schemaVersion": "evaluation-v2.rejected-mutation-audit/v1",
+        "operation": "evaluation-v2.test.mutation",
+        "requestHash": "a" * 64,
+        "claimedAt": record["created_at"],
+        "errorCode": "evaluation_rejected",
+        "statusCode": 422,
+        "responseHash": canonical_sha256(
+            {
+                "schemaVersion": "evaluation-v2.rejected-idempotency-response/v1",
+                "responseStatus": 422,
+                "responseBody": expected_response_body,
+            }
+        ),
+    }
+    assert record["status"] == "completed"
+    assert record["resource_type"] == "evaluation_rejected_audit_event"
+    assert record["resource_id"] == rows[0]["id"]
+    assert "Sensitive message" not in record["response_body_json"]
+    assert "never-audit" not in record["response_body_json"]
+    assert "token" not in record["response_body_json"]
+
+
+def test_rejected_idempotency_replay_reraises_same_error_without_second_event(
+    audit_session,
+) -> None:
+    unit_of_work = SqlAlchemyEvaluationWorkbenchUnitOfWork(audit_session)
+    command = _command()
+
+    with pytest.raises(EvaluationWorkbenchError) as first:
+        unit_of_work.mutate(command, _rejected_callback(audit_session))
+    with pytest.raises(EvaluationWorkbenchError) as replay:
+        unit_of_work.mutate(
+            command,
+            lambda _now: pytest.fail("rejected idempotency callback must not replay"),
+        )
+
+    assert replay.value.detail() == first.value.detail()
+    assert len(_events(audit_session)) == 1
+
+
+def test_expired_rejected_key_can_be_reclaimed_then_successfully_replayed(
+    audit_session,
+) -> None:
+    unit_of_work = SqlAlchemyEvaluationWorkbenchUnitOfWork(audit_session)
+    command = _command()
+    with pytest.raises(EvaluationWorkbenchError):
+        unit_of_work.mutate(command, _rejected_callback(audit_session))
+    original_claimed_at = audit_session.scalar(
+        select(GovernanceIdempotencyRecord.__table__.c.created_at)
+    )
+    audit_session.execute(
+        update(GovernanceIdempotencyRecord.__table__).values(
+            expires_at="2000-01-01T00:00:00+00:00",
+        )
+    )
+    audit_session.commit()
+
+    created = unit_of_work.mutate(command, lambda _now: _success_outcome())
+    replay = unit_of_work.mutate(
+        command,
+        lambda _now: pytest.fail("completed success must replay without callback"),
+    )
+
+    assert created.status == 201
+    assert replay.status == 201
+    assert replay.body == created.body
+    assert replay.replayed is True
+    reclaimed_at = audit_session.scalar(
+        select(GovernanceIdempotencyRecord.__table__.c.created_at)
+    )
+    assert reclaimed_at != original_claimed_at
+    assert [row["outcome"] for row in _events(audit_session)] == [
+        "rejected",
+        "success",
+    ]
+
+
+def test_tampered_rejected_idempotency_response_fails_closed_without_secret_replay(
+    audit_session,
+) -> None:
+    unit_of_work = SqlAlchemyEvaluationWorkbenchUnitOfWork(audit_session)
+    command = _command()
+    with pytest.raises(EvaluationWorkbenchError):
+        unit_of_work.mutate(command, _rejected_callback(audit_session))
+    record_id = audit_session.scalar(
+        select(GovernanceIdempotencyRecord.__table__.c.id)
+    )
+    audit_session.execute(
+        update(GovernanceIdempotencyRecord.__table__)
+        .where(GovernanceIdempotencyRecord.id == record_id)
+        .values(
+            response_body_json=canonical_json(
+                {
+                    "_fairmindEvaluationMutationRejected": True,
+                    "error": {
+                        "code": "evaluation_rejected",
+                        "message": "A different safe canonical rejection is replayed.",
+                    },
+                }
+            )
+        )
+    )
+    audit_session.commit()
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        unit_of_work.mutate(
+            command,
+            lambda _now: pytest.fail("tampered replay must not execute callback"),
+        )
+
+    assert caught.value.detail() == {
+        "code": "idempotency_response_invalid",
+        "message": "The stored idempotency response is invalid.",
+    }
+    assert "different safe canonical" not in str(caught.value)
+    assert len(_events(audit_session)) == 1
+
+
+@pytest.mark.parametrize(
+    ("column", "value"),
+    [
+        ("response_status", 409),
+        (
+            "response_body_json",
+            canonical_json(
+                {
+                    "_fairmindEvaluationMutationRejected": True,
+                    "error": {
+                        "code": "altered_safe_code",
+                        "message": "The assurance mutation was rejected.",
+                    },
+                }
+            ),
+        ),
+        (
+            "response_body_json",
+            canonical_json(
+                {
+                    "_fairmindEvaluationMutationRejected": True,
+                    "error": {
+                        "code": "evaluation_rejected",
+                        "message": "The assurance mutation was rejected.",
+                        "details": {"reason": "benign-looking private prose"},
+                    },
+                }
+            ),
+        ),
+        ("resource_type", "evaluation_test_resource"),
+        ("resource_id", str(uuid.uuid4())),
+    ],
+)
+def test_safe_semantic_rejection_tampering_cannot_replay(
+    audit_session,
+    column: str,
+    value: object,
+) -> None:
+    unit_of_work = SqlAlchemyEvaluationWorkbenchUnitOfWork(audit_session)
+    command = _command()
+    with pytest.raises(EvaluationWorkbenchError):
+        unit_of_work.mutate(command, _rejected_callback(audit_session))
+    record_id = audit_session.scalar(
+        select(GovernanceIdempotencyRecord.__table__.c.id)
+    )
+    audit_session.execute(
+        update(GovernanceIdempotencyRecord.__table__)
+        .where(GovernanceIdempotencyRecord.id == record_id)
+        .values(**{column: value})
+    )
+    audit_session.commit()
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        unit_of_work.mutate(
+            command,
+            lambda _now: pytest.fail("tampered replay must not execute callback"),
+        )
+
+    assert caught.value.code == "idempotency_response_invalid"
+    assert len(_events(audit_session)) == 1
+
+
+def test_rejected_record_cannot_be_reclassified_as_a_success_replay(audit_session) -> None:
+    unit_of_work = SqlAlchemyEvaluationWorkbenchUnitOfWork(audit_session)
+    command = _command()
+    with pytest.raises(EvaluationWorkbenchError):
+        unit_of_work.mutate(command, _rejected_callback(audit_session))
+    audit_session.execute(
+        update(GovernanceIdempotencyRecord.__table__).values(
+            response_status=201,
+            response_body_json=canonical_json({"id": "forged-success"}),
+            resource_type="evaluation_test_resource",
+            resource_id="forged-success",
+        )
+    )
+    audit_session.commit()
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        unit_of_work.mutate(
+            command,
+            lambda _now: pytest.fail("forged success must not execute callback"),
+        )
+
+    assert caught.value.code == "idempotency_response_invalid"
+    assert len(_events(audit_session)) == 1
+
+
+@pytest.mark.parametrize(
+    "stored_body",
+    [
+        None,
+        7,
+        "{",
+        (
+            '{"_fairmindEvaluationMutationRejected":true,"error":'
+            '{"code":"evaluation_rejected","code":"duplicate",'
+            '"message":"The assurance mutation was rejected."}}'
+        ),
+        '{"value":Infinity}',
+        '{"value":9007199254740992}',
+        '{"_fairmindEvaluationMutationRejected": true,"error":{}}',
+        "{" + '"value":' + "[" * 40 + "0" + "]" * 40 + "}",
+        canonical_json({"value": [0] * 4097}),
+        canonical_json(
+            {
+                "_fairmindEvaluationMutationRejected": True,
+                "error": {
+                    "code": "evaluation_rejected",
+                    "message": "x" * (33 * 1024),
+                },
+            }
+        ),
+    ],
+)
+def test_rejected_replay_rejects_malformed_or_unbounded_persisted_json(
+    audit_session,
+    stored_body: object,
+) -> None:
+    unit_of_work = SqlAlchemyEvaluationWorkbenchUnitOfWork(audit_session)
+    command = _command()
+    with pytest.raises(EvaluationWorkbenchError):
+        unit_of_work.mutate(command, _rejected_callback(audit_session))
+    audit_session.execute(
+        update(GovernanceIdempotencyRecord.__table__).values(
+            response_body_json=stored_body,
+        )
+    )
+    audit_session.commit()
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        unit_of_work.mutate(
+            command,
+            lambda _now: pytest.fail("invalid replay must not execute callback"),
+        )
+
+    assert caught.value.code == "idempotency_response_invalid"
+    assert len(_events(audit_session)) == 1
+
+
+@pytest.mark.parametrize(
+    "stored_body",
+    [
+        "[]",
+        '{"id":"first","id":"second"}',
+        '{"value":NaN}',
+        '{"id": "noncanonical"}',
+        '{"value":9007199254740992}',
+        "{" + '"value":' + "[" * 40 + "0" + "]" * 40 + "}",
+    ],
+)
+def test_completed_success_replay_rejects_invalid_persisted_json(
+    audit_session,
+    stored_body: str,
+) -> None:
+    unit_of_work = SqlAlchemyEvaluationWorkbenchUnitOfWork(audit_session)
+    command = _command(key="successful-replay")
+    unit_of_work.mutate(command, lambda _now: _success_outcome())
+    audit_session.execute(
+        update(GovernanceIdempotencyRecord.__table__).values(
+            response_body_json=stored_body,
+        )
+    )
+    audit_session.commit()
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        unit_of_work.mutate(
+            command,
+            lambda _now: pytest.fail("invalid success replay must not execute callback"),
+        )
+
+    assert caught.value.code == "idempotency_response_invalid"
+
+
+def test_completed_success_replay_rejects_invalid_status(audit_session) -> None:
+    unit_of_work = SqlAlchemyEvaluationWorkbenchUnitOfWork(audit_session)
+    command = _command(key="successful-status-replay")
+    unit_of_work.mutate(command, lambda _now: _success_outcome())
+    audit_session.execute(
+        update(GovernanceIdempotencyRecord.__table__).values(response_status=999)
+    )
+    audit_session.commit()
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        unit_of_work.mutate(
+            command,
+            lambda _now: pytest.fail("invalid status must not execute callback"),
+        )
+
+    assert caught.value.code == "idempotency_response_invalid"
+
+
+def test_success_after_rejection_extends_the_same_organization_chain(audit_session) -> None:
+    unit_of_work = SqlAlchemyEvaluationWorkbenchUnitOfWork(audit_session)
+    with pytest.raises(EvaluationWorkbenchError):
+        unit_of_work.mutate(_command(), _rejected_callback(audit_session))
+
+    unit_of_work.mutate(
+        _command(key="success-key"),
+        lambda _now: _success_outcome(),
+    )
+
+    rows = _events(audit_session)
+    assert [(row["sequence_number"], row["outcome"]) for row in rows] == [
+        (1, "rejected"),
+        (2, "success"),
+    ]
+    assert rows[1]["previous_hash"] == rows[0]["event_hash"]
+
+
+def test_rejected_events_are_organization_scoped(audit_session) -> None:
+    unit_of_work = SqlAlchemyEvaluationWorkbenchUnitOfWork(audit_session)
+    with pytest.raises(EvaluationWorkbenchError):
+        unit_of_work.mutate(_command(), _rejected_callback(audit_session))
+    with pytest.raises(EvaluationWorkbenchError):
+        unit_of_work.mutate(
+            _command(org_id=OTHER_ORG, key="other-key"),
+            _rejected_callback(
+                audit_session,
+                org_id=OTHER_ORG,
+                workspace_id="other-rolled-back",
+            ),
+        )
+
+    assert len(_events(audit_session, ORG)) == 1
+    assert len(_events(audit_session, OTHER_ORG)) == 1
+
+
+def test_rejected_audit_details_do_not_contain_error_message_or_details(audit_session) -> None:
+    unit_of_work = SqlAlchemyEvaluationWorkbenchUnitOfWork(audit_session)
+    with pytest.raises(EvaluationWorkbenchError):
+        unit_of_work.mutate(_command(), _rejected_callback(audit_session))
+
+    stored_details = _events(audit_session)[0]["details_json"]
+    assert "Sensitive message" not in stored_details
+    assert "never-audit" not in stored_details
+    assert "token" not in stored_details
+    assert "rejected-key" not in stored_details
+
+
+@pytest.mark.parametrize("failure_stage", ["append", "complete"])
+def test_rejected_audit_failure_rolls_back_everything_and_surfaces_persistence_error(
+    audit_session, monkeypatch, failure_stage: str
+) -> None:
+    unit_of_work = SqlAlchemyEvaluationWorkbenchUnitOfWork(audit_session)
+
+    def fail_rejection_transaction(**_kwargs):
+        raise RuntimeError("audit unavailable")
+
+    method = (
+        "_append_rejected_audit"
+        if failure_stage == "append"
+        else "_complete_rejected_idempotency"
+    )
+    monkeypatch.setattr(
+        unit_of_work,
+        method,
+        fail_rejection_transaction,
+        raising=False,
+    )
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        unit_of_work.mutate(_command(), _rejected_callback(audit_session))
+
+    assert caught.value.code == "evaluation_persistence_failed"
+    assert audit_session.execute(
+        select(GovernanceWorkspace.__table__).where(
+            GovernanceWorkspace.id == "rolled-back-workspace"
+        )
+    ).mappings().one_or_none() is None
+    assert audit_session.scalar(select(func.count()).select_from(GovernanceIdempotencyRecord)) == 0
+    assert audit_session.scalar(select(func.count()).select_from(GovernanceEvaluationAuditEvent)) == 0
+
+
+def test_unexpected_callback_failure_rolls_back_without_mislabeling_a_rejection(
+    audit_session,
+) -> None:
+    unit_of_work = SqlAlchemyEvaluationWorkbenchUnitOfWork(audit_session)
+
+    def fail_unexpectedly(_now):
+        audit_session.execute(
+            GovernanceWorkspace.__table__.insert().values(
+                id="unexpected-rolled-back-workspace",
+                org_id=ORG,
+                name="Must roll back",
+            )
+        )
+        raise RuntimeError("sk-proj-internal-database-detail")
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        unit_of_work.mutate(_command(), fail_unexpectedly)
+
+    assert caught.value.detail() == {
+        "code": "evaluation_persistence_failed",
+        "message": "The assurance workflow could not be persisted atomically.",
+    }
+    assert "sk-proj-internal-database-detail" not in str(caught.value)
+    assert audit_session.execute(
+        select(GovernanceWorkspace.__table__).where(
+            GovernanceWorkspace.id == "unexpected-rolled-back-workspace"
+        )
+    ).mappings().one_or_none() is None
+    assert audit_session.scalar(select(func.count()).select_from(GovernanceIdempotencyRecord)) == 0
+    assert audit_session.scalar(select(func.count()).select_from(GovernanceEvaluationAuditEvent)) == 0
+
+
+def test_tampered_chain_blocks_the_next_append(audit_session) -> None:
+    unit_of_work = SqlAlchemyEvaluationWorkbenchUnitOfWork(audit_session)
+    unit_of_work.mutate(_command(key="first"), lambda _now: _success_outcome())
+    audit_session.execute(
+        update(GovernanceEvaluationAuditEvent.__table__)
+        .where(GovernanceEvaluationAuditEvent.org_id == ORG)
+        .values(details_json='{"tampered":true}')
+    )
+    audit_session.commit()
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        unit_of_work.mutate(
+            _command(key="second"),
+            lambda _now: _success_outcome(resource_id="second-resource"),
+        )
+
+    assert caught.value.code == "evaluation_persistence_failed"
+    assert len(_events(audit_session)) == 1

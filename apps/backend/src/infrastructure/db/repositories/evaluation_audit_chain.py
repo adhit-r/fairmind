@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+import uuid
+from dataclasses import dataclass
+from typing import Any, Mapping
 
-from sqlalchemy import literal, select, union_all
+from sqlalchemy import insert, literal, select, union_all
 from sqlalchemy.orm import Session
 
 from database.governance_models import (
@@ -17,6 +19,29 @@ from src.domain.assurance.evaluation_v2 import canonical_json, canonical_sha256
 
 class EvaluationAuditChainIntegrityError(RuntimeError):
     """Stored evaluation audit history is not a valid anchored hash chain."""
+
+
+@dataclass(frozen=True, slots=True)
+class EvaluationAuditAppend:
+    """Canonical, already-authorized event facts for one chain append."""
+
+    organization_id: str
+    actor_id: str
+    action: str
+    outcome: str
+    resource_type: str
+    resource_id: str
+    details: Mapping[str, object]
+    created_at: str
+
+
+@dataclass(frozen=True, slots=True)
+class EvaluationAuditReceipt:
+    """Integrity identity of an event appended in the caller's transaction."""
+
+    event_id: str
+    event_hash: str
+    sequence_number: int
 
 
 def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -163,3 +188,70 @@ def verify_evaluation_audit_chain(session: Session, *, org_id: str) -> None:
         ValueError,
     ) as error:
         raise EvaluationAuditChainIntegrityError from error
+
+
+def append_evaluation_audit_event(
+    session: Session,
+    *,
+    event: EvaluationAuditAppend,
+) -> EvaluationAuditReceipt:
+    """Verify and append exactly one event within the caller's transaction.
+
+    The migration-owned trigger is authoritative for advancing the persisted
+    head.  This helper rebuilds the same event projection used by the verifier
+    and deliberately does not update that head itself.
+    """
+
+    verify_evaluation_audit_chain(session, org_id=event.organization_id)
+    events = GovernanceEvaluationAuditEvent.__table__
+    previous = (
+        session.execute(
+            select(events.c.sequence_number, events.c.event_hash)
+            .where(events.c.org_id == event.organization_id)
+            .order_by(events.c.sequence_number.desc())
+            .limit(1)
+            .with_for_update()
+        )
+        .mappings()
+        .one_or_none()
+    )
+    sequence = int(previous["sequence_number"]) + 1 if previous else 1
+    previous_hash = previous["event_hash"] if previous else None
+    event_id = str(uuid.uuid4())
+    details_json = canonical_json(dict(event.details))
+    details = _canonical_details(details_json)
+    projection = {
+        "eventId": event_id,
+        "organizationId": event.organization_id,
+        "sequenceNumber": sequence,
+        "actorId": event.actor_id,
+        "action": event.action,
+        "outcome": event.outcome,
+        "resourceType": event.resource_type,
+        "resourceId": event.resource_id,
+        "details": details,
+        "previousHash": previous_hash,
+        "createdAt": event.created_at,
+    }
+    event_hash = canonical_sha256(projection)
+    session.execute(
+        insert(events).values(
+            id=event_id,
+            org_id=event.organization_id,
+            sequence_number=sequence,
+            actor_id=event.actor_id,
+            action=event.action,
+            outcome=event.outcome,
+            resource_type=event.resource_type,
+            resource_id=event.resource_id,
+            details_json=details_json,
+            previous_hash=previous_hash,
+            event_hash=event_hash,
+            created_at=event.created_at,
+        )
+    )
+    return EvaluationAuditReceipt(
+        event_id=event_id,
+        event_hash=event_hash,
+        sequence_number=sequence,
+    )

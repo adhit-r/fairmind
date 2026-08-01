@@ -831,10 +831,10 @@ def test_create_run_rejects_tampered_persistence_record_and_rolls_back(
     assert session.scalar(select(func.count()).select_from(GovernanceEvaluationRun)) == 0
     assert session.scalar(
         select(func.count()).select_from(GovernanceIdempotencyRecord)
-    ) == idempotency_before
+    ) == idempotency_before + 1
     assert session.scalar(
         select(func.count()).select_from(GovernanceEvaluationAuditEvent)
-    ) == audit_before
+    ) == audit_before + 1
 
 
 @pytest.mark.parametrize("read_method", ["detail", "list"])
@@ -2144,10 +2144,10 @@ def test_plan_schema_complexity_is_rejected_before_plan_persistence(
     ) == 0
     assert session.scalar(
         select(func.count()).select_from(GovernanceIdempotencyRecord.__table__)
-    ) == idempotency_before
+    ) == idempotency_before + 1
     assert session.scalar(
         select(func.count()).select_from(GovernanceEvaluationAuditEvent.__table__)
-    ) == audit_before
+    ) == audit_before + 1
 
 
 def test_envelope_size_preflight_blocks_activation_and_run_before_persistence(
@@ -2245,7 +2245,7 @@ def test_envelope_size_preflight_blocks_activation_and_run_before_persistence(
     ) == "draft"
     assert session.scalar(
         select(func.count()).select_from(GovernanceIdempotencyRecord)
-    ) == idempotency_before_activation
+    ) == idempotency_before_activation + 1
 
     session.execute(
         GovernanceEvaluationPlan.__table__.update()
@@ -2277,7 +2277,7 @@ def test_envelope_size_preflight_blocks_activation_and_run_before_persistence(
     )
     assert session.scalar(
         select(func.count()).select_from(GovernanceIdempotencyRecord)
-    ) == idempotency_before_run
+    ) == idempotency_before_run + 1
 
 
 def test_actual_envelope_overflow_returns_compact_409_without_persistence(
@@ -2341,7 +2341,7 @@ def test_actual_envelope_overflow_returns_compact_409_without_persistence(
         session.scalar(
             select(func.count()).select_from(GovernanceIdempotencyRecord.__table__)
         )
-        == idempotency_before
+        == idempotency_before + 1
     )
 
 
