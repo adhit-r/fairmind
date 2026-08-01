@@ -1,5 +1,15 @@
 # Gating AI Deployment on Environmental Evidence Quality
 
+## Current source of truth
+
+Use `submission.tex` and `submission.pdf` for the CCAI submission. They are
+the official-template, double-blind, measured-result version. `paper.tex` and
+`paper.pdf` are legacy pre-port artifacts and should not be edited, submitted,
+or cited.
+
+The prose snapshot below is retained only as pre-port history; it still has
+pre-data language and is superseded by `submission.tex`.
+
 Draft v0.1 for Tackling Climate Change with Machine Learning @ NeurIPS 2026
 (Papers track, 4 pages excluding references, non-archival). Port to the
 official CCAI template (NeurIPS-based) before submission; deadline 2026-08-29

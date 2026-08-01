@@ -184,3 +184,8 @@ Demo inputs live in `analysis/fixtures/` and are labeled SYNTHETIC in both filen
 ## Submission Materials
 
 `paper/PRIOR_ART_AND_VENUES.md` holds the live-verified (2026-07-30) prior-art citation ledger with per-work differentiation lines, the regulatory-framing evidence, and the verified submission calendar (CCAI workshop 2026-08-29; FAccT 2027 full paper 2026-11-03; ICT4S 2027 estimated late January 2027).
+
+For the CCAI paper, `paper/ccai2026/submission.tex` and
+`paper/ccai2026/submission.pdf` are the source of truth. The older
+`paper/ccai2026/paper.tex` and `paper/ccai2026/paper.pdf` are pre-port legacy
+artifacts and should not be edited, submitted, or cited.
