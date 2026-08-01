@@ -11,14 +11,14 @@ DDL.
 
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
 import hashlib
 import json
 import os
+import uuid
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 from pathlib import Path
 from threading import Barrier
-import uuid
 
 import pytest
 from sqlalchemy import create_engine, func, select, text
@@ -91,9 +91,7 @@ def _target_payload() -> dict:
         "connectorBindingId": "postgres-connector",
         "manifest": {
             "schemaVersion": "2.0.0",
-            "inputs": {
-                "scenario_set": {"kind": "content_digest", "sha256": "c" * 64}
-            },
+            "inputs": {"scenario_set": {"kind": "content_digest", "sha256": "c" * 64}},
         },
     }
 
@@ -114,9 +112,7 @@ def _suite_payload(name: str) -> dict:
         "configurationSchema": {
             "type": "object",
             "required": ["threshold"],
-            "properties": {
-                "threshold": {"type": "number", "minimum": 0, "maximum": 1}
-            },
+            "properties": {"threshold": {"type": "number", "minimum": 0, "maximum": 1}},
             "additionalProperties": False,
         },
         "configurationDefaults": {"threshold": 0.5},
@@ -147,8 +143,7 @@ def postgres_session_factory():
                     "013b_evaluation_assurance_trust_integrity.sql",
                 }:
                     cursor.execute(
-                        "SELECT pg_catalog.set_config"
-                        "('fairmind.migration_schema', %s, false)",
+                        "SELECT pg_catalog.set_config" "('fairmind.migration_schema', %s, false)",
                         (schema_name,),
                     )
                 cursor.execute((MIGRATIONS / migration_name).read_text(encoding="utf-8"))
@@ -524,7 +519,15 @@ def test_twenty_postgres_sessions_create_exactly_one_idempotent_run(
         assert idempotency["response_status"] == 201
         assert idempotency["resource_type"] == "evaluation_run"
         assert idempotency["resource_id"] == run_id
-        assert json.loads(idempotency["response_body_json"])["id"] == run_id
+        stored_response = json.loads(idempotency["response_body_json"])
+        assert set(stored_response) == {
+            "_fairmindEvaluationMutationSucceeded",
+            "auditEventId",
+            "responseBody",
+        }
+        assert stored_response["_fairmindEvaluationMutationSucceeded"] is True
+        assert stored_response["responseBody"] == results[0].body
+        assert stored_response["responseBody"]["id"] == run_id
 
         _assert_valid_audit_chain(verification_session)
         audit_rows = (
@@ -536,8 +539,48 @@ def test_twenty_postgres_sessions_create_exactly_one_idempotent_run(
             .mappings()
             .all()
         )
-        audit_event_id = audit_rows[0]["id"]
-        audit_event_hash = audit_rows[0]["event_hash"]
+        run_audit_event = next(
+            row
+            for row in audit_rows
+            if row["action"] == "evaluation_v2.run.created" and row["resource_id"] == run_id
+        )
+        assert stored_response["auditEventId"] == run_audit_event["id"]
+        binding_wrapper = json.loads(run_audit_event["details_json"])
+        assert set(binding_wrapper) == {"_fairmindEvaluationSuccessBinding"}
+        binding = binding_wrapper["_fairmindEvaluationSuccessBinding"]
+        assert binding == {
+            "schemaVersion": "evaluation-v2.success-idempotency-audit/v1",
+            "idempotencyRecordId": idempotency["id"],
+            "idempotencyKeyHash": key_hash,
+            "operation": RUN_OPERATION,
+            "requestHash": idempotency["request_hash"],
+            "claimedAt": idempotency["created_at"],
+            "expiresAt": idempotency["expires_at"],
+            "auditEventId": run_audit_event["id"],
+            "resourceType": "evaluation_run",
+            "resourceId": run_id,
+            "responseStatus": 201,
+            "responseHash": canonical_sha256(
+                {
+                    "schemaVersion": "evaluation-v2.success-idempotency-response/v1",
+                    "auditEventId": run_audit_event["id"],
+                    "claimedAt": idempotency["created_at"],
+                    "expiresAt": idempotency["expires_at"],
+                    "resourceType": "evaluation_run",
+                    "resourceId": run_id,
+                    "responseStatus": 201,
+                    "responseBody": stored_response["responseBody"],
+                }
+            ),
+            "action": "evaluation_v2.run.created",
+            "domainDetails": {
+                "planId": plan_id,
+                "envelopeHash": next(iter(envelope_hashes)),
+                "suiteExecutionCount": SUITE_COUNT,
+            },
+        }
+        audit_event_id = run_audit_event["id"]
+        audit_event_hash = run_audit_event["event_hash"]
         audit_event_count = len(audit_rows)
     finally:
         verification_session.close()

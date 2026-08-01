@@ -33,6 +33,7 @@ class EvaluationAuditAppend:
     resource_id: str
     details: Mapping[str, object]
     created_at: str
+    event_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -217,7 +218,15 @@ def append_evaluation_audit_event(
     )
     sequence = int(previous["sequence_number"]) + 1 if previous else 1
     previous_hash = previous["event_hash"] if previous else None
-    event_id = str(uuid.uuid4())
+    if event.event_id is None:
+        event_id = str(uuid.uuid4())
+    else:
+        try:
+            if str(uuid.UUID(event.event_id)) != event.event_id:
+                raise ValueError("audit event ID is not canonical")
+        except (AttributeError, TypeError, ValueError):
+            raise ValueError("audit event ID is invalid") from None
+        event_id = event.event_id
     details_json = canonical_json(dict(event.details))
     details = _canonical_details(details_json)
     projection = {

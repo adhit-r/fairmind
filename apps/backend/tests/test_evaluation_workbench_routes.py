@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import base64
-from datetime import datetime, timezone
 import json
-from types import SimpleNamespace
 import uuid
+from datetime import datetime, timezone
+from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI, HTTPException
@@ -221,9 +221,7 @@ def _target_payload() -> dict:
         "subjectDigest": "b" * 64,
         "manifest": {
             "schemaVersion": "2.0.0",
-            "inputs": {
-                "scenario_set": {"kind": "content_digest", "sha256": "c" * 64}
-            },
+            "inputs": {"scenario_set": {"kind": "content_digest", "sha256": "c" * 64}},
         },
     }
 
@@ -719,15 +717,22 @@ def test_unsafe_neutral_configuration_values_have_no_mutation_side_effects(
     session_iterator = app.dependency_overrides[get_db]()
     session = next(session_iterator)
     try:
-        assert session.scalar(
-            select(func.count()).select_from(GovernanceEvaluationSuiteVersion.__table__)
-        ) == 0
-        assert session.scalar(
-            select(func.count()).select_from(GovernanceIdempotencyRecord.__table__)
-        ) == 0
-        assert session.scalar(
-            select(func.count()).select_from(GovernanceEvaluationAuditEvent.__table__)
-        ) == 0
+        assert (
+            session.scalar(
+                select(func.count()).select_from(GovernanceEvaluationSuiteVersion.__table__)
+            )
+            == 0
+        )
+        assert (
+            session.scalar(select(func.count()).select_from(GovernanceIdempotencyRecord.__table__))
+            == 0
+        )
+        assert (
+            session.scalar(
+                select(func.count()).select_from(GovernanceEvaluationAuditEvent.__table__)
+            )
+            == 0
+        )
     finally:
         session_iterator.close()
 
@@ -778,9 +783,7 @@ def test_json_structural_cardinality_accepts_exact_limits_and_rejects_plus_one()
     exact_members = {f"k{index}": 0 for index in range(MAX_JSON_OBJECT_MEMBERS)}
     _validate_json_structure(exact_members)
     with pytest.raises(ValueError, match="request JSON has too many object members"):
-        _validate_json_structure(
-            {f"k{index}": 0 for index in range(MAX_JSON_OBJECT_MEMBERS + 1)}
-        )
+        _validate_json_structure({f"k{index}": 0 for index in range(MAX_JSON_OBJECT_MEMBERS + 1)})
 
     _validate_json_structure([0] * (MAX_JSON_NODES - 1))
     with pytest.raises(ValueError, match="request JSON has too many nodes"):
@@ -819,15 +822,22 @@ def test_fifty_thousand_unknown_keys_return_one_small_non_reflective_error(
     session_iterator = app.dependency_overrides[get_db]()
     session = next(session_iterator)
     try:
-        assert session.scalar(
-            select(func.count()).select_from(GovernanceEvaluationTargetVersion.__table__)
-        ) == 0
-        assert session.scalar(
-            select(func.count()).select_from(GovernanceIdempotencyRecord.__table__)
-        ) == 0
-        assert session.scalar(
-            select(func.count()).select_from(GovernanceEvaluationAuditEvent.__table__)
-        ) == 0
+        assert (
+            session.scalar(
+                select(func.count()).select_from(GovernanceEvaluationTargetVersion.__table__)
+            )
+            == 0
+        )
+        assert (
+            session.scalar(select(func.count()).select_from(GovernanceIdempotencyRecord.__table__))
+            == 0
+        )
+        assert (
+            session.scalar(
+                select(func.count()).select_from(GovernanceEvaluationAuditEvent.__table__)
+            )
+            == 0
+        )
     finally:
         session_iterator.close()
 
@@ -915,15 +925,22 @@ def test_unsafe_configuration_schema_rejection_has_no_mutation_side_effects(
     session_iterator = app.dependency_overrides[get_db]()
     session = next(session_iterator)
     try:
-        assert session.scalar(
-            select(func.count()).select_from(GovernanceEvaluationSuiteVersion.__table__)
-        ) == 0
-        assert session.scalar(
-            select(func.count()).select_from(GovernanceIdempotencyRecord.__table__)
-        ) == 0
-        assert session.scalar(
-            select(func.count()).select_from(GovernanceEvaluationAuditEvent.__table__)
-        ) == 0
+        assert (
+            session.scalar(
+                select(func.count()).select_from(GovernanceEvaluationSuiteVersion.__table__)
+            )
+            == 0
+        )
+        assert (
+            session.scalar(select(func.count()).select_from(GovernanceIdempotencyRecord.__table__))
+            == 0
+        )
+        assert (
+            session.scalar(
+                select(func.count()).select_from(GovernanceEvaluationAuditEvent.__table__)
+            )
+            == 0
+        )
     finally:
         session_iterator.close()
 
@@ -994,9 +1011,10 @@ def test_openapi_exposes_strict_request_and_response_contracts() -> None:
         "riskDimensions",
     }
     suite_execution = schemas["SuiteExecutionResponse"]
-    assert run_response["properties"]["technicalStatus"]["enum"] == suite_execution[
-        "properties"
-    ]["technicalStatus"]["enum"]
+    assert (
+        run_response["properties"]["technicalStatus"]["enum"]
+        == suite_execution["properties"]["technicalStatus"]["enum"]
+    )
     assert suite_execution["properties"]["admissionStatus"]["enum"] == [
         "pending",
         "verified",
@@ -1168,9 +1186,7 @@ def test_privileged_suite_projection_corruption_returns_generic_409(
         elif corruption == "malformed-result-json":
             execution_update = {"result_summary_json": '{"FM_SENTINEL":'}
         elif corruption == "orphan-result-summary":
-            execution_update = {
-                "result_summary_json": canonical_json({"status": "complete"})
-            }
+            execution_update = {"result_summary_json": canonical_json({"status": "complete"})}
         else:
             execution_update = {
                 "technical_status": "succeeded",
@@ -1262,9 +1278,7 @@ def test_suite_integrity_failure_is_a_generic_409(
         session_iterator.close()
 
     suites_url = f"{BASE}/evaluation-v2/suite-versions"
-    response = client.get(
-        f"{suites_url}/{suite['id']}" if read_method == "detail" else suites_url
-    )
+    response = client.get(f"{suites_url}/{suite['id']}" if read_method == "detail" else suites_url)
 
     assert response.status_code == 409
     assert response.json() == {"detail": BINDING_INTEGRITY_DETAIL}
@@ -1281,9 +1295,7 @@ def test_run_nonce_witness_mismatch_is_a_generic_409(workbench_client) -> None:
     session = next(session_iterator)
     try:
         runs = GovernanceEvaluationRun.__table__
-        stored_nonce = session.scalar(
-            select(runs.c.envelope_nonce).where(runs.c.id == run["id"])
-        )
+        stored_nonce = session.scalar(select(runs.c.envelope_nonce).where(runs.c.id == run["id"]))
         assert stored_nonce != rebound_nonce
         with allow_deliberate_check_constraint_corruption(session):
             session.execute(
@@ -1298,9 +1310,7 @@ def test_run_nonce_witness_mismatch_is_a_generic_409(workbench_client) -> None:
     finally:
         session_iterator.close()
 
-    response = client.get(
-        f"{BASE}/systems/system-a/evaluation-v2/runs/{run['id']}"
-    )
+    response = client.get(f"{BASE}/systems/system-a/evaluation-v2/runs/{run['id']}")
 
     assert response.status_code == 409
     assert response.json() == {"detail": BINDING_INTEGRITY_DETAIL}
@@ -1313,11 +1323,15 @@ def test_noncanonical_target_binding_json_is_a_generic_409(workbench_client) -> 
     session_iterator = app.dependency_overrides[get_db]()
     session = next(session_iterator)
     try:
-        target = session.execute(
-            select(GovernanceEvaluationTargetVersion.__table__).where(
-                GovernanceEvaluationTargetVersion.id == target_id
+        target = (
+            session.execute(
+                select(GovernanceEvaluationTargetVersion.__table__).where(
+                    GovernanceEvaluationTargetVersion.id == target_id
+                )
             )
-        ).mappings().one()
+            .mappings()
+            .one()
+        )
         session.execute(
             GovernanceEvaluationTargetVersion.__table__.update()
             .where(GovernanceEvaluationTargetVersion.id == target_id)
@@ -1327,9 +1341,7 @@ def test_noncanonical_target_binding_json_is_a_generic_409(workbench_client) -> 
     finally:
         session_iterator.close()
 
-    response = client.get(
-        f"{BASE}/systems/system-a/evaluation-v2/target-versions/{target_id}"
-    )
+    response = client.get(f"{BASE}/systems/system-a/evaluation-v2/target-versions/{target_id}")
 
     assert response.status_code == 409
     assert response.json() == {"detail": BINDING_INTEGRITY_DETAIL}
@@ -1350,15 +1362,13 @@ def test_incoherent_run_state_is_a_generic_409(workbench_client) -> None:
     finally:
         session_iterator.close()
 
-    response = client.get(
-        f"{BASE}/systems/system-a/evaluation-v2/runs/{run['id']}"
-    )
+    response = client.get(f"{BASE}/systems/system-a/evaluation-v2/runs/{run['id']}")
 
     assert response.status_code == 409
     assert response.json() == {"detail": BINDING_INTEGRITY_DETAIL}
 
 
-def test_already_active_plan_is_a_no_audit_noop_before_dependency_preflight(
+def test_already_active_plan_gets_one_bound_noop_before_dependency_preflight(
     workbench_client,
 ) -> None:
     client, _ = workbench_client
@@ -1390,6 +1400,11 @@ def test_already_active_plan_is_a_no_audit_noop_before_dependency_preflight(
         audit_before = session.scalar(
             select(func.count()).select_from(GovernanceEvaluationAuditEvent.__table__)
         )
+        activation_audit_before = session.scalar(
+            select(func.count())
+            .select_from(GovernanceEvaluationAuditEvent.__table__)
+            .where(GovernanceEvaluationAuditEvent.action == "evaluation_v2.plan.activated")
+        )
         session.execute(
             GovernanceEvaluationSuiteVersion.__table__.update()
             .where(GovernanceEvaluationSuiteVersion.id == suite["id"])
@@ -1409,9 +1424,56 @@ def test_already_active_plan_is_a_no_audit_noop_before_dependency_preflight(
     session_iterator = app.dependency_overrides[get_db]()
     session = next(session_iterator)
     try:
-        assert session.scalar(
-            select(func.count()).select_from(GovernanceEvaluationAuditEvent.__table__)
-        ) == audit_before
+        assert (
+            session.scalar(
+                select(func.count()).select_from(GovernanceEvaluationAuditEvent.__table__)
+            )
+            == audit_before + 1
+        )
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(GovernanceEvaluationAuditEvent.__table__)
+                .where(GovernanceEvaluationAuditEvent.action == "evaluation_v2.plan.activated")
+            )
+            == activation_audit_before
+        )
+        noop_event = (
+            session.execute(
+                select(GovernanceEvaluationAuditEvent.__table__)
+                .where(GovernanceEvaluationAuditEvent.action == "evaluation_v2.mutation.noop")
+                .order_by(GovernanceEvaluationAuditEvent.sequence_number.desc())
+            )
+            .mappings()
+            .one()
+        )
+        assert noop_event["outcome"] == "success"
+        assert noop_event["resource_type"] == "evaluation_plan"
+        assert noop_event["resource_id"] == created.json()["id"]
+        success_binding = json.loads(noop_event["details_json"])[
+            "_fairmindEvaluationSuccessBinding"
+        ]
+        assert success_binding["auditEventId"] == noop_event["id"]
+        assert success_binding["action"] == "evaluation_v2.mutation.noop"
+    finally:
+        session_iterator.close()
+
+    exact_replay = client.post(
+        activate_url,
+        headers=_headers("active-noop-after-drift"),
+    )
+    assert exact_replay.status_code == 200, exact_replay.text
+    assert exact_replay.json() == replayed_activation.json()
+
+    session_iterator = app.dependency_overrides[get_db]()
+    session = next(session_iterator)
+    try:
+        assert (
+            session.scalar(
+                select(func.count()).select_from(GovernanceEvaluationAuditEvent.__table__)
+            )
+            == audit_before + 1
+        )
     finally:
         session_iterator.close()
 

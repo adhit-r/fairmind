@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from contextlib import nullcontext
-from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 import threading
-from typing import Any, Callable, Mapping
 import uuid
+from contextlib import nullcontext
+from datetime import datetime, timedelta, timezone
+from typing import Any, Callable, Mapping
 
 from sqlalchemy import insert, select, text, update
 from sqlalchemy.exc import IntegrityError
@@ -28,8 +28,8 @@ from database.governance_models import (
     GovernanceWorkspace,
 )
 from src.application.ports.evaluation_workbench import (
-    FrozenJsonObject,
     EvaluationWorkbenchError,
+    FrozenJsonObject,
     MutationCommand,
     MutationOutcome,
     MutationResult,
@@ -49,7 +49,6 @@ from src.application.ports.evaluation_workbench import (
     TrustPolicyBindingRecord,
 )
 from src.domain.assurance.evaluation_v2 import (
-    AssuranceContractValidationError,
     CONTRACT_VERSION,
     LAYER_VERDICTS_SCHEMA_VERSION,
     MAX_BUDGETS_BYTES,
@@ -62,6 +61,7 @@ from src.domain.assurance.evaluation_v2 import (
     MAX_SUITE_LIMITATIONS_BYTES,
     MAX_SUITE_MANIFEST_BYTES,
     MAX_TARGET_MANIFEST_BYTES,
+    AssuranceContractValidationError,
     canonical_json,
     canonical_sha256,
     reject_sensitive_keys,
@@ -77,25 +77,33 @@ from src.infrastructure.db.repositories.evaluation_audit_chain import (
 
 _SQLITE_WRITE_LOCK = threading.RLock()
 _BINDING_INTEGRITY_MESSAGE = "Stored assurance bindings failed integrity verification."
-_AUDIT_CHAIN_INTEGRITY_MESSAGE = (
-    "Stored evaluation audit chain failed integrity verification."
-)
+_AUDIT_CHAIN_INTEGRITY_MESSAGE = "Stored evaluation audit chain failed integrity verification."
 _REJECTED_IDEMPOTENCY_MARKER = "_fairmindEvaluationMutationRejected"
-_REJECTED_AUDIT_SCHEMA_VERSION = "evaluation-v2.rejected-mutation-audit/v1"
-_REJECTED_RESPONSE_SCHEMA_VERSION = "evaluation-v2.rejected-idempotency-response/v1"
+_REJECTED_AUDIT_SCHEMA_VERSION = "evaluation-v2.rejected-mutation-audit/v2"
+_REJECTED_RESPONSE_SCHEMA_VERSION = "evaluation-v2.rejected-idempotency-response/v2"
 _REJECTED_AUDIT_ACTION = "evaluation_v2.mutation.rejected"
 _REJECTED_AUDIT_RESOURCE_TYPE = "evaluation_idempotency_key_hash"
 _REJECTED_IDEMPOTENCY_RESOURCE_TYPE = "evaluation_rejected_audit_event"
+_SUCCESS_IDEMPOTENCY_MARKER = "_fairmindEvaluationMutationSucceeded"
+_SUCCESS_AUDIT_BINDING_KEY = "_fairmindEvaluationSuccessBinding"
+_SUCCESS_AUDIT_SCHEMA_VERSION = "evaluation-v2.success-idempotency-audit/v1"
+_SUCCESS_RESPONSE_SCHEMA_VERSION = "evaluation-v2.success-idempotency-response/v1"
+_SUCCESS_NOOP_AUDIT_ACTION = "evaluation_v2.mutation.noop"
 _GENERIC_REJECTION_CODE = "evaluation_rejected"
 _GENERIC_REJECTION_MESSAGE = "The assurance mutation was rejected."
 _MAX_REJECTION_RESPONSE_BYTES = 32 * 1024
-_MAX_IDEMPOTENCY_RESPONSE_BYTES = MAX_MUTATION_DETAIL_BODY_BYTES
+_MAX_IDEMPOTENCY_RESPONSE_BODY_BYTES = MAX_MUTATION_DETAIL_BODY_BYTES
+_MAX_IDEMPOTENCY_RESPONSE_BYTES = _MAX_IDEMPOTENCY_RESPONSE_BODY_BYTES + 4 * 1024
 _MAX_LAYER_VERDICTS_BYTES = 8 * 1024
 _MAX_SUITE_RESULT_SUMMARY_BYTES = 64 * 1024
 _MAX_BINDING_LIST_BYTES = 8 * 1024
 _MAX_TRUST_POLICY_BYTES = 64 * 1024
 _MAX_STORED_JSON_DEPTH = 32
 _MAX_STORED_JSON_ITEMS = MAX_SAFE_ARRAY_ITEMS
+_MAX_IDEMPOTENCY_RESPONSE_ITEMS = (
+    (_MAX_IDEMPOTENCY_RESPONSE_BYTES // 2) + _MAX_STORED_JSON_DEPTH + 16
+)
+_IDEMPOTENCY_RETENTION = timedelta(days=30)
 
 
 def _now() -> datetime:
@@ -227,7 +235,13 @@ def _reject_json_constant(_value: str) -> None:
     raise ValueError("non-finite JSON number")
 
 
-def _validate_stored_json_shape(value: object) -> None:
+def _validate_stored_json_shape(
+    value: object,
+    *,
+    maximum_items: int = _MAX_STORED_JSON_ITEMS,
+) -> None:
+    if not isinstance(maximum_items, int) or isinstance(maximum_items, bool) or maximum_items < 1:
+        raise ValueError("stored JSON item limit is invalid")
     pending: list[tuple[object, int]] = [(value, 1)]
     item_count = -1
     while pending:
@@ -235,7 +249,7 @@ def _validate_stored_json_shape(value: object) -> None:
         if depth > _MAX_STORED_JSON_DEPTH:
             raise ValueError("stored JSON exceeds its depth limit")
         item_count += 1
-        if item_count > _MAX_STORED_JSON_ITEMS:
+        if item_count > maximum_items:
             raise ValueError("stored JSON exceeds its aggregate item limit")
         if isinstance(current, dict):
             pending.extend((child, depth + 1) for child in current.values())
@@ -248,6 +262,7 @@ def _exact_canonical_json_value(
     *,
     maximum_bytes: int,
     expected_type: type[dict] | type[list],
+    maximum_items: int = _MAX_STORED_JSON_ITEMS,
 ) -> dict[str, Any] | list[Any]:
     """Decode bounded persisted JSON without accepting alternate serializations."""
 
@@ -263,15 +278,37 @@ def _exact_canonical_json_value(
     )
     if not isinstance(decoded, expected_type):
         raise ValueError("stored JSON has the wrong root type")
-    _validate_stored_json_shape(decoded)
+    _validate_stored_json_shape(decoded, maximum_items=maximum_items)
     if canonical_json(decoded) != raw:
         raise ValueError("stored JSON is not exact canonical JSON")
     return decoded
 
 
+def _validate_idempotency_generation(*, claimed_at: str, expires_at: str) -> None:
+    if not isinstance(claimed_at, str) or not isinstance(expires_at, str):
+        raise ValueError("idempotency generation timestamps must be text")
+    claimed = _parse_timestamp(claimed_at)
+    expiry = _parse_timestamp(expires_at)
+    if (
+        claimed.utcoffset() != timedelta(0)
+        or expiry.utcoffset() != timedelta(0)
+        or claimed.isoformat() != claimed_at
+        or expiry.isoformat() != expires_at
+        or expiry != claimed + _IDEMPOTENCY_RETENTION
+    ):
+        raise ValueError("idempotency generation timestamps are not exact")
+
+
 def _rejected_response_material(
     error: EvaluationWorkbenchError,
+    *,
+    claimed_at: str,
+    expires_at: str,
 ) -> tuple[dict[str, object], str, str]:
+    _validate_idempotency_generation(
+        claimed_at=claimed_at,
+        expires_at=expires_at,
+    )
     body: dict[str, object] = {
         _REJECTED_IDEMPOTENCY_MARKER: True,
         "error": error.detail(),
@@ -282,11 +319,92 @@ def _rejected_response_material(
     response_hash = canonical_sha256(
         {
             "schemaVersion": _REJECTED_RESPONSE_SCHEMA_VERSION,
+            "claimedAt": claimed_at,
+            "expiresAt": expires_at,
             "responseStatus": error.status_code,
             "responseBody": body,
         }
     )
     return body, body_json, response_hash
+
+
+def _success_response_material(
+    *,
+    body: Mapping[str, object],
+    status: object,
+    audit_event_id: str,
+    claimed_at: str,
+    expires_at: str,
+    resource_type: object,
+    resource_id: object,
+) -> tuple[dict[str, Any], str]:
+    """Return one bounded public response and its semantic success digest."""
+
+    try:
+        if str(uuid.UUID(audit_event_id)) != audit_event_id:
+            raise ValueError("success audit-event identity is not canonical")
+    except (AttributeError, TypeError, ValueError):
+        raise ValueError("success audit-event identity is invalid") from None
+    _validate_idempotency_generation(
+        claimed_at=claimed_at,
+        expires_at=expires_at,
+    )
+    if (
+        not isinstance(resource_type, str)
+        or not resource_type
+        or not isinstance(resource_id, str)
+        or not resource_id
+    ):
+        raise ValueError("success resource identity is invalid")
+    if not isinstance(status, int) or isinstance(status, bool) or not 200 <= status <= 299:
+        raise ValueError("success response status is invalid")
+    isolated_json = canonical_json(dict(body))
+    isolated = _exact_canonical_json_value(
+        isolated_json,
+        maximum_bytes=_MAX_IDEMPOTENCY_RESPONSE_BODY_BYTES,
+        expected_type=dict,
+        maximum_items=_MAX_IDEMPOTENCY_RESPONSE_ITEMS,
+    )
+    if _REJECTED_IDEMPOTENCY_MARKER in isolated or _SUCCESS_IDEMPOTENCY_MARKER in isolated:
+        raise ValueError("success response contains a reserved member")
+    response_hash = canonical_sha256(
+        {
+            "schemaVersion": _SUCCESS_RESPONSE_SCHEMA_VERSION,
+            "auditEventId": audit_event_id,
+            "claimedAt": claimed_at,
+            "expiresAt": expires_at,
+            "resourceType": resource_type,
+            "resourceId": resource_id,
+            "responseStatus": status,
+            "responseBody": isolated,
+        }
+    )
+    return isolated, response_hash
+
+
+def _success_idempotency_wrapper(
+    *,
+    response_body: Mapping[str, object],
+    audit_event_id: str,
+) -> tuple[dict[str, object], str]:
+    try:
+        if str(uuid.UUID(audit_event_id)) != audit_event_id:
+            raise ValueError("success audit-event identity is not canonical")
+    except (AttributeError, TypeError, ValueError):
+        raise ValueError("success audit-event identity is invalid")
+    wrapper: dict[str, object] = {
+        _SUCCESS_IDEMPOTENCY_MARKER: True,
+        "auditEventId": audit_event_id,
+        "responseBody": dict(response_body),
+    }
+    wrapper_json = canonical_json(wrapper)
+    _exact_canonical_json_value(
+        wrapper_json,
+        maximum_bytes=_MAX_IDEMPOTENCY_RESPONSE_BYTES,
+        expected_type=dict,
+        maximum_items=_MAX_IDEMPOTENCY_RESPONSE_ITEMS,
+    )
+    return wrapper, wrapper_json
 
 
 class SqlAlchemyEvaluationWorkbenchRepository:
@@ -1187,9 +1305,7 @@ class SqlAlchemyEvaluationWorkbenchRepository:
                 (not values and not allow_empty)
                 or len(values) > 64
                 or any(
-                    not isinstance(value, str)
-                    or not value
-                    or len(value.encode("utf-8")) > 200
+                    not isinstance(value, str) or not value or len(value.encode("utf-8")) > 200
                     for value in values
                 )
                 or len(set(values)) != len(values)
@@ -1440,84 +1556,34 @@ class SqlAlchemyEvaluationWorkbenchUnitOfWork:
         command: MutationCommand,
         row: Mapping[str, Any],
         body: Mapping[str, Any],
-    ) -> EvaluationWorkbenchError | None:
-        """Return an integrity-bound rejection, or None for a success record."""
-
-        try:
-            verify_evaluation_audit_chain(
-                self.db,
-                org_id=command.organization_id,
-            )
-        except EvaluationAuditChainIntegrityError:
-            raise self._error(
-                "audit_chain_integrity_error",
-                _AUDIT_CHAIN_INTEGRITY_MESSAGE,
-                409,
-            ) from None
+    ) -> EvaluationWorkbenchError:
+        """Return a rejection bound to the row's exact audit-event receipt."""
 
         key_hash = _idempotency_key_hash(command.idempotency_key)
-        candidate_rows = (
-            self.db.execute(
-                select(GovernanceEvaluationAuditEvent.__table__).where(
-                    GovernanceEvaluationAuditEvent.org_id == command.organization_id,
-                    GovernanceEvaluationAuditEvent.actor_id == command.actor_id,
-                    GovernanceEvaluationAuditEvent.action == _REJECTED_AUDIT_ACTION,
-                    GovernanceEvaluationAuditEvent.outcome == "rejected",
-                    GovernanceEvaluationAuditEvent.resource_type
-                    == _REJECTED_AUDIT_RESOURCE_TYPE,
-                    GovernanceEvaluationAuditEvent.resource_id == key_hash,
-                )
-            )
-            .mappings()
-            .all()
-        )
         request_hash = _audit_safe_request_hash(command.request_hash)
         operation = _audit_safe_operation(command.operation)
-        matching_events: list[tuple[Mapping[str, Any], Mapping[str, Any]]] = []
         try:
-            for event in candidate_rows:
-                details = _exact_canonical_json_value(
-                    event["details_json"],
-                    maximum_bytes=_MAX_REJECTION_RESPONSE_BYTES,
-                    expected_type=dict,
-                )
-                if (
-                    details.get("schemaVersion") == _REJECTED_AUDIT_SCHEMA_VERSION
-                    and details.get("operation") == operation
-                    and details.get("requestHash") == request_hash
-                    and details.get("claimedAt") == row["created_at"]
-                ):
-                    matching_events.append((event, details))
-        except (
-            AssuranceContractValidationError,
-            OverflowError,
-            RecursionError,
-            TypeError,
-            UnicodeError,
-            ValueError,
-        ):
-            raise self._invalid_idempotency_response() from None
-
-        if not matching_events:
-            if (
-                _REJECTED_IDEMPOTENCY_MARKER in body
-                or row["resource_type"] == _REJECTED_IDEMPOTENCY_RESOURCE_TYPE
+            if row["resource_type"] != _REJECTED_IDEMPOTENCY_RESOURCE_TYPE or not isinstance(
+                row["resource_id"], str
             ):
-                raise self._invalid_idempotency_response()
-            return None
-
-        if row["resource_type"] != _REJECTED_IDEMPOTENCY_RESOURCE_TYPE:
-            raise self._invalid_idempotency_response()
-        bound_events = [
-            candidate
-            for candidate in matching_events
-            if candidate[0]["id"] == row["resource_id"]
-        ]
-        if len(bound_events) != 1:
-            raise self._invalid_idempotency_response()
-        event, details = bound_events[0]
-
-        try:
+                raise ValueError("rejected receipt identity is invalid")
+            event = (
+                self.db.execute(
+                    select(GovernanceEvaluationAuditEvent.__table__).where(
+                        GovernanceEvaluationAuditEvent.org_id == command.organization_id,
+                        GovernanceEvaluationAuditEvent.id == row["resource_id"],
+                    )
+                )
+                .mappings()
+                .one_or_none()
+            )
+            if event is None:
+                raise ValueError("bound rejected audit event is missing")
+            details = _exact_canonical_json_value(
+                event["details_json"],
+                maximum_bytes=_MAX_REJECTION_RESPONSE_BYTES,
+                expected_type=dict,
+            )
             if (
                 set(body) != {_REJECTED_IDEMPOTENCY_MARKER, "error"}
                 or body.get(_REJECTED_IDEMPOTENCY_MARKER) is not True
@@ -1550,14 +1616,17 @@ class SqlAlchemyEvaluationWorkbenchUnitOfWork:
                 details=error_details,
             )
             safe_error = _safe_rejection_error(stored_error)
-            expected_body, expected_body_json, response_hash = (
-                _rejected_response_material(safe_error)
+            expected_body, expected_body_json, response_hash = _rejected_response_material(
+                safe_error,
+                claimed_at=row["created_at"],
+                expires_at=row["expires_at"],
             )
             expected_audit_details = {
                 "schemaVersion": _REJECTED_AUDIT_SCHEMA_VERSION,
                 "operation": operation,
                 "requestHash": request_hash,
                 "claimedAt": row["created_at"],
+                "expiresAt": row["expires_at"],
                 "errorCode": _audit_safe_code(safe_error.code),
                 "statusCode": safe_error.status_code,
                 "responseHash": response_hash,
@@ -1566,7 +1635,12 @@ class SqlAlchemyEvaluationWorkbenchUnitOfWork:
                 safe_error.detail() != stored_error.detail()
                 or dict(body) != expected_body
                 or row["response_body_json"] != expected_body_json
-                or row["resource_id"] != event["id"]
+                or event["actor_id"] != command.actor_id
+                or event["action"] != _REJECTED_AUDIT_ACTION
+                or event["outcome"] != "rejected"
+                or event["resource_type"] != _REJECTED_AUDIT_RESOURCE_TYPE
+                or event["resource_id"] != key_hash
+                or event["created_at"] != row["created_at"]
                 or dict(details) != expected_audit_details
             ):
                 raise ValueError("rejected response binding does not match")
@@ -1581,12 +1655,203 @@ class SqlAlchemyEvaluationWorkbenchUnitOfWork:
         ):
             raise self._invalid_idempotency_response() from None
 
+    def _verified_success_replay(
+        self,
+        *,
+        command: MutationCommand,
+        row: Mapping[str, Any],
+        wrapper: Mapping[str, Any],
+    ) -> MutationResult:
+        """Return a response bound to one exact, chain-verified success event."""
+
+        try:
+            if (
+                set(wrapper) != {_SUCCESS_IDEMPOTENCY_MARKER, "auditEventId", "responseBody"}
+                or wrapper.get(_SUCCESS_IDEMPOTENCY_MARKER) is not True
+                or not isinstance(wrapper.get("auditEventId"), str)
+                or not isinstance(wrapper.get("responseBody"), Mapping)
+            ):
+                raise ValueError("success response wrapper is invalid")
+            audit_event_id = wrapper["auditEventId"]
+            response_body_value = wrapper["responseBody"]
+            assert isinstance(audit_event_id, str)
+            assert isinstance(response_body_value, Mapping)
+            response_body, response_hash = _success_response_material(
+                body=response_body_value,
+                status=row["response_status"],
+                audit_event_id=audit_event_id,
+                claimed_at=row["created_at"],
+                expires_at=row["expires_at"],
+                resource_type=row["resource_type"],
+                resource_id=row["resource_id"],
+            )
+            expected_wrapper, expected_wrapper_json = _success_idempotency_wrapper(
+                response_body=response_body,
+                audit_event_id=audit_event_id,
+            )
+            if (
+                dict(wrapper) != expected_wrapper
+                or row["response_body_json"] != expected_wrapper_json
+            ):
+                raise ValueError("success response wrapper is not exact")
+
+            event = (
+                self.db.execute(
+                    select(GovernanceEvaluationAuditEvent.__table__).where(
+                        GovernanceEvaluationAuditEvent.org_id == command.organization_id,
+                        GovernanceEvaluationAuditEvent.id == audit_event_id,
+                    )
+                )
+                .mappings()
+                .one_or_none()
+            )
+            if event is None:
+                raise ValueError("bound success audit event is missing")
+            details = _exact_canonical_json_value(
+                event["details_json"],
+                maximum_bytes=_MAX_IDEMPOTENCY_RESPONSE_BYTES,
+                expected_type=dict,
+            )
+            if set(details) != {_SUCCESS_AUDIT_BINDING_KEY} or not isinstance(
+                details.get(_SUCCESS_AUDIT_BINDING_KEY), Mapping
+            ):
+                raise ValueError("success audit details are not bound")
+            binding = details[_SUCCESS_AUDIT_BINDING_KEY]
+            assert isinstance(binding, Mapping)
+            required_binding_members = {
+                "schemaVersion",
+                "auditEventId",
+                "idempotencyRecordId",
+                "idempotencyKeyHash",
+                "operation",
+                "requestHash",
+                "claimedAt",
+                "expiresAt",
+                "resourceType",
+                "resourceId",
+                "responseStatus",
+                "responseHash",
+                "action",
+                "domainDetails",
+            }
+            if set(binding) != required_binding_members or not isinstance(
+                binding.get("domainDetails"), Mapping
+            ):
+                raise ValueError("success audit binding is invalid")
+            expected_action = event["action"]
+            expected_binding = {
+                "schemaVersion": _SUCCESS_AUDIT_SCHEMA_VERSION,
+                "auditEventId": audit_event_id,
+                "idempotencyRecordId": row["id"],
+                "idempotencyKeyHash": _idempotency_key_hash(command.idempotency_key),
+                "operation": _audit_safe_operation(command.operation),
+                "requestHash": _audit_safe_request_hash(command.request_hash),
+                "claimedAt": row["created_at"],
+                "expiresAt": row["expires_at"],
+                "resourceType": row["resource_type"],
+                "resourceId": row["resource_id"],
+                "responseStatus": row["response_status"],
+                "responseHash": response_hash,
+                "action": expected_action,
+                "domainDetails": dict(binding["domainDetails"]),
+            }
+            if (
+                dict(binding) != expected_binding
+                or event["actor_id"] != command.actor_id
+                or event["outcome"] != "success"
+                or event["resource_type"] != row["resource_type"]
+                or event["resource_id"] != row["resource_id"]
+                or event["created_at"] != row["created_at"]
+                or not isinstance(expected_action, str)
+                or not expected_action
+            ):
+                raise ValueError("success response binding does not match")
+            return MutationResult.create(
+                body=response_body,
+                status=row["response_status"],
+                replayed=True,
+            )
+        except (
+            AssuranceContractValidationError,
+            OverflowError,
+            RecursionError,
+            TypeError,
+            UnicodeError,
+            ValueError,
+        ):
+            raise self._invalid_idempotency_response() from None
+
+    def _validated_completed_replay(
+        self,
+        *,
+        command: MutationCommand,
+        row: Mapping[str, Any],
+    ) -> MutationResult | EvaluationWorkbenchError:
+        try:
+            response_status = row["response_status"]
+            if (
+                not isinstance(response_status, int)
+                or isinstance(response_status, bool)
+                or not 100 <= response_status <= 599
+            ):
+                raise ValueError("stored response status is invalid")
+            body = _exact_canonical_json_value(
+                row["response_body_json"],
+                maximum_bytes=_MAX_IDEMPOTENCY_RESPONSE_BYTES,
+                expected_type=dict,
+                maximum_items=_MAX_IDEMPOTENCY_RESPONSE_ITEMS,
+            )
+        except (
+            AssuranceContractValidationError,
+            OverflowError,
+            RecursionError,
+            TypeError,
+            UnicodeError,
+            ValueError,
+        ):
+            raise self._invalid_idempotency_response() from None
+        try:
+            verify_evaluation_audit_chain(
+                self.db,
+                org_id=command.organization_id,
+            )
+        except EvaluationAuditChainIntegrityError:
+            raise self._error(
+                "audit_chain_integrity_error",
+                _AUDIT_CHAIN_INTEGRITY_MESSAGE,
+                409,
+            ) from None
+        if (
+            set(body) in ({_REJECTED_IDEMPOTENCY_MARKER, "error"},)
+            and body.get(_REJECTED_IDEMPOTENCY_MARKER) is True
+        ):
+            return self._verified_rejected_replay(
+                command=command,
+                row=row,
+                body=body,
+            )
+        if (
+            set(body) == {_SUCCESS_IDEMPOTENCY_MARKER, "auditEventId", "responseBody"}
+            and body.get(_SUCCESS_IDEMPOTENCY_MARKER) is True
+        ):
+            return self._verified_success_replay(
+                command=command,
+                row=row,
+                wrapper=body,
+            )
+        raise self._invalid_idempotency_response()
+
     def _claim_idempotency(
         self,
         *,
         command: MutationCommand,
         now: datetime,
-    ) -> tuple[str, MutationResult | EvaluationWorkbenchError | None]:
+    ) -> tuple[
+        str,
+        MutationResult | EvaluationWorkbenchError | None,
+        datetime,
+        datetime,
+    ]:
         records = GovernanceIdempotencyRecord.__table__
         key_hash = _idempotency_key_hash(command.idempotency_key)
 
@@ -1623,18 +1888,43 @@ class SqlAlchemyEvaluationWorkbenchUnitOfWork:
                             status="in_progress",
                             created_at=_iso(now),
                             updated_at=_iso(now),
-                            expires_at=_iso(now + timedelta(days=30)),
+                            expires_at=_iso(now + _IDEMPOTENCY_RETENTION),
                         )
                     )
                     self.db.flush()
-                return record_id, None
+                return record_id, None, now, now + _IDEMPOTENCY_RETENTION
             except IntegrityError:
                 row = existing_row(lock=True)
                 if row is None:
                     raise
-
         assert row is not None
-        if _parse_timestamp(row["expires_at"]) <= now:
+        try:
+            previous_claimed_at = _parse_timestamp(row["created_at"])
+            previous_expires_at = _parse_timestamp(row["expires_at"])
+        except (AttributeError, TypeError, ValueError):
+            raise self._invalid_idempotency_response() from None
+        expired = previous_expires_at <= now
+        if row["status"] == "completed" and expired:
+            stored_request_hash = row["request_hash"]
+            if not isinstance(stored_request_hash, str):
+                raise self._invalid_idempotency_response()
+            historical_command = MutationCommand(
+                organization_id=command.organization_id,
+                actor_id=command.actor_id,
+                operation=command.operation,
+                idempotency_key=command.idempotency_key,
+                request_hash=stored_request_hash,
+            )
+            self._validated_completed_replay(
+                command=historical_command,
+                row=row,
+            )
+        if expired:
+            claimed_at = max(
+                now,
+                previous_claimed_at + timedelta(microseconds=1),
+            )
+            expires_at = claimed_at + _IDEMPOTENCY_RETENTION
             result = self.db.execute(
                 update(records)
                 .where(
@@ -1648,9 +1938,9 @@ class SqlAlchemyEvaluationWorkbenchUnitOfWork:
                     response_body_json=None,
                     resource_type=None,
                     resource_id=None,
-                    created_at=_iso(now),
-                    updated_at=_iso(now),
-                    expires_at=_iso(now + timedelta(days=30)),
+                    created_at=_iso(claimed_at),
+                    updated_at=_iso(claimed_at),
+                    expires_at=_iso(expires_at),
                 )
             )
             if result.rowcount != 1:
@@ -1659,7 +1949,7 @@ class SqlAlchemyEvaluationWorkbenchUnitOfWork:
                     "Another request is reclaiming this expired idempotency key.",
                     409,
                 )
-            return row["id"], None
+            return row["id"], None, claimed_at, expires_at
         if row["request_hash"] != command.request_hash:
             raise self._error(
                 "idempotency_conflict",
@@ -1667,39 +1957,14 @@ class SqlAlchemyEvaluationWorkbenchUnitOfWork:
                 409,
             )
         if row["status"] == "completed":
-            try:
-                response_status = row["response_status"]
-                if (
-                    not isinstance(response_status, int)
-                    or isinstance(response_status, bool)
-                    or not 100 <= response_status <= 599
-                ):
-                    raise ValueError("stored response status is invalid")
-                body = _exact_canonical_json_value(
-                    row["response_body_json"],
-                    maximum_bytes=_MAX_IDEMPOTENCY_RESPONSE_BYTES,
-                    expected_type=dict,
-                )
-            except (
-                AssuranceContractValidationError,
-                OverflowError,
-                RecursionError,
-                TypeError,
-                UnicodeError,
-                ValueError,
-            ):
-                raise self._invalid_idempotency_response() from None
-            rejected_replay = self._verified_rejected_replay(
-                command=command,
-                row=row,
-                body=body,
-            )
-            if rejected_replay is not None:
-                return row["id"], rejected_replay
-            return row["id"], MutationResult.create(
-                body=body,
-                status=response_status,
-                replayed=True,
+            return (
+                row["id"],
+                self._validated_completed_replay(
+                    command=command,
+                    row=row,
+                ),
+                previous_claimed_at,
+                previous_expires_at,
             )
         raise self._error(
             "idempotency_in_progress",
@@ -1712,8 +1977,24 @@ class SqlAlchemyEvaluationWorkbenchUnitOfWork:
         *,
         record_id: str,
         outcome: MutationOutcome,
+        audit_receipt: EvaluationAuditReceipt,
+        claimed_at: datetime,
+        expires_at: datetime,
         now: datetime,
     ) -> None:
+        response_body, _ = _success_response_material(
+            body=outcome.body.to_dict(),
+            status=outcome.status,
+            audit_event_id=audit_receipt.event_id,
+            claimed_at=_iso(claimed_at),
+            expires_at=_iso(expires_at),
+            resource_type=outcome.resource_type,
+            resource_id=outcome.resource_id,
+        )
+        _, response_body_json = _success_idempotency_wrapper(
+            response_body=response_body,
+            audit_event_id=audit_receipt.event_id,
+        )
         result = self.db.execute(
             update(GovernanceIdempotencyRecord.__table__)
             .where(
@@ -1723,7 +2004,7 @@ class SqlAlchemyEvaluationWorkbenchUnitOfWork:
             .values(
                 status="completed",
                 response_status=outcome.status,
-                response_body_json=canonical_json(outcome.body.to_dict()),
+                response_body_json=response_body_json,
                 resource_type=outcome.resource_type,
                 resource_id=outcome.resource_id,
                 updated_at=_iso(now),
@@ -1771,23 +2052,65 @@ class SqlAlchemyEvaluationWorkbenchUnitOfWork:
         self,
         *,
         command: MutationCommand,
+        record_id: str,
         outcome: MutationOutcome,
-        now: datetime,
-    ) -> None:
-        assert outcome.audit_action is not None
-        append_evaluation_audit_event(
+        claimed_at: datetime,
+        expires_at: datetime,
+    ) -> EvaluationAuditReceipt:
+        action = outcome.audit_action or _SUCCESS_NOOP_AUDIT_ACTION
+        domain_details = outcome.audit_details.to_dict()
+        if _SUCCESS_AUDIT_BINDING_KEY in domain_details:
+            raise ValueError("success audit details contain a reserved member")
+        audit_event_id = str(uuid.uuid4())
+        _, response_hash = _success_response_material(
+            body=outcome.body.to_dict(),
+            status=outcome.status,
+            audit_event_id=audit_event_id,
+            claimed_at=_iso(claimed_at),
+            expires_at=_iso(expires_at),
+            resource_type=outcome.resource_type,
+            resource_id=outcome.resource_id,
+        )
+        details = {
+            _SUCCESS_AUDIT_BINDING_KEY: {
+                "schemaVersion": _SUCCESS_AUDIT_SCHEMA_VERSION,
+                "auditEventId": audit_event_id,
+                "idempotencyRecordId": record_id,
+                "idempotencyKeyHash": _idempotency_key_hash(command.idempotency_key),
+                "operation": _audit_safe_operation(command.operation),
+                "requestHash": _audit_safe_request_hash(command.request_hash),
+                "claimedAt": _iso(claimed_at),
+                "expiresAt": _iso(expires_at),
+                "resourceType": outcome.resource_type,
+                "resourceId": outcome.resource_id,
+                "responseStatus": outcome.status,
+                "responseHash": response_hash,
+                "action": action,
+                "domainDetails": domain_details,
+            }
+        }
+        _exact_canonical_json_value(
+            canonical_json(details),
+            maximum_bytes=_MAX_IDEMPOTENCY_RESPONSE_BYTES,
+            expected_type=dict,
+        )
+        receipt = append_evaluation_audit_event(
             self.db,
             event=EvaluationAuditAppend(
                 organization_id=command.organization_id,
                 actor_id=command.actor_id,
-                action=outcome.audit_action,
+                action=action,
                 outcome="success",
                 resource_type=outcome.resource_type,
                 resource_id=outcome.resource_id,
-                details=outcome.audit_details.to_dict(),
-                created_at=_iso(now),
+                details=details,
+                created_at=_iso(claimed_at),
+                event_id=audit_event_id,
             ),
         )
+        if receipt.event_id != audit_event_id:
+            raise ValueError("success audit receipt identity changed")
+        return receipt
 
     def _append_rejected_audit(
         self,
@@ -1795,7 +2118,8 @@ class SqlAlchemyEvaluationWorkbenchUnitOfWork:
         command: MutationCommand,
         error: EvaluationWorkbenchError,
         response_hash: str,
-        now: datetime,
+        claimed_at: datetime,
+        expires_at: datetime,
     ) -> EvaluationAuditReceipt:
         request_hash = _audit_safe_request_hash(command.request_hash)
         return append_evaluation_audit_event(
@@ -1811,12 +2135,13 @@ class SqlAlchemyEvaluationWorkbenchUnitOfWork:
                     "schemaVersion": _REJECTED_AUDIT_SCHEMA_VERSION,
                     "operation": _audit_safe_operation(command.operation),
                     "requestHash": request_hash,
-                    "claimedAt": _iso(now),
+                    "claimedAt": _iso(claimed_at),
+                    "expiresAt": _iso(expires_at),
                     "errorCode": _audit_safe_code(error.code),
                     "statusCode": error.status_code,
                     "responseHash": response_hash,
                 },
-                created_at=_iso(now),
+                created_at=_iso(claimed_at),
             ),
         )
 
@@ -1828,16 +2153,17 @@ class SqlAlchemyEvaluationWorkbenchUnitOfWork:
         with self._mutation_lock():
             try:
                 self._lock_org(command.organization_id)
-                now = _now()
-                record_id, replay = self._claim_idempotency(
+                request_now = _now()
+                record_id, replay, claimed_at, expires_at = self._claim_idempotency(
                     command=command,
-                    now=now,
+                    now=request_now,
                 )
                 if replay is not None:
                     self.db.rollback()
                     if isinstance(replay, EvaluationWorkbenchError):
                         raise replay
                     return replay
+                now = claimed_at
                 rejected_error: EvaluationWorkbenchError | None = None
                 try:
                     with self.db.begin_nested():
@@ -1845,14 +2171,17 @@ class SqlAlchemyEvaluationWorkbenchUnitOfWork:
                 except EvaluationWorkbenchError as error:
                     safe_error = _safe_rejection_error(error)
                     try:
-                        _, response_body_json, response_hash = (
-                            _rejected_response_material(safe_error)
+                        _, response_body_json, response_hash = _rejected_response_material(
+                            safe_error,
+                            claimed_at=_iso(claimed_at),
+                            expires_at=_iso(expires_at),
                         )
                         audit_receipt = self._append_rejected_audit(
                             command=command,
                             error=safe_error,
                             response_hash=response_hash,
-                            now=now,
+                            claimed_at=claimed_at,
+                            expires_at=expires_at,
                         )
                         self._complete_rejected_idempotency(
                             record_id=record_id,
@@ -1872,11 +2201,19 @@ class SqlAlchemyEvaluationWorkbenchUnitOfWork:
                     rejected_error = safe_error
                 if rejected_error is not None:
                     raise rejected_error from None
-                if outcome.audit_action is not None:
-                    self._append_audit(command=command, outcome=outcome, now=now)
+                audit_receipt = self._append_audit(
+                    command=command,
+                    record_id=record_id,
+                    outcome=outcome,
+                    claimed_at=claimed_at,
+                    expires_at=expires_at,
+                )
                 self._complete_idempotency(
                     record_id=record_id,
                     outcome=outcome,
+                    audit_receipt=audit_receipt,
+                    claimed_at=claimed_at,
+                    expires_at=expires_at,
                     now=now,
                 )
                 self.db.commit()
