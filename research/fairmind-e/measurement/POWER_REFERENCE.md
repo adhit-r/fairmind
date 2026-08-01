@@ -63,6 +63,20 @@ Record the mean watts it prints; that value becomes `--baseline-w` in step 4.
 
 ### 3. Run the study with sampling alongside it (needs sudo)
 
+**One command does steps 3 to 5**, asking for sudo once and elevating only the
+sampler, never the workloads:
+
+```bash
+bash research/fairmind-e/measurement/run_with_power_reference.sh <idle watts from step 2>
+```
+
+It starts the sampler, waits for it to settle, runs the five-iteration suite,
+stops sampling three seconds after the last run, then integrates and
+calibrates. If the sampler fails to start it aborts rather than producing a
+study with no reference. Ctrl-C cleans the sampler up.
+
+The manual equivalent, if you prefer to watch each stage, follows.
+
 Start sampling in one terminal:
 
 ```bash
