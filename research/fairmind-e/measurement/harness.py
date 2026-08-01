@@ -39,6 +39,7 @@ import importlib.util
 import json
 import pathlib
 import sys
+import time
 from typing import Any
 
 if __package__ in (None, ""):
@@ -424,6 +425,12 @@ def run_study(args: argparse.Namespace) -> tuple[list[dict[str, str]], list[str]
         method_states: dict[str, str] = {}
 
         for iteration in range(1, args.iterations + 1):
+            # Idle briefly before each run so an external power sampler sees a
+            # stretch of pure background next to it. Without such a gap the
+            # runs abut and background can only be estimated from one global
+            # constant, which is wrong whenever the load drifts.
+            if args.gap_seconds > 0 and not args.dry_run:
+                time.sleep(args.gap_seconds)
             run_id = f"{run_label}-i{iteration:02d}"
             run_result = None
             if available:
@@ -555,6 +562,16 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="also run the mitigation pair suite (quantization, region_shift, "
         "batching, time_shift) and write a companion CSV",
+    )
+    parser.add_argument(
+        "--gap-seconds",
+        type=float,
+        default=0.0,
+        help=(
+            "idle this long before each run so an external power sampler can "
+            "observe background next to it; 20 is a reasonable value when a "
+            "power reference is being captured"
+        ),
     )
     parser.add_argument(
         "--config-overrides",
