@@ -17,3 +17,13 @@ adds compatibility columns as nullable plus `NOT VALID` checks, matching the
 historical-row policy while enforcing new writes. It deliberately lives below
 `upgrade_paths/`, outside the repository's unsafe top-level `*.sql` discovery.
 Never run this upgrade through `apps/backend/scripts/migrate.py`.
+
+## Assurance trust integrity 013b to verification receipt 013c
+
+Run `013b_to_013c_evidence_verification_receipt.sql` only after the immutable
+013b operator-ledger row is present with its reviewed checksum. The upgrade is
+one transaction under a transaction-scoped advisory lock, refuses a
+pre-existing 013c catalog without its ledger row, and refuses historical
+verified V2 admissions rather than fabricating cryptographic receipts. Replay
+is supported only when the exact 013c checksum and installed catalog remain
+intact. Do not run this upgrade through `apps/backend/scripts/migrate.py`.

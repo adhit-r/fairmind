@@ -53,6 +53,7 @@ POSTGRES_OPERATOR_CHAIN = (
     "upgrade_paths/012_to_013_evaluation_v2.sql",
     "upgrade_paths/013_to_013a_evaluation_binding_integrity.sql",
     "upgrade_paths/013a_to_013b_evaluation_assurance_trust_integrity.sql",
+    "upgrade_paths/013b_to_013c_evidence_verification_receipt.sql",
 )
 
 
@@ -60,6 +61,7 @@ def _install_sqlite_assurance_chain(database_path: Path) -> None:
     from migrations.evaluation_assurance_v2_migration import sql_for as sql_013
     from migrations.evaluation_binding_integrity_migration import sql_for as sql_013a
     from migrations.evaluation_runs_migration import sql_for as sql_012
+    from migrations.evidence_verification_receipt_migration import sql_for as sql_013c
     from migrations.governance_assurance_migration import sql_for as sql_011
 
     connection = sqlite3.connect(database_path)
@@ -78,6 +80,7 @@ def _install_sqlite_assurance_chain(database_path: Path) -> None:
                 / "fixtures/013b_evaluation_assurance_trust_integrity.sqlite.sql"
             ).read_text(encoding="utf-8")
         )
+        connection.executescript(sql_013c("sqlite"))
     finally:
         connection.close()
 
@@ -487,7 +490,7 @@ def test_production_postgresql_manifest_covers_audit_immutability() -> None:
     assert frozen.postgresql_major == 14
     assert (
         frozen.digest
-        == "0462a73c572251c5318cb463ebff0fa99f81c5da51fd1c2a56897270c175fcf3"
+        == "47739c29a794d0e20bc3b5178551d92d1ab11656d202f755dc47bfe736124d3d"
     )
     validate_frozen_postgresql_catalog(frozen)
 
@@ -553,7 +556,7 @@ def test_bundled_checksum_manifest_detects_source_drift(tmp_path: Path) -> None:
         verify_bundled_migration_checksums(expected=expected)
 
 
-def test_sqlite_startup_check_accepts_the_frozen_013b_catalog(
+def test_sqlite_startup_check_accepts_the_frozen_013c_catalog(
     tmp_path: Path,
 ) -> None:
     database_path = tmp_path / "assurance.sqlite3"
@@ -648,6 +651,7 @@ def test_sqlite_startup_check_rejects_hostile_eligibility_view_replacement(
         "governance_idempotency_records",
         "governance_evidence_admission_013b_replay_state",
         "governance_evidence_admission_013b_replay_anchor",
+        "governance_evidence_verification_receipts",
     ),
 )
 def test_sqlite_startup_check_rejects_missing_assurance_authority_table(
@@ -674,6 +678,8 @@ def test_sqlite_startup_check_rejects_missing_assurance_authority_table(
         "governance_evidence_admission_replay_anchor_conflict",
         "governance_evidence_admission_replay_anchor_no_update",
         "governance_evidence_admission_replay_anchor_no_delete",
+        "governance_evidence_admissions_require_receipt_013c",
+        "governance_evidence_verification_receipts_guard_insert",
     ),
 )
 def test_sqlite_startup_check_rejects_missing_evidence_authority_guard(

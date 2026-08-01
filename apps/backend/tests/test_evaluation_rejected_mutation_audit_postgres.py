@@ -58,6 +58,7 @@ MIGRATION_CHAIN = (
     "013_evaluation_assurance_contract_v2.sql",
     "013a_evaluation_binding_integrity.sql",
     "013b_evaluation_assurance_trust_integrity.sql",
+    "013c_evidence_verification_receipt.sql",
 )
 ACTOR_ID = str(uuid.uuid4())
 
@@ -78,6 +79,7 @@ def postgres_session_factory():
                 if migration_name in {
                     "013a_evaluation_binding_integrity.sql",
                     "013b_evaluation_assurance_trust_integrity.sql",
+                    "013c_evidence_verification_receipt.sql",
                 }:
                     cursor.execute(
                         "SELECT pg_catalog.set_config" "('fairmind.migration_schema', %s, false)",

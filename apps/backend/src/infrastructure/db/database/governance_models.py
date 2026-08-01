@@ -1305,6 +1305,196 @@ class GovernanceEvidenceAdmission(Base):
     )
 
 
+class GovernanceEvidenceVerificationReceipt(Base):
+    """Append-only server verification facts for one exact V2 admission."""
+
+    __tablename__ = "governance_evidence_verification_receipts"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    workspace_id = Column(String, nullable=False)
+    system_id = Column(String, nullable=False, index=True)
+    run_id = Column(String, nullable=False, index=True)
+    suite_execution_id = Column(String, nullable=False, index=True)
+    evidence_run_id = Column(String, nullable=False, index=True)
+    passport_revision_id = Column(String, nullable=False, index=True)
+    admission_id = Column(String, nullable=False, index=True)
+    admission_contract_version = Column(String, nullable=False)
+    passport_content_hash = Column(String, nullable=False)
+    signature_input_hash = Column(String, nullable=False)
+    execution_binding_hash = Column(String, nullable=False)
+    execution_binding_json = Column(Text, nullable=False)
+    trust_policy_version_id = Column(String, nullable=False)
+    trust_policy_hash = Column(String, nullable=False)
+    issuer_id = Column(String, nullable=False)
+    issuer_key = Column(String, nullable=False)
+    signing_key_id = Column(String, nullable=False)
+    signer_key_id = Column(String, nullable=False)
+    signer_algorithm = Column(String, nullable=False)
+    public_jwk_json = Column(Text, nullable=False)
+    public_key_fingerprint = Column(String, nullable=False)
+    evaluator_issuer_id = Column(String, nullable=False)
+    evaluator_id = Column(String, nullable=False)
+    source_type = Column(String, nullable=False)
+    adapter_name = Column(String, nullable=False)
+    adapter_version = Column(String, nullable=False)
+    result_contract_version = Column(String, nullable=False)
+    evaluator_projection_json = Column(Text, nullable=False)
+    evaluator_projection_hash = Column(String, nullable=False)
+    verifier_contract = Column(String, nullable=False)
+    verifier_version = Column(String, nullable=False)
+    verified_at = Column(String, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "admission_id",
+            name="uq_governance_evidence_verification_receipt_admission",
+        ),
+        UniqueConstraint(
+            "admission_id",
+            "admission_contract_version",
+            "run_id",
+            "suite_execution_id",
+            "evidence_run_id",
+            "passport_revision_id",
+            "workspace_id",
+            "system_id",
+            "org_id",
+            name="uq_governance_evidence_verification_receipt_scope",
+        ),
+        ForeignKeyConstraint(
+            ["evidence_run_id", "workspace_id", "system_id", "org_id"],
+            [
+                "governance_evidence_runs.id",
+                "governance_evidence_runs.workspace_id",
+                "governance_evidence_runs.system_id",
+                "governance_evidence_runs.org_id",
+            ],
+        ),
+        ForeignKeyConstraint(
+            ["passport_revision_id", "evidence_run_id", "system_id", "org_id"],
+            [
+                "governance_evidence_passport_revisions.id",
+                "governance_evidence_passport_revisions.evidence_run_id",
+                "governance_evidence_passport_revisions.system_id",
+                "governance_evidence_passport_revisions.org_id",
+            ],
+        ),
+        ForeignKeyConstraint(
+            ["trust_policy_version_id", "org_id"],
+            [
+                "governance_evidence_trust_policy_versions.id",
+                "governance_evidence_trust_policy_versions.org_id",
+            ],
+        ),
+        ForeignKeyConstraint(
+            ["issuer_id", "org_id"],
+            ["governance_evidence_issuers.id", "governance_evidence_issuers.org_id"],
+        ),
+        ForeignKeyConstraint(
+            ["signing_key_id", "issuer_id", "org_id"],
+            [
+                "governance_evidence_signing_keys.id",
+                "governance_evidence_signing_keys.issuer_id",
+                "governance_evidence_signing_keys.org_id",
+            ],
+        ),
+        ForeignKeyConstraint(
+            ["run_id", "workspace_id", "system_id", "org_id"],
+            [
+                "governance_evaluation_runs.id",
+                "governance_evaluation_runs.workspace_id",
+                "governance_evaluation_runs.system_id",
+                "governance_evaluation_runs.org_id",
+            ],
+        ),
+        ForeignKeyConstraint(
+            [
+                "suite_execution_id",
+                "run_id",
+                "workspace_id",
+                "system_id",
+                "org_id",
+            ],
+            [
+                "governance_evaluation_run_suite_executions.id",
+                "governance_evaluation_run_suite_executions.run_id",
+                "governance_evaluation_run_suite_executions.workspace_id",
+                "governance_evaluation_run_suite_executions.system_id",
+                "governance_evaluation_run_suite_executions.org_id",
+            ],
+        ),
+        ForeignKeyConstraint(
+            [
+                "admission_id",
+                "admission_contract_version",
+                "run_id",
+                "suite_execution_id",
+                "evidence_run_id",
+                "passport_revision_id",
+                "workspace_id",
+                "system_id",
+                "org_id",
+            ],
+            [
+                "governance_evidence_admissions.id",
+                "governance_evidence_admissions.contract_version",
+                "governance_evidence_admissions.run_id",
+                "governance_evidence_admissions.suite_execution_id",
+                "governance_evidence_admissions.evidence_run_id",
+                "governance_evidence_admissions.passport_revision_id",
+                "governance_evidence_admissions.workspace_id",
+                "governance_evidence_admissions.system_id",
+                "governance_evidence_admissions.org_id",
+            ],
+            name="fk_governance_evidence_verification_receipt_admission",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        CheckConstraint(
+            "admission_contract_version = '2.0.0'",
+            name="ck_governance_evidence_verification_receipt_contract",
+        ),
+        CheckConstraint(
+            "signer_algorithm = 'Ed25519'",
+            name="ck_governance_evidence_verification_receipt_algorithm",
+        ),
+        CheckConstraint(
+            "source_type IN ('fairmind_worker', 'external_provider')",
+            name="ck_governance_evidence_verification_receipt_source",
+        ),
+        CheckConstraint(
+            "verifier_contract = 'fairmind/evidence-passport-v2/verified-admission' "
+            "AND verifier_version = '2.0.0'",
+            name="ck_governance_evidence_verification_receipt_verifier",
+        ),
+        CheckConstraint(
+            "evaluator_issuer_id = issuer_key",
+            name="ck_governance_evidence_verification_receipt_evaluator_issuer",
+        ),
+        CheckConstraint(
+            f"{_lower_hex64('passport_content_hash')} AND "
+            f"{_lower_hex64('signature_input_hash')} AND "
+            f"{_lower_hex64('execution_binding_hash')} AND "
+            f"{_lower_hex64('trust_policy_hash')} AND "
+            f"{_lower_hex64('public_key_fingerprint')} AND "
+            f"{_lower_hex64('evaluator_projection_hash')}",
+            name="ck_governance_evidence_verification_receipt_hashes",
+        ),
+        CheckConstraint(
+            _canonical_utc_timestamp("verified_at", nullable=False),
+            name="ck_governance_evidence_verification_receipt_timestamp",
+        ),
+        Index(
+            "idx_governance_evidence_verification_receipts_scope",
+            "org_id",
+            "system_id",
+            "run_id",
+            "suite_execution_id",
+        ),
+    )
+
+
 class GovernanceEvidenceReview(Base):
     __tablename__ = "governance_evidence_reviews"
 

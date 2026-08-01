@@ -6,6 +6,7 @@ import base64
 from dataclasses import fields
 from datetime import datetime, timedelta, timezone
 import copy
+import hashlib
 import inspect
 import json
 from typing import Mapping
@@ -35,6 +36,7 @@ from src.domain.assurance.evaluation_v2 import (
     canonical_sha256,
 )
 from src.infrastructure.security import Ed25519EvidenceVerifier
+import src.application.services.evidence_authenticity_service as admission_service_module
 
 
 NOW = datetime(2026, 8, 1, 12, 1, tzinfo=timezone.utc)
@@ -223,7 +225,7 @@ def _trusted_key(**changes: object) -> TrustedSigningKey:
         "issuer_id": "issuer-001",
         "key_id": "key-001",
         "algorithm": "Ed25519",
-        "public_jwk": {"kty": "OKP", "crv": "Ed25519", "x": "public-key"},
+        "public_jwk": {"kty": "OKP", "crv": "Ed25519", "x": "A" * 43},
         "valid_from": NOW - timedelta(days=1),
         "valid_until": NOW + timedelta(days=1),
         "revoked_at": None,
@@ -272,6 +274,71 @@ def test_valid_passport_returns_candidate_only_with_frozen_normalized_result() -
     assert len(verifier.calls) == 1
     with pytest.raises(TypeError):
         candidate.normalized_result["technicalStatus"] = "verified"  # type: ignore[index]
+
+
+def test_candidate_binds_the_exact_domain_separated_signature_input_hash() -> None:
+    candidate, _ = _assess()
+
+    expected = hashlib.sha256(
+        evidence_passport_v2_signature_bytes(_payload())
+    ).hexdigest()
+    assert candidate.signature_input_hash == expected
+
+
+def test_candidate_binds_the_complete_signed_evaluator_projection_hash() -> None:
+    candidate, _ = _assess()
+    evaluator = _payload()["evaluator"]
+    assert isinstance(evaluator, dict)
+    evaluator["untrustedFutureField"] = "must-not-enter-the-hash-domain"
+    expected = hashlib.sha256(
+        json.dumps(
+            {
+                "issuerId": evaluator["issuerId"],
+                "evaluatorId": evaluator["evaluatorId"],
+                "sourceType": evaluator["sourceType"],
+                "adapterName": evaluator["adapterName"],
+                "adapterVersion": evaluator["adapterVersion"],
+                "resultContractVersion": evaluator["resultContractVersion"],
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()
+
+    assert candidate.evaluator_projection_hash == expected
+
+
+def test_candidate_freezes_public_key_fingerprint_and_verifier_contract() -> None:
+    candidate, _ = _assess()
+
+    assert candidate.public_key_fingerprint == canonical_sha256(
+        dict(_trusted_key().public_jwk)
+    )
+    assert candidate.verifier_contract == (
+        "fairmind/evidence-passport-v2/verified-admission"
+    )
+    assert candidate.verifier_version == "2.0.0"
+
+
+@pytest.mark.parametrize(
+    "public_jwk",
+    (
+        {"kty": "OKP", "crv": "Ed25519", "x": "A" * 42},
+        {"kty": "OKP", "crv": "Ed25519", "x": "B" * 43},
+        {"kty": "OKP", "crv": "X25519", "x": "A" * 43},
+        {"kty": "OKP", "crv": "Ed25519", "x": "A" * 43, "kid": "extra"},
+    ),
+)
+def test_malformed_or_noncanonical_public_jwk_is_rejected_before_crypto(
+    public_jwk: Mapping[str, object],
+) -> None:
+    verifier = RecordingVerifier()
+
+    with pytest.raises(EvidenceAuthenticityError, match="public JWK"):
+        _assess(key=_trusted_key(public_jwk=public_jwk), verifier=verifier)
+
+    assert verifier.calls == []
 
 
 def test_real_ed25519_signature_verifies_end_to_end_and_detects_resigned_hash_tampering(
@@ -460,3 +527,47 @@ def test_service_has_no_persistence_collaborator() -> None:
     parameters = tuple(inspect.signature(EvidenceAuthenticityService).parameters)
     assert parameters == ("verifier",)
     assert isinstance(RecordingVerifier(), EvidenceSignatureVerifier)
+
+
+def test_empty_canonical_issuer_restrictions_are_unrestricted() -> None:
+    admission_service_module._validate_issuer_restrictions(
+        source_type="external_provider",
+        suite_version_id="suite-version-001",
+        target_version_id="target-version-001",
+        source_restrictions=(),
+        suite_restrictions=(),
+        target_restrictions=(),
+        known_suite_ids=frozenset(),
+        known_target_ids=frozenset(),
+    )
+
+
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    (
+        ({"source_restrictions": ("external_provider", "external_provider")}, "malformed"),
+        ({"source_restrictions": ("unknown_source",)}, "restricted"),
+        ({"source_restrictions": ("fairmind_worker",)}, "restricted"),
+        ({"suite_restrictions": ("unknown-suite",)}, "restricted"),
+        ({"suite_restrictions": ("suite-version-002",)}, "restricted"),
+        ({"target_restrictions": ("unknown-target",)}, "restricted"),
+        ({"target_restrictions": ("target-version-002",)}, "restricted"),
+    ),
+)
+def test_nonempty_issuer_restrictions_are_closed_exact_allowlists(
+    changes: Mapping[str, tuple[str, ...]], message: str
+) -> None:
+    values = {
+        "source_type": "external_provider",
+        "suite_version_id": "suite-version-001",
+        "target_version_id": "target-version-001",
+        "source_restrictions": (),
+        "suite_restrictions": (),
+        "target_restrictions": (),
+        "known_suite_ids": frozenset({"suite-version-001", "suite-version-002"}),
+        "known_target_ids": frozenset({"target-version-001", "target-version-002"}),
+    }
+    values.update(changes)
+
+    with pytest.raises(EvidenceAuthenticityError, match=message):
+        admission_service_module._validate_issuer_restrictions(**values)

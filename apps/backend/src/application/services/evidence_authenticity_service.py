@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import hashlib
 import hmac
+import re
 from types import MappingProxyType
 
 from src.application.ports.evidence_admission import (
@@ -24,6 +28,61 @@ from src.domain.assurance.evaluation_v2 import canonical_sha256
 
 class EvidenceAuthenticityError(ValueError):
     """Stable, non-admission authenticity failure safe for caller handling."""
+
+
+_TRUSTED_SOURCE_TYPES = frozenset({"fairmind_worker", "external_provider"})
+_PUBLIC_JWK_KEYS = frozenset({"kty", "crv", "x"})
+_BASE64URL = re.compile(r"^[A-Za-z0-9_-]{43}$")
+VERIFIER_CONTRACT = "fairmind/evidence-passport-v2/verified-admission"
+VERIFIER_VERSION = "2.0.0"
+_EVALUATOR_PROJECTION_KEYS = (
+    "issuerId",
+    "evaluatorId",
+    "sourceType",
+    "adapterName",
+    "adapterVersion",
+    "resultContractVersion",
+)
+
+
+def _validate_issuer_restrictions(
+    *,
+    source_type: str,
+    suite_version_id: str,
+    target_version_id: str,
+    source_restrictions: tuple[str, ...],
+    suite_restrictions: tuple[str, ...],
+    target_restrictions: tuple[str, ...],
+    known_suite_ids: frozenset[str],
+    known_target_ids: frozenset[str],
+) -> None:
+    """Apply the Task 12 closed issuer-restriction semantics.
+
+    Empty canonical arrays are unrestricted. Non-empty arrays are exact
+    allow-lists, and every value must belong to the closed server catalog.
+    """
+    if source_type not in _TRUSTED_SOURCE_TYPES:
+        raise EvidenceAuthenticityError("issuer source restriction is invalid")
+    for values in (source_restrictions, suite_restrictions, target_restrictions):
+        if len(values) != len(set(values)) or any(
+            not isinstance(value, str) or not value for value in values
+        ):
+            raise EvidenceAuthenticityError("issuer restriction is malformed")
+    if source_restrictions and (
+        any(value not in _TRUSTED_SOURCE_TYPES for value in source_restrictions)
+        or source_type not in source_restrictions
+    ):
+        raise EvidenceAuthenticityError("issuer source is restricted")
+    if suite_restrictions and (
+        any(value not in known_suite_ids for value in suite_restrictions)
+        or suite_version_id not in suite_restrictions
+    ):
+        raise EvidenceAuthenticityError("issuer suite is restricted")
+    if target_restrictions and (
+        any(value not in known_target_ids for value in target_restrictions)
+        or target_version_id not in target_restrictions
+    ):
+        raise EvidenceAuthenticityError("issuer target is restricted")
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -76,12 +135,46 @@ def _plain_value(value: object) -> object:
     return value
 
 
+def _canonical_ed25519_public_jwk(
+    public_jwk: Mapping[str, object],
+) -> dict[str, str]:
+    """Return the exact three-member public JWK fingerprint domain.
+
+    The fingerprint algorithm is SHA-256 lower-hex over the RFC 8785
+    canonical JSON of ``{crv, kty, x}`` for one canonical Ed25519 public key.
+    """
+    if (
+        frozenset(public_jwk) != _PUBLIC_JWK_KEYS
+        or public_jwk.get("kty") != "OKP"
+        or public_jwk.get("crv") != "Ed25519"
+    ):
+        raise EvidenceAuthenticityError("trusted public JWK is invalid")
+    public_x = public_jwk.get("x")
+    if not isinstance(public_x, str) or _BASE64URL.fullmatch(public_x) is None:
+        raise EvidenceAuthenticityError("trusted public JWK is invalid")
+    try:
+        decoded = base64.b64decode(f"{public_x}=", altchars=b"-_", validate=True)
+    except (binascii.Error, ValueError):
+        raise EvidenceAuthenticityError("trusted public JWK is invalid") from None
+    if (
+        len(decoded) != 32
+        or base64.urlsafe_b64encode(decoded).rstrip(b"=").decode("ascii") != public_x
+    ):
+        raise EvidenceAuthenticityError("trusted public JWK is invalid")
+    return {"crv": "Ed25519", "kty": "OKP", "x": public_x}
+
+
 @dataclass(frozen=True)
 class AuthenticityCandidate:
     """Authenticity facts only; an outer admission workflow makes decisions."""
 
     content_hash: str
+    signature_input_hash: str
     execution_binding_hash: str
+    evaluator_projection_hash: str
+    public_key_fingerprint: str
+    verifier_contract: str
+    verifier_version: str
     issuer_id: str
     key_id: str
     captured_at: datetime
@@ -142,6 +235,7 @@ class EvidenceAuthenticityService:
             raise EvidenceAuthenticityError("key is not trusted")
         if algorithm != trusted_key.algorithm:
             raise EvidenceAuthenticityError("key algorithm does not match signature")
+        canonical_public_jwk = _canonical_ed25519_public_jwk(trusted_key.public_jwk)
 
         captured_at = _parse_timestamp(normalized.get("capturedAt"), label="captured")
         signed_at = _parse_timestamp(signature.get("signedAt"), label="signed")
@@ -152,9 +246,10 @@ class EvidenceAuthenticityService:
             raise EvidenceAuthenticityError("timestamp window is invalid")
         self._verify_key_window(trusted_key, signed_at, now_utc)
 
+        signing_input = evidence_passport_v2_signature_bytes(normalized)
         try:
             verified = self._verifier(
-                signing_input=evidence_passport_v2_signature_bytes(normalized),
+                signing_input=signing_input,
                 signature_b64url=signature_value,
                 public_jwk=trusted_key.public_jwk,
             )
@@ -164,10 +259,19 @@ class EvidenceAuthenticityService:
             raise EvidenceAuthenticityError("signature verification failed")
 
         normalized_result = _mapping(normalized.get("result"), label="result")
+        evaluator_projection = {
+            key: _text(evaluator, key, label="evaluator")
+            for key in _EVALUATOR_PROJECTION_KEYS
+        }
 
         return AuthenticityCandidate(
             content_hash=content_hash,
+            signature_input_hash=hashlib.sha256(signing_input).hexdigest(),
             execution_binding_hash=canonical_sha256(_plain_value(expected.execution_binding)),
+            evaluator_projection_hash=canonical_sha256(evaluator_projection),
+            public_key_fingerprint=canonical_sha256(canonical_public_jwk),
+            verifier_contract=VERIFIER_CONTRACT,
+            verifier_version=VERIFIER_VERSION,
             issuer_id=issuer_id,
             key_id=key_id,
             captured_at=captured_at,

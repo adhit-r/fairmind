@@ -70,6 +70,9 @@ _MIGRATIONS = _BACKEND_ROOT / "migrations"
 _FROZEN_013B_CHECKSUM = (
     "d2d336d7f9fc99b0c259c6b54fc3a975267e84e055b40fdc97dc675184ef9c2f"
 )
+_FROZEN_013C_CHECKSUM = (
+    "e3cece71a7eb9781bfe5cf44a49678be299506a9312bfe4ca4bb8e425b937d87"
+)
 
 FROZEN_ASSURANCE_MIGRATIONS = (
     FrozenMigration(
@@ -86,6 +89,11 @@ FROZEN_ASSURANCE_MIGRATIONS = (
         "013a-to-013b-evaluation-assurance-trust-integrity-v1",
         _FROZEN_013B_CHECKSUM,
         _MIGRATIONS / "013b_evaluation_assurance_trust_integrity.sql",
+    ),
+    FrozenMigration(
+        "013b-to-013c-evidence-verification-receipt-v1",
+        _FROZEN_013C_CHECKSUM,
+        _MIGRATIONS / "013c_evidence_verification_receipt.sql",
     ),
 )
 
@@ -107,6 +115,7 @@ POSTGRESQL_ASSURANCE_RELATIONS = frozenset(
         "governance_evidence_artifacts",
         "governance_evidence_passport_revisions",
         "governance_evidence_admissions",
+        "governance_evidence_verification_receipts",
         "governance_evidence_reviews",
         "governance_evidence_nonce_claims",
         "governance_evaluation_suite_evidence_links",
@@ -127,6 +136,7 @@ POSTGRESQL_ASSURANCE_FUNCTIONS = frozenset(
         "fairmind_evidence_admission_is_eligible_013b",
         "fairmind_expected_decision_evidence_set_013b",
         "fairmind_is_exact_decision_evidence_set_shape_013b",
+        "fairmind_jsonb_object_member_count_013c",
         "fairmind_freshness_transition_allowed",
         "fairmind_initial_layer_verdicts_v1_for_run",
         "fairmind_is_canonical_utc_timestamp",
@@ -148,12 +158,14 @@ POSTGRESQL_ASSURANCE_FUNCTIONS = frozenset(
         "guard_governance_evaluation_suite_version",
         "guard_governance_evaluation_target_version",
         "guard_governance_evidence_admission_signer_013b",
+        "guard_governance_evidence_admission_receipt_013c",
         "guard_governance_evidence_issuer_013b",
         "guard_governance_evidence_nonce_claim_013b",
         "guard_governance_evidence_review_013b",
         "guard_governance_evidence_run_namespace_013b",
         "guard_governance_evidence_signing_key_013b",
         "guard_governance_evidence_trust_policy_013b",
+        "guard_governance_evidence_verification_receipt_013c",
         "reject_governance_evaluation_013b_mutation",
         "reject_governance_evaluation_audit_mutation",
     }
@@ -192,6 +204,7 @@ POSTGRESQL_ASSURANCE_REQUIRED_TRIGGERS = frozenset(
         "governance_evidence_admissions_no_delete",
         "governance_evidence_admissions_no_update",
         "governance_evidence_admissions_guard_signer_insert",
+        "governance_evidence_admissions_require_receipt_013c",
         "governance_evidence_issuers_guard_delete",
         "governance_evidence_issuers_guard_insert",
         "governance_evidence_issuers_guard_update",
@@ -208,6 +221,9 @@ POSTGRESQL_ASSURANCE_REQUIRED_TRIGGERS = frozenset(
         "governance_evidence_trust_policies_guard_delete",
         "governance_evidence_trust_policies_guard_insert",
         "governance_evidence_trust_policies_guard_update",
+        "governance_evidence_verification_receipts_guard_insert",
+        "governance_evidence_verification_receipts_no_delete",
+        "governance_evidence_verification_receipts_no_update",
     }
 )
 
@@ -229,7 +245,7 @@ FROZEN_POSTGRESQL_ASSURANCE_CATALOGS: Mapping[
             spec=POSTGRESQL_ASSURANCE_CATALOG_SPEC,
             postgresql_major=14,
             digest=(
-                "0462a73c572251c5318cb463ebff0fa99f81c5da51fd1c2a56897270c175fcf3"
+                "47739c29a794d0e20bc3b5178551d92d1ab11656d202f755dc47bfe736124d3d"
             ),
         )
     }
@@ -252,6 +268,7 @@ SQLITE_ASSURANCE_TABLES = frozenset(
         "governance_evidence_artifacts",
         "governance_evidence_passport_revisions",
         "governance_evidence_admissions",
+        "governance_evidence_verification_receipts",
         "governance_evidence_reviews",
         "governance_evidence_nonce_claims",
         "governance_evaluation_suite_evidence_links",
@@ -287,6 +304,7 @@ SQLITE_ASSURANCE_INDEXES = frozenset(
         "uq_governance_evidence_run_workspace_tenant",
         "idx_evidence_passport_revisions_tenant_run",
         "idx_governance_evidence_admissions_scope_execution_created",
+        "idx_governance_evidence_verification_receipts_scope",
         "idx_governance_evidence_reviews_admission_version",
         "idx_governance_evidence_nonce_claims_scope_admission",
         "idx_governance_evaluation_suite_evidence_links_scope",
@@ -327,6 +345,11 @@ SQLITE_ASSURANCE_TRIGGERS = frozenset(
         "governance_evidence_admission_replay_anchor_no_delete",
         "governance_evidence_admissions_no_update",
         "governance_evidence_admissions_no_delete",
+        "governance_evidence_admissions_require_receipt_013c",
+        "governance_evidence_admissions_require_receipt_update_013c",
+        "governance_evidence_verification_receipts_guard_insert",
+        "governance_evidence_verification_receipts_no_update",
+        "governance_evidence_verification_receipts_no_delete",
         "governance_evidence_reviews_guard_insert",
         "governance_evidence_reviews_no_update",
         "governance_evidence_reviews_no_delete",
@@ -379,9 +402,9 @@ SQLITE_ASSURANCE_VIEWS = frozenset(
 # named above, sorted by object type and name.  Unlike a name-only inventory,
 # this freezes table columns/checks/FKs, explicit indexes, trigger bodies, and
 # security-critical view definitions.
-# Replace only after the complete 013b SQLite fixture has passed review.
+# Replace only after the complete 013c SQLite fixture has passed review.
 SQLITE_ASSURANCE_CATALOG_DIGEST = (
-    "ff02d854b2bb43c2197d3b09415d54daf620f8447adf83f7609f0c51e80a57e6"
+    "a0812fa421ab7a172045d8f9845389cc5876bc1388ed9ef4cef8793fde2697d1"
 )
 
 _SQLITE_ASSURANCE_OBJECTS = {

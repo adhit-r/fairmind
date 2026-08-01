@@ -13,6 +13,9 @@ from migrations.evaluation_assurance_trust_integrity_migration import (
     sql_for as trust_integrity_sql_for,
 )
 from migrations.evaluation_binding_integrity_migration import sql_for
+from migrations.evidence_verification_receipt_migration import (
+    sql_for as verification_receipt_sql_for,
+)
 
 _OPERATIONAL_EVALUATION_TABLES = (
     "governance_evaluation_target_versions",
@@ -43,7 +46,11 @@ def install_013a_for_application_verifier_harness(engine: Engine) -> None:
         raw_connection.execute(
             "DROP TABLE IF EXISTS governance_evaluation_audit_chain_heads"
         )
+        raw_connection.execute(
+            "DROP TABLE IF EXISTS governance_evidence_verification_receipts"
+        )
         raw_connection.executescript(trust_integrity_sql_for("sqlite"))
+        raw_connection.executescript(verification_receipt_sql_for("sqlite"))
         cursor = raw_connection.cursor()
         placeholders = ", ".join("?" for _table in _OPERATIONAL_EVALUATION_TABLES)
         cursor.execute(

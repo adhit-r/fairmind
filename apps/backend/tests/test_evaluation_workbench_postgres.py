@@ -5,7 +5,7 @@ run creates a unique empty schema and applies the production SQL chain.  The
 governance slice begins at migration 008, but exact user/organization seeding
 requires its identity/RBAC prerequisites, so 001 and corrected 007 are applied
 first.  The assurance migrations then run in the required order:
-008 -> 011 -> 012 -> 013 -> 013a -> 013b. Nothing depends on ORM-generated
+008 -> 011 -> 012 -> 013 -> 013a -> 013b -> 013c. Nothing depends on ORM-generated
 DDL.
 """
 
@@ -70,6 +70,7 @@ ASSURANCE_MIGRATIONS = (
     "013_evaluation_assurance_contract_v2.sql",
     "013a_evaluation_binding_integrity.sql",
     "013b_evaluation_assurance_trust_integrity.sql",
+    "013c_evidence_verification_receipt.sql",
 )
 
 
@@ -141,6 +142,7 @@ def postgres_session_factory():
                 if migration_name in {
                     "013a_evaluation_binding_integrity.sql",
                     "013b_evaluation_assurance_trust_integrity.sql",
+                    "013c_evidence_verification_receipt.sql",
                 }:
                     cursor.execute(
                         "SELECT pg_catalog.set_config" "('fairmind.migration_schema', %s, false)",
