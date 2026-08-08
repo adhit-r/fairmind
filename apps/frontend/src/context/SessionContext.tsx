@@ -8,10 +8,12 @@ import { API_ENDPOINTS } from '@/lib/api/endpoints'
 import type { User } from '@/lib/api/types'
 import {
   clearBrowserSessionState,
+  CURRENT_SESSION_REQUEST_OPTIONS,
   createSingleFlight,
   endBrowserSession,
   publishSessionCleared,
-  resolveSessionIdentity,
+  resolveSessionTransition,
+  type SessionStatus,
   SESSION_BROADCAST_CHANNEL,
   SESSION_CLEARED_EVENT,
   SESSION_CLEARED_STORAGE_KEY,
@@ -20,6 +22,7 @@ import {
 export interface SessionContextValue {
   user: User | null
   loading: boolean
+  status: SessionStatus
   error: Error | null
   refreshSession: () => Promise<User | null>
   logout: () => Promise<void>
@@ -30,6 +33,7 @@ const SessionContext = createContext<SessionContextValue | undefined>(undefined)
 export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
+  const [status, setStatus] = useState<SessionStatus>('loading')
   const [error, setError] = useState<Error | null>(null)
   const sessionRevision = useRef(0)
   const sessionLoad = useRef(createSingleFlight<User | null>())
@@ -50,6 +54,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     setUser(null)
     setError(null)
     setLoading(false)
+    setStatus('unauthenticated')
 
     if (notifyOtherTabs && typeof window !== 'undefined') {
       publishSessionCleared({
@@ -74,31 +79,34 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
       const requestRevision = sessionRevision.current
       setLoading(true)
+      setStatus('loading')
       setError(null)
 
-      const response = await apiClient.get<User>(API_ENDPOINTS.auth.me, {
-        enableRetry: false,
-        timeout: 5_000,
-      })
+      const response = await apiClient.get<User>(
+        API_ENDPOINTS.auth.me,
+        CURRENT_SESSION_REQUEST_OPTIONS,
+      )
 
       if (sessionRevision.current !== requestRevision) return null
 
-      const identity = resolveSessionIdentity(response)
-      if (identity.state === 'authenticated') {
-        setUser(identity.user)
-        setLoading(false)
-        return identity.user
+      const transition = resolveSessionTransition(response)
+      switch (transition.status) {
+        case 'authenticated':
+          setUser(transition.user)
+          setLoading(false)
+          setStatus('authenticated')
+          return transition.user
+        case 'unauthenticated':
+          clearLocalSession(true)
+          return null
+        case 'denied':
+        case 'unavailable':
+          setUser(null)
+          setError(new Error(transition.error))
+          setLoading(false)
+          setStatus(transition.status)
+          return null
       }
-
-      if (identity.state === 'clear') {
-        clearLocalSession(true)
-        return null
-      }
-
-      setUser(null)
-      setError(new Error(identity.message))
-      setLoading(false)
-      return null
     })
   }, [clearLocalSession])
 
@@ -159,10 +167,11 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<SessionContextValue>(() => ({
     user,
     loading,
+    status,
     error,
     refreshSession,
     logout,
-  }), [error, loading, logout, refreshSession, user])
+  }), [error, loading, logout, refreshSession, status, user])
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>
 }

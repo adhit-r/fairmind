@@ -2,6 +2,16 @@ export const SESSION_CLEARED_EVENT = 'fairmind:session-cleared'
 export const SESSION_CLEARED_STORAGE_KEY = 'fairmind:session-cleared'
 export const SESSION_BROADCAST_CHANNEL = 'fairmind-session'
 
+/**
+ * Do not retry transient request failures here, but allow ApiClient to perform
+ * its single stored-refresh recovery when /auth/me returns an expired-token
+ * 401. A final 401 is then safe to treat as terminal session loss.
+ */
+export const CURRENT_SESSION_REQUEST_OPTIONS = {
+  enableRetry: false,
+  timeout: 5_000,
+} as const
+
 type StorageLike = Pick<Storage, 'removeItem' | 'setItem'>
 
 type SessionBroadcastChannel = {
@@ -39,10 +49,24 @@ export interface SessionResponseLike {
   apiError?: { status?: number }
 }
 
+export type SessionStatus =
+  | 'loading'
+  | 'authenticated'
+  | 'unauthenticated'
+  | 'denied'
+  | 'unavailable'
+
 export type SessionIdentityResolution =
   | { state: 'authenticated'; user: SessionIdentity }
-  | { state: 'clear'; reason: 'invalid_identity' | 'unauthorized' }
-  | { state: 'error'; message: string }
+  | { state: 'unauthenticated'; reason: 'invalid_identity' | 'unauthorized' | 'user_not_found' }
+  | { state: 'denied'; message: string }
+  | { state: 'unavailable'; message: string }
+
+export type SessionTransition =
+  | { status: 'authenticated'; user: SessionIdentity; clearLocalSession: false }
+  | { status: 'unauthenticated'; clearLocalSession: true }
+  | { status: 'denied'; error: string; clearLocalSession: false }
+  | { status: 'unavailable'; error: string; clearLocalSession: false }
 
 export interface SingleFlight<T> {
   run: (load: () => Promise<T>) => Promise<T>
@@ -102,14 +126,45 @@ export function resolveSessionIdentity(response: SessionResponseLike): SessionId
   if (response.success) {
     return isSessionIdentity(response.data)
       ? { state: 'authenticated', user: response.data }
-      : { state: 'clear', reason: 'invalid_identity' }
+      : { state: 'unauthenticated', reason: 'invalid_identity' }
   }
 
-  if (response.apiError?.status === 401 || response.apiError?.status === 403) {
-    return { state: 'clear', reason: 'unauthorized' }
+  if (response.apiError?.status === 401) {
+    return { state: 'unauthenticated', reason: 'unauthorized' }
   }
 
-  return { state: 'error', message: response.error || 'Unable to verify the current session' }
+  // This resolver is only used for /auth/me. Its 404 contract means the JWT
+  // subject no longer resolves to a user, so retaining credentials would leave
+  // a deleted session looking recoverable.
+  if (response.apiError?.status === 404) {
+    return { state: 'unauthenticated', reason: 'user_not_found' }
+  }
+
+  if (response.apiError?.status === 403) {
+    return { state: 'denied', message: response.error || 'The session endpoint denied this request' }
+  }
+
+  return { state: 'unavailable', message: response.error || 'Unable to verify the current session' }
+}
+
+/**
+ * Keeps credential removal tied to a confirmed unauthenticated response. A
+ * denied or unavailable current-session request remains visible to the guard
+ * without erasing recoverable browser credentials.
+ */
+export function resolveSessionTransition(response: SessionResponseLike): SessionTransition {
+  const identity = resolveSessionIdentity(response)
+
+  switch (identity.state) {
+    case 'authenticated':
+      return { status: 'authenticated', user: identity.user, clearLocalSession: false }
+    case 'unauthenticated':
+      return { status: 'unauthenticated', clearLocalSession: true }
+    case 'denied':
+      return { status: 'denied', error: identity.message, clearLocalSession: false }
+    case 'unavailable':
+      return { status: 'unavailable', error: identity.message, clearLocalSession: false }
+  }
 }
 
 /**

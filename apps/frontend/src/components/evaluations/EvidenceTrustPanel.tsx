@@ -72,7 +72,7 @@ export function EvidenceTrustPanel({ run }: { run: EvaluationRunV2 }) {
                 <th scope="col" className="px-3 py-3 font-black">Suite execution</th>
                 <th scope="col" className="px-3 py-3 font-black">Suite version</th>
                 <th scope="col" className="px-3 py-3 font-black">Manifest digest</th>
-                <th scope="col" className="px-3 py-3 font-black">Evaluator / adapter</th>
+                <th scope="col" className="px-3 py-3 font-black">Adapter</th>
                 <th scope="col" className="px-3 py-3 font-black">Runner image</th>
                 <th scope="col" className="px-3 py-3 font-black">Configuration hash</th>
                 <th scope="col" className="px-3 py-3 font-black">Passport revision</th>

@@ -85,7 +85,7 @@ export default function AssuranceEvaluationDetailPage({ params }: PageProps) {
       </header>
 
       <section className="border-2 border-[#0F1412] bg-[#FFF1D6] p-4 text-sm font-semibold text-[#5B492E]">
-        This preview is read-only and default-off at the API. It renders only a verified v2 run response; unavailable or denied data is never replaced with legacy or fixture evidence.
+        This preview is read-only and default-off at the API. It renders only a validated, scope-matched v2 run response; unavailable or denied data is never replaced with legacy or fixture evidence.
       </section>
 
       {!ASSURANCE_V2_UI_ENABLED ? (

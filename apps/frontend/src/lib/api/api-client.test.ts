@@ -124,7 +124,40 @@ test('does not restore an access token when logout races an in-flight refresh', 
   assert.equal(storage.getItem('refresh_token'), null)
 })
 
-test('keeps selected organization out of the current-user endpoint', async () => {
+test('refreshes an expired current-user request once before returning its authenticated response', async () => {
+  const storage = installBrowser()
+  storage.setItem('access_token', 'expired-access')
+  storage.setItem('refresh_token', 'refresh-token')
+  const client = new ApiClient('https://fairmind.test')
+  client.setAccessToken('expired-access')
+  client.setRefreshToken('refresh-token')
+  const urls: string[] = []
+  let currentUserCalls = 0
+  globalThis.fetch = (async (url) => {
+    const target = String(url)
+    urls.push(target)
+    if (target.endsWith('/api/v1/auth/refresh')) {
+      return response(200, { access_token: 'refreshed-access' })
+    }
+    currentUserCalls += 1
+    return currentUserCalls === 1
+      ? response(401, { detail: 'expired' })
+      : response(200, { id: 'user-1', username: 'reviewer', email: 'reviewer@fairmind.test' })
+  }) as typeof fetch
+
+  const result = await client.get('/api/v1/auth/me', { enableRetry: false })
+
+  assert.equal(result.success, true)
+  assert.deepEqual(result.data, { id: 'user-1', username: 'reviewer', email: 'reviewer@fairmind.test' })
+  assert.equal(storage.getItem('access_token'), 'refreshed-access')
+  assert.deepEqual(urls, [
+    'https://fairmind.test/api/v1/auth/me',
+    'https://fairmind.test/api/v1/auth/refresh',
+    'https://fairmind.test/api/v1/auth/me',
+  ])
+})
+
+test('does not turn UI organization selection into API query authority', async () => {
   const storage = installBrowser()
   storage.setItem('selected_org_id', 'organization-1')
   const client = new ApiClient('https://fairmind.test')
@@ -135,6 +168,30 @@ test('keeps selected organization out of the current-user endpoint', async () =>
   }) as typeof fetch
 
   await client.get('/api/v1/auth/me', { enableRetry: false })
+  await client.get('/api/v1/core/models', { enableRetry: false })
+  await client.get(
+    '/api/v1/ai-governance/organizations/organization-from-path/systems/system-1/evaluation-v2/plans',
+    { enableRetry: false },
+  )
 
-  assert.deepEqual(urls, ['https://fairmind.test/api/v1/auth/me'])
+  assert.deepEqual(urls, [
+    'https://fairmind.test/api/v1/auth/me',
+    'https://fairmind.test/api/v1/core/models',
+    'https://fairmind.test/api/v1/ai-governance/organizations/organization-from-path/systems/system-1/evaluation-v2/plans',
+  ])
+})
+
+test('preserves an explicitly supplied legacy organization query without replacing it', async () => {
+  const storage = installBrowser()
+  storage.setItem('selected_org_id', 'ui-selection-org')
+  const client = new ApiClient('https://fairmind.test')
+  const urls: string[] = []
+  globalThis.fetch = (async (url) => {
+    urls.push(String(url))
+    return response(200, { data: [] })
+  }) as typeof fetch
+
+  await client.get('/api/v1/core/models?org_id=legacy-query-org', { enableRetry: false })
+
+  assert.deepEqual(urls, ['https://fairmind.test/api/v1/core/models?org_id=legacy-query-org'])
 })

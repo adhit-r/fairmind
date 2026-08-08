@@ -362,24 +362,10 @@ export class ApiClient {
       }
     }
 
-    // Inject selected org_id into GET requests for dashboard routes
-    let finalEndpoint = endpoint
-    if (
-      typeof window !== 'undefined'
-      && endpoint.includes('/api/v1/')
-      && !endpoint.startsWith('/api/v1/auth/')
-    ) {
-      const selectedOrgId = window.localStorage.getItem('selected_org_id')
-      if (selectedOrgId) {
-        // Add org_id parameter only if not already present
-        const separator = endpoint.includes('?') ? '&' : '?'
-        if (!endpoint.includes('org_id=')) {
-          finalEndpoint = `${endpoint}${separator}org_id=${selectedOrgId}`
-        }
-      }
-    }
-
-    const url = `${this.baseUrl}${finalEndpoint.startsWith('/') ? finalEndpoint : `/${finalEndpoint}`}`
+    // Scope is carried by the caller's explicit path or query contract. The
+    // selected organization in local storage is a UI preference, never an API
+    // authority, so it must not alter this request.
+    const url = `${this.baseUrl}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
