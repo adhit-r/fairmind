@@ -11,7 +11,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, event, func, select, text
+from sqlalchemy import create_engine, event, func, select, text, update
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -148,6 +148,30 @@ def workbench_client():
         )
     )
     session.execute(
+        OrganizationRole.__table__.insert().values(
+            id=uuid.uuid4(),
+            org_id=uuid.UUID(ORG),
+            name="admin",
+            permissions=[
+                "evaluation:plan:write",
+                "evaluation:plan:activate",
+                "evaluation:run:create",
+            ],
+        )
+    )
+    session.execute(
+        OrganizationRole.__table__.insert().values(
+            id=uuid.uuid4(),
+            org_id=uuid.UUID(FOREIGN_ORG),
+            name="admin",
+            permissions=[
+                "evaluation:plan:write",
+                "evaluation:plan:activate",
+                "evaluation:run:create",
+            ],
+        )
+    )
+    session.execute(
         GovernanceWorkspace.__table__.insert().values(
             id="workspace-a", org_id=ORG, name="workspace-a"
         )
@@ -264,34 +288,40 @@ def _review_url(
 
 
 def _grant_evidence_submit_permission() -> None:
-    session_iterator = app.dependency_overrides[get_db]()
-    session = next(session_iterator)
-    try:
-        session.execute(
-            OrganizationRole.__table__.insert().values(
-                id=uuid.uuid4(),
-                org_id=uuid.UUID(ORG),
-                name="admin",
-                permissions=["evaluation:evidence:submit"],
-            )
-        )
-        session.commit()
-    finally:
-        session_iterator.close()
+    _grant_role_permissions("admin", ["evaluation:evidence:submit"])
 
 
 def _grant_evidence_review_permission() -> None:
+    _grant_role_permissions("reviewer", ["evaluation:evidence:review"])
+
+
+def _grant_role_permissions(role: str, permissions: list[str]) -> None:
     session_iterator = app.dependency_overrides[get_db]()
     session = next(session_iterator)
     try:
-        session.execute(
-            OrganizationRole.__table__.insert().values(
-                id=uuid.uuid4(),
-                org_id=uuid.UUID(ORG),
-                name="reviewer",
-                permissions=["evaluation:evidence:review"],
+        roles = OrganizationRole.__table__
+        current = session.execute(
+            select(roles.c.permissions).where(
+                roles.c.org_id == uuid.UUID(ORG),
+                roles.c.name == role,
             )
-        )
+        ).scalar_one_or_none()
+        if current is None:
+            session.execute(
+                roles.insert().values(
+                    id=uuid.uuid4(),
+                    org_id=uuid.UUID(ORG),
+                    name=role,
+                    permissions=permissions,
+                )
+            )
+        else:
+            merged = list(dict.fromkeys([*current, *permissions]))
+            session.execute(
+                update(roles)
+                .where(roles.c.org_id == uuid.UUID(ORG), roles.c.name == role)
+                .values(permissions=merged)
+            )
         session.commit()
     finally:
         session_iterator.close()
@@ -463,6 +493,114 @@ def _create_active_v2_plan_and_run(
     )
     assert created_run.status_code == 201, created_run.text
     return plan, created_run.json()
+
+
+def test_v2_plan_creation_rejects_generic_org_mutation_permission(workbench_client) -> None:
+    client, active = workbench_client
+    _grant_role_permissions("viewer", ["model:write"])
+    active["token"] = _token(VIEWER)
+    target, suite = _bootstrap(client)
+
+    response = client.post(
+        f"{BASE}/systems/system-a/evaluation-v2/plans",
+        headers=_headers("plan-generic-mutator"),
+        json={
+            "contractVersion": "2.0.0",
+            "name": "Generic mutator plan",
+            "targetVersionId": target["id"],
+            "lifecyclePhases": ["pre_deploy"],
+            "executionDepth": "deep",
+            "enforcementMode": "human_approval",
+            "deliveryMode": "external_provider",
+            "trustPolicyVersionId": "trust-a",
+            "suites": [{"suiteVersionId": suite["id"]}],
+        },
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == {
+        "code": "evaluation_plan_write_forbidden",
+        "message": "The evaluation:plan:write permission is required.",
+    }
+
+
+def test_v2_plan_activation_requires_its_own_persisted_permission(workbench_client) -> None:
+    client, active = workbench_client
+    _grant_role_permissions("viewer", ["model:write", "evaluation:plan:write"])
+    active["token"] = _token(VIEWER)
+    target, suite = _bootstrap(client)
+    plans_url = f"{BASE}/systems/system-a/evaluation-v2/plans"
+    created = client.post(
+        plans_url,
+        headers=_headers("plan-activation-boundary-create"),
+        json={
+            "contractVersion": "2.0.0",
+            "name": "Activation boundary plan",
+            "targetVersionId": target["id"],
+            "lifecyclePhases": ["pre_deploy"],
+            "executionDepth": "deep",
+            "enforcementMode": "human_approval",
+            "deliveryMode": "external_provider",
+            "trustPolicyVersionId": "trust-a",
+            "suites": [{"suiteVersionId": suite["id"]}],
+        },
+    )
+    assert created.status_code == 201, created.text
+
+    response = client.post(
+        f"{plans_url}/{created.json()['id']}/activate",
+        headers=_headers("plan-activation-boundary"),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == {
+        "code": "evaluation_plan_activate_forbidden",
+        "message": "The evaluation:plan:activate permission is required.",
+    }
+
+
+def test_v2_run_creation_requires_its_own_persisted_permission(workbench_client) -> None:
+    client, active = workbench_client
+    _grant_role_permissions(
+        "viewer",
+        ["model:write", "evaluation:plan:write", "evaluation:plan:activate"],
+    )
+    active["token"] = _token(VIEWER)
+    target, suite = _bootstrap(client)
+    plans_url = f"{BASE}/systems/system-a/evaluation-v2/plans"
+    created = client.post(
+        plans_url,
+        headers=_headers("run-creation-boundary-plan"),
+        json={
+            "contractVersion": "2.0.0",
+            "name": "Run creation boundary plan",
+            "targetVersionId": target["id"],
+            "lifecyclePhases": ["pre_deploy"],
+            "executionDepth": "deep",
+            "enforcementMode": "human_approval",
+            "deliveryMode": "external_provider",
+            "trustPolicyVersionId": "trust-a",
+            "suites": [{"suiteVersionId": suite["id"]}],
+        },
+    )
+    assert created.status_code == 201, created.text
+    activated = client.post(
+        f"{plans_url}/{created.json()['id']}/activate",
+        headers=_headers("run-creation-boundary-activate"),
+    )
+    assert activated.status_code == 200, activated.text
+
+    response = client.post(
+        f"{plans_url}/{created.json()['id']}/runs",
+        headers=_headers("run-creation-boundary"),
+        json={"trigger": "manual", "lifecyclePhase": "pre_deploy"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == {
+        "code": "evaluation_run_create_forbidden",
+        "message": "The evaluation:run:create permission is required.",
+    }
 
 
 def test_verified_evidence_submit_is_hidden_when_feature_flag_is_off(

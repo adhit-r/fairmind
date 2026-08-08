@@ -588,6 +588,45 @@ def _write(membership: OrgMembership, db: Session) -> None:
     _require_mutation(membership, governance_service(db))
 
 
+def _require_plan_write_permission(membership: OrgMembership) -> None:
+    """Require the narrow capability to create an immutable evaluation plan."""
+
+    if "evaluation:plan:write" not in membership.permissions:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "evaluation_plan_write_forbidden",
+                "message": "The evaluation:plan:write permission is required.",
+            },
+        )
+
+
+def _require_plan_activate_permission(membership: OrgMembership) -> None:
+    """Require the separate capability to activate an executable plan."""
+
+    if "evaluation:plan:activate" not in membership.permissions:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "evaluation_plan_activate_forbidden",
+                "message": "The evaluation:plan:activate permission is required.",
+            },
+        )
+
+
+def _require_run_create_permission(membership: OrgMembership) -> None:
+    """Require the separate capability to start an immutable evaluation run."""
+
+    if "evaluation:run:create" not in membership.permissions:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "evaluation_run_create_forbidden",
+                "message": "The evaluation:run:create permission is required.",
+            },
+        )
+
+
 def _require_evidence_submit_permission(membership: OrgMembership) -> None:
     if "evaluation:evidence:submit" not in membership.permissions:
         raise HTTPException(
@@ -898,7 +937,7 @@ async def create_plan(
     membership: OrgMembership = Depends(organization_membership),
     db: Session = Depends(get_db),
 ):
-    _write(membership, db)
+    _require_plan_write_permission(membership)
     try:
         result = _service(db).create_plan(
             org_id=membership.org_id,
@@ -967,7 +1006,7 @@ def activate_plan(
     membership: OrgMembership = Depends(organization_membership),
     db: Session = Depends(get_db),
 ):
-    _write(membership, db)
+    _require_plan_activate_permission(membership)
     try:
         result = _service(db).activate_plan(
             org_id=membership.org_id,
@@ -1022,7 +1061,7 @@ async def create_run(
     membership: OrgMembership = Depends(organization_membership),
     db: Session = Depends(get_db),
 ):
-    _write(membership, db)
+    _require_run_create_permission(membership)
     try:
         result = _service(db).create_run(
             org_id=membership.org_id,
