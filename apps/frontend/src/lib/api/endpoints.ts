@@ -193,6 +193,17 @@ export const API_ENDPOINTS = {
       `/api/v1/ai-governance/organizations/${orgId}/systems/${systemId}/evaluation-runs/${runId}`,
     evaluationRunPassportLink: (orgId: string, systemId: string, runId: string) =>
       `/api/v1/ai-governance/organizations/${orgId}/systems/${systemId}/evaluation-runs/${runId}/evidence-passport-link`,
+    // The current GET workbench routes derive workspace from the server-owned
+    // system binding. The client still keys and validates every response by
+    // organization, workspace, and system before rendering it.
+    evaluationV2Plans: (orgId: string, systemId: string) =>
+      `/api/v1/ai-governance/organizations/${orgId}/systems/${systemId}/evaluation-v2/plans`,
+    evaluationV2Plan: (orgId: string, systemId: string, planId: string) =>
+      `/api/v1/ai-governance/organizations/${orgId}/systems/${systemId}/evaluation-v2/plans/${planId}`,
+    evaluationV2Runs: (orgId: string, systemId: string) =>
+      `/api/v1/ai-governance/organizations/${orgId}/systems/${systemId}/evaluation-v2/runs`,
+    evaluationV2Run: (orgId: string, systemId: string, runId: string) =>
+      `/api/v1/ai-governance/organizations/${orgId}/systems/${systemId}/evaluation-v2/runs/${runId}`,
     evidenceMappings: (orgId: string, evidenceId: string) =>
       `/api/v1/ai-governance/organizations/${orgId}/evidence/${evidenceId}/control-mappings`,
     reviewEvidenceMapping: (orgId: string, mappingId: string) =>
