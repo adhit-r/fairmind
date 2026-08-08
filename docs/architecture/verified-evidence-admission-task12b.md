@@ -27,11 +27,14 @@ kernel resolves it through an installed durable evaluator-registration catalog,
 locks an approved row in the same transaction as receipt persistence, and
 requires the exact source, adapter name/version, result contract, issuer, and
 signing-key binding. The registration ID and binding hash are included in the
-append-only successful-admission audit event. Catalog administration has no
-public route in this default-off slice; external and FairMind-worker
-registration ceremonies and route-level catalog permissions remain separate
-release gates. Product claims must not describe an evaluator or provider as
-generally authorized until those gates exist.
+append-only successful-admission audit event. A separate, independently
+default-off catalog-administration API now exposes the registration ceremony;
+it requires the literal `evaluation:catalog:admin` permission, exact
+organization scope, idempotency, four-eyes transitions, CAS, and audit
+events. The API records identity authorization only. External and
+FairMind-worker execution, trust lifecycle administration, and product
+release gates remain separate. Product claims must not describe an evaluator
+or provider as generally authorized until those gates exist.
 
 Inside the organization-scoped mutation transaction, the trusted resolver:
 
@@ -185,12 +188,13 @@ approval ceremonies are released.
 
 ## Capability boundary
 
-Task 12B deliberately adds no UI, worker, external-provider registration
-ceremony, unsigned-import flow, reviewer action,
-governance decision, framework mapping, certification, compliance claim, or
-runtime enforcement. The kernel remains internal and default-off until its
-native PostgreSQL adversarial suite, independent security review, and later
-product release gates pass.
+Task 12B deliberately adds no worker execution, external-provider execution,
+unsigned-import flow, governance decision, framework mapping, certification,
+compliance claim, or runtime enforcement. The catalog UI and API remain
+identity-and-ceremony surfaces only, independently default-off, and do not
+attest evaluator quality or readiness. The kernel remains internal and
+default-off until its native PostgreSQL adversarial suite, independent
+security review, and later product release gates pass.
 
 ## Verification coverage
 
