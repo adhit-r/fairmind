@@ -9,6 +9,7 @@ import re
 import uuid
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
+from io import BytesIO
 from pathlib import Path
 
 from openpyxl import load_workbook
@@ -18,21 +19,40 @@ from sqlalchemy.orm import Session
 
 from database.governance_models import GovernanceControlDefinition, GovernanceFrameworkVersion
 
-
 REQUIRED_SHEETS = ("Instructions", "AIUC-1 requirements", "AIUC-1 Controls & Evidence")
 DEFAULT_COUNTS = (51, 135)
 REQUIREMENT_ID = re.compile(r"^([A-Z]\d{3}):")
 CONTROL_ID = re.compile(r"^([A-Z]\d{3}\.\d+)")
 VERSION = re.compile(r"\bVersion:\s*([^|\n]+)", re.IGNORECASE)
 REQUIREMENT_HEADERS = (
-    "Principle", "Requirement title", "Full requirement", "Application", "Frequency", "Capabilities"
+    "Principle",
+    "Requirement title",
+    "Full requirement",
+    "Application",
+    "Frequency",
+    "Capabilities",
 )
 CONTROL_HEADERS = (
-    "Requirement title", "Mandatory / Optional", "Full requirement", "Control application", "Control",
-    "Evidence title", "Typical evidence", "Category", "Typical Location", "Capabilities", "Category",
-    "Typical Location", "Capabilities", "Type of change", "Change - priority area", "Change - control",
-    "Change - evidence title", "Change - typical evidence",
-    "Change - other (control type, category, typical location, capabilities)", "Reasoning for change",
+    "Requirement title",
+    "Mandatory / Optional",
+    "Full requirement",
+    "Control application",
+    "Control",
+    "Evidence title",
+    "Typical evidence",
+    "Category",
+    "Typical Location",
+    "Capabilities",
+    "Category",
+    "Typical Location",
+    "Capabilities",
+    "Type of change",
+    "Change - priority area",
+    "Change - control",
+    "Change - evidence title",
+    "Change - typical evidence",
+    "Change - other (control type, category, typical location, capabilities)",
+    "Reasoning for change",
     "Changelog specification",
 )
 
@@ -119,7 +139,9 @@ def _active(*values: str) -> bool:
 
 
 def _validate_headers(sheet: object, row: int, expected: tuple[str, ...], label: str) -> None:
-    actual = tuple(_text(value) for value in next(sheet.iter_rows(min_row=row, max_row=row, values_only=True)))
+    actual = tuple(
+        _text(value) for value in next(sheet.iter_rows(min_row=row, max_row=row, values_only=True))
+    )
     if actual[: len(expected)] != expected:
         raise WorkbookValidationError(f"unexpected {label} header")
 
@@ -210,18 +232,18 @@ def _control_records(sheet: object, requirement_ids: set[str]) -> tuple[ParsedCo
     return tuple(records)
 
 
-def parse_aiuc_workbook(
-    path: Path, *, strict: bool = True, expected_counts: tuple[int, int] | None = None
+def _parse_aiuc_workbook_bytes(
+    payload: bytes, *, strict: bool = True, expected_counts: tuple[int, int] | None = None
 ) -> ParsedFrameworkCatalog:
-    """Parse and validate an AIUC-1 workbook without changing database state."""
-    path = Path(path)
-    workbook = load_workbook(path, read_only=True, data_only=True)
+    workbook = load_workbook(BytesIO(payload), read_only=True, data_only=True)
     try:
         missing = set(REQUIRED_SHEETS) - set(workbook.sheetnames)
         if missing:
             raise WorkbookValidationError(f"missing required sheets: {', '.join(sorted(missing))}")
         requirements = _requirement_records(workbook[REQUIRED_SHEETS[1]])
-        controls = _control_records(workbook[REQUIRED_SHEETS[2]], {item.external_id for item in requirements})
+        controls = _control_records(
+            workbook[REQUIRED_SHEETS[2]], {item.external_id for item in requirements}
+        )
         target = DEFAULT_COUNTS if strict else expected_counts
         if target and (len(requirements), len(controls)) != target:
             raise WorkbookValidationError(
@@ -232,12 +254,21 @@ def parse_aiuc_workbook(
             framework_key="aiuc-1",
             name="AIUC-1",
             version_label=_version_label(workbook[REQUIRED_SHEETS[0]]),
-            source_hash=hashlib.sha256(path.read_bytes()).hexdigest(),
+            source_hash=hashlib.sha256(payload).hexdigest(),
             requirements=requirements,
             controls=controls,
         )
     finally:
         workbook.close()
+
+
+def parse_aiuc_workbook(
+    path: Path, *, strict: bool = True, expected_counts: tuple[int, int] | None = None
+) -> ParsedFrameworkCatalog:
+    """Parse and validate an AIUC-1 workbook without changing database state."""
+    return _parse_aiuc_workbook_bytes(
+        Path(path).read_bytes(), strict=strict, expected_counts=expected_counts
+    )
 
 
 class FrameworkCatalogService:
@@ -251,11 +282,52 @@ class FrameworkCatalogService:
         self.expected_counts = expected_counts
 
     def import_workbook(self, path: Path, actor_id: str) -> FrameworkImportResult:
-        catalog = parse_aiuc_workbook(path, strict=self.strict, expected_counts=self.expected_counts)
+        path = Path(path)
+        return self._import_catalog(
+            parse_aiuc_workbook(path, strict=self.strict, expected_counts=self.expected_counts),
+            source_filename=path.name,
+            source_uri=str(path),
+            actor_id=actor_id,
+        )
+
+    def import_workbook_bytes(
+        self, payload: bytes, *, source_filename: str, actor_id: str
+    ) -> FrameworkImportResult:
+        """Import a byte snapshot so callers can close the source before parsing."""
+        if (
+            not source_filename
+            or "/" in source_filename
+            or "\\" in source_filename
+            or Path(source_filename).name != source_filename
+        ):
+            raise ValueError("source_filename must be a single filename")
+        catalog = _parse_aiuc_workbook_bytes(
+            payload, strict=self.strict, expected_counts=self.expected_counts
+        )
+        return self._import_catalog(
+            catalog,
+            source_filename=source_filename,
+            source_uri=f"managed-import://{catalog.source_hash}",
+            actor_id=actor_id,
+        )
+
+    def _import_catalog(
+        self,
+        catalog: ParsedFrameworkCatalog,
+        *,
+        source_filename: str,
+        source_uri: str,
+        actor_id: str,
+    ) -> FrameworkImportResult:
         try:
             already_active = self.db.in_transaction()
-            with (self.db.begin_nested() if already_active else self.db.begin()):
-                result = self._persist(catalog, Path(path), actor_id)
+            with self.db.begin_nested() if already_active else self.db.begin():
+                result = self._persist(
+                    catalog,
+                    source_filename=source_filename,
+                    source_uri=source_uri,
+                    actor_id=actor_id,
+                )
             if already_active:
                 self.db.commit()
             return result
@@ -273,7 +345,14 @@ class FrameworkCatalogService:
                 return self._result(existing, catalog, created=False)
             raise
 
-    def _persist(self, catalog: ParsedFrameworkCatalog, path: Path, actor_id: str) -> FrameworkImportResult:
+    def _persist(
+        self,
+        catalog: ParsedFrameworkCatalog,
+        *,
+        source_filename: str,
+        source_uri: str,
+        actor_id: str,
+    ) -> FrameworkImportResult:
         versions = GovernanceFrameworkVersion.__table__
         controls = GovernanceControlDefinition.__table__
         existing = self.db.execute(
@@ -293,19 +372,28 @@ class FrameworkCatalogService:
                 name=catalog.name,
                 version_label=catalog.version_label,
                 source_hash=catalog.source_hash,
-                source_filename=path.name,
-                source_uri=str(path),
+                source_filename=source_filename,
+                source_uri=source_uri,
                 imported_by=actor_id,
                 imported_at=datetime.now(timezone.utc).isoformat(),
-                requirements_json=json.dumps([asdict(requirement) for requirement in catalog.requirements]),
+                requirements_json=json.dumps(
+                    [asdict(requirement) for requirement in catalog.requirements]
+                ),
                 metadata_json=json.dumps({"parser": "aiuc-1-workbook"}),
                 status="active",
             )
         )
-        requirements = {requirement.external_id: requirement for requirement in catalog.requirements}
+        requirements = {
+            requirement.external_id: requirement for requirement in catalog.requirements
+        }
         self.db.execute(
             insert(controls),
-            [self._control_values(version_id, control, requirements[control.parent_requirement_id]) for control in catalog.controls],
+            [
+                self._control_values(
+                    version_id, control, requirements[control.parent_requirement_id]
+                )
+                for control in catalog.controls
+            ],
         )
         return self._result(version_id, catalog, created=True)
 
@@ -353,7 +441,9 @@ class FrameworkCatalogService:
         }
 
     @staticmethod
-    def _result(version_id: str, catalog: ParsedFrameworkCatalog, *, created: bool) -> FrameworkImportResult:
+    def _result(
+        version_id: str, catalog: ParsedFrameworkCatalog, *, created: bool
+    ) -> FrameworkImportResult:
         return FrameworkImportResult(
             version_id=version_id,
             framework_key=catalog.framework_key,

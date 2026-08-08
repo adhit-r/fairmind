@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict
 import os
+import tempfile
+from dataclasses import asdict
 from pathlib import Path
 from string import ascii_letters, digits
-import tempfile
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -18,7 +18,6 @@ from sqlalchemy.orm import Session
 from config.auth import TokenData, get_current_active_user
 from config.settings import settings
 from database.connection import get_db
-from src.application.services.framework_catalog_service import FrameworkCatalogService
 from src.application.ports.evidence_ingestion import (
     EvidenceAuditWriteError,
     EvidenceMappingReferenceError,
@@ -28,21 +27,22 @@ from src.application.ports.evidence_ingestion import (
     EvidenceScopeMismatch,
     EvidenceSystemNotFound,
 )
+from src.application.services.evaluation_runs_service import (
+    SUITE_REF_PATTERN,
+    EvaluationRunsService,
+    EvaluationWorkflowError,
+)
 from src.application.services.evidence_ingestion_service import (
     EvidencePassportValidationError,
     build_evidence_ingestion_service,
     canonical_evidence_passport_schema,
     parse_strict_json_object,
 )
+from src.application.services.framework_catalog_service import FrameworkCatalogService
 from src.application.services.governance_assurance_service import (
     EvidenceMappingConflictError,
     GovernanceAssuranceService,
     OrgMembership,
-)
-from src.application.services.evaluation_runs_service import (
-    EvaluationRunsService,
-    EvaluationWorkflowError,
-    SUITE_REF_PATTERN,
 )
 
 router = APIRouter(prefix="/organizations/{org_id}", tags=["governance-assurance"])
@@ -224,9 +224,9 @@ class EvaluationRunResponse(BaseModel):
     technical_status: Literal[
         "awaiting_evidence", "running", "succeeded", "failed", "cancelled"
     ] = Field(alias="technicalStatus")
-    overall_verdict: Literal[
-        "approved", "conditional", "review", "blocked", "insufficient"
-    ] = Field(alias="overallVerdict")
+    overall_verdict: Literal["approved", "conditional", "review", "blocked", "insufficient"] = (
+        Field(alias="overallVerdict")
+    )
     layer_verdicts: dict[str, Any] = Field(alias="layerVerdicts")
     linked_evidence_run_id: str | None = Field(alias="linkedEvidenceRunId")
     linked_passport_revision_id: str | None = Field(alias="linkedPassportRevisionId")
@@ -536,35 +536,92 @@ def _require_import(membership: OrgMembership, service: GovernanceAssuranceServi
         )
 
 
-def _managed_workbook_path(workbook_path: str) -> Path:
+def _read_managed_workbook(workbook_path: str) -> tuple[str, bytes]:
+    if (
+        not isinstance(workbook_path, str)
+        or not workbook_path
+        or "\x00" in workbook_path
+        or "/" in workbook_path
+        or "\\" in workbook_path
+        or Path(workbook_path).name != workbook_path
+        or Path(workbook_path).suffix.lower() != ".xlsx"
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Workbook must be a managed .xlsx file",
+        )
     root = Path(
         os.getenv(
             "GOVERNANCE_FRAMEWORK_IMPORT_ROOT",
             str(Path(tempfile.gettempdir()) / "fairmind-framework-imports"),
         )
     ).resolve()
-    requested = Path(workbook_path)
-    if requested.is_absolute() or requested.suffix.lower() != ".xlsx":
+
+    nofollow = getattr(os, "O_NOFOLLOW", None)
+    if nofollow is None:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Workbook must be a managed .xlsx file",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Managed workbook imports require no-follow file opening support",
         )
     try:
-        path = (root / requested).resolve()
-        path.relative_to(root)
-    except ValueError as error:
+        entries = os.scandir(root)
+    except FileNotFoundError as error:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Workbook path is outside the managed import root",
+            status_code=status.HTTP_404_NOT_FOUND, detail="Workbook not found"
         ) from error
-    if not path.is_file():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workbook not found")
-    if path.stat().st_size > MAX_WORKBOOK_BYTES:
+    except OSError as error:
         raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="Workbook exceeds import size limit",
-        )
-    return path
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Managed workbook directory is unavailable",
+        ) from error
+
+    with entries:
+        entry = next((candidate for candidate in entries if candidate.name == workbook_path), None)
+        if entry is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workbook not found")
+        try:
+            if entry.is_symlink():
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="Workbook must not be a symlink",
+                )
+            if not entry.is_file(follow_symlinks=False):
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND, detail="Workbook not found"
+                )
+        except OSError as error:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Workbook could not be inspected safely",
+            ) from error
+        try:
+            descriptor = os.open(
+                entry.path,
+                os.O_RDONLY | nofollow | getattr(os, "O_CLOEXEC", 0),
+            )
+        except FileNotFoundError as error:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Workbook not found"
+            ) from error
+        except OSError as error:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Workbook could not be opened safely",
+            ) from error
+
+        with os.fdopen(descriptor, "rb") as stream:
+            if os.fstat(stream.fileno()).st_size > MAX_WORKBOOK_BYTES:
+                raise HTTPException(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail="Workbook exceeds import size limit",
+                )
+            payload = stream.read(MAX_WORKBOOK_BYTES + 1)
+        if len(payload) > MAX_WORKBOOK_BYTES:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail="Workbook exceeds import size limit",
+            )
+        return entry.name, payload
 
 
 def _strict_imports() -> bool:
@@ -590,10 +647,10 @@ def import_framework(
 ) -> dict:
     service = _service(db)
     _require_import(membership, service)
-    path = _managed_workbook_path(request.workbook_path)
+    source_filename, payload = _read_managed_workbook(request.workbook_path)
     return asdict(
-        FrameworkCatalogService(db, strict=_strict_imports()).import_workbook(
-            path, membership.user_id
+        FrameworkCatalogService(db, strict=_strict_imports()).import_workbook_bytes(
+            payload, source_filename=source_filename, actor_id=membership.user_id
         )
     )
 
@@ -885,8 +942,7 @@ def _require_legacy_evaluation_mutation_enabled() -> None:
             detail={
                 "code": "contract_upgrade_required",
                 "message": (
-                    "Legacy evaluation mutations are disabled while Assurance V2 "
-                    "is enabled."
+                    "Legacy evaluation mutations are disabled while Assurance V2 " "is enabled."
                 ),
                 "nextAction": (
                     "Clone legacy records into a bound v2 plan and use the "

@@ -284,6 +284,11 @@ def test_owner_imports_only_managed_xlsx_files_and_exposes_catalog_routes(
     _write_small_workbook(workbook)
     outside = import_root.parent / "outside.xlsx"
     _write_small_workbook(outside)
+    symlink = import_root / "symlink.xlsx"
+    try:
+        symlink.symlink_to(outside)
+    except OSError:
+        pytest.skip("symlink tests require filesystem symlink support")
 
     imported = client.post(
         f"/api/v1/ai-governance/organizations/{ORG_A}/frameworks/import",
@@ -301,6 +306,10 @@ def test_owner_imports_only_managed_xlsx_files_and_exposes_catalog_routes(
         f"/api/v1/ai-governance/organizations/{ORG_A}/frameworks/import",
         json={"workbookPath": str(outside)},
     )
+    symlinked = client.post(
+        f"/api/v1/ai-governance/organizations/{ORG_A}/frameworks/import",
+        json={"workbookPath": symlink.name},
+    )
     invalid_type = client.post(
         f"/api/v1/ai-governance/organizations/{ORG_A}/frameworks/import",
         json={"workbookPath": "catalog.txt"},
@@ -312,7 +321,13 @@ def test_owner_imports_only_managed_xlsx_files_and_exposes_catalog_routes(
     assert versions.json()[0]["id"] == imported.json()["version_id"]
     assert controls.status_code == 200
     assert len(controls.json()) == 2
-    assert traversal.status_code == absolute.status_code == invalid_type.status_code == 422
+    assert (
+        traversal.status_code
+        == absolute.status_code
+        == symlinked.status_code
+        == invalid_type.status_code
+        == 422
+    )
     session = session_factory()
     assert (
         session.execute(

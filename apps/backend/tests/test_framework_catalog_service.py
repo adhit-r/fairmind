@@ -160,6 +160,27 @@ def test_import_is_idempotent_and_persists_catalog_in_one_transaction(tmp_path: 
     assert json.loads(control["metadata_json"])["additional_capabilities"] == ["Legacy"]
 
 
+def test_import_workbook_bytes_persists_an_immutable_source_snapshot(tmp_path: Path) -> None:
+    workbook_path = tmp_path / "aiuc.xlsx"
+    write_workbook(workbook_path)
+    payload = workbook_path.read_bytes()
+    engine = create_engine("sqlite://")
+    GovernanceFrameworkVersion.__table__.create(engine)
+    GovernanceControlDefinition.__table__.create(engine)
+    session = Session(engine)
+    service = FrameworkCatalogService(session, strict=False, expected_counts=(2, 2))
+
+    created = service.import_workbook_bytes(
+        payload, source_filename="aiuc.xlsx", actor_id="actor-1"
+    )
+
+    assert created.created is True
+    assert created.source_hash == hashlib.sha256(payload).hexdigest()
+    version = session.execute(select(GovernanceFrameworkVersion.__table__)).mappings().one()
+    assert version["source_filename"] == "aiuc.xlsx"
+    assert version["source_uri"] == f"managed-import://{created.source_hash}"
+
+
 def test_import_rolls_back_version_when_control_persistence_fails(tmp_path: Path) -> None:
     workbook_path = tmp_path / "aiuc.xlsx"
     write_workbook(workbook_path)
