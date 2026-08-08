@@ -3,6 +3,7 @@
 import React from "react";
 import { usePathname } from "next/navigation";
 import { SidebarProvider } from "@/components/ui/sidebar";
+import { SessionProvider } from "@/context/SessionContext";
 import { Header } from "./Header";
 import { AppSidebar } from "./Sidebar";
 
@@ -40,6 +41,8 @@ export function ClientNavigation({ children }: ClientNavigationProps) {
   const isAuthRoute =
     pathname?.startsWith("/login") ||
     pathname?.startsWith("/register") ||
+    pathname?.startsWith("/callback") ||
+    pathname?.startsWith("/invitations/") ||
     isLegacyTestRoute;
 
 
@@ -49,14 +52,16 @@ export function ClientNavigation({ children }: ClientNavigationProps) {
   }
 
   return (
-    <SidebarProvider>
-      <div className="relative flex min-h-screen w-full overflow-x-clip">
-        {/* Sidebar - fixed position, full height from top */}
-        <AppSidebar />
+    <SessionProvider>
+      <SidebarProvider>
+        <div className="relative flex min-h-screen w-full overflow-x-clip">
+          {/* Sidebar - fixed position, full height from top */}
+          <AppSidebar />
 
-        {/* Main content area - accounts for sidebar width dynamically */}
-        <MainContent>{children}</MainContent>
-      </div>
-    </SidebarProvider>
+          {/* Main content area - accounts for sidebar width dynamically */}
+          <MainContent>{children}</MainContent>
+        </div>
+      </SidebarProvider>
+    </SessionProvider>
   );
 }

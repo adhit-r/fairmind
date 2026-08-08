@@ -4,7 +4,7 @@ import * as React from 'react'
 
 import { cn } from '@/lib/utils'
 
-export const APPROVED_PROFILE_PORTRAIT_URL = 'https://ui.shadcn.com/avatars/02.png'
+export const APPROVED_PROFILE_PORTRAIT_URL = '/profile-portrait.svg'
 
 export interface FramedIdentityProps
   extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'children'> {
@@ -67,7 +67,6 @@ export const FramedIdentity = React.forwardRef<HTMLButtonElement, FramedIdentity
       >
         <span className={cn('relative flex shrink-0 items-center justify-center overflow-hidden bg-[#FF6B35]', collapsed ? 'h-10 w-10' : 'h-11 w-11 border-2 border-[#0F1412]')}>
           {imageAvailable ? (
-            // This exact approved source is centralized here until a local licensed asset replaces it.
             // eslint-disable-next-line @next/next/no-img-element
             <img
               ref={imageRef}

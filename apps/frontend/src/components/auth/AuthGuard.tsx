@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { useAuth } from '@/lib/api/hooks/useAuth'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useSession } from '@/context/SessionContext'
 
 interface AuthGuardProps {
   children: React.ReactNode
@@ -11,29 +11,13 @@ interface AuthGuardProps {
 
 export function AuthGuard({ children }: AuthGuardProps) {
   const router = useRouter()
-  const { user, getCurrentUser, loading } = useAuth()
-  const [isChecking, setIsChecking] = useState(true)
+  const { user, loading } = useSession()
 
   useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null
-        if (!token) {
-          router.push('/login')
-          return
-        }
+    if (!loading && !user) router.replace('/login')
+  }, [loading, router, user])
 
-        await getCurrentUser()
-        setIsChecking(false)
-      } catch {
-        router.push('/login')
-      }
-    }
-
-    checkAuth()
-  }, [router, getCurrentUser])
-
-  if (isChecking || loading) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="space-y-4 w-full max-w-md p-6">

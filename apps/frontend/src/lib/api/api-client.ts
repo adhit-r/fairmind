@@ -139,6 +139,7 @@ const classifyError = (error: any, response?: Response): ApiError => {
 
 interface RequestOptions extends RequestInit {
   enableRetry?: boolean
+  refreshOnUnauthorized?: boolean
   maxRetries?: number
   retryDelay?: number
   timeout?: number
@@ -216,22 +217,54 @@ export class ApiClient {
   private accessToken: string | null = null
   private refreshToken: string | null = null
   private refreshPromise: Promise<boolean> | null = null
+  private sessionEpoch = 0
 
   constructor(baseUrl?: string) {
     this.baseUrl = baseUrl || process.env.NEXT_PUBLIC_API_URL || '/api/proxy'
   }
 
   setAccessToken(token: string | null) {
+    if (this.accessToken !== token) {
+      this.sessionEpoch += 1
+      this.refreshPromise = null
+      this.clearCache()
+    }
     this.accessToken = token
   }
 
   setRefreshToken(token: string | null) {
+    if (this.refreshToken !== token) {
+      this.sessionEpoch += 1
+      this.refreshPromise = null
+      this.clearCache()
+    }
     this.refreshToken = token
   }
 
+  hydrateSession() {
+    if (typeof window === 'undefined') return
+
+    const accessToken = window.localStorage.getItem('access_token')
+    const refreshToken = window.localStorage.getItem('refresh_token')
+    if (this.accessToken !== accessToken || this.refreshToken !== refreshToken) {
+      this.sessionEpoch += 1
+      this.refreshPromise = null
+      this.clearCache()
+    }
+    this.accessToken = accessToken
+    this.refreshToken = refreshToken
+  }
+
+  clearCache() {
+    apiCache.clear()
+  }
+
   clearSession() {
+    this.sessionEpoch += 1
     this.accessToken = null
     this.refreshToken = null
+    this.refreshPromise = null
+    this.clearCache()
     if (typeof window !== 'undefined') {
       window.localStorage.removeItem('access_token')
       window.localStorage.removeItem('refresh_token')
@@ -239,7 +272,8 @@ export class ApiClient {
   }
 
   private async refreshAccessToken(): Promise<boolean> {
-    if (!this.refreshToken) {
+    const refreshToken = this.refreshToken
+    if (!refreshToken) {
       return false
     }
 
@@ -247,42 +281,50 @@ export class ApiClient {
       return this.refreshPromise
     }
 
-    this.refreshPromise = (async () => {
+    const refreshEpoch = this.sessionEpoch
+    const refreshPromise = (async () => {
       try {
         const response = await fetch(`${this.baseUrl}${API_ENDPOINTS.auth.refresh}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ refresh_token: this.refreshToken }),
+          body: JSON.stringify({ refresh_token: refreshToken }),
         })
 
         if (!response.ok) {
-          this.clearSession()
+          if (this.sessionEpoch === refreshEpoch) this.clearSession()
           return false
         }
 
         const payload = await response.json()
         const nextToken = payload.access_token
         if (!nextToken) {
-          this.clearSession()
+          if (this.sessionEpoch === refreshEpoch) this.clearSession()
           return false
         }
 
-        this.setAccessToken(nextToken)
+        if (this.sessionEpoch !== refreshEpoch || this.refreshToken !== refreshToken) {
+          return false
+        }
+
+        this.accessToken = nextToken
         if (typeof window !== 'undefined') {
           window.localStorage.setItem('access_token', nextToken)
         }
         return true
       } catch {
-        this.clearSession()
+        if (this.sessionEpoch === refreshEpoch) this.clearSession()
         return false
       } finally {
-        this.refreshPromise = null
+        if (this.sessionEpoch === refreshEpoch) {
+          this.refreshPromise = null
+        }
       }
     })()
 
-    return this.refreshPromise
+    this.refreshPromise = refreshPromise
+    return refreshPromise
   }
 
   private async request<T>(
@@ -299,6 +341,7 @@ export class ApiClient {
 
     const {
       enableRetry = true,
+      refreshOnUnauthorized = true,
       maxRetries = 3,
       retryDelay = 1000,
       timeout = 10000,
@@ -306,6 +349,7 @@ export class ApiClient {
       useCache = false,
       ...fetchOptions
     } = options
+    const requestEpoch = this.sessionEpoch
 
     // Check cache first
     if (useCache && cacheKey) {
@@ -320,8 +364,12 @@ export class ApiClient {
 
     // Inject selected org_id into GET requests for dashboard routes
     let finalEndpoint = endpoint
-    if (typeof window !== 'undefined' && endpoint.includes('/api/v1/')) {
-      const selectedOrgId = localStorage.getItem('selected_org_id')
+    if (
+      typeof window !== 'undefined'
+      && endpoint.includes('/api/v1/')
+      && !endpoint.startsWith('/api/v1/auth/')
+    ) {
+      const selectedOrgId = window.localStorage.getItem('selected_org_id')
       if (selectedOrgId) {
         // Add org_id parameter only if not already present
         const separator = endpoint.includes('?') ? '&' : '?'
@@ -343,7 +391,20 @@ export class ApiClient {
     }
 
     let retryCount = 0
-    const makeRequest = async (allowRefresh = true): Promise<ApiResponse<T>> => {
+    const makeRequest = async (allowRefresh = refreshOnUnauthorized): Promise<ApiResponse<T>> => {
+      if (this.sessionEpoch !== requestEpoch) {
+        return {
+          success: false,
+          error: 'Session was cleared before the request completed',
+          apiError: {
+            message: 'Session was cleared before the request completed',
+            status: 401,
+            type: 'client',
+            canRetry: false,
+          },
+        }
+      }
+
       try {
         // Create abort controller for timeout
         const controller = new AbortController()
@@ -356,6 +417,19 @@ export class ApiClient {
         })
 
         clearTimeout(timeoutId)
+
+        if (this.sessionEpoch !== requestEpoch) {
+          return {
+            success: false,
+            error: 'Session was cleared before the request completed',
+            apiError: {
+              message: 'Session was cleared before the request completed',
+              status: 401,
+              type: 'client',
+              canRetry: false,
+            },
+          }
+        }
 
         if (!response.ok) {
           if (response.status === 401 && allowRefresh && this.refreshToken) {
@@ -381,6 +455,19 @@ export class ApiClient {
         }
 
         const jsonData = await response.json()
+
+        if (this.sessionEpoch !== requestEpoch) {
+          return {
+            success: false,
+            error: 'Session was cleared before the request completed',
+            apiError: {
+              message: 'Session was cleared before the request completed',
+              status: 401,
+              type: 'client',
+              canRetry: false,
+            },
+          }
+        }
 
         // Cache successful response
         if (useCache && cacheKey) {
@@ -488,8 +575,5 @@ export const apiClient = new ApiClient()
 
 // Initialize from localStorage if available
 if (typeof window !== 'undefined') {
-  const token = localStorage.getItem('access_token')
-  const refreshToken = localStorage.getItem('refresh_token')
-  apiClient.setAccessToken(token)
-  apiClient.setRefreshToken(refreshToken)
+  apiClient.hydrateSession()
 }
