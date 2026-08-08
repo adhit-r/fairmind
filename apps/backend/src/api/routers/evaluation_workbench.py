@@ -16,6 +16,9 @@ from api.composition.evaluation_workbench import build_evaluation_workbench_serv
 from api.composition.verified_evidence_admission import (
     build_verified_evidence_admission_service,
 )
+from api.composition.verified_evidence_review import (
+    build_verified_evidence_review_service,
+)
 from config.settings import settings
 from src.api.routers.governance_assurance import (
     _require_mutation,
@@ -23,6 +26,7 @@ from src.api.routers.governance_assurance import (
     organization_membership,
 )
 from src.application.ports.evidence_admission import EvidenceAdmissionScope
+from src.application.ports.evidence_review import EvidenceReviewScope
 from src.application.services.evaluation_workbench_service import (
     EvaluationWorkbenchError,
     EvaluationWorkbenchInputError,
@@ -32,12 +36,19 @@ from src.application.services.evaluation_workbench_service import (
 from src.application.services.verified_evidence_admission_service import (
     VerifiedEvidenceAdmissionService,
 )
+from src.application.services.verified_evidence_review_service import (
+    VerifiedEvidenceReviewService,
+)
 from src.application.services.governance_assurance_service import OrgMembership
 
 router = APIRouter(prefix="/organizations/{org_id}", tags=["evaluation-workbench-v2"])
 verified_evidence_router = APIRouter(
     prefix="/organizations/{org_id}",
     tags=["evaluation-workbench-v2-evidence"],
+)
+verified_evidence_review_router = APIRouter(
+    prefix="/organizations/{org_id}",
+    tags=["evaluation-workbench-v2-evidence-review"],
 )
 MAX_REQUEST_BYTES = 1024 * 1024
 MAX_JSON_DEPTH = 32
@@ -379,6 +390,36 @@ class EvidenceAdmissionResponse(StrictModel):
     verified_at: str = Field(alias="verifiedAt")
 
 
+class EvidenceReviewRequest(StrictModel):
+    """One explicit reviewer outcome for a scope-bound admitted Passport V2."""
+
+    decision: Literal["accepted", "rejected"]
+    rationale: str = Field(min_length=1, max_length=512)
+    expected_review_version: int = Field(alias="expectedReviewVersion", ge=0)
+
+
+class EvidenceReviewResponse(StrictModel):
+    """Evidence-review projection; deliberately not a governance decision."""
+
+    review_id: str = Field(alias="reviewId")
+    admission_id: str = Field(alias="admissionId")
+    passport_revision_id: str = Field(alias="passportRevisionId")
+    run_id: str = Field(alias="runId")
+    suite_execution_id: str = Field(alias="suiteExecutionId")
+    decision: Literal["accepted", "rejected"]
+    rationale: str
+    review_version: int = Field(alias="reviewVersion", ge=1)
+    reviewed_by: str = Field(alias="reviewedBy")
+    reviewed_at: str = Field(alias="reviewedAt")
+    admission_status: Literal["verified"] = Field(alias="admissionStatus")
+    review_status: Literal["accepted", "rejected"] = Field(alias="reviewStatus")
+    freshness_status: Literal["current"] = Field(alias="freshnessStatus")
+    technical_status: TechnicalStatus = Field(alias="technicalStatus")
+    evidence_result_status: EvidenceResultStatus = Field(alias="evidenceResultStatus")
+    run_technical_status: TechnicalStatus = Field(alias="runTechnicalStatus")
+    run_evidence_outcome: EvidenceResultStatus = Field(alias="runEvidenceOutcome")
+
+
 def _depth(value: Any, level: int = 0) -> int:
     if level > MAX_JSON_DEPTH:
         return level
@@ -509,6 +550,14 @@ def get_verified_evidence_admission_service(
     return build_verified_evidence_admission_service(db)
 
 
+def get_verified_evidence_review_service(
+    db: Session = Depends(get_db),
+) -> VerifiedEvidenceReviewService:
+    """Compose the review service only at the independently gated boundary."""
+
+    return build_verified_evidence_review_service(db)
+
+
 def _require_verified_evidence_submit_enabled() -> None:
     """Hide the route until its independent execution/admission gate passes."""
 
@@ -518,6 +567,19 @@ def _require_verified_evidence_submit_enabled() -> None:
             detail={
                 "code": "assurance_feature_disabled",
                 "message": "Verified evidence submission is not enabled.",
+            },
+        )
+
+
+def _require_verified_evidence_review_enabled() -> None:
+    """Hide review until its separate authorization and integrity gate passes."""
+
+    if not settings.assurance_v2_evidence_review_enabled:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "code": "assurance_feature_disabled",
+                "message": "Verified evidence review is not enabled.",
             },
         )
 
@@ -533,6 +595,19 @@ def _require_evidence_submit_permission(membership: OrgMembership) -> None:
             detail={
                 "code": "evaluation_evidence_submit_forbidden",
                 "message": "The evaluation:evidence:submit permission is required.",
+            },
+        )
+
+
+def _require_evidence_review_permission(membership: OrgMembership) -> None:
+    """Require the narrow review permission; admin role alone is insufficient."""
+
+    if "evaluation:evidence:review" not in membership.permissions:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "evaluation_evidence_review_forbidden",
+                "message": "The evaluation:evidence:review permission is required.",
             },
         )
 
@@ -1081,5 +1156,69 @@ async def submit_verified_evidence(
             raw_passport=raw_passport,
         )
         return _respond(result, EvidenceAdmissionResponse)
+    except EvaluationWorkbenchError as error:
+        _raise(error)
+
+
+@verified_evidence_review_router.post(
+    "/workspaces/{workspace_id}/systems/{system_id}/evaluation-v2/runs/{run_id}"
+    "/suite-executions/{suite_execution_id}/evidence-admissions/{admission_id}"
+    "/passport-revisions/{passport_revision_id}/review",
+    status_code=201,
+    response_model=EvidenceReviewResponse,
+    dependencies=[Depends(_require_verified_evidence_review_enabled)],
+    openapi_extra=_request_body_schema(EvidenceReviewRequest),
+)
+async def review_verified_evidence(
+    org_id: str,
+    workspace_id: str,
+    system_id: str,
+    run_id: str,
+    suite_execution_id: str,
+    admission_id: str,
+    passport_revision_id: str,
+    request: Request,
+    idempotency_key: str = Header(alias="Idempotency-Key"),
+    membership: OrgMembership = Depends(organization_membership),
+    db: Session = Depends(get_db),
+    review_service: VerifiedEvidenceReviewService = Depends(get_verified_evidence_review_service),
+):
+    """Append one four-eyes reviewer outcome for exactly one admitted Passport.
+
+    This endpoint deliberately cannot issue a governance verdict.  The service
+    accepts only a pending, verified, current admission with live trust/key
+    authority and rejects any reviewer who submitted, linked, or requested it.
+    """
+
+    _require_evidence_review_permission(membership)
+    if membership.org_id != org_id:
+        _missing("evidence_scope")
+    _require_evidence_scope(
+        db=db,
+        organization_id=membership.org_id,
+        workspace_id=workspace_id,
+        system_id=system_id,
+        run_id=run_id,
+        suite_execution_id=suite_execution_id,
+    )
+    payload = await _payload(request, EvidenceReviewRequest)
+    try:
+        result = review_service.review_verified_evidence(
+            scope=EvidenceReviewScope(
+                organization_id=membership.org_id,
+                workspace_id=workspace_id,
+                system_id=system_id,
+                run_id=run_id,
+                suite_execution_id=suite_execution_id,
+                admission_id=admission_id,
+                passport_revision_id=passport_revision_id,
+            ),
+            actor_id=membership.user_id,
+            idempotency_key=idempotency_key,
+            decision=payload["decision"],
+            rationale=payload["rationale"],
+            expected_review_version=payload["expectedReviewVersion"],
+        )
+        return _respond(result, EvidenceReviewResponse)
     except EvaluationWorkbenchError as error:
         _raise(error)

@@ -410,6 +410,16 @@ if settings.assurance_v2_enabled:
         )
     else:
         logger.info("Verified Evidence Passport admission route is disabled")
+    if settings.assurance_v2_evidence_review_enabled:
+        _include_router(
+            "api.routes.evaluation_workbench",
+            prefix="/api/v1/ai-governance",
+            tags=["evaluation-workbench-v2-evidence-review"],
+            attr="verified_evidence_review_router",
+            required=True,
+        )
+    else:
+        logger.info("Verified Evidence Passport review route is disabled")
 else:
     logger.info("Assurance-contract v2 routes are disabled")
 _include_router("api.routes.environmental", tags=["environmental"], required=False)

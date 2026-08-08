@@ -20,6 +20,7 @@ from database.governance_models import (
     GovernanceEvaluationPlan,
     GovernanceEvaluationPlanSuite,
     GovernanceEvaluationRun,
+    GovernanceEvaluationDecision,
     GovernanceEvaluationRunSuiteExecution,
     GovernanceEvaluationSuiteEvidenceLink,
     GovernanceEvaluationSuiteVersion,
@@ -28,6 +29,7 @@ from database.governance_models import (
     GovernanceEvidenceIssuer,
     GovernanceEvidenceNonceClaim,
     GovernanceEvidencePassportRevision,
+    GovernanceEvidenceReview,
     GovernanceEvidenceRun,
     GovernanceEvidenceSigningKey,
     GovernanceEvidenceTrustPolicyVersion,
@@ -61,6 +63,12 @@ from src.application.ports.evidence_admission import (
     EvidenceAdmissionScope,
     PersistVerifiedPassportV2Command,
     VerifiedPassportV2Record,
+)
+from src.application.ports.evidence_review import (
+    EvidenceReviewAuthorityRecord,
+    EvidenceReviewScope,
+    PersistEvidenceReviewCommand,
+    ReviewedEvidenceRecord,
 )
 from src.domain.assurance.evaluation_v2 import (
     CONTRACT_VERSION,
@@ -151,6 +159,34 @@ _EVIDENCE_P0001_INTEGRITY_MESSAGES = frozenset(
         "verification receipt requires exact verified admission",
     }
 )
+_EVIDENCE_REVIEW_VERSION_CONSTRAINTS = frozenset(
+    {
+        "uq_governance_evidence_review_version",
+        "uq_governance_evidence_review_admission_version",
+    }
+)
+_EVIDENCE_REVIEW_TRIGGER_MESSAGES = {
+    "reviews are frozen after governance decision": (
+        "evidence_review_frozen",
+        "Evidence reviews are frozen after a governance decision.",
+    ),
+    "reviewer must differ from submitter": (
+        "evidence_review_separation_required",
+        "The reviewer must be independent from submission, linking, and run request.",
+    ),
+    "review must use the next review version": (
+        "evidence_review_version_conflict",
+        "The evidence review version is stale.",
+    ),
+    "review requires an exact linked admission": (
+        "evidence_review_integrity_conflict",
+        "The evidence-review authority changed before persistence.",
+    ),
+    "review timestamp is not causal": (
+        "evidence_review_chronology_invalid",
+        "The evidence-review chronology is invalid.",
+    ),
+}
 
 
 def _now() -> datetime:
@@ -1225,6 +1261,403 @@ class SqlAlchemyEvaluationWorkbenchRepository:
             )
         except DBAPIError as error:
             self._raise_evidence_database_error(error)
+
+    # ------------------------------------------------------------------
+    # Verified evidence review.  Reviews are deliberately narrower than a
+    # governance decision: they append one accepted/rejected review and only
+    # project that decision to the matching suite execution.
+    # ------------------------------------------------------------------
+
+    def load_evidence_review_authority_for_update(
+        self,
+        *,
+        scope: EvidenceReviewScope,
+    ) -> EvidenceReviewAuthorityRecord | None:
+        """Lock the exact admitted graph required for a four-eyes review."""
+
+        system_scope = self._system_scope(
+            scope.organization_id,
+            scope.system_id,
+            lock=True,
+        )
+        if system_scope is None or system_scope["workspace_id"] != scope.workspace_id:
+            return None
+
+        runs = GovernanceEvaluationRun.__table__
+        run = (
+            self.db.execute(
+                select(runs)
+                .where(
+                    runs.c.id == scope.run_id,
+                    runs.c.org_id == scope.organization_id,
+                    runs.c.workspace_id == scope.workspace_id,
+                    runs.c.system_id == scope.system_id,
+                    runs.c.contract_version == CONTRACT_VERSION,
+                )
+                .with_for_update()
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if run is None:
+            return None
+
+        suites = GovernanceEvaluationRunSuiteExecution.__table__
+        suite = (
+            self.db.execute(
+                select(suites)
+                .where(
+                    suites.c.id == scope.suite_execution_id,
+                    suites.c.org_id == scope.organization_id,
+                    suites.c.workspace_id == scope.workspace_id,
+                    suites.c.system_id == scope.system_id,
+                    suites.c.run_id == scope.run_id,
+                )
+                .with_for_update()
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if suite is None or suite["evidence_run_id"] is None:
+            return None
+
+        admissions = GovernanceEvidenceAdmission.__table__
+        admission = (
+            self.db.execute(
+                select(admissions)
+                .where(
+                    admissions.c.id == scope.admission_id,
+                    admissions.c.org_id == scope.organization_id,
+                    admissions.c.workspace_id == scope.workspace_id,
+                    admissions.c.system_id == scope.system_id,
+                    admissions.c.run_id == scope.run_id,
+                    admissions.c.suite_execution_id == scope.suite_execution_id,
+                    admissions.c.evidence_run_id == suite["evidence_run_id"],
+                    admissions.c.passport_revision_id == scope.passport_revision_id,
+                    admissions.c.contract_version == CONTRACT_VERSION,
+                )
+                .with_for_update()
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if admission is None or suite["passport_revision_id"] != scope.passport_revision_id:
+            return None
+
+        links = GovernanceEvaluationSuiteEvidenceLink.__table__
+        link = (
+            self.db.execute(
+                select(links)
+                .where(
+                    links.c.org_id == scope.organization_id,
+                    links.c.workspace_id == scope.workspace_id,
+                    links.c.system_id == scope.system_id,
+                    links.c.run_id == scope.run_id,
+                    links.c.suite_execution_id == scope.suite_execution_id,
+                    links.c.admission_id == scope.admission_id,
+                    links.c.admission_contract_version == CONTRACT_VERSION,
+                    links.c.evidence_run_id == admission["evidence_run_id"],
+                    links.c.passport_revision_id == scope.passport_revision_id,
+                )
+                .with_for_update()
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if link is None:
+            return None
+
+        reviews = GovernanceEvidenceReview.__table__
+        latest_review = (
+            self.db.execute(
+                select(reviews)
+                .where(
+                    reviews.c.org_id == scope.organization_id,
+                    reviews.c.workspace_id == scope.workspace_id,
+                    reviews.c.system_id == scope.system_id,
+                    reviews.c.run_id == scope.run_id,
+                    reviews.c.suite_execution_id == scope.suite_execution_id,
+                    reviews.c.admission_id == scope.admission_id,
+                    reviews.c.admission_contract_version == CONTRACT_VERSION,
+                    reviews.c.evidence_run_id == admission["evidence_run_id"],
+                    reviews.c.passport_revision_id == scope.passport_revision_id,
+                )
+                .order_by(reviews.c.review_version.desc(), reviews.c.id.desc())
+                .limit(1)
+                .with_for_update()
+            )
+            .mappings()
+            .one_or_none()
+        )
+
+        trust_policies = GovernanceEvidenceTrustPolicyVersion.__table__
+        trust_policy = (
+            self.db.execute(
+                select(trust_policies)
+                .where(
+                    trust_policies.c.id == admission["trust_policy_version_id"],
+                    trust_policies.c.org_id == scope.organization_id,
+                )
+                .with_for_update()
+            )
+            .mappings()
+            .one_or_none()
+        )
+        issuer_id = admission["issuer_id"]
+        signing_key_id = admission["signing_key_id"]
+        signer_key_id = admission["signer_key_id"]
+        if (
+            trust_policy is None
+            or not isinstance(issuer_id, str)
+            or not isinstance(signing_key_id, str)
+            or not isinstance(signer_key_id, str)
+        ):
+            raise self._error(
+                "binding_integrity_error",
+                _BINDING_INTEGRITY_MESSAGE,
+                409,
+            )
+        issuers = GovernanceEvidenceIssuer.__table__
+        issuer = (
+            self.db.execute(
+                select(issuers)
+                .where(
+                    issuers.c.id == issuer_id,
+                    issuers.c.org_id == scope.organization_id,
+                )
+                .with_for_update()
+            )
+            .mappings()
+            .one_or_none()
+        )
+        signing_keys = GovernanceEvidenceSigningKey.__table__
+        signing_key = (
+            self.db.execute(
+                select(signing_keys)
+                .where(
+                    signing_keys.c.id == signing_key_id,
+                    signing_keys.c.org_id == scope.organization_id,
+                    signing_keys.c.issuer_id == issuer_id,
+                    signing_keys.c.key_id == signer_key_id,
+                )
+                .with_for_update()
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if issuer is None or signing_key is None:
+            raise self._error(
+                "binding_integrity_error",
+                _BINDING_INTEGRITY_MESSAGE,
+                409,
+            )
+
+        decisions = GovernanceEvaluationDecision.__table__
+        governance_decision_exists = (
+            self.db.execute(
+                select(decisions.c.id).where(
+                    decisions.c.org_id == scope.organization_id,
+                    decisions.c.workspace_id == scope.workspace_id,
+                    decisions.c.system_id == scope.system_id,
+                    decisions.c.run_id == scope.run_id,
+                    decisions.c.run_contract_version == CONTRACT_VERSION,
+                )
+            ).scalar_one_or_none()
+            is not None
+        )
+
+        try:
+            current_review_version = 0 if latest_review is None else latest_review["review_version"]
+            if (
+                isinstance(current_review_version, bool)
+                or not isinstance(current_review_version, int)
+                or current_review_version < 0
+            ):
+                raise ValueError("review version is invalid")
+            required_strings = (
+                admission["evidence_run_id"],
+                admission["submitted_by"],
+                link["linked_by"],
+                run["requested_by"],
+                admission["admission_status"],
+                admission["freshness_status"],
+                suite["review_status"],
+                trust_policy["status"],
+                issuer["status"],
+                suite["technical_status"],
+                suite["evidence_result_status"],
+                run["technical_status"],
+                run["evidence_outcome"],
+            )
+            if any(not isinstance(value, str) or not value for value in required_strings):
+                raise ValueError("review authority strings are invalid")
+            effective_expires_at = _parse_timestamp(admission["effective_expires_at"])
+            key_valid_from = _parse_timestamp(signing_key["valid_from"])
+            key_valid_until = _parse_timestamp(signing_key["valid_until"])
+            key_revoked_at = (
+                None
+                if signing_key["revoked_at"] is None
+                else _parse_timestamp(signing_key["revoked_at"])
+            )
+        except (AttributeError, TypeError, ValueError) as error:
+            raise self._error(
+                "binding_integrity_error",
+                _BINDING_INTEGRITY_MESSAGE,
+                409,
+            ) from error
+
+        return EvidenceReviewAuthorityRecord(
+            scope=scope,
+            evidence_run_id=admission["evidence_run_id"],
+            admission_contract_version=admission["contract_version"],
+            admission_status=admission["admission_status"],
+            freshness_status=admission["freshness_status"],
+            review_status=suite["review_status"],
+            current_review_version=current_review_version,
+            submitted_by=admission["submitted_by"],
+            linked_by=link["linked_by"],
+            run_requested_by=run["requested_by"],
+            effective_expires_at=effective_expires_at,
+            trust_policy_status=trust_policy["status"],
+            issuer_status=issuer["status"],
+            key_valid_from=key_valid_from,
+            key_valid_until=key_valid_until,
+            key_revoked_at=key_revoked_at,
+            technical_status=suite["technical_status"],
+            evidence_result_status=suite["evidence_result_status"],
+            run_technical_status=run["technical_status"],
+            run_evidence_outcome=run["evidence_outcome"],
+            governance_decision_exists=governance_decision_exists,
+        )
+
+    @staticmethod
+    def _evidence_review_database_error(error: DBAPIError) -> EvaluationWorkbenchError | None:
+        original = getattr(error, "orig", None)
+        sqlstate = getattr(original, "sqlstate", None) or getattr(original, "pgcode", None)
+        constraint_name = getattr(getattr(original, "diag", None), "constraint_name", None)
+        first_line = str(original).partition("\n")[0].strip().lower()
+        if sqlstate == "23505" and constraint_name in _EVIDENCE_REVIEW_VERSION_CONSTRAINTS:
+            return EvaluationWorkbenchError(
+                "evidence_review_version_conflict",
+                "The evidence review version is stale.",
+                status_code=409,
+            )
+        if sqlstate == "P0001" and first_line in _EVIDENCE_REVIEW_TRIGGER_MESSAGES:
+            code, message = _EVIDENCE_REVIEW_TRIGGER_MESSAGES[first_line]
+            return EvaluationWorkbenchError(code, message, status_code=409)
+        return None
+
+    def persist_evidence_review(
+        self,
+        command: PersistEvidenceReviewCommand,
+    ) -> ReviewedEvidenceRecord:
+        """Append one review and CAS only the suite's review-status projection."""
+
+        scope = command.scope
+        authority = command.authority
+        if (
+            authority.scope != scope
+            or authority.admission_contract_version != CONTRACT_VERSION
+            or command.expected_review_version != authority.current_review_version
+            or command.next_review_version != authority.current_review_version + 1
+            or command.next_review_version != 1
+            or command.decision not in {"accepted", "rejected"}
+            or authority.admission_status != "verified"
+            or authority.freshness_status != "current"
+            or authority.review_status != "pending"
+            or authority.current_review_version != 0
+            or authority.governance_decision_exists
+        ):
+            raise self._error(
+                "evidence_review_integrity_conflict",
+                "The evidence-review authority changed before persistence.",
+                409,
+            )
+        reviewed_at = self._timestamp_value(command.reviewed_at)
+        if reviewed_at is None:
+            raise self._error(
+                "evidence_review_chronology_invalid",
+                "The evidence-review chronology is invalid.",
+                409,
+            )
+
+        reviews = GovernanceEvidenceReview.__table__
+        suites = GovernanceEvaluationRunSuiteExecution.__table__
+        try:
+            self.db.execute(
+                insert(reviews).values(
+                    id=command.review_id,
+                    org_id=scope.organization_id,
+                    system_id=scope.system_id,
+                    evidence_run_id=authority.evidence_run_id,
+                    passport_revision_id=scope.passport_revision_id,
+                    admission_id=scope.admission_id,
+                    decision=command.decision,
+                    rationale=command.rationale,
+                    reviewed_by=command.actor_id,
+                    review_version=command.next_review_version,
+                    separation_override_reason=None,
+                    reviewed_at=reviewed_at,
+                    workspace_id=scope.workspace_id,
+                    run_id=scope.run_id,
+                    suite_execution_id=scope.suite_execution_id,
+                    admission_contract_version=CONTRACT_VERSION,
+                )
+            )
+            updated = self.db.execute(
+                update(suites)
+                .where(
+                    suites.c.id == scope.suite_execution_id,
+                    suites.c.org_id == scope.organization_id,
+                    suites.c.workspace_id == scope.workspace_id,
+                    suites.c.system_id == scope.system_id,
+                    suites.c.run_id == scope.run_id,
+                    suites.c.evidence_run_id == authority.evidence_run_id,
+                    suites.c.passport_revision_id == scope.passport_revision_id,
+                    suites.c.admission_status == "verified",
+                    suites.c.freshness_status == "current",
+                    suites.c.review_status == "pending",
+                    suites.c.linked_by == authority.linked_by,
+                )
+                .values(
+                    review_status=command.decision,
+                )
+            )
+            if updated.rowcount != 1:
+                raise self._error(
+                    "evidence_review_projection_conflict",
+                    "The suite execution changed before evidence review could be recorded.",
+                    409,
+                )
+        except DBAPIError as error:
+            mapped = self._evidence_review_database_error(error)
+            if mapped is not None:
+                raise mapped from error
+            raise
+
+        return ReviewedEvidenceRecord(
+            review_id=command.review_id,
+            organization_id=scope.organization_id,
+            workspace_id=scope.workspace_id,
+            system_id=scope.system_id,
+            run_id=scope.run_id,
+            suite_execution_id=scope.suite_execution_id,
+            admission_id=scope.admission_id,
+            passport_revision_id=scope.passport_revision_id,
+            evidence_run_id=authority.evidence_run_id,
+            decision=command.decision,
+            rationale=command.rationale,
+            review_version=command.next_review_version,
+            reviewed_by=command.actor_id,
+            reviewed_at=command.reviewed_at,
+            admission_status="verified",
+            review_status=command.decision,
+            freshness_status="current",
+            technical_status=authority.technical_status,
+            evidence_result_status=authority.evidence_result_status,
+            run_technical_status=authority.run_technical_status,
+            run_evidence_outcome=authority.run_evidence_outcome,
+        )
 
     # ------------------------------------------------------------------
     # Shared transaction, idempotency, audit, and integrity primitives.

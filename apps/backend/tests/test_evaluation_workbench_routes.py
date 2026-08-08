@@ -18,6 +18,7 @@ from sqlalchemy.pool import StaticPool
 from api.routes.evaluation_workbench import (
     router as evaluation_workbench_router,
     verified_evidence_router,
+    verified_evidence_review_router,
 )
 from api.routes.governance_assurance import router as governance_assurance_router
 from config.auth import TokenData, TokenType, UserRole, get_current_active_user
@@ -38,7 +39,10 @@ from database.governance_models import (
 from database.models import Organization, OrganizationMember, OrganizationRole, User
 from src.domain.assurance.evaluation_v2 import canonical_json, canonical_sha256
 from src.application.ports.evaluation_workbench import MutationResult
-from api.routes.evaluation_workbench import get_verified_evidence_admission_service
+from api.routes.evaluation_workbench import (
+    get_verified_evidence_admission_service,
+    get_verified_evidence_review_service,
+)
 from tests.evaluation_workbench_sqlite import (
     allow_deliberate_check_constraint_corruption,
     install_authoritative_assurance_fixtures_for_application_verifier_harness,
@@ -60,11 +64,17 @@ app.include_router(
     prefix="/api/v1/ai-governance",
     tags=["evaluation-workbench-v2-evidence"],
 )
+app.include_router(
+    verified_evidence_review_router,
+    prefix="/api/v1/ai-governance",
+    tags=["evaluation-workbench-v2-evidence-review"],
+)
 
 ORG = str(uuid.uuid4())
 FOREIGN_ORG = str(uuid.uuid4())
 USER = str(uuid.uuid4())
 VIEWER = str(uuid.uuid4())
+REVIEWER = str(uuid.uuid4())
 BASE = f"/api/v1/ai-governance/organizations/{ORG}"
 FOREIGN_BASE = f"/api/v1/ai-governance/organizations/{FOREIGN_ORG}"
 BINDING_INTEGRITY_DETAIL = {
@@ -99,7 +109,7 @@ def workbench_client():
     install_authoritative_assurance_fixtures_for_application_verifier_harness(engine)
     factory = sessionmaker(bind=engine)
     session = factory()
-    for user_id in (USER, VIEWER):
+    for user_id in (USER, VIEWER, REVIEWER):
         session.execute(
             User.__table__.insert().values(
                 id=uuid.UUID(user_id), email=f"{user_id}@example.test", username=user_id
@@ -118,7 +128,7 @@ def workbench_client():
             owner_id=uuid.UUID(USER),
         )
     )
-    for user_id, role in ((USER, "admin"), (VIEWER, "viewer")):
+    for user_id, role in ((USER, "admin"), (VIEWER, "viewer"), (REVIEWER, "reviewer")):
         session.execute(
             OrganizationMember.__table__.insert().values(
                 id=uuid.uuid4(),
@@ -235,6 +245,24 @@ def _admission_url(
     )
 
 
+def _review_url(
+    *,
+    run_id: str,
+    suite_execution_id: str,
+    admission_id: str = "admission-a",
+    passport_revision_id: str = "passport-revision-a",
+    workspace_id: str = "workspace-a",
+    system_id: str = "system-a",
+    org_id: str = ORG,
+) -> str:
+    return (
+        f"/api/v1/ai-governance/organizations/{org_id}/workspaces/{workspace_id}"
+        f"/systems/{system_id}/evaluation-v2/runs/{run_id}"
+        f"/suite-executions/{suite_execution_id}/evidence-admissions/{admission_id}"
+        f"/passport-revisions/{passport_revision_id}/review"
+    )
+
+
 def _grant_evidence_submit_permission() -> None:
     session_iterator = app.dependency_overrides[get_db]()
     session = next(session_iterator)
@@ -245,6 +273,23 @@ def _grant_evidence_submit_permission() -> None:
                 org_id=uuid.UUID(ORG),
                 name="admin",
                 permissions=["evaluation:evidence:submit"],
+            )
+        )
+        session.commit()
+    finally:
+        session_iterator.close()
+
+
+def _grant_evidence_review_permission() -> None:
+    session_iterator = app.dependency_overrides[get_db]()
+    session = next(session_iterator)
+    try:
+        session.execute(
+            OrganizationRole.__table__.insert().values(
+                id=uuid.uuid4(),
+                org_id=uuid.UUID(ORG),
+                name="reviewer",
+                permissions=["evaluation:evidence:review"],
             )
         )
         session.commit()
@@ -281,6 +326,36 @@ class _RecordingAdmissionService:
                 "verdictVersion": 1,
                 "effectiveExpiresAt": "2026-08-08T12:00:00+00:00",
                 "verifiedAt": "2026-08-08T11:00:00+00:00",
+            },
+            status=201,
+        )
+
+
+class _RecordingEvidenceReviewService:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    def review_verified_evidence(self, **kwargs):
+        self.calls.append(kwargs)
+        return MutationResult.create(
+            body={
+                "reviewId": "review-1",
+                "admissionId": kwargs["scope"].admission_id,
+                "passportRevisionId": kwargs["scope"].passport_revision_id,
+                "runId": kwargs["scope"].run_id,
+                "suiteExecutionId": kwargs["scope"].suite_execution_id,
+                "decision": kwargs["decision"],
+                "rationale": kwargs["rationale"],
+                "reviewVersion": 1,
+                "reviewedBy": kwargs["actor_id"],
+                "reviewedAt": "2026-08-08T12:00:00+00:00",
+                "admissionStatus": "verified",
+                "reviewStatus": kwargs["decision"],
+                "freshnessStatus": "current",
+                "technicalStatus": "succeeded",
+                "evidenceResultStatus": "failed",
+                "runTechnicalStatus": "succeeded",
+                "runEvidenceOutcome": "failed",
             },
             status=201,
         )
@@ -482,6 +557,129 @@ def test_verified_evidence_submit_rejects_oversized_body_before_service(
 
     assert response.status_code == 413
     assert response.json()["detail"]["code"] == "request_too_large"
+    assert recorder.calls == []
+
+
+def test_verified_evidence_review_is_hidden_when_its_feature_flag_is_off(
+    workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_evidence_review_enabled", False, raising=False)
+    recorder = _RecordingEvidenceReviewService()
+    app.dependency_overrides[get_verified_evidence_review_service] = lambda: recorder
+    try:
+        response = client.post(
+            _review_url(run_id="run-not-visible", suite_execution_id="suite-not-visible"),
+            headers=_headers("review-hidden"),
+            json={
+                "decision": "accepted",
+                "rationale": "Independent evidence review completed.",
+                "expectedReviewVersion": 0,
+            },
+        )
+    finally:
+        app.dependency_overrides.pop(get_verified_evidence_review_service, None)
+
+    assert response.status_code == 404
+    assert recorder.calls == []
+
+
+def test_verified_evidence_review_requires_permission_and_binds_exact_run_suite_scope(
+    workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, active = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_evidence_review_enabled", True, raising=False)
+    _plan, run = _create_active_v2_plan_and_run(client)
+    suite_execution_id = run["suiteExecutions"][0]["id"]
+    valid_url = _review_url(run_id=run["id"], suite_execution_id=suite_execution_id)
+    request_headers = _headers("review-boundary")
+    payload = {
+        "decision": "accepted",
+        "rationale": "Independent evidence review completed.",
+        "expectedReviewVersion": 0,
+    }
+    recorder = _RecordingEvidenceReviewService()
+    app.dependency_overrides[get_verified_evidence_review_service] = lambda: recorder
+    try:
+        denied = client.post(valid_url, headers=request_headers, json=payload)
+        assert denied.status_code == 403
+        assert denied.json()["detail"]["code"] == "evaluation_evidence_review_forbidden"
+        assert recorder.calls == []
+
+        _grant_evidence_review_permission()
+        active["token"] = _token(REVIEWER)
+
+        wrong_workspace = client.post(
+            _review_url(
+                run_id=run["id"],
+                suite_execution_id=suite_execution_id,
+                workspace_id="workspace-wrong",
+            ),
+            headers=request_headers,
+            json=payload,
+        )
+        assert wrong_workspace.status_code == 404
+
+        wrong_suite = client.post(
+            _review_url(run_id=run["id"], suite_execution_id="suite-wrong"),
+            headers=request_headers,
+            json=payload,
+        )
+        assert wrong_suite.status_code == 404
+        assert recorder.calls == []
+
+        accepted = client.post(valid_url, headers=request_headers, json=payload)
+        assert accepted.status_code == 201, accepted.text
+        assert "overallVerdict" not in accepted.json()
+        assert "verdictVersion" not in accepted.json()
+        assert len(recorder.calls) == 1
+        call = recorder.calls[0]
+        assert call["actor_id"] == REVIEWER
+        assert call["idempotency_key"] == "review-boundary"
+        assert call["decision"] == "accepted"
+        assert call["rationale"] == "Independent evidence review completed."
+        assert call["expected_review_version"] == 0
+        assert call["scope"].organization_id == ORG
+        assert call["scope"].workspace_id == "workspace-a"
+        assert call["scope"].system_id == "system-a"
+        assert call["scope"].run_id == run["id"]
+        assert call["scope"].suite_execution_id == suite_execution_id
+        assert call["scope"].admission_id == "admission-a"
+        assert call["scope"].passport_revision_id == "passport-revision-a"
+    finally:
+        app.dependency_overrides.pop(get_verified_evidence_review_service, None)
+
+
+def test_verified_evidence_review_rejects_non_strict_body_before_service(
+    workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, active = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_evidence_review_enabled", True, raising=False)
+    _plan, run = _create_active_v2_plan_and_run(client)
+    suite_execution_id = run["suiteExecutions"][0]["id"]
+    _grant_evidence_review_permission()
+    active["token"] = _token(REVIEWER)
+    recorder = _RecordingEvidenceReviewService()
+    app.dependency_overrides[get_verified_evidence_review_service] = lambda: recorder
+    try:
+        response = client.post(
+            _review_url(run_id=run["id"], suite_execution_id=suite_execution_id),
+            headers=_headers("review-invalid"),
+            json={
+                "decision": "accepted",
+                "rationale": "Independent evidence review completed.",
+                "expectedReviewVersion": 0,
+                "overallVerdict": "approved",
+            },
+        )
+    finally:
+        app.dependency_overrides.pop(get_verified_evidence_review_service, None)
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "invalid_request"
     assert recorder.calls == []
 
 
