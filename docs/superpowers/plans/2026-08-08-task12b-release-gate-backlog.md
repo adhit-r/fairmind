@@ -21,16 +21,19 @@ kernel; none of these rows authorize route exposure or a product claim.
   identity through local admission scope and restriction checks, and prove zero
   evidence graph and zero successful admission audit in both tenants.
 
-## Before any evidence-admission route is composed
+## Before any evidence-admission route is enabled
 
 - [x] Add an immutable in-process server-owned evaluator registry and bind the
   signed `evaluatorId` to an active, exact source/adapter/result-contract
   tuple. The catalog and registration hashes are recorded in the append-only
   admission audit event. Persistent catalog administration and provider/worker
   registration ceremonies remain separate release gates.
-- [ ] Add the route-level `evaluation:evidence:submit` permission, exact
-  organization/workspace/system/run/suite scope checks, request byte limits,
-  feature flag, and service composition as a separately reviewed change.
+- [x] Compose the default-off route-level `evaluation:evidence:submit`
+  permission, exact organization/workspace/system/run/suite scope checks,
+  bounded request streaming, an independently gated API router, and the
+  server-owned admission service. The bootstrap composition has an empty
+  evaluator catalog, so accidentally enabling the route still rejects every
+  evaluator as unregistered until registration ceremonies are released.
 - [ ] Keep admission distinct from reviewer acceptance, governance decision,
   framework evidence acceptance, certification, compliance, and enforcement.
 - [ ] Add real external-provider and FairMind-worker registration ceremonies;

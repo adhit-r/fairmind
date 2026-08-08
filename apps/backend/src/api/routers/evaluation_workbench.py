@@ -13,20 +13,32 @@ from sqlalchemy.orm import Session
 
 from database.connection import get_db
 from api.composition.evaluation_workbench import build_evaluation_workbench_service
+from api.composition.verified_evidence_admission import (
+    build_verified_evidence_admission_service,
+)
+from config.settings import settings
 from src.api.routers.governance_assurance import (
     _require_mutation,
     _service as governance_service,
     organization_membership,
 )
+from src.application.ports.evidence_admission import EvidenceAdmissionScope
 from src.application.services.evaluation_workbench_service import (
     EvaluationWorkbenchError,
     EvaluationWorkbenchInputError,
     EvaluationWorkbenchService,
     canonical_assurance_json,
 )
+from src.application.services.verified_evidence_admission_service import (
+    VerifiedEvidenceAdmissionService,
+)
 from src.application.services.governance_assurance_service import OrgMembership
 
 router = APIRouter(prefix="/organizations/{org_id}", tags=["evaluation-workbench-v2"])
+verified_evidence_router = APIRouter(
+    prefix="/organizations/{org_id}",
+    tags=["evaluation-workbench-v2-evidence"],
+)
 MAX_REQUEST_BYTES = 1024 * 1024
 MAX_JSON_DEPTH = 32
 MAX_JSON_NODES = 20_000
@@ -105,9 +117,7 @@ class ResourceBudgetsV1(StrictModel):
         default=None, alias="maxDurationSeconds", gt=0, le=86_400
     )
     max_cpu_seconds: float | None = Field(default=None, alias="maxCpuSeconds", gt=0, le=86_400)
-    max_memory_mib: int | None = Field(
-        default=None, alias="maxMemoryMiB", ge=1, le=1_048_576
-    )
+    max_memory_mib: int | None = Field(default=None, alias="maxMemoryMiB", ge=1, le=1_048_576)
     max_processes: int | None = Field(default=None, alias="maxProcesses", ge=1, le=4_096)
     max_disk_mib: int | None = Field(default=None, alias="maxDiskMiB", ge=1, le=1_048_576)
     max_input_bytes: int | None = Field(
@@ -327,9 +337,7 @@ class EvaluationRunV2Response(StrictModel):
     technical_status: TechnicalStatus = Field(alias="technicalStatus")
     evidence_outcome: EvidenceResultStatus = Field(alias="evidenceOutcome")
     overall_verdict: GovernanceVerdict = Field(alias="overallVerdict")
-    layer_verdicts_schema_version: Literal["1.0.0"] = Field(
-        alias="layerVerdictsSchemaVersion"
-    )
+    layer_verdicts_schema_version: Literal["1.0.0"] = Field(alias="layerVerdictsSchemaVersion")
     layer_verdicts: LayerVerdictsResponse = Field(alias="layerVerdicts")
     suite_executions: list[SuiteExecutionResponse] = Field(alias="suiteExecutions")
     envelope_id: str = Field(alias="envelopeId")
@@ -343,6 +351,32 @@ class EvaluationRunV2Response(StrictModel):
     failure_message: str | None = Field(alias="failureMessage")
     created_at: str = Field(alias="createdAt")
     updated_at: str = Field(alias="updatedAt")
+
+
+class EvidenceAdmissionResponse(StrictModel):
+    """Safe response projection for one suite-specific verified admission."""
+
+    admission_id: str = Field(alias="admissionId")
+    evidence_run_id: str = Field(alias="evidenceRunId")
+    passport_revision_id: str = Field(alias="passportRevisionId")
+    verification_receipt_id: str = Field(alias="verificationReceiptId")
+    nonce_claim_id: str = Field(alias="nonceClaimId")
+    suite_evidence_link_id: str = Field(alias="suiteEvidenceLinkId")
+    run_id: str = Field(alias="runId")
+    suite_execution_id: str = Field(alias="suiteExecutionId")
+    envelope_hash: str = Field(alias="envelopeHash", pattern="^[0-9a-f]{64}$")
+    passport_content_hash: str = Field(alias="passportContentHash", pattern="^[0-9a-f]{64}$")
+    technical_status: TechnicalStatus = Field(alias="technicalStatus")
+    evidence_result_status: EvidenceResultStatus = Field(alias="evidenceResultStatus")
+    admission_status: AdmissionStatus = Field(alias="admissionStatus")
+    review_status: ReviewStatus = Field(alias="reviewStatus")
+    freshness_status: FreshnessStatus = Field(alias="freshnessStatus")
+    run_technical_status: TechnicalStatus = Field(alias="runTechnicalStatus")
+    run_evidence_outcome: EvidenceResultStatus = Field(alias="runEvidenceOutcome")
+    overall_verdict: GovernanceVerdict = Field(alias="overallVerdict")
+    verdict_version: int = Field(alias="verdictVersion", ge=1)
+    effective_expires_at: str = Field(alias="effectiveExpiresAt")
+    verified_at: str = Field(alias="verifiedAt")
 
 
 def _depth(value: Any, level: int = 0) -> int:
@@ -467,8 +501,74 @@ def _service(db: Session) -> EvaluationWorkbenchService:
     return build_evaluation_workbench_service(db)
 
 
+def get_verified_evidence_admission_service(
+    db: Session = Depends(get_db),
+) -> VerifiedEvidenceAdmissionService:
+    """Compose the admission service only at the gated HTTP boundary."""
+
+    return build_verified_evidence_admission_service(db)
+
+
+def _require_verified_evidence_submit_enabled() -> None:
+    """Hide the route until its independent execution/admission gate passes."""
+
+    if not settings.assurance_v2_evidence_submit_enabled:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "code": "assurance_feature_disabled",
+                "message": "Verified evidence submission is not enabled.",
+            },
+        )
+
+
 def _write(membership: OrgMembership, db: Session) -> None:
     _require_mutation(membership, governance_service(db))
+
+
+def _require_evidence_submit_permission(membership: OrgMembership) -> None:
+    if "evaluation:evidence:submit" not in membership.permissions:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "evaluation_evidence_submit_forbidden",
+                "message": "The evaluation:evidence:submit permission is required.",
+            },
+        )
+
+
+def _require_evidence_scope(
+    *,
+    db: Session,
+    organization_id: str,
+    workspace_id: str,
+    system_id: str,
+    run_id: str,
+    suite_execution_id: str,
+) -> None:
+    """Bind every path identity to the same immutable run and suite record."""
+
+    try:
+        run = _service(db).get_run(
+            org_id=organization_id,
+            system_id=system_id,
+            run_id=run_id,
+        )
+    except EvaluationWorkbenchError as error:
+        _raise(error)
+    if not isinstance(run, dict):
+        _missing("evidence_scope")
+    if (
+        run.get("organizationId") != organization_id
+        or run.get("workspaceId") != workspace_id
+        or run.get("systemId") != system_id
+        or run.get("id") != run_id
+        or not any(
+            isinstance(execution, dict) and execution.get("id") == suite_execution_id
+            for execution in run.get("suiteExecutions", [])
+        )
+    ):
+        _missing("evidence_scope")
 
 
 def _raise(error: EvaluationWorkbenchError) -> None:
@@ -904,3 +1004,82 @@ def get_run(
     if result is None:
         _missing("run")
     return result
+
+
+@verified_evidence_router.post(
+    "/workspaces/{workspace_id}/systems/{system_id}/evaluation-v2/runs/{run_id}"
+    "/suite-executions/{suite_execution_id}/evidence",
+    status_code=201,
+    response_model=EvidenceAdmissionResponse,
+    dependencies=[Depends(_require_verified_evidence_submit_enabled)],
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "content": {
+                "application/json": {
+                    "schema": {
+                        "type": "object",
+                        "description": "Signed Evidence Passport V2 JSON.",
+                    }
+                }
+            },
+        }
+    },
+)
+async def submit_verified_evidence(
+    org_id: str,
+    workspace_id: str,
+    system_id: str,
+    run_id: str,
+    suite_execution_id: str,
+    request: Request,
+    idempotency_key: str = Header(alias="Idempotency-Key"),
+    membership: OrgMembership = Depends(organization_membership),
+    db: Session = Depends(get_db),
+    admission_service: VerifiedEvidenceAdmissionService = Depends(
+        get_verified_evidence_admission_service
+    ),
+):
+    """Admit one signed Passport to one exact suite execution.
+
+    The submitted bytes remain opaque at this transport boundary. The
+    admission service parses and authenticates them only after resolving the
+    server-owned authority graph for this exact tenant/run/suite scope.
+    """
+
+    _require_evidence_submit_permission(membership)
+    if membership.org_id != org_id:
+        _missing("evidence_scope")
+    _require_evidence_scope(
+        db=db,
+        organization_id=membership.org_id,
+        workspace_id=workspace_id,
+        system_id=system_id,
+        run_id=run_id,
+        suite_execution_id=suite_execution_id,
+    )
+    media_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    if media_type != "application/json" and not media_type.endswith("+json"):
+        raise HTTPException(
+            status_code=415,
+            detail={
+                "code": "unsupported_media_type",
+                "message": "Use application/json for a signed Evidence Passport.",
+            },
+        )
+    raw_passport = await _read_request_body(request)
+    try:
+        result = admission_service.admit_verified_passport_v2(
+            scope=EvidenceAdmissionScope(
+                organization_id=membership.org_id,
+                system_id=system_id,
+                run_id=run_id,
+                suite_execution_id=suite_execution_id,
+            ),
+            actor_id=membership.user_id,
+            idempotency_key=idempotency_key,
+            raw_passport=raw_passport,
+        )
+        return _respond(result, EvidenceAdmissionResponse)
+    except EvaluationWorkbenchError as error:
+        _raise(error)
