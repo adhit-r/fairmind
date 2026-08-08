@@ -51,16 +51,14 @@ kernel; none of these rows authorize route exposure or a product claim.
 
 ## Repository baseline debt
 
-- [ ] Repair the pre-existing backend collection failure in
-  `tests/test_fairness_evidence_profile_route.py`, which imports the absent
-  compatibility module `api.models.ai_bom`.
-- [ ] Remove the order-dependent SQLAlchemy metadata collision caused by two
-  active `AuditLog` declarations for `audit_logs` in
-  `src/api/middleware/audit_logging.py` and
-  `src/infrastructure/db/database/models.py`. In the broad suite this can
-  attempt to create `ix_audit_logs_user_id` twice; an affected governance test
-  passes when isolated, so this is test/runtime model-composition debt rather
-  than a Task 12B regression.
+- [x] Repair the pre-existing backend collection failure in
+  `tests/test_fairness_evidence_profile_route.py`: the active
+  `api.models.ai_bom` compatibility transport models now restore the route's
+  request/response boundary without an archive dependency.
+- [x] Remove the order-dependent SQLAlchemy metadata collision caused by two
+  active `AuditLog` declarations for `audit_logs`: the middleware now reexports
+  the canonical `database.models.AuditLog`, so the user index has one owner in
+  every import order.
 - [ ] Establish a clean whole-backend CI baseline after those two blockers are
   resolved. Until then, use focused affected suites plus native PostgreSQL,
   boundary, archive-import, formatting, and diff checks as the Task 12B gate.

@@ -307,6 +307,10 @@ temp/
 localhost.har
 *.har
 apps/backend/public_key.pem
+
+# The broad ML artifact rule ``models/`` must not hide active API source.
+!apps/backend/api/models/
+!apps/backend/api/models/**/*.py
 apps/backend/private_key.pem
 apps/backend/api/services/real_bias_detection_service.py
 apps/backend/email_service.py
