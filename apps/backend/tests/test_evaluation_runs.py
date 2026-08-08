@@ -233,10 +233,12 @@ def test_v1_mutations_are_quarantined_when_assurance_v2_is_enabled(
 ) -> None:
     client, session_factory, _ = evaluation_client
     plan = _create_plan(client)
+    assert plan["contractVersion"] == "1.0.0"
     assert _activate(client, plan["id"]).status_code == 200
     run_response = _create_run(client, plan["id"])
     assert run_response.status_code == 201, run_response.text
     run = run_response.json()
+    assert run["contractVersion"] == "1.0.0"
 
     session = session_factory()
     try:
@@ -291,11 +293,27 @@ def test_v1_mutations_are_quarantined_when_assurance_v2_is_enabled(
             assert response.status_code == 409
             assert response.json() == expected
 
-        assert client.get(_plans_url()).status_code == 200
-        assert (
-            client.get(f"{_plans_url()}/{plan['id']}/preflight").status_code
-            == 200
-        )
+        plans = client.get(_plans_url())
+        assert plans.status_code == 200
+        assert [item["id"] for item in plans.json()] == [plan["id"]]
+        assert plans.json()[0]["contractVersion"] == "1.0.0"
+        assert plans.json()[0]["status"] == "active"
+        preflight = client.get(f"{_plans_url()}/{plan['id']}/preflight")
+        assert preflight.status_code == 200
+        assert preflight.json() == {
+            "planId": plan["id"],
+            "canPrepareRun": False,
+            "fairmindExecutionAvailable": False,
+            "code": "contract_upgrade_required",
+            "message": (
+                "This legacy assurance-contract v1 plan cannot prepare a new run "
+                "while Assurance V2 is enabled."
+            ),
+            "nextAction": (
+                "Clone legacy records into a bound v2 plan and use the "
+                "evaluation-v2 workflow."
+            ),
+        }
         assert (
             client.get(
                 f"{BASE}/{ORG_A}/systems/system-a/evaluation-runs"

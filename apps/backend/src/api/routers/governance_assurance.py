@@ -180,6 +180,7 @@ class EvaluationPlanResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     id: str
+    contract_version: Literal["1.0.0"] = Field(alias="contractVersion")
     org_id: str = Field(alias="orgId")
     workspace_id: str = Field(alias="workspaceId")
     system_id: str = Field(alias="systemId")
@@ -216,6 +217,7 @@ class EvaluationRunResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     id: str
+    contract_version: Literal["1.0.0"] = Field(alias="contractVersion")
     org_id: str = Field(alias="orgId")
     workspace_id: str = Field(alias="workspaceId")
     system_id: str = Field(alias="systemId")
@@ -247,7 +249,9 @@ class EvaluationPreflightResponse(BaseModel):
     plan_id: str = Field(alias="planId")
     can_prepare_run: bool = Field(alias="canPrepareRun")
     fairmind_execution_available: bool = Field(alias="fairmindExecutionAvailable")
-    code: Literal["executor_unavailable", "evidence_link_required"]
+    code: Literal[
+        "contract_upgrade_required", "executor_unavailable", "evidence_link_required"
+    ]
     message: str
     next_action: str = Field(alias="nextAction")
 
@@ -932,24 +936,10 @@ def review_evidence_mapping(
 
 
 def _evaluation_service(db: Session) -> EvaluationRunsService:
-    return EvaluationRunsService(db)
-
-
-def _require_legacy_evaluation_mutation_enabled() -> None:
-    if settings.assurance_v2_enabled:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "code": "contract_upgrade_required",
-                "message": (
-                    "Legacy evaluation mutations are disabled while Assurance V2 " "is enabled."
-                ),
-                "nextAction": (
-                    "Clone legacy records into a bound v2 plan and use the "
-                    "evaluation-v2 workflow."
-                ),
-            },
-        )
+    return EvaluationRunsService(
+        db,
+        legacy_mutations_enabled=not settings.assurance_v2_enabled,
+    )
 
 
 def _raise_evaluation_error(error: EvaluationWorkflowError) -> None:
@@ -994,7 +984,6 @@ def create_evaluation_plan(
     membership: OrgMembership = Depends(organization_membership),
     db: Session = Depends(get_db),
 ) -> dict:
-    _require_legacy_evaluation_mutation_enabled()
     authorization_service = _service(db)
     _require_mutation(membership, authorization_service)
     try:
@@ -1038,7 +1027,6 @@ def activate_evaluation_plan(
     membership: OrgMembership = Depends(organization_membership),
     db: Session = Depends(get_db),
 ) -> dict:
-    _require_legacy_evaluation_mutation_enabled()
     authorization_service = _service(db)
     _require_mutation(membership, authorization_service)
     try:
@@ -1089,7 +1077,6 @@ def create_evaluation_run(
     membership: OrgMembership = Depends(organization_membership),
     db: Session = Depends(get_db),
 ) -> dict:
-    _require_legacy_evaluation_mutation_enabled()
     authorization_service = _service(db)
     _require_mutation(membership, authorization_service)
     try:
@@ -1156,7 +1143,6 @@ def link_evaluation_run_passport(
     membership: OrgMembership = Depends(organization_membership),
     db: Session = Depends(get_db),
 ) -> dict:
-    _require_legacy_evaluation_mutation_enabled()
     authorization_service = _service(db)
     _require_mutation(membership, authorization_service)
     try:
