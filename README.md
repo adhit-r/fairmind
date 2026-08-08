@@ -6,14 +6,14 @@
 
 <div align="center">
 
-**Ethical AI Governance & Bias Detection Platform**
-*Compliant with EU AI Act, India DPDP Act, & GDPR*
+**AI assurance control plane for evidence-grade evaluation**
+*Evidence-first foundations for governing models, LLMs, agents, and multimodal systems*
 
 </div>
 
-[![Backend Status](https://img.shields.io/badge/Backend-FastAPI-green)](https://api.fairmind.xyz)
-[![Frontend Status](https://img.shields.io/badge/Frontend-Next.js-blue)](https://app-demo.fairmind.xyz)
-[![Testing Coverage](https://img.shields.io/badge/Testing-80%25%2B-brightgreen)](./docs/TESTING_GUIDE.md)
+[![Assurance Status](https://img.shields.io/badge/Assurance-internal%20alpha-orange)](docs/superpowers/plans/2026-07-19-fairmind-2027-ai-assurance-todo.md)
+[![Backend](https://img.shields.io/badge/Backend-FastAPI-green)](apps/backend)
+[![Frontend](https://img.shields.io/badge/Frontend-Next.js-blue)](apps/frontend)
 [![Contributors](https://img.shields.io/github/contributors/adhit-r/fairmind)](https://github.com/adhit-r/fairmind/graphs/contributors)
 [![Issues](https://img.shields.io/github/issues/adhit-r/fairmind/good%20first%20issue)](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -41,24 +41,44 @@
 
 ## Overview
 
-FairMind is a production-ready AI Governance and Bias Detection Platform designed for modern AI systems. It provides comprehensive tools for detecting bias, generating compliance reports, and ensuring ethical AI development across Classic Machine Learning, Large Language Models (LLMs), and Multimodal systems.
+FairMind is evolving from a model-focused governance application into an evidence-grade AI assurance control plane. The 2027 objective is to make evaluation evidence reproducible, correctly scoped, reviewable, and useful across predictive models, LLMs, agents, code generation, image, audio, video, and multimodal systems.
+
+The current branch is an **internal, default-off trust-foundation alpha**. It implements the evidence contract and verification kernel, but it is not yet a generally available evaluator, certification service, or automatic enforcement product.
+
+### Current assurance boundary
+
+| Capability | Current state | Claim allowed today |
+|---|---|---|
+| Target and suite identity | Implemented in the v2 contract | Immutable planning metadata |
+| Execution envelope and Passport v2 binding | Implemented and tested | Evidence-integrity foundation |
+| Signature, replay, scope, and admission checks | Implemented as a default-off kernel | Supporting evidence verification |
+| Public admission API and reviewer workflow | Not yet shipped | Do not claim |
+| Sandboxed worker execution | Not yet shipped | Do not claim |
+| LLM, agent, code, vision, image, audio, video, and multimodal packs | Not yet independently validated | Planned/experimental only |
+| Pre-deployment, realtime, and post-deployment assurance | Not yet shipped | Do not claim |
+| Compliance, certification, automatic approval, or automatic enforcement | Not provided by this branch | Do not claim |
+
+See the [2027 assurance roadmap](docs/superpowers/plans/2026-07-19-fairmind-2027-ai-assurance-todo.md) for the release gates that must pass before individual execution capabilities are exposed.
 
 ### What FairMind Does
 
-FairMind helps organizations:
-- Detect bias in AI models across multiple domains (Classic ML, LLMs, Multimodal)
-- Automatically generate remediation code to fix detected biases
-- Generate compliance reports for GDPR, EU AI Act, and other regulations
-- Create AI Bill of Materials (BOM) for model transparency
-- Integrate with MLOps tools (Weights & Biases, MLflow) for experiment tracking
-- Monitor model performance and bias metrics in real-time
-- Manage model lifecycle and governance
+FairMind is being built to help organizations:
 
-### Live Services
+- Define immutable targets, suites, configurations, and lifecycle phases.
+- Collect evaluator evidence with exact scope, provenance, freshness, and review state.
+- Map accepted findings to governance controls and framework evidence.
+- Run specialist evaluation engines in isolated workers when the execution layer is released.
+- Produce reproducible audit packs from evidence hashes without asserting automatic compliance.
 
-- **Backend API**: [api.fairmind.xyz](https://api.fairmind.xyz)
-- **API Documentation**: [api.fairmind.xyz/docs](https://api.fairmind.xyz/docs)
-- **Frontend Application**: [app-demo.fairmind.xyz](https://app-demo.fairmind.xyz)
+Existing legacy routes and services remain in the repository for compatibility. Their names or presence do not mean that a capability is currently validated or release-ready.
+
+### Local development surfaces
+
+- **Backend API**: `http://localhost:8000`
+- **API Documentation**: `http://localhost:8000/docs`
+- **Frontend Application**: `http://localhost:1111`
+
+Hosted links, where available, are development or demonstration surfaces and are not evidence that every roadmap capability is deployed.
 
 ---
 
@@ -70,44 +90,46 @@ FairMind helps organizations:
 
 ### Feature Status Summary
 
-** Production Ready**: Bias Detection • Model Benchmarking • Compliance Reports • Real-Time Monitoring • MLOps Integration • Automated Remediation • Model Marketplace • Advanced Reporting • User Authentication (Local)
+**Implemented foundation**: target and suite identity, execution-envelope binding, Passport v2 verification primitives, trust-policy checks, replay protection, and evidence-state contracts.
 
-**🟡 Backend Complete, UI Pending**: LLM-as-a-Judge
+**In progress**: public evidence admission, evaluator registry, four-eyes review, frontend evidence states, worker isolation, and release-gate verification.
 
-**⏳ Planned Q2 2025**: Advanced Analytics Dashboard • Enterprise Features (RBAC, Teams) • Internationalization
+**Planned after the foundation**: real predictive, LLM, agent, code, vision, image, audio, video, and multimodal evaluation packs; pre-deployment and realtime pre/post workflows; and independently benchmarked execution claims.
 
-** Out of Scope**: Mobile/Desktop Apps
+**Not claimable from this branch**: compliance certification, automatic approval, automatic enforcement, or a generally available “FairMind Verified” designation.
 
 ---
 
 ## Key Features
 
-### 1. Comprehensive Bias Detection
+The catalog below describes the product direction and compatibility surfaces. A feature is only an executable assurance capability when its versioned suite, runner, benchmark report, sandbox report, and release gate are complete.
 
-**Classic Machine Learning Bias Detection**
+### 1. Bias and safety evaluation lanes
+
+**Predictive-model fairness (legacy kernels; independent validation required)**
 - Demographic Parity: Measures equal positive prediction rates across groups
 - Equalized Odds: Ensures equal true positive and false positive rates
 - Disparate Impact Analysis: Statistical parity difference calculation
 - Individual Fairness: Counterfactual fairness testing
 - Group Fairness: Multiple protected attribute analysis
 
-**Large Language Model (LLM) Bias Detection**
+**LLM and text evaluation (planned; no production adapter on this branch)**
 - WEAT (Word Embedding Association Test): Detects implicit bias in word embeddings
 - SEAT (Sentence Embedding Association Test): Tests bias in sentence-level embeddings
 - Minimal Pairs Testing: Systematic bias detection through controlled comparisons
 - Counterfactual Fairness: Tests model behavior under counterfactual scenarios
 - Stereotype Detection: Identifies stereotypical associations in model outputs
 
-**Multimodal Bias Detection**
+**Multimodal evaluation packs (planned; no production packs on this branch)**
 - Image Generation Bias: Analyzes bias in image generation models (DALL-E, Stable Diffusion, etc.)
 - Audio Generation Fairness: Tests bias in audio synthesis models
 - Video Content Bias: Detects bias in video generation and analysis
 - Cross-Modal Stereotype Analysis: Identifies bias across different modalities
 - Representation Bias: Analyzes demographic representation in generated content
 
-### 2. Automated Remediation
+### 2. Remediation (legacy/experimental)
 
-FairMind generates production-ready Python code to fix detected biases:
+Some legacy routes generate example Python remediation code. Treat generated code as advisory and review it before use; this branch does not certify that generated code is safe or effective.
 
 <div align="center">
   <img src="assets/diagrams/remediation_flow.png" alt="FairMind Remediation Flow" width="700">
@@ -121,9 +143,9 @@ FairMind generates production-ready Python code to fix detected biases:
 - **Post-Processing Methods**: Calibration and adjustment techniques
 - **Pre-Processing Solutions**: Data transformation and cleaning strategies
 
-### 3. MLOps Integration
+### 3. MLOps integrations (compatibility surfaces)
 
-Seamless integration with experiment tracking platforms:
+Legacy integrations exist for experiment tracking platforms. Their presence does not provide evidence admission or certify an evaluation result:
 
 <div align="center">
   <img src="assets/diagrams/mlops_integration.png" alt="FairMind MLOps Integration" width="700">
@@ -131,7 +153,7 @@ Seamless integration with experiment tracking platforms:
 
 
 - **Weights & Biases Integration**
-  - Automatic logging of bias test results
+  - Optional logging of bias test results
   - Deep linking from FairMind results to W&B dashboards
   - Experiment tracking and comparison
   - Model versioning and registry
@@ -142,11 +164,13 @@ Seamless integration with experiment tracking platforms:
   - Model serving and deployment tracking
   - Performance metrics logging
 
-- **Zero-Configuration Setup**: Enable via environment variables
-- **Automatic Logging**: All bias tests automatically logged to configured platforms
+- **Configuration**: Enable via environment variables where supported
+- **Logging**: Results can be logged by supported legacy routes
 - **Dashboard Links**: Direct links from results to experiment dashboards
 
-### 4. Compliance and Governance
+### 4. Governance evidence and framework mapping
+
+FairMind is intended to gather and organize evidence for governance frameworks. Framework mapping is not the same as legal compliance, certification, or an automatic conformity decision.
 
 **AI Bill of Materials (BOM)**
 - Standard SBOM format for AI models
@@ -161,13 +185,9 @@ Seamless integration with experiment tracking platforms:
   <img src="assets/diagrams/compliance_workflow.png" alt="FairMind Compliance Workflow" width="700">
 </div>
 
-- **EU AI Act Assessment**: Automated compliance checking against EU AI Act requirements
-- **GDPR Compliance**: Data protection and privacy compliance reporting
-- **DPDP Act (India)**: Digital Personal Data Protection Act compliance
-- **India AI Framework**: NITI Aayog Responsible AI Guidelines compliance
-- **ISO/IEC 42001**: AI Management System Standard compliance
-- **NIST AI RMF**: Risk Management Framework alignment
-- **IEEE 7000**: Ethical concerns process compliance
+- **EU AI Act**: Planned evidence and control mapping
+- **GDPR and DPDP Act (India)**: Planned privacy and governance evidence mapping
+- **India AI Framework, ISO/IEC 42001, NIST AI RMF, and IEEE 7000**: Framework references and planned mappings
 
 **Risk Assessment**
 - Automated risk categorization (High/Medium/Low)
@@ -190,31 +210,29 @@ Seamless integration with experiment tracking platforms:
 - Model comparison and benchmarking
 - Lifecycle state management
 
-### 6. Real-Time Monitoring
+### 6. Monitoring and lifecycle assurance (planned)
 
 <div align="center">
   <img src="assets/diagrams/realtime_monitoring.png" alt="FairMind Real-time Monitoring" width="700">
 </div>
 
 
-- Live bias metrics monitoring
-- Performance tracking
-- Alert system for threshold violations
-- Dashboard analytics
-- Historical trend analysis
+- Planned post-deployment metrics, drift and incident replay
+- Planned advisory realtime pre/post checks
+- Historical analysis where supported by a connected evaluator
 
-### 7. Model Marketplace
+### 7. Model registry and marketplace (legacy/planned)
 
-- **Discovery Hub**: Centralized platform for finding fair and verified models
-- **Bias Cards**: Transparent fairness metrics for every model
+- **Discovery Hub**: Centralized platform for model metadata
+- **Bias Cards**: Intended to show evidence-backed metrics when validated evidence exists
 - **Community Reviews**: User ratings and feedback system
 - **Usage Tracking**: Monitor model adoption and performance
 
-### 8. Advanced Reporting
+### 8. Reporting and audit packs (planned)
 
 - **PDF Generation**: Create professional, audit-ready reports
 - **Bias Audits**: Detailed breakdown of fairness metrics and remediation steps
-- **Compliance Certificates**: Proof of adherence to regulatory frameworks (EU AI Act, etc.)
+- **Framework evidence packs**: Reproducible exports after evidence admission and reviewer acceptance; not compliance certificates
 - **Model Cards**: Standardized documentation for model transparency
 
 ---
@@ -229,28 +247,17 @@ Seamless integration with experiment tracking platforms:
 
 ### Component Breakdown
 
-**Backend Services (40+ API Route Modules)**
+**Backend services (legacy and active modules)**
 - **Core Governance**: Authentication, Authorization, Policy Management
-- **Bias Detection Engine**:
-  - Classic ML (Demographic Parity, Equalized Odds)
-  - Modern LLM (WEAT, SEAT, Minimal Pairs)
-  - Multimodal (Image, Audio, Video)
-- **Compliance Engine**:
-  - **India Stack**: DPDP Act 2023, NITI Aayog Framework, Digital India Act
-  - **Global**: EU AI Act, GDPR, NIST AI RMF
-  - **RAG System**: Semantic search for regulatory documents
-- **FairMind Monitor**:
-  - Real-time token analysis
-  - Live bias metric tracking
-  - Threshold-based alerting
-- **Automated Remediation**: Code generation for bias mitigation
-- **MLOps Integration**: Seamless connection with W&B and MLflow
+- **Assurance foundation**: Target and suite identity, execution envelopes, Passport v2 binding, trust checks, and evidence-state contracts
+- **Legacy evaluation routes**: Predictive, LLM, and multimodal endpoints retained for compatibility; they are not current release claims
+- **Governance mapping surfaces**: Framework references and evidence organization; not automatic compliance decisions
+- **MLOps integrations**: Optional compatibility adapters for W&B and MLflow
 
-**Frontend Application (40+ Pages, 80+ Components)**
-- **Dashboards**: Main, Compliance, Real-time Monitoring
-- **Interactive Tools**: Bias Testing, Remediation Generator, Policy Editor
-- **Visualizations**: Real-time charts, Bias metric heatmaps, Compliance scorecards
-- **Evidence Management**: Automated collection and reporting UI
+**Frontend application**
+- Existing dashboards and legacy evaluation pages remain under active redesign
+- Evidence-admission, signer, freshness, review, and governance axes are being added to the product UI
+- The original high-contrast neobrutalist visual language remains the design constraint
 
 **Data Layer (Hybrid Architecture)**
 - **SQLite (Local)**: Primary relational storage for users, authentication, and application state. Zero-config, local-first.
@@ -384,7 +391,7 @@ Full interactive API documentation with request/response examples:
 - `GET /health` - Health check endpoint
 - `GET /api/v1/system/info` - System information
 
-**Total API Endpoints**: 50+
+The API catalog includes legacy endpoints. Endpoint presence does not imply that the route is bound to the v2 evidence contract or independently validated.
 
 For complete API reference, see [API Documentation](docs/API_ENDPOINTS.md)
 
@@ -413,7 +420,7 @@ For complete API reference, see [API Documentation](docs/API_ENDPOINTS.md)
 
 - **Neobrutal Design System**: Modern, bold UI design
 - **Responsive Layouts**: Works on desktop, tablet, and mobile
-- **Real-Time Updates**: Live metrics and status updates
+- **Status updates**: Live updates where a connected service supports them
 - **Interactive Visualizations**: Charts and graphs for bias metrics
 - **Export Capabilities**: JSON, CSV, PDF export options
 - **Deep Linking**: Direct links to MLOps dashboards
@@ -460,7 +467,8 @@ For complete API reference, see [API Documentation](docs/API_ENDPOINTS.md)
 **Testing**
 - pytest with coverage
 - Playwright (E2E)
-- Test coverage: 80%+ target
+- Focused assurance tests: 548 non-PostgreSQL tests and 73 native PostgreSQL tests recorded for the current trust-foundation slice
+- Full-repository backend baseline: not yet green; see the release-gate backlog
 
 ### Frontend
 
@@ -705,8 +713,8 @@ FairMind takes security seriously. We follow responsible disclosure practices.
 
 - CodeQL for vulnerability detection
 - Dependabot for dependency scanning
-- Regular security audits
-- Automated security checks in CI/CD
+- Security audit and release evidence are being rebuilt around the v2 evidence contract
+- The current exact-commit security discovery is not sealed as a release clearance yet
 
 ### Security Features
 
@@ -724,32 +732,29 @@ See [Security Policy](docs/SECURITY.md) for complete security policy.
 
 ## Project Status
 
-### Current Phase: Q1 2025 (Foundation)
+### Current phase: 2027 assurance foundation
 
-**Completed**
-- Core AI governance features
-- Modern LLM bias detection (WEAT, SEAT, Minimal Pairs)
-- Multimodal bias analysis (Image, Audio, Video)
-- MLOps integration (W&B, MLflow)
-- Compliance reporting (EU AI Act, GDPR)
-- AI BOM generation
-- Production deployment
-- Comprehensive testing (80%+ coverage)
-- Documentation suite
+The current branch is an internal trust-foundation alpha. The roadmap checklist is 20/92 complete (21.7%), with the P1 worker layer, real evaluation engines, modality packs, lifecycle workflows, and rollout gates still open.
 
-**In Progress**
-- CI/CD pipeline automation
-- Frontend performance optimizations
-- Security vulnerability remediation
-- Accessibility improvements
+**Implemented and verified for the current slice**
 
-**Planned**
-- Mobile responsiveness
-- Internationalization (i18n)
-- Advanced analytics dashboard
-- Enterprise features
+- Immutable target and suite identity contracts
+- Server-generated execution-envelope binding
+- Passport v2 scope, signature, expiry, replay, and admission primitives
+- Atomic evidence persistence and separate execution/evidence/review/governance states
+- Focused unit and PostgreSQL verification for the trust-foundation slice
 
-See [ROADMAP.md](ROADMAP.md) for detailed roadmap.
+**Next release gates**
+
+- Complete P0 API permissions, evaluator registry, review workflow, audit chain, and evidence UI
+- Pass the private governance pilot (Gate A)
+- Build the isolated worker and sandbox (Gate B)
+- Connect and independently benchmark real modality evaluators (Gate C)
+- Earn capability-specific public claims only after the execution, sandbox, red-team, and soak requirements pass (Gate D)
+
+No compliance certification, automatic approval, automatic enforcement, or generally available “FairMind Verified” claim is made by this branch.
+
+See the [2027 assurance roadmap](docs/superpowers/plans/2026-07-19-fairmind-2027-ai-assurance-todo.md), [Task 12B architecture note](docs/architecture/verified-evidence-admission-task12b.md), and [release-gate backlog](docs/superpowers/plans/2026-08-08-task12b-release-gate-backlog.md).
 
 ---
 
