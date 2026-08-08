@@ -288,7 +288,7 @@ def _review_url(
 
 
 def _grant_evidence_submit_permission() -> None:
-    _grant_role_permissions("admin", ["evaluation:evidence:submit"])
+    _grant_role_permissions("admin", ["evaluation:evidence:submit", "evaluation:evidence:link"])
 
 
 def _grant_evidence_review_permission() -> None:
@@ -669,6 +669,29 @@ def test_verified_evidence_submit_requires_explicit_permission_and_exact_scope(
         assert call["scope"].suite_execution_id == suite_execution_id
     finally:
         app.dependency_overrides.pop(get_verified_evidence_admission_service, None)
+
+
+def test_verified_evidence_link_permission_is_separate_from_submission(
+    workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_evidence_submit_enabled", True)
+    _plan, run = _create_active_v2_plan_and_run(client)
+    suite_execution_id = run["suiteExecutions"][0]["id"]
+    _grant_role_permissions("admin", ["evaluation:evidence:submit"])
+
+    response = client.post(
+        _admission_url(run_id=run["id"], suite_execution_id=suite_execution_id),
+        headers={**_headers("evidence-link-boundary"), "Content-Type": "application/json"},
+        content=b"signed-passport",
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == {
+        "code": "evaluation_evidence_link_forbidden",
+        "message": "The evaluation:evidence:link permission is required.",
+    }
 
 
 def test_verified_evidence_submit_rejects_oversized_body_before_service(

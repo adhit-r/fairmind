@@ -654,6 +654,19 @@ def _require_evidence_submit_permission(membership: OrgMembership) -> None:
         )
 
 
+def _require_evidence_link_permission(membership: OrgMembership) -> None:
+    """Require the separate capability for creating a suite-evidence link."""
+
+    if "evaluation:evidence:link" not in membership.permissions:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "evaluation_evidence_link_forbidden",
+                "message": "The evaluation:evidence:link permission is required.",
+            },
+        )
+
+
 def _require_evidence_review_permission(membership: OrgMembership) -> None:
     """Require the narrow review permission; admin role alone is insufficient."""
 
@@ -1178,6 +1191,7 @@ async def submit_verified_evidence(
     """
 
     _require_evidence_submit_permission(membership)
+    _require_evidence_link_permission(membership)
     if membership.org_id != org_id:
         _missing("evidence_scope")
     _require_evidence_scope(
