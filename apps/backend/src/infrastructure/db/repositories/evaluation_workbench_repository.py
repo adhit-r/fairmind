@@ -34,6 +34,7 @@ from database.governance_models import (
     GovernanceEvidenceSigningKey,
     GovernanceEvidenceTrustPolicyVersion,
     GovernanceEvidenceVerificationReceipt,
+    GovernanceEvaluatorRegistration,
     GovernanceIdempotencyRecord,
     GovernanceWorkspace,
 )
@@ -59,6 +60,7 @@ from src.application.ports.evaluation_workbench import (
     TrustPolicyBindingRecord,
 )
 from src.application.ports.evidence_admission import (
+    ApprovedEvaluatorRegistration,
     EvidenceAdmissionAuthorityRecord,
     EvidenceAdmissionScope,
     PersistVerifiedPassportV2Command,
@@ -69,6 +71,13 @@ from src.application.ports.evidence_review import (
     EvidenceReviewScope,
     PersistEvidenceReviewCommand,
     ReviewedEvidenceRecord,
+)
+from src.application.ports.evaluator_catalog import EvaluatorCatalogRecord
+from src.application.services.evaluator_catalog_service import evaluator_binding_hash
+from src.application.services.evaluator_registration import (
+    EvaluatorIdentityBinding,
+    EvaluatorRegistrationCeremonyError,
+    EvaluatorRegistrationRecord,
 )
 from src.domain.assurance.evaluation_v2 import (
     CONTRACT_VERSION,
@@ -773,6 +782,139 @@ class SqlAlchemyEvaluationWorkbenchRepository:
                 return False
         return True
 
+    def load_approved_evaluator_registration_for_update(
+        self,
+        *,
+        scope: EvidenceAdmissionScope,
+        authority: EvidenceAdmissionAuthorityRecord,
+        evaluator_id: str,
+        source_type: str,
+        adapter_name: str,
+        adapter_version: str,
+        result_contract_version: str,
+        issuer_id: str,
+        signing_key_id: str,
+        verified_at: datetime,
+    ) -> ApprovedEvaluatorRegistration | None:
+        """Lock one live, approved catalog tuple for the new receipt.
+
+        The selection is intentionally performed through the same Session as
+        the enclosing admission mutation.  PostgreSQL therefore holds the
+        registration, issuer, and signing-key locks until the receipt and
+        admission graph commit; a concurrent revocation either commits first
+        and is rejected here, or waits until the receipt is durably issued.
+        """
+
+        if authority.scope != scope or authority.scope.organization_id != scope.organization_id:
+            raise self._error(
+                "evidence_admission_integrity_conflict",
+                _EVIDENCE_INTEGRITY_MESSAGE,
+                409,
+            )
+        values = (
+            evaluator_id,
+            source_type,
+            adapter_name,
+            adapter_version,
+            result_contract_version,
+            issuer_id,
+            signing_key_id,
+        )
+        if any(not isinstance(value, str) or not value for value in values):
+            raise self._error(
+                "evidence_admission_integrity_conflict",
+                _EVIDENCE_INTEGRITY_MESSAGE,
+                409,
+            )
+        verified_at_text = self._timestamp_value(verified_at)
+        if verified_at_text is None:
+            raise self._error(
+                "evidence_admission_integrity_conflict",
+                _EVIDENCE_INTEGRITY_MESSAGE,
+                409,
+            )
+
+        registrations = GovernanceEvaluatorRegistration.__table__
+        issuers = GovernanceEvidenceIssuer.__table__
+        signing_keys = GovernanceEvidenceSigningKey.__table__
+        statement = (
+            select(registrations)
+            .select_from(
+                registrations.join(
+                    issuers,
+                    (issuers.c.id == registrations.c.authority_issuer_id)
+                    & (issuers.c.org_id == registrations.c.org_id),
+                ).join(
+                    signing_keys,
+                    (signing_keys.c.id == registrations.c.authority_signing_key_id)
+                    & (signing_keys.c.issuer_id == issuers.c.id)
+                    & (signing_keys.c.org_id == issuers.c.org_id),
+                )
+            )
+            .where(
+                registrations.c.org_id == scope.organization_id,
+                registrations.c.evaluator_id == evaluator_id,
+                registrations.c.source_type == source_type,
+                registrations.c.adapter_name == adapter_name,
+                registrations.c.adapter_version == adapter_version,
+                registrations.c.result_contract_version == result_contract_version,
+                registrations.c.issuer_id == issuer_id,
+                registrations.c.signing_key_id == signing_key_id,
+                registrations.c.authority_issuer_id == authority.issuer_internal_id,
+                registrations.c.authority_signing_key_id == authority.signing_key_internal_id,
+                registrations.c.status == "approved",
+                issuers.c.issuer_key == authority.issuer_key,
+                issuers.c.issuer_key == issuer_id,
+                issuers.c.issuer_type == source_type,
+                issuers.c.status == "active",
+                signing_keys.c.key_id == authority.signer_key_id,
+                signing_keys.c.key_id == signing_key_id,
+                signing_keys.c.revoked_at.is_(None),
+                signing_keys.c.valid_from <= verified_at_text,
+                verified_at_text < signing_keys.c.valid_until,
+            )
+            .with_for_update()
+        )
+        row = self.db.execute(statement).mappings().one_or_none()
+        if row is None:
+            return None
+        try:
+            catalog_record = SqlAlchemyEvaluatorCatalogRepository._record_from_row(row)
+        except EvaluatorCatalogRepositoryError as error:
+            raise self._error(
+                "evidence_admission_integrity_conflict",
+                _EVIDENCE_INTEGRITY_MESSAGE,
+                409,
+            ) from error
+        registration = catalog_record.registration
+        if (
+            catalog_record.organization_id != scope.organization_id
+            or registration.status != "approved"
+            or registration.binding.evaluator_id != evaluator_id
+            or registration.binding.source_type != source_type
+            or registration.binding.adapter_name != adapter_name
+            or registration.binding.adapter_version != adapter_version
+            or registration.binding.result_contract_version != result_contract_version
+            or registration.binding.issuer_id != issuer_id
+            or registration.binding.key_id != signing_key_id
+        ):
+            raise self._error(
+                "evidence_admission_integrity_conflict",
+                _EVIDENCE_INTEGRITY_MESSAGE,
+                409,
+            )
+        return ApprovedEvaluatorRegistration(
+            registration_id=registration.registration_id,
+            binding_hash=catalog_record.binding_hash,
+            evaluator_id=registration.binding.evaluator_id,
+            source_type=registration.binding.source_type,
+            adapter_name=registration.binding.adapter_name,
+            adapter_version=registration.binding.adapter_version,
+            result_contract_version=registration.binding.result_contract_version,
+            issuer_id=registration.binding.issuer_id,
+            signing_key_id=registration.binding.key_id,
+        )
+
     @staticmethod
     def _evidence_database_error_kind(error: DBAPIError) -> str | None:
         """Classify only known relational failures; operational errors propagate."""
@@ -962,6 +1104,29 @@ class SqlAlchemyEvaluationWorkbenchRepository:
         passport = command.passport.to_dict()
         evaluator = passport["evaluator"]
         assert isinstance(evaluator, dict)
+        catalog_registration = self.load_approved_evaluator_registration_for_update(
+            scope=scope,
+            authority=authority,
+            evaluator_id=evaluator.get("evaluatorId"),
+            source_type=evaluator.get("sourceType"),
+            adapter_name=evaluator.get("adapterName"),
+            adapter_version=evaluator.get("adapterVersion"),
+            result_contract_version=evaluator.get("resultContractVersion"),
+            issuer_id=evaluator.get("issuerId"),
+            signing_key_id=authority.signer_key_id,
+            verified_at=command.verified_at,
+        )
+        if (
+            catalog_registration is None
+            or catalog_registration.registration_id != command.evaluator_registration_id
+            or catalog_registration.binding_hash
+            != command.evaluator_registration_binding_hash
+        ):
+            raise self._error(
+                "evidence_admission_integrity_conflict",
+                _EVIDENCE_INTEGRITY_MESSAGE,
+                409,
+            )
         verified_at = self._timestamp_value(command.verified_at)
         captured_at = self._timestamp_value(command.captured_at)
         signed_at = self._timestamp_value(command.signed_at)
@@ -1051,6 +1216,10 @@ class SqlAlchemyEvaluationWorkbenchRepository:
                         command.evaluator_projection.to_dict()
                     ),
                     evaluator_projection_hash=command.evaluator_projection_hash,
+                    evaluator_registration_id=command.evaluator_registration_id,
+                    evaluator_registration_binding_hash=(
+                        command.evaluator_registration_binding_hash
+                    ),
                     verifier_contract=command.verifier_contract,
                     verifier_version=command.verifier_version,
                     verified_at=verified_at,
@@ -1253,6 +1422,7 @@ class SqlAlchemyEvaluationWorkbenchRepository:
             self.db.execute(
                 text(
                     "SET CONSTRAINTS "
+                    "fk_governance_evidence_receipt_evaluator_registration, "
                     "fk_governance_evidence_verification_receipt_admission, "
                     "governance_evidence_admissions_require_receipt_013c, "
                     "governance_evidence_receipts_require_verified_admission_013c "
@@ -2756,6 +2926,334 @@ class SqlAlchemyEvaluationWorkbenchRepository:
             ) from None
 
 
+class EvaluatorCatalogRepositoryError(EvaluationWorkbenchError):
+    """A durable catalog row cannot be trusted as an admission authority."""
+
+
+class SqlAlchemyEvaluatorCatalogRepository:
+    """Tenant-bound evaluator catalog adapter with CAS lifecycle updates.
+
+    This adapter deliberately models identity authorization only.  It never
+    infers evaluator quality, provider certification, worker readiness, or
+    the truth of a submitted evidence result from a catalog row.
+    """
+
+    def __init__(self, session: Session) -> None:
+        if not isinstance(session, Session):
+            raise TypeError("SQLAlchemy Session required")
+        self.db = session
+
+    @staticmethod
+    def _error(code: str, message: str, status_code: int = 409) -> EvaluatorCatalogRepositoryError:
+        return EvaluatorCatalogRepositoryError(code, message, status_code=status_code)
+
+    @staticmethod
+    def _timestamp(value: datetime) -> str:
+        if not isinstance(value, datetime) or value.tzinfo is None:
+            raise SqlAlchemyEvaluatorCatalogRepository._error(
+                "evaluator_registration_invalid",
+                "The evaluator registration persistence input is invalid.",
+                422,
+            )
+        return value.astimezone(timezone.utc).isoformat()
+
+    @classmethod
+    def _record_from_row(cls, row: Mapping[str, Any]) -> EvaluatorCatalogRecord:
+        try:
+            binding = EvaluatorIdentityBinding(
+                evaluator_id=row["evaluator_id"],
+                source_type=row["source_type"],
+                adapter_name=row["adapter_name"],
+                adapter_version=row["adapter_version"],
+                result_contract_version=row["result_contract_version"],
+                issuer_id=row["issuer_id"],
+                key_id=row["signing_key_id"],
+            )
+            binding_hash = row["binding_hash"]
+            if not isinstance(binding_hash, str) or binding_hash != evaluator_binding_hash(binding):
+                raise ValueError("binding hash does not match the exact tuple")
+            record = EvaluatorRegistrationRecord(
+                registration_id=row["id"],
+                binding=binding,
+                status=row["status"],
+                submitted_by=row["submitted_by"],
+                submitted_at=_parse_timestamp(row["submitted_at"]),
+                reviewed_by=row["reviewed_by"],
+                reviewed_at=(
+                    None if row["reviewed_at"] is None else _parse_timestamp(row["reviewed_at"])
+                ),
+                review_rationale=row["review_rationale"],
+                revoked_by=row["revoked_by"],
+                revoked_at=(
+                    None if row["revoked_at"] is None else _parse_timestamp(row["revoked_at"])
+                ),
+                revocation_rationale=row["revocation_rationale"],
+            )
+            organization_id = row["org_id"]
+            if not isinstance(organization_id, str) or not organization_id:
+                raise ValueError("organization is invalid")
+            return EvaluatorCatalogRecord(
+                organization_id=organization_id,
+                registration=record,
+                binding_hash=binding_hash,
+            )
+        except (
+            EvaluatorRegistrationCeremonyError,
+            KeyError,
+            TypeError,
+            ValueError,
+        ) as error:
+            raise cls._error(
+                "evaluator_registration_integrity_conflict",
+                "The stored evaluator registration failed integrity checks.",
+            ) from error
+
+    def _live_authority_row(
+        self,
+        *,
+        organization_id: str,
+        issuer_id: str,
+        key_id: str,
+        source_type: str,
+        at: datetime,
+        lock: bool,
+    ) -> Mapping[str, Any] | None:
+        issuers = GovernanceEvidenceIssuer.__table__
+        signing_keys = GovernanceEvidenceSigningKey.__table__
+        timestamp = self._timestamp(at)
+        statement = (
+            select(
+                issuers.c.id.label("authority_issuer_id"),
+                signing_keys.c.id.label("authority_signing_key_id"),
+            )
+            .select_from(
+                issuers.join(
+                    signing_keys,
+                    (signing_keys.c.issuer_id == issuers.c.id)
+                    & (signing_keys.c.org_id == issuers.c.org_id),
+                )
+            )
+            .where(
+                issuers.c.org_id == organization_id,
+                issuers.c.issuer_key == issuer_id,
+                issuers.c.issuer_type == source_type,
+                issuers.c.status == "active",
+                signing_keys.c.key_id == key_id,
+                signing_keys.c.revoked_at.is_(None),
+                signing_keys.c.valid_from <= timestamp,
+                timestamp < signing_keys.c.valid_until,
+            )
+        )
+        if lock:
+            statement = statement.with_for_update()
+        return self.db.execute(statement).mappings().one_or_none()
+
+    def find_by_binding(
+        self,
+        *,
+        organization_id: str,
+        binding: EvaluatorIdentityBinding,
+    ) -> EvaluatorCatalogRecord | None:
+        table = GovernanceEvaluatorRegistration.__table__
+        row = (
+            self.db.execute(
+                select(table).where(
+                    table.c.org_id == organization_id,
+                    table.c.evaluator_id == binding.evaluator_id,
+                    table.c.source_type == binding.source_type,
+                    table.c.adapter_name == binding.adapter_name,
+                    table.c.adapter_version == binding.adapter_version,
+                    table.c.result_contract_version == binding.result_contract_version,
+                    table.c.issuer_id == binding.issuer_id,
+                    table.c.signing_key_id == binding.key_id,
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        return None if row is None else self._record_from_row(row)
+
+    def get_registration(
+        self,
+        *,
+        organization_id: str,
+        registration_id: str,
+        lock: bool,
+    ) -> EvaluatorCatalogRecord | None:
+        table = GovernanceEvaluatorRegistration.__table__
+        statement = select(table).where(
+            table.c.id == registration_id,
+            table.c.org_id == organization_id,
+        )
+        if lock:
+            statement = statement.with_for_update()
+        row = self.db.execute(statement).mappings().one_or_none()
+        return None if row is None else self._record_from_row(row)
+
+    def list_registrations(self, *, organization_id: str) -> list[EvaluatorCatalogRecord]:
+        table = GovernanceEvaluatorRegistration.__table__
+        rows = (
+            self.db.execute(
+                select(table)
+                .where(table.c.org_id == organization_id)
+                .order_by(table.c.submitted_at, table.c.id)
+            )
+            .mappings()
+            .all()
+        )
+        return [self._record_from_row(row) for row in rows]
+
+    def signing_authority_is_live(
+        self,
+        *,
+        organization_id: str,
+        issuer_id: str,
+        key_id: str,
+        source_type: str,
+        at: datetime,
+        lock: bool,
+    ) -> bool:
+        return self._live_authority_row(
+            organization_id=organization_id,
+            issuer_id=issuer_id,
+            key_id=key_id,
+            source_type=source_type,
+            at=at,
+            lock=lock,
+        ) is not None
+
+    def insert_registration(self, record: EvaluatorCatalogRecord) -> EvaluatorCatalogRecord:
+        if not isinstance(record, EvaluatorCatalogRecord):
+            raise self._error(
+                "evaluator_registration_invalid",
+                "The evaluator registration persistence input is invalid.",
+                422,
+            )
+        binding = record.binding
+        if record.binding_hash != evaluator_binding_hash(binding):
+            raise self._error(
+                "evaluator_registration_integrity_conflict",
+                "The evaluator registration binding hash is invalid.",
+            )
+        authority = self._live_authority_row(
+            organization_id=record.organization_id,
+            issuer_id=binding.issuer_id,
+            key_id=binding.key_id,
+            source_type=binding.source_type,
+            at=record.registration.submitted_at,
+            lock=True,
+        )
+        if authority is None:
+            raise self._error(
+                "evaluator_registration_signing_authority_untrusted",
+                "The evaluator issuer and signing key are not live in this organization.",
+            )
+        registration = record.registration
+        table = GovernanceEvaluatorRegistration.__table__
+        try:
+            self.db.execute(
+                insert(table).values(
+                    id=registration.registration_id,
+                    org_id=record.organization_id,
+                    evaluator_id=binding.evaluator_id,
+                    source_type=binding.source_type,
+                    adapter_name=binding.adapter_name,
+                    adapter_version=binding.adapter_version,
+                    result_contract_version=binding.result_contract_version,
+                    issuer_id=binding.issuer_id,
+                    signing_key_id=binding.key_id,
+                    authority_issuer_id=authority["authority_issuer_id"],
+                    authority_signing_key_id=authority["authority_signing_key_id"],
+                    binding_hash=record.binding_hash,
+                    status=registration.status,
+                    submitted_by=registration.submitted_by,
+                    submitted_at=self._timestamp(registration.submitted_at),
+                    reviewed_by=registration.reviewed_by,
+                    reviewed_at=(
+                        None
+                        if registration.reviewed_at is None
+                        else self._timestamp(registration.reviewed_at)
+                    ),
+                    review_rationale=registration.review_rationale,
+                    revoked_by=registration.revoked_by,
+                    revoked_at=(
+                        None
+                        if registration.revoked_at is None
+                        else self._timestamp(registration.revoked_at)
+                    ),
+                    revocation_rationale=registration.revocation_rationale,
+                )
+            )
+        except IntegrityError as error:
+            raise self._error(
+                "evaluator_registration_exists",
+                "An evaluator registration already exists for this exact binding.",
+            ) from error
+        persisted = self.get_registration(
+            organization_id=record.organization_id,
+            registration_id=registration.registration_id,
+            lock=False,
+        )
+        if persisted is None:
+            raise self._error(
+                "evaluator_registration_integrity_conflict",
+                "The evaluator registration could not be read after persistence.",
+            )
+        return persisted
+
+    def replace_registration(
+        self,
+        record: EvaluatorCatalogRecord,
+        *,
+        expected_status: str,
+    ) -> EvaluatorCatalogRecord | None:
+        if not isinstance(record, EvaluatorCatalogRecord):
+            raise self._error(
+                "evaluator_registration_invalid",
+                "The evaluator registration persistence input is invalid.",
+                422,
+            )
+        if record.binding_hash != evaluator_binding_hash(record.binding):
+            raise self._error(
+                "evaluator_registration_integrity_conflict",
+                "The evaluator registration binding hash is invalid.",
+            )
+        registration = record.registration
+        table = GovernanceEvaluatorRegistration.__table__
+        result = self.db.execute(
+            update(table)
+            .where(
+                table.c.id == registration.registration_id,
+                table.c.org_id == record.organization_id,
+                table.c.status == expected_status,
+            )
+            .values(
+                status=registration.status,
+                reviewed_by=registration.reviewed_by,
+                reviewed_at=(
+                    None
+                    if registration.reviewed_at is None
+                    else self._timestamp(registration.reviewed_at)
+                ),
+                review_rationale=registration.review_rationale,
+                revoked_by=registration.revoked_by,
+                revoked_at=(
+                    None
+                    if registration.revoked_at is None
+                    else self._timestamp(registration.revoked_at)
+                ),
+                revocation_rationale=registration.revocation_rationale,
+            )
+        )
+        if result.rowcount != 1:
+            return None
+        return self.get_registration(
+            organization_id=record.organization_id,
+            registration_id=registration.registration_id,
+            lock=False,
+        )
+
+
 class SqlAlchemyEvaluationWorkbenchUnitOfWork:
     """SQLAlchemy transaction adapter for one application-orchestrated mutation."""
 
@@ -3482,3 +3980,13 @@ class SqlAlchemyEvaluationWorkbenchUnitOfWork:
                     "The assurance workflow could not be persisted atomically.",
                     500,
                 ) from None
+
+
+class SqlAlchemyEvaluatorCatalogUnitOfWork(SqlAlchemyEvaluationWorkbenchUnitOfWork):
+    """Reuse the audited mutation/idempotency boundary for catalog ceremonies."""
+
+    def __init__(self, session: Session) -> None:
+        super().__init__(
+            session,
+            repository=SqlAlchemyEvaluatorCatalogRepository(session),
+        )

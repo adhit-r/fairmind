@@ -26,6 +26,7 @@ from database.governance_models import (
     GovernanceEvidenceSigningKey,
     GovernanceEvidenceTrustPolicyVersion,
     GovernanceEvidenceVerificationReceipt,
+    GovernanceEvaluatorRegistration,
 )
 from src.application.ports.evaluation_workbench import (
     EvaluationWorkbenchError,
@@ -39,6 +40,8 @@ from src.application.ports.evidence_admission import (
 from src.application.services.trusted_evidence_admission_resolver import (
     TrustedEvidenceAdmissionResolver,
 )
+from src.application.services.evaluator_catalog_service import evaluator_binding_hash
+from src.application.services.evaluator_registration import EvaluatorIdentityBinding
 from src.domain.assurance.evaluation_v2 import canonical_json, canonical_sha256
 from src.domain.assurance.evidence_passport_v2 import (
     evidence_passport_v2_content_hash,
@@ -57,8 +60,21 @@ from tests.test_evaluation_workbench_repository import (
     _service,
     _suite_payload,
     _target_payload,
-    repository_fixture,
+    repository_fixture as base_repository_fixture,
 )
+
+
+@pytest.fixture
+def repository_fixture(base_repository_fixture):
+    """Exercise repository admission against the installed 013d receipt shape."""
+
+    session, factory = base_repository_fixture
+    from migrations.evaluator_catalog_migration import apply_sqlite
+
+    raw_connection = session.connection().connection.driver_connection
+    apply_sqlite(raw_connection)
+    session.expire_all()
+    yield session, factory
 
 
 def test_sqlite_fresh_clock_is_utc_and_does_not_use_the_process_clock(monkeypatch) -> None:
@@ -300,6 +316,79 @@ def _verified_after_locked_graph(
     raise AssertionError("SQLite database clock did not advance beyond the locked graph")
 
 
+def _ensure_approved_catalog_registration(
+    session: Session,
+    *,
+    authority: EvidenceAdmissionAuthorityRecord,
+    evaluator: dict[str, object],
+    submitted_at: datetime,
+) -> tuple[str, str]:
+    """Seed the durable, exact registration required by direct repo tests."""
+
+    binding = EvaluatorIdentityBinding(
+        evaluator_id=str(evaluator["evaluatorId"]),
+        source_type=str(evaluator["sourceType"]),
+        adapter_name=str(evaluator["adapterName"]),
+        adapter_version=str(evaluator["adapterVersion"]),
+        result_contract_version=str(evaluator["resultContractVersion"]),
+        issuer_id=str(evaluator["issuerId"]),
+        key_id=authority.signer_key_id,
+    )
+    table = GovernanceEvaluatorRegistration.__table__
+    existing = session.execute(
+        select(table.c.id, table.c.binding_hash).where(
+            table.c.org_id == authority.scope.organization_id,
+            table.c.evaluator_id == binding.evaluator_id,
+            table.c.source_type == binding.source_type,
+            table.c.adapter_name == binding.adapter_name,
+            table.c.adapter_version == binding.adapter_version,
+            table.c.result_contract_version == binding.result_contract_version,
+            table.c.issuer_id == binding.issuer_id,
+            table.c.signing_key_id == binding.key_id,
+        )
+    ).one_or_none()
+    if existing is not None:
+        return str(existing.id), str(existing.binding_hash)
+    registration_id = str(uuid.uuid4())
+    binding_hash = evaluator_binding_hash(binding)
+    session.execute(
+        insert(table).values(
+            id=registration_id,
+            org_id=authority.scope.organization_id,
+            evaluator_id=binding.evaluator_id,
+            source_type=binding.source_type,
+            adapter_name=binding.adapter_name,
+            adapter_version=binding.adapter_version,
+            result_contract_version=binding.result_contract_version,
+            issuer_id=binding.issuer_id,
+            signing_key_id=binding.key_id,
+            authority_issuer_id=authority.issuer_internal_id,
+            authority_signing_key_id=authority.signing_key_internal_id,
+            binding_hash=binding_hash,
+            status="pending",
+            submitted_by=USER,
+            submitted_at=(submitted_at - timedelta(seconds=1)).isoformat(),
+            reviewed_by=None,
+            reviewed_at=None,
+            review_rationale=None,
+            revoked_by=None,
+            revoked_at=None,
+            revocation_rationale=None,
+        )
+    )
+    session.execute(
+        table.update()
+        .where(table.c.id == registration_id, table.c.org_id == authority.scope.organization_id)
+        .values(
+            status="approved",
+            reviewed_by="catalog-reviewer",
+            reviewed_at=submitted_at.isoformat(),
+            review_rationale="Independent review approved the exact evaluator binding.",
+        )
+    )
+    return registration_id, binding_hash
+
+
 def _admission_command(
     session: Session,
     run: dict[str, object],
@@ -363,6 +452,14 @@ def _admission_command(
         "adapterVersion": plan_suite.suite.adapter_version,
         "resultContractVersion": plan_suite.suite.result_contract_version,
     }
+    evaluator_registration_id, evaluator_registration_binding_hash = (
+        _ensure_approved_catalog_registration(
+            session,
+            authority=authority,
+            evaluator=evaluator,
+            submitted_at=captured_at,
+        )
+    )
     passport: dict[str, object] = {
         "schemaVersion": "2.0.0",
         "passportId": str(uuid.uuid4()),
@@ -441,6 +538,8 @@ def _admission_command(
         execution_binding_hash=canonical_sha256(binding),
         evaluator_projection=evaluator_json,
         evaluator_projection_hash=canonical_sha256(evaluator),
+        evaluator_registration_id=evaluator_registration_id,
+        evaluator_registration_binding_hash=evaluator_registration_binding_hash,
         public_key_fingerprint=canonical_sha256(authority.public_jwk.to_dict()),
         verifier_contract="fairmind/evidence-passport-v2/verified-admission",
         verifier_version="2.0.0",

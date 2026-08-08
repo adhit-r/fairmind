@@ -18,6 +18,7 @@ from src.application.ports.evaluation_workbench import (
     SuiteExecutionRecord,
 )
 from src.application.ports.evidence_admission import (
+    ApprovedEvaluatorRegistration,
     EvidenceAdmissionScope,
     EvidenceAdmissionUnitOfWork,
     PersistVerifiedPassportV2Command,
@@ -36,10 +37,12 @@ from src.application.services.evidence_authenticity_service import (
     EvidenceAuthenticityError,
     EvidenceAuthenticityService,
 )
-from src.application.services.evaluator_registry import (
-    EvaluatorRegistration,
-    EvaluatorRegistry,
-    EvaluatorRegistryError,
+from src.application.services.evaluator_catalog_service import (
+    evaluator_binding_hash,
+)
+from src.application.services.evaluator_registration import (
+    EvaluatorIdentityBinding,
+    EvaluatorRegistrationCeremonyError,
 )
 from src.application.services.trusted_evidence_admission_resolver import (
     TrustedEvidenceAdmissionResolver,
@@ -179,27 +182,7 @@ def _evaluator_projection(passport: Mapping[str, object]) -> dict[str, object]:
 def _verify_evaluator_binding(
     context: TrustedEvidenceAdmissionContext,
     evaluator: Mapping[str, object],
-    evaluator_registry: EvaluatorRegistry,
-) -> EvaluatorRegistration:
-    try:
-        registration = evaluator_registry.validate_binding(
-            evaluator_id=evaluator["evaluatorId"],
-            source_type=evaluator["sourceType"],
-            adapter_name=evaluator["adapterName"],
-            adapter_version=evaluator["adapterVersion"],
-            result_contract_version=evaluator["resultContractVersion"],
-        )
-    except EvaluatorRegistryError as error:
-        mapped_code = {
-            "evaluator_unregistered": "evidence_evaluator_unregistered",
-            "evaluator_inactive": "evidence_evaluator_inactive",
-            "evaluator_source_not_allowed": "evidence_evaluator_source_untrusted",
-        }.get(error.code, "evidence_evaluator_binding_mismatch")
-        raise _error(
-            mapped_code,
-            "The signed evaluator is not authorized by the server catalog.",
-            status_code=409,
-        ) from None
+) -> None:
     _, suite = _selected_suite(context)
     expected = {
         "issuerId": context.authority.issuer_key,
@@ -214,6 +197,98 @@ def _verify_evaluator_binding(
         raise _error(
             "evidence_evaluator_binding_mismatch",
             "The signed evaluator does not match the locked suite authority.",
+        )
+
+
+def _resolve_approved_evaluator_registration(
+    *,
+    context: TrustedEvidenceAdmissionContext,
+    evaluator: Mapping[str, object],
+    signer_key_id: str,
+    repository: object,
+) -> ApprovedEvaluatorRegistration:
+    """Lock the durable approval that authorizes this exact receipt binding."""
+
+    values = {
+        "evaluator_id": evaluator["evaluatorId"],
+        "source_type": evaluator["sourceType"],
+        "adapter_name": evaluator["adapterName"],
+        "adapter_version": evaluator["adapterVersion"],
+        "result_contract_version": evaluator["resultContractVersion"],
+        "issuer_id": evaluator["issuerId"],
+    }
+    if any(not isinstance(value, str) for value in values.values()):
+        raise _error(
+            "evidence_evaluator_binding_mismatch",
+            "The signed evaluator does not match the locked suite authority.",
+        )
+    try:
+        binding = EvaluatorIdentityBinding(
+            evaluator_id=values["evaluator_id"],
+            source_type=values["source_type"],
+            adapter_name=values["adapter_name"],
+            adapter_version=values["adapter_version"],
+            result_contract_version=values["result_contract_version"],
+            issuer_id=values["issuer_id"],
+            key_id=signer_key_id,
+        )
+    except EvaluatorRegistrationCeremonyError:
+        raise _error(
+            "evidence_evaluator_binding_mismatch",
+            "The signed evaluator does not match the locked suite authority.",
+        ) from None
+
+    resolver = getattr(repository, "load_approved_evaluator_registration_for_update", None)
+    if not callable(resolver):
+        raise _error(
+            "evidence_evaluator_registration_unavailable",
+            "Persistent evaluator registration is unavailable for evidence admission.",
+        )
+    registration = resolver(
+        scope=context.authority.scope,
+        authority=context.authority,
+        evaluator_id=binding.evaluator_id,
+        source_type=binding.source_type,
+        adapter_name=binding.adapter_name,
+        adapter_version=binding.adapter_version,
+        result_contract_version=binding.result_contract_version,
+        issuer_id=binding.issuer_id,
+        signing_key_id=binding.key_id,
+        verified_at=context.database_now,
+    )
+    if registration is None:
+        raise _error(
+            "evidence_evaluator_unregistered",
+            "The signed evaluator has no approved persistent registration.",
+        )
+    expected = (
+        binding.evaluator_id,
+        binding.source_type,
+        binding.adapter_name,
+        binding.adapter_version,
+        binding.result_contract_version,
+        binding.issuer_id,
+        binding.key_id,
+        evaluator_binding_hash(binding),
+    )
+    observed = (
+        registration.evaluator_id,
+        registration.source_type,
+        registration.adapter_name,
+        registration.adapter_version,
+        registration.result_contract_version,
+        registration.issuer_id,
+        registration.signing_key_id,
+        registration.binding_hash,
+    )
+    if (
+        not isinstance(registration.registration_id, str)
+        or not registration.registration_id
+        or observed != expected
+    ):
+        raise _error(
+            "evidence_admission_integrity_conflict",
+            "The approved evaluator registration failed integrity checks.",
         )
     return registration
 
@@ -369,14 +444,12 @@ class VerifiedEvidenceAdmissionService:
         self,
         unit_of_work: EvidenceAdmissionUnitOfWork,
         authenticity_service: EvidenceAuthenticityService,
-        evaluator_registry: EvaluatorRegistry,
         *,
         uuid_factory: UuidFactory = uuid.uuid4,
     ) -> None:
         self._unit_of_work = unit_of_work
         self._repository = unit_of_work.repository
         self._authenticity = authenticity_service
-        self._evaluator_registry = evaluator_registry
         self._resolver = TrustedEvidenceAdmissionResolver(self._repository)
         self._uuid_factory = uuid_factory
 
@@ -497,27 +570,20 @@ class VerifiedEvidenceAdmissionService:
                 )
 
             evaluator = _evaluator_projection(passport)
-            initial_registration = _verify_evaluator_binding(
-                initial,
-                evaluator,
-                self._evaluator_registry,
-            )
+            _verify_evaluator_binding(initial, evaluator)
             verified = self._resolver.resolve(
                 scope=scope,
                 issuer_key=issuer_key,
                 signer_key_id=signer_key_id,
             )
             _verify_stable_authority(initial, verified)
-            verified_registration = _verify_evaluator_binding(
-                verified,
-                evaluator,
-                self._evaluator_registry,
+            _verify_evaluator_binding(verified, evaluator)
+            verified_registration = _resolve_approved_evaluator_registration(
+                context=verified,
+                evaluator=evaluator,
+                signer_key_id=signer_key_id,
+                repository=self._repository,
             )
-            if initial_registration != verified_registration:
-                raise _error(
-                    "evidence_evaluator_registry_changed",
-                    "The server evaluator catalog changed during verification.",
-                )
             return self._persist_verified(
                 scope=scope,
                 actor_id=actor_id,
@@ -541,7 +607,7 @@ class VerifiedEvidenceAdmissionService:
         evaluator: Mapping[str, object],
         initial: TrustedEvidenceAdmissionContext,
         verified: TrustedEvidenceAdmissionContext,
-        evaluator_registration: EvaluatorRegistration,
+        evaluator_registration: ApprovedEvaluatorRegistration,
     ) -> MutationOutcome:
         authority = verified.authority
         run = authority.run
@@ -726,6 +792,8 @@ class VerifiedEvidenceAdmissionService:
             execution_binding_hash=candidate.execution_binding_hash,
             evaluator_projection=FrozenJsonObject.from_mapping(evaluator),
             evaluator_projection_hash=candidate.evaluator_projection_hash,
+            evaluator_registration_id=evaluator_registration.registration_id,
+            evaluator_registration_binding_hash=evaluator_registration.binding_hash,
             public_key_fingerprint=candidate.public_key_fingerprint,
             verifier_contract=candidate.verifier_contract,
             verifier_version=candidate.verifier_version,
@@ -794,8 +862,8 @@ class VerifiedEvidenceAdmissionService:
             "freshnessStatus": record.freshness_status,
             "runTechnicalStatus": record.run_technical_status,
             "runEvidenceOutcome": record.run_evidence_outcome,
-            "evaluatorRegistryHash": self._evaluator_registry.catalog_hash,
-            "evaluatorRegistrationHash": canonical_sha256(evaluator_registration.to_dict()),
+            "evaluatorRegistrationId": evaluator_registration.registration_id,
+            "evaluatorRegistrationBindingHash": evaluator_registration.binding_hash,
         }
         return MutationOutcome(
             body=FrozenJsonObject.from_mapping(body),

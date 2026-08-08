@@ -830,6 +830,115 @@ class GovernanceEvidenceSigningKey(Base):
     )
 
 
+class GovernanceEvaluatorRegistration(Base):
+    """Structural projection; migration 013d owns lifecycle authority.
+
+    A row authorizes an exact evaluator identity tuple only.  It is not a
+    provider certification, execution-readiness record, or outcome claim.
+    """
+
+    __tablename__ = "governance_evaluator_registrations"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    evaluator_id = Column(String, nullable=False)
+    source_type = Column(String, nullable=False)
+    adapter_name = Column(String, nullable=False)
+    adapter_version = Column(String, nullable=False)
+    result_contract_version = Column(String, nullable=False)
+    issuer_id = Column(String, nullable=False)
+    signing_key_id = Column(String, nullable=False)
+    authority_issuer_id = Column(String, nullable=False)
+    authority_signing_key_id = Column(String, nullable=False)
+    binding_hash = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="pending")
+    submitted_by = Column(String, nullable=False)
+    submitted_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    reviewed_by = Column(String, nullable=True)
+    reviewed_at = Column(String, nullable=True)
+    review_rationale = Column(Text, nullable=True)
+    revoked_by = Column(String, nullable=True)
+    revoked_at = Column(String, nullable=True)
+    revocation_rationale = Column(Text, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("id", "org_id", name="uq_governance_evaluator_registration_tenant"),
+        UniqueConstraint(
+            "org_id",
+            "binding_hash",
+            name="uq_governance_evaluator_registration_binding_hash",
+        ),
+        UniqueConstraint(
+            "org_id",
+            "evaluator_id",
+            "source_type",
+            "adapter_name",
+            "adapter_version",
+            "result_contract_version",
+            "issuer_id",
+            "signing_key_id",
+            name="uq_governance_evaluator_registration_exact_binding",
+        ),
+        ForeignKeyConstraint(
+            ["authority_issuer_id", "org_id"],
+            ["governance_evidence_issuers.id", "governance_evidence_issuers.org_id"],
+            name="fk_governance_evaluator_registration_issuer",
+        ),
+        ForeignKeyConstraint(
+            ["authority_signing_key_id", "authority_issuer_id", "org_id"],
+            [
+                "governance_evidence_signing_keys.id",
+                "governance_evidence_signing_keys.issuer_id",
+                "governance_evidence_signing_keys.org_id",
+            ],
+            name="fk_governance_evaluator_registration_signing_key",
+        ),
+        CheckConstraint(
+            "source_type IN ('fairmind_worker', 'external_provider')",
+            name="ck_governance_evaluator_registration_source",
+        ),
+        CheckConstraint(
+            _lower_hex64("binding_hash"),
+            name="ck_governance_evaluator_registration_hash",
+        ),
+        CheckConstraint(
+            _canonical_utc_timestamp("submitted_at", nullable=False),
+            name="ck_governance_evaluator_registration_submitted_at",
+        ),
+        CheckConstraint(
+            "(reviewed_at IS NULL OR "
+            f"({_canonical_utc_timestamp('reviewed_at', nullable=False)}) AND "
+            "reviewed_at >= submitted_at) AND "
+            "(revoked_at IS NULL OR "
+            f"({_canonical_utc_timestamp('revoked_at', nullable=False)}) AND "
+            "reviewed_at IS NOT NULL AND revoked_at >= reviewed_at)",
+            name="ck_governance_evaluator_registration_timestamps",
+        ),
+        CheckConstraint(
+            "(status = 'pending' AND reviewed_by IS NULL AND reviewed_at IS NULL "
+            "AND review_rationale IS NULL AND revoked_by IS NULL AND revoked_at IS NULL "
+            "AND revocation_rationale IS NULL) OR "
+            "(status IN ('approved', 'rejected') AND reviewed_by IS NOT NULL "
+            "AND reviewed_by <> submitted_by AND reviewed_at IS NOT NULL "
+            "AND review_rationale IS NOT NULL AND length(trim(review_rationale)) BETWEEN 1 AND 2000 "
+            "AND revoked_by IS NULL AND revoked_at IS NULL AND revocation_rationale IS NULL) OR "
+            "(status = 'revoked' AND reviewed_by IS NOT NULL "
+            "AND reviewed_by <> submitted_by AND reviewed_at IS NOT NULL "
+            "AND review_rationale IS NOT NULL AND length(trim(review_rationale)) BETWEEN 1 AND 2000 "
+            "AND revoked_by IS NOT NULL AND revoked_at IS NOT NULL "
+            "AND revocation_rationale IS NOT NULL "
+            "AND length(trim(revocation_rationale)) BETWEEN 1 AND 2000)",
+            name="ck_governance_evaluator_registration_lifecycle",
+        ),
+        Index(
+            "idx_governance_evaluator_registrations_org_status",
+            "org_id",
+            "status",
+            "id",
+        ),
+    )
+
+
 class GovernanceEvidenceTrustPolicyVersion(Base):
     __tablename__ = "governance_evidence_trust_policy_versions"
 
@@ -1365,6 +1474,8 @@ class GovernanceEvidenceVerificationReceipt(Base):
     result_contract_version = Column(String, nullable=False)
     evaluator_projection_json = Column(Text, nullable=False)
     evaluator_projection_hash = Column(String, nullable=False)
+    evaluator_registration_id = Column(String, nullable=True)
+    evaluator_registration_binding_hash = Column(String, nullable=True)
     verifier_contract = Column(String, nullable=False)
     verifier_version = Column(String, nullable=False)
     verified_at = Column(String, nullable=False)
@@ -1410,6 +1521,16 @@ class GovernanceEvidenceVerificationReceipt(Base):
                 "governance_evidence_signing_keys.issuer_id",
                 "governance_evidence_signing_keys.org_id",
             ],
+        ),
+        ForeignKeyConstraint(
+            ["evaluator_registration_id", "org_id"],
+            [
+                "governance_evaluator_registrations.id",
+                "governance_evaluator_registrations.org_id",
+            ],
+            name="fk_governance_evidence_receipt_evaluator_registration",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         ForeignKeyConstraint(
             ["run_id", "workspace_id", "system_id", "org_id"],
@@ -1497,6 +1618,14 @@ class GovernanceEvidenceVerificationReceipt(Base):
         CheckConstraint(
             _canonical_utc_timestamp("verified_at", nullable=False),
             name="ck_governance_evidence_verification_receipt_timestamp",
+        ),
+        CheckConstraint(
+            "(evaluator_registration_id IS NULL AND "
+            "evaluator_registration_binding_hash IS NULL) OR "
+            "(evaluator_registration_id IS NOT NULL AND "
+            "evaluator_registration_binding_hash IS NOT NULL AND "
+            f"({_lower_hex64('evaluator_registration_binding_hash')}))",
+            name="ck_governance_evidence_receipt_evaluator_registration",
         ),
         Index(
             "idx_governance_evidence_verification_receipts_scope",

@@ -76,6 +76,11 @@ FROZEN_013C_OPERATOR_CHECKSUM = "8f7ec1bda9041f16a03ace75202e590fc8a92947495a792
 FROZEN_SQLITE_013C_FIXTURE_CHECKSUM = (
     "876c377bfb6063b063c0f6cbd20d31089187f0ceae7d40d5ba1ab44c81ecb50d"
 )
+_FROZEN_013D_CHECKSUM = "d5d167dabc3d2458aa5aab6d2cb120ae9c90f798bf4ace6b193b58d4660c6cb9"
+FROZEN_013D_OPERATOR_CHECKSUM = "7a1d368fc1556e6286e047bf73c47878ab69fb31d2b25e7cf139b6919a00d77d"
+FROZEN_SQLITE_013D_FIXTURE_CHECKSUM = (
+    "1d88a2c78cb10871259471fda2b9336043756d0a989941afbc616e10df5e015f"
+)
 
 FROZEN_ASSURANCE_MIGRATIONS = (
     FrozenMigration(
@@ -98,6 +103,11 @@ FROZEN_ASSURANCE_MIGRATIONS = (
         _FROZEN_013C_CHECKSUM,
         _MIGRATIONS / "013c_evidence_verification_receipt.sql",
     ),
+    FrozenMigration(
+        "013c-to-013d-evaluator-catalog-v1",
+        _FROZEN_013D_CHECKSUM,
+        _MIGRATIONS / "013d_evaluator_catalog.sql",
+    ),
 )
 
 POSTGRESQL_ASSURANCE_RELATIONS = frozenset(
@@ -119,6 +129,7 @@ POSTGRESQL_ASSURANCE_RELATIONS = frozenset(
         "governance_evidence_passport_revisions",
         "governance_evidence_admissions",
         "governance_evidence_verification_receipts",
+        "governance_evaluator_registrations",
         "governance_evidence_reviews",
         "governance_evidence_nonce_claims",
         "governance_evaluation_suite_evidence_links",
@@ -140,6 +151,7 @@ POSTGRESQL_ASSURANCE_FUNCTIONS = frozenset(
         "fairmind_expected_decision_evidence_set_013b",
         "fairmind_is_exact_decision_evidence_set_shape_013b",
         "fairmind_jsonb_object_member_count_013c",
+        "fairmind_evaluator_registration_binding_hash_013d",
         "fairmind_verification_receipt_has_exact_verified_admission_013c",
         "fairmind_verification_receipt_is_relationally_valid_013c",
         "fairmind_verification_receipt_matches_admission_013c",
@@ -174,6 +186,10 @@ POSTGRESQL_ASSURANCE_FUNCTIONS = frozenset(
         "guard_governance_evidence_trust_policy_013b",
         "guard_governance_evidence_verification_receipt_013c",
         "guard_governance_evidence_verification_receipt_parent_013c",
+        "guard_governance_evaluator_registration_insert_013d",
+        "guard_governance_evaluator_registration_update_013d",
+        "guard_governance_evaluator_registration_delete_013d",
+        "guard_governance_evidence_receipt_catalog_013d",
         "reject_governance_evaluation_013b_mutation",
         "reject_governance_evaluation_audit_mutation",
     }
@@ -232,6 +248,10 @@ POSTGRESQL_ASSURANCE_REQUIRED_TRIGGERS = frozenset(
         "governance_evidence_trust_policies_guard_update",
         "governance_evidence_verification_receipts_guard_insert",
         "governance_evidence_verification_receipts_no_delete",
+        "governance_evaluator_registrations_guard_insert",
+        "governance_evaluator_registrations_guard_update",
+        "governance_evaluator_registrations_no_delete",
+        "governance_evidence_verification_receipts_catalog_guard_013d",
         "governance_evidence_verification_receipts_no_update",
     }
 )
@@ -251,7 +271,7 @@ FROZEN_POSTGRESQL_ASSURANCE_CATALOGS: Mapping[int, FrozenPostgreSQLCatalog] = Ma
         14: FrozenPostgreSQLCatalog(
             spec=POSTGRESQL_ASSURANCE_CATALOG_SPEC,
             postgresql_major=14,
-            digest=("714fc4ea6f69085ad13bdc3142d38432e405cc17d33d77f93161f3e957f3c9c6"),
+            digest=("e8f66e4703666f7dabea38f329bb89970b554e8ae514e78843b1ded2e14584d5"),
         )
     }
 )
@@ -274,6 +294,7 @@ SQLITE_ASSURANCE_TABLES = frozenset(
         "governance_evidence_passport_revisions",
         "governance_evidence_admissions",
         "governance_evidence_verification_receipts",
+        "governance_evaluator_registrations",
         "governance_evidence_reviews",
         "governance_evidence_nonce_claims",
         "governance_evaluation_suite_evidence_links",
@@ -310,6 +331,8 @@ SQLITE_ASSURANCE_INDEXES = frozenset(
         "idx_evidence_passport_revisions_tenant_run",
         "idx_governance_evidence_admissions_scope_execution_created",
         "idx_governance_evidence_verification_receipts_scope",
+        "idx_governance_evaluator_registrations_org_status",
+        "idx_governance_evidence_receipts_catalog_registration",
         "idx_governance_evidence_reviews_admission_version",
         "idx_governance_evidence_nonce_claims_scope_admission",
         "idx_governance_evaluation_suite_evidence_links_scope",
@@ -355,6 +378,10 @@ SQLITE_ASSURANCE_TRIGGERS = frozenset(
         "governance_evidence_verification_receipts_guard_insert",
         "governance_evidence_verification_receipts_no_update",
         "governance_evidence_verification_receipts_no_delete",
+        "governance_evaluator_registrations_guard_insert",
+        "governance_evaluator_registrations_guard_update",
+        "governance_evaluator_registrations_no_delete",
+        "governance_evidence_verification_receipts_catalog_guard_013d",
         "governance_evidence_reviews_guard_insert",
         "governance_evidence_reviews_no_update",
         "governance_evidence_reviews_no_delete",
@@ -408,8 +435,8 @@ SQLITE_ASSURANCE_VIEWS = frozenset(
 # named above, sorted by object type and name.  Unlike a name-only inventory,
 # this freezes table columns/checks/FKs, explicit indexes, trigger bodies, and
 # security-critical view definitions.
-# Replace only after the complete 013c SQLite fixture has passed review.
-SQLITE_ASSURANCE_CATALOG_DIGEST = "4e73091e481f1259ce830c6697d678e3f60d368d3d0b4deec1911cb2516b8b82"
+# Replace only after the complete 013d SQLite fixture has passed review.
+SQLITE_ASSURANCE_CATALOG_DIGEST = "6823a69b57a7b06565f58689b153dc7e4d9ad4b9a78531ab9ca0a62bfbd89234"
 
 _SQLITE_ASSURANCE_OBJECTS = {
     "table": SQLITE_ASSURANCE_TABLES,
@@ -1284,15 +1311,29 @@ def _sqlite_catalog_digest(
 
 def verify_sqlite_assurance_schema(connection) -> None:
     """Validate the parity fixture without inventing a PostgreSQL ledger."""
-    fixture_path = _MIGRATIONS / "fixtures" / "013c_evidence_verification_receipt.sqlite.sql"
-    try:
-        fixture_checksum = hashlib.sha256(fixture_path.read_bytes()).hexdigest()
-    except OSError as error:
-        raise MigrationIntegrityError(
-            "SQLite 013c bundled fixture source is unavailable"
-        ) from error
-    if fixture_checksum != FROZEN_SQLITE_013C_FIXTURE_CHECKSUM:
-        raise MigrationIntegrityError("SQLite 013c bundled fixture checksum drift")
+    fixtures = (
+        (
+            "013c",
+            _MIGRATIONS / "fixtures" / "013c_evidence_verification_receipt.sqlite.sql",
+            FROZEN_SQLITE_013C_FIXTURE_CHECKSUM,
+        ),
+        (
+            "013d",
+            _MIGRATIONS / "fixtures" / "013d_evaluator_catalog.sqlite.sql",
+            FROZEN_SQLITE_013D_FIXTURE_CHECKSUM,
+        ),
+    )
+    for version, fixture_path, frozen_checksum in fixtures:
+        try:
+            fixture_checksum = hashlib.sha256(fixture_path.read_bytes()).hexdigest()
+        except OSError as error:
+            raise MigrationIntegrityError(
+                f"SQLite {version} bundled fixture source is unavailable"
+            ) from error
+        if fixture_checksum != frozen_checksum:
+            raise MigrationIntegrityError(
+                f"SQLite {version} bundled fixture checksum drift"
+            )
 
     foreign_keys = connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one()
     if foreign_keys != 1:

@@ -36,6 +36,8 @@ from src.application.services.evaluation_workbench_service import (
 from src.application.services.evidence_authenticity_service import (
     EvidenceAuthenticityService,
 )
+from src.application.services.evaluator_catalog_service import evaluator_binding_hash
+from src.application.services.evaluator_registration import EvaluatorIdentityBinding
 from src.domain.assurance.evaluation_v2 import canonical_json, canonical_sha256
 from src.domain.assurance.evidence_passport_v2 import (
     evidence_passport_v2_content_hash,
@@ -66,6 +68,7 @@ MIGRATION_CHAIN = (
     "013a_evaluation_binding_integrity.sql",
     "013b_evaluation_assurance_trust_integrity.sql",
     "013c_evidence_verification_receipt.sql",
+    "013d_evaluator_catalog.sql",
 )
 ADMISSION_OPERATION = "evaluation-v2.evidence.verified-admit"
 ADMISSION_SUCCESS_ACTION = "evaluation_v2.evidence.verified_admitted"
@@ -151,6 +154,8 @@ class AdmissionScenario:
     suite_version_ids: tuple[str, ...]
     run: dict[str, Any]
     signing: SigningMaterial
+    evaluator_registration_id: str
+    evaluator_registration_binding_hash: str
 
     @property
     def run_id(self) -> str:
@@ -184,6 +189,7 @@ def postgres_session_factory():
                     "013a_evaluation_binding_integrity.sql",
                     "013b_evaluation_assurance_trust_integrity.sql",
                     "013c_evidence_verification_receipt.sql",
+                    "013d_evaluator_catalog.sql",
                 }:
                     cursor.execute(
                         "SELECT pg_catalog.set_config" "('fairmind.migration_schema', %s, false)",
@@ -461,6 +467,76 @@ def _insert_signing_authority(
     )
 
 
+def _insert_approved_evaluator_registration(
+    session,
+    *,
+    org_id: str,
+    actor_id: str,
+    signing: SigningMaterial,
+    reference_time: datetime,
+) -> tuple[str, str]:
+    """Persist the exact durable approval consumed by native admission tests."""
+
+    registration_id = str(uuid.uuid4())
+    binding = EvaluatorIdentityBinding(
+        evaluator_id="inspect-postgres-evaluator",
+        source_type="external_provider",
+        adapter_name="inspect",
+        adapter_version="0.3.0",
+        result_contract_version="1.0.0",
+        issuer_id=signing.issuer_key,
+        key_id=signing.key_id,
+    )
+    binding_hash = evaluator_binding_hash(binding)
+    submitted_at = _iso(reference_time)
+    session.execute(
+        text(
+            "INSERT INTO governance_evaluator_registrations "
+            "(id, org_id, evaluator_id, source_type, adapter_name, adapter_version, "
+            "result_contract_version, issuer_id, signing_key_id, "
+            "authority_issuer_id, authority_signing_key_id, binding_hash, status, "
+            "submitted_by, submitted_at) "
+            "VALUES (:id, :org_id, :evaluator_id, :source_type, :adapter_name, "
+            ":adapter_version, :result_contract_version, :issuer_id, :signing_key_id, "
+            ":authority_issuer_id, :authority_signing_key_id, :binding_hash, "
+            "'pending', :submitted_by, :submitted_at)"
+        ),
+        {
+            "id": registration_id,
+            "org_id": org_id,
+            "evaluator_id": binding.evaluator_id,
+            "source_type": binding.source_type,
+            "adapter_name": binding.adapter_name,
+            "adapter_version": binding.adapter_version,
+            "result_contract_version": binding.result_contract_version,
+            "issuer_id": binding.issuer_id,
+            "signing_key_id": binding.key_id,
+            "authority_issuer_id": signing.issuer_row_id,
+            "authority_signing_key_id": signing.signing_key_row_id,
+            "binding_hash": binding_hash,
+            "submitted_by": actor_id,
+            "submitted_at": submitted_at,
+        },
+    )
+    session.execute(
+        text(
+            "UPDATE governance_evaluator_registrations "
+            "SET status = 'approved', reviewed_by = :reviewed_by, "
+            "reviewed_at = :reviewed_at, review_rationale = :review_rationale "
+            "WHERE id = :id AND org_id = :org_id"
+        ),
+        {
+            "reviewed_by": f"reviewer-{uuid.uuid4()}",
+            "reviewed_at": submitted_at,
+            "review_rationale": "Independent review approved this exact evaluator identity.",
+            "id": registration_id,
+            "org_id": org_id,
+        },
+    )
+    session.commit()
+    return registration_id, binding_hash
+
+
 def _seed_scenario(factory: sessionmaker, *, suite_count: int = 2) -> AdmissionScenario:
     org_id = str(uuid.uuid4())
     actor_id = str(uuid.uuid4())
@@ -541,6 +617,13 @@ def _seed_scenario(factory: sessionmaker, *, suite_count: int = 2) -> AdmissionS
             actor_id=actor_id,
             reference_time=requested_at,
         )
+        registration_id, registration_binding_hash = _insert_approved_evaluator_registration(
+            session,
+            org_id=org_id,
+            actor_id=actor_id,
+            signing=signing,
+            reference_time=requested_at,
+        )
         return AdmissionScenario(
             org_id=org_id,
             actor_id=actor_id,
@@ -552,6 +635,8 @@ def _seed_scenario(factory: sessionmaker, *, suite_count: int = 2) -> AdmissionS
             suite_version_ids=tuple(suite_ids),
             run=dict(run),
             signing=signing,
+            evaluator_registration_id=registration_id,
+            evaluator_registration_binding_hash=registration_binding_hash,
         )
     finally:
         session.close()
@@ -715,10 +800,6 @@ def _verified_service(
     from src.application.services.verified_evidence_admission_service import (
         VerifiedEvidenceAdmissionService,
     )
-    from src.application.services.evaluator_registry import (
-        EvaluatorRegistration,
-        StaticEvaluatorRegistry,
-    )
 
     unit_of_work = SqlAlchemyEvaluationWorkbenchUnitOfWork(
         session,
@@ -727,18 +808,6 @@ def _verified_service(
     return VerifiedEvidenceAdmissionService(
         unit_of_work,
         EvidenceAuthenticityService(verifier or Ed25519EvidenceVerifier()),
-        StaticEvaluatorRegistry(
-            catalog_version="2026.08.1",
-            registrations=(
-                EvaluatorRegistration(
-                    evaluator_id="inspect-postgres-evaluator",
-                    adapter_name="inspect",
-                    adapter_version="0.3.0",
-                    result_contract_version="1.0.0",
-                    source_types=frozenset({"external_provider"}),
-                ),
-            ),
-        ),
     )
 
 
@@ -819,7 +888,7 @@ def _insert_additional_signing_key(
         },
     )
     session.commit()
-    return SigningMaterial(
+    signing = SigningMaterial(
         issuer_row_id=scenario.signing.issuer_row_id,
         issuer_key=scenario.signing.issuer_key,
         signing_key_row_id=signing_key_row_id,
@@ -827,6 +896,14 @@ def _insert_additional_signing_key(
         private_key=private_key,
         public_jwk=public_jwk,
     )
+    _insert_approved_evaluator_registration(
+        session,
+        org_id=scenario.org_id,
+        actor_id=scenario.actor_id,
+        signing=signing,
+        reference_time=requested_at,
+    )
+    return signing
 
 
 def _assert_empty_graph(factory: sessionmaker, scenario: AdmissionScenario) -> None:
@@ -849,6 +926,29 @@ def _assert_one_graph(factory: sessionmaker, scenario: AdmissionScenario) -> Non
         "nonce_claims": 1,
         "suite_links": 1,
     }
+    session = factory()
+    try:
+        receipt = (
+            session.execute(
+                text(
+                    "SELECT receipt.evaluator_registration_id, "
+                    "receipt.evaluator_registration_binding_hash, "
+                    "registration.binding_hash "
+                    "FROM governance_evidence_verification_receipts AS receipt "
+                    "JOIN governance_evaluator_registrations AS registration "
+                    "ON registration.id = receipt.evaluator_registration_id "
+                    "AND registration.org_id = receipt.org_id "
+                    "WHERE receipt.org_id = :org_id"
+                ),
+                {"org_id": scenario.org_id},
+            )
+            .mappings()
+            .one()
+        )
+    finally:
+        session.close()
+    assert receipt["evaluator_registration_id"]
+    assert receipt["evaluator_registration_binding_hash"] == receipt["binding_hash"]
 
 
 def test_fixture_uses_uuid_identity_and_preserves_requested_at_precision(
@@ -872,6 +972,35 @@ def test_fixture_uses_uuid_identity_and_preserves_requested_at_precision(
         "nonce_claims": 0,
         "suite_links": 0,
     }
+
+
+def test_native_admission_persists_the_exact_approved_registration_provenance(
+    postgres_session_factory,
+) -> None:
+    factory = postgres_session_factory
+    scenario = _seed_scenario(factory)
+    _payload, raw = _signed_passport(scenario)
+    session = factory()
+    try:
+        result = _admit(
+            session,
+            scenario,
+            raw=raw,
+            idempotency_key=f"registration-provenance-{uuid.uuid4()}",
+        )
+        assert result.status == 201
+    finally:
+        session.close()
+    receipt = _scalar(
+        factory,
+        "SELECT evaluator_registration_id || ':' || evaluator_registration_binding_hash "
+        "FROM governance_evidence_verification_receipts WHERE org_id = :org_id",
+        org_id=scenario.org_id,
+    )
+    assert receipt == (
+        f"{scenario.evaluator_registration_id}:"
+        f"{scenario.evaluator_registration_binding_hash}"
+    )
 
 
 @pytest.mark.parametrize(
@@ -1822,12 +1951,28 @@ def _revoke_authority(session, scenario: AdmissionScenario, resource: str) -> No
                 "org_id": scenario.org_id,
             },
         )
+    elif resource == "registration":
+        session.execute(
+            text(
+                "UPDATE governance_evaluator_registrations "
+                "SET status = 'revoked', revoked_by = :revoked_by, "
+                "revoked_at = :revoked_at, revocation_rationale = :rationale "
+                "WHERE id = :id AND org_id = :org_id"
+            ),
+            {
+                "revoked_by": f"revoker-{uuid.uuid4()}",
+                "revoked_at": now,
+                "rationale": "The evaluator registration was revoked for this test.",
+                "id": scenario.evaluator_registration_id,
+                "org_id": scenario.org_id,
+            },
+        )
     else:
         raise AssertionError(resource)
     session.commit()
 
 
-@pytest.mark.parametrize("resource", ("policy", "issuer", "key"))
+@pytest.mark.parametrize("resource", ("policy", "issuer", "key", "registration"))
 def test_revocation_committed_before_admission_rejects_without_a_graph(
     postgres_session_factory,
     resource: str,
@@ -1914,6 +2059,84 @@ def test_admission_lock_wins_then_revocation_commits_after_the_verified_graph(
 
     assert admission_result.status == 201
     _assert_one_graph(factory, scenario)
+
+
+class _BlockingRegistrationRepository(SqlAlchemyEvaluationWorkbenchRepository):
+    """Expose the native registration row lock without weakening the real query."""
+
+    def __init__(self, session, *, locked: Event, release: Event) -> None:
+        super().__init__(session)
+        self._locked = locked
+        self._release = release
+
+    def load_approved_evaluator_registration_for_update(self, **kwargs):
+        registration = super().load_approved_evaluator_registration_for_update(**kwargs)
+        self._locked.set()
+        if not self._release.wait(timeout=30):
+            raise RuntimeError("registration-lock test release timed out")
+        return registration
+
+
+def test_registration_lock_orders_revocation_after_a_durable_receipt(
+    postgres_session_factory,
+) -> None:
+    """A real second PostgreSQL session cannot revoke the locked registration early."""
+
+    factory = postgres_session_factory
+    scenario = _seed_scenario(factory)
+    _payload, raw = _signed_passport(scenario)
+    registration_locked = Event()
+    release_admission = Event()
+    revocation_started = Event()
+    revocation_committed = Event()
+
+    def admit_in_thread():
+        session = factory()
+        try:
+            repository = _BlockingRegistrationRepository(
+                session,
+                locked=registration_locked,
+                release=release_admission,
+            )
+            return _admit(
+                session,
+                scenario,
+                raw=raw,
+                idempotency_key=f"registration-lock-{uuid.uuid4()}",
+                repository=repository,
+            )
+        finally:
+            session.close()
+
+    def revoke_in_thread():
+        session = factory()
+        try:
+            revocation_started.set()
+            _revoke_authority(session, scenario, "registration")
+            revocation_committed.set()
+        finally:
+            session.close()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        admission_future = executor.submit(admit_in_thread)
+        assert registration_locked.wait(timeout=30)
+        revocation_future = executor.submit(revoke_in_thread)
+        assert revocation_started.wait(timeout=30)
+        assert not revocation_committed.wait(timeout=0.25)
+        release_admission.set()
+        admission_result = admission_future.result(timeout=30)
+        revocation_future.result(timeout=30)
+
+    assert admission_result.status == 201
+    assert revocation_committed.is_set()
+    _assert_one_graph(factory, scenario)
+    assert _scalar(
+        factory,
+        "SELECT status FROM governance_evaluator_registrations "
+        "WHERE id = :id AND org_id = :org_id",
+        id=scenario.evaluator_registration_id,
+        org_id=scenario.org_id,
+    ) == "revoked"
 
 
 class _CorruptDeferredReceiptRepository(SqlAlchemyEvaluationWorkbenchRepository):

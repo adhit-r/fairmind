@@ -44,10 +44,11 @@ class _CatalogRepository:
         organization_id: str,
         issuer_id: str,
         key_id: str,
+        source_type: str,
         at: datetime,
         lock: bool,
     ) -> bool:
-        del at, lock
+        del source_type, at, lock
         return (organization_id, issuer_id, key_id) in self.authorities
 
     def insert_registration(self, record):

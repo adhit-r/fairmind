@@ -1,9 +1,9 @@
 """Idempotent, auditable evaluator-registration catalog orchestration.
 
-This is a default-off application contract. It is not wired into an HTTP route
-or evidence admission composition, so no registration produced by this module
-can authorize submitted evidence until the persistent control-plane release is
-installed and independently reviewed.
+This is a default-off application contract. It has no public catalog route,
+but gated verified-evidence admission consumes only an installed, approved,
+same-transaction locked persistent registration. The catalog itself makes no
+provider-quality, worker-readiness, or outcome claim.
 """
 
 from __future__ import annotations
@@ -233,6 +233,7 @@ class EvaluatorCatalogService:
                 organization_id=organization_id,
                 issuer_id=binding.issuer_id,
                 key_id=binding.key_id,
+                source_type=binding.source_type,
                 at=now,
                 lock=True,
             ):
@@ -317,6 +318,7 @@ class EvaluatorCatalogService:
                         organization_id=organization_id,
                         issuer_id=current.binding.issuer_id,
                         key_id=current.binding.key_id,
+                        source_type=current.binding.source_type,
                         at=now,
                         lock=True,
                     ):

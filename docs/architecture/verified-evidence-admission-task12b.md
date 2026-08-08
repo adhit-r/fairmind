@@ -23,14 +23,15 @@ as lookup selectors. It cannot supply authoritative target, plan, suite,
 envelope, policy, issuer, or key state.
 
 `evaluatorId` is signed, stored, and receipt-bound. The internal admission
-kernel now resolves it through an immutable, server-owned evaluator catalog and
-requires the catalog entry to match source, adapter name/version, and result
-contract exactly. The catalog hash and registration hash are included in the
-append-only successful-admission audit event. This is an in-process catalog for
-the current default-off slice: persistent catalog administration, external and
-FairMind-worker registration ceremonies, and route-level catalog permissions
-remain separate release gates. Product claims must not describe an evaluator or
-provider as generally authorized until those gates exist.
+kernel resolves it through an installed durable evaluator-registration catalog,
+locks an approved row in the same transaction as receipt persistence, and
+requires the exact source, adapter name/version, result contract, issuer, and
+signing-key binding. The registration ID and binding hash are included in the
+append-only successful-admission audit event. Catalog administration has no
+public route in this default-off slice; external and FairMind-worker
+registration ceremonies and route-level catalog permissions remain separate
+release gates. Product claims must not describe an evaluator or provider as
+generally authorized until those gates exist.
 
 Inside the organization-scoped mutation transaction, the trusted resolver:
 

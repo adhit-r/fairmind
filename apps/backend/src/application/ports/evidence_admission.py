@@ -117,6 +117,26 @@ class TrustedEvidenceAdmissionContext:
 
 
 @dataclass(frozen=True, slots=True)
+class ApprovedEvaluatorRegistration:
+    """One exact catalog decision locked for a verified evidence admission.
+
+    This record is intentionally narrower than the catalog ceremony record.
+    It carries only the durable identifier, the canonical binding digest, and
+    the exact public identity tuple needed to bind a newly issued receipt.
+    """
+
+    registration_id: str
+    binding_hash: str
+    evaluator_id: str
+    source_type: str
+    adapter_name: str
+    adapter_version: str
+    result_contract_version: str
+    issuer_id: str
+    signing_key_id: str
+
+
+@dataclass(frozen=True, slots=True)
 class PersistVerifiedPassportV2Command:
     """Closed atomic write command for one first-revision verified graph."""
 
@@ -141,6 +161,8 @@ class PersistVerifiedPassportV2Command:
     execution_binding_hash: str
     evaluator_projection: FrozenJsonObject
     evaluator_projection_hash: str
+    evaluator_registration_id: str
+    evaluator_registration_binding_hash: str
     public_key_fingerprint: str
     verifier_contract: str
     verifier_version: str
@@ -213,6 +235,21 @@ class EvidenceAdmissionRepository(Protocol):
         suite_version_ids: tuple[str, ...],
         target_version_ids: tuple[str, ...],
     ) -> bool: ...
+
+    def load_approved_evaluator_registration_for_update(
+        self,
+        *,
+        scope: EvidenceAdmissionScope,
+        authority: EvidenceAdmissionAuthorityRecord,
+        evaluator_id: str,
+        source_type: str,
+        adapter_name: str,
+        adapter_version: str,
+        result_contract_version: str,
+        issuer_id: str,
+        signing_key_id: str,
+        verified_at: datetime,
+    ) -> ApprovedEvaluatorRegistration | None: ...
 
     def persist_verified_passport_v2(
         self,

@@ -1,9 +1,9 @@
 """Default-off persistence boundary for an evaluator registration catalog.
 
-This port deliberately has no production composition root or route. A future
-release must pair it with an installed PostgreSQL migration, exact
-issuer/signing-key binding, and same-transaction admission locking before a
-catalog record can authorize evidence admission.
+This port deliberately has no public catalog route. Gated verified-evidence
+admission authorizes a record only after the installed PostgreSQL catalog
+enforces its exact issuer/signing-key binding and locks the durable approval in
+the same transaction as receipt persistence.
 """
 
 from __future__ import annotations
@@ -74,6 +74,7 @@ class EvaluatorCatalogRepository(Protocol):
         organization_id: str,
         issuer_id: str,
         key_id: str,
+        source_type: str,
         at: datetime,
         lock: bool,
     ) -> bool: ...

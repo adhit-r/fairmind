@@ -14,8 +14,10 @@ from sqlalchemy import create_engine, text
 from config.migration_integrity import (
     FROZEN_013B_OPERATOR_V2_CHECKSUM,
     FROZEN_013C_OPERATOR_CHECKSUM,
+    FROZEN_013D_OPERATOR_CHECKSUM,
     FROZEN_POSTGRESQL_ASSURANCE_CATALOGS,
     FROZEN_SQLITE_013C_FIXTURE_CHECKSUM,
+    FROZEN_SQLITE_013D_FIXTURE_CHECKSUM,
     POSTGRESQL_ASSURANCE_CATALOG_SPEC,
     POSTGRESQL_ASSURANCE_FUNCTIONS,
     POSTGRESQL_ASSURANCE_REQUIRED_TRIGGERS,
@@ -56,6 +58,7 @@ POSTGRES_OPERATOR_CHAIN = (
     "upgrade_paths/013_to_013a_evaluation_binding_integrity.sql",
     "upgrade_paths/013a_to_013b_evaluation_assurance_trust_integrity_v2.sql",
     "upgrade_paths/013b_to_013c_evidence_verification_receipt.sql",
+    "upgrade_paths/013c_to_013d_evaluator_catalog.sql",
 )
 POSTGRESQL_013B_PREREQUISITE_CONSTRAINTS = frozenset(
     {
@@ -137,6 +140,7 @@ POSTGRESQL_013B_RETAINED_PREREQUISITE_CONSTRAINTS = POSTGRESQL_013B_PREREQUISITE
 
 
 def _install_sqlite_assurance_chain(database_path: Path) -> None:
+    from migrations.evaluator_catalog_migration import apply_sqlite as apply_013d
     from migrations.evaluation_assurance_v2_migration import sql_for as sql_013
     from migrations.evaluation_binding_integrity_migration import sql_for as sql_013a
     from migrations.evaluation_runs_migration import sql_for as sql_012
@@ -159,6 +163,7 @@ def _install_sqlite_assurance_chain(database_path: Path) -> None:
             ).read_text(encoding="utf-8")
         )
         connection.executescript(sql_013c("sqlite"))
+        apply_013d(connection)
     finally:
         connection.close()
 
@@ -587,7 +592,7 @@ def test_production_postgresql_manifest_covers_audit_immutability() -> None:
     frozen = FROZEN_POSTGRESQL_ASSURANCE_CATALOGS[14]
     assert frozen.spec is POSTGRESQL_ASSURANCE_CATALOG_SPEC
     assert frozen.postgresql_major == 14
-    assert frozen.digest == "714fc4ea6f69085ad13bdc3142d38432e405cc17d33d77f93161f3e957f3c9c6"
+    assert frozen.digest == "e8f66e4703666f7dabea38f329bb89970b554e8ae514e78843b1ded2e14584d5"
     validate_frozen_postgresql_catalog(frozen)
 
 
@@ -664,6 +669,20 @@ def test_sqlite_013c_fixture_source_checksum_is_frozen() -> None:
 
     fixture = MIGRATIONS / "fixtures/013c_evidence_verification_receipt.sqlite.sql"
     assert hashlib.sha256(fixture.read_bytes()).hexdigest() == (FROZEN_SQLITE_013C_FIXTURE_CHECKSUM)
+
+
+def test_013d_operator_source_checksum_is_frozen() -> None:
+    import hashlib
+
+    operator = MIGRATIONS / "upgrade_paths/013c_to_013d_evaluator_catalog.sql"
+    assert hashlib.sha256(operator.read_bytes()).hexdigest() == (FROZEN_013D_OPERATOR_CHECKSUM)
+
+
+def test_sqlite_013d_fixture_source_checksum_is_frozen() -> None:
+    import hashlib
+
+    fixture = MIGRATIONS / "fixtures/013d_evaluator_catalog.sqlite.sql"
+    assert hashlib.sha256(fixture.read_bytes()).hexdigest() == (FROZEN_SQLITE_013D_FIXTURE_CHECKSUM)
 
 
 def test_013b_v2_operator_source_checksum_and_c_collation_are_frozen() -> None:
