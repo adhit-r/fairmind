@@ -1,6 +1,7 @@
 # Verified Evidence Passport V2 admission
 
-Status: internal application kernel; default-off and not route-wired
+Status: internal application kernel; route-composed but independently
+default-off
 
 ## Purpose
 
@@ -21,12 +22,15 @@ The submitted Passport supplies an issuer key and signing-key identifier only
 as lookup selectors. It cannot supply authoritative target, plan, suite,
 envelope, policy, issuer, or key state.
 
-`evaluatorId` is signed, stored, and receipt-bound, but Task 12B still treats it
-as an issuer assertion. The server independently authorizes the issuer, source,
-adapter name and version, and result-contract version; it does not yet resolve
-`evaluatorId` through a server-owned evaluator registry. Product claims must
-not describe evaluator identity as independently authorized until that catalog
-and binding ceremony exist.
+`evaluatorId` is signed, stored, and receipt-bound. The internal admission
+kernel now resolves it through an immutable, server-owned evaluator catalog and
+requires the catalog entry to match source, adapter name/version, and result
+contract exactly. The catalog hash and registration hash are included in the
+append-only successful-admission audit event. This is an in-process catalog for
+the current default-off slice: persistent catalog administration, external and
+FairMind-worker registration ceremonies, and route-level catalog permissions
+remain separate release gates. Product claims must not describe an evaluator or
+provider as generally authorized until those gates exist.
 
 Inside the organization-scoped mutation transaction, the trusted resolver:
 
@@ -156,10 +160,32 @@ errors, and unexpected post-write exceptions remain 500-class persistence
 failures and roll back the graph, idempotency row, and audit event. This avoids
 mislabeling infrastructure failure as a trustworthy user rejection.
 
+## HTTP boundary
+
+The verified-admission endpoint is mounted only when both the assurance-v2
+flag and the independent evidence-submit flag are enabled:
+
+`POST /api/v1/ai-governance/organizations/{org_id}/workspaces/{workspace_id}/systems/{system_id}/evaluation-v2/runs/{run_id}/suite-executions/{suite_execution_id}/evidence`
+
+The route requires the organization role permission
+`evaluation:evidence:submit`. It binds the organization, workspace, system,
+run, and suite execution path identities to the same immutable run projection
+before reading the request body. It accepts only JSON media types and streams
+at most the existing one-MiB request limit; the admission service receives the
+raw bytes so canonical Passport parsing and authentication remain authoritative
+inside the application transaction. Missing permission, any scope mismatch,
+unsupported media type, and oversized bodies fail before an admission call.
+
+The production composition uses real Ed25519 verification and the existing
+transactional admission service, but its bootstrap evaluator registry is empty.
+Therefore a flag-enabled deployment still rejects every evaluator as
+unregistered until server-owned evaluator registration persistence and
+approval ceremonies are released.
+
 ## Capability boundary
 
-Task 12B deliberately adds no API route, permission wiring, UI, worker,
-external-provider registration ceremony, unsigned-import flow, reviewer action,
+Task 12B deliberately adds no UI, worker, external-provider registration
+ceremony, unsigned-import flow, reviewer action,
 governance decision, framework mapping, certification, compliance claim, or
 runtime enforcement. The kernel remains internal and default-off until its
 native PostgreSQL adversarial suite, independent security review, and later

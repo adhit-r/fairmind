@@ -17,12 +17,7 @@ from functools import wraps
 import hashlib
 
 from fastapi import Request
-from sqlalchemy import Column, String, DateTime, JSON, Text, Index
-from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.sql import func
-import uuid
-
-from database.connection import Base
+from database.models import AuditLog
 from config.settings import settings
 
 logger = logging.getLogger("fairmind.audit")
@@ -30,6 +25,7 @@ logger = logging.getLogger("fairmind.audit")
 
 class AuditEventType(str, Enum):
     """Types of audit events"""
+
     COMPLIANCE_CHECK = "compliance_check"
     EVIDENCE_ACCESS = "evidence_access"
     EVIDENCE_MODIFICATION = "evidence_modification"
@@ -44,50 +40,21 @@ class AuditEventType(str, Enum):
 
 class AuditSeverity(str, Enum):
     """Severity levels for audit events"""
+
     INFO = "info"
     WARNING = "warning"
     CRITICAL = "critical"
 
 
-# ============================================================================
-# Audit Log Model
-# ============================================================================
-
-class AuditLog(Base):
-    """Model for audit logging"""
-    __tablename__ = "audit_logs"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-    event_type = Column(String(100), nullable=False, index=True)
-    severity = Column(String(50), nullable=False, index=True)
-    user_id = Column(String(255), nullable=True, index=True)
-    resource_type = Column(String(100), nullable=False, index=True)
-    resource_id = Column(String(255), nullable=True, index=True)
-    action = Column(String(100), nullable=False)
-    details = Column(JSON, nullable=True)
-    ip_address = Column(String(45), nullable=True)
-    user_agent = Column(String(500), nullable=True)
-    status = Column(String(50), nullable=False)  # success, failure
-    error_message = Column(Text, nullable=True)
-    timestamp = Column(DateTime(timezone=True), default=func.now(), nullable=False, index=True)
-    created_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
-
-    __table_args__ = (
-        Index('idx_audit_logs_user_id', 'user_id'),
-        Index('idx_audit_logs_event_type', 'event_type'),
-        Index('idx_audit_logs_resource_type', 'resource_type'),
-        Index('idx_audit_logs_timestamp', 'timestamp'),
-        Index('idx_audit_logs_severity', 'severity'),
-        {"extend_existing": True},
-    )
-
-    def __repr__(self):
-        return f"<AuditLog(id={self.id}, event_type={self.event_type}, user_id={self.user_id})>"
+# ``AuditLog`` remains importable from this middleware for compatibility.  The
+# canonical ORM model is owned by ``database.models`` so every import order
+# shares one SQLAlchemy table and index definition.
 
 
 # ============================================================================
 # Audit Logger
 # ============================================================================
+
 
 class AuditLogger:
     """Centralized audit logging service"""
@@ -495,6 +462,7 @@ class AuditLogger:
 # Audit Logging Decorator
 # ============================================================================
 
+
 def audit_log(
     event_type: AuditEventType,
     resource_type: str,
@@ -513,6 +481,7 @@ def audit_log(
     Returns:
         Decorated function
     """
+
     def decorator(func):
         @wraps(func)
         async def async_wrapper(*args, **kwargs):
@@ -600,6 +569,7 @@ def audit_log(
 
         # Return appropriate wrapper based on function type
         import inspect
+
         if inspect.iscoroutinefunction(func):
             return async_wrapper
         else:

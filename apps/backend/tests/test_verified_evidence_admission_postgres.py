@@ -715,6 +715,10 @@ def _verified_service(
     from src.application.services.verified_evidence_admission_service import (
         VerifiedEvidenceAdmissionService,
     )
+    from src.application.services.evaluator_registry import (
+        EvaluatorRegistration,
+        StaticEvaluatorRegistry,
+    )
 
     unit_of_work = SqlAlchemyEvaluationWorkbenchUnitOfWork(
         session,
@@ -723,6 +727,18 @@ def _verified_service(
     return VerifiedEvidenceAdmissionService(
         unit_of_work,
         EvidenceAuthenticityService(verifier or Ed25519EvidenceVerifier()),
+        StaticEvaluatorRegistry(
+            catalog_version="2026.08.1",
+            registrations=(
+                EvaluatorRegistration(
+                    evaluator_id="inspect-postgres-evaluator",
+                    adapter_name="inspect",
+                    adapter_version="0.3.0",
+                    result_contract_version="1.0.0",
+                    source_types=frozenset({"external_provider"}),
+                ),
+            ),
+        ),
     )
 
 

@@ -51,8 +51,8 @@ The current branch is an **internal, default-off trust-foundation alpha**. It im
 |---|---|---|
 | Target and suite identity | Implemented in the v2 contract | Immutable planning metadata |
 | Execution envelope and Passport v2 binding | Implemented and tested | Evidence-integrity foundation |
-| Signature, replay, scope, and admission checks | Implemented as a default-off kernel | Supporting evidence verification |
-| Public admission API and reviewer workflow | Not yet shipped | Do not claim |
+| Signature, replay, scope, and admission checks | Implemented as a default-off kernel with a separately gated route boundary | Supporting evidence verification |
+| Public admission API and reviewer workflow | Route boundary is composed but disabled; reviewer workflow is not shipped | Do not claim |
 | Sandboxed worker execution | Not yet shipped | Do not claim |
 | LLM, agent, code, vision, image, audio, video, and multimodal packs | Not yet independently validated | Planned/experimental only |
 | Pre-deployment, realtime, and post-deployment assurance | Not yet shipped | Do not claim |
@@ -92,7 +92,7 @@ Hosted links, where available, are development or demonstration surfaces and are
 
 **Implemented foundation**: target and suite identity, execution-envelope binding, Passport v2 verification primitives, trust-policy checks, replay protection, and evidence-state contracts.
 
-**In progress**: public evidence admission, evaluator registry, four-eyes review, frontend evidence states, worker isolation, and release-gate verification.
+**In progress**: enabling public evidence admission after evaluator registration, four-eyes review, frontend evidence states, worker isolation, and release-gate verification. The route remains disabled by default and its bootstrap catalog contains no admitted evaluators.
 
 **Planned after the foundation**: real predictive, LLM, agent, code, vision, image, audio, video, and multimodal evaluation packs; pre-deployment and realtime pre/post workflows; and independently benchmarked execution claims.
 

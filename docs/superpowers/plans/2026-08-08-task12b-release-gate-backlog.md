@@ -21,15 +21,19 @@ kernel; none of these rows authorize route exposure or a product claim.
   identity through local admission scope and restriction checks, and prove zero
   evidence graph and zero successful admission audit in both tenants.
 
-## Before any evidence-admission route is composed
+## Before any evidence-admission route is enabled
 
-- [ ] Add a server-owned evaluator registry and bind signed `evaluatorId` to an
-  authorized evaluator version. Task 12B currently treats that identifier as a
-  signed issuer assertion while independently authorizing issuer, source,
-  adapter, adapter version, and result-contract version.
-- [ ] Add the route-level `evaluation:evidence:submit` permission, exact
-  organization/workspace/system/run/suite scope checks, request byte limits,
-  feature flag, and service composition as a separately reviewed change.
+- [x] Add an immutable in-process server-owned evaluator registry and bind the
+  signed `evaluatorId` to an active, exact source/adapter/result-contract
+  tuple. The catalog and registration hashes are recorded in the append-only
+  admission audit event. Persistent catalog administration and provider/worker
+  registration ceremonies remain separate release gates.
+- [x] Compose the default-off route-level `evaluation:evidence:submit`
+  permission, exact organization/workspace/system/run/suite scope checks,
+  bounded request streaming, an independently gated API router, and the
+  server-owned admission service. The bootstrap composition has an empty
+  evaluator catalog, so accidentally enabling the route still rejects every
+  evaluator as unregistered until registration ceremonies are released.
 - [ ] Keep admission distinct from reviewer acceptance, governance decision,
   framework evidence acceptance, certification, compliance, and enforcement.
 - [ ] Add real external-provider and FairMind-worker registration ceremonies;
@@ -47,16 +51,14 @@ kernel; none of these rows authorize route exposure or a product claim.
 
 ## Repository baseline debt
 
-- [ ] Repair the pre-existing backend collection failure in
-  `tests/test_fairness_evidence_profile_route.py`, which imports the absent
-  compatibility module `api.models.ai_bom`.
-- [ ] Remove the order-dependent SQLAlchemy metadata collision caused by two
-  active `AuditLog` declarations for `audit_logs` in
-  `src/api/middleware/audit_logging.py` and
-  `src/infrastructure/db/database/models.py`. In the broad suite this can
-  attempt to create `ix_audit_logs_user_id` twice; an affected governance test
-  passes when isolated, so this is test/runtime model-composition debt rather
-  than a Task 12B regression.
+- [x] Repair the pre-existing backend collection failure in
+  `tests/test_fairness_evidence_profile_route.py`: the active
+  `api.models.ai_bom` compatibility transport models now restore the route's
+  request/response boundary without an archive dependency.
+- [x] Remove the order-dependent SQLAlchemy metadata collision caused by two
+  active `AuditLog` declarations for `audit_logs`: the middleware now reexports
+  the canonical `database.models.AuditLog`, so the user index has one owner in
+  every import order.
 - [ ] Establish a clean whole-backend CI baseline after those two blockers are
   resolved. Until then, use focused affected suites plus native PostgreSQL,
   boundary, archive-import, formatting, and diff checks as the Task 12B gate.

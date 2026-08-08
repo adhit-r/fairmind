@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     database_max_overflow: int = 30
     database_timeout: int = 30
     assurance_v2_enabled: bool = False
+    # Verified Evidence Passport admission remains independently disabled until
+    # the route, trust catalog, and reviewer workflow pass their release gate.
+    assurance_v2_evidence_submit_enabled: bool = False
     assurance_migration_schema: Optional[str] = None
     
     # Neon Auth + Data API

@@ -15,9 +15,13 @@ from sqlalchemy import create_engine, event, func, select, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from api.routes.evaluation_workbench import router as evaluation_workbench_router
+from api.routes.evaluation_workbench import (
+    router as evaluation_workbench_router,
+    verified_evidence_router,
+)
 from api.routes.governance_assurance import router as governance_assurance_router
 from config.auth import TokenData, TokenType, UserRole, get_current_active_user
+from config.settings import settings
 from database.connection import Base, get_db
 from database.governance_models import (
     GovernanceAISystem,
@@ -31,8 +35,10 @@ from database.governance_models import (
     GovernanceIdempotencyRecord,
     GovernanceWorkspace,
 )
-from database.models import Organization, OrganizationMember, User
+from database.models import Organization, OrganizationMember, OrganizationRole, User
 from src.domain.assurance.evaluation_v2 import canonical_json, canonical_sha256
+from src.application.ports.evaluation_workbench import MutationResult
+from api.routes.evaluation_workbench import get_verified_evidence_admission_service
 from tests.evaluation_workbench_sqlite import (
     allow_deliberate_check_constraint_corruption,
     install_authoritative_assurance_fixtures_for_application_verifier_harness,
@@ -48,6 +54,11 @@ app.include_router(
     evaluation_workbench_router,
     prefix="/api/v1/ai-governance",
     tags=["evaluation-workbench-v2"],
+)
+app.include_router(
+    verified_evidence_router,
+    prefix="/api/v1/ai-governance",
+    tags=["evaluation-workbench-v2-evidence"],
 )
 
 ORG = str(uuid.uuid4())
@@ -209,6 +220,72 @@ def _headers(key: str) -> dict[str, str]:
     return {"Idempotency-Key": key}
 
 
+def _admission_url(
+    *,
+    run_id: str,
+    suite_execution_id: str,
+    workspace_id: str = "workspace-a",
+    system_id: str = "system-a",
+    org_id: str = ORG,
+) -> str:
+    return (
+        f"/api/v1/ai-governance/organizations/{org_id}/workspaces/{workspace_id}"
+        f"/systems/{system_id}/evaluation-v2/runs/{run_id}"
+        f"/suite-executions/{suite_execution_id}/evidence"
+    )
+
+
+def _grant_evidence_submit_permission() -> None:
+    session_iterator = app.dependency_overrides[get_db]()
+    session = next(session_iterator)
+    try:
+        session.execute(
+            OrganizationRole.__table__.insert().values(
+                id=uuid.uuid4(),
+                org_id=uuid.UUID(ORG),
+                name="admin",
+                permissions=["evaluation:evidence:submit"],
+            )
+        )
+        session.commit()
+    finally:
+        session_iterator.close()
+
+
+class _RecordingAdmissionService:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    def admit_verified_passport_v2(self, **kwargs):
+        self.calls.append(kwargs)
+        return MutationResult.create(
+            body={
+                "admissionId": "admission-1",
+                "evidenceRunId": "evidence-run-1",
+                "passportRevisionId": "passport-revision-1",
+                "verificationReceiptId": "receipt-1",
+                "nonceClaimId": "nonce-1",
+                "suiteEvidenceLinkId": "suite-link-1",
+                "runId": kwargs["scope"].run_id,
+                "suiteExecutionId": kwargs["scope"].suite_execution_id,
+                "envelopeHash": "a" * 64,
+                "passportContentHash": "b" * 64,
+                "technicalStatus": "succeeded",
+                "evidenceResultStatus": "passed",
+                "admissionStatus": "verified",
+                "reviewStatus": "pending",
+                "freshnessStatus": "current",
+                "runTechnicalStatus": "succeeded",
+                "runEvidenceOutcome": "passed",
+                "overallVerdict": "review",
+                "verdictVersion": 1,
+                "effectiveExpiresAt": "2026-08-08T12:00:00+00:00",
+                "verifiedAt": "2026-08-08T11:00:00+00:00",
+            },
+            status=201,
+        )
+
+
 def _target_payload() -> dict:
     return {
         "targetKey": "agent-prod",
@@ -311,6 +388,101 @@ def _create_active_v2_plan_and_run(
     )
     assert created_run.status_code == 201, created_run.text
     return plan, created_run.json()
+
+
+def test_verified_evidence_submit_is_hidden_when_feature_flag_is_off(
+    workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_evidence_submit_enabled", False)
+
+    response = client.post(
+        _admission_url(run_id="run-not-visible", suite_execution_id="suite-not-visible"),
+        headers={**_headers("evidence-hidden"), "Content-Type": "application/json"},
+        content=b"{}",
+    )
+
+    assert response.status_code == 404
+
+
+def test_verified_evidence_submit_requires_explicit_permission_and_exact_scope(
+    workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_evidence_submit_enabled", True)
+    _plan, run = _create_active_v2_plan_and_run(client)
+    suite_execution_id = run["suiteExecutions"][0]["id"]
+    valid_url = _admission_url(run_id=run["id"], suite_execution_id=suite_execution_id)
+    request_headers = {**_headers("evidence-boundary"), "Content-Type": "application/json"}
+
+    denied = client.post(valid_url, headers=request_headers, content=b"signed-passport")
+    assert denied.status_code == 403
+    assert denied.json()["detail"]["code"] == "evaluation_evidence_submit_forbidden"
+
+    _grant_evidence_submit_permission()
+    recorder = _RecordingAdmissionService()
+    app.dependency_overrides[get_verified_evidence_admission_service] = lambda: recorder
+    try:
+        wrong_workspace = client.post(
+            _admission_url(
+                run_id=run["id"],
+                suite_execution_id=suite_execution_id,
+                workspace_id="workspace-wrong",
+            ),
+            headers=request_headers,
+            content=b"signed-passport",
+        )
+        assert wrong_workspace.status_code == 404
+
+        wrong_suite = client.post(
+            _admission_url(run_id=run["id"], suite_execution_id="suite-wrong"),
+            headers=request_headers,
+            content=b"signed-passport",
+        )
+        assert wrong_suite.status_code == 404
+
+        accepted = client.post(valid_url, headers=request_headers, content=b"signed-passport")
+        assert accepted.status_code == 201, accepted.text
+        assert len(recorder.calls) == 1
+        call = recorder.calls[0]
+        assert call["actor_id"] == USER
+        assert call["idempotency_key"] == "evidence-boundary"
+        assert call["raw_passport"] == b"signed-passport"
+        assert call["scope"].organization_id == ORG
+        assert call["scope"].system_id == "system-a"
+        assert call["scope"].run_id == run["id"]
+        assert call["scope"].suite_execution_id == suite_execution_id
+    finally:
+        app.dependency_overrides.pop(get_verified_evidence_admission_service, None)
+
+
+def test_verified_evidence_submit_rejects_oversized_body_before_service(
+    workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.api.routers.evaluation_workbench import MAX_REQUEST_BYTES
+
+    client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_evidence_submit_enabled", True)
+    _plan, run = _create_active_v2_plan_and_run(client)
+    suite_execution_id = run["suiteExecutions"][0]["id"]
+    _grant_evidence_submit_permission()
+    recorder = _RecordingAdmissionService()
+    app.dependency_overrides[get_verified_evidence_admission_service] = lambda: recorder
+    try:
+        response = client.post(
+            _admission_url(run_id=run["id"], suite_execution_id=suite_execution_id),
+            headers={**_headers("evidence-oversize"), "Content-Type": "application/json"},
+            content=b"x" * (MAX_REQUEST_BYTES + 1),
+        )
+    finally:
+        app.dependency_overrides.pop(get_verified_evidence_admission_service, None)
+
+    assert response.status_code == 413
+    assert response.json()["detail"]["code"] == "request_too_large"
+    assert recorder.calls == []
 
 
 def test_complete_additive_route_flow_and_three_axis_run(workbench_client) -> None:
@@ -1053,6 +1225,17 @@ def test_openapi_exposes_strict_request_and_response_contracts() -> None:
     ):
         assert_refs_resolve(operation["requestBody"])
         assert_refs_resolve(operation["responses"])
+
+    evidence_path = (
+        f"{prefix}/workspaces/{{workspace_id}}/systems/{{system_id}}"
+        "/evaluation-v2/runs/{run_id}/suite-executions/{suite_execution_id}/evidence"
+    )
+    evidence_operation = document["paths"][evidence_path]["post"]
+    assert evidence_operation["requestBody"]["required"] is True
+    assert "application/json" in evidence_operation["requestBody"]["content"]
+    assert evidence_operation["responses"]["201"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/EvidenceAdmissionResponse"
+    }
 
 
 def test_suite_configuration_is_omittable_but_never_nullable(workbench_client) -> None:

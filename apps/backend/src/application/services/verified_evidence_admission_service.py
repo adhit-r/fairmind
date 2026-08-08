@@ -36,6 +36,11 @@ from src.application.services.evidence_authenticity_service import (
     EvidenceAuthenticityError,
     EvidenceAuthenticityService,
 )
+from src.application.services.evaluator_registry import (
+    EvaluatorRegistration,
+    EvaluatorRegistry,
+    EvaluatorRegistryError,
+)
 from src.application.services.trusted_evidence_admission_resolver import (
     TrustedEvidenceAdmissionResolver,
 )
@@ -174,7 +179,27 @@ def _evaluator_projection(passport: Mapping[str, object]) -> dict[str, object]:
 def _verify_evaluator_binding(
     context: TrustedEvidenceAdmissionContext,
     evaluator: Mapping[str, object],
-) -> None:
+    evaluator_registry: EvaluatorRegistry,
+) -> EvaluatorRegistration:
+    try:
+        registration = evaluator_registry.validate_binding(
+            evaluator_id=evaluator["evaluatorId"],
+            source_type=evaluator["sourceType"],
+            adapter_name=evaluator["adapterName"],
+            adapter_version=evaluator["adapterVersion"],
+            result_contract_version=evaluator["resultContractVersion"],
+        )
+    except EvaluatorRegistryError as error:
+        mapped_code = {
+            "evaluator_unregistered": "evidence_evaluator_unregistered",
+            "evaluator_inactive": "evidence_evaluator_inactive",
+            "evaluator_source_not_allowed": "evidence_evaluator_source_untrusted",
+        }.get(error.code, "evidence_evaluator_binding_mismatch")
+        raise _error(
+            mapped_code,
+            "The signed evaluator is not authorized by the server catalog.",
+            status_code=409,
+        ) from None
     _, suite = _selected_suite(context)
     expected = {
         "issuerId": context.authority.issuer_key,
@@ -190,6 +215,7 @@ def _verify_evaluator_binding(
             "evidence_evaluator_binding_mismatch",
             "The signed evaluator does not match the locked suite authority.",
         )
+    return registration
 
 
 def _verify_stable_authority(
@@ -343,12 +369,14 @@ class VerifiedEvidenceAdmissionService:
         self,
         unit_of_work: EvidenceAdmissionUnitOfWork,
         authenticity_service: EvidenceAuthenticityService,
+        evaluator_registry: EvaluatorRegistry,
         *,
         uuid_factory: UuidFactory = uuid.uuid4,
     ) -> None:
         self._unit_of_work = unit_of_work
         self._repository = unit_of_work.repository
         self._authenticity = authenticity_service
+        self._evaluator_registry = evaluator_registry
         self._resolver = TrustedEvidenceAdmissionResolver(self._repository)
         self._uuid_factory = uuid_factory
 
@@ -469,14 +497,27 @@ class VerifiedEvidenceAdmissionService:
                 )
 
             evaluator = _evaluator_projection(passport)
-            _verify_evaluator_binding(initial, evaluator)
+            initial_registration = _verify_evaluator_binding(
+                initial,
+                evaluator,
+                self._evaluator_registry,
+            )
             verified = self._resolver.resolve(
                 scope=scope,
                 issuer_key=issuer_key,
                 signer_key_id=signer_key_id,
             )
             _verify_stable_authority(initial, verified)
-            _verify_evaluator_binding(verified, evaluator)
+            verified_registration = _verify_evaluator_binding(
+                verified,
+                evaluator,
+                self._evaluator_registry,
+            )
+            if initial_registration != verified_registration:
+                raise _error(
+                    "evidence_evaluator_registry_changed",
+                    "The server evaluator catalog changed during verification.",
+                )
             return self._persist_verified(
                 scope=scope,
                 actor_id=actor_id,
@@ -485,6 +526,7 @@ class VerifiedEvidenceAdmissionService:
                 evaluator=evaluator,
                 initial=initial,
                 verified=verified,
+                evaluator_registration=verified_registration,
             )
 
         return self._unit_of_work.mutate(command, admit)
@@ -499,6 +541,7 @@ class VerifiedEvidenceAdmissionService:
         evaluator: Mapping[str, object],
         initial: TrustedEvidenceAdmissionContext,
         verified: TrustedEvidenceAdmissionContext,
+        evaluator_registration: EvaluatorRegistration,
     ) -> MutationOutcome:
         authority = verified.authority
         run = authority.run
@@ -751,6 +794,8 @@ class VerifiedEvidenceAdmissionService:
             "freshnessStatus": record.freshness_status,
             "runTechnicalStatus": record.run_technical_status,
             "runEvidenceOutcome": record.run_evidence_outcome,
+            "evaluatorRegistryHash": self._evaluator_registry.catalog_hash,
+            "evaluatorRegistrationHash": canonical_sha256(evaluator_registration.to_dict()),
         }
         return MutationOutcome(
             body=FrozenJsonObject.from_mapping(body),
