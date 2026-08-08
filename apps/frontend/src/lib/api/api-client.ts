@@ -3,6 +3,8 @@
  * Handles authentication, error handling, retry logic, and request/response interceptors
  */
 
+import { z } from 'zod'
+
 import { API_ENDPOINTS } from './endpoints'
 
 export interface ApiResponse<T> {
@@ -10,6 +12,7 @@ export interface ApiResponse<T> {
   data?: T
   message?: string
   error?: string
+  apiError?: ApiError
 }
 
 export interface ApiError {
@@ -17,6 +20,9 @@ export interface ApiError {
   status: number
   type: 'network' | 'server' | 'client' | 'timeout' | 'cors' | 'unknown'
   canRetry: boolean
+  code?: string
+  detail?: string
+  nextAction?: string
 }
 
 enum ApiErrorType {
@@ -49,7 +55,7 @@ const setCachedData = (key: string, data: any, ttl: number = 5 * 60 * 1000) => {
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
 const classifyError = (error: any, response?: Response): ApiError => {
-  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
     return {
       message: 'No internet connection. Please check your network.',
       status: 0,
@@ -77,12 +83,30 @@ const classifyError = (error: any, response?: Response): ApiError => {
       }
     }
 
+    if (response.status === 409) {
+      return {
+        message: 'The record changed while you were editing it',
+        status: 409,
+        type: 'client',
+        canRetry: false,
+      }
+    }
+
     if (response.status >= 500) {
       return {
         message: 'Server error occurred',
         status: response.status,
         type: 'server',
         canRetry: true,
+      }
+    }
+
+    if (response.status >= 400) {
+      return {
+        message: 'Request failed',
+        status: response.status,
+        type: 'client',
+        canRetry: false,
       }
     }
 
@@ -122,7 +146,72 @@ interface RequestOptions extends RequestInit {
   useCache?: boolean
 }
 
-class ApiClient {
+type ErrorPayload = {
+  detail?: unknown
+  error?: unknown
+  message?: unknown
+}
+
+const workflowErrorCodeSchema = z.enum([
+  'executor_unavailable',
+  'plan_inactive',
+  'plan_archived',
+  'passport_link_conflict',
+  'passport_scope_mismatch',
+  'suite_mismatch',
+  'target_kind_mismatch',
+  'target_kind_unverifiable',
+  'passport_snapshot_invalid',
+  'evaluation_persistence_failed',
+])
+
+const workflowErrorEnvelopeSchema = z.strictObject({
+  detail: z.strictObject({
+    code: workflowErrorCodeSchema,
+    message: z.string().min(1),
+    nextAction: z.string().min(1),
+  }),
+})
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined
+}
+
+function decodeFailure(
+  payload: unknown,
+  classified: ApiError,
+): Pick<ApiResponse<never>, 'success' | 'error' | 'apiError'> {
+  const payloadRecord = payload && typeof payload === 'object' && !Array.isArray(payload)
+    ? payload as ErrorPayload
+    : {}
+  const parsedWorkflow = workflowErrorEnvelopeSchema.safeParse(payload)
+  const workflowDetail = parsedWorkflow.success ? parsedWorkflow.data.detail : undefined
+  const untrustedDetail = payloadRecord.detail && typeof payloadRecord.detail === 'object' && !Array.isArray(payloadRecord.detail)
+    ? payloadRecord.detail as Record<string, unknown>
+    : undefined
+  const workflowMessage = stringValue(workflowDetail?.message)
+  const legacyDetail = stringValue(payloadRecord.detail)
+  const untrustedMessage = stringValue(untrustedDetail?.message)
+  const message = workflowMessage
+    || legacyDetail
+    || untrustedMessage
+    || stringValue(payloadRecord.error)
+    || stringValue(payloadRecord.message)
+    || classified.message
+
+  return {
+    success: false,
+    error: message,
+    apiError: {
+      ...classified,
+      message,
+      detail: workflowMessage || legacyDetail || untrustedMessage || message,
+      ...(workflowDetail ? { code: workflowDetail.code, nextAction: workflowDetail.nextAction } : {}),
+    },
+  }
+}
+
+export class ApiClient {
   private baseUrl: string
   private accessToken: string | null = null
   private refreshToken: string | null = null
@@ -287,11 +376,8 @@ class ApiClient {
             return makeRequest()
           }
 
-          const errorData = await response.json().catch(() => ({}))
-          return {
-            success: false,
-            error: errorData.detail || errorData.error || errorData.message || apiError.message || `HTTP ${response.status}: ${response.statusText}`,
-          } as ApiResponse<T>
+          const errorData = await response.json().catch(() => ({})) as unknown
+          return decodeFailure(errorData, apiError) as ApiResponse<T>
         }
 
         const jsonData = await response.json()
@@ -330,16 +416,29 @@ class ApiClient {
             return {
               success: false,
               error: 'Request timeout - please check your connection',
+              apiError: {
+                ...apiError,
+                message: 'Request timeout - please check your connection',
+                detail: 'Request timeout - please check your connection',
+              },
             } as ApiResponse<T>
           }
           return {
             success: false,
             error: apiError.message || error.message || 'Network error occurred',
+            apiError: {
+              ...apiError,
+              detail: apiError.message || error.message || 'Network error occurred',
+            },
           } as ApiResponse<T>
         }
         return {
           success: false,
           error: apiError.message || 'Unknown error occurred',
+          apiError: {
+            ...apiError,
+            detail: apiError.message || 'Unknown error occurred',
+          },
         } as ApiResponse<T>
       }
     }

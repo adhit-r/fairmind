@@ -1,0 +1,254 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fairmind:evidence-passport:2.0.0",
+  "title": "FairMind Evidence Passport V2",
+  "description": "Closed, signed supporting-evidence contract. It is not an admission or governance decision.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "passportId",
+    "passportRevision",
+    "claimBoundary",
+    "organizationId",
+    "workspaceId",
+    "systemId",
+    "executionBinding",
+    "evaluator",
+    "result",
+    "artifacts",
+    "limitations",
+    "capturedAt",
+    "expiresAt",
+    "contentHash",
+    "signature"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "2.0.0" },
+    "passportId": { "$ref": "#/$defs/identifier" },
+    "passportRevision": { "const": 1 },
+    "claimBoundary": { "const": "supporting_evidence_only" },
+    "organizationId": { "$ref": "#/$defs/identifier" },
+    "workspaceId": { "$ref": "#/$defs/identifier" },
+    "systemId": { "$ref": "#/$defs/identifier" },
+    "executionBinding": { "$ref": "#/$defs/executionBinding" },
+    "evaluator": { "$ref": "#/$defs/evaluator" },
+    "result": { "$ref": "#/$defs/result" },
+    "artifacts": {
+      "type": "array",
+      "maxItems": 50,
+      "items": { "$ref": "#/$defs/artifact" }
+    },
+    "limitations": {
+      "type": "array",
+      "maxItems": 128,
+      "items": { "type": "string", "minLength": 1, "maxLength": 8192 }
+    },
+    "capturedAt": { "$ref": "#/$defs/timestamp" },
+    "expiresAt": { "$ref": "#/$defs/timestamp" },
+    "contentHash": { "$ref": "#/$defs/sha256" },
+    "signature": { "$ref": "#/$defs/signature" }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 96,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]*$"
+    },
+    "adapterName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 48,
+      "pattern": "^[a-z][a-z0-9]*(?:[-_.][a-z0-9]+)*$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "nonce": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 40
+    },
+    "targetBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["targetVersionId", "subjectDigest", "manifestDigest"],
+      "properties": {
+        "targetVersionId": { "$ref": "#/$defs/identifier" },
+        "subjectDigest": { "$ref": "#/$defs/sha256" },
+        "manifestDigest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "suiteBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "suiteExecutionId",
+        "suiteVersionId",
+        "manifestDigest",
+        "configurationHash"
+      ],
+      "properties": {
+        "suiteExecutionId": { "$ref": "#/$defs/identifier" },
+        "suiteVersionId": { "$ref": "#/$defs/identifier" },
+        "manifestDigest": { "$ref": "#/$defs/sha256" },
+        "configurationHash": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "trustPolicyBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["trustPolicyVersionId", "policyHash"],
+      "properties": {
+        "trustPolicyVersionId": { "$ref": "#/$defs/identifier" },
+        "policyHash": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "executionBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "organizationId",
+        "workspaceId",
+        "systemId",
+        "runId",
+        "envelopeId",
+        "envelopeHash",
+        "nonce",
+        "planId",
+        "planContentHash",
+        "target",
+        "suite",
+        "lifecyclePhase",
+        "executionDepth",
+        "enforcementMode",
+        "deliveryMode",
+        "trustPolicy"
+      ],
+      "properties": {
+        "organizationId": { "$ref": "#/$defs/identifier" },
+        "workspaceId": { "$ref": "#/$defs/identifier" },
+        "systemId": { "$ref": "#/$defs/identifier" },
+        "runId": { "$ref": "#/$defs/identifier" },
+        "envelopeId": { "$ref": "#/$defs/identifier" },
+        "envelopeHash": { "$ref": "#/$defs/sha256" },
+        "nonce": { "$ref": "#/$defs/nonce" },
+        "planId": { "$ref": "#/$defs/identifier" },
+        "planContentHash": { "$ref": "#/$defs/sha256" },
+        "target": { "$ref": "#/$defs/targetBinding" },
+        "suite": { "$ref": "#/$defs/suiteBinding" },
+        "lifecyclePhase": {
+          "enum": ["pre_deploy", "realtime", "post_deploy"]
+        },
+        "executionDepth": { "enum": ["inline", "deep", "hybrid"] },
+        "enforcementMode": {
+          "enum": ["advisory", "human_approval", "automatic"]
+        },
+        "deliveryMode": {
+          "enum": ["fairmind_worker", "external_provider", "imported_report"]
+        },
+        "trustPolicy": { "$ref": "#/$defs/trustPolicyBinding" }
+      }
+    },
+    "evaluator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "issuerId",
+        "evaluatorId",
+        "sourceType",
+        "adapterName",
+        "adapterVersion",
+        "resultContractVersion"
+      ],
+      "properties": {
+        "issuerId": { "$ref": "#/$defs/identifier" },
+        "evaluatorId": { "$ref": "#/$defs/identifier" },
+        "sourceType": {
+          "enum": ["fairmind_worker", "external_provider"]
+        },
+        "adapterName": { "$ref": "#/$defs/adapterName" },
+        "adapterVersion": { "$ref": "#/$defs/version" },
+        "resultContractVersion": { "$ref": "#/$defs/version" }
+      }
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["technicalStatus", "evidenceResultStatus", "summary"],
+      "properties": {
+        "technicalStatus": {
+          "enum": ["succeeded", "failed", "timed_out", "cancelled"]
+        },
+        "evidenceResultStatus": {
+          "enum": [
+            "pending",
+            "passed",
+            "passed_with_limitations",
+            "failed",
+            "informational",
+            "error",
+            "unavailable",
+            "insufficient_data",
+            "unknown"
+          ]
+        },
+        "summary": {
+          "type": "object",
+          "maxProperties": 256,
+          "propertyNames": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 96
+          },
+          "additionalProperties": true
+        }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifactId", "role", "sha256", "mediaType", "sizeBytes"],
+      "properties": {
+        "artifactId": { "$ref": "#/$defs/identifier" },
+        "role": { "$ref": "#/$defs/identifier" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "mediaType": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 96,
+          "pattern": "^[a-z][a-z0-9.+-]*/[a-z0-9][a-z0-9.+-]*$"
+        },
+        "sizeBytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      }
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "issuerId", "keyId", "signedAt", "value"],
+      "properties": {
+        "algorithm": { "const": "Ed25519" },
+        "issuerId": { "$ref": "#/$defs/identifier" },
+        "keyId": { "$ref": "#/$defs/identifier" },
+        "signedAt": { "$ref": "#/$defs/timestamp" },
+        "value": { "type": "string", "minLength": 1, "maxLength": 512 }
+      }
+    }
+  }
+}

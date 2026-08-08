@@ -4,10 +4,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 
-try:
-    from src.domain.settings.services.settings_service import settings_service
-except Exception:
-    settings_service = None
+from src.application.services.api_boundary_dependencies import settings_service
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -52,4 +49,3 @@ async def update_settings(payload: SettingsUpdateRequest):
         return {"success": True, "data": updated.__dict__, "message": "Settings updated"}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
-

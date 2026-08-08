@@ -24,3 +24,16 @@ export { useCompliance } from './useCompliance'
 export { useAIBOM, useAIBOMFairnessProfile, useAIBOMStats } from './useAIBOM'
 export { useModernBias } from './useModernBias'
 export { useMultimodalBias } from './useMultimodalBias'
+export { useEvaluationRuns } from './useEvaluationRuns'
+export type {
+  CreateEvaluationPlanInput,
+  DeliveryMode,
+  EvaluationPlan,
+  EvaluationPreflight,
+  EvaluationRun,
+  EvaluationTargetKind,
+  GovernanceVerdict,
+  LifecyclePhase,
+  PassportRevisionLinkInput,
+  TechnicalStatus,
+} from './useEvaluationRuns'

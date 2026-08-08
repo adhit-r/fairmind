@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="810" height="330" viewBox="0 0 810 330" role="img" aria-label="FairMind-E smoke summary">
+<rect width="100%" height="100%" fill="#FFFFFF"/>
+<text x="36" y="38" font-size="24" font-family="Arial, sans-serif" font-weight="700" fill="#111111">FairMind-E smoke summary</text>
+<text x="36" y="64" font-size="13" font-family="Arial, sans-serif" fill="#333333">Market-based kg CO2e by workload; confidence is averaged across evidence methods.</text>
+<line x1="42" y1="252" x2="774" y2="252" stroke="#111111" stroke-width="3"/>
+<rect x="58" y="227" width="86" height="23" fill="#0F766E" stroke="#111111" stroke-width="2"/>
+<text x="58" y="268" font-size="12" fill="#111111">batch embeddings</text>
+<text x="58" y="219" font-size="12" fill="#111111">0.227 kg, c=0.65</text>
+<rect x="196" y="220" width="86" height="30" fill="#F97316" stroke="#111111" stroke-width="2"/>
+<text x="196" y="268" font-size="12" fill="#111111">classical ml training</text>
+<text x="196" y="212" font-size="12" fill="#111111">0.286 kg, c=0.52</text>
+<rect x="334" y="246" width="86" height="4" fill="#111111" stroke="#111111" stroke-width="2"/>
+<text x="334" y="268" font-size="12" fill="#111111">rag inference</text>
+<text x="334" y="238" font-size="12" fill="#111111">0.047 kg, c=0.68</text>
+<rect x="472" y="236" width="86" height="14" fill="#14B8A6" stroke="#111111" stroke-width="2"/>
+<text x="472" y="268" font-size="12" fill="#111111">scenario sweeps</text>
+<text x="472" y="228" font-size="12" fill="#111111">0.139 kg, c=0.57</text>
+<rect x="610" y="80" width="86" height="170" fill="#EAB308" stroke="#111111" stroke-width="2"/>
+<text x="610" y="268" font-size="12" fill="#111111">transformer finetune</text>
+<text x="610" y="72" font-size="12" fill="#111111">1.611 kg, c=0.63</text>
+</svg>

@@ -18,21 +18,22 @@ import {
   IconClipboardList,
   IconUserCheck,
   IconDatabase,
+  IconChecklist,
 } from '@tabler/icons-react';
-import { ReactNode } from 'react';
+import type { TablerIcon } from '@tabler/icons-react';
 
 export interface NavigationItem {
   title: string;
   href: string;
   description?: string;
-  icon?: React.ComponentType<any>;
+  icon?: TablerIcon;
 }
 
 export interface NavigationCategory {
   id: string;
   title: string;
   href?: string;
-  icon?: React.ComponentType<any>;
+  icon?: TablerIcon;
   items?: NavigationItem[];
 }
 
@@ -50,12 +51,6 @@ export const NAVIGATION_ITEMS: NavigationCategory[] = [
     icon: IconTarget,
   },
   {
-    id: 'model_inventory',
-    title: 'Model Inventory',
-    href: '/model-inventory',
-    icon: IconDatabase,
-  },
-  {
     id: 'bias_fairness',
     title: 'Assess',
     icon: IconScale,
@@ -65,6 +60,12 @@ export const NAVIGATION_ITEMS: NavigationCategory[] = [
         href: '/bias',
         description: 'Analyze models for bias',
         icon: IconScale,
+      },
+      {
+        title: 'Evaluation Runs',
+        href: '/tests',
+        description: 'Plan evaluations and trace evidence-backed runs',
+        icon: IconChecklist,
       },
       {
         title: 'Remediation Wizard',
@@ -98,33 +99,39 @@ export const NAVIGATION_ITEMS: NavigationCategory[] = [
     icon: IconShieldLock,
     items: [
       {
-        title: 'Compliance Dashboard',
+        title: 'Overview',
+        href: '/ai-governance',
+        description: 'Governance readiness overview',
+        icon: IconDashboard,
+      },
+      {
+        title: 'AI Systems',
+        href: '/model-inventory',
+        description: 'Governed models, agents, and applications',
+        icon: IconDatabase,
+      },
+      {
+        title: 'Frameworks & Controls',
         href: '/compliance-dashboard',
-        description: 'Global compliance status',
+        description: 'Framework versions and control readiness',
         icon: IconShieldLock,
       },
       {
-        title: 'Risks',
+        title: 'Evidence & Evaluations',
+        href: '/evidence',
+        description: 'Evidence records and completed evaluation runs',
+        icon: IconFileAnalytics,
+      },
+      {
+        title: 'Findings',
         href: '/risks',
-        description: 'Risk register and release blockers',
+        description: 'Findings and release blockers',
         icon: IconAlertHexagon,
       },
       {
-        title: 'Reports',
+        title: 'Reports & Assurance',
         href: '/reports',
         icon: IconReportAnalytics,
-      },
-      {
-        title: 'Compliance Automation',
-        href: '/compliance-automation',
-        description: 'Auto-reports & alerts',
-        icon: IconRobot,
-      },
-      {
-        title: 'Audit Reports',
-        href: '/audit-reports',
-        description: 'Generate and view reports',
-        icon: IconFileAnalytics,
       },
     ],
   },

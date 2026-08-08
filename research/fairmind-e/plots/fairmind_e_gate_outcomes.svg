@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="620" height="310" viewBox="0 0 620 310" role="img" aria-label="FairMind-E gate outcomes">
+<rect width="100%" height="100%" fill="#FFFFFF"/>
+<text x="36" y="38" font-size="24" font-family="Arial, sans-serif" font-weight="700" fill="#111111">FairMind-E gate outcomes</text>
+<text x="36" y="64" font-size="13" font-family="Arial, sans-serif" fill="#333333">Deterministic smoke records by release recommendation.</text>
+<line x1="54" y1="232" x2="550" y2="232" stroke="#111111" stroke-width="3"/>
+<rect x="92" y="180" width="96" height="50" fill="#0F766E" stroke="#111111" stroke-width="2"/>
+<text x="92" y="248" font-size="12" fill="#111111">go</text>
+<text x="92" y="172" font-size="12" fill="#111111">5</text>
+<rect x="252" y="180" width="96" height="50" fill="#F97316" stroke="#111111" stroke-width="2"/>
+<text x="252" y="248" font-size="12" fill="#111111">conditional_go</text>
+<text x="252" y="172" font-size="12" fill="#111111">5</text>
+<rect x="412" y="170" width="96" height="60" fill="#111111" stroke="#111111" stroke-width="2"/>
+<text x="412" y="248" font-size="12" fill="#111111">no_go</text>
+<text x="412" y="162" font-size="12" fill="#111111">6</text>
+</svg>

@@ -1,0 +1,52 @@
+{
+  "workload_id": "scenario_sweeps",
+  "run_id": "smoke",
+  "functional_unit": "1000_requests",
+  "records": [
+    {
+      "method": "region_shift_low_ci",
+      "duration_seconds": 70,
+      "energy_kwh": 0.160,
+      "location_carbon_intensity_g_co2e_per_kwh": 95.0,
+      "market_carbon_intensity_g_co2e_per_kwh": 80.0,
+      "carbon_intensity_basis": "average",
+      "provenance_class": "measured",
+      "uncertainty_pct": 7,
+      "impact_level": "low",
+      "intensity_vs_baseline": 0.45,
+      "mitigation_readiness": "documented",
+      "offsets_retired_kg_co2e": 0.0,
+      "notes": "Region shift uses dual CI fields and does not rely on offsets."
+    },
+    {
+      "method": "time_shift_marginal_ci",
+      "duration_seconds": 70,
+      "energy_kwh": 0.170,
+      "location_carbon_intensity_g_co2e_per_kwh": 510.0,
+      "market_carbon_intensity_g_co2e_per_kwh": 360.0,
+      "carbon_intensity_basis": "marginal",
+      "provenance_class": "tool_estimated",
+      "uncertainty_pct": 28,
+      "impact_level": "moderate",
+      "intensity_vs_baseline": 1.40,
+      "mitigation_readiness": "planned",
+      "offsets_retired_kg_co2e": 0.0,
+      "notes": "Time-shift claim declares marginal CI basis."
+    },
+    {
+      "method": "unknown_cache_state",
+      "duration_seconds": 70,
+      "energy_kwh": 0.180,
+      "location_carbon_intensity_g_co2e_per_kwh": 510.0,
+      "market_carbon_intensity_g_co2e_per_kwh": 360.0,
+      "carbon_intensity_basis": "average",
+      "provenance_class": "unknown",
+      "uncertainty_pct": 100,
+      "impact_level": "moderate",
+      "intensity_vs_baseline": 1.10,
+      "mitigation_readiness": "none",
+      "offsets_retired_kg_co2e": 0.5,
+      "notes": "Moderate impact plus unknown cache evidence is a no_go finding."
+    }
+  ]
+}

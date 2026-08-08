@@ -47,6 +47,8 @@ class Settings(BaseSettings):
     database_pool_size: int = 20
     database_max_overflow: int = 30
     database_timeout: int = 30
+    assurance_v2_enabled: bool = False
+    assurance_migration_schema: Optional[str] = None
     
     # Neon Auth + Data API
     neon_auth_enabled: bool = False

@@ -5,7 +5,7 @@
  * Maintains backward compatibility while enabling OAuth2 transitions.
  */
 
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { apiClient, type ApiResponse } from '../api-client'
 import { API_ENDPOINTS } from '../endpoints'
 import type { LoginRequest, LoginResponse, User } from '../types'
@@ -168,7 +168,7 @@ export function useAuth() {
     }
   }
 
-  const getCurrentUser = async () => {
+  const getCurrentUser = useCallback(async () => {
     try {
       setLoading(true)
       const response: ApiResponse<User> = await apiClient.get(API_ENDPOINTS.auth.me)
@@ -185,7 +185,7 @@ export function useAuth() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   return {
     user,

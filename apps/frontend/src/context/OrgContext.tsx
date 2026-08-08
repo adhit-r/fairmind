@@ -15,6 +15,7 @@ export interface Organization {
   owner_id: string;
   created_at: string;
   role: string; // "admin", "analyst", "viewer"
+  permissions: string[];
 }
 
 /**

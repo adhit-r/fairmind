@@ -392,6 +392,17 @@ _include_router("api.routes.core", prefix="/api/v1", tags=["core"], required=Tru
 _include_router("api.routes.database", prefix="/api/v1", tags=["database"], attr="router", required=True)
 _include_router("api.routes.database", prefix="/api/v1", tags=["main-api"], attr="main_router", required=True)
 _include_router("api.routes.ai_governance", prefix="/api/v1/ai-governance", tags=["ai-governance"], required=True)
+_include_router("api.routes.governance_assurance", prefix="/api/v1/ai-governance", tags=["governance-assurance"], required=True)
+if settings.assurance_v2_enabled:
+    _include_router(
+        "api.routes.evaluation_workbench",
+        prefix="/api/v1/ai-governance",
+        tags=["evaluation-workbench-v2"],
+        required=True,
+    )
+else:
+    logger.info("Assurance-contract v2 routes are disabled")
+_include_router("api.routes.environmental", tags=["environmental"], required=False)
 _include_router("api.routes.settings", prefix="/api/v1", tags=["settings"], required=False)
 
 # Optional feature routers.
@@ -415,7 +426,9 @@ _include_router("api.routes.org_management", tags=["organization-management"], r
 _include_router("api.routes.compliance", tags=["compliance"], required=False)
 _include_router("api.routes.compliance_audit", tags=["compliance-audit"], required=False)
 _include_router("api.routes.policies", tags=["policies"], required=False)
-_include_router("api.routes.approvals", tags=["approvals"], required=False)
+# The legacy /api/approvals router writes the same approval tables without the
+# tenant and actor guarantees enforced by the primary governance API. Keep it
+# unmounted; clients must use /api/v1/ai-governance approval endpoints.
 
 logger.info("Explicit API router map registered")
 

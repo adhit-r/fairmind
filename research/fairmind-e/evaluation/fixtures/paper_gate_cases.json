@@ -1,0 +1,387 @@
+{
+  "schema_version": "0.1.0",
+  "claim": "FairMind-E makes environmental release decisions machine-checkable from provenance, impact, mitigation, exceptions, and offset disclosure.",
+  "cases": [
+    {
+      "id": "measured_training_low_go",
+      "description": "Measured low-impact training run passes.",
+      "expected": {
+        "recommendation": "go",
+        "approval_blocking": false,
+        "impact_tier": "low",
+        "confidence_score": 0.92
+      },
+      "assessment": {
+        "boundary_json": {"scope": "training", "region": "us-east-1"},
+        "lifecycle_phase": "training",
+        "functional_unit": "one training run",
+        "impact_type": "carbon",
+        "metrics": {
+          "total_kwh": 180.0,
+          "total_kg_co2e_location": 80.0,
+          "total_kg_co2e_market": 62.0
+        },
+        "provenance_class": "measured",
+        "uncertainty_pct": 6.0,
+        "confidence_score": 0.92,
+        "mitigation_readiness": "documented",
+        "mitigations_json": [{"description": "Measured run logged in telemetry", "target_date": "2026-12-31"}],
+        "evidence_refs_json": ["evidence://metered/training-low"]
+      }
+    },
+    {
+      "id": "measured_training_medium_conditioned",
+      "description": "Measured medium-impact training requires mitigation before approval.",
+      "expected": {
+        "recommendation": "conditional_go",
+        "approval_blocking": true,
+        "impact_tier": "medium",
+        "confidence_score": 0.9
+      },
+      "assessment": {
+        "boundary_json": {"scope": "training", "region": "us-east-1"},
+        "lifecycle_phase": "training",
+        "functional_unit": "one training run",
+        "impact_type": "carbon",
+        "metrics": {
+          "total_kwh": 1300.0,
+          "total_kg_co2e_location": 500.0,
+          "total_kg_co2e_market": 380.0
+        },
+        "provenance_class": "measured",
+        "uncertainty_pct": 8.0,
+        "confidence_score": 0.9,
+        "mitigation_readiness": "planned",
+        "evidence_refs_json": ["evidence://metered/training-medium"]
+      }
+    },
+    {
+      "id": "measured_training_high_documented",
+      "description": "Measured high-impact training can proceed only as conditional with documented mitigation.",
+      "expected": {
+        "recommendation": "conditional_go",
+        "approval_blocking": false,
+        "impact_tier": "high",
+        "confidence_score": 0.94
+      },
+      "assessment": {
+        "boundary_json": {"scope": "training", "region": "us-east-1"},
+        "lifecycle_phase": "training",
+        "functional_unit": "one training run",
+        "impact_type": "carbon",
+        "metrics": {
+          "total_kwh": 42000.0,
+          "total_kg_co2e_location": 12000.0,
+          "total_kg_co2e_market": 8200.0
+        },
+        "provenance_class": "measured",
+        "uncertainty_pct": 5.0,
+        "confidence_score": 0.94,
+        "mitigation_readiness": "documented",
+        "mitigations_json": [{"description": "Region shift and quantization required", "target_date": "2026-11-30"}],
+        "evidence_refs_json": ["evidence://metered/training-high"]
+      }
+    },
+    {
+      "id": "measured_training_high_missing_mitigation",
+      "description": "Measured high-impact training is blocked when mitigation is missing.",
+      "expected": {
+        "recommendation": "conditional_go",
+        "approval_blocking": true,
+        "impact_tier": "high",
+        "confidence_score": 0.94
+      },
+      "assessment": {
+        "boundary_json": {"scope": "training", "region": "us-east-1"},
+        "lifecycle_phase": "training",
+        "functional_unit": "one training run",
+        "impact_type": "carbon",
+        "metrics": {
+          "total_kwh": 42000.0,
+          "total_kg_co2e_location": 12000.0,
+          "total_kg_co2e_market": 8200.0
+        },
+        "provenance_class": "measured",
+        "uncertainty_pct": 5.0,
+        "confidence_score": 0.94,
+        "mitigation_readiness": "missing",
+        "evidence_refs_json": ["evidence://metered/training-high"]
+      }
+    },
+    {
+      "id": "vendor_low_inference_go",
+      "description": "Vendor-reported low-impact inference passes, with confidence capped.",
+      "expected": {
+        "recommendation": "go",
+        "approval_blocking": false,
+        "impact_tier": "low",
+        "confidence_score": 0.6
+      },
+      "assessment": {
+        "boundary_json": {"scope": "inference", "region": "us-west-2"},
+        "lifecycle_phase": "inference",
+        "functional_unit": "1000_requests",
+        "impact_type": "carbon",
+        "metrics": {
+          "total_kwh": 4.0,
+          "total_kg_co2e_location": 1.6,
+          "total_kg_co2e_market": 1.1,
+          "kg_co2e_per_1000_requests": 0.0005
+        },
+        "provenance_class": "vendor_reported",
+        "uncertainty_pct": 22.0,
+        "confidence_score": 0.95,
+        "mitigation_readiness": "missing",
+        "evidence_refs_json": ["evidence://cloud-billing/inference-low"]
+      }
+    },
+    {
+      "id": "vendor_medium_inference_conditioned",
+      "description": "Vendor-reported medium-impact inference is conditional and blocked without mitigation.",
+      "expected": {
+        "recommendation": "conditional_go",
+        "approval_blocking": true,
+        "impact_tier": "medium",
+        "confidence_score": 0.6
+      },
+      "assessment": {
+        "boundary_json": {"scope": "inference", "region": "us-west-2"},
+        "lifecycle_phase": "inference",
+        "functional_unit": "1000_requests",
+        "impact_type": "carbon",
+        "metrics": {
+          "total_kwh": 16.0,
+          "total_kg_co2e_location": 6.0,
+          "total_kg_co2e_market": 4.4,
+          "kg_co2e_per_1000_requests": 0.004
+        },
+        "provenance_class": "vendor_reported",
+        "uncertainty_pct": 30.0,
+        "confidence_score": 0.88,
+        "mitigation_readiness": "planned",
+        "evidence_refs_json": ["evidence://cloud-billing/inference-medium"]
+      }
+    },
+    {
+      "id": "tool_high_llm_no_go",
+      "description": "Tool-estimated high-impact LLM inference is blocked when confidence is estimated.",
+      "expected": {
+        "recommendation": "no_go",
+        "approval_blocking": true,
+        "impact_tier": "high",
+        "confidence_score": 0.65
+      },
+      "assessment": {
+        "boundary_json": {"scope": "llm_inference", "region": "eu-central-1"},
+        "lifecycle_phase": "llm_inference",
+        "functional_unit": "1m_tokens",
+        "impact_type": "carbon",
+        "metrics": {
+          "total_kwh": 2100.0,
+          "total_kg_co2e_location": 980.0,
+          "total_kg_co2e_market": 710.0,
+          "kg_co2e_per_1m_tokens": 12.5
+        },
+        "provenance_class": "tool_estimated",
+        "uncertainty_pct": 32.0,
+        "confidence_score": 0.65,
+        "mitigation_readiness": "planned",
+        "evidence_refs_json": ["evidence://ecologits/llm-high"]
+      }
+    },
+    {
+      "id": "manual_medium_training_no_go",
+      "description": "Manual medium-impact evidence below the estimated band is blocked.",
+      "expected": {
+        "recommendation": "no_go",
+        "approval_blocking": true,
+        "impact_tier": "medium",
+        "confidence_score": 0.25
+      },
+      "assessment": {
+        "boundary_json": {"scope": "training", "region": "ap-south-1"},
+        "lifecycle_phase": "training",
+        "functional_unit": "one training run",
+        "impact_type": "carbon",
+        "metrics": {
+          "total_kwh": 900.0,
+          "total_kg_co2e_location": 360.0,
+          "total_kg_co2e_market": 280.0
+        },
+        "provenance_class": "manual",
+        "uncertainty_pct": 65.0,
+        "confidence_score": 0.25,
+        "mitigation_readiness": "planned",
+        "evidence_refs_json": ["evidence://manual/training-medium"]
+      }
+    },
+    {
+      "id": "unknown_low_inference_no_go",
+      "description": "Unknown provenance forces no-go even for low-impact inference.",
+      "expected": {
+        "recommendation": "no_go",
+        "approval_blocking": true,
+        "impact_tier": "low",
+        "confidence_score": 0.0
+      },
+      "assessment": {
+        "boundary_json": {"scope": "inference", "region": "unknown"},
+        "lifecycle_phase": "inference",
+        "functional_unit": "1000_requests",
+        "impact_type": "carbon",
+        "metrics": {
+          "total_kwh": 1.0,
+          "total_kg_co2e_location": 0.4,
+          "total_kg_co2e_market": 0.3,
+          "kg_co2e_per_1000_requests": 0.0003
+        },
+        "provenance_class": "unknown",
+        "uncertainty_pct": 100.0,
+        "confidence_score": 0.5,
+        "mitigation_readiness": "documented",
+        "evidence_refs_json": ["evidence://unknown/inference-low"]
+      }
+    },
+    {
+      "id": "baseline_bump_low_to_medium",
+      "description": "High baseline intensity bumps a low measured workload to medium.",
+      "expected": {
+        "recommendation": "conditional_go",
+        "approval_blocking": false,
+        "impact_tier": "medium",
+        "confidence_score": 0.92
+      },
+      "assessment": {
+        "boundary_json": {"scope": "inference", "region": "us-east-1"},
+        "lifecycle_phase": "inference",
+        "functional_unit": "1000_requests",
+        "impact_type": "carbon",
+        "metrics": {
+          "total_kwh": 2.0,
+          "total_kg_co2e_location": 0.7,
+          "total_kg_co2e_market": 0.5,
+          "kg_co2e_per_1000_requests": 0.0005
+        },
+        "provenance_class": "measured",
+        "uncertainty_pct": 6.0,
+        "confidence_score": 0.92,
+        "intensity_vs_baseline": 1.4,
+        "mitigation_readiness": "documented",
+        "mitigations_json": [{"description": "Reduce request amplification", "target_date": "2026-10-31"}],
+        "evidence_refs_json": ["evidence://metered/baseline-bump"]
+      }
+    },
+    {
+      "id": "baseline_lower_medium_to_low",
+      "description": "Strong evidence can lower a below-baseline medium workload to low.",
+      "expected": {
+        "recommendation": "go",
+        "approval_blocking": false,
+        "impact_tier": "low",
+        "confidence_score": 0.93
+      },
+      "assessment": {
+        "boundary_json": {"scope": "training", "region": "us-east-1"},
+        "lifecycle_phase": "training",
+        "functional_unit": "one training run",
+        "impact_type": "carbon",
+        "metrics": {
+          "total_kwh": 400.0,
+          "total_kg_co2e_location": 120.0,
+          "total_kg_co2e_market": 92.0
+        },
+        "provenance_class": "measured",
+        "uncertainty_pct": 5.0,
+        "confidence_score": 0.93,
+        "intensity_vs_baseline": 0.5,
+        "mitigation_readiness": "missing",
+        "evidence_refs_json": ["evidence://metered/baseline-lower"]
+      }
+    },
+    {
+      "id": "offsets_do_not_rescue_unknown",
+      "description": "Offsets are disclosed but do not improve an unknown-provenance no-go.",
+      "expected": {
+        "recommendation": "no_go",
+        "approval_blocking": true,
+        "impact_tier": "medium",
+        "confidence_score": 0.0
+      },
+      "assessment": {
+        "boundary_json": {"scope": "training", "region": "us-east-1"},
+        "lifecycle_phase": "training",
+        "functional_unit": "one training run",
+        "impact_type": "carbon",
+        "metrics": {
+          "total_kwh": 1400.0,
+          "total_kg_co2e_location": 520.0,
+          "total_kg_co2e_market": 390.0
+        },
+        "provenance_class": "unknown",
+        "uncertainty_pct": 100.0,
+        "confidence_score": 0.7,
+        "mitigation_readiness": "documented",
+        "offsets_json": {"offset_kg_co2e": 1000.0},
+        "evidence_refs_json": ["evidence://unknown/offsets"]
+      }
+    },
+    {
+      "id": "exception_allows_conditional_review",
+      "description": "Owned exception makes a conditional-go approvable without documented mitigation.",
+      "expected": {
+        "recommendation": "conditional_go",
+        "approval_blocking": false,
+        "impact_tier": "high",
+        "confidence_score": 0.91
+      },
+      "assessment": {
+        "boundary_json": {"scope": "training", "region": "us-east-1"},
+        "lifecycle_phase": "training",
+        "functional_unit": "one training run",
+        "impact_type": "carbon",
+        "metrics": {
+          "total_kwh": 36000.0,
+          "total_kg_co2e_location": 11000.0,
+          "total_kg_co2e_market": 7800.0
+        },
+        "provenance_class": "measured",
+        "uncertainty_pct": 7.0,
+        "confidence_score": 0.91,
+        "mitigation_readiness": "planned",
+        "exception": {
+          "owner": "governance-lead",
+          "expiry": "2026-12-31",
+          "rationale": "Regulatory deadline with owned follow-up mitigation."
+        },
+        "evidence_refs_json": ["evidence://metered/exception"]
+      }
+    },
+    {
+      "id": "vendor_claimed_high_confidence_capped",
+      "description": "Vendor high-impact fine-tune remains no-go despite claimed high confidence.",
+      "expected": {
+        "recommendation": "no_go",
+        "approval_blocking": true,
+        "impact_tier": "high",
+        "confidence_score": 0.6
+      },
+      "assessment": {
+        "boundary_json": {"scope": "fine_tune", "region": "us-west-1"},
+        "lifecycle_phase": "fine_tune",
+        "functional_unit": "one fine-tune run",
+        "impact_type": "carbon",
+        "metrics": {
+          "total_kwh": 18000.0,
+          "total_kg_co2e_location": 6000.0,
+          "total_kg_co2e_market": 4200.0
+        },
+        "provenance_class": "vendor_reported",
+        "uncertainty_pct": 18.0,
+        "confidence_score": 0.99,
+        "mitigation_readiness": "documented",
+        "mitigations_json": [{"description": "Repeat with measured telemetry before release", "target_date": "2026-12-15"}],
+        "evidence_refs_json": ["evidence://cloud-billing/fine-tune-high"]
+      }
+    }
+  ]
+}

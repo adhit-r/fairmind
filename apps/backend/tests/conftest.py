@@ -9,10 +9,20 @@ from fastapi.testclient import TestClient
 from httpx import AsyncClient, ASGITransport
 import tempfile
 import os
+from datetime import datetime, timezone
 from pathlib import Path
+import uuid
 
 from api.main import app
+from config.auth import TokenData, TokenType, UserRole, get_current_active_user
 from config.settings import Settings
+from database.connection import Base, get_db
+from database.models import Organization, OrganizationMember, User
+from middleware.security import RateLimitMiddleware
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+from src.application.services import environmental_service
 
 
 class TestSettings(Settings):
@@ -35,6 +45,23 @@ def test_settings() -> TestSettings:
     return TestSettings()
 
 
+def _reset_in_memory_rate_limit() -> None:
+    middleware = app.middleware_stack
+    while middleware is not None:
+        if isinstance(middleware, RateLimitMiddleware):
+            middleware.fallback_clients.clear()
+            return
+        middleware = getattr(middleware, "app", None)
+
+
+@pytest.fixture(autouse=True)
+def reset_in_memory_rate_limit() -> Generator[None, None, None]:
+    """Keep request histories isolated between function-scoped API clients."""
+    _reset_in_memory_rate_limit()
+    yield
+    _reset_in_memory_rate_limit()
+
+
 @pytest.fixture(scope="session")
 def temp_dir() -> Generator[Path, None, None]:
     """Create a temporary directory for tests."""
@@ -47,22 +74,92 @@ def client(test_settings: TestSettings, temp_dir: Path) -> Generator[TestClient,
     """Create a test client."""
     # Override settings for tests
     app.dependency_overrides = {}
-    
+
     # Set up test directories
     test_settings.upload_dir = str(temp_dir / "uploads")
     test_settings.database_dir = str(temp_dir / "datasets")
     test_settings.model_cache_dir = str(temp_dir / "models")
-    
+
     # Create test directories
     Path(test_settings.upload_dir).mkdir(parents=True, exist_ok=True)
     Path(test_settings.database_dir).mkdir(parents=True, exist_ok=True)
     Path(test_settings.model_cache_dir).mkdir(parents=True, exist_ok=True)
-    
+
     with TestClient(app) as client:
         yield client
-    
+
     # Clean up
     app.dependency_overrides = {}
+
+
+@pytest.fixture
+def environmental_governance_client() -> Generator[tuple[TestClient, str], None, None]:
+    """Provide an authenticated, organization-scoped isolated API client."""
+    engine = create_engine(
+        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+    )
+    Base.metadata.create_all(engine)
+    session_factory = sessionmaker(bind=engine)
+    org_id = str(uuid.uuid4())
+    user_id = uuid.uuid4()
+    now = datetime.now(timezone.utc)
+    active_user = TokenData(
+        user_id=str(user_id),
+        email="environment-owner@example.test",
+        role=UserRole.ADMIN,
+        token_type=TokenType.ACCESS,
+        iat=now,
+        exp=now,
+    )
+
+    session = session_factory()
+    session.execute(
+        User.__table__.insert().values(
+            id=user_id,
+            email=active_user.email,
+            username="environment-owner",
+        )
+    )
+    session.execute(
+        Organization.__table__.insert().values(
+            id=uuid.UUID(org_id),
+            name="Environmental Test Organization",
+            slug=f"environment-{org_id[:8]}",
+            owner_id=user_id,
+        )
+    )
+    session.execute(
+        OrganizationMember.__table__.insert().values(
+            id=uuid.uuid4(),
+            org_id=uuid.UUID(org_id),
+            user_id=user_id,
+            role="owner",
+            status="active",
+        )
+    )
+    environmental_service._ensure_environmental_schema(session)
+    session.commit()
+    session.close()
+
+    def override_db():
+        database_session = session_factory()
+        try:
+            yield database_session
+        finally:
+            database_session.close()
+
+    async def override_user():
+        return active_user
+
+    app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_current_active_user] = override_user
+    try:
+        with TestClient(app) as test_client:
+            yield test_client, org_id
+    finally:
+        app.dependency_overrides.clear()
+        Base.metadata.drop_all(engine)
+        engine.dispose()
 
 
 @pytest_asyncio.fixture(scope="function")

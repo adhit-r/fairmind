@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="976" height="330" viewBox="0 0 976 330" role="img" aria-label="FairMind-E baseline exact-match comparison">
+<rect width="100%" height="100%" fill="#FFFFFF"/>
+<text x="36" y="38" font-size="24" font-family="Arial, sans-serif" font-weight="700" fill="#111111">FairMind-E baseline comparison</text>
+<text x="36" y="64" font-size="13" font-family="Arial, sans-serif" fill="#333333">Exact gate-label matches against the 14-case paper fixture.</text>
+<line x1="42" y1="252" x2="926" y2="252" stroke="#111111" stroke-width="3"/>
+<rect x="62" y="165" width="72" height="85" fill="#0F766E" stroke="#111111" stroke-width="2"/>
+<text x="62" y="157" font-size="12" font-family="Arial, sans-serif" fill="#111111">7/14</text>
+<text x="62" y="286" font-size="11" font-family="Arial, sans-serif" fill="#111111">carbon only</text>
+<rect x="190" y="80" width="72" height="170" fill="#F97316" stroke="#111111" stroke-width="2"/>
+<text x="190" y="72" font-size="12" font-family="Arial, sans-serif" fill="#111111">14/14</text>
+<text x="190" y="286" font-size="11" font-family="Arial, sans-serif" fill="#111111">FairMind-E</text>
+<rect x="318" y="178" width="72" height="72" fill="#111111" stroke="#111111" stroke-width="2"/>
+<text x="318" y="170" font-size="12" font-family="Arial, sans-serif" fill="#111111">6/14</text>
+<text x="318" y="286" font-size="11" font-family="Arial, sans-serif" fill="#111111">generic score</text>
+<rect x="446" y="214" width="72" height="36" fill="#14B8A6" stroke="#111111" stroke-width="2"/>
+<text x="446" y="206" font-size="12" font-family="Arial, sans-serif" fill="#111111">3/14</text>
+<text x="446" y="286" font-size="11" font-family="Arial, sans-serif" fill="#111111">no env gate</text>
+<rect x="574" y="93" width="72" height="157" fill="#0F766E" stroke="#111111" stroke-width="2"/>
+<text x="574" y="85" font-size="12" font-family="Arial, sans-serif" fill="#111111">13/14</text>
+<text x="574" y="286" font-size="11" font-family="Arial, sans-serif" fill="#111111">no exception</text>
+<rect x="702" y="117" width="72" height="133" fill="#F97316" stroke="#111111" stroke-width="2"/>
+<text x="702" y="109" font-size="12" font-family="Arial, sans-serif" fill="#111111">11/14</text>
+<text x="702" y="286" font-size="11" font-family="Arial, sans-serif" fill="#111111">no mitigation</text>
+<rect x="830" y="93" width="72" height="157" fill="#111111" stroke="#111111" stroke-width="2"/>
+<text x="830" y="85" font-size="12" font-family="Arial, sans-serif" fill="#111111">13/14</text>
+<text x="830" y="286" font-size="11" font-family="Arial, sans-serif" fill="#111111">offset credit</text>
+</svg>

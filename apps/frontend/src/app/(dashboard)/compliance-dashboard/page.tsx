@@ -1,564 +1,272 @@
-'use client';
+'use client'
 
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react'
+import { IconRefresh } from '@tabler/icons-react'
+
+import { useSystemContext } from '@/components/workflow/SystemContext'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
+import { useOrg } from '@/context/OrgContext'
 import {
-    IconShieldCheck,
-    IconAlertTriangle,
-    IconFileText,
-    IconDownload,
-    IconRefresh,
-    IconChecklist,
-    IconScale,
-    IconBook,
-    IconRobot,
-    IconDatabase,
-    IconChartBar,
-    IconLock,
-    IconBrain,
-} from '@tabler/icons-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Progress } from '@/components/ui/progress';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { BiasDetectionWidget } from '@/components/dashboard/BiasDetectionWidget';
+  useFrameworkVersions,
+  useGovernanceAssurance,
+  type ControlAssessment,
+} from '@/lib/api/hooks/useGovernanceAssurance'
 
-interface Framework {
-    id: string;
-    name: string;
-    description: string;
-    region: string;
-    status: string;
+import { ControlAssessmentTable } from './components/ControlAssessmentTable'
+import { FrameworkCatalog } from './components/FrameworkCatalog'
+import type { WorkbenchControl } from './components/ControlTracePanel'
+
+function ReadinessStrip({
+  frameworkName,
+  versionLabel,
+  readiness,
+  loading,
+}: {
+  frameworkName: string
+  versionLabel: string
+  readiness: {
+    applicable: number
+    accepted: number
+    readyForReview: number
+    missingEvidence: number
+    blockingFindings: number
+  } | null
+  loading: boolean
+}) {
+  const measures = [
+    ['Applicable', readiness?.applicable],
+    ['Accepted', readiness?.accepted],
+    ['Ready for review', readiness?.readyForReview],
+    ['Missing evidence', readiness?.missingEvidence],
+    ['Rejected assessments', readiness?.blockingFindings],
+  ] as const
+
+  return (
+    <section aria-labelledby="readiness-heading" className="border-2 border-[#0F1412] bg-[#FCFDF8]">
+      <div className="flex flex-col gap-1 border-b-2 border-[#0F1412] bg-[oklch(0.60_0.13_163)] px-4 py-3 text-[#0F1412] sm:flex-row sm:items-center sm:justify-between">
+        <h2 id="readiness-heading" className="text-base font-black uppercase tracking-tight">
+          {frameworkName} readiness
+        </h2>
+        <p className="text-xs font-black uppercase tracking-[0.12em]">Version {versionLabel}</p>
+      </div>
+      <dl
+        aria-label={loading ? 'Loading readiness summary' : undefined}
+        className="grid grid-cols-2 divide-x-2 divide-y-2 divide-[#0F1412] sm:grid-cols-5 sm:divide-y-0"
+      >
+        {measures.map(([label, value]) => (
+          <div key={label} className="min-h-[76px] px-3 py-3 first:col-span-2 sm:first:col-span-1">
+            <dt className="text-[11px] font-black uppercase tracking-[0.1em] text-[#59615D]">{label}</dt>
+            <dd className="mt-1 text-xl font-black text-[#0F1412]">
+              {loading ? <Skeleton className="h-7 w-10 rounded-none" /> : value ?? 'Unknown'}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  )
 }
 
-interface ComplianceResult {
-    model_id?: string;
-    framework: string;
-    compliance_score: number;
-    overall_status: string;
-    total_requirements: number;
-    compliant_requirements: number;
-    evidence_collected?: number;
-    automated_evidence_sources?: string[];
-    results: Array<{
-        requirement_id: string;
-        category: string;
-        requirement: string;
-        status: string;
-        gaps: string[];
-        evidence_source?: string;
-        evidence_hash?: string;
-    }>;
-    gaps?: Array<{
-        control_id: string;
-        control_name: string;
-        category: string;
-        failed_checks: string[];
-    }>;
-    note?: string;
+function WorkbenchLoading() {
+  return (
+    <div aria-label="Loading framework catalog" className="space-y-4 border-4 border-[#0F1412] bg-[#FCFDF8] p-5 shadow-[8px_8px_0_0_#0F1412]">
+      <Skeleton className="h-5 w-48 rounded-none" />
+      <Skeleton className="h-12 w-full rounded-none" />
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Skeleton className="h-20 rounded-none" />
+        <Skeleton className="h-20 rounded-none" />
+        <Skeleton className="h-20 rounded-none" />
+      </div>
+    </div>
+  )
 }
-
-// Evidence source mapping for visual display
-const EVIDENCE_SOURCE_MAP: Record<string, { icon: any; label: string; color: string }> = {
-    'fairmind_dataset_service': {
-        icon: IconDatabase,
-        label: 'Dataset Service',
-        color: 'bg-blue-100 text-blue-800'
-    },
-    'fairmind_bias_detection': {
-        icon: IconBrain,
-        label: 'Bias Detection',
-        color: 'bg-purple-100 text-purple-800'
-    },
-    'fairmind_model_registry': {
-        icon: IconFileText,
-        label: 'Model Registry',
-        color: 'bg-green-100 text-green-800'
-    },
-    'fairmind_monitoring_service': {
-        icon: IconChartBar,
-        label: 'Monitoring',
-        color: 'bg-orange-100 text-orange-800'
-    },
-    'fairmind_security_testing': {
-        icon: IconLock,
-        label: 'Security Tests',
-        color: 'bg-red-100 text-red-800'
-    },
-    'default': {
-        icon: IconFileText,
-        label: 'Manual',
-        color: 'bg-gray-100 text-gray-800'
-    }
-};
 
 export default function ComplianceDashboardPage() {
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8010';
-    const [frameworks, setFrameworks] = useState<Framework[]>([]);
-    const [selectedFramework, setSelectedFramework] = useState<string>('');
-    const [selectedModel, setSelectedModel] = useState<string>('model-demo-001');
-    const [complianceResults, setComplianceResults] = useState<ComplianceResult | null>(null);
-    const [loading, setLoading] = useState(false);
-    const [useAutomated, setUseAutomated] = useState(true);
+  const { selectedOrg } = useOrg()
+  const { selectedSystem } = useSystemContext()
+  const orgId = selectedOrg?.id
 
-    useEffect(() => {
-        fetchFrameworks();
-    }, []);
+  const [frameworkKey, setFrameworkKey] = useState('')
+  const [selectedVersionId, setSelectedVersionId] = useState('')
+  const [activeAssignment, setActiveAssignment] = useState<{ id: string; systemId: string }>()
+  const [activating, setActivating] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
 
-    const fetchFrameworks = async () => {
-        try {
-            const response = await fetch(`${apiBase}/api/v1/compliance/frameworks`);
-            const data = await response.json();
-            setFrameworks(data.frameworks || []);
-            if (data.frameworks && data.frameworks.length > 0) {
-                setSelectedFramework(data.frameworks[0].id);
-            }
-        } catch (error) {
-            console.error('Error fetching frameworks:', error);
-        }
-    };
+  const activeAssignmentId = activeAssignment?.systemId === selectedSystem.id
+    ? activeAssignment.id
+    : undefined
+  const assurance = useGovernanceAssurance(orgId, selectedSystem.id, activeAssignmentId)
+  const versionState = useFrameworkVersions(orgId, frameworkKey || undefined)
 
-    const checkCompliance = async () => {
-        if (!selectedFramework) return;
+  useEffect(() => {
+    if (!frameworkKey || !assurance.frameworks.some((item) => item.frameworkKey === frameworkKey)) {
+      setFrameworkKey(assurance.frameworks[0]?.frameworkKey || '')
+    }
+  }, [assurance.frameworks, frameworkKey])
 
-        setLoading(true);
-        try {
-            if (useAutomated && selectedModel) {
-                // AUTOMATED: Evidence collected automatically from FairMind features
-                const response = await fetch(
-                    `${apiBase}/api/v1/compliance/model/${selectedModel}/compliance?framework=${selectedFramework}`
-                );
-                const data = await response.json();
-                setComplianceResults(data);
-            } else {
-                // MANUAL: Use sample system data
-                const systemData = {
-                    name: 'Sample AI System',
-                    description: 'AI-powered recommendation system',
-                    risk_level: 'high',
-                    evidence_EU_AI_1: [{ quality: 0.9, description: 'Risk classification completed' }],
-                    evidence_EU_AI_2: [{ quality: 0.85, description: 'Transparency measures implemented' }],
-                    evidence_EU_AI_3: [{ quality: 0.8, description: 'Human oversight in place' }],
-                    evidence_EU_AI_4: [{ quality: 0.9, description: 'Data governance established' }],
-                    evidence_EU_AI_5: [{ quality: 0.95, description: 'Technical documentation maintained' }],
-                    evidence_EU_AI_6: [{ quality: 0.88, description: 'Logging system active' }],
-                    evidence_EU_AI_7: [{ quality: 0.82, description: 'Accuracy monitoring in place' }],
-                    evidence_GDPR_1: [{ quality: 0.9, description: 'Legal basis established' }],
-                    evidence_GDPR_2: [{ quality: 0.85, description: 'Data minimization applied' }],
-                    evidence_GDPR_3: [{ quality: 0.8, description: 'Automated decision safeguards' }],
-                    evidence_GDPR_4: [{ quality: 0.9, description: 'DPIA conducted' }],
-                    evidence_ISO_1: [{ quality: 0.85, description: 'AI management system established' }],
-                    evidence_ISO_2: [{ quality: 0.88, description: 'Risk management implemented' }],
-                    evidence_NIST_1: [{ quality: 0.9, description: 'Governance structure in place' }],
-                    evidence_NIST_2: [{ quality: 0.85, description: 'Risk mapping completed' }],
-                    evidence_NIST_3: [{ quality: 0.87, description: 'Performance measurement active' }],
-                    evidence_IEEE_1: [{ quality: 0.83, description: 'Value-based design applied' }],
-                };
+  useEffect(() => {
+    if (versionState.versions.length === 0) {
+      setSelectedVersionId('')
+      return
+    }
+    const assignedVersion = versionState.versions.find((version) =>
+      assurance.assignments.some((assignment) =>
+        assignment.systemId === selectedSystem.id && assignment.frameworkVersionId === version.id,
+      ),
+    )
+    const selectionExists = versionState.versions.some((version) => version.id === selectedVersionId)
+    if (!selectionExists) {
+      setSelectedVersionId(assignedVersion?.id || versionState.versions[0].id)
+    }
+  }, [assurance.assignments, selectedSystem.id, selectedVersionId, versionState.versions])
 
-                const response = await fetch(`${apiBase}/api/v1/compliance/check`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        framework: selectedFramework,
-                        system_data: systemData,
-                    }),
-                });
+  useEffect(() => {
+    const selectedAssignment = assurance.assignments.find(
+      (assignment) =>
+        assignment.systemId === selectedSystem.id
+        && assignment.frameworkVersionId === selectedVersionId,
+    )
+    setActiveAssignment(selectedAssignment
+      ? { id: selectedAssignment.id, systemId: selectedAssignment.systemId }
+      : undefined)
+  }, [assurance.assignments, selectedSystem.id, selectedVersionId])
 
-                const data = await response.json();
-                setComplianceResults(data);
-            }
-        } catch (error) {
-            console.error('Error checking compliance:', error);
-        } finally {
-            setLoading(false);
-        }
-    };
+  const selectedVersion = versionState.versions.find((version) => version.id === selectedVersionId)
+  const selectedFramework = assurance.frameworks.find((item) => item.frameworkKey === frameworkKey)
+  const assignedVersionIds = useMemo(
+    () => assurance.assignments.map((assignment) => assignment.frameworkVersionId),
+    [assurance.assignments],
+  )
+  const canEdit = selectedOrg?.role === 'admin'
+    || selectedOrg?.role === 'owner'
+    || selectedOrg?.permissions?.includes('model:write') === true
+  const catalogLoading = assurance.loading
+    && (assurance.frameworks.length === 0 || assurance.assignments.length === 0)
+    && !assurance.error
+  const error = actionError || assurance.error?.message || versionState.error?.message || null
 
-    const getStatusColor = (status: string) => {
-        switch (status) {
-            case 'compliant':
-                return 'bg-green-100 text-green-800 hover:bg-green-100';
-            case 'partially_compliant':
-                return 'bg-yellow-100 text-yellow-800 hover:bg-yellow-100';
-            case 'non_compliant':
-                return 'bg-red-100 text-red-800 hover:bg-red-100';
-            default:
-                return 'bg-gray-100 text-gray-800 hover:bg-gray-100';
-        }
-    };
+  const activateFramework = async () => {
+    if (!selectedVersionId) return
+    if (!canEdit) {
+      setActionError('Your organization role cannot activate framework versions')
+      return
+    }
+    setActivating(true)
+    setActionError(null)
+    try {
+      const assignment = await assurance.assign(selectedVersionId)
+      setActiveAssignment({ id: assignment.id, systemId: assignment.systemId })
+    } catch (reason) {
+      setActionError(reason instanceof Error ? reason.message : 'Framework activation failed')
+    } finally {
+      setActivating(false)
+    }
+  }
 
-    const getStatusIcon = (status: string) => {
-        switch (status) {
-            case 'compliant':
-                return <IconShieldCheck className="h-5 w-5 text-green-600" />;
-            case 'partially_compliant':
-                return <IconAlertTriangle className="h-5 w-5 text-yellow-600" />;
-            case 'non_compliant':
-                return <IconAlertTriangle className="h-5 w-5 text-red-600" />;
-            default:
-                return <IconFileText className="h-5 w-5 text-gray-600" />;
-        }
-    };
+  const retry = async () => {
+    setActionError(null)
+    await Promise.all([assurance.refresh(), versionState.refresh()])
+  }
 
-    return (
-        <div className="container mx-auto py-8 space-y-8">
-            {/* Header */}
-            <div className="flex justify-between items-center">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight">Compliance Dashboard</h1>
-                    <p className="text-muted-foreground mt-1">
-                        Regulatory compliance checks and audit reporting
-                    </p>
-                </div>
-                <div className="flex gap-2">
-                    <Button variant="neutral" onClick={fetchFrameworks}>
-                        <IconRefresh className="mr-2 h-4 w-4" />
-                        Refresh
-                    </Button>
-                    <Button disabled={!complianceResults}>
-                        <IconDownload className="mr-2 h-4 w-4" />
-                        Export Report
-                    </Button>
-                </div>
-            </div>
+  const updateControl = async (
+    control: WorkbenchControl,
+    update: Pick<ControlAssessment, 'applicability' | 'status' | 'owner'>,
+  ) => {
+    if (!canEdit) throw new Error('Your organization role cannot update control assessments')
+    await assurance.updateAssessment(control.id, update)
+  }
 
-            {/* Bias Detection Widget */}
-            <BiasDetectionWidget />
-
-            {/* Framework Selection */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>Compliance Check Configuration</CardTitle>
-                    <CardDescription>Choose framework and evidence collection method</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    {/* Automated Evidence Toggle */}
-                    <Alert className="mb-4 bg-blue-50 border-blue-200">
-                        <IconRobot className="h-4 w-4 text-blue-600" />
-                        <AlertDescription className="ml-2">
-                            <div className="flex items-center justify-between">
-                                <span className="font-medium text-blue-900">
-                                    {useAutomated ? ' Automated Evidence Collection Enabled' : ' Manual Evidence Mode'}
-                                </span>
-                                <Button
-                                    variant="neutral"
-                                    size="sm"
-                                    onClick={() => setUseAutomated(!useAutomated)}
-                                    className="ml-4"
-                                >
-                                    {useAutomated ? 'Switch to Manual' : 'Enable Automated'}
-                                </Button>
-                            </div>
-                            <p className="text-sm text-blue-700 mt-2">
-                                {useAutomated
-                                    ? 'Evidence will be automatically collected from FairMind\'s bias detection, model registry, monitoring, and security testing features.'
-                                    : 'Using sample data for demonstration. Enable automated mode to collect real evidence from your models.'}
-                            </p>
-                        </AlertDescription>
-                    </Alert>
-
-                    <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-                        {useAutomated && (
-                            <div className="md:col-span-4">
-                                <label className="text-sm font-medium mb-2 block">Model</label>
-                                <Select value={selectedModel} onValueChange={setSelectedModel}>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select a model" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="model-demo-001">Demo Model 001</SelectItem>
-                                        <SelectItem value="model-demo-002">Demo Model 002</SelectItem>
-                                        <SelectItem value="model-prod-001">Production Model 001</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        )}
-                        <div className={useAutomated ? "md:col-span-4" : "md:col-span-8"}>
-                            <label className="text-sm font-medium mb-2 block">Framework</label>
-                            <Select value={selectedFramework} onValueChange={setSelectedFramework}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select a regulatory framework" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {frameworks.map((f) => (
-                                        <SelectItem key={f.id} value={f.id}>
-                                            {f.name} - {f.description}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div className="md:col-span-4">
-                            <Button
-                                className="w-full"
-                                onClick={checkCompliance}
-                                disabled={loading || !selectedFramework || (useAutomated && !selectedModel)}
-                            >
-                                {loading ? 'Checking...' : useAutomated ? 'Check Compliance (Auto)' : 'Check Compliance (Manual)'}
-                                {!loading && <IconChecklist className="ml-2 h-4 w-4" />}
-                            </Button>
-                        </div>
-                    </div>
-
-                    {/* Evidence Source Legend */}
-                    {useAutomated && (
-                        <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                            <h4 className="text-sm font-semibold mb-2">Automated Evidence Sources:</h4>
-                            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                                {Object.entries(EVIDENCE_SOURCE_MAP).filter(([key]) => key !== 'default').map(([key, { icon: Icon, label, color }]) => (
-                                    <div key={key} className="flex items-center gap-2">
-                                        <Icon className="h-4 w-4" />
-                                        <Badge variant="outline" className={color}>
-                                            {label}
-                                        </Badge>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                </CardContent>
-            </Card>
-
-            {/* Results */}
-            {complianceResults && (
-                <div className="space-y-6">
-                    {/* Overview Cards */}
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <Card>
-                            <CardContent className="pt-6">
-                                <div className="flex justify-between items-start mb-4">
-                                    <p className="text-sm font-medium text-muted-foreground">Overall Score</p>
-                                    {getStatusIcon(complianceResults.overall_status)}
-                                </div>
-                                <div className="flex items-baseline gap-2">
-                                    <span className="text-3xl font-bold">
-                                        {complianceResults.compliance_score.toFixed(0)}%
-                                    </span>
-                                </div>
-                                <Progress
-                                    value={complianceResults.compliance_score}
-                                    className="mt-4"
-                                // Note: Shadcn Progress doesn't support color prop directly, usually handled via class or CSS variables
-                                />
-                            </CardContent>
-                        </Card>
-
-                        <Card>
-                            <CardContent className="pt-6">
-                                <div className="flex flex-col gap-1">
-                                    <p className="text-sm font-medium text-muted-foreground">Status</p>
-                                    <Badge className={`w-fit mt-2 ${getStatusColor(complianceResults.overall_status)}`}>
-                                        {complianceResults.overall_status.replace('_', ' ').toUpperCase()}
-                                    </Badge>
-                                    <p className="text-xs text-muted-foreground mt-4">
-                                        Framework: {complianceResults.framework}
-                                    </p>
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        <Card>
-                            <CardContent className="pt-6">
-                                <div className="flex flex-col gap-1">
-                                    <p className="text-sm font-medium text-muted-foreground">Requirements Met</p>
-                                    <span className="text-3xl font-bold mt-2">
-                                        {complianceResults.compliant_requirements} / {complianceResults.total_requirements}
-                                    </span>
-                                    <Progress
-                                        value={(complianceResults.compliant_requirements / complianceResults.total_requirements) * 100}
-                                        className="mt-4"
-                                    />
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        <Card>
-                            <CardContent className="pt-6">
-                                <div className="flex flex-col gap-1">
-                                    <p className="text-sm font-medium text-muted-foreground">Total Requirements</p>
-                                    <span className="text-3xl font-bold mt-2">
-                                        {complianceResults.total_requirements}
-                                    </span>
-                                    <p className="text-xs text-muted-foreground mt-4">
-                                        Assessed requirements
-                                    </p>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </div>
-
-                    {/* Automated Evidence Sources Card */}
-                    {complianceResults.automated_evidence_sources && complianceResults.automated_evidence_sources.length > 0 && (
-                        <Card className="border-2 border-blue-200 bg-blue-50/50">
-                            <CardHeader>
-                                <div className="flex items-center gap-2">
-                                    <IconRobot className="h-5 w-5 text-blue-600" />
-                                    <CardTitle className="text-blue-900">Automated Evidence Collection</CardTitle>
-                                </div>
-                                <CardDescription>
-                                    Evidence automatically collected from {complianceResults.evidence_collected} checks across {complianceResults.automated_evidence_sources.length} FairMind features
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                                    {complianceResults.automated_evidence_sources.map((source) => {
-                                        const sourceInfo = EVIDENCE_SOURCE_MAP[source] || EVIDENCE_SOURCE_MAP['default'];
-                                        const Icon = sourceInfo.icon;
-                                        return (
-                                            <div key={source} className="flex flex-col items-center gap-2 p-4 bg-white rounded-lg border">
-                                                <Icon className="h-8 w-8 text-gray-700" />
-                                                <Badge className={sourceInfo.color}>
-                                                    {sourceInfo.label}
-                                                </Badge>
-                                                <span className="text-xs text-gray-500 text-center">
-                                                    {source.replace('fairmind_', '').replace(/_/g, ' ')}
-                                                </span>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                                {complianceResults.note && (
-                                    <p className="text-sm text-blue-700 mt-4 p-3 bg-blue-100 rounded">
-                                        ℹ {complianceResults.note}
-                                    </p>
-                                )}
-                            </CardContent>
-                        </Card>
-                    )}
-
-                    {/* Detailed Results */}
-                    <Card>
-                        <CardContent className="p-6">
-                            <Tabs defaultValue="overview">
-                                <TabsList className="mb-4">
-                                    <TabsTrigger value="overview">
-                                        <IconScale className="mr-2 h-4 w-4" />
-                                        Overview
-                                    </TabsTrigger>
-                                    <TabsTrigger value="requirements">
-                                        <IconChecklist className="mr-2 h-4 w-4" />
-                                        Requirements
-                                    </TabsTrigger>
-                                    <TabsTrigger value="recommendations">
-                                        <IconBook className="mr-2 h-4 w-4" />
-                                        Recommendations
-                                    </TabsTrigger>
-                                </TabsList>
-
-                                <TabsContent value="overview" className="space-y-4">
-                                    <div>
-                                        <h3 className="text-lg font-semibold mb-2">Compliance Overview</h3>
-                                        <p className="text-muted-foreground mb-4">
-                                            Your system has been assessed against the {complianceResults.framework} framework.
-                                            The overall compliance score is {complianceResults.compliance_score.toFixed(1)}%.
-                                        </p>
-                                    </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        {complianceResults.results.map((result, index) => (
-                                            <Card key={index} className="border shadow-sm">
-                                                <CardContent className="p-4">
-                                                    <div className="flex justify-between items-start mb-2">
-                                                        <span className="font-semibold text-sm">{result.category}</span>
-                                                        <Badge className={getStatusColor(result.status)}>
-                                                            {result.status.replace('_', ' ')}
-                                                        </Badge>
-                                                    </div>
-                                                    <p className="text-xs text-muted-foreground">
-                                                        {result.requirement}
-                                                    </p>
-                                                </CardContent>
-                                            </Card>
-                                        ))}
-                                    </div>
-                                </TabsContent>
-
-                                <TabsContent value="requirements">
-                                    <div className="rounded-md border">
-                                        <Table>
-                                            <TableHeader>
-                                                <TableRow>
-                                                    <TableHead>ID</TableHead>
-                                                    <TableHead>Category</TableHead>
-                                                    <TableHead>Requirement</TableHead>
-                                                    <TableHead>Status</TableHead>
-                                                    <TableHead>Gaps</TableHead>
-                                                </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                                {complianceResults.results.map((result, index) => (
-                                                    <TableRow key={index}>
-                                                        <TableCell className="font-medium">{result.requirement_id}</TableCell>
-                                                        <TableCell>{result.category}</TableCell>
-                                                        <TableCell>{result.requirement}</TableCell>
-                                                        <TableCell>
-                                                            <Badge className={getStatusColor(result.status)}>
-                                                                {result.status.replace('_', ' ')}
-                                                            </Badge>
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            {result.gaps.length > 0 ? (
-                                                                <Badge variant="destructive">
-                                                                    {result.gaps.length} gap(s)
-                                                                </Badge>
-                                                            ) : (
-                                                                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                                                                    No gaps
-                                                                </Badge>
-                                                            )}
-                                                        </TableCell>
-                                                    </TableRow>
-                                                ))}
-                                            </TableBody>
-                                        </Table>
-                                    </div>
-                                </TabsContent>
-
-                                <TabsContent value="recommendations" className="space-y-4">
-                                    <div>
-                                        <h3 className="text-lg font-semibold mb-4">Recommendations</h3>
-                                        <div className="space-y-4">
-                                            {complianceResults.results
-                                                .filter((r) => r.status !== 'compliant')
-                                                .map((result, index) => (
-                                                    <Card key={index} className="border-l-4 border-l-orange-500">
-                                                        <CardContent className="p-4">
-                                                            <div className="flex justify-between items-start mb-2">
-                                                                <span className="font-semibold">{result.category}</span>
-                                                                <Badge variant="secondary" className="bg-orange-100 text-orange-800">
-                                                                    Action Required
-                                                                </Badge>
-                                                            </div>
-                                                            <p className="text-sm mb-2">{result.requirement}</p>
-                                                            <div className="space-y-1">
-                                                                {result.gaps.map((gap, gapIndex) => (
-                                                                    <p key={gapIndex} className="text-xs text-muted-foreground flex items-center">
-                                                                        <span className="mr-2">•</span> {gap}
-                                                                    </p>
-                                                                ))}
-                                                            </div>
-                                                        </CardContent>
-                                                    </Card>
-                                                ))}
-                                            {complianceResults.results.filter((r) => r.status !== 'compliant').length === 0 && (
-                                                <Card className="bg-muted/50">
-                                                    <CardContent className="p-8 text-center text-muted-foreground">
-                                                        No recommendations - all requirements are met!
-                                                    </CardContent>
-                                                </Card>
-                                            )}
-                                        </div>
-                                    </div>
-                                </TabsContent>
-                            </Tabs>
-                        </CardContent>
-                    </Card>
-                </div>
-            )}
+  return (
+    <main
+      data-testid="framework-controls-workbench"
+      className="space-y-5 bg-[#FCFDF8] pb-10 text-[#0F1412]"
+    >
+      <header className="flex flex-col gap-3 border-b-4 border-[#0F1412] pb-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-[#0B7659]">Governance workbench</p>
+          <h1 className="mt-1 text-2xl font-black uppercase tracking-tight sm:text-3xl">Frameworks &amp; Controls</h1>
+          <p className="mt-2 max-w-[70ch] text-sm font-medium text-[#59615D]">
+            Activate a version for {selectedSystem.name}, assign control work, and inspect the evidence trail before review.
+          </p>
         </div>
-    );
+        <Button
+          type="button"
+          variant="neutral"
+          onClick={() => void retry()}
+          className="rounded-none border-[#0F1412] bg-[#FCFDF8] font-black uppercase"
+        >
+          <IconRefresh aria-hidden="true" />
+          Refresh workbench
+        </Button>
+      </header>
+
+      <div className="flex flex-wrap gap-x-6 gap-y-2 border-2 border-[#0F1412] bg-[#F3F5F0] px-4 py-3 text-sm">
+        <p><span className="font-black uppercase">Organization:</span> {selectedOrg?.name || 'Not selected'}</p>
+        <p><span className="font-black uppercase">AI system:</span> {selectedSystem.name}</p>
+        <p><span className="font-black uppercase">Version:</span> {selectedVersion?.versionLabel || 'Not selected'}</p>
+      </div>
+
+      {error ? (
+        <Alert role="alert" className="rounded-none border-2 border-[#D83A2E] bg-[#FFF0ED] text-[#0F1412]">
+          <AlertDescription className="flex flex-col gap-3 font-bold sm:flex-row sm:items-center sm:justify-between">
+            <span>{error}</span>
+            <Button
+              type="button"
+              variant="neutral"
+              onClick={() => void retry()}
+              className="rounded-none border-[#0F1412] bg-[#FCFDF8]"
+            >
+              Retry loading frameworks
+            </Button>
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      {!error && catalogLoading ? (
+        <WorkbenchLoading />
+      ) : !error && assurance.frameworks.length === 0 ? (
+        <section className="border-4 border-[#0F1412] bg-[#F3F5F0] p-8 text-center shadow-[8px_8px_0_0_#0F1412]">
+          <h2 className="text-xl font-black uppercase">No framework versions available</h2>
+          <p className="mx-auto mt-2 max-w-[60ch] text-sm text-[#59615D]">
+            An organization administrator must import a versioned catalog before it can be activated for this AI system.
+          </p>
+        </section>
+      ) : !error ? (
+        <FrameworkCatalog
+          frameworks={assurance.frameworks}
+          versions={versionState.versions}
+          selectedFrameworkKey={frameworkKey}
+          selectedVersionId={selectedVersionId}
+          assignedVersionIds={assignedVersionIds}
+          loading={versionState.loading}
+          activating={activating}
+          canActivate={canEdit}
+          systemName={selectedSystem.name}
+          onFrameworkChange={setFrameworkKey}
+          onVersionChange={setSelectedVersionId}
+          onActivate={() => void activateFramework()}
+        />
+      ) : null}
+
+      {!error && activeAssignmentId && selectedVersion ? (
+        <>
+          <ReadinessStrip
+            frameworkName={selectedFramework?.name || selectedVersion.name}
+            versionLabel={selectedVersion.versionLabel}
+            readiness={assurance.readiness}
+            loading={assurance.readinessLoading}
+          />
+          <ControlAssessmentTable
+            controls={assurance.controls}
+            loading={assurance.loading}
+            canEdit={canEdit}
+            frameworkName={selectedFramework?.name || selectedVersion.name}
+            versionLabel={selectedVersion.versionLabel}
+            onUpdate={updateControl}
+          />
+        </>
+      ) : null}
+    </main>
+  )
 }

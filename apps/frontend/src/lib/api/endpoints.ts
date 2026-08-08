@@ -131,6 +131,7 @@ export const API_ENDPOINTS = {
     evidenceItem: (evidenceId: string) => `/api/v1/ai-governance/evidence-item/${evidenceId}`,
     evidenceItemLinks: (evidenceId: string) => `/api/v1/ai-governance/evidence-item/${evidenceId}/links`,
     evidenceItemLink: (evidenceId: string, linkId: string) => `/api/v1/ai-governance/evidence-item/${evidenceId}/links/${linkId}`,
+    environmentalImpact: (systemId: string) => `/api/v1/systems/${systemId}/environmental-impact`,
     remediation: '/api/v1/ai-governance/remediation',
     updateRemediation: (taskId: string) => `/api/v1/ai-governance/remediation/${taskId}`,
     approvalRequests: '/api/v1/ai-governance/approval-requests',
@@ -160,6 +161,42 @@ export const API_ENDPOINTS = {
     aiSystem: (systemId: string) => `/api/v1/ai-governance/systems/${systemId}`,
     aiSystemRisks: (systemId: string) => `/api/v1/ai-governance/dashboard/risk?system_id=${systemId}`,
     aiSystemApprovals: (systemId: string) => `/api/v1/ai-governance/systems/${systemId}/approvals`,
+    frameworkAssignments: (orgId: string, systemId: string) =>
+      `/api/v1/ai-governance/organizations/${orgId}/systems/${systemId}/framework-assignments`,
+    frameworks: (orgId: string) =>
+      `/api/v1/ai-governance/organizations/${orgId}/frameworks`,
+    importFramework: (orgId: string) =>
+      `/api/v1/ai-governance/organizations/${orgId}/frameworks/import`,
+    frameworkVersions: (orgId: string, frameworkKey: string) =>
+      `/api/v1/ai-governance/organizations/${orgId}/frameworks/${frameworkKey}/versions`,
+    frameworkVersionControls: (orgId: string, versionId: string) =>
+      `/api/v1/ai-governance/organizations/${orgId}/framework-versions/${versionId}/controls`,
+    assignmentControls: (orgId: string, assignmentId: string) =>
+      `/api/v1/ai-governance/organizations/${orgId}/framework-assignments/${assignmentId}/controls`,
+    assignmentReadiness: (orgId: string, assignmentId: string) =>
+      `/api/v1/ai-governance/organizations/${orgId}/framework-assignments/${assignmentId}/readiness`,
+    controlAssessment: (orgId: string, assessmentId: string) =>
+      `/api/v1/ai-governance/organizations/${orgId}/control-assessments/${assessmentId}`,
+    evidenceRuns: (orgId: string, systemId: string) =>
+      `/api/v1/ai-governance/organizations/${orgId}/systems/${systemId}/evidence-runs`,
+    evaluationPlans: (orgId: string, systemId: string) =>
+      `/api/v1/ai-governance/organizations/${orgId}/systems/${systemId}/evaluation-plans`,
+    evaluationPlanActivation: (orgId: string, systemId: string, planId: string) =>
+      `/api/v1/ai-governance/organizations/${orgId}/systems/${systemId}/evaluation-plans/${planId}/activate`,
+    evaluationPlanPreflight: (orgId: string, systemId: string, planId: string) =>
+      `/api/v1/ai-governance/organizations/${orgId}/systems/${systemId}/evaluation-plans/${planId}/preflight`,
+    evaluationPlanRuns: (orgId: string, systemId: string, planId: string) =>
+      `/api/v1/ai-governance/organizations/${orgId}/systems/${systemId}/evaluation-plans/${planId}/runs`,
+    evaluationRuns: (orgId: string, systemId: string) =>
+      `/api/v1/ai-governance/organizations/${orgId}/systems/${systemId}/evaluation-runs`,
+    evaluationRun: (orgId: string, systemId: string, runId: string) =>
+      `/api/v1/ai-governance/organizations/${orgId}/systems/${systemId}/evaluation-runs/${runId}`,
+    evaluationRunPassportLink: (orgId: string, systemId: string, runId: string) =>
+      `/api/v1/ai-governance/organizations/${orgId}/systems/${systemId}/evaluation-runs/${runId}/evidence-passport-link`,
+    evidenceMappings: (orgId: string, evidenceId: string) =>
+      `/api/v1/ai-governance/organizations/${orgId}/evidence/${evidenceId}/control-mappings`,
+    reviewEvidenceMapping: (orgId: string, mappingId: string) =>
+      `/api/v1/ai-governance/organizations/${orgId}/evidence-mappings/${mappingId}/review`,
   },
 
   // AI BOM

@@ -1,0 +1,52 @@
+{
+  "workload_id": "classical_ml_training",
+  "run_id": "smoke",
+  "functional_unit": "1000_training_rows",
+  "records": [
+    {
+      "method": "nvml_rapl_meter",
+      "duration_seconds": 42,
+      "energy_kwh": 0.185,
+      "location_carbon_intensity_g_co2e_per_kwh": 360.0,
+      "market_carbon_intensity_g_co2e_per_kwh": 240.0,
+      "carbon_intensity_basis": "average",
+      "provenance_class": "measured",
+      "uncertainty_pct": 5,
+      "impact_level": "low",
+      "intensity_vs_baseline": 0.82,
+      "mitigation_readiness": "documented",
+      "offsets_retired_kg_co2e": 0.0,
+      "notes": "Synthetic metered baseline for a small tabular training smoke run."
+    },
+    {
+      "method": "cloud_invoice_vendor",
+      "duration_seconds": 42,
+      "energy_kwh": 0.210,
+      "location_carbon_intensity_g_co2e_per_kwh": 360.0,
+      "market_carbon_intensity_g_co2e_per_kwh": 240.0,
+      "carbon_intensity_basis": "average",
+      "provenance_class": "vendor_reported",
+      "uncertainty_pct": 15,
+      "impact_level": "moderate",
+      "intensity_vs_baseline": 1.12,
+      "mitigation_readiness": "planned",
+      "offsets_retired_kg_co2e": 0.0,
+      "notes": "Vendor-reported figures are capped at 0.60 confidence."
+    },
+    {
+      "method": "missing_energy_claim",
+      "duration_seconds": 42,
+      "energy_kwh": 0.200,
+      "location_carbon_intensity_g_co2e_per_kwh": 360.0,
+      "market_carbon_intensity_g_co2e_per_kwh": 240.0,
+      "carbon_intensity_basis": "average",
+      "provenance_class": "unknown",
+      "uncertainty_pct": 100,
+      "impact_level": "moderate",
+      "intensity_vs_baseline": 1.20,
+      "mitigation_readiness": "none",
+      "offsets_retired_kg_co2e": 10.0,
+      "notes": "Offsets are disclosed but do not improve the no_go recommendation."
+    }
+  ]
+}
