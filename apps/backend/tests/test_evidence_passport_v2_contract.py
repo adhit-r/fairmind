@@ -3,26 +3,24 @@
 from __future__ import annotations
 
 import base64
-from copy import deepcopy
 import hashlib
 import importlib
 import json
+from copy import deepcopy
 from pathlib import Path
 
-from jsonschema import Draft202012Validator
 import pytest
+from jsonschema import Draft202012Validator
 
 from src.domain.assurance.evaluation_v2 import (
     build_execution_envelope_v2,
     canonical_json_bytes,
     canonical_sha256,
 )
-
+from tests.evaluation_result_contract_cases import TERMINAL_RESULT_AXIS_CASES
 
 CANONICAL_NONCE = base64.urlsafe_b64encode(bytes(range(32))).decode("ascii").rstrip("=")
-ENCODED_SIGNATURE = (
-    base64.urlsafe_b64encode(bytes(range(64))).decode("ascii").rstrip("=")
-)
+ENCODED_SIGNATURE = base64.urlsafe_b64encode(bytes(range(64))).decode("ascii").rstrip("=")
 TOP_LEVEL_KEYS = {
     "schemaVersion",
     "passportId",
@@ -96,9 +94,7 @@ def _envelope() -> dict:
                 "adapterVersion": "0.3.0",
                 "resultContractVersion": "1.0.0",
                 "configuration": {"threshold": 0.5, "locale": "de-DE"},
-                "configurationHash": canonical_sha256(
-                    {"threshold": 0.5, "locale": "de-DE"}
-                ),
+                "configurationHash": canonical_sha256({"threshold": 0.5, "locale": "de-DE"}),
                 "inputRoles": ["scenario_set"],
                 "budgets": {"maxCases": 200},
                 "inputs": {
@@ -151,9 +147,7 @@ def _expected_binding() -> dict:
             "suiteExecutionId": "execution-1",
             "suiteVersionId": "suite-1",
             "manifestDigest": "e" * 64,
-            "configurationHash": canonical_sha256(
-                {"threshold": 0.5, "locale": "de-DE"}
-            ),
+            "configurationHash": canonical_sha256({"threshold": 0.5, "locale": "de-DE"}),
         },
         "lifecyclePhase": "pre_deploy",
         "executionDepth": "deep",
@@ -250,6 +244,46 @@ def test_valid_passport_normalizes_to_an_isolated_closed_copy() -> None:
     assert normalized["result"]["summary"]["caseCount"] == 200
 
 
+@pytest.mark.parametrize(
+    ("technical_status", "evidence_result_status", "expected_valid"),
+    TERMINAL_RESULT_AXIS_CASES,
+)
+def test_passport_terminal_result_axis_matrix_matches_release_authority(
+    technical_status: str,
+    evidence_result_status: str,
+    expected_valid: bool,
+) -> None:
+    """Catches domain normalization accepting a pair rejected by application/DB."""
+
+    module = _contract()
+    passport = _passport()
+    passport["result"] = {
+        "technicalStatus": technical_status,
+        "evidenceResultStatus": evidence_result_status,
+        "summary": (
+            {}
+            if technical_status == "succeeded"
+            else {"diagnostic": "Evaluator execution did not succeed."}
+        ),
+    }
+    passport["limitations"] = (
+        ["The passing result has a declared limitation."]
+        if evidence_result_status == "passed_with_limitations"
+        else []
+    )
+    passport["contentHash"] = hashlib.sha256(
+        canonical_json_bytes(_content_projection_literal(passport))
+    ).hexdigest()
+
+    if expected_valid:
+        assert module.normalize_evidence_passport_v2(passport) == passport
+    else:
+        _assert_code(
+            "invalid_result",
+            lambda: module.normalize_evidence_passport_v2(passport),
+        )
+
+
 def test_strict_parser_rejects_duplicate_names_and_returns_the_same_contract() -> None:
     module = _contract()
     payload = _passport()
@@ -266,9 +300,10 @@ def test_content_projection_and_hash_exclude_only_hash_and_signature() -> None:
     expected = _content_projection_literal(passport)
 
     assert module.evidence_passport_v2_content_projection(passport) == expected
-    assert module.evidence_passport_v2_content_hash(passport) == hashlib.sha256(
-        canonical_json_bytes(expected)
-    ).hexdigest()
+    assert (
+        module.evidence_passport_v2_content_hash(passport)
+        == hashlib.sha256(canonical_json_bytes(expected)).hexdigest()
+    )
 
     tampered = deepcopy(passport)
     tampered["contentHash"] = "9" * 64
@@ -311,9 +346,7 @@ def test_signature_projection_is_domain_separated_and_exact() -> None:
         ("signedAt", "2026-08-01T12:00:02+00:00"),
     ),
 )
-def test_every_protected_signature_field_changes_the_signing_input(
-    field: str, value: str
-) -> None:
+def test_every_protected_signature_field_changes_the_signing_input(field: str, value: str) -> None:
     module = _contract()
     passport = _passport()
     baseline = module.evidence_passport_v2_signature_bytes(passport)
@@ -325,9 +358,7 @@ def test_every_protected_signature_field_changes_the_signing_input(
 
 def test_server_derives_the_exact_closed_binding_from_the_envelope() -> None:
     module = _contract()
-    assert module.expected_execution_binding_v2(_envelope(), "execution-1") == (
-        _expected_binding()
-    )
+    assert module.expected_execution_binding_v2(_envelope(), "execution-1") == (_expected_binding())
 
 
 @pytest.mark.parametrize("failure", ["missing", "duplicate", "extra_envelope_key"])
@@ -393,7 +424,8 @@ def test_server_binding_rejects_missing_duplicate_or_nonclosed_suite_envelopes(
     ],
 )
 def test_every_evidence_content_leaf_is_hash_significant(
-    path: tuple[str, ...], replacement,
+    path: tuple[str, ...],
+    replacement,
 ) -> None:
     module = _contract()
     baseline = _passport()
@@ -415,17 +447,11 @@ def test_every_evidence_content_leaf_is_hash_significant(
     [
         lambda value: value.update({"unexpected": True}),
         lambda value: value["executionBinding"].update({"unexpected": True}),
-        lambda value: value["executionBinding"]["target"].update(
-            {"unexpected": True}
-        ),
-        lambda value: value["executionBinding"]["suite"].update(
-            {"unexpected": True}
-        ),
+        lambda value: value["executionBinding"]["target"].update({"unexpected": True}),
+        lambda value: value["executionBinding"]["suite"].update({"unexpected": True}),
         lambda value: value["evaluator"].update({"unexpected": True}),
         lambda value: value["result"].update({"rawOutput": "private completion"}),
-        lambda value: value["artifacts"][0].update(
-            {"uri": "https://example.invalid/report.json"}
-        ),
+        lambda value: value["artifacts"][0].update({"uri": "https://example.invalid/report.json"}),
         lambda value: value["signature"].update({"publicJwk": {"kty": "OKP"}}),
         lambda value: value.update({"signatures": [value["signature"]]}),
     ],
@@ -445,7 +471,9 @@ def test_contract_is_closed_at_every_boundary(mutate) -> None:
     [
         ("failed", "passed"),
         ("failed", "failed"),
+        ("failed", "pending"),
         ("timed_out", "passed_with_limitations"),
+        ("timed_out", "pending"),
         ("cancelled", "passed"),
     ],
 )
@@ -477,6 +505,21 @@ def test_successful_evaluator_may_report_a_failed_target() -> None:
             "label": "adversarial-evaluation",
         },
     }
+
+
+def test_cancelled_evaluator_may_report_pending_evidence_without_false_failure() -> None:
+    module = _contract()
+    passport = _passport()
+    passport["result"] = {
+        "technicalStatus": "cancelled",
+        "evidenceResultStatus": "pending",
+        "summary": {"diagnostic": "Evaluation cancelled before evidence completed."},
+    }
+    passport["contentHash"] = module.evidence_passport_v2_content_hash(passport)
+
+    normalized = module.normalize_evidence_passport_v2(passport)
+
+    assert normalized["result"] == passport["result"]
 
 
 @pytest.mark.parametrize("failure", ["missing_limitations", "missing_diagnostics"])
@@ -595,15 +638,11 @@ def test_signature_issuer_is_bound_to_the_evaluator() -> None:
 @pytest.mark.parametrize(
     "mutate",
     [
-        lambda value: value["result"]["summary"].update(
-            {"chainOfThought": "private reasoning"}
-        ),
+        lambda value: value["result"]["summary"].update({"chainOfThought": "private reasoning"}),
         lambda value: value["result"]["summary"].update(
             {"safeLabel": "sk-proj-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"}
         ),
-        lambda value: value["limitations"].append(
-            "Authorization: Bearer caller-controlled-value"
-        ),
+        lambda value: value["limitations"].append("Authorization: Bearer caller-controlled-value"),
     ],
 )
 def test_known_sensitive_fields_and_values_are_rejected(mutate) -> None:

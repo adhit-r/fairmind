@@ -163,13 +163,14 @@ technicalStatus = succeeded
 evidenceResultStatus = failed
 ```
 
-This is a valid and important state. Conversely, a failed, timed-out, or
-cancelled evaluator cannot report `passed`, `passed_with_limitations`, or
-`failed` target evidence. Evaluator failure must remain `error`, `unavailable`,
-`insufficient_data`, or `unknown`. No execution failure is translated into a
-passing result. A `passed_with_limitations` result must include at least one
-limitation, and a non-successful evaluator execution must include a non-empty,
-bounded diagnostic summary.
+This is a valid and important state. Conversely, a failed or timed-out
+evaluator cannot report `passed`, `passed_with_limitations`, or `failed` target
+evidence; its result must remain `error`, `unavailable`, `insufficient_data`,
+or `unknown`. A cancelled evaluator may report only `pending`, `unavailable`,
+or `unknown`. No evaluator execution failure or cancellation is translated
+into passing or failed target evidence. A `passed_with_limitations` result must
+include at least one limitation, and a non-successful evaluator execution must
+include a non-empty, bounded diagnostic summary.
 
 The Passport does not contain admission state, review state, freshness state,
 or governance verdict. Those axes are produced only by downstream workflows.

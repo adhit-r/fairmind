@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import base64
 import binascii
-from datetime import datetime, timedelta
 import re
 import secrets
-from typing import Mapping
 import uuid
+from datetime import datetime, timedelta
+from typing import Mapping
 
 from src.application.ports.evaluation_workbench import (
-    EvaluationWorkbenchUnitOfWork,
     EvaluationWorkbenchError,
+    EvaluationWorkbenchUnitOfWork,
     FrozenJsonObject,
     MutationCommand,
     MutationOutcome,
@@ -32,7 +32,6 @@ from src.application.ports.evaluation_workbench import (
     TrustPolicyBindingRecord,
 )
 from src.domain.assurance.evaluation_v2 import (
-    AssuranceContractValidationError,
     CONTRACT_VERSION,
     LAYER_VERDICT_AXES,
     LAYER_VERDICTS_SCHEMA_VERSION,
@@ -42,8 +41,9 @@ from src.domain.assurance.evaluation_v2 import (
     MAX_RUN_LIMITATIONS_BYTES,
     MAX_SUITE_LIMITATIONS_BYTES,
     MAX_SUITE_MANIFEST_BYTES,
-    PreflightBlocker,
     RUN_TRIGGERS,
+    AssuranceContractValidationError,
+    PreflightBlocker,
     build_execution_envelope_v2,
     canonical_json,
     canonical_sha256,
@@ -65,11 +65,8 @@ from src.domain.assurance.evaluation_v2 import (
     validated_manifest_inputs,
 )
 
-
 BINDING_INTEGRITY_MESSAGE = "Stored assurance bindings failed integrity verification."
-GOVERNANCE_VERDICTS = frozenset(
-    {"approved", "conditional", "review", "blocked", "insufficient"}
-)
+GOVERNANCE_VERDICTS = frozenset({"approved", "conditional", "review", "blocked", "insufficient"})
 TECHNICAL_STATUSES = frozenset(
     {
         "awaiting_evidence",
@@ -82,9 +79,7 @@ TECHNICAL_STATUSES = frozenset(
         "cancelled",
     }
 )
-TERMINAL_TECHNICAL_STATUSES = frozenset(
-    {"succeeded", "failed", "timed_out", "cancelled"}
-)
+TERMINAL_TECHNICAL_STATUSES = frozenset({"succeeded", "failed", "timed_out", "cancelled"})
 FAILURE_TECHNICAL_STATUSES = frozenset({"failed", "timed_out", "cancelled"})
 EVIDENCE_RESULTS = frozenset(
     {
@@ -135,17 +130,11 @@ EVIDENCE_RESULTS_BY_TECHNICAL_STATUS = {
     "cancelled": frozenset({"pending", "unavailable", "unknown"}),
 }
 RUN_EVIDENCE_OUTCOMES_BY_TECHNICAL_STATUS = {
-    status: (
-        outcomes | {"pending"}
-        if status in TERMINAL_TECHNICAL_STATUSES
-        else outcomes
-    )
+    status: (EVIDENCE_RESULTS if status in TERMINAL_TECHNICAL_STATUSES else outcomes)
     for status, outcomes in EVIDENCE_RESULTS_BY_TECHNICAL_STATUS.items()
 }
 _MAX_SUITE_RESULT_SUMMARY_BYTES = 64 * 1024
-_STORED_LINK_IDENTIFIER = re.compile(
-    r"^[A-Za-z0-9](?:[A-Za-z0-9_.:-]{0,94}[A-Za-z0-9])?$"
-)
+_STORED_LINK_IDENTIFIER = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9_.:-]{0,94}[A-Za-z0-9])?$")
 
 
 class EvaluationWorkbenchInputError(ValueError):
@@ -555,11 +544,7 @@ def _plain_json_value(value: object) -> object:
 
 
 def _execution_view(execution: SuiteExecutionRecord) -> dict[str, object]:
-    limitations = (
-        []
-        if execution.limitations is None
-        else _plain_json_value(execution.limitations)
-    )
+    limitations = [] if execution.limitations is None else _plain_json_value(execution.limitations)
     try:
         require_canonical_size(
             limitations,
@@ -567,9 +552,10 @@ def _execution_view(execution: SuiteExecutionRecord) -> dict[str, object]:
             code="suite_limitations_too_large",
             message="Suite limitations exceed 8 KiB.",
         )
-        if execution.failure_message is not None and len(
-            execution.failure_message.encode("utf-8")
-        ) > MAX_FAILURE_MESSAGE_BYTES:
+        if (
+            execution.failure_message is not None
+            and len(execution.failure_message.encode("utf-8")) > MAX_FAILURE_MESSAGE_BYTES
+        ):
             raise AssuranceContractValidationError(
                 "failure_message_too_large", "A failure message exceeds 2 KiB."
             )
@@ -752,11 +738,7 @@ def _parsed_utc_timestamp(value: object, *, optional: bool) -> datetime | None:
         parsed = datetime.fromisoformat(value)
     except (OverflowError, ValueError) as error:
         raise _binding_error("A stored assurance timestamp is malformed.") from error
-    if (
-        parsed.tzinfo is None
-        or parsed.utcoffset() != timedelta(0)
-        or parsed.isoformat() != value
-    ):
+    if parsed.tzinfo is None or parsed.utcoffset() != timedelta(0) or parsed.isoformat() != value:
         raise _binding_error("A stored assurance timestamp is malformed.")
     return parsed
 
@@ -867,14 +849,10 @@ def _verify_suite_evidence_projections(execution: SuiteExecutionRecord) -> None:
         raise _binding_error("A suite evidence link is only partially populated.")
     try:
         result_summary = (
-            None
-            if execution.result_summary is None
-            else execution.result_summary.to_dict()
+            None if execution.result_summary is None else execution.result_summary.to_dict()
         )
         limitations = (
-            None
-            if execution.limitations is None
-            else _plain_json_value(execution.limitations)
+            None if execution.limitations is None else _plain_json_value(execution.limitations)
         )
         if result_summary is not None:
             require_canonical_size(
@@ -907,9 +885,8 @@ def _verify_suite_evidence_projections(execution: SuiteExecutionRecord) -> None:
             raise _binding_error("An unlinked suite carries evidence projections.")
         return
 
-    if (
-        execution.admission_status in {"pending", "rejected", "trust_error"}
-        or execution.evidence_result_status == "pending"
+    if execution.admission_status in {"pending", "rejected", "trust_error"} or (
+        execution.evidence_result_status == "pending" and execution.technical_status != "cancelled"
     ):
         raise _binding_error("A linked suite is not backed by eligible evidence.")
     for identifier in link_tuple[:3]:
@@ -976,6 +953,43 @@ def _aggregate_suite_evidence_outcome(
     raise _binding_error("A run has no suite evidence outcome to aggregate.")
 
 
+def aggregate_run_result_axes(
+    executions: tuple[SuiteExecutionRecord, ...],
+    *,
+    require_linked_evidence: bool = False,
+) -> tuple[str, str]:
+    """Return exact run execution and evidence axes for all suite states."""
+
+    if not executions:
+        raise _binding_error("A run has no suite execution to aggregate.")
+    technical_states = {execution.technical_status for execution in executions}
+    if technical_states <= TERMINAL_TECHNICAL_STATUSES:
+        if require_linked_evidence and any(
+            execution.admission_status in {"pending", "rejected", "trust_error"}
+            or any(
+                value is None
+                for value in (
+                    execution.evidence_run_id,
+                    execution.passport_revision_id,
+                    execution.linked_by,
+                    execution.linked_at,
+                )
+            )
+            for execution in executions
+        ):
+            return "awaiting_evidence", "pending"
+        technical_priority = ("failed", "timed_out", "cancelled", "succeeded")
+    else:
+        technical_priority = ("running", "leased", "queued", "awaiting_evidence")
+    technical = next(
+        (status for status in technical_priority if status in technical_states),
+        None,
+    )
+    if technical is None:
+        raise _binding_error("A run has no technical status to aggregate.")
+    return technical, _aggregate_suite_evidence_outcome(executions)
+
+
 def _verify_run_state(run: RunRecord, layer_verdicts: Mapping[str, object]) -> None:
     if (
         run.technical_status not in TECHNICAL_STATUSES
@@ -1003,19 +1017,24 @@ def _verify_run_state(run: RunRecord, layer_verdicts: Mapping[str, object]) -> N
         failure_code=run.failure_code,
         failure_message=run.failure_message,
     )
-    if run.evidence_outcome != _aggregate_suite_evidence_outcome(
-        run.suite_executions
-    ):
+    raw_evidence_outcome = _aggregate_suite_evidence_outcome(run.suite_executions)
+    terminal_sibling_admission = (
+        len(run.suite_executions) > 1
+        and all(
+            execution.technical_status in TERMINAL_TECHNICAL_STATUSES
+            for execution in run.suite_executions
+        )
+        and any(execution.evidence_run_id is None for execution in run.suite_executions)
+        and (run.technical_status, run.evidence_outcome) == ("awaiting_evidence", "pending")
+    )
+    if not terminal_sibling_admission and run.evidence_outcome != raw_evidence_outcome:
         raise _binding_error("The run evidence outcome is not the exact suite aggregate.")
     if run.technical_status == "succeeded" and any(
-        execution.technical_status != "succeeded"
-        for execution in run.suite_executions
+        execution.technical_status != "succeeded" for execution in run.suite_executions
     ):
         raise _binding_error("A succeeded run has a non-succeeded suite execution.")
     layer_values = tuple(
-        verdict
-        for axis in LAYER_VERDICT_AXES
-        for verdict in layer_verdicts[axis].values()
+        verdict for axis in LAYER_VERDICT_AXES for verdict in layer_verdicts[axis].values()
     )
     if run.verdict_version == 0 and (
         run.overall_verdict not in {"review", "insufficient"}
@@ -1084,10 +1103,7 @@ def _verify_run_record_against_verified_graph(
         if (
             run.layer_verdicts_schema_version != LAYER_VERDICTS_SCHEMA_VERSION
             or set(layer_verdicts) != set(LAYER_VERDICT_AXES)
-            or any(
-                not isinstance(layer_verdicts[axis], dict)
-                for axis in LAYER_VERDICT_AXES
-            )
+            or any(not isinstance(layer_verdicts[axis], dict) for axis in LAYER_VERDICT_AXES)
             or set(layer_verdicts["suites"]) != set(execution_ids)
             or any(
                 not isinstance(key, str)
@@ -1146,6 +1162,12 @@ def _verify_run_record(run: RunRecord, graph: PlanGraphRecord) -> None:
     except (AssuranceContractValidationError, TypeError, ValueError) as error:
         raise _binding_error("The stored plan graph violates its contract.") from error
     _verify_run_record_against_verified_graph(run, graph)
+
+
+def verify_run_record_binding(run: RunRecord, graph: PlanGraphRecord) -> None:
+    """Validate one persisted run against its complete immutable plan graph."""
+
+    _verify_run_record(run, graph)
 
 
 class EvaluationWorkbenchService:
@@ -1829,9 +1851,7 @@ class EvaluationWorkbenchService:
             except AssuranceContractValidationError as error:
                 raise _translate(error) from error
             layer_verdicts = {
-                "suites": {
-                    execution_id: "insufficient" for execution_id in execution_ids
-                },
+                "suites": {execution_id: "insufficient" for execution_id in execution_ids},
                 "modalities": {},
                 "components": {},
                 "riskDimensions": {},

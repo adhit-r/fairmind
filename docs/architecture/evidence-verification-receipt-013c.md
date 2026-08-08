@@ -1,6 +1,6 @@
 # Evidence verification receipt 013c
 
-Status: internal migration authority; no admission application path
+Status: internal receipt and admission authority; no exposed product path
 
 ## Purpose
 
@@ -143,27 +143,33 @@ Migration tests exercise the real PostgreSQL and SQLite SQL, and the application
 SQLite harness proves the structural ORM table is replaced by the reviewed
 fixture before V2 workbench tests run.
 
-## Task 12B remains absent
+## Task 12B internal application kernel
 
-There is no `admit_verified_passport_v2` service or trusted resolver. Issuer
-source, suite, and target restriction enforcement belongs in that resolver,
-under the organization transaction lock with fresh policy, issuer, and key
-state. Migration 013c does not authorize an issuer merely because a receipt row
-can satisfy database constraints.
+Task 12B adds a default-off application service and trusted resolver around the
+013c database authority. The resolver reconstructs the exact locked plan, run,
+envelope, target, suite, trust-policy, issuer, and signing-key state. It enforces
+issuer source, suite, and target restrictions under the organization
+transaction lock with a fresh database clock. Migration 013c still does not
+authorize an issuer merely because a receipt row could satisfy database
+constraints.
 
-Task 12B must still reconstruct trusted plan/run/envelope state, calculate
-effective expiry, perform real Ed25519 verification, and atomically persist the
-receipt and admission graph through the existing workbench unit of work and
-idempotency/audit boundary.
+The application service normalizes the Passport, resolves authority before and
+after real Ed25519 verification, calculates the effective expiry, and requests
+one atomic persistence of the receipt-first six-record evidence graph through
+the existing workbench transaction, idempotency, and audit boundary. The
+database then forces its deferred relational checks before the transaction can
+commit. The detailed application contract and result-axis rules are recorded in
+[`verified-evidence-admission-task12b.md`](./verified-evidence-admission-task12b.md).
 
-`previous_revision_hash`, the evidence parent `evidence_id`, and evidence and
-revision row `created_at` values are metadata, not Task 12A assurance facts.
-Task 12B must define and explicitly accept their persistence semantics before
-public enablement. Likewise, normalized artifact-child reconciliation,
-retrieval, quarantine, and storage are a P1 blocker before child rows may
+For an admitted first revision, `previous_revision_hash` and the evidence
+parent `evidence_id` remain null, and the evidence/revision creation times equal
+the database-derived verification time. These values are persistence metadata,
+not independent assurance facts. Normalized artifact-child reconciliation,
+retrieval, quarantine, and storage remain a P1 blocker before child rows may
 support any assurance claim; until then the signed snapshot descriptors are the
 only authoritative artifact metadata.
 
 There is no route, UI, external adapter trust ceremony, unsigned-import path,
 human review, governance decision, worker execution, certification, compliance,
-or enforcement capability in 013c. V2 remains default-off and unwired.
+or enforcement capability in 013c or Task 12B. V2 remains default-off and
+unwired from routes and composition.

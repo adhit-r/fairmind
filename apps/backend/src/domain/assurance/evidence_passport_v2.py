@@ -9,14 +9,14 @@ from __future__ import annotations
 
 import base64
 import binascii
-from collections.abc import Mapping
-from datetime import datetime, timedelta
-from functools import lru_cache
 import hashlib
 import hmac
 import json
-from pathlib import Path
 import re
+from collections.abc import Mapping
+from datetime import datetime, timedelta
+from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 from jsonschema import Draft202012Validator
@@ -31,7 +31,6 @@ from src.domain.assurance.evaluation_v2 import (
     validate_public_safe_string,
     validate_public_safe_values,
 )
-
 
 SCHEMA_VERSION = "2.0.0"
 PASSPORT_REVISION = 1
@@ -78,9 +77,8 @@ _SUCCESS_EVIDENCE_RESULTS = frozenset(
         "unknown",
     }
 )
-_NON_SUCCESS_EVIDENCE_RESULTS = frozenset(
-    {"error", "unavailable", "insufficient_data", "unknown"}
-)
+_NON_SUCCESS_EVIDENCE_RESULTS = frozenset({"error", "unavailable", "insufficient_data", "unknown"})
+_CANCELLED_EVIDENCE_RESULTS = frozenset({"pending", "unavailable", "unknown"})
 
 
 class EvidencePassportV2ValidationError(ValueError):
@@ -217,9 +215,7 @@ def evidence_passport_v2_content_projection(
             "Evidence Passport V2 must be an object.",
         )
     projection = {
-        key: value
-        for key, value in passport.items()
-        if key not in {"contentHash", "signature"}
+        key: value for key, value in passport.items() if key not in {"contentHash", "signature"}
     }
     return _canonical_isolated_mapping(
         projection,
@@ -343,8 +339,7 @@ def expected_execution_binding_v2(
     matches = [
         suite
         for suite in suites
-        if isinstance(suite, dict)
-        and suite.get("suiteExecutionId") == suite_execution_id
+        if isinstance(suite, dict) and suite.get("suiteExecutionId") == suite_execution_id
     ]
     if len(matches) != 1:
         raise _error(
@@ -396,11 +391,7 @@ def _canonical_utc_timestamp(value: Any) -> datetime:
             "invalid_timestamp",
             "Evidence timestamps must be canonical UTC.",
         ) from error
-    if (
-        parsed.tzinfo is None
-        or parsed.utcoffset() != timedelta(0)
-        or parsed.isoformat() != value
-    ):
+    if parsed.tzinfo is None or parsed.utcoffset() != timedelta(0) or parsed.isoformat() != value:
         raise _error("invalid_timestamp", "Evidence timestamps must be canonical UTC.")
     return parsed
 
@@ -426,16 +417,15 @@ def _validate_signature_value(value: Any) -> None:
         )
 
 
-def _validate_result(
-    result: Mapping[str, Any], limitations: list[Any] | tuple[Any, ...]
-) -> None:
+def _validate_result(result: Mapping[str, Any], limitations: list[Any] | tuple[Any, ...]) -> None:
     technical = result["technicalStatus"]
     evidence = result["evidenceResultStatus"]
-    allowed = (
-        _SUCCESS_EVIDENCE_RESULTS
-        if technical == "succeeded"
-        else _NON_SUCCESS_EVIDENCE_RESULTS
-    )
+    if technical == "succeeded":
+        allowed = _SUCCESS_EVIDENCE_RESULTS
+    elif technical == "cancelled":
+        allowed = _CANCELLED_EVIDENCE_RESULTS
+    else:
+        allowed = _NON_SUCCESS_EVIDENCE_RESULTS
     if evidence not in allowed:
         raise _error(
             "invalid_result",
