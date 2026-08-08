@@ -1,9 +1,9 @@
 """Idempotent, auditable evaluator-registration catalog orchestration.
 
-This is a default-off application contract. It has no public catalog route,
-but gated verified-evidence admission consumes only an installed, approved,
-same-transaction locked persistent registration. The catalog itself makes no
-provider-quality, worker-readiness, or outcome claim.
+This is a default-off application contract. Its independently gated,
+narrow-permission route and verified-evidence admission consume only an
+installed, approved, same-transaction locked persistent registration. The
+catalog itself makes no provider-quality, worker-readiness, or outcome claim.
 """
 
 from __future__ import annotations
@@ -46,6 +46,9 @@ _TRANSITION_AUDIT_ACTIONS = {
     "reject": "evaluation_v2.evaluator_catalog.rejected",
     "revoke": "evaluation_v2.evaluator_catalog.revoked",
 }
+DEFAULT_CATALOG_LIST_LIMIT = 100
+MAX_CATALOG_LIST_LIMIT = 100
+MAX_CATALOG_LIST_OFFSET = 10_000
 
 
 class EvaluatorCatalogError(EvaluationWorkbenchError):
@@ -444,17 +447,48 @@ class EvaluatorCatalogService:
         )
         return None if record is None else _record_view(record)
 
-    def list(self, *, organization_id: str) -> list[dict[str, object]]:
+    def list(
+        self,
+        *,
+        organization_id: str,
+        limit: int = DEFAULT_CATALOG_LIST_LIMIT,
+        offset: int = 0,
+    ) -> dict[str, object]:
         self._validate_identifiers(organization_id)
-        return [
-            _record_view(record)
-            for record in self._repository.list_registrations(organization_id=organization_id)
-        ]
+        if (
+            isinstance(limit, bool)
+            or not isinstance(limit, int)
+            or limit < 1
+            or limit > MAX_CATALOG_LIST_LIMIT
+            or isinstance(offset, bool)
+            or not isinstance(offset, int)
+            or offset < 0
+            or offset > MAX_CATALOG_LIST_OFFSET
+        ):
+            raise _error(
+                "evaluator_registration_request_invalid",
+                "The evaluator registration request is invalid.",
+                status_code=422,
+            )
+        records = self._repository.list_registrations(
+            organization_id=organization_id,
+            limit=limit + 1,
+            offset=offset,
+        )
+        return {
+            "items": [_record_view(record) for record in records[:limit]],
+            "limit": limit,
+            "offset": offset,
+            "hasMore": len(records) > limit,
+        }
 
 
 __all__ = [
     "EvaluatorCatalogError",
     "EvaluatorCatalogService",
+    "DEFAULT_CATALOG_LIST_LIMIT",
+    "MAX_CATALOG_LIST_LIMIT",
+    "MAX_CATALOG_LIST_OFFSET",
     "evaluator_binding_hash",
     "evaluator_binding_projection",
 ]

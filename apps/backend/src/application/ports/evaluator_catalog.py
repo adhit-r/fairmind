@@ -1,6 +1,7 @@
 """Default-off persistence boundary for an evaluator registration catalog.
 
-This port deliberately has no public catalog route. Gated verified-evidence
+This port is exposed only through a default-off,
+``evaluation:catalog:admin``-permission catalog route. Gated verified-evidence
 admission authorizes a record only after the installed PostgreSQL catalog
 enforces its exact issuer/signing-key binding and locks the durable approval in
 the same transaction as receipt persistence.
@@ -66,6 +67,8 @@ class EvaluatorCatalogRepository(Protocol):
         self,
         *,
         organization_id: str,
+        limit: int,
+        offset: int,
     ) -> list[EvaluatorCatalogRecord]: ...
 
     def signing_authority_is_live(

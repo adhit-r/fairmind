@@ -420,6 +420,16 @@ if settings.assurance_v2_enabled:
         )
     else:
         logger.info("Verified Evidence Passport review route is disabled")
+    if settings.assurance_v2_evaluator_catalog_enabled:
+        _include_router(
+            "api.routes.evaluator_catalog",
+            prefix="/api/v1/ai-governance",
+            tags=["evaluation-workbench-v2-evaluator-catalog"],
+            attr="evaluator_catalog_router",
+            required=True,
+        )
+    else:
+        logger.info("Evaluator catalog administration route is disabled")
 else:
     logger.info("Assurance-contract v2 routes are disabled")
 _include_router("api.routes.environmental", tags=["environmental"], required=False)

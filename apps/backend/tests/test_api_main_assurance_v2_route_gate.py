@@ -21,6 +21,9 @@ VERIFIED_EVIDENCE_REVIEW_PATH = (
     "/suite-executions/{suite_execution_id}/evidence-admissions/{admission_id}"
     "/passport-revisions/{passport_revision_id}/review"
 )
+EVALUATOR_CATALOG_PATH = (
+    "/api/v1/ai-governance/organizations/{org_id}" "/evaluation-v2/evaluator-catalog/registrations"
+)
 LEGACY_PLAN_PATH = (
     "/api/v1/ai-governance/organizations/{org_id}/systems/{system_id}" "/evaluation-plans"
 )
@@ -41,16 +44,19 @@ def test_assurance_v2_routes_are_mounted_only_when_enabled() -> None:
     original = settings.assurance_v2_enabled
     original_evidence_submit = settings.assurance_v2_evidence_submit_enabled
     original_evidence_review = settings.assurance_v2_evidence_review_enabled
+    original_evaluator_catalog = getattr(settings, "assurance_v2_evaluator_catalog_enabled", False)
     try:
         settings.assurance_v2_enabled = False
         settings.assurance_v2_evidence_submit_enabled = False
         settings.assurance_v2_evidence_review_enabled = False
+        settings.assurance_v2_evaluator_catalog_enabled = False
         importlib.reload(main_module)
         disabled_paths = _route_paths()
 
         assert _assurance_v2_paths(disabled_paths) == set()
         assert VERIFIED_EVIDENCE_PATH not in disabled_paths
         assert VERIFIED_EVIDENCE_REVIEW_PATH not in disabled_paths
+        assert EVALUATOR_CATALOG_PATH not in disabled_paths
         assert LEGACY_PLAN_PATH in disabled_paths
         assert LEGACY_RUN_PATH in disabled_paths
 
@@ -63,6 +69,7 @@ def test_assurance_v2_routes_are_mounted_only_when_enabled() -> None:
         assert V2_PLAN_PATH in _assurance_v2_paths(enabled_paths_without_evidence_submit)
         assert VERIFIED_EVIDENCE_PATH not in enabled_paths_without_evidence_submit
         assert VERIFIED_EVIDENCE_REVIEW_PATH not in enabled_paths_without_evidence_submit
+        assert EVALUATOR_CATALOG_PATH not in enabled_paths_without_evidence_submit
         assert LEGACY_PLAN_PATH in enabled_paths_without_evidence_submit
         assert LEGACY_RUN_PATH in enabled_paths_without_evidence_submit
 
@@ -71,6 +78,7 @@ def test_assurance_v2_routes_are_mounted_only_when_enabled() -> None:
         enabled_paths = _route_paths()
         assert VERIFIED_EVIDENCE_PATH in enabled_paths
         assert VERIFIED_EVIDENCE_REVIEW_PATH not in enabled_paths
+        assert EVALUATOR_CATALOG_PATH not in enabled_paths
 
         settings.assurance_v2_evidence_submit_enabled = False
         settings.assurance_v2_evidence_review_enabled = True
@@ -78,8 +86,15 @@ def test_assurance_v2_routes_are_mounted_only_when_enabled() -> None:
         enabled_paths_without_evidence_submit = _route_paths()
         assert VERIFIED_EVIDENCE_PATH not in enabled_paths_without_evidence_submit
         assert VERIFIED_EVIDENCE_REVIEW_PATH in enabled_paths_without_evidence_submit
+
+        settings.assurance_v2_evidence_review_enabled = False
+        settings.assurance_v2_evaluator_catalog_enabled = True
+        importlib.reload(main_module)
+        enabled_paths_with_catalog = _route_paths()
+        assert EVALUATOR_CATALOG_PATH in enabled_paths_with_catalog
     finally:
         settings.assurance_v2_enabled = original
         settings.assurance_v2_evidence_submit_enabled = original_evidence_submit
         settings.assurance_v2_evidence_review_enabled = original_evidence_review
+        settings.assurance_v2_evaluator_catalog_enabled = original_evaluator_catalog
         importlib.reload(main_module)

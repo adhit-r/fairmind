@@ -54,6 +54,10 @@ class Settings(BaseSettings):
     # Four-eyes evidence review remains separately disabled until its
     # persistence, authorization, and release-gate controls are validated.
     assurance_v2_evidence_review_enabled: bool = False
+    # Evaluator registration administration is inert until the dedicated
+    # release gate, narrow organization permission, and audited ceremony are
+    # deliberately enabled together.
+    assurance_v2_evaluator_catalog_enabled: bool = False
     assurance_migration_schema: Optional[str] = None
     
     # Neon Auth + Data API

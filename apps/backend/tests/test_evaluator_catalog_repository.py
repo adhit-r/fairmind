@@ -95,9 +95,9 @@ def catalog_session():
         engine.dispose()
 
 
-def _binding() -> EvaluatorIdentityBinding:
+def _binding(*, evaluator_id: str = "inspect-agent-safety") -> EvaluatorIdentityBinding:
     return EvaluatorIdentityBinding(
-        evaluator_id="inspect-agent-safety",
+        evaluator_id=evaluator_id,
         source_type="external_provider",
         adapter_name="inspect",
         adapter_version="0.3.0",
@@ -222,3 +222,40 @@ def test_catalog_repository_is_tenant_scoped_hash_checked_and_cas_safe(catalog_s
     )
     with pytest.raises(Exception, match="binding hash is invalid"):
         repository.insert_registration(invalid)
+
+
+def test_catalog_repository_uses_stable_bounded_offset_pages(catalog_session) -> None:
+    repository = SqlAlchemyEvaluatorCatalogRepository(catalog_session)
+    registration_ids = (
+        "44444444-4444-4444-8444-444444444444",
+        "22222222-2222-4222-8222-222222222222",
+        "33333333-3333-4333-8333-333333333333",
+    )
+    for ordinal, registration_id in enumerate(registration_ids):
+        binding = _binding(evaluator_id=f"inspect-page-{ordinal}")
+        repository.insert_registration(
+            EvaluatorCatalogRecord(
+                organization_id="org-a",
+                registration=EvaluatorRegistrationCeremony.submit(
+                    registration_id=registration_id,
+                    binding=binding,
+                    submitted_by="submitter-a",
+                    submitted_at=NOW,
+                ),
+                binding_hash=evaluator_binding_hash(binding),
+            )
+        )
+
+    first_page = repository.list_registrations(
+        organization_id="org-a",
+        limit=2,
+        offset=0,
+    )
+    second_page = repository.list_registrations(
+        organization_id="org-a",
+        limit=2,
+        offset=2,
+    )
+
+    assert [record.registration_id for record in first_page] == sorted(registration_ids)[:2]
+    assert [record.registration_id for record in second_page] == sorted(registration_ids)[2:]

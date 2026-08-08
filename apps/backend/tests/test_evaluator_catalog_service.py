@@ -38,6 +38,23 @@ class _CatalogRepository:
         del lock
         return self.records.get((organization_id, registration_id))
 
+    def list_registrations(
+        self,
+        *,
+        organization_id: str,
+        limit: int,
+        offset: int,
+    ):
+        records = sorted(
+            (
+                record
+                for (org_id, _registration_id), record in self.records.items()
+                if org_id == organization_id
+            ),
+            key=lambda record: record.registration_id,
+        )
+        return records[offset : offset + limit]
+
     def signing_authority_is_live(
         self,
         *,
@@ -194,6 +211,18 @@ def test_submission_fails_closed_when_issuer_key_is_not_live_for_that_org() -> N
         )
 
     assert caught.value.code == "evaluator_registration_signing_authority_untrusted"
+
+
+def test_catalog_list_validates_explicit_pagination_bounds() -> None:
+    service, _unit_of_work = _service()
+
+    page = service.list(organization_id="org-a", limit=2, offset=0)
+    assert page == {"items": [], "limit": 2, "offset": 0, "hasMore": False}
+
+    for limit, offset in ((0, 0), (101, 0), (True, 0), (1, -1), (1, 10_001)):
+        with pytest.raises(EvaluatorCatalogError) as caught:
+            service.list(organization_id="org-a", limit=limit, offset=offset)
+        assert caught.value.code == "evaluator_registration_request_invalid"
 
 
 def test_lifecycle_audit_actions_use_explicit_past_tense_names() -> None:

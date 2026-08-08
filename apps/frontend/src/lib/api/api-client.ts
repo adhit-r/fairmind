@@ -166,11 +166,32 @@ const workflowErrorCodeSchema = z.enum([
   'evaluation_persistence_failed',
 ])
 
+const evaluatorCatalogErrorCodeSchema = z.enum([
+  'assurance_feature_disabled',
+  'evaluation_catalog_admin_forbidden',
+  'evaluator_registration_not_found',
+  'evaluator_registration_transition_conflict',
+  'evaluator_registration_transition_invalid',
+  'evaluator_registration_four_eyes_required',
+  'evaluator_registration_invalid',
+  'evaluator_registration_request_invalid',
+  'evaluator_registration_exists',
+  'evaluator_registration_signing_authority_untrusted',
+  'idempotency_conflict',
+])
+
 const workflowErrorEnvelopeSchema = z.strictObject({
   detail: z.strictObject({
     code: workflowErrorCodeSchema,
     message: z.string().min(1),
     nextAction: z.string().min(1),
+  }),
+})
+
+const evaluatorCatalogErrorEnvelopeSchema = z.strictObject({
+  detail: z.strictObject({
+    code: evaluatorCatalogErrorCodeSchema,
+    message: z.string().min(1),
   }),
 })
 
@@ -187,13 +208,15 @@ function decodeFailure(
     : {}
   const parsedWorkflow = workflowErrorEnvelopeSchema.safeParse(payload)
   const workflowDetail = parsedWorkflow.success ? parsedWorkflow.data.detail : undefined
+  const parsedEvaluatorCatalog = evaluatorCatalogErrorEnvelopeSchema.safeParse(payload)
+  const evaluatorCatalogDetail = parsedEvaluatorCatalog.success ? parsedEvaluatorCatalog.data.detail : undefined
   const untrustedDetail = payloadRecord.detail && typeof payloadRecord.detail === 'object' && !Array.isArray(payloadRecord.detail)
     ? payloadRecord.detail as Record<string, unknown>
     : undefined
-  const workflowMessage = stringValue(workflowDetail?.message)
+  const knownMessage = stringValue(workflowDetail?.message) || stringValue(evaluatorCatalogDetail?.message)
   const legacyDetail = stringValue(payloadRecord.detail)
   const untrustedMessage = stringValue(untrustedDetail?.message)
-  const message = workflowMessage
+  const message = knownMessage
     || legacyDetail
     || untrustedMessage
     || stringValue(payloadRecord.error)
@@ -206,8 +229,9 @@ function decodeFailure(
     apiError: {
       ...classified,
       message,
-      detail: workflowMessage || legacyDetail || untrustedMessage || message,
+      detail: knownMessage || legacyDetail || untrustedMessage || message,
       ...(workflowDetail ? { code: workflowDetail.code, nextAction: workflowDetail.nextAction } : {}),
+      ...(evaluatorCatalogDetail ? { code: evaluatorCatalogDetail.code } : {}),
     },
   }
 }

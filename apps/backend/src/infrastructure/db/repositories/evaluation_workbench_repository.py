@@ -3090,13 +3090,21 @@ class SqlAlchemyEvaluatorCatalogRepository:
         row = self.db.execute(statement).mappings().one_or_none()
         return None if row is None else self._record_from_row(row)
 
-    def list_registrations(self, *, organization_id: str) -> list[EvaluatorCatalogRecord]:
+    def list_registrations(
+        self,
+        *,
+        organization_id: str,
+        limit: int,
+        offset: int,
+    ) -> list[EvaluatorCatalogRecord]:
         table = GovernanceEvaluatorRegistration.__table__
         rows = (
             self.db.execute(
                 select(table)
                 .where(table.c.org_id == organization_id)
                 .order_by(table.c.submitted_at, table.c.id)
+                .limit(limit)
+                .offset(offset)
             )
             .mappings()
             .all()

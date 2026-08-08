@@ -195,3 +195,63 @@ test('preserves an explicitly supplied legacy organization query without replaci
 
   assert.deepEqual(urls, ['https://fairmind.test/api/v1/core/models?org_id=legacy-query-org'])
 })
+
+test('preserves the catalog feature-disabled code from the real API error envelope', async () => {
+  installBrowser()
+  const client = new ApiClient('https://fairmind.test')
+  globalThis.fetch = (async () => response(404, {
+    detail: {
+      code: 'assurance_feature_disabled',
+      message: 'Evaluator catalog administration is not enabled.',
+    },
+  })) as typeof fetch
+
+  const result = await client.get(
+    '/api/v1/ai-governance/organizations/org-1/evaluation-v2/evaluator-catalog/registrations',
+    { enableRetry: false },
+  )
+
+  assert.equal(result.success, false)
+  assert.equal(result.apiError?.status, 404)
+  assert.equal(result.apiError?.code, 'assurance_feature_disabled')
+  assert.equal(result.error, 'Evaluator catalog administration is not enabled.')
+})
+
+test('preserves the exact catalog permission code from the real API error envelope', async () => {
+  installBrowser()
+  const client = new ApiClient('https://fairmind.test')
+  globalThis.fetch = (async () => response(403, {
+    detail: {
+      code: 'evaluation_catalog_admin_forbidden',
+      message: 'The evaluation:catalog:admin permission is required.',
+    },
+  })) as typeof fetch
+
+  const result = await client.get(
+    '/api/v1/ai-governance/organizations/org-1/evaluation-v2/evaluator-catalog/registrations',
+    { enableRetry: false },
+  )
+
+  assert.equal(result.success, false)
+  assert.equal(result.apiError?.status, 403)
+  assert.equal(result.apiError?.code, 'evaluation_catalog_admin_forbidden')
+  assert.equal(result.error, 'The evaluation:catalog:admin permission is required.')
+})
+
+test('does not treat a workflow code without nextAction as a decoded workflow envelope', async () => {
+  installBrowser()
+  const client = new ApiClient('https://fairmind.test')
+  globalThis.fetch = (async () => response(409, {
+    detail: {
+      code: 'plan_archived',
+      message: 'This plan is archived.',
+    },
+  })) as typeof fetch
+
+  const result = await client.get('/api/v1/ai-governance/workflow', { enableRetry: false })
+
+  assert.equal(result.success, false)
+  assert.equal(result.error, 'This plan is archived.')
+  assert.equal(result.apiError?.code, undefined)
+  assert.equal(result.apiError?.nextAction, undefined)
+})

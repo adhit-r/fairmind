@@ -204,6 +204,8 @@ export const API_ENDPOINTS = {
       `/api/v1/ai-governance/organizations/${orgId}/systems/${systemId}/evaluation-v2/runs`,
     evaluationV2Run: (orgId: string, systemId: string, runId: string) =>
       `/api/v1/ai-governance/organizations/${orgId}/systems/${systemId}/evaluation-v2/runs/${runId}`,
+    evaluatorCatalogRegistrations: (orgId: string, { limit, offset }: { limit: number; offset: number }) =>
+      `/api/v1/ai-governance/organizations/${orgId}/evaluation-v2/evaluator-catalog/registrations?limit=${limit}&offset=${offset}`,
     evidenceMappings: (orgId: string, evidenceId: string) =>
       `/api/v1/ai-governance/organizations/${orgId}/evidence/${evidenceId}/control-mappings`,
     reviewEvidenceMapping: (orgId: string, mappingId: string) =>

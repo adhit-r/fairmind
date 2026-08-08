@@ -39,6 +39,9 @@ import { EvidenceTagFilter } from './components/EvidenceTagFilter'
 import { EvidenceUploader } from './components/EvidenceUploader'
 import { EvidenceDetailDrawer } from './components/EvidenceDetailDrawer'
 import { EvaluationRunList } from './components/EvaluationRunList'
+import { EvaluatorRegistrationCatalogSection } from '@/components/evaluations/EvaluatorRegistrationCatalogPanel'
+
+const EVALUATOR_CATALOG_UI_ENABLED = process.env.NEXT_PUBLIC_ASSURANCE_V2_EVALUATOR_CATALOG_UI_ENABLED === 'true'
 
 function formatDate(ts: string) {
   if (!ts) return '—'
@@ -144,6 +147,7 @@ export default function EvidencePage() {
   const canReview = selectedOrg?.role === 'admin'
     || selectedOrg?.role === 'owner'
     || selectedOrg?.permissions?.includes('model:write') === true
+  const canViewEvaluatorCatalog = selectedOrg?.permissions?.includes('evaluation:catalog:admin') === true
   const {
     data,
     summary,
@@ -395,17 +399,25 @@ export default function EvidencePage() {
       ) : null}
 
       {activeView === 'evaluations' ? (
-        <EvaluationRunList
-          runs={evaluationState.runs}
-          controls={assessmentState.controls}
-          loading={evaluationState.loading || assignments.loading || assessmentState.loading}
-          error={evaluationState.error || assignments.error || assessmentState.error}
-          canReview={canReview}
-          onReview={mappingReview.reviewMapping}
-          onRefresh={async () => {
-            await Promise.all([evaluationState.refresh(), assignments.refresh(), assessmentState.refresh()])
-          }}
-        />
+        <div className="space-y-5">
+          {EVALUATOR_CATALOG_UI_ENABLED ? (
+            <EvaluatorRegistrationCatalogSection
+              organizationId={selectedOrg?.id}
+              authorized={canViewEvaluatorCatalog}
+            />
+          ) : null}
+          <EvaluationRunList
+            runs={evaluationState.runs}
+            controls={assessmentState.controls}
+            loading={evaluationState.loading || assignments.loading || assessmentState.loading}
+            error={evaluationState.error || assignments.error || assessmentState.error}
+            canReview={canReview}
+            onReview={mappingReview.reviewMapping}
+            onRefresh={async () => {
+              await Promise.all([evaluationState.refresh(), assignments.refresh(), assessmentState.refresh()])
+            }}
+          />
+        </div>
       ) : null}
 
       {/* Main content: sidebar + list */}
