@@ -12,6 +12,11 @@ import pytest
 from src.application.services.evaluation_workbench_service import (
     EvaluationWorkbenchError,
     EvaluationWorkbenchService,
+    _execution_view,
+)
+from src.application.ports.evaluation_workbench import (
+    EvidenceTrustMetadataRecord,
+    SuiteExecutionRecord,
 )
 import src.domain.assurance.evaluation_v2 as evaluation_v2_module
 from src.domain.assurance.evaluation_v2 import (
@@ -152,6 +157,57 @@ def test_plan_service_rejects_wrong_contract_version_before_repository() -> None
         )
     assert caught.value.code == "invalid_contract_version"
     assert repository.plan_payload is None
+
+
+def test_suite_execution_projection_keeps_authority_metadata_scoped_and_explicit() -> None:
+    execution = SuiteExecutionRecord(
+        id="suite-execution-1",
+        suite_version_id="suite-version-1",
+        owner_scope="org-1",
+        ordinal=0,
+        technical_status="succeeded",
+        evidence_result_status="passed",
+        admission_status="superseded",
+        review_status="accepted",
+        freshness_status="superseded",
+        evidence_run_id="evidence-run-1",
+        passport_revision_id="passport-revision-1",
+        linked_by="operator-1",
+        linked_at="2026-08-09T00:00:00+00:00",
+        result_summary=None,
+        limitations=(),
+        failure_code=None,
+        failure_message=None,
+        started_at="2026-08-09T00:00:00+00:00",
+        completed_at="2026-08-09T00:00:00+00:00",
+        created_at="2026-08-09T00:00:00+00:00",
+        updated_at="2026-08-09T00:00:00+00:00",
+        evidence_trust=EvidenceTrustMetadataRecord(
+            source_type="external_provider",
+            issuer_key="issuer:assurance-lab",
+            signing_key_id="key-2026-08",
+            signer_key_id="key-2026-08",
+            signer_algorithm="Ed25519",
+            effective_expires_at="2026-08-30T00:00:00+00:00",
+            reviewed_by="reviewer-1",
+            reviewed_at="2026-08-09T01:00:00+00:00",
+            admission_reasons=("newer passport revision recorded",),
+            signing_key_revocation_reason="key rotation",
+        ),
+    )
+
+    assert _execution_view(execution)["evidenceTrust"] == {
+        "sourceType": "external_provider",
+        "issuerKey": "issuer:assurance-lab",
+        "signingKeyId": "key-2026-08",
+        "signerKeyId": "key-2026-08",
+        "signerAlgorithm": "Ed25519",
+        "effectiveExpiresAt": "2026-08-30T00:00:00+00:00",
+        "reviewedBy": "reviewer-1",
+        "reviewedAt": "2026-08-09T01:00:00+00:00",
+        "admissionReasons": ["newer passport revision recorded"],
+        "signingKeyRevocationReason": "key rotation",
+    }
 
 
 def test_preflight_success_has_no_blockers() -> None:

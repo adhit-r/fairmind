@@ -112,20 +112,28 @@ export default function EvaluationRunDetailPage({ params }: PageProps) {
   const { selectedSystem, loading: systemLoading } = useSystemContext()
   const realSystem = selectedSystem.metadata?.source === 'fallback' ? undefined : selectedSystem
   const evaluations = useEvaluationRuns(selectedOrg?.id, realSystem?.id)
-  const [run, setRun] = useState<EvaluationRun | null>(null)
+  const scopeKey = [selectedOrg?.id ?? '', realSystem?.id ?? '', testId].join(':')
+  const [runState, setRunState] = useState<{ scopeKey: string; run: EvaluationRun | null }>({
+    scopeKey,
+    run: null,
+  })
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState<Error | null>(null)
 
+  // Mask a previous organization's/system's run synchronously on route or
+  // scope changes; the fetch effect below cannot provide that guarantee.
+  const run = runState.scopeKey === scopeKey ? runState.run : null
+
   useEffect(() => {
     let current = true
-    setRun(null)
+    setRunState({ scopeKey, run: null })
     setDetailError(null)
     if (!selectedOrg?.id || !realSystem?.id) return () => { current = false }
 
     setDetailLoading(true)
     void evaluations.getRun(testId)
       .then((result) => {
-        if (current) setRun(result)
+        if (current) setRunState({ scopeKey, run: result })
       })
       .catch((reason) => {
         if (!current || reason instanceof StaleEvaluationResultError) return
@@ -135,7 +143,7 @@ export default function EvaluationRunDetailPage({ params }: PageProps) {
         if (current) setDetailLoading(false)
       })
     return () => { current = false }
-  }, [evaluations.getRun, realSystem?.id, selectedOrg?.id, testId])
+  }, [evaluations.getRun, realSystem?.id, scopeKey, selectedOrg?.id, testId])
 
   const plan = useMemo(
     () => evaluations.plans.find((candidate) => candidate.id === run?.planId),

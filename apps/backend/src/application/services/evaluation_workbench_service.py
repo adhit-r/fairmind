@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from typing import Mapping
 
 from src.application.ports.evaluation_workbench import (
+    EvidenceTrustMetadataRecord,
     EvaluationWorkbenchError,
     EvaluationWorkbenchUnitOfWork,
     FrozenJsonObject,
@@ -543,6 +544,27 @@ def _plain_json_value(value: object) -> object:
     return FrozenJsonObject.from_mapping({"value": value}).to_dict()["value"]
 
 
+def _evidence_trust_view(
+    metadata: EvidenceTrustMetadataRecord | None,
+) -> dict[str, object] | None:
+    if metadata is None:
+        return None
+    return {
+        "sourceType": metadata.source_type,
+        "issuerKey": metadata.issuer_key,
+        "signingKeyId": metadata.signing_key_id,
+        "signerKeyId": metadata.signer_key_id,
+        "signerAlgorithm": metadata.signer_algorithm,
+        "effectiveExpiresAt": metadata.effective_expires_at,
+        "reviewedBy": metadata.reviewed_by,
+        "reviewedAt": metadata.reviewed_at,
+        "admissionReasons": (
+            None if metadata.admission_reasons is None else list(metadata.admission_reasons)
+        ),
+        "signingKeyRevocationReason": metadata.signing_key_revocation_reason,
+    }
+
+
 def _execution_view(execution: SuiteExecutionRecord) -> dict[str, object]:
     limitations = [] if execution.limitations is None else _plain_json_value(execution.limitations)
     try:
@@ -571,6 +593,7 @@ def _execution_view(execution: SuiteExecutionRecord) -> dict[str, object]:
         "admissionStatus": execution.admission_status,
         "reviewStatus": execution.review_status,
         "freshnessStatus": execution.freshness_status,
+        "evidenceTrust": _evidence_trust_view(execution.evidence_trust),
         "limitations": limitations,
         "failureCode": execution.failure_code,
         "failureMessage": execution.failure_message,
@@ -837,6 +860,45 @@ def _verify_admission_review_freshness(execution: SuiteExecutionRecord) -> None:
         raise _binding_error("Rejected or untrusted evidence cannot be accepted.")
 
 
+def _verify_evidence_trust_metadata(metadata: EvidenceTrustMetadataRecord) -> None:
+    values = (
+        metadata.source_type,
+        metadata.issuer_key,
+        metadata.signing_key_id,
+        metadata.signer_key_id,
+        metadata.signer_algorithm,
+        metadata.reviewed_by,
+        metadata.signing_key_revocation_reason,
+    )
+    try:
+        for value in values:
+            if value is None:
+                continue
+            if not isinstance(value, str) or not value or len(value.encode("utf-8")) > 512:
+                raise ValueError("invalid authority metadata")
+            validate_public_safe_string(value)
+        if metadata.effective_expires_at is not None and _parsed_utc_timestamp(
+            metadata.effective_expires_at,
+            optional=False,
+        ) is None:
+            raise ValueError("invalid effective expiry")
+        if metadata.reviewed_at is not None and _parsed_utc_timestamp(
+            metadata.reviewed_at,
+            optional=False,
+        ) is None:
+            raise ValueError("invalid review timestamp")
+        reasons = metadata.admission_reasons
+        if reasons is not None:
+            if len(reasons) > 64:
+                raise ValueError("too many admission reasons")
+            for reason in reasons:
+                if not isinstance(reason, str) or not reason or len(reason.encode("utf-8")) > 512:
+                    raise ValueError("invalid admission reason")
+                validate_public_safe_string(reason)
+    except (AssuranceContractValidationError, TypeError, UnicodeError, ValueError) as error:
+        raise _binding_error("Suite evidence authority metadata is malformed.") from error
+
+
 def _verify_suite_evidence_projections(execution: SuiteExecutionRecord) -> None:
     link_tuple = (
         execution.evidence_run_id,
@@ -847,6 +909,10 @@ def _verify_suite_evidence_projections(execution: SuiteExecutionRecord) -> None:
     present = tuple(value is not None for value in link_tuple)
     if any(present) and not all(present):
         raise _binding_error("A suite evidence link is only partially populated.")
+    if execution.evidence_trust is not None:
+        if not all(present):
+            raise _binding_error("Unlinked suite evidence cannot carry authority metadata.")
+        _verify_evidence_trust_metadata(execution.evidence_trust)
     try:
         result_summary = (
             None if execution.result_summary is None else execution.result_summary.to_dict()

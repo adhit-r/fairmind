@@ -30,13 +30,22 @@ export default function AssuranceEvaluationDetailPage({ params }: PageProps) {
     ASSURANCE_V2_UI_ENABLED ? realSystem?.workspaceId : undefined,
     ASSURANCE_V2_UI_ENABLED ? realSystem?.id : undefined,
   )
-  const [run, setRun] = useState<EvaluationRunV2 | null>(null)
+  const scopeKey = [selectedOrg?.id ?? '', realSystem?.workspaceId ?? '', realSystem?.id ?? '', runId].join(':')
+  const [runState, setRunState] = useState<{ scopeKey: string; run: EvaluationRunV2 | null }>({
+    scopeKey,
+    run: null,
+  })
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState<Error | null>(null)
 
+  // Do not render a prior-scope result for even one paint while the route or
+  // selected organization/system changes. The effect below owns fetching;
+  // this derived value owns the synchronous masking boundary.
+  const run = runState.scopeKey === scopeKey ? runState.run : null
+
   useEffect(() => {
     let current = true
-    setRun(null)
+    setRunState({ scopeKey, run: null })
     setDetailError(null)
     if (!ASSURANCE_V2_UI_ENABLED || !selectedOrg?.id || !realSystem?.workspaceId || !realSystem.id) {
       return () => { current = false }
@@ -45,7 +54,7 @@ export default function AssuranceEvaluationDetailPage({ params }: PageProps) {
     setDetailLoading(true)
     void workbench.getRun(runId)
       .then((result) => {
-        if (current) setRun(result)
+        if (current) setRunState({ scopeKey, run: result })
       })
       .catch((reason) => {
         if (!current || reason instanceof StaleEvaluationWorkbenchResultError) return
@@ -56,7 +65,7 @@ export default function AssuranceEvaluationDetailPage({ params }: PageProps) {
       })
 
     return () => { current = false }
-  }, [realSystem?.id, realSystem?.workspaceId, runId, selectedOrg?.id, workbench.getRun])
+  }, [realSystem?.id, realSystem?.workspaceId, runId, scopeKey, selectedOrg?.id, workbench.getRun])
 
   const initialLoading = orgLoading || systemLoading || detailLoading || (!run && !detailError && Boolean(
     ASSURANCE_V2_UI_ENABLED && selectedOrg?.id && realSystem?.workspaceId && realSystem.id,
@@ -116,7 +125,7 @@ export default function AssuranceEvaluationDetailPage({ params }: PageProps) {
             setDetailError(null)
             setDetailLoading(true)
             void workbench.getRun(runId)
-              .then(setRun)
+              .then((result) => setRunState({ scopeKey, run: result }))
               .catch((reason) => setDetailError(reason instanceof Error ? reason : new Error('Unable to load evaluation evidence.')))
               .finally(() => setDetailLoading(false))
           }}

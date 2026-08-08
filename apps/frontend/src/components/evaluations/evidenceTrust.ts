@@ -8,6 +8,18 @@ export type EvidenceTrustSuiteInput = {
   admissionStatus: string
   reviewStatus: string
   freshnessStatus: string
+  evidenceTrust?: {
+    sourceType: string | null
+    issuerKey: string | null
+    signingKeyId: string | null
+    signerKeyId: string | null
+    signerAlgorithm: string | null
+    effectiveExpiresAt: string | null
+    reviewedBy: string | null
+    reviewedAt: string | null
+    admissionReasons: string[] | null
+    signingKeyRevocationReason: string | null
+  } | null
   limitations: unknown[]
   failureCode: string | null
   failureMessage: string | null
@@ -48,7 +60,14 @@ export type EvidenceTrustPresentation = {
   suiteMetadata: Array<{
     suiteExecutionId: string
     source: string
+    issuer: string
+    signingKey: string
     signer: string
+    effectiveExpiry: string
+    reviewer: string
+    reviewedAt: string
+    admissionReasons: string[]
+    signingKeyRevocationReason: string
     evidenceResult: string
     admission: string
     freshness: string
@@ -73,6 +92,20 @@ function row(label: string, value: unknown) {
   return { label, value: text(value) }
 }
 
+function signer(value: EvidenceTrustSuiteInput['evidenceTrust']) {
+  const keyId = text(value?.signerKeyId)
+  const algorithm = text(value?.signerAlgorithm)
+  return keyId === NOT_RETURNED && algorithm === NOT_RETURNED
+    ? NOT_RETURNED
+    : `${keyId} (${algorithm})`
+}
+
+function reasons(value: EvidenceTrustSuiteInput['evidenceTrust']) {
+  return (value?.admissionReasons ?? []).filter(
+    (reason): reason is string => typeof reason === 'string' && reason.trim().length > 0,
+  )
+}
+
 export function sentenceLabel(value: string) {
   return value.replace(/_/g, ' ').replace(/^./, (character) => character.toUpperCase())
 }
@@ -82,6 +115,7 @@ export function buildEvidenceTrustPresentation(input: EvidenceTrustInput): Evide
   const target = record(envelope.target)
   const trustPolicy = record(envelope.trustPolicy)
   const envelopeSuites = Array.isArray(envelope.suites) ? envelope.suites : []
+  const executionsById = new Map((input.suiteExecutions ?? []).map((suite) => [suite.id, suite]))
 
   return {
     axes: [
@@ -116,6 +150,7 @@ export function buildEvidenceTrustPresentation(input: EvidenceTrustInput): Evide
       ],
       suites: envelopeSuites.map((suiteValue) => {
         const suite = record(suiteValue)
+        const execution = executionsById.get(text(suite.suiteExecutionId))
         const adapterName = text(suite.adapterName)
         const adapterVersion = text(suite.adapterVersion)
         return {
@@ -128,15 +163,22 @@ export function buildEvidenceTrustPresentation(input: EvidenceTrustInput): Evide
           runnerImageDigest: text(suite.runnerImageDigest),
           configurationHash: text(suite.configurationHash),
           passportRevisionId: NOT_RETURNED,
-          signer: NOT_RETURNED,
+          signer: signer(execution?.evidenceTrust),
         }
       }),
     },
     suiteMetadata: (input.suiteExecutions ?? []).map((suite) => ({
       suiteExecutionId: suite.id,
       // ownerScope describes suite ownership, not the source of this evidence.
-      source: NOT_RETURNED,
-      signer: NOT_RETURNED,
+      source: text(suite.evidenceTrust?.sourceType),
+      issuer: text(suite.evidenceTrust?.issuerKey),
+      signingKey: text(suite.evidenceTrust?.signingKeyId),
+      signer: signer(suite.evidenceTrust),
+      effectiveExpiry: text(suite.evidenceTrust?.effectiveExpiresAt),
+      reviewer: text(suite.evidenceTrust?.reviewedBy),
+      reviewedAt: text(suite.evidenceTrust?.reviewedAt),
+      admissionReasons: reasons(suite.evidenceTrust),
+      signingKeyRevocationReason: text(suite.evidenceTrust?.signingKeyRevocationReason),
       evidenceResult: sentenceLabel(suite.evidenceResultStatus),
       admission: sentenceLabel(suite.admissionStatus),
       freshness: sentenceLabel(suite.freshnessStatus),

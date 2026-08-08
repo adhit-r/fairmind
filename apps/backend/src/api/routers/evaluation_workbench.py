@@ -314,6 +314,21 @@ class EvaluationPreflightResponse(StrictModel):
     blockers: list[PreflightBlockerResponse]
 
 
+class SuiteEvidenceTrustResponse(StrictModel):
+    """Read-only, scoped provenance returned only from persisted authority records."""
+
+    source_type: str | None = Field(alias="sourceType")
+    issuer_key: str | None = Field(alias="issuerKey")
+    signing_key_id: str | None = Field(alias="signingKeyId")
+    signer_key_id: str | None = Field(alias="signerKeyId")
+    signer_algorithm: str | None = Field(alias="signerAlgorithm")
+    effective_expires_at: str | None = Field(alias="effectiveExpiresAt")
+    reviewed_by: str | None = Field(alias="reviewedBy")
+    reviewed_at: str | None = Field(alias="reviewedAt")
+    admission_reasons: list[str] | None = Field(alias="admissionReasons")
+    signing_key_revocation_reason: str | None = Field(alias="signingKeyRevocationReason")
+
+
 class SuiteExecutionResponse(StrictModel):
     id: str
     suite_version_id: str = Field(alias="suiteVersionId")
@@ -324,6 +339,7 @@ class SuiteExecutionResponse(StrictModel):
     admission_status: AdmissionStatus = Field(alias="admissionStatus")
     review_status: ReviewStatus = Field(alias="reviewStatus")
     freshness_status: FreshnessStatus = Field(alias="freshnessStatus")
+    evidence_trust: SuiteEvidenceTrustResponse | None = Field(alias="evidenceTrust")
     limitations: list[Any]
     failure_code: str | None = Field(alias="failureCode")
     failure_message: str | None = Field(alias="failureMessage")

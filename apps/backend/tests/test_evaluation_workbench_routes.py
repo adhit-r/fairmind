@@ -864,6 +864,7 @@ def test_complete_additive_route_flow_and_three_axis_run(workbench_client) -> No
     assert body["overallVerdict"] == "insufficient"
     assert body["layerVerdictsSchemaVersion"] == "1.0.0"
     assert len(body["suiteExecutions"]) == 1
+    assert body["suiteExecutions"][0]["evidenceTrust"] is None
     assert body["layerVerdicts"] == {
         "suites": {body["suiteExecutions"][0]["id"]: "insufficient"},
         "modalities": {},
@@ -1537,6 +1538,24 @@ def test_openapi_exposes_strict_request_and_response_contracts() -> None:
         "accepted",
         "rejected",
     ]
+    assert suite_execution["properties"]["evidenceTrust"]["anyOf"] == [
+        {"$ref": "#/components/schemas/SuiteEvidenceTrustResponse"},
+        {"type": "null"},
+    ]
+    trust_metadata = schemas["SuiteEvidenceTrustResponse"]
+    assert trust_metadata["additionalProperties"] is False
+    assert set(trust_metadata["required"]) == {
+        "sourceType",
+        "issuerKey",
+        "signingKeyId",
+        "signerKeyId",
+        "signerAlgorithm",
+        "effectiveExpiresAt",
+        "reviewedBy",
+        "reviewedAt",
+        "admissionReasons",
+        "signingKeyRevocationReason",
+    }
 
     def assert_refs_resolve(value) -> None:
         if isinstance(value, dict):

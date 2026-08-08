@@ -33,6 +33,10 @@ from src.application.services.evaluator_registration import EvaluatorIdentityBin
 from src.application.services.governance_assurance_service import OrgMembership
 
 CATALOG_ADMIN_PERMISSION = "evaluation:catalog:admin"
+CATALOG_READ_PERMISSION = "evaluation:catalog:read"
+CATALOG_SUBMIT_PERMISSION = "evaluation:catalog:submit"
+CATALOG_REVIEW_PERMISSION = "evaluation:catalog:review"
+CATALOG_REVOKE_PERMISSION = "evaluation:catalog:revoke"
 _IDENTIFIER_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
 
 evaluator_catalog_router = APIRouter(
@@ -143,15 +147,23 @@ def _require_evaluator_catalog_enabled() -> None:
         )
 
 
-def _require_catalog_admin(membership: OrgMembership) -> None:
-    """Require the literal catalog permission; owner/admin role is insufficient."""
+def _require_catalog_permission(membership: OrgMembership, permission: str) -> None:
+    """Require an action permission; role names and generic writes never bypass it.
 
-    if CATALOG_ADMIN_PERMISSION not in membership.permissions:
+    ``evaluation:catalog:admin`` is retained as an explicit, auditable
+    compatibility super-permission. It is not inferred from an administrator
+    role and does not authorize any other evaluation capability.
+    """
+
+    if (
+        permission not in membership.permissions
+        and CATALOG_ADMIN_PERMISSION not in membership.permissions
+    ):
         raise HTTPException(
             status_code=403,
             detail={
-                "code": "evaluation_catalog_admin_forbidden",
-                "message": "The evaluation:catalog:admin permission is required.",
+                "code": f"{permission.replace(':', '_')}_forbidden",
+                "message": f"The {permission} permission is required.",
             },
         )
 
@@ -200,9 +212,10 @@ async def _transition(
     idempotency_key: str,
     membership: OrgMembership,
     catalog_service: EvaluatorCatalogService,
+    permission: str,
 ) -> Response:
     _require_catalog_scope(membership, org_id)
-    _require_catalog_admin(membership)
+    _require_catalog_permission(membership, permission)
     payload = await _payload(request, EvaluatorCatalogDecisionRequest)
     try:
         if transition == "approve":
@@ -253,7 +266,7 @@ async def submit_evaluator_registration(
     """Submit one immutable binding for independent organization review."""
 
     _require_catalog_scope(membership, org_id)
-    _require_catalog_admin(membership)
+    _require_catalog_permission(membership, CATALOG_SUBMIT_PERMISSION)
     payload = await _payload(request, EvaluatorCatalogSubmitRequest)
     try:
         result = catalog_service.submit(
@@ -286,7 +299,7 @@ def list_evaluator_registrations(
     """Return one explicit, stable page in the caller's active organization scope."""
 
     _require_catalog_scope(membership, org_id)
-    _require_catalog_admin(membership)
+    _require_catalog_permission(membership, CATALOG_READ_PERMISSION)
     try:
         return catalog_service.list(
             organization_id=membership.org_id,
@@ -315,7 +328,7 @@ def get_evaluator_registration(
     """Read one registration without disclosing a record from another organization."""
 
     _require_catalog_scope(membership, org_id)
-    _require_catalog_admin(membership)
+    _require_catalog_permission(membership, CATALOG_READ_PERMISSION)
     try:
         registration = catalog_service.get(
             organization_id=membership.org_id,
@@ -356,6 +369,7 @@ async def approve_evaluator_registration(
         idempotency_key=idempotency_key,
         membership=membership,
         catalog_service=catalog_service,
+        permission=CATALOG_REVIEW_PERMISSION,
     )
 
 
@@ -387,6 +401,7 @@ async def reject_evaluator_registration(
         idempotency_key=idempotency_key,
         membership=membership,
         catalog_service=catalog_service,
+        permission=CATALOG_REVIEW_PERMISSION,
     )
 
 
@@ -418,11 +433,16 @@ async def revoke_evaluator_registration(
         idempotency_key=idempotency_key,
         membership=membership,
         catalog_service=catalog_service,
+        permission=CATALOG_REVOKE_PERMISSION,
     )
 
 
 __all__ = [
     "CATALOG_ADMIN_PERMISSION",
+    "CATALOG_READ_PERMISSION",
+    "CATALOG_SUBMIT_PERMISSION",
+    "CATALOG_REVIEW_PERMISSION",
+    "CATALOG_REVOKE_PERMISSION",
     "evaluator_catalog_router",
     "get_evaluator_catalog_service",
 ]

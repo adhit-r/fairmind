@@ -85,6 +85,19 @@ const evaluationPlanV2Schema = z.strictObject({
   updatedAt: z.string(),
 })
 
+const suiteEvidenceTrustSchema = z.strictObject({
+  sourceType: z.string().nullable(),
+  issuerKey: z.string().nullable(),
+  signingKeyId: z.string().nullable(),
+  signerKeyId: z.string().nullable(),
+  signerAlgorithm: z.string().nullable(),
+  effectiveExpiresAt: z.string().nullable(),
+  reviewedBy: z.string().nullable(),
+  reviewedAt: z.string().nullable(),
+  admissionReasons: z.array(z.string()).nullable(),
+  signingKeyRevocationReason: z.string().nullable(),
+})
+
 const suiteExecutionSchema = z.strictObject({
   id: z.string(),
   suiteVersionId: z.string(),
@@ -95,6 +108,7 @@ const suiteExecutionSchema = z.strictObject({
   admissionStatus: admissionStatusSchema,
   reviewStatus: reviewStatusSchema,
   freshnessStatus: freshnessStatusSchema,
+  evidenceTrust: suiteEvidenceTrustSchema.nullable(),
   limitations: z.array(z.unknown()),
   failureCode: z.string().nullable(),
   failureMessage: z.string().nullable(),

@@ -147,12 +147,16 @@ export function EvidenceTrustPanel({ run }: { run: EvaluationRunV2 }) {
           </div>
         ) : (
           <div className="mt-3 max-w-full overflow-x-auto border-2 border-[#0F1412]">
-            <table aria-label="Suite evidence trust metadata" className="w-full min-w-[1180px] border-collapse text-left text-sm">
+            <table aria-label="Suite evidence trust metadata" className="w-full min-w-[1900px] border-collapse text-left text-sm">
               <thead className="bg-[#0F1412] text-white">
                 <tr>
                   <th scope="col" className="px-3 py-3 font-black">Suite</th>
                   <th scope="col" className="px-3 py-3 font-black">Source</th>
+                  <th scope="col" className="px-3 py-3 font-black">Issuer / key</th>
                   <th scope="col" className="px-3 py-3 font-black">Evidence signer</th>
+                  <th scope="col" className="px-3 py-3 font-black">Effective expiry</th>
+                  <th scope="col" className="px-3 py-3 font-black">Reviewer</th>
+                  <th scope="col" className="px-3 py-3 font-black">Authority reasons</th>
                   <th scope="col" className="px-3 py-3 font-black">Evidence result</th>
                   <th scope="col" className="px-3 py-3 font-black">Admission</th>
                   <th scope="col" className="px-3 py-3 font-black">Freshness</th>
@@ -167,7 +171,11 @@ export function EvidenceTrustPanel({ run }: { run: EvaluationRunV2 }) {
                     <tr key={metadata.suiteExecutionId} className="border-t-2 border-[#0F1412] bg-[#FCFDF8]">
                       <td className="px-3 py-3"><p className="font-mono text-xs font-bold">{suite?.suiteVersionId ?? metadata.suiteExecutionId}</p><p className="mt-1 text-xs font-semibold text-[#59615D]">Execution {suite?.ordinal ?? 'not recorded'} · {suite ? sentenceLabel(suite.technicalStatus) : 'Not recorded'}</p></td>
                       <td className="px-3 py-3 font-semibold">{metadata.source}</td>
+                      <td className="px-3 py-3 text-[#59615D]"><p className="font-mono text-xs font-bold">{metadata.issuer}</p><p className="mt-1 font-mono text-xs">{metadata.signingKey}</p></td>
                       <td className="px-3 py-3 text-[#59615D]">{metadata.signer}</td>
+                      <td className="px-3 py-3 text-xs font-semibold text-[#59615D]"><Timestamp value={metadata.effectiveExpiry === 'Not returned by this response' ? null : metadata.effectiveExpiry} /></td>
+                      <td className="px-3 py-3 text-[#59615D]"><p className="font-mono text-xs font-bold">{metadata.reviewer}</p><p className="mt-1 text-xs">{metadata.reviewedAt}</p></td>
+                      <td className="px-3 py-3 text-xs font-semibold text-[#59615D]">{metadata.admissionReasons.length > 0 || metadata.signingKeyRevocationReason !== 'Not returned by this response' ? <>{metadata.admissionReasons.length > 0 ? <ul className="list-disc space-y-1 pl-4">{metadata.admissionReasons.map((reason, index) => <li key={`${metadata.suiteExecutionId}-reason-${index}`}>{reason}</li>)}</ul> : null}{metadata.signingKeyRevocationReason !== 'Not returned by this response' ? <p className={metadata.admissionReasons.length > 0 ? 'mt-2' : undefined}>Key revocation: {metadata.signingKeyRevocationReason}</p> : null}</> : 'Not returned by this response'}</td>
                       <td className="px-3 py-3"><span className={`inline-flex min-h-8 items-center border-2 px-2 py-1 text-xs font-black uppercase ${axisClass('Evidence result', metadata.evidenceResult)}`}>{metadata.evidenceResult}</span></td>
                       <td className="px-3 py-3"><span className={`inline-flex min-h-8 items-center border-2 px-2 py-1 text-xs font-black uppercase ${axisClass('Admission', metadata.admission)}`}>{metadata.admission}</span></td>
                       <td className="px-3 py-3"><span className={`inline-flex min-h-8 items-center border-2 px-2 py-1 text-xs font-black uppercase ${axisClass('Freshness', metadata.freshness)}`}>{metadata.freshness}</span></td>
@@ -180,7 +188,7 @@ export function EvidenceTrustPanel({ run }: { run: EvaluationRunV2 }) {
             </table>
           </div>
         )}
-        <p className="mt-3 text-xs font-semibold text-[#59615D]">Reviewer identity, evidence signer, expiry timestamp, and invalidation reasons are not returned by the current run response. A review status does not identify a signer or reviewer.</p>
+        <p className="mt-3 text-xs font-semibold text-[#59615D]">Source, issuer, signer, expiry, reviewer, and authority reasons are shown only when the linked persisted authority records return them. “Not returned by this response” is not a trust conclusion. Admission reasons and key-revocation reasons are distinct; no separate supersession reason is inferred when the authority record does not persist one.</p>
       </div>
 
       {run.failureCode || run.failureMessage ? (

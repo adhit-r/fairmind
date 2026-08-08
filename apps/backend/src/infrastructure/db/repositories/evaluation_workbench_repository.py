@@ -39,6 +39,7 @@ from database.governance_models import (
     GovernanceWorkspace,
 )
 from src.application.ports.evaluation_workbench import (
+    EvidenceTrustMetadataRecord,
     EvaluationWorkbenchError,
     FrozenJsonObject,
     MutationCommand,
@@ -2605,7 +2606,12 @@ class SqlAlchemyEvaluationWorkbenchRepository:
     # Runs and immutable envelopes.
     # --------------------------------------------------------------
 
-    def _suite_execution_record(self, row: Mapping[str, Any]) -> SuiteExecutionRecord:
+    def _suite_execution_record(
+        self,
+        row: Mapping[str, Any],
+        *,
+        evidence_trust: EvidenceTrustMetadataRecord | None = None,
+    ) -> SuiteExecutionRecord:
         frozen_result_summary = (
             None
             if row["result_summary_json"] is None
@@ -2644,6 +2650,7 @@ class SqlAlchemyEvaluationWorkbenchRepository:
             completed_at=row["completed_at"],
             created_at=row["created_at"],
             updated_at=row["updated_at"],
+            evidence_trust=evidence_trust,
         )
 
     def _stored_json_value(
@@ -2744,6 +2751,7 @@ class SqlAlchemyEvaluationWorkbenchRepository:
         row: Mapping[str, Any],
         executions: list[Mapping[str, Any]],
     ) -> RunRecord:
+        evidence_trust = self._evidence_trust_metadata_by_execution(row, executions)
         return RunRecord(
             id=row["id"],
             organization_id=row["org_id"],
@@ -2762,7 +2770,11 @@ class SqlAlchemyEvaluationWorkbenchRepository:
                 maximum_bytes=_MAX_LAYER_VERDICTS_BYTES,
             ),
             suite_executions=tuple(
-                self._suite_execution_record(execution) for execution in executions
+                self._suite_execution_record(
+                    execution,
+                    evidence_trust=evidence_trust.get(execution["id"]),
+                )
+                for execution in executions
             ),
             envelope_id=row["envelope_id"],
             envelope_nonce=row["envelope_nonce"],
@@ -2777,6 +2789,140 @@ class SqlAlchemyEvaluationWorkbenchRepository:
             created_at=row["created_at"],
             updated_at=row["updated_at"],
         )
+
+    def _evidence_trust_metadata_by_execution(
+        self,
+        run: Mapping[str, Any],
+        executions: list[Mapping[str, Any]],
+    ) -> dict[str, EvidenceTrustMetadataRecord]:
+        """Project only scope-bound, persisted provenance for this exact run."""
+
+        execution_ids = tuple(
+            execution["id"]
+            for execution in executions
+            if execution["evidence_run_id"] is not None
+            and execution["passport_revision_id"] is not None
+        )
+        if not execution_ids:
+            return {}
+
+        links = GovernanceEvaluationSuiteEvidenceLink.__table__
+        admissions = GovernanceEvidenceAdmission.__table__
+        evidence_runs = GovernanceEvidenceRun.__table__
+        issuers = GovernanceEvidenceIssuer.__table__
+        signing_keys = GovernanceEvidenceSigningKey.__table__
+        rows = self.db.execute(
+            select(
+                links.c.suite_execution_id.label("suite_execution_id"),
+                links.c.admission_id.label("admission_id"),
+                evidence_runs.c.source_type.label("source_type"),
+                issuers.c.issuer_key.label("issuer_key"),
+                signing_keys.c.key_id.label("signing_key_id"),
+                admissions.c.signer_key_id.label("signer_key_id"),
+                admissions.c.signer_algorithm.label("signer_algorithm"),
+                admissions.c.effective_expires_at.label("effective_expires_at"),
+                admissions.c.reasons_json.label("admission_reasons_json"),
+                signing_keys.c.revocation_reason.label("signing_key_revocation_reason"),
+            )
+            .select_from(
+                links.join(
+                    admissions,
+                    (links.c.admission_id == admissions.c.id)
+                    & (links.c.admission_contract_version == admissions.c.contract_version)
+                    & (links.c.org_id == admissions.c.org_id)
+                    & (links.c.workspace_id == admissions.c.workspace_id)
+                    & (links.c.system_id == admissions.c.system_id)
+                    & (links.c.run_id == admissions.c.run_id)
+                    & (links.c.suite_execution_id == admissions.c.suite_execution_id)
+                    & (links.c.evidence_run_id == admissions.c.evidence_run_id)
+                    & (links.c.passport_revision_id == admissions.c.passport_revision_id),
+                )
+                .join(
+                    evidence_runs,
+                    (admissions.c.evidence_run_id == evidence_runs.c.id)
+                    & (admissions.c.org_id == evidence_runs.c.org_id)
+                    & (admissions.c.workspace_id == evidence_runs.c.workspace_id)
+                    & (admissions.c.system_id == evidence_runs.c.system_id),
+                )
+                .outerjoin(
+                    issuers,
+                    (admissions.c.issuer_id == issuers.c.id)
+                    & (admissions.c.org_id == issuers.c.org_id),
+                )
+                .outerjoin(
+                    signing_keys,
+                    (admissions.c.signing_key_id == signing_keys.c.id)
+                    & (admissions.c.issuer_id == signing_keys.c.issuer_id)
+                    & (admissions.c.org_id == signing_keys.c.org_id),
+                )
+            )
+            .where(
+                links.c.org_id == run["org_id"],
+                links.c.workspace_id == run["workspace_id"],
+                links.c.system_id == run["system_id"],
+                links.c.run_id == run["id"],
+                links.c.admission_contract_version == CONTRACT_VERSION,
+                admissions.c.contract_version == CONTRACT_VERSION,
+                links.c.suite_execution_id.in_(execution_ids),
+            )
+        ).mappings().all()
+
+        reviews = GovernanceEvidenceReview.__table__
+        review_rows = self.db.execute(
+            select(
+                reviews.c.suite_execution_id.label("suite_execution_id"),
+                reviews.c.admission_id.label("admission_id"),
+                reviews.c.reviewed_by.label("reviewed_by"),
+                reviews.c.reviewed_at.label("reviewed_at"),
+            )
+            .where(
+                reviews.c.org_id == run["org_id"],
+                reviews.c.workspace_id == run["workspace_id"],
+                reviews.c.system_id == run["system_id"],
+                reviews.c.run_id == run["id"],
+                reviews.c.admission_contract_version == CONTRACT_VERSION,
+                reviews.c.suite_execution_id.in_(execution_ids),
+            )
+            .order_by(
+                reviews.c.suite_execution_id,
+                reviews.c.admission_id,
+                reviews.c.review_version.desc(),
+                reviews.c.id.desc(),
+            )
+        ).mappings().all()
+        latest_reviews: dict[tuple[str, str], Mapping[str, Any]] = {}
+        for review in review_rows:
+            latest_reviews.setdefault(
+                (review["suite_execution_id"], review["admission_id"]), review
+            )
+
+        result: dict[str, EvidenceTrustMetadataRecord] = {}
+        for metadata in rows:
+            suite_execution_id = metadata["suite_execution_id"]
+            if suite_execution_id in result:
+                raise self._error(
+                    "binding_integrity_error",
+                    _BINDING_INTEGRITY_MESSAGE,
+                    409,
+                )
+            review = latest_reviews.get((suite_execution_id, metadata["admission_id"]))
+            result[suite_execution_id] = EvidenceTrustMetadataRecord(
+                source_type=metadata["source_type"],
+                issuer_key=metadata["issuer_key"],
+                signing_key_id=metadata["signing_key_id"],
+                signer_key_id=metadata["signer_key_id"],
+                signer_algorithm=metadata["signer_algorithm"],
+                effective_expires_at=metadata["effective_expires_at"],
+                reviewed_by=None if review is None else review["reviewed_by"],
+                reviewed_at=None if review is None else review["reviewed_at"],
+                admission_reasons=self._stored_string_array(
+                    metadata["admission_reasons_json"],
+                    maximum_bytes=_MAX_BINDING_LIST_BYTES,
+                    allow_empty=True,
+                ),
+                signing_key_revocation_reason=metadata["signing_key_revocation_reason"],
+            )
+        return result
 
     def _run_record(self, row: Mapping[str, Any]) -> RunRecord:
         executions = list(

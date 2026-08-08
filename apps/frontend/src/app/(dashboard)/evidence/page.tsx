@@ -147,7 +147,8 @@ export default function EvidencePage() {
   const canReview = selectedOrg?.role === 'admin'
     || selectedOrg?.role === 'owner'
     || selectedOrg?.permissions?.includes('model:write') === true
-  const canViewEvaluatorCatalog = selectedOrg?.permissions?.includes('evaluation:catalog:admin') === true
+  const canViewEvaluatorCatalog = selectedOrg?.permissions?.includes('evaluation:catalog:read') === true
+    || selectedOrg?.permissions?.includes('evaluation:catalog:admin') === true
   const {
     data,
     summary,

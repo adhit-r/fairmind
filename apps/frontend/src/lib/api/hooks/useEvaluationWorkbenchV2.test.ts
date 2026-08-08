@@ -91,6 +91,7 @@ function run(overrides: Partial<EvaluationRunV2> = {}): EvaluationRunV2 {
       admissionStatus: 'verified',
       reviewStatus: 'pending',
       freshnessStatus: 'current',
+      evidenceTrust: null,
       limitations: ['Boundary coverage is incomplete.'],
       failureCode: null,
       failureMessage: null,
