@@ -29,6 +29,10 @@ from src.application.services.evidence_authenticity_service import (
     AuthenticityCandidate,
     EvidenceAuthenticityError,
 )
+from src.application.services.evaluator_registry import (
+    EvaluatorRegistration,
+    StaticEvaluatorRegistry,
+)
 from src.application.services.verified_evidence_admission_service import (
     VerifiedEvidenceAdmissionService,
 )
@@ -422,6 +426,7 @@ def _configured_service(
     first_hash: str = "9" * 64,
     second_hash: str = "9" * 64,
     authenticity_failure: Exception | None = None,
+    evaluator_registry: StaticEvaluatorRegistry | None = None,
 ):
     initial = authority or _authority()
     verified = second_authority or initial
@@ -437,6 +442,19 @@ def _configured_service(
     service = VerifiedEvidenceAdmissionService(
         unit_of_work,
         authenticity,  # type: ignore[arg-type]
+        evaluator_registry=evaluator_registry
+        or StaticEvaluatorRegistry(
+            catalog_version="2026.08.1",
+            registrations=(
+                EvaluatorRegistration(
+                    evaluator_id="evaluator-a",
+                    adapter_name="inspect",
+                    adapter_version="0.3.0",
+                    result_contract_version="1.0.0",
+                    source_types=frozenset({"external_provider"}),
+                ),
+            ),
+        ),
         uuid_factory=SequentialUuidFactory(),
     )
     service._resolver = resolver
@@ -551,7 +569,38 @@ def test_verified_admission_persists_exact_graph_with_fresh_database_time() -> N
         "freshnessStatus": "current",
         "runTechnicalStatus": "succeeded",
         "runEvidenceOutcome": "failed",
+        "evaluatorRegistryHash": "e816008e154dd1c5509c2158ca1e0ff0f40a8f75c209a22f2d473fc375e5c617",
+        "evaluatorRegistrationHash": "eba56d312a0fe0e4ce7e6af6bc4b20b4660f75da7d4accc343772ea9298d62c3",
     }
+
+
+def test_signed_evaluator_must_be_registered_by_server_catalog() -> None:
+    service, unit_of_work, repository, _, _ = _configured_service(
+        evaluator_registry=StaticEvaluatorRegistry(
+            catalog_version="2026.08.1",
+            registrations=(
+                EvaluatorRegistration(
+                    evaluator_id="different-evaluator",
+                    adapter_name="inspect",
+                    adapter_version="0.3.0",
+                    result_contract_version="1.0.0",
+                    source_types=frozenset({"external_provider"}),
+                ),
+            ),
+        )
+    )
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        service.admit_verified_passport_v2(
+            scope=SCOPE,
+            actor_id="reviewer-a",
+            idempotency_key="unregistered-evaluator-a",
+            raw_passport=_passport_bytes(),
+        )
+
+    assert caught.value.code == "evidence_evaluator_unregistered"
+    assert repository.persisted == []
+    assert unit_of_work.rejections == [caught.value]
 
 
 @pytest.mark.parametrize(

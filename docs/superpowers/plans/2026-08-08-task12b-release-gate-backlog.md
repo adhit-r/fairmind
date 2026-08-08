@@ -23,10 +23,11 @@ kernel; none of these rows authorize route exposure or a product claim.
 
 ## Before any evidence-admission route is composed
 
-- [ ] Add a server-owned evaluator registry and bind signed `evaluatorId` to an
-  authorized evaluator version. Task 12B currently treats that identifier as a
-  signed issuer assertion while independently authorizing issuer, source,
-  adapter, adapter version, and result-contract version.
+- [x] Add an immutable in-process server-owned evaluator registry and bind the
+  signed `evaluatorId` to an active, exact source/adapter/result-contract
+  tuple. The catalog and registration hashes are recorded in the append-only
+  admission audit event. Persistent catalog administration and provider/worker
+  registration ceremonies remain separate release gates.
 - [ ] Add the route-level `evaluation:evidence:submit` permission, exact
   organization/workspace/system/run/suite scope checks, request byte limits,
   feature flag, and service composition as a separately reviewed change.

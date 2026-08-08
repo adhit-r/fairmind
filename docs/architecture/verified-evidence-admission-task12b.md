@@ -21,12 +21,15 @@ The submitted Passport supplies an issuer key and signing-key identifier only
 as lookup selectors. It cannot supply authoritative target, plan, suite,
 envelope, policy, issuer, or key state.
 
-`evaluatorId` is signed, stored, and receipt-bound, but Task 12B still treats it
-as an issuer assertion. The server independently authorizes the issuer, source,
-adapter name and version, and result-contract version; it does not yet resolve
-`evaluatorId` through a server-owned evaluator registry. Product claims must
-not describe evaluator identity as independently authorized until that catalog
-and binding ceremony exist.
+`evaluatorId` is signed, stored, and receipt-bound. The internal admission
+kernel now resolves it through an immutable, server-owned evaluator catalog and
+requires the catalog entry to match source, adapter name/version, and result
+contract exactly. The catalog hash and registration hash are included in the
+append-only successful-admission audit event. This is an in-process catalog for
+the current default-off slice: persistent catalog administration, external and
+FairMind-worker registration ceremonies, and route-level catalog permissions
+remain separate release gates. Product claims must not describe an evaluator or
+provider as generally authorized until those gates exist.
 
 Inside the organization-scoped mutation transaction, the trusted resolver:
 
