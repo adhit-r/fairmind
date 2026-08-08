@@ -959,6 +959,22 @@ def test_governance_decision_requires_exact_permission_and_run_scope(
         assert denied.status_code == 403
         assert denied.json()["detail"]["code"] == "evaluation_decision_write_forbidden"
 
+        _grant_role_permissions(
+            "admin",
+            ["model:write", "evaluation:decision:write"],
+        )
+        alias_denied = client.post(
+            _decision_url(run_id=run["id"]),
+            headers=_headers("decision-alias-denied"),
+            json=payload,
+        )
+        assert alias_denied.status_code == 403
+        assert alias_denied.json()["detail"] == {
+            "code": "evaluation_decision_write_forbidden",
+            "message": "The evaluation:decision permission is required.",
+        }
+        assert recorder.calls == []
+
         _grant_role_permissions("admin", ["evaluation:decision"])
         wrong_workspace = client.post(
             _decision_url(run_id=run["id"], workspace_id="workspace-wrong"),
