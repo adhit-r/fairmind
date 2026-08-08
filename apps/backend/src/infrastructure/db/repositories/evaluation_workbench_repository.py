@@ -74,6 +74,12 @@ from src.application.ports.evidence_review import (
     ReviewedEvidenceRecord,
 )
 from src.application.ports.evaluator_catalog import EvaluatorCatalogRecord
+from src.application.ports.governance_decision import (
+    GovernanceDecisionAuthorityRecord,
+    GovernanceDecisionRecord,
+    GovernanceDecisionScope,
+    PersistGovernanceDecisionCommand,
+)
 from src.application.services.evaluator_catalog_service import evaluator_binding_hash
 from src.application.services.evaluator_registration import (
     EvaluatorIdentityBinding,
@@ -195,6 +201,43 @@ _EVIDENCE_REVIEW_TRIGGER_MESSAGES = {
     "review timestamp is not causal": (
         "evidence_review_chronology_invalid",
         "The evidence-review chronology is invalid.",
+    ),
+}
+_MAX_GOVERNANCE_DECISION_EVIDENCE_SET_BYTES = 256 * 1024
+_GOVERNANCE_DECISION_VERSION_CONSTRAINTS = frozenset(
+    {
+        "uq_governance_evaluation_decision_tenant",
+        "uq_governance_evaluation_decision_run_version",
+    }
+)
+_GOVERNANCE_DECISION_TRIGGER_MESSAGES = {
+    "decision does not match the current exact run graph": (
+        "governance_decision_version_conflict",
+        "The governance verdict version is stale.",
+    ),
+    "decision requires the exact hashed evidence set": (
+        "governance_decision_evidence_conflict",
+        "The reviewed evidence set changed before the decision was recorded.",
+    ),
+    "decision requires every suite to have current reviewed verified evidence": (
+        "governance_decision_evidence_not_ready",
+        "Every suite requires current, accepted, verified evidence.",
+    ),
+    "decider must differ from requester": (
+        "governance_decision_separation_required",
+        "The decider must be independent from the run requester and evidence submitters.",
+    ),
+    "decider must differ from submitter": (
+        "governance_decision_separation_required",
+        "The decider must be independent from the run requester and evidence submitters.",
+    ),
+    "owner override is not enabled": (
+        "governance_decision_owner_override_unavailable",
+        "Owner override is not available.",
+    ),
+    "decision timestamp is not causal": (
+        "governance_decision_chronology_invalid",
+        "The governance-decision chronology is invalid.",
     ),
 }
 
@@ -1828,6 +1871,357 @@ class SqlAlchemyEvaluationWorkbenchRepository:
             evidence_result_status=authority.evidence_result_status,
             run_technical_status=authority.run_technical_status,
             run_evidence_outcome=authority.run_evidence_outcome,
+        )
+
+    # ------------------------------------------------------------------
+    # Normal governance decisions.  The application never accepts an
+    # evidence set from the caller: PostgreSQL reconstructs it from the exact
+    # locked run graph and the adapter persists those canonical server bytes.
+    # SQLite deliberately remains a read/test fixture and cannot write this
+    # authority-bearing record.
+    # ------------------------------------------------------------------
+
+    def _require_postgres_governance_decisions(self) -> None:
+        if self.db.get_bind().dialect.name != "postgresql":
+            raise self._error(
+                "governance_decision_postgresql_required",
+                "Governance decisions require the PostgreSQL integrity boundary.",
+                409,
+            )
+
+    def load_governance_decision_authority_for_update(
+        self,
+        *,
+        scope: GovernanceDecisionScope,
+    ) -> GovernanceDecisionAuthorityRecord | None:
+        """Lock the exact run and load its decision evidence from PostgreSQL."""
+
+        self._require_postgres_governance_decisions()
+        system_scope = self._system_scope(
+            scope.organization_id,
+            scope.system_id,
+            lock=True,
+        )
+        if system_scope is None or system_scope["workspace_id"] != scope.workspace_id:
+            return None
+
+        runs = GovernanceEvaluationRun.__table__
+        run = (
+            self.db.execute(
+                select(runs)
+                .where(
+                    runs.c.id == scope.run_id,
+                    runs.c.org_id == scope.organization_id,
+                    runs.c.workspace_id == scope.workspace_id,
+                    runs.c.system_id == scope.system_id,
+                    runs.c.contract_version == CONTRACT_VERSION,
+                )
+                .with_for_update()
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if run is None:
+            return None
+
+        executions = GovernanceEvaluationRunSuiteExecution.__table__
+        execution_rows = (
+            self.db.execute(
+                select(executions.c.id)
+                .where(
+                    executions.c.run_id == scope.run_id,
+                    executions.c.org_id == scope.organization_id,
+                    executions.c.workspace_id == scope.workspace_id,
+                    executions.c.system_id == scope.system_id,
+                )
+                .order_by(executions.c.ordinal, executions.c.id)
+                .with_for_update()
+            )
+            .mappings()
+            .all()
+        )
+        suite_execution_ids = tuple(row["id"] for row in execution_rows)
+        if not suite_execution_ids or len(set(suite_execution_ids)) != len(
+            suite_execution_ids
+        ):
+            raise self._error(
+                "governance_decision_integrity_conflict",
+                "The locked governance-decision authority is inconsistent.",
+                409,
+            )
+
+        links = GovernanceEvaluationSuiteEvidenceLink.__table__
+        admissions = GovernanceEvidenceAdmission.__table__
+        submitter_rows = (
+            self.db.execute(
+                select(admissions.c.submitted_by)
+                .select_from(
+                    executions.join(
+                        links,
+                        (links.c.suite_execution_id == executions.c.id)
+                        & (links.c.run_id == executions.c.run_id)
+                        & (links.c.workspace_id == executions.c.workspace_id)
+                        & (links.c.system_id == executions.c.system_id)
+                        & (links.c.org_id == executions.c.org_id),
+                    ).join(
+                        admissions,
+                        (admissions.c.id == links.c.admission_id)
+                        & (
+                            admissions.c.contract_version
+                            == links.c.admission_contract_version
+                        )
+                        & (admissions.c.run_id == links.c.run_id)
+                        & (
+                            admissions.c.suite_execution_id
+                            == links.c.suite_execution_id
+                        )
+                        & (admissions.c.evidence_run_id == links.c.evidence_run_id)
+                        & (
+                            admissions.c.passport_revision_id
+                            == links.c.passport_revision_id
+                        )
+                        & (admissions.c.workspace_id == links.c.workspace_id)
+                        & (admissions.c.system_id == links.c.system_id)
+                        & (admissions.c.org_id == links.c.org_id),
+                    )
+                )
+                .where(
+                    executions.c.run_id == scope.run_id,
+                    executions.c.org_id == scope.organization_id,
+                    executions.c.workspace_id == scope.workspace_id,
+                    executions.c.system_id == scope.system_id,
+                )
+                .order_by(executions.c.ordinal, executions.c.id)
+            )
+            .scalars()
+            .all()
+        )
+
+        evidence_set_raw = self.db.execute(
+            text(
+                "SELECT fairmind_expected_decision_evidence_set_013b"
+                "(:run_id)::text"
+            ),
+            {"run_id": scope.run_id},
+        ).scalar_one_or_none()
+        if evidence_set_raw is None:
+            raise self._error(
+                "governance_decision_evidence_not_ready",
+                "Every suite requires current, accepted, verified evidence.",
+                409,
+            )
+
+        try:
+            if (
+                not isinstance(run["envelope_id"], str)
+                or not run["envelope_id"]
+                or not isinstance(run["envelope_hash"], str)
+                or not isinstance(run["requested_by"], str)
+                or not run["requested_by"]
+                or isinstance(run["verdict_version"], bool)
+                or not isinstance(run["verdict_version"], int)
+                or run["verdict_version"] < 0
+                or not isinstance(run["technical_status"], str)
+                or not isinstance(run["overall_verdict"], str)
+                or len(submitter_rows) != len(suite_execution_ids)
+                or any(
+                    not isinstance(submitter, str) or not submitter
+                    for submitter in submitter_rows
+                )
+            ):
+                raise ValueError("governance decision authority is malformed")
+            evidence_value = json.loads(evidence_set_raw)
+            if not isinstance(evidence_value, dict):
+                raise ValueError("decision evidence set must be an object")
+            evidence_set = self._stored_json_object(
+                canonical_json(evidence_value),
+                maximum_bytes=_MAX_GOVERNANCE_DECISION_EVIDENCE_SET_BYTES,
+            )
+            current_layers = self._stored_json_object(
+                run["layer_verdicts_json"],
+                maximum_bytes=_MAX_LAYER_VERDICTS_BYTES,
+            )
+        except (
+            AssuranceContractValidationError,
+            json.JSONDecodeError,
+            OverflowError,
+            RecursionError,
+            TypeError,
+            UnicodeError,
+            ValueError,
+        ) as error:
+            raise self._error(
+                "governance_decision_integrity_conflict",
+                "The locked governance-decision authority is inconsistent.",
+                409,
+            ) from error
+
+        return GovernanceDecisionAuthorityRecord.create(
+            scope=scope,
+            run_contract_version=run["contract_version"],
+            envelope_id=run["envelope_id"],
+            envelope_hash=run["envelope_hash"],
+            technical_status=run["technical_status"],
+            current_verdict_version=run["verdict_version"],
+            current_overall_verdict=run["overall_verdict"],
+            current_layer_verdicts=current_layers.to_dict(),
+            requested_by=run["requested_by"],
+            evidence_submitters=tuple(dict.fromkeys(submitter_rows)),
+            suite_execution_ids=suite_execution_ids,
+            evidence_set=evidence_set.to_dict(),
+            evidence_set_hash=canonical_sha256(evidence_set.to_dict()),
+        )
+
+    @staticmethod
+    def _governance_decision_database_error(
+        error: DBAPIError,
+    ) -> EvaluationWorkbenchError | None:
+        original = getattr(error, "orig", None)
+        sqlstate = getattr(original, "sqlstate", None) or getattr(original, "pgcode", None)
+        constraint_name = getattr(getattr(original, "diag", None), "constraint_name", None)
+        first_line = str(original).partition("\n")[0].strip().lower()
+        if (
+            sqlstate == "23505"
+            and constraint_name in _GOVERNANCE_DECISION_VERSION_CONSTRAINTS
+        ):
+            return EvaluationWorkbenchError(
+                "governance_decision_version_conflict",
+                "The governance verdict version is stale.",
+                status_code=409,
+            )
+        if sqlstate == "P0001" and first_line in _GOVERNANCE_DECISION_TRIGGER_MESSAGES:
+            code, message = _GOVERNANCE_DECISION_TRIGGER_MESSAGES[first_line]
+            return EvaluationWorkbenchError(code, message, status_code=409)
+        if sqlstate == "P0001" and first_line in {
+            "decision history is not projected by run",
+            "decision history does not match run projection",
+        }:
+            return EvaluationWorkbenchError(
+                "governance_decision_projection_conflict",
+                "The governance decision does not match the run projection.",
+                status_code=409,
+            )
+        return None
+
+    def persist_governance_decision(
+        self,
+        command: PersistGovernanceDecisionCommand,
+    ) -> GovernanceDecisionRecord:
+        """Append the decision and CAS its exact run projection atomically."""
+
+        self._require_postgres_governance_decisions()
+        scope = command.scope
+        authority = command.authority
+        evidence_set_json = canonical_json(authority.evidence_set.to_dict())
+        evidence_set_hash = hashlib.sha256(evidence_set_json.encode("utf-8")).hexdigest()
+        layer_verdicts_json = canonical_json(command.layer_verdicts.to_dict())
+        if (
+            authority.scope != scope
+            or authority.run_contract_version != CONTRACT_VERSION
+            or authority.technical_status != "succeeded"
+            or command.owner_override_reason is not None
+            or command.expected_verdict_version != authority.current_verdict_version
+            or command.next_verdict_version != command.expected_verdict_version + 1
+            or evidence_set_hash != authority.evidence_set_hash
+            or len(evidence_set_json.encode("utf-8"))
+            > _MAX_GOVERNANCE_DECISION_EVIDENCE_SET_BYTES
+            or len(layer_verdicts_json.encode("utf-8")) > _MAX_LAYER_VERDICTS_BYTES
+        ):
+            raise self._error(
+                "governance_decision_integrity_conflict",
+                "The locked governance-decision authority is inconsistent.",
+                409,
+            )
+        decided_at = self._timestamp_value(command.decided_at)
+        if decided_at is None:
+            raise self._error(
+                "governance_decision_chronology_invalid",
+                "The governance-decision chronology is invalid.",
+                409,
+            )
+
+        decisions = GovernanceEvaluationDecision.__table__
+        runs = GovernanceEvaluationRun.__table__
+        try:
+            self.db.execute(
+                insert(decisions).values(
+                    id=command.decision_id,
+                    org_id=scope.organization_id,
+                    workspace_id=scope.workspace_id,
+                    system_id=scope.system_id,
+                    run_id=scope.run_id,
+                    run_contract_version=CONTRACT_VERSION,
+                    envelope_id=authority.envelope_id,
+                    envelope_hash=authority.envelope_hash,
+                    verdict_version=command.next_verdict_version,
+                    overall_verdict=command.overall_verdict,
+                    layer_verdicts_schema_version=LAYER_VERDICTS_SCHEMA_VERSION,
+                    layer_verdicts_json=layer_verdicts_json,
+                    rationale=command.rationale,
+                    decided_by=command.actor_id,
+                    owner_override_reason=None,
+                    evidence_set_json=evidence_set_json,
+                    evidence_set_hash=evidence_set_hash,
+                    decided_at=decided_at,
+                )
+            )
+            updated = self.db.execute(
+                update(runs)
+                .where(
+                    runs.c.id == scope.run_id,
+                    runs.c.org_id == scope.organization_id,
+                    runs.c.workspace_id == scope.workspace_id,
+                    runs.c.system_id == scope.system_id,
+                    runs.c.contract_version == CONTRACT_VERSION,
+                    runs.c.envelope_id == authority.envelope_id,
+                    runs.c.envelope_hash == authority.envelope_hash,
+                    runs.c.technical_status == "succeeded",
+                    runs.c.verdict_version == command.expected_verdict_version,
+                    runs.c.overall_verdict == authority.current_overall_verdict,
+                    runs.c.layer_verdicts_schema_version
+                    == LAYER_VERDICTS_SCHEMA_VERSION,
+                    runs.c.layer_verdicts_json
+                    == canonical_json(authority.current_layer_verdicts.to_dict()),
+                )
+                .values(
+                    overall_verdict=command.overall_verdict,
+                    layer_verdicts_json=layer_verdicts_json,
+                    layer_verdicts_schema_version=LAYER_VERDICTS_SCHEMA_VERSION,
+                    verdict_version=command.next_verdict_version,
+                    updated_at=decided_at,
+                )
+            )
+            if updated.rowcount != 1:
+                raise self._error(
+                    "governance_decision_version_conflict",
+                    "The governance verdict version is stale.",
+                    409,
+                )
+            self.db.execute(
+                text(
+                    "SET CONSTRAINTS "
+                    "governance_evaluation_decisions_guard_run_projection IMMEDIATE"
+                )
+            )
+        except DBAPIError as error:
+            mapped = self._governance_decision_database_error(error)
+            if mapped is not None:
+                raise mapped from error
+            raise
+
+        return GovernanceDecisionRecord.create(
+            decision_id=command.decision_id,
+            scope=scope,
+            run_contract_version=CONTRACT_VERSION,
+            envelope_id=authority.envelope_id,
+            envelope_hash=authority.envelope_hash,
+            verdict_version=command.next_verdict_version,
+            overall_verdict=command.overall_verdict,
+            layer_verdicts=command.layer_verdicts.to_dict(),
+            rationale=command.rationale,
+            decided_by=command.actor_id,
+            evidence_set_hash=evidence_set_hash,
+            decided_at=command.decided_at,
         )
 
     # ------------------------------------------------------------------

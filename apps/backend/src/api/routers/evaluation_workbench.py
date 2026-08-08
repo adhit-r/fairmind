@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from database.connection import get_db
 from api.composition.evaluation_workbench import build_evaluation_workbench_service
+from api.composition.governance_decision import build_governance_decision_service
 from api.composition.verified_evidence_admission import (
     build_verified_evidence_admission_service,
 )
@@ -27,6 +28,7 @@ from src.api.routers.governance_assurance import (
 )
 from src.application.ports.evidence_admission import EvidenceAdmissionScope
 from src.application.ports.evidence_review import EvidenceReviewScope
+from src.application.ports.governance_decision import GovernanceDecisionScope
 from src.application.services.evaluation_workbench_service import (
     EvaluationWorkbenchError,
     EvaluationWorkbenchInputError,
@@ -40,6 +42,7 @@ from src.application.services.verified_evidence_review_service import (
     VerifiedEvidenceReviewService,
 )
 from src.application.services.governance_assurance_service import OrgMembership
+from src.application.services.governance_decision_service import GovernanceDecisionService
 
 router = APIRouter(prefix="/organizations/{org_id}", tags=["evaluation-workbench-v2"])
 verified_evidence_router = APIRouter(
@@ -49,6 +52,10 @@ verified_evidence_router = APIRouter(
 verified_evidence_review_router = APIRouter(
     prefix="/organizations/{org_id}",
     tags=["evaluation-workbench-v2-evidence-review"],
+)
+governance_decision_router = APIRouter(
+    prefix="/organizations/{org_id}",
+    tags=["evaluation-workbench-v2-governance-decision"],
 )
 MAX_REQUEST_BYTES = 1024 * 1024
 MAX_JSON_DEPTH = 32
@@ -436,6 +443,31 @@ class EvidenceReviewResponse(StrictModel):
     run_evidence_outcome: EvidenceResultStatus = Field(alias="runEvidenceOutcome")
 
 
+class GovernanceDecisionRequest(StrictModel):
+    """Normal decision input; no evidence authority or owner override is accepted."""
+
+    expected_verdict_version: int = Field(alias="expectedVerdictVersion", ge=0)
+    overall_verdict: GovernanceVerdict = Field(alias="overallVerdict")
+    layer_verdicts: LayerVerdictsResponse = Field(alias="layerVerdicts")
+    rationale: str = Field(min_length=1, max_length=4000)
+
+
+class GovernanceDecisionResponse(StrictModel):
+    decision_id: str = Field(alias="decisionId")
+    run_id: str = Field(alias="runId")
+    contract_version: Literal["2.0.0"] = Field(alias="contractVersion")
+    verdict_version: int = Field(alias="verdictVersion", ge=1)
+    overall_verdict: GovernanceVerdict = Field(alias="overallVerdict")
+    layer_verdicts_schema_version: Literal["1.0.0"] = Field(
+        alias="layerVerdictsSchemaVersion"
+    )
+    layer_verdicts: LayerVerdictsResponse = Field(alias="layerVerdicts")
+    rationale: str
+    decided_by: str = Field(alias="decidedBy")
+    evidence_set_hash: str = Field(alias="evidenceSetHash", pattern="^[0-9a-f]{64}$")
+    decided_at: str = Field(alias="decidedAt")
+
+
 def _depth(value: Any, level: int = 0) -> int:
     if level > MAX_JSON_DEPTH:
         return level
@@ -574,6 +606,14 @@ def get_verified_evidence_review_service(
     return build_verified_evidence_review_service(db)
 
 
+def get_governance_decision_service(
+    db: Session = Depends(get_db),
+) -> GovernanceDecisionService:
+    """Compose normal decisions only at the independently gated boundary."""
+
+    return build_governance_decision_service(db)
+
+
 def _require_verified_evidence_submit_enabled() -> None:
     """Hide the route until its independent execution/admission gate passes."""
 
@@ -596,6 +636,19 @@ def _require_verified_evidence_review_enabled() -> None:
             detail={
                 "code": "assurance_feature_disabled",
                 "message": "Verified evidence review is not enabled.",
+            },
+        )
+
+
+def _require_governance_decision_enabled() -> None:
+    """Hide normal decisions until their independent PostgreSQL release gate passes."""
+
+    if not settings.assurance_v2_governance_decision_enabled:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "code": "assurance_feature_disabled",
+                "message": "Governance decisions are not enabled.",
             },
         )
 
@@ -680,6 +733,19 @@ def _require_evidence_review_permission(membership: OrgMembership) -> None:
         )
 
 
+def _require_decision_write_permission(membership: OrgMembership) -> None:
+    """Require the literal decision capability; role names are insufficient."""
+
+    if "evaluation:decision" not in membership.permissions:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "evaluation_decision_write_forbidden",
+                "message": "The evaluation:decision permission is required.",
+            },
+        )
+
+
 def _require_evidence_scope(
     *,
     db: Session,
@@ -712,6 +778,34 @@ def _require_evidence_scope(
         )
     ):
         _missing("evidence_scope")
+
+
+def _require_decision_scope(
+    *,
+    db: Session,
+    organization_id: str,
+    workspace_id: str,
+    system_id: str,
+    run_id: str,
+) -> None:
+    """Bind every decision path identity to the same persisted v2 run."""
+
+    try:
+        run = _service(db).get_run(
+            org_id=organization_id,
+            system_id=system_id,
+            run_id=run_id,
+        )
+    except EvaluationWorkbenchError as error:
+        _raise(error)
+    if not isinstance(run, dict) or (
+        run.get("organizationId") != organization_id
+        or run.get("workspaceId") != workspace_id
+        or run.get("systemId") != system_id
+        or run.get("id") != run_id
+        or run.get("contractVersion") != "2.0.0"
+    ):
+        _missing("decision_scope")
 
 
 def _raise(error: EvaluationWorkbenchError) -> None:
@@ -1289,5 +1383,56 @@ async def review_verified_evidence(
             expected_review_version=payload["expectedReviewVersion"],
         )
         return _respond(result, EvidenceReviewResponse)
+    except EvaluationWorkbenchError as error:
+        _raise(error)
+
+
+@governance_decision_router.post(
+    "/workspaces/{workspace_id}/systems/{system_id}/evaluation-v2/runs/{run_id}/decisions",
+    status_code=201,
+    response_model=GovernanceDecisionResponse,
+    dependencies=[Depends(_require_governance_decision_enabled)],
+    openapi_extra=_request_body_schema(GovernanceDecisionRequest),
+)
+async def create_governance_decision(
+    org_id: str,
+    workspace_id: str,
+    system_id: str,
+    run_id: str,
+    request: Request,
+    idempotency_key: str = Header(alias="Idempotency-Key"),
+    membership: OrgMembership = Depends(organization_membership),
+    db: Session = Depends(get_db),
+    decision_service: GovernanceDecisionService = Depends(get_governance_decision_service),
+):
+    """Append one normal decision without enabling owner override or enforcement."""
+
+    _require_decision_write_permission(membership)
+    if membership.org_id != org_id:
+        _missing("decision_scope")
+    _require_decision_scope(
+        db=db,
+        organization_id=membership.org_id,
+        workspace_id=workspace_id,
+        system_id=system_id,
+        run_id=run_id,
+    )
+    payload = await _payload(request, GovernanceDecisionRequest)
+    try:
+        result = decision_service.decide(
+            scope=GovernanceDecisionScope(
+                organization_id=membership.org_id,
+                workspace_id=workspace_id,
+                system_id=system_id,
+                run_id=run_id,
+            ),
+            actor_id=membership.user_id,
+            idempotency_key=idempotency_key,
+            expected_verdict_version=payload["expectedVerdictVersion"],
+            overall_verdict=payload["overallVerdict"],
+            layer_verdicts=payload["layerVerdicts"],
+            rationale=payload["rationale"],
+        )
+        return _respond(result, GovernanceDecisionResponse)
     except EvaluationWorkbenchError as error:
         _raise(error)

@@ -15,10 +15,26 @@ import os
 import re
 import subprocess
 import uuid
+from dataclasses import replace
 from datetime import UTC, timedelta
 from pathlib import Path
 
 import pytest
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import Session
+
+from src.application.ports.evaluation_workbench import (
+    EvaluationWorkbenchError,
+    FrozenJsonObject,
+)
+from src.application.ports.governance_decision import (
+    GovernanceDecisionScope,
+    PersistGovernanceDecisionCommand,
+)
+from src.domain.assurance.evaluation_v2 import canonical_json
+from src.infrastructure.db.repositories.evaluation_workbench_repository import (
+    SqlAlchemyEvaluationWorkbenchRepository,
+)
 
 MIGRATIONS = Path(__file__).parents[1] / "migrations"
 DIRECT_PATH = MIGRATIONS / "013b_evaluation_assurance_trust_integrity.sql"
@@ -3890,3 +3906,119 @@ def test_postgresql_migration_rejects_preexisting_gapped_audit_chain_atomically(
                 )
         finally:
             cleanup.close()
+
+
+def test_postgresql_decision_repository_commits_canonical_cas_and_rejects_stale(
+    postgres_seeded_upgrade_connection,
+) -> None:
+    """Exercise the application adapter against the production 013b triggers."""
+
+    assert POSTGRES_URL is not None
+    connection = postgres_seeded_upgrade_connection
+    _prepare_verified_v2_admission(connection, submitted_by="actor-submit")
+    _insert_nonce_claim(connection)
+    _link_and_accept_verified_v2_admission(
+        connection,
+        link_id="link-adapter-decision",
+        review_id="review-adapter-decision",
+    )
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT current_schema()")
+        schema_name = cursor.fetchone()[0]
+    assert isinstance(schema_name, str) and schema_name
+
+    engine = create_engine(
+        POSTGRES_URL,
+        connect_args={"options": f"-csearch_path={schema_name}"},
+        pool_pre_ping=True,
+    )
+    scope = GovernanceDecisionScope(
+        organization_id="org-a",
+        workspace_id="ws-a",
+        system_id="sys-a",
+        run_id="run-a",
+    )
+    layers = FrozenJsonObject.from_mapping(
+        {
+            "suites": {"execution-a": "conditional"},
+            "modalities": {"predictive_model": "conditional"},
+            "components": {},
+            "riskDimensions": {"fairness": "conditional"},
+        }
+    )
+    session = Session(engine, expire_on_commit=False)
+    try:
+        repository = SqlAlchemyEvaluationWorkbenchRepository(session)
+        authority = repository.load_governance_decision_authority_for_update(scope=scope)
+        assert authority is not None
+        assert authority.current_verdict_version == 0
+        assert authority.requested_by == "actor-a"
+        assert authority.evidence_submitters == ("actor-submit",)
+        assert authority.suite_execution_ids == ("execution-a",)
+        command = PersistGovernanceDecisionCommand(
+            scope=scope,
+            authority=authority,
+            decision_id="11111111-1111-4111-8111-111111111111",
+            actor_id="actor-decision",
+            expected_verdict_version=0,
+            next_verdict_version=1,
+            overall_verdict="conditional",
+            layer_verdicts=layers,
+            rationale="Reviewed evidence supports conditional approval.",
+            owner_override_reason=None,
+            decided_at=repository.read_fresh_utc_now(),
+        )
+        record = repository.persist_governance_decision(command)
+        assert record.verdict_version == 1
+        assert record.evidence_set_hash == authority.evidence_set_hash
+        session.commit()
+    finally:
+        session.close()
+
+    expected_evidence_json = canonical_json(authority.evidence_set.to_dict())
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT verdict_version, overall_verdict, layer_verdicts_json, "
+            "evidence_set_json, evidence_set_hash, owner_override_reason "
+            "FROM governance_evaluation_decisions WHERE run_id='run-a'"
+        )
+        decision_row = cursor.fetchone()
+        assert decision_row == (
+            1,
+            "conditional",
+            canonical_json(layers.to_dict()),
+            expected_evidence_json,
+            authority.evidence_set_hash,
+            None,
+        )
+        cursor.execute(
+            "SELECT verdict_version, overall_verdict, layer_verdicts_json "
+            "FROM governance_evaluation_runs WHERE id='run-a'"
+        )
+        assert cursor.fetchone() == (
+            1,
+            "conditional",
+            canonical_json(layers.to_dict()),
+        )
+
+    stale_session = Session(engine, expire_on_commit=False)
+    try:
+        stale_repository = SqlAlchemyEvaluationWorkbenchRepository(stale_session)
+        stale_command = replace(
+            command,
+            decision_id="22222222-2222-4222-8222-222222222222",
+            decided_at=stale_repository.read_fresh_utc_now(),
+        )
+        with pytest.raises(EvaluationWorkbenchError) as caught:
+            stale_repository.persist_governance_decision(stale_command)
+        assert caught.value.code == "governance_decision_version_conflict"
+        stale_session.rollback()
+    finally:
+        stale_session.close()
+        engine.dispose()
+
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT count(*) FROM governance_evaluation_decisions " "WHERE run_id='run-a'"
+        )
+        assert cursor.fetchone() == (1,)

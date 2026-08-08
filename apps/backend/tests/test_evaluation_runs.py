@@ -31,6 +31,12 @@ from src.application.services.evaluation_runs_service import (
     EvaluationRunsService,
     EvaluationWorkflowError,
 )
+from src.application.services.legacy_evaluation_feature_gates import (
+    AUTOMATIC_ENFORCEMENT_FLAG,
+    EVIDENCE_LINKING_FLAG,
+    FAIRMIND_WORKER_FLAG,
+    LegacyEvaluationFeatureGates,
+)
 
 
 ORG_A = str(uuid.uuid4())
@@ -39,6 +45,9 @@ USER_A = str(uuid.uuid4())
 USER_B = str(uuid.uuid4())
 VIEWER = str(uuid.uuid4())
 BASE = "/api/v1/ai-governance/organizations"
+LEGACY_AUTOMATIC_ENFORCEMENT_FLAG = AUTOMATIC_ENFORCEMENT_FLAG
+LEGACY_FAIRMIND_WORKER_FLAG = FAIRMIND_WORKER_FLAG
+LEGACY_EVIDENCE_LINKING_FLAG = EVIDENCE_LINKING_FLAG
 
 
 def _token(user_id: str) -> TokenData:
@@ -172,6 +181,12 @@ def evaluation_client():
         engine.dispose()
 
 
+@pytest.fixture(autouse=True)
+def _enable_legacy_linking_for_existing_passport_contract_tests(monkeypatch):
+    """Keep the historical Passport-contract cases explicit about their capability."""
+    monkeypatch.setenv(LEGACY_EVIDENCE_LINKING_FLAG, "true")
+
+
 def _plan_payload(**overrides) -> dict:
     payload = {
         "name": "Release assurance",
@@ -226,6 +241,91 @@ def _workflow_detail(message: str, next_action: str) -> dict:
             "nextAction": next_action,
         }
     }
+
+
+def test_legacy_capability_flags_require_literal_true() -> None:
+    gates = LegacyEvaluationFeatureGates.from_environment(
+        {
+            LEGACY_AUTOMATIC_ENFORCEMENT_FLAG: "TRUE",
+            LEGACY_FAIRMIND_WORKER_FLAG: "1",
+            LEGACY_EVIDENCE_LINKING_FLAG: "yes",
+        }
+    )
+
+    assert gates == LegacyEvaluationFeatureGates()
+
+
+def test_legacy_mutation_capabilities_default_deny_unsupported_paths(
+    evaluation_client,
+    monkeypatch,
+) -> None:
+    client, session_factory, _ = evaluation_client
+    monkeypatch.delenv(LEGACY_AUTOMATIC_ENFORCEMENT_FLAG, raising=False)
+    monkeypatch.delenv(LEGACY_FAIRMIND_WORKER_FLAG, raising=False)
+    monkeypatch.delenv(LEGACY_EVIDENCE_LINKING_FLAG, raising=False)
+
+    automatic = client.post(
+        _plans_url(), json=_plan_payload(enforcementMode="automatic")
+    )
+    worker = client.post(
+        _plans_url(), json=_plan_payload(deliveryMode="fairmind_worker")
+    )
+
+    assert automatic.status_code == 409
+    assert automatic.json()["detail"]["code"] == "automatic_enforcement_disabled"
+    assert worker.status_code == 409
+    assert worker.json()["detail"]["code"] == "fairmind_worker_delivery_disabled"
+
+    safe_plan = _create_plan(client)
+    assert _activate(client, safe_plan["id"]).status_code == 200
+    run = _create_run(client, safe_plan["id"]).json()
+    link = _link(client, run["id"], "untrusted-evidence", "untrusted-revision")
+
+    assert link.status_code == 409
+    assert link.json()["detail"] == {
+        "code": "legacy_evidence_linking_disabled",
+        "message": (
+            "Legacy evidence linking is disabled because it bypasses the "
+            "trusted-evidence admission workflow."
+        ),
+        "nextAction": (
+            "Use the Assurance V2 trusted-evidence workflow, or enable the "
+            "reviewed legacy-link capability."
+        ),
+    }
+    session = session_factory()
+    try:
+        assert session.execute(select(GovernanceEvaluationPlan.__table__.c.id)).all() == [
+            (safe_plan["id"],)
+        ]
+        stored = session.execute(
+            select(GovernanceEvaluationRun.__table__).where(
+                GovernanceEvaluationRun.__table__.c.id == run["id"]
+            )
+        ).mappings().one()
+        assert stored["technical_status"] == "awaiting_evidence"
+        assert stored["linked_passport_revision_id"] is None
+        assert "evaluation_run.passport_linked" not in _audit_actions(session_factory)
+    finally:
+        session.close()
+
+
+def test_explicit_legacy_capability_flags_permit_plan_shapes(evaluation_client, monkeypatch) -> None:
+    client, _, _ = evaluation_client
+    monkeypatch.setenv(LEGACY_AUTOMATIC_ENFORCEMENT_FLAG, "true")
+    monkeypatch.setenv(LEGACY_FAIRMIND_WORKER_FLAG, "true")
+
+    response = client.post(
+        _plans_url(),
+        json=_plan_payload(
+            enforcementMode="automatic",
+            deliveryMode="fairmind_worker",
+        ),
+    )
+
+    assert response.status_code == 201, response.text
+    assert response.json()["enforcementMode"] == "automatic"
+    assert response.json()["deliveryMode"] == "fairmind_worker"
 
 
 def test_v1_mutations_are_quarantined_when_assurance_v2_is_enabled(
@@ -857,8 +957,9 @@ def test_preflight_blocks_inactive_external_and_imported_plans(
     }
 
 
-def test_unavailable_worker_cannot_create_run(evaluation_client) -> None:
+def test_unavailable_worker_cannot_create_run(evaluation_client, monkeypatch) -> None:
     client, session_factory, _ = evaluation_client
+    monkeypatch.setenv(LEGACY_FAIRMIND_WORKER_FLAG, "true")
     plan = _create_plan(client, deliveryMode="fairmind_worker")
     assert _activate(client, plan["id"]).status_code == 200
 

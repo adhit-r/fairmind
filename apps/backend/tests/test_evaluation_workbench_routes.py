@@ -16,6 +16,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from api.routes.evaluation_workbench import (
+    governance_decision_router,
     router as evaluation_workbench_router,
     verified_evidence_router,
     verified_evidence_review_router,
@@ -40,6 +41,7 @@ from database.models import Organization, OrganizationMember, OrganizationRole, 
 from src.domain.assurance.evaluation_v2 import canonical_json, canonical_sha256
 from src.application.ports.evaluation_workbench import MutationResult
 from api.routes.evaluation_workbench import (
+    get_governance_decision_service,
     get_verified_evidence_admission_service,
     get_verified_evidence_review_service,
 )
@@ -68,6 +70,11 @@ app.include_router(
     verified_evidence_review_router,
     prefix="/api/v1/ai-governance",
     tags=["evaluation-workbench-v2-evidence-review"],
+)
+app.include_router(
+    governance_decision_router,
+    prefix="/api/v1/ai-governance",
+    tags=["evaluation-workbench-v2-governance-decision"],
 )
 
 ORG = str(uuid.uuid4())
@@ -287,6 +294,19 @@ def _review_url(
     )
 
 
+def _decision_url(
+    *,
+    run_id: str,
+    workspace_id: str = "workspace-a",
+    system_id: str = "system-a",
+    org_id: str = ORG,
+) -> str:
+    return (
+        f"/api/v1/ai-governance/organizations/{org_id}/workspaces/{workspace_id}"
+        f"/systems/{system_id}/evaluation-v2/runs/{run_id}/decisions"
+    )
+
+
 def _grant_evidence_submit_permission() -> None:
     _grant_role_permissions("admin", ["evaluation:evidence:submit", "evaluation:evidence:link"])
 
@@ -386,6 +406,30 @@ class _RecordingEvidenceReviewService:
                 "evidenceResultStatus": "failed",
                 "runTechnicalStatus": "succeeded",
                 "runEvidenceOutcome": "failed",
+            },
+            status=201,
+        )
+
+
+class _RecordingGovernanceDecisionService:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    def decide(self, **kwargs):
+        self.calls.append(kwargs)
+        return MutationResult.create(
+            body={
+                "decisionId": "11111111-1111-4111-8111-111111111111",
+                "runId": kwargs["scope"].run_id,
+                "contractVersion": "2.0.0",
+                "verdictVersion": kwargs["expected_verdict_version"] + 1,
+                "overallVerdict": kwargs["overall_verdict"],
+                "layerVerdictsSchemaVersion": "1.0.0",
+                "layerVerdicts": kwargs["layer_verdicts"],
+                "rationale": kwargs["rationale"],
+                "decidedBy": kwargs["actor_id"],
+                "evidenceSetHash": "a" * 64,
+                "decidedAt": "2026-08-09T12:00:00+00:00",
             },
             status=201,
         )
@@ -838,6 +882,149 @@ def test_verified_evidence_review_rejects_non_strict_body_before_service(
         )
     finally:
         app.dependency_overrides.pop(get_verified_evidence_review_service, None)
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "invalid_request"
+    assert recorder.calls == []
+
+
+def test_governance_decision_is_hidden_when_its_feature_flag_is_off(
+    workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _ = workbench_client
+    monkeypatch.setattr(
+        settings,
+        "assurance_v2_governance_decision_enabled",
+        False,
+        raising=False,
+    )
+    recorder = _RecordingGovernanceDecisionService()
+    app.dependency_overrides[get_governance_decision_service] = lambda: recorder
+    try:
+        response = client.post(
+            _decision_url(run_id="run-not-visible"),
+            headers=_headers("decision-hidden"),
+            json={
+                "expectedVerdictVersion": 0,
+                "overallVerdict": "conditional",
+                "layerVerdicts": {
+                    "suites": {"suite-not-visible": "conditional"},
+                    "modalities": {},
+                    "components": {},
+                    "riskDimensions": {},
+                },
+                "rationale": "Not visible while disabled.",
+            },
+        )
+    finally:
+        app.dependency_overrides.pop(get_governance_decision_service, None)
+
+    assert response.status_code == 404
+    assert recorder.calls == []
+
+
+def test_governance_decision_requires_exact_permission_and_run_scope(
+    workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _ = workbench_client
+    monkeypatch.setattr(
+        settings,
+        "assurance_v2_governance_decision_enabled",
+        True,
+        raising=False,
+    )
+    _plan, run = _create_active_v2_plan_and_run(client)
+    suite_execution_id = run["suiteExecutions"][0]["id"]
+    payload = {
+        "expectedVerdictVersion": 0,
+        "overallVerdict": "conditional",
+        "layerVerdicts": {
+            "suites": {suite_execution_id: "conditional"},
+            "modalities": {"agent": "conditional"},
+            "components": {},
+            "riskDimensions": {"safety": "conditional"},
+        },
+        "rationale": "Current reviewed evidence supports conditional approval.",
+    }
+    recorder = _RecordingGovernanceDecisionService()
+    app.dependency_overrides[get_governance_decision_service] = lambda: recorder
+    try:
+        denied = client.post(
+            _decision_url(run_id=run["id"]),
+            headers=_headers("decision-denied"),
+            json=payload,
+        )
+        assert denied.status_code == 403
+        assert denied.json()["detail"]["code"] == "evaluation_decision_write_forbidden"
+
+        _grant_role_permissions("admin", ["evaluation:decision"])
+        wrong_workspace = client.post(
+            _decision_url(run_id=run["id"], workspace_id="workspace-wrong"),
+            headers=_headers("decision-wrong-scope"),
+            json=payload,
+        )
+        assert wrong_workspace.status_code == 404
+
+        accepted = client.post(
+            _decision_url(run_id=run["id"]),
+            headers=_headers("decision-accepted"),
+            json=payload,
+        )
+    finally:
+        app.dependency_overrides.pop(get_governance_decision_service, None)
+
+    assert accepted.status_code == 201, accepted.text
+    assert accepted.json()["verdictVersion"] == 1
+    assert len(recorder.calls) == 1
+    call = recorder.calls[0]
+    assert call["actor_id"] == USER
+    assert call["idempotency_key"] == "decision-accepted"
+    assert call["scope"].organization_id == ORG
+    assert call["scope"].workspace_id == "workspace-a"
+    assert call["scope"].system_id == "system-a"
+    assert call["scope"].run_id == run["id"]
+    assert call["expected_verdict_version"] == 0
+    assert call["overall_verdict"] == "conditional"
+    assert call["layer_verdicts"] == payload["layerVerdicts"]
+
+
+def test_governance_decision_request_cannot_enable_owner_override(
+    workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _ = workbench_client
+    monkeypatch.setattr(
+        settings,
+        "assurance_v2_governance_decision_enabled",
+        True,
+        raising=False,
+    )
+    _plan, run = _create_active_v2_plan_and_run(client)
+    suite_execution_id = run["suiteExecutions"][0]["id"]
+    _grant_role_permissions("admin", ["evaluation:decision"])
+    recorder = _RecordingGovernanceDecisionService()
+    app.dependency_overrides[get_governance_decision_service] = lambda: recorder
+    try:
+        response = client.post(
+            _decision_url(run_id=run["id"]),
+            headers=_headers("decision-owner-override"),
+            json={
+                "expectedVerdictVersion": 0,
+                "overallVerdict": "approved",
+                "layerVerdicts": {
+                    "suites": {suite_execution_id: "approved"},
+                    "modalities": {},
+                    "components": {},
+                    "riskDimensions": {},
+                },
+                "rationale": "Attempted owner override.",
+                "ownerOverrideReason": "Not supported by this boundary.",
+            },
+        )
+    finally:
+        app.dependency_overrides.pop(get_governance_decision_service, None)
 
     assert response.status_code == 422
     assert response.json()["detail"]["code"] == "invalid_request"

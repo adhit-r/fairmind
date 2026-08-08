@@ -34,6 +34,7 @@ from database.governance_models import (
 )
 from database.models import Organization, OrganizationMember, User
 from src.application.ports.evaluation_workbench import FrozenJsonObject
+from src.application.ports.governance_decision import GovernanceDecisionScope
 from src.application.services.evaluation_workbench_service import (
     EvaluationWorkbenchError,
     EvaluationWorkbenchService,
@@ -98,6 +99,25 @@ def _service(
             repository=repository,
         )
     )
+
+
+def test_sqlite_repository_explicitly_rejects_governance_decision_authority(
+    repository_fixture,
+) -> None:
+    session, _factory = repository_fixture
+    repository = SqlAlchemyEvaluationWorkbenchRepository(session)
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        repository.load_governance_decision_authority_for_update(
+            scope=GovernanceDecisionScope(
+                organization_id=ORG,
+                workspace_id="workspace-a",
+                system_id="system-a",
+                run_id="run-a",
+            )
+        )
+
+    assert caught.value.code == "governance_decision_postgresql_required"
 
 
 @pytest.fixture

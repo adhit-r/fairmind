@@ -420,6 +420,16 @@ if settings.assurance_v2_enabled:
         )
     else:
         logger.info("Verified Evidence Passport review route is disabled")
+    if settings.assurance_v2_governance_decision_enabled:
+        _include_router(
+            "api.routes.evaluation_workbench",
+            prefix="/api/v1/ai-governance",
+            tags=["evaluation-workbench-v2-governance-decision"],
+            attr="governance_decision_router",
+            required=True,
+        )
+    else:
+        logger.info("Governance decision route is disabled")
     if settings.assurance_v2_evaluator_catalog_enabled:
         _include_router(
             "api.routes.evaluator_catalog",

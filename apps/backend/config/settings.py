@@ -54,6 +54,9 @@ class Settings(BaseSettings):
     # Four-eyes evidence review remains separately disabled until its
     # persistence, authorization, and release-gate controls are validated.
     assurance_v2_evidence_review_enabled: bool = False
+    # Normal governance decisions remain independently disabled until their
+    # PostgreSQL CAS path and authorization gate are deliberately released.
+    assurance_v2_governance_decision_enabled: bool = False
     # Evaluator registration administration is inert until the dedicated
     # release gate, narrow organization permission, and audited ceremony are
     # deliberately enabled together.
