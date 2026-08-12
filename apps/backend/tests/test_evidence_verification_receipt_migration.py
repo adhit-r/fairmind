@@ -483,15 +483,20 @@ def test_application_harness_replaces_structural_orm_receipt_ddl() -> None:
             "SELECT sql FROM sqlite_master WHERE type = 'table' "
             "AND name = 'governance_evidence_verification_receipts'"
         ).scalar_one()
-        trigger_count = connection.exec_driver_sql(
-            "SELECT count(*) FROM sqlite_master WHERE type = 'trigger' "
+        trigger_names = set(connection.exec_driver_sql(
+            "SELECT name FROM sqlite_master WHERE type = 'trigger' "
             "AND tbl_name = 'governance_evidence_verification_receipts'"
-        ).scalar_one()
+        ).scalars())
     engine.dispose()
 
     assert "json_valid(execution_binding_json)" in authoritative_sql
     assert "uq_governance_evidence_verification_receipt_scope" not in authoritative_sql
-    assert trigger_count == 3
+    assert trigger_names == {
+        "governance_evidence_verification_receipts_guard_insert",
+        "governance_evidence_verification_receipts_no_update",
+        "governance_evidence_verification_receipts_no_delete",
+        "governance_evidence_verification_receipts_catalog_guard_013d",
+    }
 
 
 def test_postgresql_013c_source_freezes_the_narrow_database_claim() -> None:

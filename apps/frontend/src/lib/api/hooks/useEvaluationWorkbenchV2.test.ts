@@ -62,7 +62,7 @@ function plan(overrides: Partial<EvaluationPlanV2> = {}): EvaluationPlanV2 {
 }
 
 function run(overrides: Partial<EvaluationRunV2> = {}): EvaluationRunV2 {
-  const base: EvaluationRunV2 = {
+  const base: Omit<EvaluationRunV2, 'envelope'> = {
     id: 'run-1',
     organizationId: 'org-1',
     workspaceId: 'workspace-1',
@@ -97,7 +97,6 @@ function run(overrides: Partial<EvaluationRunV2> = {}): EvaluationRunV2 {
       failureMessage: null,
     }],
     envelopeId: 'envelope-1',
-    envelope: {},
     envelopeHash: 'd'.repeat(64),
     verdictVersion: 1,
     requestedBy: 'user-1',

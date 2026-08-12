@@ -652,6 +652,7 @@ def test_verified_evidence_submit_is_hidden_when_feature_flag_is_off(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", True)
     monkeypatch.setattr(settings, "assurance_v2_evidence_submit_enabled", False)
 
     response = client.post(
@@ -663,11 +664,34 @@ def test_verified_evidence_submit_is_hidden_when_feature_flag_is_off(
     assert response.status_code == 404
 
 
+def test_verified_evidence_submit_is_hidden_when_master_gate_is_off(
+    workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", False)
+    monkeypatch.setattr(settings, "assurance_v2_evidence_submit_enabled", True)
+    recorder = _RecordingAdmissionService()
+    app.dependency_overrides[get_verified_evidence_admission_service] = lambda: recorder
+    try:
+        response = client.post(
+            _admission_url(run_id="run-not-visible", suite_execution_id="suite-not-visible"),
+            headers={**_headers("evidence-master-hidden"), "Content-Type": "application/json"},
+            content=b"{}",
+        )
+    finally:
+        app.dependency_overrides.pop(get_verified_evidence_admission_service, None)
+
+    assert response.status_code == 404
+    assert recorder.calls == []
+
+
 def test_verified_evidence_submit_requires_explicit_permission_and_exact_scope(
     workbench_client,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", True)
     monkeypatch.setattr(settings, "assurance_v2_evidence_submit_enabled", True)
     _plan, run = _create_active_v2_plan_and_run(client)
     suite_execution_id = run["suiteExecutions"][0]["id"]
@@ -720,6 +744,7 @@ def test_verified_evidence_link_permission_is_separate_from_submission(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", True)
     monkeypatch.setattr(settings, "assurance_v2_evidence_submit_enabled", True)
     _plan, run = _create_active_v2_plan_and_run(client)
     suite_execution_id = run["suiteExecutions"][0]["id"]
@@ -745,6 +770,7 @@ def test_verified_evidence_submit_rejects_oversized_body_before_service(
     from src.api.routers.evaluation_workbench import MAX_REQUEST_BYTES
 
     client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", True)
     monkeypatch.setattr(settings, "assurance_v2_evidence_submit_enabled", True)
     _plan, run = _create_active_v2_plan_and_run(client)
     suite_execution_id = run["suiteExecutions"][0]["id"]
@@ -770,6 +796,7 @@ def test_verified_evidence_review_is_hidden_when_its_feature_flag_is_off(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", True)
     monkeypatch.setattr(settings, "assurance_v2_evidence_review_enabled", False, raising=False)
     recorder = _RecordingEvidenceReviewService()
     app.dependency_overrides[get_verified_evidence_review_service] = lambda: recorder
@@ -790,11 +817,38 @@ def test_verified_evidence_review_is_hidden_when_its_feature_flag_is_off(
     assert recorder.calls == []
 
 
+def test_verified_evidence_review_is_hidden_when_master_gate_is_off(
+    workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", False)
+    monkeypatch.setattr(settings, "assurance_v2_evidence_review_enabled", True, raising=False)
+    recorder = _RecordingEvidenceReviewService()
+    app.dependency_overrides[get_verified_evidence_review_service] = lambda: recorder
+    try:
+        response = client.post(
+            _review_url(run_id="run-not-visible", suite_execution_id="suite-not-visible"),
+            headers=_headers("review-master-hidden"),
+            json={
+                "decision": "accepted",
+                "rationale": "Master gate remains authoritative.",
+                "expectedReviewVersion": 0,
+            },
+        )
+    finally:
+        app.dependency_overrides.pop(get_verified_evidence_review_service, None)
+
+    assert response.status_code == 404
+    assert recorder.calls == []
+
+
 def test_verified_evidence_review_requires_permission_and_binds_exact_run_suite_scope(
     workbench_client,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client, active = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", True)
     monkeypatch.setattr(settings, "assurance_v2_evidence_review_enabled", True, raising=False)
     _plan, run = _create_active_v2_plan_and_run(client)
     suite_execution_id = run["suiteExecutions"][0]["id"]
@@ -862,6 +916,7 @@ def test_verified_evidence_review_rejects_non_strict_body_before_service(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client, active = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", True)
     monkeypatch.setattr(settings, "assurance_v2_evidence_review_enabled", True, raising=False)
     _plan, run = _create_active_v2_plan_and_run(client)
     suite_execution_id = run["suiteExecutions"][0]["id"]
@@ -893,6 +948,7 @@ def test_governance_decision_is_hidden_when_its_feature_flag_is_off(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", True)
     monkeypatch.setattr(
         settings,
         "assurance_v2_governance_decision_enabled",
@@ -924,11 +980,49 @@ def test_governance_decision_is_hidden_when_its_feature_flag_is_off(
     assert recorder.calls == []
 
 
+def test_governance_decision_is_hidden_when_master_gate_is_off(
+    workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", False)
+    monkeypatch.setattr(
+        settings,
+        "assurance_v2_governance_decision_enabled",
+        True,
+        raising=False,
+    )
+    recorder = _RecordingGovernanceDecisionService()
+    app.dependency_overrides[get_governance_decision_service] = lambda: recorder
+    try:
+        response = client.post(
+            _decision_url(run_id="run-not-visible"),
+            headers=_headers("decision-master-hidden"),
+            json={
+                "expectedVerdictVersion": 0,
+                "overallVerdict": "conditional",
+                "layerVerdicts": {
+                    "suites": {"suite-not-visible": "conditional"},
+                    "modalities": {},
+                    "components": {},
+                    "riskDimensions": {},
+                },
+                "rationale": "Master gate remains authoritative.",
+            },
+        )
+    finally:
+        app.dependency_overrides.pop(get_governance_decision_service, None)
+
+    assert response.status_code == 404
+    assert recorder.calls == []
+
+
 def test_governance_decision_requires_exact_permission_and_run_scope(
     workbench_client,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", True)
     monkeypatch.setattr(
         settings,
         "assurance_v2_governance_decision_enabled",
@@ -1011,6 +1105,7 @@ def test_governance_decision_request_cannot_enable_owner_override(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", True)
     monkeypatch.setattr(
         settings,
         "assurance_v2_governance_decision_enabled",

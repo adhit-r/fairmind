@@ -172,12 +172,10 @@ Legacy integrations exist for experiment tracking platforms. Their presence does
 
 FairMind is intended to gather and organize evidence for governance frameworks. Framework mapping is not the same as legal compliance, certification, or an automatic conformity decision.
 
-**AI Bill of Materials (BOM)**
-- Standard SBOM format for AI models
-- Component tracking and provenance
-- Dependency analysis and vulnerability scanning
-- Model lineage and version history
-- Training data documentation
+**AI Bill of Materials (BOM) — planned**
+- The legacy global HTTP API is quarantined and the dashboard is intentionally unavailable.
+- A replacement must enforce authenticated tenant scope, exact action permissions, server-derived identity, and audited persistence.
+- Component provenance, dependency analysis, vulnerability metadata, lineage, and training-data documentation remain roadmap capabilities until independently validated.
 
 **Regulatory Compliance**
 
@@ -372,7 +370,6 @@ Full interactive API documentation with request/response examples:
 
 **Compliance and Governance**
 - `POST /api/v1/compliance/report` - Generate compliance report
-- `POST /api/v1/aibom/generate` - Create AI Bill of Materials
 - `GET /api/v1/compliance/frameworks` - List supported frameworks
 
 **Model Management**
@@ -391,7 +388,7 @@ Full interactive API documentation with request/response examples:
 - `GET /health` - Health check endpoint
 - `GET /api/v1/system/info` - System information
 
-The API catalog includes legacy endpoints. Endpoint presence does not imply that the route is bound to the v2 evidence contract or independently validated.
+The API catalog includes legacy endpoints. Endpoint presence does not imply that the route is bound to the v2 evidence contract or independently validated. The legacy `/api/v1/ai-bom` HTTP surface is intentionally unmounted and also fails closed if mounted directly. It remains quarantined until it has authenticated membership, exact action permissions, server-derived organization and actor identity, and tenant-scoped persistence.
 
 For complete API reference, see [API Documentation](docs/API_ENDPOINTS.md)
 
@@ -410,7 +407,7 @@ For complete API reference, see [API Documentation](docs/API_ENDPOINTS.md)
 | **Test Results** | `/tests/[id]` | Detailed test analysis, W&B/MLflow links, JSON export |
 | **Remediation** | `/remediation` | Select strategies, generate Python code |
 | **Compliance Dashboard** | `/compliance-dashboard` | Policy management, report generation |
-| **AI BOM** | `/ai-bom` | Bill of Materials generation and tracking |
+| **AI BOM** | `/ai-bom` | Explicit unavailable state; legacy read/write API quarantined pending tenant-safe replacement |
 | **Models** | `/models` | Model registry, versioning, lifecycle management |
 | **Monitoring** | `/monitoring` | Real-time metrics, alerts, performance tracking |
 | **Analytics** | `/analytics` | Performance analytics, trend analysis, insights |

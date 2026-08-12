@@ -614,43 +614,44 @@ def get_governance_decision_service(
     return build_governance_decision_service(db)
 
 
-def _require_verified_evidence_submit_enabled() -> None:
-    """Hide the route until its independent execution/admission gate passes."""
+def _require_assurance_v2_capability(child_enabled: bool, message: str) -> None:
+    """Require both the master switch and one independently gated capability."""
 
-    if not settings.assurance_v2_evidence_submit_enabled:
+    if not (settings.assurance_v2_enabled and child_enabled):
         raise HTTPException(
             status_code=404,
             detail={
                 "code": "assurance_feature_disabled",
-                "message": "Verified evidence submission is not enabled.",
+                "message": message,
             },
         )
+
+
+def _require_verified_evidence_submit_enabled() -> None:
+    """Hide the route until its independent execution/admission gate passes."""
+
+    _require_assurance_v2_capability(
+        settings.assurance_v2_evidence_submit_enabled,
+        "Verified evidence submission is not enabled.",
+    )
 
 
 def _require_verified_evidence_review_enabled() -> None:
     """Hide review until its separate authorization and integrity gate passes."""
 
-    if not settings.assurance_v2_evidence_review_enabled:
-        raise HTTPException(
-            status_code=404,
-            detail={
-                "code": "assurance_feature_disabled",
-                "message": "Verified evidence review is not enabled.",
-            },
-        )
+    _require_assurance_v2_capability(
+        settings.assurance_v2_evidence_review_enabled,
+        "Verified evidence review is not enabled.",
+    )
 
 
 def _require_governance_decision_enabled() -> None:
-    """Hide normal decisions until their independent PostgreSQL release gate passes."""
+    """Hide normal decisions until their PostgreSQL release gate passes."""
 
-    if not settings.assurance_v2_governance_decision_enabled:
-        raise HTTPException(
-            status_code=404,
-            detail={
-                "code": "assurance_feature_disabled",
-                "message": "Governance decisions are not enabled.",
-            },
-        )
+    _require_assurance_v2_capability(
+        settings.assurance_v2_governance_decision_enabled,
+        "Governance decisions are not enabled.",
+    )
 
 
 def _write(membership: OrgMembership, db: Session) -> None:

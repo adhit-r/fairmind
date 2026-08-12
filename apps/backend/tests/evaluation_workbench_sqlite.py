@@ -13,6 +13,7 @@ from migrations.evaluation_assurance_trust_integrity_migration import (
     sql_for as trust_integrity_sql_for,
 )
 from migrations.evaluation_binding_integrity_migration import sql_for
+from migrations.evaluator_catalog_migration import apply_sqlite as apply_evaluator_catalog_sqlite
 from migrations.evidence_verification_receipt_migration import (
     sql_for as verification_receipt_sql_for,
 )
@@ -31,7 +32,7 @@ _OPERATIONAL_EVALUATION_TABLES = (
 def install_authoritative_assurance_fixtures_for_application_verifier_harness(
     engine: Engine,
 ) -> None:
-    """Replace structural ORM DDL with authoritative 013a/013b/013c fixtures.
+    """Replace structural ORM DDL with authoritative 013a/013b/013c/013d fixtures.
 
     These repository and route tests corrupt persisted rows to prove the
     application verifier fails closed. Migration tests remain the authority for
@@ -49,6 +50,7 @@ def install_authoritative_assurance_fixtures_for_application_verifier_harness(
         raw_connection.execute("DROP TABLE IF EXISTS governance_evidence_verification_receipts")
         raw_connection.executescript(trust_integrity_sql_for("sqlite"))
         raw_connection.executescript(verification_receipt_sql_for("sqlite"))
+        apply_evaluator_catalog_sqlite(raw_connection)
         cursor = raw_connection.cursor()
         placeholders = ", ".join("?" for _table in _OPERATIONAL_EVALUATION_TABLES)
         cursor.execute(

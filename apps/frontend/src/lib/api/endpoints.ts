@@ -212,20 +212,6 @@ export const API_ENDPOINTS = {
       `/api/v1/ai-governance/organizations/${orgId}/evidence-mappings/${mappingId}/review`,
   },
 
-  // AI BOM
-  aiBOM: {
-    documents: '/api/v1/ai-bom/documents',
-    create: '/api/v1/ai-bom/create',
-    document: (bomId: string) => `/api/v1/ai-bom/documents/${bomId}`,
-    analyze: (bomId: string) => `/api/v1/ai-bom/documents/${bomId}/analyze`,
-    fairnessEvidenceProfile: (bomId: string) => `/api/v1/ai-bom/documents/${bomId}/fairness-evidence-profile`,
-    metrics: (bomId: string) => `/api/v1/ai-bom/documents/${bomId}/metrics`,
-    dependencyGraph: (bomId: string) => `/api/v1/ai-bom/documents/${bomId}/dependency-graph`,
-    componentTypes: '/api/v1/ai-bom/components/types',
-    riskLevels: '/api/v1/ai-bom/risk-levels',
-    stats: '/api/v1/ai-bom/stats',
-  },
-
   // Datasets
   datasets: {
     list: '/api/v1/core/datasets',

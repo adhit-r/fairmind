@@ -4,6 +4,8 @@
 
 **Target venues**: ACM FAccT 2027, CODS-COMAD 2027, AIES 2027, NeurIPS SafeGenAI Workshop 2026
 
+> **Capability status:** This is a research concept draft, not evidence of current product capability or validation. The legacy AI-BOM HTTP surface is quarantined, and the multimodal, compliance, and evidence-automation claims below require frozen benchmarks, independent validation, and the release gates defined in the FairMind 2027 roadmap before publication.
+
 ---
 
 ## Abstract

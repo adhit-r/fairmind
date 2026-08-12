@@ -159,10 +159,6 @@ openapi_tags = [
         "description": "Multimodal bias detection for image, audio, video, and cross-modal analysis",
     },
     {
-        "name": "ai-bom",
-        "description": "AI Bill of Materials management and compliance tracking",
-    },
-    {
         "name": "security",
         "description": "OWASP AI security testing and vulnerability scanning",
     },
@@ -215,7 +211,6 @@ app = FastAPI(
 - **Advanced Bias Detection**: Comprehensive bias detection for text and image models
 - **Modern LLM Bias Detection**: WEAT, SEAT, and Minimal Pairs testing
 - **Multimodal Bias Detection**: Image, audio, video, and cross-modal analysis
-- **AI BOM Management**: Bill of Materials tracking and compliance
 - **Security Testing**: OWASP AI security testing
 - **Real-time Monitoring**: Live monitoring and alerting
 - **Fairness Governance**: Policy management and compliance
@@ -446,7 +441,6 @@ _include_router("api.routes.environmental", tags=["environmental"], required=Fal
 _include_router("api.routes.settings", prefix="/api/v1", tags=["settings"], required=False)
 
 # Optional feature routers.
-_include_router("api.routes.real_ai_bom", prefix="/api/v1", tags=["ai-bom"], required=False)
 _include_router("api.routes.advanced_bias_detection", prefix="/api/v1", tags=["advanced-bias-detection"], required=False)
 _include_router("api.routes.bias_detection", prefix="/api/v1", tags=["bias-detection"], required=False)
 _include_router("api.routes.compliance_check", tags=["compliance"], required=False)
@@ -582,7 +576,6 @@ async def root():
             "Advanced Bias Detection & Fairness Analysis",
             "Modern LLM Bias Detection (WEAT, SEAT, Minimal Pairs)",
             "Multimodal Bias Detection (Image, Audio, Video)",
-            "AI BOM Management & Compliance Tracking",
             "Real-time Monitoring & Alerting",
             "Model Explainability & Interpretability",
             "OWASP AI Security Testing",
@@ -613,8 +606,7 @@ async def api_info():
         "endpoints": {
             "health": "/health",
             "core": "/api/v1/core",
-            "database": "/api/v1/database",
-            "ai_bom": "/api/v1/ai-bom"
+            "database": "/api/v1/database"
         }
     }
 
