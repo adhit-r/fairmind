@@ -17,7 +17,7 @@ from pathlib import Path
 from threading import Barrier, Lock
 
 import pytest
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import sessionmaker
 
 from database.governance_models import (
@@ -355,9 +355,15 @@ def test_twenty_sessions_reclaim_one_expired_success_generation(
     postgres_session_factory,
     monkeypatch,
 ) -> None:
-    """Expired completed success is validated, reclaimed once, then replayed 19 times."""
+    """PostgreSQL reclaims one truthful expired success, then replays it 19 times."""
     factory = postgres_session_factory
     org_id = str(uuid.uuid4())
+    generation_one_time = datetime.fromisoformat("2000-01-01T00:00:00+00:00")
+    monkeypatch.setattr(
+        workbench_repository_module.SqlAlchemyEvaluationWorkbenchRepository,
+        "read_fresh_utc_now",
+        lambda _repository: generation_one_time,
+    )
     first_command = _command(
         org_id=org_id,
         key="expired-success-generation",
@@ -382,11 +388,26 @@ def test_twenty_sessions_reclaim_one_expired_success_generation(
             .one()
         )
         first_wrapper = json.loads(first_record["response_body_json"])
+
+        schema_name = initial_session.execute(text("SELECT current_schema()"))
+        schema_name = schema_name.scalar_one()
+        initial_session.execute(
+            text(
+                "SELECT pg_catalog.set_config"
+                "('fairmind.migration_schema', :schema_name, false)"
+            ),
+            {"schema_name": schema_name},
+        )
+        migration_source = (
+            MIGRATIONS / "013h_idempotency_retention_integrity.sql"
+        ).read_text(encoding="utf-8")
+        with initial_session.connection().connection.cursor() as cursor:
+            cursor.execute(migration_source)
+        initial_session.commit()
     finally:
         initial_session.close()
 
-    after_expiry = datetime.fromisoformat(first_record["expires_at"]) + timedelta(seconds=1)
-    monkeypatch.setattr(workbench_repository_module, "_now", lambda: after_expiry)
+    monkeypatch.undo()
     next_command = _command(
         org_id=org_id,
         key="expired-success-generation",

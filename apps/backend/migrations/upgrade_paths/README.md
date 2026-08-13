@@ -45,3 +45,44 @@ intact. Before its ledger write, replay revalidates every stored receipt's full
 stable relational facts and both receipt/admission directions. Lifecycle status
 is current-trust admission state, not a reason to invalidate an older receipt.
 Do not run this upgrade through `apps/backend/scripts/migrate.py`.
+
+## Operational evidence freshness 013g to idempotency retention 013h
+
+Run `013g_to_013h_idempotency_retention_integrity.sql` only after the exact
+013g operator-ledger row is present. The wrapper is one transaction under a
+transaction-scoped advisory lock. It refuses an orphaned 013h catalog, invalid
+or future-dated legacy generations, and ledger checksum drift. Replay succeeds
+only when the frozen direct checksum, owner-bound functions, fixed function
+search paths, and `ENABLE ALWAYS` trigger remain intact.
+
+013h makes PostgreSQL the database-clock authority for every claim and expired
+generation rollover. Each generation is exactly 2,592,000 seconds, independent
+of the session timezone or daylight-saving changes.
+
+The frozen 013h PostgreSQL catalog was measured and is verified through the
+migration-owner connection. That owner/runtime database identity is therefore
+part of the trusted deployment boundary for this revision. A compromised or
+malicious owner credential can replace guards or rewrite the operator ledger;
+013h does not claim protection against that authority. The negative role test
+only proves bounded trigger privilege behavior and is not runtime-login or
+startup-topology proof.
+
+A separately authenticated non-owner application login remains open rollout
+hardening. Adopting it requires a follow-on migration to provision minimum
+runtime ACLs, startup checks that reject owner, superuser, replication, and
+owner-role membership authority, and a catalog reproduced from two clean
+installs queried through that runtime login. Until then, do not describe 013h
+as least-privilege runtime-startup compatible.
+
+The idempotency rows are deliberately non-deletable in 013h, including after a
+generation expires. This is a minimum 30-day anti-reexecution window, not a
+bounded 30-day data-retention claim: an un-retried response remains stored
+until an atomic rollover clears it, and no purge/erasure lifecycle exists yet.
+Expiry permits an atomic in-place rollover of the same identity; it does not
+authorize historical deletion. A later migration may add archival or partition
+retirement only with an independently integrity-protected history. Operators
+must capacity-plan the table and must not disable the guard for cleanup.
+
+SQLite installs three guards that reject every idempotency INSERT, UPDATE, and
+DELETE. It remains a fail-closed parity fixture and is not an execution
+authority for assurance-v2 mutations.

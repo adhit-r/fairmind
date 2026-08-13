@@ -18,6 +18,7 @@ from config.migration_integrity import (
     FROZEN_013E_OPERATOR_CHECKSUM,
     FROZEN_013F_OPERATOR_CHECKSUM,
     FROZEN_013G_OPERATOR_CHECKSUM,
+    FROZEN_013H_OPERATOR_CHECKSUM,
     FROZEN_ASSURANCE_MIGRATIONS,
     FROZEN_POSTGRESQL_ASSURANCE_CATALOGS,
     FROZEN_SQLITE_013C_FIXTURE_CHECKSUM,
@@ -25,6 +26,7 @@ from config.migration_integrity import (
     FROZEN_SQLITE_013E_FIXTURE_CHECKSUM,
     FROZEN_SQLITE_013F_FIXTURE_CHECKSUM,
     FROZEN_SQLITE_013G_FIXTURE_CHECKSUM,
+    FROZEN_SQLITE_013H_FIXTURE_CHECKSUM,
     POSTGRESQL_ASSURANCE_CATALOG_SPEC,
     POSTGRESQL_ASSURANCE_FUNCTIONS,
     POSTGRESQL_ASSURANCE_REQUIRED_TRIGGERS,
@@ -70,6 +72,7 @@ POSTGRES_OPERATOR_CHAIN = (
     "upgrade_paths/013d_to_013e_environmental_tenant_scope.sql",
     "upgrade_paths/013e_to_013f_trust_authority_integrity.sql",
     "upgrade_paths/013f_to_013g_operational_evidence_freshness.sql",
+    "upgrade_paths/013g_to_013h_idempotency_retention_integrity.sql",
 )
 POSTGRESQL_013B_PREREQUISITE_CONSTRAINTS = frozenset(
     {
@@ -162,6 +165,9 @@ def _install_sqlite_assurance_chain(database_path: Path) -> None:
     from migrations.operational_evidence_freshness_migration import (
         apply_sqlite as apply_013g,
     )
+    from migrations.idempotency_retention_integrity_migration import (
+        apply_sqlite as apply_013h,
+    )
 
     connection = sqlite3.connect(database_path)
     try:
@@ -183,6 +189,7 @@ def _install_sqlite_assurance_chain(database_path: Path) -> None:
         apply_013e(connection)
         apply_013f(connection)
         apply_013g(connection)
+        apply_013h(connection)
     finally:
         connection.close()
 
@@ -611,7 +618,7 @@ def test_production_postgresql_manifest_covers_audit_immutability() -> None:
     frozen = FROZEN_POSTGRESQL_ASSURANCE_CATALOGS[14]
     assert frozen.spec is POSTGRESQL_ASSURANCE_CATALOG_SPEC
     assert frozen.postgresql_major == 14
-    assert frozen.digest == "d7912a0fe9e06c2fa798655d848c55394b1454d8ed8f7d81c6cb7a00dcdbb9a0"
+    assert frozen.digest == "5789e901c7c853bce6c40dcf631f294f1e27b2d8d9f77e13623d72c17408030d"
     validate_frozen_postgresql_catalog(frozen)
 
 
@@ -746,6 +753,40 @@ def test_013b_v2_operator_source_checksum_and_c_collation_are_frozen() -> None:
     assert hashlib.sha256(payload.encode("utf-8")).hexdigest() == (FROZEN_013B_OPERATOR_V2_CHECKSUM)
     assert payload.count("E'\\n' ORDER BY") == 4
     assert payload.count('COLLATE pg_catalog."C"') == 7
+
+
+def test_013h_operator_direct_ledger_and_fixture_sources_are_frozen() -> None:
+    import hashlib
+
+    direct = MIGRATIONS / "013h_idempotency_retention_integrity.sql"
+    operator = (
+        MIGRATIONS
+        / "upgrade_paths"
+        / "013g_to_013h_idempotency_retention_integrity.sql"
+    )
+    fixture = (
+        MIGRATIONS
+        / "fixtures"
+        / "013h_idempotency_retention_integrity.sqlite.sql"
+    )
+    frozen = next(
+        item
+        for item in FROZEN_ASSURANCE_MIGRATIONS
+        if item.ledger_key
+        == "013g-to-013h-idempotency-retention-integrity-v1"
+    )
+    operator_source = operator.read_text(encoding="utf-8")
+
+    assert hashlib.sha256(direct.read_bytes()).hexdigest() == frozen.checksum
+    assert hashlib.sha256(operator.read_bytes()).hexdigest() == (
+        FROZEN_013H_OPERATOR_CHECKSUM
+    )
+    assert hashlib.sha256(fixture.read_bytes()).hexdigest() == (
+        FROZEN_SQLITE_013H_FIXTURE_CHECKSUM
+    )
+    assert "\\ir ../013h_idempotency_retention_integrity.sql" in operator_source
+    assert frozen.ledger_key in operator_source
+    assert frozen.checksum in operator_source
 
 
 def test_sqlite_startup_check_accepts_the_frozen_013f_catalog(
@@ -1645,6 +1686,242 @@ def test_native_013g_operator_orphan_check_is_schema_scoped() -> None:
                             sql.Identifier(schema_name)
                         )
                     )
+        finally:
+            cleanup.close()
+
+
+@pytest.mark.skipif(
+    not POSTGRES_URL,
+    reason="requires FAIRMIND_TEST_POSTGRES_URL pointing to disposable PostgreSQL",
+)
+def test_native_013h_operator_rejects_ledger_tamper() -> None:
+    """An exact replay succeeds, but a changed 013h ledger row cannot be adopted."""
+
+    import psycopg2
+    from psycopg2 import sql
+
+    assert POSTGRES_URL is not None
+    schema_name = f"fm_013h_ledger_{uuid.uuid4().hex[:12]}"
+    try:
+        _install_postgresql_base_through_012(POSTGRES_URL, schema_name)
+        for migration_name in POSTGRES_OPERATOR_CHAIN:
+            result = _run_postgresql_operator_migration(
+                POSTGRES_URL,
+                schema_name,
+                migration_name,
+            )
+            assert result.returncode == 0, result.stderr
+        replay = _run_postgresql_operator_migration(
+            POSTGRES_URL,
+            schema_name,
+            POSTGRES_OPERATOR_CHAIN[-1],
+        )
+        assert replay.returncode == 0, replay.stderr
+
+        connection = psycopg2.connect(POSTGRES_URL)
+        connection.autocommit = True
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    sql.SQL(
+                        "UPDATE {}.fairmind_operator_migration_ledger "
+                        "SET migration_checksum = %s WHERE migration_key = %s"
+                    ).format(sql.Identifier(schema_name)),
+                    (
+                        "0" * 64,
+                        "013g-to-013h-idempotency-retention-integrity-v1",
+                    ),
+                )
+        finally:
+            connection.close()
+        tampered = _run_postgresql_operator_migration(
+            POSTGRES_URL,
+            schema_name,
+            POSTGRES_OPERATOR_CHAIN[-1],
+        )
+        assert tampered.returncode != 0
+        assert "checksum drift for 013g-to-013h" in tampered.stderr
+    finally:
+        cleanup = psycopg2.connect(POSTGRES_URL)
+        cleanup.autocommit = True
+        try:
+            with cleanup.cursor() as cursor:
+                cursor.execute(
+                    sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(
+                        sql.Identifier(schema_name)
+                    )
+                )
+        finally:
+            cleanup.close()
+
+
+@pytest.mark.skipif(
+    not POSTGRES_URL,
+    reason="requires FAIRMIND_TEST_POSTGRES_URL pointing to disposable PostgreSQL",
+)
+def test_native_013h_failed_operator_upgrade_rolls_back_catalog_and_ledger() -> None:
+    """Invalid legacy state cannot leave a partly adopted 013h authority."""
+
+    import psycopg2
+    from psycopg2 import sql
+
+    assert POSTGRES_URL is not None
+    schema_name = f"fm_013h_rollback_{uuid.uuid4().hex[:12]}"
+    try:
+        _install_postgresql_base_through_012(POSTGRES_URL, schema_name)
+        for migration_name in POSTGRES_OPERATOR_CHAIN[:-1]:
+            result = _run_postgresql_operator_migration(
+                POSTGRES_URL,
+                schema_name,
+                migration_name,
+            )
+            assert result.returncode == 0, result.stderr
+        connection = psycopg2.connect(POSTGRES_URL)
+        connection.autocommit = True
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    sql.SQL("SET search_path TO {}, pg_catalog, pg_temp").format(
+                        sql.Identifier(schema_name)
+                    )
+                )
+                cursor.execute(
+                    """
+                    INSERT INTO governance_idempotency_records (
+                        id, org_id, actor_id, operation, key_hash, request_hash,
+                        status, created_at, updated_at, expires_at
+                    ) VALUES (
+                        'bad-operator-row', 'org-bad', 'actor-bad',
+                        'evaluation.run.create', %s, %s, 'in_progress',
+                        '2000-01-01T24:00:00+00:00',
+                        '2000-01-01T24:00:00+00:00',
+                        '2000-01-31T24:00:00+00:00'
+                    )
+                    """,
+                    ("a" * 64, "b" * 64),
+                )
+        finally:
+            connection.close()
+
+        failed = _run_postgresql_operator_migration(
+            POSTGRES_URL,
+            schema_name,
+            POSTGRES_OPERATOR_CHAIN[-1],
+        )
+        assert failed.returncode != 0
+        assert "migration 013h found invalid idempotency records" in failed.stderr
+
+        inspection = psycopg2.connect(POSTGRES_URL)
+        inspection.autocommit = True
+        try:
+            with inspection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT
+                        (SELECT count(*) FROM pg_catalog.pg_proc AS p
+                         JOIN pg_catalog.pg_namespace AS n ON n.oid = p.pronamespace
+                         WHERE n.nspname = %s AND p.proname LIKE '%%_013h'),
+                        (SELECT count(*) FROM pg_catalog.pg_trigger AS t
+                         JOIN pg_catalog.pg_class AS c ON c.oid = t.tgrelid
+                         JOIN pg_catalog.pg_namespace AS n ON n.oid = c.relnamespace
+                         WHERE n.nspname = %s AND t.tgname =
+                           'governance_idempotency_records_integrity_013h'),
+                        (SELECT count(*) FROM {}.fairmind_operator_migration_ledger
+                         WHERE migration_key =
+                           '013g-to-013h-idempotency-retention-integrity-v1')
+                    """.format(sql.Identifier(schema_name).as_string(inspection)),
+                    (schema_name, schema_name),
+                )
+                assert cursor.fetchone() == (0, 0, 0)
+        finally:
+            inspection.close()
+    finally:
+        cleanup = psycopg2.connect(POSTGRES_URL)
+        cleanup.autocommit = True
+        try:
+            with cleanup.cursor() as cursor:
+                cursor.execute(
+                    sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(
+                        sql.Identifier(schema_name)
+                    )
+                )
+        finally:
+            cleanup.close()
+
+
+@pytest.mark.skipif(
+    not POSTGRES_URL,
+    reason="requires FAIRMIND_TEST_POSTGRES_URL pointing to disposable PostgreSQL",
+)
+def test_native_013h_startup_rejects_disabled_and_missing_trigger() -> None:
+    """Startup detects both live disablement and removal of the 013h authority."""
+
+    import psycopg2
+    from psycopg2 import sql
+
+    assert POSTGRES_URL is not None
+    schema_name = f"fm_013h_startup_{uuid.uuid4().hex[:12]}"
+    engine = None
+    try:
+        _install_postgresql_base_through_012(POSTGRES_URL, schema_name)
+        for migration_name in POSTGRES_OPERATOR_CHAIN:
+            result = _run_postgresql_operator_migration(
+                POSTGRES_URL,
+                schema_name,
+                migration_name,
+            )
+            assert result.returncode == 0, result.stderr
+        engine = create_engine(POSTGRES_URL)
+        bind_postgresql_engine_search_path(engine, schema_name)
+        verify_assurance_migration_integrity(
+            engine,
+            enabled=True,
+            postgresql_schema=schema_name,
+        )
+        with engine.begin() as connection:
+            connection.exec_driver_sql(
+                "ALTER TABLE governance_idempotency_records DISABLE TRIGGER "
+                "governance_idempotency_records_integrity_013h"
+            )
+        with pytest.raises(MigrationIntegrityError, match="disabled required triggers"):
+            verify_assurance_migration_integrity(
+                engine,
+                enabled=True,
+                postgresql_schema=schema_name,
+            )
+        with engine.begin() as connection:
+            connection.exec_driver_sql(
+                "ALTER TABLE governance_idempotency_records ENABLE ALWAYS TRIGGER "
+                "governance_idempotency_records_integrity_013h"
+            )
+        verify_assurance_migration_integrity(
+            engine,
+            enabled=True,
+            postgresql_schema=schema_name,
+        )
+        with engine.begin() as connection:
+            connection.exec_driver_sql(
+                "DROP TRIGGER governance_idempotency_records_integrity_013h "
+                "ON governance_idempotency_records"
+            )
+        with pytest.raises(MigrationIntegrityError, match="missing required triggers"):
+            verify_assurance_migration_integrity(
+                engine,
+                enabled=True,
+                postgresql_schema=schema_name,
+            )
+    finally:
+        if engine is not None:
+            engine.dispose()
+        cleanup = psycopg2.connect(POSTGRES_URL)
+        cleanup.autocommit = True
+        try:
+            with cleanup.cursor() as cursor:
+                cursor.execute(
+                    sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(
+                        sql.Identifier(schema_name)
+                    )
+                )
         finally:
             cleanup.close()
 

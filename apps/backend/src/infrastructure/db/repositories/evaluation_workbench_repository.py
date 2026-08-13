@@ -4582,22 +4582,37 @@ class SqlAlchemyEvaluationWorkbenchUnitOfWork:
                         .values(updated_at=records.c.updated_at)
                     )
                 with self.db.begin_nested():
-                    self.db.execute(
-                        insert(records).values(
-                            id=record_id,
-                            org_id=command.organization_id,
-                            actor_id=command.actor_id,
-                            operation=command.operation,
-                            key_hash=key_hash,
-                            request_hash=command.request_hash,
-                            status="in_progress",
-                            created_at=_iso(now),
-                            updated_at=_iso(now),
-                            expires_at=_iso(now + _IDEMPOTENCY_RETENTION),
+                    claimed_row = (
+                        self.db.execute(
+                            insert(records)
+                            .values(
+                                id=record_id,
+                                org_id=command.organization_id,
+                                actor_id=command.actor_id,
+                                operation=command.operation,
+                                key_hash=key_hash,
+                                request_hash=command.request_hash,
+                                status="in_progress",
+                                created_at=_iso(now),
+                                updated_at=_iso(now),
+                                expires_at=_iso(now + _IDEMPOTENCY_RETENTION),
+                            )
+                            .returning(records.c.created_at, records.c.expires_at)
                         )
+                        .mappings()
+                        .one()
                     )
                     self.db.flush()
-                return record_id, None, now, now + _IDEMPOTENCY_RETENTION
+                _validate_idempotency_generation(
+                    claimed_at=claimed_row["created_at"],
+                    expires_at=claimed_row["expires_at"],
+                )
+                return (
+                    record_id,
+                    None,
+                    _parse_timestamp(claimed_row["created_at"]),
+                    _parse_timestamp(claimed_row["expires_at"]),
+                )
             except IntegrityError:
                 row = existing_row(lock=True)
                 if row is None:
@@ -4634,30 +4649,44 @@ class SqlAlchemyEvaluationWorkbenchUnitOfWork:
                 previous_claimed_at + timedelta(microseconds=1),
             )
             expires_at = claimed_at + _IDEMPOTENCY_RETENTION
-            result = self.db.execute(
-                update(records)
-                .where(
-                    records.c.id == row["id"],
-                    records.c.updated_at == row["updated_at"],
+            reclaimed_row = (
+                self.db.execute(
+                    update(records)
+                    .where(
+                        records.c.id == row["id"],
+                        records.c.updated_at == row["updated_at"],
+                    )
+                    .values(
+                        request_hash=command.request_hash,
+                        status="in_progress",
+                        response_status=None,
+                        response_body_json=None,
+                        resource_type=None,
+                        resource_id=None,
+                        created_at=_iso(claimed_at),
+                        updated_at=_iso(claimed_at),
+                        expires_at=_iso(expires_at),
+                    )
+                    .returning(records.c.created_at, records.c.expires_at)
                 )
-                .values(
-                    request_hash=command.request_hash,
-                    status="in_progress",
-                    response_status=None,
-                    response_body_json=None,
-                    resource_type=None,
-                    resource_id=None,
-                    created_at=_iso(claimed_at),
-                    updated_at=_iso(claimed_at),
-                    expires_at=_iso(expires_at),
-                )
+                .mappings()
+                .one_or_none()
             )
-            if result.rowcount != 1:
+            if reclaimed_row is None:
                 raise self._error(
                     "idempotency_in_progress",
                     "Another request is reclaiming this expired idempotency key.",
                     409,
                 )
+            try:
+                _validate_idempotency_generation(
+                    claimed_at=reclaimed_row["created_at"],
+                    expires_at=reclaimed_row["expires_at"],
+                )
+                claimed_at = _parse_timestamp(reclaimed_row["created_at"])
+                expires_at = _parse_timestamp(reclaimed_row["expires_at"])
+            except (AttributeError, TypeError, ValueError):
+                raise self._invalid_idempotency_response() from None
             return row["id"], None, claimed_at, expires_at
         if row["request_hash"] != command.request_hash:
             raise self._error(
@@ -4889,7 +4918,11 @@ class SqlAlchemyEvaluationWorkbenchUnitOfWork:
         with self._mutation_lock():
             try:
                 self._lock_org(command.organization_id)
-                request_now = _now()
+                request_now = (
+                    self._repository.read_fresh_utc_now()
+                    if self.db.get_bind().dialect.name == "postgresql"
+                    else _now()
+                )
                 try:
                     record_id, replay, claimed_at, expires_at = self._claim_idempotency(
                         command=command,

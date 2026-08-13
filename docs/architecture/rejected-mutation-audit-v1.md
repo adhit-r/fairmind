@@ -15,6 +15,9 @@ one terminal path:
   idempotency response atomically;
 - expected rejection: roll back the savepoint, then commit one rejected audit
   event and the replayable rejected idempotency response atomically;
+- preclaim conflict or in-progress contention: leave the existing idempotency
+  generation unchanged, commit one bounded redacted rejection event, and return
+  the stable conflict without invoking business work;
 - audit or idempotency-finalization failure: roll back the outer transaction and
   return a generic persistence failure;
 - unexpected exception: roll back the outer transaction without creating a
@@ -42,7 +45,7 @@ Its canonical `details` object is closed by the writer:
   "operation": "<server operation>",
   "requestHash": "<lowercase SHA-256>",
   "claimedAt": "<canonical idempotency-claim timestamp>",
-  "expiresAt": "<claimedAt plus 30 days>",
+  "expiresAt": "<claimedAt plus exactly 2,592,000 seconds>",
   "errorCode": "<bounded stable code>",
   "statusCode": 422,
   "responseHash": "<SHA-256 of the canonical status-plus-body envelope>"
@@ -56,8 +59,10 @@ record only after bounded safe-content validation. If that validation fails,
 the caller and stored replay receive a generic rejection instead. The
 idempotency record references the exact immutable audit-event ID. The claim and
 expiry timestamps form the attempt generation. A reclaimed key receives a
-claim timestamp strictly later than the preceding generation, even when the
-wall clock repeats or moves backward. On replay, FairMind verifies the
+claim timestamp strictly later than the preceding generation. PostgreSQL owns
+both expiry classification and the rollover timestamp: a database clock that
+moves backward before the stored expiry fails closed instead of reclaiming the
+key. On replay, FairMind verifies the
 organization chain once, point-loads the event by the trusted organization and
 the row's exact audit-event reference, verifies every binding, and recomputes
 the response digest before returning the error.
@@ -79,7 +84,7 @@ business resource type and ID and contains one closed binding object:
     "operation": "<server operation>",
     "requestHash": "<lowercase SHA-256>",
     "claimedAt": "<canonical idempotency-claim timestamp>",
-    "expiresAt": "<claimedAt plus 30 days>",
+    "expiresAt": "<claimedAt plus exactly 2,592,000 seconds>",
     "resourceType": "<business resource type>",
     "resourceId": "<business resource ID>",
     "responseStatus": 201,
@@ -138,30 +143,59 @@ anchored head. The application never updates the head directly.
 
 PostgreSQL uses the existing transaction-scoped organization advisory lock.
 SQLite uses the existing process write lock and remains a parity fixture. No
-migration changed: the existing event table already accepts `rejected` as an
-outcome, and PostgreSQL 14 remains the release authority.
+event-table migration was needed: the existing event table already accepts
+`rejected` as an outcome, and PostgreSQL 14 remains the release authority.
 
-Successful and rejected responses are retained under the existing 30-day
-idempotency policy. A retry with the same organization, actor, operation, key,
-and request hash returns the bound result without executing the callback or
+Successful and rejected responses have a minimum 2,592,000-second
+anti-reexecution generation. This is not a bounded 30-day data-retention
+claim: an un-retried response remains stored until an atomic rollover clears
+it, and 013h has no purge or erasure lifecycle. A retry with the same
+organization, actor, operation, key, and
+request hash returns the bound result without executing the callback or
 appending a second event. Before any completed row is reclaimed, its stored
-expiry and immutable event binding are validated. Mutating `expires_at` cannot
-force callback re-execution.
+expiry and immutable event binding are validated. Rollover clears the prior
+response fields and binds the callback and audit event to timestamps returned
+by PostgreSQL. Mutating `expires_at` cannot force callback re-execution.
+
+Migration 013h rejects invalid, noncanonical, or future-dated legacy rows. Its
+`ENABLE ALWAYS` trigger rejects every DELETE, makes identity and generation
+fields immutable before expiry, permits only `in_progress` to `completed`, and
+makes response/resource bindings write-once. Expiry authorizes an atomic
+in-place generation rollover, not deletion: rows remain append-like identity
+anchors indefinitely until a future reviewed archival design exists.
+
+PostgreSQL is the only execution authority for this contract. SQLite installs
+fail-closed INSERT, UPDATE, and DELETE guards. The current frozen catalog was
+measured and is checked through the migration-owner session. That owner/runtime
+database identity is the trusted deployment boundary for 013h: startup verifies
+the frozen source, operator ledger, owner-session catalog, owner alignment,
+fixed function search paths, and enabled trigger, but cannot prevent a
+compromised or malicious owner credential from replacing guards or rewriting
+the ledger. The restricted-role tamper test is bounded negative-control proof,
+not proof that startup works through a separate runtime login.
+
+A separately authenticated non-owner application login remains open rollout
+hardening, not a delivered 013h property. It requires follow-on runtime ACL
+provisioning, explicit startup rejection of owner and privileged application
+identities, and a runtime-login catalog reproduced from two clean installs.
+Until that work lands, this control must not be described as least-privilege
+runtime-startup compatible.
 
 ## Exact coverage boundary
 
 This revision covers expected `EvaluationWorkbenchError` failures raised after
-a trusted `MutationCommand` has entered the shared unit of work. It does not yet
-cover:
+a trusted `MutationCommand` has entered the shared unit of work. This includes
+idempotency-key conflicts and in-progress contention, which use the closed
+`evaluation-v2.preclaim-rejection-audit/v1` projection and never rebind or
+complete the existing generation. It does not yet cover:
 
 - malformed HTTP or strict-JSON parser failures;
 - unauthenticated requests or permission denials before trusted organization
   membership is established;
 - domain normalization failures that occur before command construction;
-- idempotency-key conflicts raised while claiming an existing different
-  request;
-- unexpected infrastructure exceptions, which roll back and surface a generic
-  persistence failure.
+- unexpected infrastructure exceptions, which atomically roll back the domain
+  change, audit append, and idempotency claim and surface a generic persistence
+  failure. They are not classified as a trusted expected rejection.
 
 Those paths require a trusted request-attempt boundary and, for unauthenticated
 events, a separate security log that cannot be scoped by caller-controlled

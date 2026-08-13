@@ -737,8 +737,8 @@ See [Security Policy](docs/SECURITY.md) for complete security policy.
 ### Current phase: 2027 assurance foundation
 
 The current branch is an internal trust-foundation alpha. The trustworthy
-control-plane checklist is 13/19 complete (68.4%), and the full roadmap is
-22/92 complete (23.9%). The P1 worker layer, real evaluation engines, modality
+control-plane checklist is 14/19 complete (73.7%), and the full roadmap is
+23/92 complete (25.0%). The P1 worker layer, real evaluation engines, modality
 packs, lifecycle workflows, and rollout gates remain open.
 
 **Implemented and verified for the current slice**
@@ -756,6 +756,10 @@ packs, lifecycle workflows, and rollout gates remain open.
   authority graph, with verified-only review gates, current-only governance
   decisions, historical response qualification, and common-lock serialization
   against evaluator revocation
+- PostgreSQL-authoritative transactional idempotency with exact 2,592,000-second
+  generations, immutable response/audit bindings, expired-only atomic rollover,
+  and one append-only per-organization audit chain across all 20 enabled
+  Assurance V2 mutation routes
 - Tenant-bound environmental evidence routes, response admission, and migration 013e,
   verified on SQLite and a disposable local PostgreSQL 14 instance
 - Focused unit, route, SQLite migration-parity, PostgreSQL 14 lifecycle, and
@@ -767,8 +771,11 @@ packs, lifecycle workflows, and rollout gates remain open.
 - Implement service-worker authorization, trusted external-adapter and imported-
   report workflows, an audited separation override, and independently invocable
   submit/link surfaces
-- Close the full idempotency/audit and feature-switch rows and implement the
-  evidence UI without weakening the default-off boundary
+- Close the feature-switch row and implement the evidence UI without weakening
+  the default-off boundary
+- Add a separately authenticated least-privilege database runtime identity,
+  runtime-stable catalog proof, and a reviewed purge/erasure lifecycle before
+  describing the idempotency store as production-ready data retention
 - Pass the private governance pilot (Gate A)
 - Build the isolated worker and sandbox (Gate B)
 - Connect and independently benchmark real modality evaluators (Gate C)

@@ -100,6 +100,13 @@ FROZEN_013G_OPERATOR_CHECKSUM = (
 FROZEN_SQLITE_013G_FIXTURE_CHECKSUM = (
     "9d0a3df360936577e08dfa25fb249e180bafa208053b0cc646e67ce74abf9e61"
 )
+_FROZEN_013H_CHECKSUM = "9798cca6bae5e66036ff08caf3eeebcb9d8ed78e5ea669ec403a4bf06e4df84b"
+FROZEN_013H_OPERATOR_CHECKSUM = (
+    "71c58297d218c9da7c54d0f13887eec1250d11e463c02bbca2f3981b2b13e180"
+)
+FROZEN_SQLITE_013H_FIXTURE_CHECKSUM = (
+    "33e6eb96c95c9734a8efe50c760c59bd225099aa5ab2fb3a0441c3fe706fdf78"
+)
 
 FROZEN_ASSURANCE_MIGRATIONS = (
     FrozenMigration(
@@ -141,6 +148,11 @@ FROZEN_ASSURANCE_MIGRATIONS = (
         "013f-to-013g-operational-evidence-freshness-v1",
         _FROZEN_013G_CHECKSUM,
         _MIGRATIONS / "013g_operational_evidence_freshness.sql",
+    ),
+    FrozenMigration(
+        "013g-to-013h-idempotency-retention-integrity-v1",
+        _FROZEN_013H_CHECKSUM,
+        _MIGRATIONS / "013h_idempotency_retention_integrity.sql",
     ),
 )
 
@@ -205,6 +217,10 @@ POSTGRESQL_ASSURANCE_FUNCTIONS = frozenset(
         "fairmind_gate_evidence_review_013g",
         "fairmind_stamp_evaluator_registration_revocation_013g",
         "fairmind_gate_evaluation_decision_013g",
+        "fairmind_idempotency_format_utc_013h",
+        "fairmind_idempotency_clock_utc_013h",
+        "fairmind_idempotency_row_is_valid_013h",
+        "fairmind_guard_idempotency_record_013h",
         "fairmind_initial_layer_verdicts_v1_for_run",
         "fairmind_is_canonical_utc_timestamp",
         "fairmind_is_initial_layer_verdicts",
@@ -311,6 +327,7 @@ POSTGRESQL_ASSURANCE_REQUIRED_TRIGGERS = frozenset(
         "001_013g_evaluator_registration_revocation_clock",
         "000_013g_evidence_reviews_freshness_gate",
         "000_013g_evaluation_decisions_freshness_gate",
+        "governance_idempotency_records_integrity_013h",
     }
 )
 
@@ -329,7 +346,7 @@ FROZEN_POSTGRESQL_ASSURANCE_CATALOGS: Mapping[int, FrozenPostgreSQLCatalog] = Ma
         14: FrozenPostgreSQLCatalog(
             spec=POSTGRESQL_ASSURANCE_CATALOG_SPEC,
             postgresql_major=14,
-            digest=("d7912a0fe9e06c2fa798655d848c55394b1454d8ed8f7d81c6cb7a00dcdbb9a0"),
+            digest=("5789e901c7c853bce6c40dcf631f294f1e27b2d8d9f77e13623d72c17408030d"),
         )
     }
 )
@@ -480,6 +497,9 @@ SQLITE_ASSURANCE_TRIGGERS = frozenset(
         "governance_evidence_artifacts_immutable_delete",
         "governance_evidence_reviews_freshness_unavailable_013g",
         "governance_evaluation_decisions_freshness_unavailable_013g",
+        "governance_idempotency_records_insert_unavailable_013h",
+        "governance_idempotency_records_update_unavailable_013h",
+        "governance_idempotency_records_delete_unavailable_013h",
         "governance_evidence_org_insert",
         "governance_evidence_org_update",
         "governance_evaluation_audit_events_no_update",
@@ -503,8 +523,9 @@ SQLITE_ASSURANCE_VIEWS = frozenset(
 # named above, sorted by object type and name.  Unlike a name-only inventory,
 # this freezes table columns/checks/FKs, explicit indexes, trigger bodies, and
 # security-critical view definitions.
-# Replace only after the complete 013g SQLite fixture has passed review.
-SQLITE_ASSURANCE_CATALOG_DIGEST = "5649543790ee620272ad7f11be6542cd25d65ad9ffde3c4031fd7fef2fb8b565"
+# Measured after the complete 013h SQLite fail-closed fixture was installed
+# twice and its source checksum was frozen.
+SQLITE_ASSURANCE_CATALOG_DIGEST = "3bd2973106d368f55332095d98fcecc23dbc588e0ec2c72cefae32ba69c51118"
 
 _SQLITE_ASSURANCE_OBJECTS = {
     "table": SQLITE_ASSURANCE_TABLES,
@@ -1404,6 +1425,11 @@ def verify_sqlite_assurance_schema(connection) -> None:
             "013g",
             _MIGRATIONS / "fixtures" / "013g_operational_evidence_freshness.sqlite.sql",
             FROZEN_SQLITE_013G_FIXTURE_CHECKSUM,
+        ),
+        (
+            "013h",
+            _MIGRATIONS / "fixtures" / "013h_idempotency_retention_integrity.sqlite.sql",
+            FROZEN_SQLITE_013H_FIXTURE_CHECKSUM,
         ),
     )
     for version, fixture_path, frozen_checksum in fixtures:
