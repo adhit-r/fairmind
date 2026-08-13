@@ -7,6 +7,7 @@ import json
 import threading
 import uuid
 from contextlib import nullcontext
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Mapping
 
@@ -73,6 +74,7 @@ from src.application.ports.evidence_review import (
     PersistEvidenceReviewCommand,
     ReviewedEvidenceRecord,
 )
+from src.application.ports.evidence_freshness import EvidenceFreshnessClassification
 from src.application.ports.evaluator_catalog import EvaluatorCatalogRecord
 from src.application.ports.governance_decision import (
     GovernanceDecisionAuthorityRecord,
@@ -81,6 +83,10 @@ from src.application.ports.governance_decision import (
     PersistGovernanceDecisionCommand,
 )
 from src.application.services.evaluator_catalog_service import evaluator_binding_hash
+from src.application.services import evidence_freshness_service as freshness
+from src.application.services.evaluation_workbench_service import (
+    verify_stored_suite_link_projection,
+)
 from src.application.services.evaluator_registration import (
     EvaluatorIdentityBinding,
     EvaluatorRegistrationCeremonyError,
@@ -203,8 +209,30 @@ _EVIDENCE_REVIEW_TRIGGER_MESSAGES = {
         "evidence_review_chronology_invalid",
         "The evidence-review chronology is invalid.",
     ),
+    "suite-execution update timestamp order is invalid": (
+        "evidence_review_projection_conflict",
+        "The suite execution changed before evidence review could be recorded.",
+    ),
 }
 _MAX_GOVERNANCE_DECISION_EVIDENCE_SET_BYTES = 256 * 1024
+_FRESHNESS_CLASSIFIER_COLUMNS = frozenset(
+    {
+        "classification_status",
+        "freshness_contract_version",
+        "recorded_freshness_status",
+        "effective_freshness_status",
+        "evaluated_at",
+        "effective_at",
+        "expiring_at",
+        "reason_codes_json",
+        "decision_eligible",
+    }
+)
+_FRESHNESS_CLASSIFIER_SQL = text(
+    "SELECT * FROM fairmind_classify_evidence_freshness_013g("
+    ":org_id, :workspace_id, :system_id, :run_id, "
+    ":suite_execution_id, :admission_id, :as_of)"
+)
 _GOVERNANCE_DECISION_VERSION_CONSTRAINTS = frozenset(
     {
         "uq_governance_evaluation_decision_tenant",
@@ -254,6 +282,67 @@ def _iso(value: datetime | None = None) -> str:
 def _parse_timestamp(value: str) -> datetime:
     parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def _classifier_timestamp(value: object, *, optional: bool) -> datetime | None:
+    if value is None and optional:
+        return None
+    if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
+        raise EvaluationWorkbenchError(
+            "binding_integrity_error",
+            _BINDING_INTEGRITY_MESSAGE,
+            status_code=409,
+        )
+    return value.astimezone(timezone.utc)
+
+
+def _parse_evidence_freshness_classification(
+    row: Mapping[str, Any],
+    *,
+    expected_recorded_status: str,
+) -> EvidenceFreshnessClassification:
+    """Parse and validate one exact native PostgreSQL classifier row."""
+
+    try:
+        if set(row) != _FRESHNESS_CLASSIFIER_COLUMNS:
+            raise ValueError("classifier columns are not exact")
+        reason_codes = _exact_canonical_json_value(
+            row["reason_codes_json"],
+            maximum_bytes=_MAX_BINDING_LIST_BYTES,
+            expected_type=list,
+        )
+        if any(not isinstance(reason, str) for reason in reason_codes):
+            raise ValueError("classifier reason codes are malformed")
+        classification = EvidenceFreshnessClassification(
+            classification_status=row["classification_status"],
+            freshness_contract_version=row["freshness_contract_version"],
+            recorded_freshness_status=row["recorded_freshness_status"],
+            effective_freshness_status=row["effective_freshness_status"],
+            evaluated_at=_classifier_timestamp(row["evaluated_at"], optional=False),
+            effective_at=_classifier_timestamp(row["effective_at"], optional=True),
+            expiring_at=_classifier_timestamp(row["expiring_at"], optional=True),
+            reason_codes=tuple(reason_codes),
+            decision_eligible=row["decision_eligible"],
+        )
+        freshness.public_projection(
+            classification,
+            expected_recorded_status=expected_recorded_status,
+        )
+        return classification
+    except EvaluationWorkbenchError:
+        raise
+    except (AttributeError, TypeError, UnicodeError, ValueError) as error:
+        raise EvaluationWorkbenchError(
+            "binding_integrity_error",
+            _BINDING_INTEGRITY_MESSAGE,
+            status_code=409,
+        ) from error
+
+
+@dataclass(frozen=True, slots=True)
+class _EvidenceReadBinding:
+    admission_id: str
+    trust: EvidenceTrustMetadataRecord
 
 
 def _json_load(value: str | None, fallback: Any) -> Any:
@@ -564,11 +653,9 @@ class SqlAlchemyEvaluationWorkbenchRepository:
 
         dialect = self.db.get_bind().dialect.name
         if dialect == "postgresql":
-            value = self.db.execute(
-                text("SELECT clock_timestamp() AT TIME ZONE 'UTC'")
-            ).scalar_one()
-            if isinstance(value, datetime):
-                return value.replace(tzinfo=timezone.utc)
+            value = self.db.execute(text("SELECT clock_timestamp()")).scalar_one()
+            if isinstance(value, datetime) and value.tzinfo is not None:
+                return value.astimezone(timezone.utc)
         else:
             value = self.db.execute(
                 text("SELECT strftime('%Y-%m-%dT%H:%M:%f000+00:00', " "'now', '+0 seconds')")
@@ -576,6 +663,76 @@ class SqlAlchemyEvaluationWorkbenchRepository:
         if not isinstance(value, str):
             raise TypeError("database UTC timestamp required")
         return _parse_timestamp(value).astimezone(timezone.utc)
+
+    def _require_postgres_freshness_authority(self) -> None:
+        if self.db.get_bind().dialect.name != "postgresql":
+            raise self._error(
+                "operational_freshness_postgresql_required",
+                "Operational evidence freshness requires the PostgreSQL authority.",
+                409,
+            )
+
+    def _acquire_operational_freshness_read_lock(
+        self,
+        *,
+        organization_id: str,
+    ) -> None:
+        """Serialize an operational freshness snapshot with authority mutations."""
+
+        self._require_postgres_freshness_authority()
+        self.db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:org_id, 0))"),
+            {"org_id": organization_id},
+        )
+
+    def _classify_evidence_freshness(
+        self,
+        *,
+        organization_id: str,
+        workspace_id: str,
+        system_id: str,
+        run_id: str,
+        suite_execution_id: str,
+        admission_id: str,
+        recorded_freshness_status: str,
+        as_of: datetime,
+    ) -> EvidenceFreshnessClassification:
+        """Load exactly one database classification for one exact linked admission."""
+
+        self._require_postgres_freshness_authority()
+        rows = (
+            self.db.execute(
+                _FRESHNESS_CLASSIFIER_SQL,
+                {
+                    "org_id": organization_id,
+                    "workspace_id": workspace_id,
+                    "system_id": system_id,
+                    "run_id": run_id,
+                    "suite_execution_id": suite_execution_id,
+                    "admission_id": admission_id,
+                    "as_of": as_of,
+                },
+            )
+            .mappings()
+            .all()
+        )
+        if len(rows) != 1:
+            raise self._error(
+                "binding_integrity_error",
+                _BINDING_INTEGRITY_MESSAGE,
+                409,
+            )
+        classification = _parse_evidence_freshness_classification(
+            rows[0],
+            expected_recorded_status=recorded_freshness_status,
+        )
+        if classification.evaluated_at != as_of.astimezone(timezone.utc):
+            raise self._error(
+                "binding_integrity_error",
+                _BINDING_INTEGRITY_MESSAGE,
+                409,
+            )
+        return classification
 
     def load_admission_authority_for_update(
         self,
@@ -1490,6 +1647,8 @@ class SqlAlchemyEvaluationWorkbenchRepository:
     ) -> EvidenceReviewAuthorityRecord | None:
         """Lock the exact admitted graph required for a four-eyes review."""
 
+        self._require_postgres_freshness_authority()
+
         system_scope = self._system_scope(
             scope.organization_id,
             scope.system_id,
@@ -1721,6 +1880,17 @@ class SqlAlchemyEvaluationWorkbenchRepository:
                 409,
             ) from error
 
+        operational_freshness = self._classify_evidence_freshness(
+            organization_id=scope.organization_id,
+            workspace_id=scope.workspace_id,
+            system_id=scope.system_id,
+            run_id=scope.run_id,
+            suite_execution_id=scope.suite_execution_id,
+            admission_id=scope.admission_id,
+            recorded_freshness_status=admission["freshness_status"],
+            as_of=self.read_fresh_utc_now(),
+        )
+
         return EvidenceReviewAuthorityRecord(
             scope=scope,
             evidence_run_id=admission["evidence_run_id"],
@@ -1743,6 +1913,7 @@ class SqlAlchemyEvaluationWorkbenchRepository:
             run_technical_status=run["technical_status"],
             run_evidence_outcome=run["evidence_outcome"],
             governance_decision_exists=governance_decision_exists,
+            operational_freshness=operational_freshness,
         )
 
     @staticmethod
@@ -1757,6 +1928,19 @@ class SqlAlchemyEvaluationWorkbenchRepository:
                 "The evidence review version is stale.",
                 status_code=409,
             )
+        freshness_trigger_messages = {
+            "evidence freshness classification integrity error": (
+                "binding_integrity_error",
+                _BINDING_INTEGRITY_MESSAGE,
+            ),
+            "evidence is not review-eligible at database time": (
+                "evidence_review_evidence_not_current",
+                "Only current or expiring evidence can be reviewed.",
+            ),
+        }
+        if sqlstate == "23514" and first_line in freshness_trigger_messages:
+            code, message = freshness_trigger_messages[first_line]
+            return EvaluationWorkbenchError(code, message, status_code=409)
         if sqlstate == "P0001" and first_line in _EVIDENCE_REVIEW_TRIGGER_MESSAGES:
             code, message = _EVIDENCE_REVIEW_TRIGGER_MESSAGES[first_line]
             return EvaluationWorkbenchError(code, message, status_code=409)
@@ -1778,7 +1962,7 @@ class SqlAlchemyEvaluationWorkbenchRepository:
             or command.next_review_version != 1
             or command.decision not in {"accepted", "rejected"}
             or authority.admission_status != "verified"
-            or authority.freshness_status != "current"
+            or authority.freshness_status not in {"current", "expiring"}
             or authority.review_status != "pending"
             or authority.current_review_version != 0
             or authority.governance_decision_exists
@@ -1799,7 +1983,7 @@ class SqlAlchemyEvaluationWorkbenchRepository:
         reviews = GovernanceEvidenceReview.__table__
         suites = GovernanceEvaluationRunSuiteExecution.__table__
         try:
-            self.db.execute(
+            persisted_reviewed_at_raw = self.db.execute(
                 insert(reviews).values(
                     id=command.review_id,
                     org_id=scope.organization_id,
@@ -1817,7 +2001,16 @@ class SqlAlchemyEvaluationWorkbenchRepository:
                     run_id=scope.run_id,
                     suite_execution_id=scope.suite_execution_id,
                     admission_contract_version=CONTRACT_VERSION,
+                ).returning(reviews.c.reviewed_at)
+            ).scalar_one()
+            if not isinstance(persisted_reviewed_at_raw, str):
+                raise self._error(
+                    "evidence_review_chronology_invalid",
+                    "The evidence-review chronology is invalid.",
+                    409,
                 )
+            persisted_reviewed_at = _parse_timestamp(persisted_reviewed_at_raw).astimezone(
+                timezone.utc
             )
             updated = self.db.execute(
                 update(suites)
@@ -1830,12 +2023,13 @@ class SqlAlchemyEvaluationWorkbenchRepository:
                     suites.c.evidence_run_id == authority.evidence_run_id,
                     suites.c.passport_revision_id == scope.passport_revision_id,
                     suites.c.admission_status == "verified",
-                    suites.c.freshness_status == "current",
+                    suites.c.freshness_status == authority.freshness_status,
                     suites.c.review_status == "pending",
                     suites.c.linked_by == authority.linked_by,
                 )
                 .values(
                     review_status=command.decision,
+                    updated_at=persisted_reviewed_at_raw,
                 )
             )
             if updated.rowcount != 1:
@@ -1844,6 +2038,16 @@ class SqlAlchemyEvaluationWorkbenchRepository:
                     "The suite execution changed before evidence review could be recorded.",
                     409,
                 )
+            operational_freshness = self._classify_evidence_freshness(
+                organization_id=scope.organization_id,
+                workspace_id=scope.workspace_id,
+                system_id=scope.system_id,
+                run_id=scope.run_id,
+                suite_execution_id=scope.suite_execution_id,
+                admission_id=scope.admission_id,
+                recorded_freshness_status=authority.freshness_status,
+                as_of=persisted_reviewed_at,
+            )
         except DBAPIError as error:
             mapped = self._evidence_review_database_error(error)
             if mapped is not None:
@@ -1864,14 +2068,15 @@ class SqlAlchemyEvaluationWorkbenchRepository:
             rationale=command.rationale,
             review_version=command.next_review_version,
             reviewed_by=command.actor_id,
-            reviewed_at=command.reviewed_at,
+            reviewed_at=persisted_reviewed_at,
             admission_status="verified",
             review_status=command.decision,
-            freshness_status="current",
+            freshness_status=authority.freshness_status,
             technical_status=authority.technical_status,
             evidence_result_status=authority.evidence_result_status,
             run_technical_status=authority.run_technical_status,
             run_evidence_outcome=authority.run_evidence_outcome,
+            operational_freshness=operational_freshness,
         )
 
     # ------------------------------------------------------------------
@@ -1953,9 +2158,14 @@ class SqlAlchemyEvaluationWorkbenchRepository:
 
         links = GovernanceEvaluationSuiteEvidenceLink.__table__
         admissions = GovernanceEvidenceAdmission.__table__
-        submitter_rows = (
+        admission_rows = (
             self.db.execute(
-                select(admissions.c.submitted_by)
+                select(
+                    executions.c.id.label("suite_execution_id"),
+                    admissions.c.id.label("admission_id"),
+                    admissions.c.submitted_by.label("submitted_by"),
+                    admissions.c.freshness_status.label("freshness_status"),
+                )
                 .select_from(
                     executions.join(
                         links,
@@ -1994,7 +2204,7 @@ class SqlAlchemyEvaluationWorkbenchRepository:
                 )
                 .order_by(executions.c.ordinal, executions.c.id)
             )
-            .scalars()
+            .mappings()
             .all()
         )
 
@@ -2024,10 +2234,17 @@ class SqlAlchemyEvaluationWorkbenchRepository:
                 or run["verdict_version"] < 0
                 or not isinstance(run["technical_status"], str)
                 or not isinstance(run["overall_verdict"], str)
-                or len(submitter_rows) != len(suite_execution_ids)
+                or len(admission_rows) != len(suite_execution_ids)
+                or tuple(row["suite_execution_id"] for row in admission_rows)
+                != suite_execution_ids
                 or any(
-                    not isinstance(submitter, str) or not submitter
-                    for submitter in submitter_rows
+                    not isinstance(row["submitted_by"], str)
+                    or not row["submitted_by"]
+                    or not isinstance(row["admission_id"], str)
+                    or not row["admission_id"]
+                    or not isinstance(row["freshness_status"], str)
+                    or not row["freshness_status"]
+                    for row in admission_rows
                 )
             ):
                 raise ValueError("governance decision authority is malformed")
@@ -2057,6 +2274,21 @@ class SqlAlchemyEvaluationWorkbenchRepository:
                 409,
             ) from error
 
+        classified_at = self.read_fresh_utc_now()
+        operational_freshness = tuple(
+            self._classify_evidence_freshness(
+                organization_id=scope.organization_id,
+                workspace_id=scope.workspace_id,
+                system_id=scope.system_id,
+                run_id=scope.run_id,
+                suite_execution_id=row["suite_execution_id"],
+                admission_id=row["admission_id"],
+                recorded_freshness_status=row["freshness_status"],
+                as_of=classified_at,
+            )
+            for row in admission_rows
+        )
+
         return GovernanceDecisionAuthorityRecord.create(
             scope=scope,
             run_contract_version=run["contract_version"],
@@ -2067,10 +2299,14 @@ class SqlAlchemyEvaluationWorkbenchRepository:
             current_overall_verdict=run["overall_verdict"],
             current_layer_verdicts=current_layers.to_dict(),
             requested_by=run["requested_by"],
-            evidence_submitters=tuple(dict.fromkeys(submitter_rows)),
+            evidence_submitters=tuple(
+                dict.fromkeys(row["submitted_by"] for row in admission_rows)
+            ),
             suite_execution_ids=suite_execution_ids,
+            admission_ids=tuple(row["admission_id"] for row in admission_rows),
             evidence_set=evidence_set.to_dict(),
             evidence_set_hash=canonical_sha256(evidence_set.to_dict()),
+            operational_freshness=operational_freshness,
         )
 
     @staticmethod
@@ -2090,6 +2326,19 @@ class SqlAlchemyEvaluationWorkbenchRepository:
                 "The governance verdict version is stale.",
                 status_code=409,
             )
+        freshness_trigger_messages = {
+            "evidence freshness classification integrity error": (
+                "binding_integrity_error",
+                _BINDING_INTEGRITY_MESSAGE,
+            ),
+            "evidence is not decision-eligible at database time": (
+                "governance_decision_evidence_not_ready",
+                "Every suite requires current, accepted, verified evidence.",
+            ),
+        }
+        if sqlstate == "23514" and first_line in freshness_trigger_messages:
+            code, message = freshness_trigger_messages[first_line]
+            return EvaluationWorkbenchError(code, message, status_code=409)
         if sqlstate == "P0001" and first_line in _GOVERNANCE_DECISION_TRIGGER_MESSAGES:
             code, message = _GOVERNANCE_DECISION_TRIGGER_MESSAGES[first_line]
             return EvaluationWorkbenchError(code, message, status_code=409)
@@ -2144,7 +2393,7 @@ class SqlAlchemyEvaluationWorkbenchRepository:
         decisions = GovernanceEvaluationDecision.__table__
         runs = GovernanceEvaluationRun.__table__
         try:
-            self.db.execute(
+            persisted_decided_at_raw = self.db.execute(
                 insert(decisions).values(
                     id=command.decision_id,
                     org_id=scope.organization_id,
@@ -2164,7 +2413,16 @@ class SqlAlchemyEvaluationWorkbenchRepository:
                     evidence_set_json=evidence_set_json,
                     evidence_set_hash=evidence_set_hash,
                     decided_at=decided_at,
+                ).returning(decisions.c.decided_at)
+            ).scalar_one()
+            if not isinstance(persisted_decided_at_raw, str):
+                raise self._error(
+                    "governance_decision_chronology_invalid",
+                    "The governance-decision chronology is invalid.",
+                    409,
                 )
+            persisted_decided_at = _parse_timestamp(persisted_decided_at_raw).astimezone(
+                timezone.utc
             )
             updated = self.db.execute(
                 update(runs)
@@ -2189,7 +2447,7 @@ class SqlAlchemyEvaluationWorkbenchRepository:
                     layer_verdicts_json=layer_verdicts_json,
                     layer_verdicts_schema_version=LAYER_VERDICTS_SCHEMA_VERSION,
                     verdict_version=command.next_verdict_version,
-                    updated_at=decided_at,
+                    updated_at=persisted_decided_at_raw,
                 )
             )
             if updated.rowcount != 1:
@@ -2202,6 +2460,29 @@ class SqlAlchemyEvaluationWorkbenchRepository:
                 text(
                     "SET CONSTRAINTS "
                     "governance_evaluation_decisions_guard_run_projection IMMEDIATE"
+                )
+            )
+            if len(authority.admission_ids) != len(authority.suite_execution_ids):
+                raise self._error(
+                    "governance_decision_integrity_conflict",
+                    "The locked governance-decision authority is inconsistent.",
+                    409,
+                )
+            operational_freshness = tuple(
+                self._classify_evidence_freshness(
+                    organization_id=scope.organization_id,
+                    workspace_id=scope.workspace_id,
+                    system_id=scope.system_id,
+                    run_id=scope.run_id,
+                    suite_execution_id=suite_execution_id,
+                    admission_id=admission_id,
+                    recorded_freshness_status="current",
+                    as_of=persisted_decided_at,
+                )
+                for suite_execution_id, admission_id in zip(
+                    authority.suite_execution_ids,
+                    authority.admission_ids,
+                    strict=True,
                 )
             )
         except DBAPIError as error:
@@ -2222,7 +2503,9 @@ class SqlAlchemyEvaluationWorkbenchRepository:
             rationale=command.rationale,
             decided_by=command.actor_id,
             evidence_set_hash=evidence_set_hash,
-            decided_at=command.decided_at,
+            decided_at=persisted_decided_at,
+            suite_execution_ids=authority.suite_execution_ids,
+            operational_freshness=operational_freshness,
         )
 
     # ------------------------------------------------------------------
@@ -3006,6 +3289,7 @@ class SqlAlchemyEvaluationWorkbenchRepository:
         row: Mapping[str, Any],
         *,
         evidence_trust: EvidenceTrustMetadataRecord | None = None,
+        operational_freshness: EvidenceFreshnessClassification | None = None,
     ) -> SuiteExecutionRecord:
         frozen_result_summary = (
             None
@@ -3046,6 +3330,7 @@ class SqlAlchemyEvaluationWorkbenchRepository:
             created_at=row["created_at"],
             updated_at=row["updated_at"],
             evidence_trust=evidence_trust,
+            operational_freshness=operational_freshness,
         )
 
     def _stored_json_value(
@@ -3145,8 +3430,41 @@ class SqlAlchemyEvaluationWorkbenchRepository:
         self,
         row: Mapping[str, Any],
         executions: list[Mapping[str, Any]],
+        *,
+        freshness_as_of: datetime | None = None,
     ) -> RunRecord:
-        evidence_trust = self._evidence_trust_metadata_by_execution(row, executions)
+        for execution in executions:
+            verify_stored_suite_link_projection(
+                self._suite_execution_record(execution)
+            )
+        linked_executions = [
+            execution for execution in executions if execution["evidence_run_id"] is not None
+        ]
+        if linked_executions and freshness_as_of is None:
+            self._acquire_operational_freshness_read_lock(
+                organization_id=row["org_id"],
+            )
+            freshness_as_of = self.read_fresh_utc_now()
+        evidence_bindings = self._evidence_read_bindings_by_execution(row, executions)
+        operational_freshness: dict[str, EvidenceFreshnessClassification] = {}
+        for execution in linked_executions:
+            binding = evidence_bindings.get(execution["id"])
+            if binding is None or freshness_as_of is None:
+                raise self._error(
+                    "binding_integrity_error",
+                    _BINDING_INTEGRITY_MESSAGE,
+                    409,
+                )
+            operational_freshness[execution["id"]] = self._classify_evidence_freshness(
+                organization_id=row["org_id"],
+                workspace_id=row["workspace_id"],
+                system_id=row["system_id"],
+                run_id=row["id"],
+                suite_execution_id=execution["id"],
+                admission_id=binding.admission_id,
+                recorded_freshness_status=execution["freshness_status"],
+                as_of=freshness_as_of,
+            )
         return RunRecord(
             id=row["id"],
             organization_id=row["org_id"],
@@ -3167,7 +3485,12 @@ class SqlAlchemyEvaluationWorkbenchRepository:
             suite_executions=tuple(
                 self._suite_execution_record(
                     execution,
-                    evidence_trust=evidence_trust.get(execution["id"]),
+                    evidence_trust=(
+                        None
+                        if evidence_bindings.get(execution["id"]) is None
+                        else evidence_bindings[execution["id"]].trust
+                    ),
+                    operational_freshness=operational_freshness.get(execution["id"]),
                 )
                 for execution in executions
             ),
@@ -3185,11 +3508,11 @@ class SqlAlchemyEvaluationWorkbenchRepository:
             updated_at=row["updated_at"],
         )
 
-    def _evidence_trust_metadata_by_execution(
+    def _evidence_read_bindings_by_execution(
         self,
         run: Mapping[str, Any],
         executions: list[Mapping[str, Any]],
-    ) -> dict[str, EvidenceTrustMetadataRecord]:
+    ) -> dict[str, _EvidenceReadBinding]:
         """Project only scope-bound, persisted provenance for this exact run."""
 
         execution_ids = tuple(
@@ -3291,7 +3614,7 @@ class SqlAlchemyEvaluationWorkbenchRepository:
                 (review["suite_execution_id"], review["admission_id"]), review
             )
 
-        result: dict[str, EvidenceTrustMetadataRecord] = {}
+        result: dict[str, _EvidenceReadBinding] = {}
         for metadata in rows:
             suite_execution_id = metadata["suite_execution_id"]
             if suite_execution_id in result:
@@ -3301,21 +3624,26 @@ class SqlAlchemyEvaluationWorkbenchRepository:
                     409,
                 )
             review = latest_reviews.get((suite_execution_id, metadata["admission_id"]))
-            result[suite_execution_id] = EvidenceTrustMetadataRecord(
-                source_type=metadata["source_type"],
-                issuer_key=metadata["issuer_key"],
-                signing_key_id=metadata["signing_key_id"],
-                signer_key_id=metadata["signer_key_id"],
-                signer_algorithm=metadata["signer_algorithm"],
-                effective_expires_at=metadata["effective_expires_at"],
-                reviewed_by=None if review is None else review["reviewed_by"],
-                reviewed_at=None if review is None else review["reviewed_at"],
-                admission_reasons=self._stored_string_array(
-                    metadata["admission_reasons_json"],
-                    maximum_bytes=_MAX_BINDING_LIST_BYTES,
-                    allow_empty=True,
+            result[suite_execution_id] = _EvidenceReadBinding(
+                admission_id=metadata["admission_id"],
+                trust=EvidenceTrustMetadataRecord(
+                    source_type=metadata["source_type"],
+                    issuer_key=metadata["issuer_key"],
+                    signing_key_id=metadata["signing_key_id"],
+                    signer_key_id=metadata["signer_key_id"],
+                    signer_algorithm=metadata["signer_algorithm"],
+                    effective_expires_at=metadata["effective_expires_at"],
+                    reviewed_by=None if review is None else review["reviewed_by"],
+                    reviewed_at=None if review is None else review["reviewed_at"],
+                    admission_reasons=self._stored_string_array(
+                        metadata["admission_reasons_json"],
+                        maximum_bytes=_MAX_BINDING_LIST_BYTES,
+                        allow_empty=True,
+                    ),
+                    signing_key_revocation_reason=metadata[
+                        "signing_key_revocation_reason"
+                    ],
                 ),
-                signing_key_revocation_reason=metadata["signing_key_revocation_reason"],
             )
         return result
 
@@ -3428,7 +3756,56 @@ class SqlAlchemyEvaluationWorkbenchRepository:
             .mappings()
             .all()
         )
-        return [self._run_record(row) for row in rows]
+        if not rows:
+            return []
+        run_ids = tuple(row["id"] for row in rows)
+        execution_rows = list(
+            self.db.execute(
+                select(GovernanceEvaluationRunSuiteExecution.__table__)
+                .where(
+                    GovernanceEvaluationRunSuiteExecution.run_id.in_(run_ids),
+                    GovernanceEvaluationRunSuiteExecution.org_id == org_id,
+                    GovernanceEvaluationRunSuiteExecution.workspace_id
+                    == scope["workspace_id"],
+                    GovernanceEvaluationRunSuiteExecution.system_id == system_id,
+                )
+                .order_by(
+                    GovernanceEvaluationRunSuiteExecution.run_id,
+                    GovernanceEvaluationRunSuiteExecution.ordinal,
+                )
+            )
+            .mappings()
+            .all()
+        )
+        executions_by_run: dict[str, list[Mapping[str, Any]]] = {
+            run_id: [] for run_id in run_ids
+        }
+        for execution in execution_rows:
+            run_executions = executions_by_run.get(execution["run_id"])
+            if run_executions is None:
+                raise self._error(
+                    "binding_integrity_error", _BINDING_INTEGRITY_MESSAGE, 409
+                )
+            run_executions.append(execution)
+            verify_stored_suite_link_projection(
+                self._suite_execution_record(execution)
+            )
+        has_linked_evidence = any(
+            execution["evidence_run_id"] is not None for execution in execution_rows
+        )
+        if has_linked_evidence:
+            self._acquire_operational_freshness_read_lock(organization_id=org_id)
+            freshness_as_of = self.read_fresh_utc_now()
+        else:
+            freshness_as_of = None
+        return [
+            self._run_record_from_rows(
+                row,
+                executions_by_run[row["id"]],
+                freshness_as_of=freshness_as_of,
+            )
+            for row in rows
+        ]
 
     def get_run_record(
         self,
@@ -3454,7 +3831,37 @@ class SqlAlchemyEvaluationWorkbenchRepository:
             .mappings()
             .one_or_none()
         )
-        return self._run_record(row) if row else None
+        if row is None:
+            return None
+        executions = list(
+            self.db.execute(
+                select(GovernanceEvaluationRunSuiteExecution.__table__)
+                .where(
+                    GovernanceEvaluationRunSuiteExecution.run_id == row["id"],
+                    GovernanceEvaluationRunSuiteExecution.org_id == row["org_id"],
+                    GovernanceEvaluationRunSuiteExecution.workspace_id
+                    == row["workspace_id"],
+                    GovernanceEvaluationRunSuiteExecution.system_id == row["system_id"],
+                )
+                .order_by(GovernanceEvaluationRunSuiteExecution.ordinal)
+            )
+            .mappings()
+            .all()
+        )
+        for execution in executions:
+            verify_stored_suite_link_projection(
+                self._suite_execution_record(execution)
+            )
+        if any(execution["evidence_run_id"] is not None for execution in executions):
+            self._acquire_operational_freshness_read_lock(organization_id=org_id)
+            freshness_as_of = self.read_fresh_utc_now()
+        else:
+            freshness_as_of = None
+        return self._run_record_from_rows(
+            row,
+            executions,
+            freshness_as_of=freshness_as_of,
+        )
 
     def _verify_audit_chain(self, *, org_id: str) -> None:
         try:

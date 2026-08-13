@@ -21,6 +21,7 @@ from src.application.ports.evidence_review import (
     UuidFactory,
 )
 from src.application.services.evaluation_workbench_service import assurance_request_hash
+from src.application.services import evidence_freshness_service as freshness
 from src.domain.assurance.evaluation_v2 import (
     AssuranceContractValidationError,
     canonical_sha256,
@@ -29,7 +30,7 @@ from src.domain.assurance.evaluation_v2 import (
 )
 
 _OPERATION = "evaluation-v2.evidence.review"
-_AUDIT_SCHEMA = "evaluation-v2.verified-evidence-review/v1"
+_AUDIT_SCHEMA = "evaluation-v2.verified-evidence-review/v2"
 _DECISIONS = frozenset({"accepted", "rejected"})
 
 
@@ -128,10 +129,16 @@ def _assert_authority(
             "evidence_review_admission_not_verified",
             "Only verified evidence can be reviewed.",
         )
-    if authority.freshness_status != "current":
+    freshness.require_review_eligible(
+        authority.operational_freshness,
+        expected_recorded_status=authority.freshness_status,
+        error_code="evidence_review_evidence_not_current",
+        error_message="Only current or expiring evidence can be reviewed.",
+    )
+    if _utc(authority.operational_freshness.evaluated_at) != now:
         raise _error(
-            "evidence_review_evidence_not_current",
-            "Only current evidence can be reviewed.",
+            "evidence_review_integrity_conflict",
+            "The locked evidence-review authority is inconsistent.",
         )
     if authority.review_status != "pending" or authority.current_review_version != 0:
         raise _error(
@@ -189,7 +196,7 @@ def _assert_authority(
 
 
 def _body(record: ReviewedEvidenceRecord) -> dict[str, object]:
-    return {
+    result = {
         "reviewId": record.review_id,
         "admissionId": record.admission_id,
         "passportRevisionId": record.passport_revision_id,
@@ -208,6 +215,16 @@ def _body(record: ReviewedEvidenceRecord) -> dict[str, object]:
         "runTechnicalStatus": record.run_technical_status,
         "runEvidenceOutcome": record.run_evidence_outcome,
     }
+    result.update(
+        freshness.public_projection(
+            record.operational_freshness,
+            expected_recorded_status=record.freshness_status,
+        )
+    )
+    result["decisionEvidenceEligibleAtReview"] = (
+        record.operational_freshness.decision_eligible is True
+    )
+    return result
 
 
 def _assert_record(
@@ -229,10 +246,9 @@ def _assert_record(
         command.rationale,
         command.next_review_version,
         command.actor_id,
-        _utc(command.reviewed_at),
         "verified",
         command.decision,
-        "current",
+        authority.freshness_status,
         authority.technical_status,
         authority.evidence_result_status,
         authority.run_technical_status,
@@ -252,7 +268,6 @@ def _assert_record(
         record.rationale,
         record.review_version,
         record.reviewed_by,
-        _utc(record.reviewed_at),
         record.admission_status,
         record.review_status,
         record.freshness_status,
@@ -265,6 +280,18 @@ def _assert_record(
         raise _error(
             "evidence_review_integrity_conflict",
             "The evidence-review projection is inconsistent.",
+        )
+    reviewed_at = _utc(record.reviewed_at)
+    freshness.require_review_eligible(
+        record.operational_freshness,
+        expected_recorded_status=record.freshness_status,
+        error_code="evidence_review_evidence_not_current",
+        error_message="Only current or expiring evidence can be reviewed.",
+    )
+    if _utc(record.operational_freshness.evaluated_at) != reviewed_at:
+        raise _error(
+            "evidence_review_integrity_conflict",
+            "The persisted evidence-review projection is inconsistent.",
         )
 
 
@@ -332,13 +359,13 @@ class VerifiedEvidenceReviewService:
                     "The evidence admission was not found in this scope.",
                     status_code=404,
                 )
-            reviewed_at = _utc(self.repository.read_fresh_utc_now())
+            advisory_evaluated_at = _utc(authority.operational_freshness.evaluated_at)
             _assert_authority(
                 authority=authority,
                 scope=scope,
                 actor_id=safe_actor_id,
                 expected_review_version=expected_review_version,
-                now=reviewed_at,
+                now=advisory_evaluated_at,
             )
             persistence = PersistEvidenceReviewCommand(
                 scope=scope,
@@ -349,7 +376,7 @@ class VerifiedEvidenceReviewService:
                 rationale=rationale,
                 expected_review_version=expected_review_version,
                 next_review_version=expected_review_version + 1,
-                reviewed_at=reviewed_at,
+                reviewed_at=advisory_evaluated_at,
             )
             record = self.repository.persist_evidence_review(persistence)
             _assert_record(record, persistence)
@@ -373,7 +400,30 @@ class VerifiedEvidenceReviewService:
                         "rationaleHash": canonical_sha256({"rationale": rationale}),
                         "admissionStatus": "verified",
                         "reviewStatus": decision,
-                        "freshnessStatus": "current",
+                        "recordedFreshnessStatus": record.freshness_status,
+                        "effectiveFreshnessStatus": (
+                            record.operational_freshness.effective_freshness_status
+                        ),
+                        "freshnessContractVersion": (
+                            record.operational_freshness.freshness_contract_version
+                        ),
+                        "freshnessEvaluatedAt": _iso(
+                            record.operational_freshness.evaluated_at
+                        ),
+                        "freshnessEffectiveAt": _iso(
+                            record.operational_freshness.effective_at
+                        ),
+                        "expiringAt": (
+                            None
+                            if record.operational_freshness.expiring_at is None
+                            else _iso(record.operational_freshness.expiring_at)
+                        ),
+                        "freshnessReasonCodesHash": canonical_sha256(
+                            list(record.operational_freshness.reason_codes)
+                        ),
+                        "decisionEvidenceEligibleAtReview": (
+                            record.operational_freshness.decision_eligible is True
+                        ),
                         "technicalStatus": authority.technical_status,
                         "evidenceResultStatus": authority.evidence_result_status,
                     }

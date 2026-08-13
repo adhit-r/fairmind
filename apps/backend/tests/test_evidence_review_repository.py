@@ -63,6 +63,28 @@ def _review_service(session) -> VerifiedEvidenceReviewService:
     return VerifiedEvidenceReviewService(SqlAlchemyEvaluationWorkbenchUnitOfWork(session))
 
 
+def test_sqlite_repository_rejects_review_freshness_authority(
+    repository_fixture,
+) -> None:
+    session, _factory = repository_fixture
+    repository = SqlAlchemyEvaluationWorkbenchRepository(session)
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        repository.load_evidence_review_authority_for_update(
+            scope=EvidenceReviewScope(
+                organization_id=ORG,
+                workspace_id="workspace-a",
+                system_id="system-a",
+                run_id="run-a",
+                suite_execution_id="suite-a",
+                admission_id="admission-a",
+                passport_revision_id="revision-a",
+            )
+        )
+
+    assert caught.value.code == "operational_freshness_postgresql_required"
+
+
 class _ProjectionFailingRepository:
     """Test double that simulates a CAS miss after the review insert is attempted."""
 
@@ -97,51 +119,25 @@ class _ProjectionFailingUnitOfWork:
         return self._delegate.mutate(command, callback)
 
 
-def test_review_is_one_append_only_cas_mutation_with_replay_and_no_governance_decision(
+def test_sqlite_review_mutation_fails_closed_replays_rejection_and_writes_no_review(
     repository_fixture,
 ) -> None:
     session, _factory = repository_fixture
     scope = _admitted_scope(session)
-    before_run = (
-        session.execute(
-            select(GovernanceEvaluationRun.__table__).where(
-                GovernanceEvaluationRun.id == scope.run_id
-            )
-        )
-        .mappings()
-        .one()
-    )
-    before_suite = (
-        session.execute(
-            select(GovernanceEvaluationRunSuiteExecution.__table__).where(
-                GovernanceEvaluationRunSuiteExecution.id == scope.suite_execution_id
-            )
-        )
-        .mappings()
-        .one()
-    )
     service = _review_service(session)
 
-    first = service.review_verified_evidence(
-        scope=scope,
-        actor_id="independent-reviewer-a",
-        idempotency_key="review-replay-a",
-        decision="accepted",
-        rationale="Independent evidence review completed.",
-        expected_review_version=0,
-    )
-    replay = service.review_verified_evidence(
-        scope=scope,
-        actor_id="independent-reviewer-a",
-        idempotency_key="review-replay-a",
-        decision="accepted",
-        rationale="Independent evidence review completed.",
-        expected_review_version=0,
-    )
+    for _attempt in range(2):
+        with pytest.raises(EvaluationWorkbenchError) as unavailable:
+            service.review_verified_evidence(
+                scope=scope,
+                actor_id="independent-reviewer-a",
+                idempotency_key="review-replay-a",
+                decision="accepted",
+                rationale="Independent evidence review completed.",
+                expected_review_version=0,
+            )
+        assert unavailable.value.code == "operational_freshness_postgresql_required"
 
-    assert first.status == replay.status == 201
-    assert first.body == replay.body
-    assert replay.replayed is True
     with pytest.raises(EvaluationWorkbenchError) as conflict:
         service.review_verified_evidence(
             scope=scope,
@@ -153,26 +149,7 @@ def test_review_is_one_append_only_cas_mutation_with_replay_and_no_governance_de
         )
     assert conflict.value.code == "idempotency_conflict"
 
-    assert (
-        session.scalar(
-            select(func.count())
-            .select_from(GovernanceEvidenceReview.__table__)
-            .where(GovernanceEvidenceReview.admission_id == scope.admission_id)
-        )
-        == 1
-    )
-    review = (
-        session.execute(
-            select(GovernanceEvidenceReview.__table__).where(
-                GovernanceEvidenceReview.admission_id == scope.admission_id
-            )
-        )
-        .mappings()
-        .one()
-    )
-    assert review["decision"] == "accepted"
-    assert review["review_version"] == 1
-    assert review["separation_override_reason"] is None
+    assert session.scalar(select(func.count()).select_from(GovernanceEvidenceReview.__table__)) == 0
     suite = (
         session.execute(
             select(GovernanceEvaluationRunSuiteExecution.__table__).where(
@@ -182,25 +159,7 @@ def test_review_is_one_append_only_cas_mutation_with_replay_and_no_governance_de
         .mappings()
         .one()
     )
-    assert suite["review_status"] == "accepted"
-    assert suite["updated_at"] == before_suite["updated_at"]
-    after_run = (
-        session.execute(
-            select(GovernanceEvaluationRun.__table__).where(
-                GovernanceEvaluationRun.id == scope.run_id
-            )
-        )
-        .mappings()
-        .one()
-    )
-    for field in (
-        "technical_status",
-        "evidence_outcome",
-        "overall_verdict",
-        "verdict_version",
-        "updated_at",
-    ):
-        assert after_run[field] == before_run[field]
+    assert suite["review_status"] == "pending"
     assert (
         session.scalar(select(func.count()).select_from(GovernanceEvaluationDecision.__table__))
         == 0
@@ -211,12 +170,24 @@ def test_review_is_one_append_only_cas_mutation_with_replay_and_no_governance_de
             .select_from(GovernanceEvaluationAuditEvent.__table__)
             .where(GovernanceEvaluationAuditEvent.action == "evaluation_v2.evidence.reviewed")
         )
-        == 1
+        == 0
+    )
+    assert (
+        session.scalar(
+            select(func.count())
+            .select_from(GovernanceEvaluationAuditEvent.__table__)
+            .where(
+                GovernanceEvaluationAuditEvent.action == "evaluation_v2.mutation.rejected",
+                GovernanceEvaluationAuditEvent.outcome == "rejected",
+            )
+        )
+        == 2
     )
 
 
-def test_review_rejects_submitter_and_wrong_workspace_without_a_partial_row(
+def test_sqlite_rejects_before_four_eyes_and_scope_loader_remains_tenant_exact(
     repository_fixture,
+    monkeypatch,
 ) -> None:
     session, _factory = repository_fixture
     scope = _admitted_scope(session)
@@ -231,7 +202,7 @@ def test_review_rejects_submitter_and_wrong_workspace_without_a_partial_row(
             rationale="Independent evidence review completed.",
             expected_review_version=0,
         )
-    assert submitter.value.code == "evidence_review_separation_required"
+    assert submitter.value.code == "operational_freshness_postgresql_required"
 
     wrong_scope = EvidenceReviewScope(
         organization_id=scope.organization_id,
@@ -242,16 +213,9 @@ def test_review_rejects_submitter_and_wrong_workspace_without_a_partial_row(
         admission_id=scope.admission_id,
         passport_revision_id=scope.passport_revision_id,
     )
-    with pytest.raises(EvaluationWorkbenchError) as missing:
-        service.review_verified_evidence(
-            scope=wrong_scope,
-            actor_id="independent-reviewer-a",
-            idempotency_key="review-scope-a",
-            decision="rejected",
-            rationale="Independent evidence review completed.",
-            expected_review_version=0,
-        )
-    assert missing.value.code == "evidence_review_scope_not_found"
+    repository = SqlAlchemyEvaluationWorkbenchRepository(session)
+    monkeypatch.setattr(repository, "_require_postgres_freshness_authority", lambda: None)
+    assert repository.load_evidence_review_authority_for_update(scope=wrong_scope) is None
     assert session.scalar(select(func.count()).select_from(GovernanceEvidenceReview.__table__)) == 0
 
 
@@ -278,6 +242,7 @@ def test_review_rejects_submitter_and_wrong_workspace_without_a_partial_row(
 )
 def test_review_rejects_every_mutated_scope_identity_without_a_review_row(
     repository_fixture,
+    monkeypatch,
     field: str,
     value: str,
 ) -> None:
@@ -285,22 +250,15 @@ def test_review_rejects_every_mutated_scope_identity_without_a_review_row(
     scope = _admitted_scope(session)
     mutated_scope = replace(scope, **{field: value})
 
-    with pytest.raises(EvaluationWorkbenchError) as missing:
-        _review_service(session).review_verified_evidence(
-            scope=mutated_scope,
-            actor_id="independent-reviewer-a",
-            idempotency_key=f"review-scope-{field}",
-            decision="rejected",
-            rationale="Independent evidence review completed.",
-            expected_review_version=0,
-        )
-
-    assert missing.value.code == "evidence_review_scope_not_found"
+    repository = SqlAlchemyEvaluationWorkbenchRepository(session)
+    monkeypatch.setattr(repository, "_require_postgres_freshness_authority", lambda: None)
+    assert repository.load_evidence_review_authority_for_update(scope=mutated_scope) is None
     assert session.scalar(select(func.count()).select_from(GovernanceEvidenceReview.__table__)) == 0
 
 
 def test_review_rejects_admission_and_passport_cross_pairs_without_a_review_row(
     repository_fixture,
+    monkeypatch,
 ) -> None:
     session, _factory = repository_fixture
     first_scope = _admitted_scope(session, run_key="review-cross-pair-first")
@@ -309,7 +267,8 @@ def test_review_rejects_admission_and_passport_cross_pairs_without_a_review_row(
         seed_authority=False,
         run_key="review-cross-pair-second",
     )
-    service = _review_service(session)
+    repository = SqlAlchemyEvaluationWorkbenchRepository(session)
+    monkeypatch.setattr(repository, "_require_postgres_freshness_authority", lambda: None)
 
     for name, mutated_scope in (
         ("admission", replace(first_scope, admission_id=second_scope.admission_id)),
@@ -318,21 +277,12 @@ def test_review_rejects_admission_and_passport_cross_pairs_without_a_review_row(
             replace(first_scope, passport_revision_id=second_scope.passport_revision_id),
         ),
     ):
-        with pytest.raises(EvaluationWorkbenchError) as missing:
-            service.review_verified_evidence(
-                scope=mutated_scope,
-                actor_id="independent-reviewer-a",
-                idempotency_key=f"review-cross-pair-{name}",
-                decision="rejected",
-                rationale="Independent evidence review completed.",
-                expected_review_version=0,
-            )
-        assert missing.value.code == "evidence_review_scope_not_found"
+        assert repository.load_evidence_review_authority_for_update(scope=mutated_scope) is None
 
     assert session.scalar(select(func.count()).select_from(GovernanceEvidenceReview.__table__)) == 0
 
 
-def test_projection_cas_failure_rolls_back_the_review_and_records_only_rejection_audit(
+def test_sqlite_never_reaches_projection_cas_and_records_only_rejection_audit(
     repository_fixture,
 ) -> None:
     session, _factory = repository_fixture
@@ -349,7 +299,7 @@ def test_projection_cas_failure_rolls_back_the_review_and_records_only_rejection
             expected_review_version=0,
         )
 
-    assert failed.value.code == "evidence_review_projection_conflict"
+    assert failed.value.code == "operational_freshness_postgresql_required"
     assert session.scalar(select(func.count()).select_from(GovernanceEvidenceReview.__table__)) == 0
     suite = (
         session.execute(

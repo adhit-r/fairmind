@@ -18,7 +18,8 @@
 - [x] Create one suite-execution record per selected suite.
 - [x] Bind Passport v2 to exact tenant, system, target, suite, plan, configuration, lifecycle, delivery, evaluator, nonce, and chronology.
 - [x] Keep Passport v1 readable but ineligible for v2 runs.
-- [ ] Add evidence issuers, Ed25519 keys, immutable trust policies, admissions, freshness, and append-only reviews.
+- [x] Add evidence issuers, Ed25519 keys, immutable trust policies, admissions, freshness, and append-only reviews.
+  - Checkpoint: migration 013g derives current operational freshness from the exact admission, receipt, evaluator registration, issuer, signing key, policy, review, and chronology graph. PostgreSQL owns gate time and serializes authority changes with review/decision mutations; SQLite remains a fail-closed parity fixture. See `docs/audits/2026-08-13-p0-operational-evidence-freshness.md` for proof and remaining public-release gaps.
 - [ ] Require verified evidence from FairMind workers and external adapters; imports may remain unsigned only as visibly unverified human-review material.
 - [x] Keep linking separate from governance decision-making; a link yields `review` or `insufficient`, never automatic approval/blocking.
 - [ ] Add granular plan, run, evidence, decision, catalog, trust, worker, and separation-override permissions.
@@ -29,11 +30,14 @@
 - [x] Add forward migration 013 without rewriting migration 012; extend checksum-ledger drift detection.
 - [x] Mark existing plans/runs contract v1 without fabricating registry identities; keep them readable but prevent new execution until upgraded.
 
-Task 12B milestone: the checked Passport v2 binding and link-separation rows are
-implemented as an internal, default-off application kernel. They do not imply
-an exposed API, reviewer acceptance, governance approval, compliance,
-certification, worker execution, or runtime enforcement. The remaining issuer,
-review, permission, and route rows are independent release gates.
+Task 12B milestone: Passport v2 binding, trust authority, verified admission,
+append-only review, operational freshness, and link separation are implemented
+as an internal, default-off PostgreSQL-authoritative control-plane kernel. They
+do not imply generally available evaluator execution, compliance,
+certification, automatic approval, worker execution, or runtime enforcement.
+Worker/external-adapter identity, imported-report workflows, separation
+overrides, remaining feature switches, and public execution routes remain
+independent release gates.
 
 ## P0 — Frontend and design
 

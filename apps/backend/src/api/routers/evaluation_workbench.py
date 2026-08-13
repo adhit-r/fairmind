@@ -347,7 +347,6 @@ class SuiteEvidenceTrustResponse(StrictModel):
     reviewed_by: str | None = Field(alias="reviewedBy")
     reviewed_at: str | None = Field(alias="reviewedAt")
     admission_reasons: list[str] | None = Field(alias="admissionReasons")
-    signing_key_revocation_reason: str | None = Field(alias="signingKeyRevocationReason")
 
 
 class SuiteExecutionResponse(StrictModel):
@@ -360,6 +359,21 @@ class SuiteExecutionResponse(StrictModel):
     admission_status: AdmissionStatus = Field(alias="admissionStatus")
     review_status: ReviewStatus = Field(alias="reviewStatus")
     freshness_status: FreshnessStatus = Field(alias="freshnessStatus")
+    recorded_freshness_status: FreshnessStatus | None = Field(
+        default=None, alias="recordedFreshnessStatus"
+    )
+    freshness_contract_version: Literal["1.0.0"] | None = Field(
+        default=None, alias="freshnessContractVersion"
+    )
+    freshness_evaluated_at: str | None = Field(default=None, alias="freshnessEvaluatedAt")
+    freshness_effective_at: str | None = Field(default=None, alias="freshnessEffectiveAt")
+    expiring_at: str | None = Field(default=None, alias="expiringAt")
+    freshness_reason_codes: list[str] | None = Field(
+        default=None, alias="freshnessReasonCodes"
+    )
+    decision_evidence_eligible: bool | None = Field(
+        default=None, alias="decisionEvidenceEligible"
+    )
     evidence_trust: SuiteEvidenceTrustResponse | None = Field(alias="evidenceTrust")
     limitations: list[Any]
     failure_code: str | None = Field(alias="failureCode")
@@ -388,6 +402,9 @@ class EvaluationRunV2Response(StrictModel):
     layer_verdicts_schema_version: Literal["1.0.0"] = Field(alias="layerVerdictsSchemaVersion")
     layer_verdicts: LayerVerdictsResponse = Field(alias="layerVerdicts")
     suite_executions: list[SuiteExecutionResponse] = Field(alias="suiteExecutions")
+    decision_evidence_currently_eligible: bool = Field(
+        alias="decisionEvidenceCurrentlyEligible"
+    )
     envelope_id: str = Field(alias="envelopeId")
     envelope: dict[str, Any]
     envelope_hash: str = Field(alias="envelopeHash")
@@ -450,7 +467,16 @@ class EvidenceReviewResponse(StrictModel):
     reviewed_at: str = Field(alias="reviewedAt")
     admission_status: Literal["verified"] = Field(alias="admissionStatus")
     review_status: Literal["accepted", "rejected"] = Field(alias="reviewStatus")
-    freshness_status: Literal["current"] = Field(alias="freshnessStatus")
+    freshness_status: FreshnessStatus = Field(alias="freshnessStatus")
+    recorded_freshness_status: FreshnessStatus = Field(alias="recordedFreshnessStatus")
+    freshness_contract_version: Literal["1.0.0"] = Field(alias="freshnessContractVersion")
+    freshness_evaluated_at: str = Field(alias="freshnessEvaluatedAt")
+    freshness_effective_at: str = Field(alias="freshnessEffectiveAt")
+    expiring_at: str | None = Field(alias="expiringAt")
+    freshness_reason_codes: list[str] = Field(alias="freshnessReasonCodes")
+    decision_evidence_eligible_at_review: bool = Field(
+        alias="decisionEvidenceEligibleAtReview"
+    )
     technical_status: TechnicalStatus = Field(alias="technicalStatus")
     evidence_result_status: EvidenceResultStatus = Field(alias="evidenceResultStatus")
     run_technical_status: TechnicalStatus = Field(alias="runTechnicalStatus")
@@ -464,6 +490,18 @@ class GovernanceDecisionRequest(StrictModel):
     overall_verdict: GovernanceVerdict = Field(alias="overallVerdict")
     layer_verdicts: LayerVerdictsResponse = Field(alias="layerVerdicts")
     rationale: str = Field(min_length=1, max_length=4000)
+
+
+class GovernanceDecisionSuiteFreshnessResponse(StrictModel):
+    suite_execution_id: str = Field(alias="suiteExecutionId")
+    recorded_freshness_status: FreshnessStatus = Field(alias="recordedFreshnessStatus")
+    effective_freshness_status: FreshnessStatus = Field(alias="effectiveFreshnessStatus")
+    freshness_effective_at: str = Field(alias="freshnessEffectiveAt")
+    expiring_at: str | None = Field(alias="expiringAt")
+    freshness_reason_codes: list[str] = Field(alias="freshnessReasonCodes")
+    decision_evidence_eligible_at_decision: bool = Field(
+        alias="decisionEvidenceEligibleAtDecision"
+    )
 
 
 class GovernanceDecisionResponse(StrictModel):
@@ -480,6 +518,14 @@ class GovernanceDecisionResponse(StrictModel):
     decided_by: str = Field(alias="decidedBy")
     evidence_set_hash: str = Field(alias="evidenceSetHash", pattern="^[0-9a-f]{64}$")
     decided_at: str = Field(alias="decidedAt")
+    freshness_contract_version: Literal["1.0.0"] = Field(alias="freshnessContractVersion")
+    freshness_evaluated_at: str = Field(alias="freshnessEvaluatedAt")
+    decision_evidence_eligible_at_decision: bool = Field(
+        alias="decisionEvidenceEligibleAtDecision"
+    )
+    suite_freshness: list[GovernanceDecisionSuiteFreshnessResponse] = Field(
+        alias="suiteFreshness"
+    )
 
 
 def _depth(value: Any, level: int = 0) -> int:

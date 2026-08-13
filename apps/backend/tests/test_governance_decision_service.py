@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 import pytest
@@ -17,6 +17,7 @@ from src.application.ports.governance_decision import (
     GovernanceDecisionRecord,
     GovernanceDecisionScope,
 )
+from src.application.ports.evidence_freshness import EvidenceFreshnessClassification
 from src.application.services.governance_decision_service import GovernanceDecisionService
 
 UTC = timezone.utc
@@ -81,8 +82,22 @@ def _authority() -> GovernanceDecisionAuthorityRecord:
         requested_by="requester-a",
         evidence_submitters=("submitter-a",),
         suite_execution_ids=("suite-execution-a",),
+        admission_ids=("admission-a",),
         evidence_set=EVIDENCE_SET,
         evidence_set_hash=EVIDENCE_SET_HASH,
+        operational_freshness=(
+            EvidenceFreshnessClassification(
+                classification_status="ok",
+                freshness_contract_version="1.0.0",
+                recorded_freshness_status="current",
+                effective_freshness_status="current",
+                evaluated_at=NOW,
+                effective_at=NOW,
+                expiring_at=NOW + timedelta(hours=1),
+                reason_codes=(),
+                decision_eligible=True,
+            ),
+        ),
     )
 
 
@@ -101,6 +116,12 @@ class _FakeRepository:
 
     def persist_governance_decision(self, command):
         self.persisted.append(command)
+        decided_at = getattr(self, "returned_decided_at", command.decided_at)
+        operational_freshness = getattr(
+            self,
+            "returned_operational_freshness",
+            command.authority.operational_freshness,
+        )
         return GovernanceDecisionRecord.create(
             decision_id=command.decision_id,
             scope=command.scope,
@@ -113,7 +134,9 @@ class _FakeRepository:
             rationale=command.rationale,
             decided_by=command.actor_id,
             evidence_set_hash=command.authority.evidence_set_hash,
-            decided_at=command.decided_at,
+            decided_at=decided_at,
+            suite_execution_ids=command.authority.suite_execution_ids,
+            operational_freshness=operational_freshness,
         )
 
 
@@ -155,12 +178,54 @@ def test_decision_appends_server_bound_record_and_advances_expected_version() ->
         "decidedBy": "decider-a",
         "evidenceSetHash": EVIDENCE_SET_HASH,
         "decidedAt": NOW.isoformat(),
+        "freshnessContractVersion": "1.0.0",
+        "freshnessEvaluatedAt": NOW.isoformat(),
+        "decisionEvidenceEligibleAtDecision": True,
+        "suiteFreshness": [
+            {
+                "suiteExecutionId": "suite-execution-a",
+                "recordedFreshnessStatus": "current",
+                "effectiveFreshnessStatus": "current",
+                "freshnessEffectiveAt": NOW.isoformat(),
+                "expiringAt": (NOW + timedelta(hours=1)).isoformat(),
+                "freshnessReasonCodes": [],
+                "decisionEvidenceEligibleAtDecision": True,
+            }
+        ],
     }
     persisted = repository.persisted[0]
     assert persisted.expected_verdict_version == 0
     assert persisted.next_verdict_version == 1
     assert persisted.authority.evidence_set.to_dict() == EVIDENCE_SET
     assert persisted.owner_override_reason is None
+
+
+def test_decision_rejects_classifier_result_from_a_different_database_instant() -> None:
+    repository = _FakeRepository(_authority())
+    repository.returned_decided_at = NOW
+    repository.returned_operational_freshness = (
+        replace(
+            _authority().operational_freshness[0],
+            evaluated_at=NOW.replace(microsecond=1),
+        ),
+    )
+    service = GovernanceDecisionService(
+        _FakeUnitOfWork(repository), uuid_factory=lambda: DECISION_ID
+    )
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        service.decide(
+            scope=SCOPE,
+            actor_id="decider-a",
+            idempotency_key="decision-wrong-evaluated-at",
+            expected_verdict_version=0,
+            overall_verdict="conditional",
+            layer_verdicts=LAYERS,
+            rationale="Must share the database-owned decision instant.",
+        )
+
+    assert caught.value.code == "governance_decision_integrity_conflict"
+    assert len(repository.persisted) == 1
 
 
 @pytest.mark.parametrize(

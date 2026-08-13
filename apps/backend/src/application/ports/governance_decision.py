@@ -12,6 +12,7 @@ from src.application.ports.evaluation_workbench import (
     MutationCommand,
     MutationResult,
 )
+from src.application.ports.evidence_freshness import EvidenceFreshnessClassification
 
 UuidFactory = Callable[[], object]
 
@@ -37,8 +38,10 @@ class GovernanceDecisionAuthorityRecord:
     requested_by: str
     evidence_submitters: tuple[str, ...]
     suite_execution_ids: tuple[str, ...]
+    admission_ids: tuple[str, ...]
     evidence_set: FrozenJsonObject
     evidence_set_hash: str
+    operational_freshness: tuple[EvidenceFreshnessClassification, ...]
 
     @classmethod
     def create(
@@ -55,8 +58,10 @@ class GovernanceDecisionAuthorityRecord:
         requested_by: str,
         evidence_submitters: tuple[str, ...],
         suite_execution_ids: tuple[str, ...],
+        admission_ids: tuple[str, ...],
         evidence_set: Mapping[str, object],
         evidence_set_hash: str,
+        operational_freshness: tuple[EvidenceFreshnessClassification, ...],
     ) -> "GovernanceDecisionAuthorityRecord":
         return cls(
             scope=scope,
@@ -70,8 +75,10 @@ class GovernanceDecisionAuthorityRecord:
             requested_by=requested_by,
             evidence_submitters=tuple(evidence_submitters),
             suite_execution_ids=tuple(suite_execution_ids),
+            admission_ids=tuple(admission_ids),
             evidence_set=FrozenJsonObject.from_mapping(evidence_set),
             evidence_set_hash=evidence_set_hash,
+            operational_freshness=tuple(operational_freshness),
         )
 
 
@@ -104,6 +111,8 @@ class GovernanceDecisionRecord:
     decided_by: str
     evidence_set_hash: str
     decided_at: datetime
+    suite_execution_ids: tuple[str, ...]
+    operational_freshness: tuple[EvidenceFreshnessClassification, ...]
 
     @classmethod
     def create(
@@ -121,6 +130,8 @@ class GovernanceDecisionRecord:
         decided_by: str,
         evidence_set_hash: str,
         decided_at: datetime,
+        suite_execution_ids: tuple[str, ...],
+        operational_freshness: tuple[EvidenceFreshnessClassification, ...],
     ) -> "GovernanceDecisionRecord":
         return cls(
             decision_id=decision_id,
@@ -135,6 +146,8 @@ class GovernanceDecisionRecord:
             decided_by=decided_by,
             evidence_set_hash=evidence_set_hash,
             decided_at=decided_at,
+            suite_execution_ids=tuple(suite_execution_ids),
+            operational_freshness=tuple(operational_freshness),
         )
 
 

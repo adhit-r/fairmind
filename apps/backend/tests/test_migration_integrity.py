@@ -17,12 +17,14 @@ from config.migration_integrity import (
     FROZEN_013D_OPERATOR_CHECKSUM,
     FROZEN_013E_OPERATOR_CHECKSUM,
     FROZEN_013F_OPERATOR_CHECKSUM,
+    FROZEN_013G_OPERATOR_CHECKSUM,
     FROZEN_ASSURANCE_MIGRATIONS,
     FROZEN_POSTGRESQL_ASSURANCE_CATALOGS,
     FROZEN_SQLITE_013C_FIXTURE_CHECKSUM,
     FROZEN_SQLITE_013D_FIXTURE_CHECKSUM,
     FROZEN_SQLITE_013E_FIXTURE_CHECKSUM,
     FROZEN_SQLITE_013F_FIXTURE_CHECKSUM,
+    FROZEN_SQLITE_013G_FIXTURE_CHECKSUM,
     POSTGRESQL_ASSURANCE_CATALOG_SPEC,
     POSTGRESQL_ASSURANCE_FUNCTIONS,
     POSTGRESQL_ASSURANCE_REQUIRED_TRIGGERS,
@@ -67,6 +69,7 @@ POSTGRES_OPERATOR_CHAIN = (
     "upgrade_paths/013c_to_013d_evaluator_catalog.sql",
     "upgrade_paths/013d_to_013e_environmental_tenant_scope.sql",
     "upgrade_paths/013e_to_013f_trust_authority_integrity.sql",
+    "upgrade_paths/013f_to_013g_operational_evidence_freshness.sql",
 )
 POSTGRESQL_013B_PREREQUISITE_CONSTRAINTS = frozenset(
     {
@@ -156,6 +159,9 @@ def _install_sqlite_assurance_chain(database_path: Path) -> None:
     from migrations.evidence_verification_receipt_migration import sql_for as sql_013c
     from migrations.governance_assurance_migration import sql_for as sql_011
     from migrations.trust_authority_integrity_migration import apply_sqlite as apply_013f
+    from migrations.operational_evidence_freshness_migration import (
+        apply_sqlite as apply_013g,
+    )
 
     connection = sqlite3.connect(database_path)
     try:
@@ -176,6 +182,7 @@ def _install_sqlite_assurance_chain(database_path: Path) -> None:
         apply_013d(connection)
         apply_013e(connection)
         apply_013f(connection)
+        apply_013g(connection)
     finally:
         connection.close()
 
@@ -604,7 +611,7 @@ def test_production_postgresql_manifest_covers_audit_immutability() -> None:
     frozen = FROZEN_POSTGRESQL_ASSURANCE_CATALOGS[14]
     assert frozen.spec is POSTGRESQL_ASSURANCE_CATALOG_SPEC
     assert frozen.postgresql_major == 14
-    assert frozen.digest == "6d9432fd9b092b1d99091773cec9bf5065bb25b1bf768004b2eba83492abcad2"
+    assert frozen.digest == "d7912a0fe9e06c2fa798655d848c55394b1454d8ed8f7d81c6cb7a00dcdbb9a0"
     validate_frozen_postgresql_catalog(frozen)
 
 
@@ -1587,6 +1594,52 @@ def test_native_production_catalog_freeze_matches_two_operator_installs_and_tamp
         try:
             with cleanup.cursor() as cursor:
                 for schema_name in schemas:
+                    cursor.execute(
+                        sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(
+                            sql.Identifier(schema_name)
+                        )
+                    )
+        finally:
+            cleanup.close()
+
+
+@pytest.mark.skipif(
+    not POSTGRES_URL,
+    reason="requires FAIRMIND_TEST_POSTGRES_URL pointing to disposable PostgreSQL",
+)
+def test_native_013g_operator_orphan_check_is_schema_scoped() -> None:
+    """A recorded 013g catalog in one schema cannot block another schema's install."""
+    import psycopg2
+    from psycopg2 import sql
+
+    assert POSTGRES_URL is not None
+    first_schema, second_schema = (
+        f"fm_013g_scope_{uuid.uuid4().hex[:12]}",
+        f"fm_013g_scope_{uuid.uuid4().hex[:12]}",
+    )
+    try:
+        for schema_name in (first_schema, second_schema):
+            _install_postgresql_base_through_012(POSTGRES_URL, schema_name)
+            for migration_name in POSTGRES_OPERATOR_CHAIN[:-1]:
+                result = _run_postgresql_operator_migration(
+                    POSTGRES_URL, schema_name, migration_name
+                )
+                assert result.returncode == 0, result.stderr
+
+        first = _run_postgresql_operator_migration(
+            POSTGRES_URL, first_schema, POSTGRES_OPERATOR_CHAIN[-1]
+        )
+        assert first.returncode == 0, first.stderr
+        second = _run_postgresql_operator_migration(
+            POSTGRES_URL, second_schema, POSTGRES_OPERATOR_CHAIN[-1]
+        )
+        assert second.returncode == 0, second.stderr
+    finally:
+        cleanup = psycopg2.connect(POSTGRES_URL)
+        cleanup.autocommit = True
+        try:
+            with cleanup.cursor() as cursor:
+                for schema_name in (first_schema, second_schema):
                     cursor.execute(
                         sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(
                             sql.Identifier(schema_name)

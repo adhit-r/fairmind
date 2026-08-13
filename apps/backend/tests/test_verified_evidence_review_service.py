@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -19,6 +19,7 @@ from src.application.ports.evidence_review import (
     EvidenceReviewScope,
     ReviewedEvidenceRecord,
 )
+from src.application.ports.evidence_freshness import EvidenceFreshnessClassification
 from src.application.services.verified_evidence_review_service import (
     VerifiedEvidenceReviewService,
 )
@@ -60,6 +61,17 @@ def _authority(**changes: object) -> EvidenceReviewAuthorityRecord:
         "run_technical_status": "succeeded",
         "run_evidence_outcome": "failed",
         "governance_decision_exists": False,
+        "operational_freshness": EvidenceFreshnessClassification(
+            classification_status="ok",
+            freshness_contract_version="1.0.0",
+            recorded_freshness_status="current",
+            effective_freshness_status="current",
+            evaluated_at=NOW,
+            effective_at=NOW - timedelta(hours=1),
+            expiring_at=NOW + timedelta(minutes=30),
+            reason_codes=(),
+            decision_eligible=False,
+        ),
     }
     values.update(changes)
     return EvidenceReviewAuthorityRecord(**values)
@@ -80,6 +92,15 @@ class _FakeRepository:
 
     def persist_evidence_review(self, command):
         self.persisted.append(command)
+        reviewed_at = getattr(self, "returned_reviewed_at", command.reviewed_at)
+        operational_freshness = getattr(
+            self,
+            "returned_operational_freshness",
+            replace(
+                command.authority.operational_freshness,
+                decision_eligible=command.decision == "accepted",
+            ),
+        )
         return ReviewedEvidenceRecord(
             review_id=command.review_id,
             organization_id=command.scope.organization_id,
@@ -94,14 +115,15 @@ class _FakeRepository:
             rationale=command.rationale,
             review_version=command.next_review_version,
             reviewed_by=command.actor_id,
-            reviewed_at=command.reviewed_at,
+            reviewed_at=reviewed_at,
             admission_status="verified",
             review_status=command.decision,
-            freshness_status="current",
+            freshness_status=command.authority.freshness_status,
             technical_status=command.authority.technical_status,
             evidence_result_status=command.authority.evidence_result_status,
             run_technical_status=command.authority.run_technical_status,
             run_evidence_outcome=command.authority.run_evidence_outcome,
+            operational_freshness=operational_freshness,
         )
 
 
@@ -163,6 +185,13 @@ def test_review_persists_an_independent_transition_without_a_governance_verdict(
         "evidenceResultStatus": "failed",
         "runTechnicalStatus": "succeeded",
         "runEvidenceOutcome": "failed",
+        "recordedFreshnessStatus": "current",
+        "freshnessContractVersion": "1.0.0",
+        "freshnessEvaluatedAt": NOW.isoformat(),
+        "freshnessEffectiveAt": (NOW - timedelta(hours=1)).isoformat(),
+        "expiringAt": (NOW + timedelta(minutes=30)).isoformat(),
+        "freshnessReasonCodes": [],
+        "decisionEvidenceEligibleAtReview": decision == "accepted",
     }
     assert "overallVerdict" not in result.body
     assert "verdictVersion" not in result.body
@@ -195,7 +224,7 @@ def test_review_persists_an_independent_transition_without_a_governance_verdict(
         audit_action="evaluation_v2.evidence.reviewed",
         audit_details=FrozenJsonObject.from_mapping(
             {
-                "schemaVersion": "evaluation-v2.verified-evidence-review/v1",
+                "schemaVersion": "evaluation-v2.verified-evidence-review/v2",
                 "runId": "run-a",
                 "suiteExecutionId": "suite-execution-a",
                 "admissionId": "admission-a",
@@ -208,12 +237,51 @@ def test_review_persists_an_independent_transition_without_a_governance_verdict(
                 ),
                 "admissionStatus": "verified",
                 "reviewStatus": decision,
-                "freshnessStatus": "current",
+                "recordedFreshnessStatus": "current",
+                "effectiveFreshnessStatus": "current",
+                "freshnessContractVersion": "1.0.0",
+                "freshnessEvaluatedAt": NOW.isoformat(),
+                "freshnessEffectiveAt": (NOW - timedelta(hours=1)).isoformat(),
+                "expiringAt": (NOW + timedelta(minutes=30)).isoformat(),
+                "freshnessReasonCodesHash": canonical_sha256([]),
+                "decisionEvidenceEligibleAtReview": decision == "accepted",
                 "technicalStatus": "succeeded",
                 "evidenceResultStatus": "failed",
             }
         ),
     )
+
+
+def test_accepted_expiring_evidence_is_not_decision_eligible_at_review() -> None:
+    expiring = replace(
+        _authority().operational_freshness,
+        recorded_freshness_status="expiring",
+        effective_freshness_status="expiring",
+        effective_at=NOW,
+        expiring_at=NOW,
+        reason_codes=("evidence_expiring",),
+        decision_eligible=False,
+    )
+    service, _unit_of_work, repository = _service(
+        authority=_authority(
+            freshness_status="expiring",
+            operational_freshness=expiring,
+        )
+    )
+    repository.returned_operational_freshness = expiring
+
+    result = service.review_verified_evidence(
+        scope=SCOPE,
+        actor_id="reviewer-a",
+        idempotency_key="review-expiring-accepted",
+        decision="accepted",
+        rationale="Expiring evidence remains reviewable but cannot authorize a new verdict.",
+        expected_review_version=0,
+    )
+
+    assert result.body["freshnessStatus"] == "expiring"
+    assert result.body["recordedFreshnessStatus"] == "expiring"
+    assert result.body["decisionEvidenceEligibleAtReview"] is False
 
 
 @pytest.mark.parametrize("actor_id", ("submitter-a", "linker-a", "requester-a"))
@@ -235,11 +303,51 @@ def test_review_rejects_submitter_linker_and_run_requester(actor_id: str) -> Non
     assert repository.persisted == []
 
 
+def test_review_rejects_classifier_result_from_a_different_database_instant() -> None:
+    prior = NOW - timedelta(microseconds=1)
+    service, _unit_of_work, repository = _service()
+    repository.returned_reviewed_at = NOW
+    repository.returned_operational_freshness = replace(
+        repository.authority.operational_freshness,
+        evaluated_at=prior,
+    )
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        service.review_verified_evidence(
+            scope=SCOPE,
+            actor_id="reviewer-a",
+            idempotency_key="different-evaluated-at",
+            decision="accepted",
+            rationale="Must share one database instant.",
+            expected_review_version=0,
+        )
+
+    assert caught.value.code == "evidence_review_integrity_conflict"
+    assert len(repository.persisted) == 1
+
+
 @pytest.mark.parametrize(
     ("authority", "expected_review_version", "expected_code"),
     (
         (_authority(admission_status="unverified"), 0, "evidence_review_admission_not_verified"),
-        (_authority(freshness_status="stale"), 0, "evidence_review_evidence_not_current"),
+        (
+            _authority(
+                freshness_status="stale",
+                operational_freshness=EvidenceFreshnessClassification(
+                    classification_status="ok",
+                    freshness_contract_version="1.0.0",
+                    recorded_freshness_status="stale",
+                    effective_freshness_status="stale",
+                    evaluated_at=NOW,
+                    effective_at=NOW,
+                    expiring_at=NOW,
+                        reason_codes=("recorded_stale",),
+                    decision_eligible=False,
+                ),
+            ),
+            0,
+            "evidence_review_evidence_not_current",
+        ),
         (
             _authority(review_status="accepted", current_review_version=1),
             1,

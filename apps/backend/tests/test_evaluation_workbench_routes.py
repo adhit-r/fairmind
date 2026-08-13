@@ -453,6 +453,13 @@ class _RecordingEvidenceReviewService:
                 "admissionStatus": "verified",
                 "reviewStatus": kwargs["decision"],
                 "freshnessStatus": "current",
+                "recordedFreshnessStatus": "current",
+                "freshnessContractVersion": "1.0.0",
+                "freshnessEvaluatedAt": "2026-08-08T12:00:00+00:00",
+                "freshnessEffectiveAt": "2026-08-08T11:00:00+00:00",
+                "expiringAt": "2026-08-09T11:00:00+00:00",
+                "freshnessReasonCodes": [],
+                "decisionEvidenceEligibleAtReview": kwargs["decision"] == "accepted",
                 "technicalStatus": "succeeded",
                 "evidenceResultStatus": "failed",
                 "runTechnicalStatus": "succeeded",
@@ -468,6 +475,7 @@ class _RecordingGovernanceDecisionService:
 
     def decide(self, **kwargs):
         self.calls.append(kwargs)
+        suite_execution_id = next(iter(kwargs["layer_verdicts"]["suites"]))
         return MutationResult.create(
             body={
                 "decisionId": "11111111-1111-4111-8111-111111111111",
@@ -481,6 +489,20 @@ class _RecordingGovernanceDecisionService:
                 "decidedBy": kwargs["actor_id"],
                 "evidenceSetHash": "a" * 64,
                 "decidedAt": "2026-08-09T12:00:00+00:00",
+                "freshnessContractVersion": "1.0.0",
+                "freshnessEvaluatedAt": "2026-08-09T12:00:00+00:00",
+                "decisionEvidenceEligibleAtDecision": True,
+                "suiteFreshness": [
+                    {
+                        "suiteExecutionId": suite_execution_id,
+                        "recordedFreshnessStatus": "current",
+                        "effectiveFreshnessStatus": "current",
+                        "freshnessEffectiveAt": "2026-08-09T11:00:00+00:00",
+                        "expiringAt": "2026-08-10T11:00:00+00:00",
+                        "freshnessReasonCodes": [],
+                        "decisionEvidenceEligibleAtDecision": True,
+                    }
+                ],
             },
             status=201,
         )
@@ -1337,8 +1359,20 @@ def test_complete_additive_route_flow_and_three_axis_run(workbench_client) -> No
     assert body["evidenceOutcome"] == "pending"
     assert body["overallVerdict"] == "insufficient"
     assert body["layerVerdictsSchemaVersion"] == "1.0.0"
+    assert body["decisionEvidenceCurrentlyEligible"] is False
     assert len(body["suiteExecutions"]) == 1
-    assert body["suiteExecutions"][0]["evidenceTrust"] is None
+    pending_suite = body["suiteExecutions"][0]
+    assert pending_suite["evidenceTrust"] is None
+    for field in (
+        "recordedFreshnessStatus",
+        "freshnessContractVersion",
+        "freshnessEvaluatedAt",
+        "freshnessEffectiveAt",
+        "expiringAt",
+        "freshnessReasonCodes",
+        "decisionEvidenceEligible",
+    ):
+        assert pending_suite[field] is None
     assert body["layerVerdicts"] == {
         "suites": {body["suiteExecutions"][0]["id"]: "insufficient"},
         "modalities": {},
@@ -1346,8 +1380,12 @@ def test_complete_additive_route_flow_and_three_axis_run(workbench_client) -> No
         "riskDimensions": {},
     }
     runs_url = f"{BASE}/systems/system-a/evaluation-v2/runs"
-    assert client.get(runs_url).json()[0]["id"] == body["id"]
-    assert client.get(f"{runs_url}/{body['id']}").json()["envelopeHash"] == body["envelopeHash"]
+    listed = client.get(runs_url).json()[0]
+    detailed = client.get(f"{runs_url}/{body['id']}").json()
+    assert listed["id"] == body["id"]
+    assert detailed["envelopeHash"] == body["envelopeHash"]
+    assert listed["suiteExecutions"][0]["freshnessEvaluatedAt"] is None
+    assert detailed["suiteExecutions"][0]["freshnessEvaluatedAt"] is None
 
 
 def test_missing_or_malformed_idempotency_key_and_viewer_mutation_are_rejected(
@@ -2028,7 +2066,6 @@ def test_openapi_exposes_strict_request_and_response_contracts() -> None:
         "reviewedBy",
         "reviewedAt",
         "admissionReasons",
-        "signingKeyRevocationReason",
     }
 
     def assert_refs_resolve(value) -> None:

@@ -93,6 +93,13 @@ FROZEN_013F_OPERATOR_CHECKSUM = (
 FROZEN_SQLITE_013F_FIXTURE_CHECKSUM = (
     "0b0b7ba6d7bb5616445b1ea9c00cf1dbe18ffb3f213a3f5037883ba341434c25"
 )
+_FROZEN_013G_CHECKSUM = "ec8c29cabc98906d43c44aaf138e0d5e6a4458e86702298170b3b5964849ebf8"
+FROZEN_013G_OPERATOR_CHECKSUM = (
+    "4d7e1db2453832b409b9dcc8dcf9f8027e589a0f081dd1a64a4d0806cf2541f3"
+)
+FROZEN_SQLITE_013G_FIXTURE_CHECKSUM = (
+    "9d0a3df360936577e08dfa25fb249e180bafa208053b0cc646e67ce74abf9e61"
+)
 
 FROZEN_ASSURANCE_MIGRATIONS = (
     FrozenMigration(
@@ -129,6 +136,11 @@ FROZEN_ASSURANCE_MIGRATIONS = (
         "013e-to-013f-trust-authority-integrity-v1",
         _FROZEN_013F_CHECKSUM,
         _MIGRATIONS / "013f_trust_authority_integrity.sql",
+    ),
+    FrozenMigration(
+        "013f-to-013g-operational-evidence-freshness-v1",
+        _FROZEN_013G_CHECKSUM,
+        _MIGRATIONS / "013g_operational_evidence_freshness.sql",
     ),
 )
 
@@ -188,6 +200,11 @@ POSTGRESQL_ASSURANCE_FUNCTIONS = frozenset(
         "fairmind_is_semver_013f",
         "fairmind_semver_gt_013f",
         "fairmind_sha256_text_013f",
+        "fairmind_classify_evidence_freshness_013g",
+        "fairmind_lock_evidence_authority_org_013g",
+        "fairmind_gate_evidence_review_013g",
+        "fairmind_stamp_evaluator_registration_revocation_013g",
+        "fairmind_gate_evaluation_decision_013g",
         "fairmind_initial_layer_verdicts_v1_for_run",
         "fairmind_is_canonical_utc_timestamp",
         "fairmind_is_initial_layer_verdicts",
@@ -287,6 +304,13 @@ POSTGRESQL_ASSURANCE_REQUIRED_TRIGGERS = frozenset(
         "governance_evaluator_registrations_no_delete",
         "governance_evidence_verification_receipts_catalog_guard_013d",
         "governance_evidence_verification_receipts_no_update",
+        "000_013g_evidence_issuers_common_lock",
+        "000_013g_evidence_signing_keys_common_lock",
+        "000_013g_evidence_trust_policies_common_lock",
+        "000_013g_evaluator_registrations_common_lock",
+        "001_013g_evaluator_registration_revocation_clock",
+        "000_013g_evidence_reviews_freshness_gate",
+        "000_013g_evaluation_decisions_freshness_gate",
     }
 )
 
@@ -305,7 +329,7 @@ FROZEN_POSTGRESQL_ASSURANCE_CATALOGS: Mapping[int, FrozenPostgreSQLCatalog] = Ma
         14: FrozenPostgreSQLCatalog(
             spec=POSTGRESQL_ASSURANCE_CATALOG_SPEC,
             postgresql_major=14,
-            digest=("6d9432fd9b092b1d99091773cec9bf5065bb25b1bf768004b2eba83492abcad2"),
+            digest=("d7912a0fe9e06c2fa798655d848c55394b1454d8ed8f7d81c6cb7a00dcdbb9a0"),
         )
     }
 )
@@ -454,6 +478,8 @@ SQLITE_ASSURANCE_TRIGGERS = frozenset(
         "governance_evidence_passport_revisions_immutable_delete",
         "governance_evidence_artifacts_immutable_update",
         "governance_evidence_artifacts_immutable_delete",
+        "governance_evidence_reviews_freshness_unavailable_013g",
+        "governance_evaluation_decisions_freshness_unavailable_013g",
         "governance_evidence_org_insert",
         "governance_evidence_org_update",
         "governance_evaluation_audit_events_no_update",
@@ -477,8 +503,8 @@ SQLITE_ASSURANCE_VIEWS = frozenset(
 # named above, sorted by object type and name.  Unlike a name-only inventory,
 # this freezes table columns/checks/FKs, explicit indexes, trigger bodies, and
 # security-critical view definitions.
-# Replace only after the complete 013f SQLite fixture has passed review.
-SQLITE_ASSURANCE_CATALOG_DIGEST = "e2cc0fbbd88be8ebdd932bc4dda465f3eded9d43e6c01ad1816af271ae742d52"
+# Replace only after the complete 013g SQLite fixture has passed review.
+SQLITE_ASSURANCE_CATALOG_DIGEST = "5649543790ee620272ad7f11be6542cd25d65ad9ffde3c4031fd7fef2fb8b565"
 
 _SQLITE_ASSURANCE_OBJECTS = {
     "table": SQLITE_ASSURANCE_TABLES,
@@ -1373,6 +1399,11 @@ def verify_sqlite_assurance_schema(connection) -> None:
             "013f",
             _MIGRATIONS / "fixtures" / "013f_trust_authority_integrity.sqlite.sql",
             FROZEN_SQLITE_013F_FIXTURE_CHECKSUM,
+        ),
+        (
+            "013g",
+            _MIGRATIONS / "fixtures" / "013g_operational_evidence_freshness.sqlite.sql",
+            FROZEN_SQLITE_013G_FIXTURE_CHECKSUM,
         ),
     )
     for version, fixture_path, frozen_checksum in fixtures:

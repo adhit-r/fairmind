@@ -13,11 +13,16 @@ from src.application.services.evaluation_workbench_service import (
     EvaluationWorkbenchError,
     EvaluationWorkbenchService,
     _execution_view,
+    _run_view,
+    _verify_suite_execution_state,
 )
 from src.application.ports.evaluation_workbench import (
     EvidenceTrustMetadataRecord,
+    FrozenJsonObject,
+    RunRecord,
     SuiteExecutionRecord,
 )
+from src.application.ports.evidence_freshness import EvidenceFreshnessClassification
 import src.domain.assurance.evaluation_v2 as evaluation_v2_module
 from src.domain.assurance.evaluation_v2 import (
     build_execution_envelope_v2,
@@ -194,9 +199,21 @@ def test_suite_execution_projection_keeps_authority_metadata_scoped_and_explicit
             admission_reasons=("newer passport revision recorded",),
             signing_key_revocation_reason="key rotation",
         ),
+        operational_freshness=EvidenceFreshnessClassification(
+            classification_status="ok",
+            freshness_contract_version="1.0.0",
+            recorded_freshness_status="superseded",
+            effective_freshness_status="superseded",
+            evaluated_at=datetime(2026, 8, 10, tzinfo=timezone.utc),
+            effective_at=datetime(2026, 8, 9, tzinfo=timezone.utc),
+            expiring_at=datetime(2026, 8, 29, tzinfo=timezone.utc),
+            reason_codes=("trust_policy_superseded",),
+            decision_eligible=False,
+        ),
     )
 
-    assert _execution_view(execution)["evidenceTrust"] == {
+    view = _execution_view(execution)
+    assert view["evidenceTrust"] == {
         "sourceType": "external_provider",
         "issuerKey": "issuer:assurance-lab",
         "signingKeyId": "key-2026-08",
@@ -206,8 +223,181 @@ def test_suite_execution_projection_keeps_authority_metadata_scoped_and_explicit
         "reviewedBy": "reviewer-1",
         "reviewedAt": "2026-08-09T01:00:00+00:00",
         "admissionReasons": ["newer passport revision recorded"],
-        "signingKeyRevocationReason": "key rotation",
     }
+    assert view["freshnessStatus"] == "superseded"
+    assert view["recordedFreshnessStatus"] == "superseded"
+    assert view["freshnessContractVersion"] == "1.0.0"
+    assert view["freshnessEvaluatedAt"] == "2026-08-10T00:00:00+00:00"
+    assert view["freshnessEffectiveAt"] == "2026-08-09T00:00:00+00:00"
+    assert view["expiringAt"] == "2026-08-29T00:00:00+00:00"
+    assert view["freshnessReasonCodes"] == ["trust_policy_superseded"]
+
+
+def test_unlinked_suite_preserves_recorded_current_without_fabricating_freshness() -> None:
+    execution = SuiteExecutionRecord(
+        id="suite-execution-1",
+        suite_version_id="suite-version-1",
+        owner_scope="org-1",
+        ordinal=0,
+        technical_status="awaiting_evidence",
+        evidence_result_status="pending",
+        admission_status="pending",
+        review_status="pending",
+        freshness_status="current",
+        evidence_run_id=None,
+        passport_revision_id=None,
+        linked_by=None,
+        linked_at=None,
+        result_summary=None,
+        limitations=None,
+        failure_code=None,
+        failure_message=None,
+        started_at=None,
+        completed_at=None,
+        created_at="2026-08-09T00:00:00+00:00",
+        updated_at="2026-08-09T00:00:00+00:00",
+    )
+
+    view = _execution_view(execution)
+
+    assert view["freshnessStatus"] == "current"
+    assert view["evidenceTrust"] is None
+    assert "recordedFreshnessStatus" not in view
+    assert "freshnessEvaluatedAt" not in view
+
+
+def test_unlinked_suite_cannot_carry_an_operational_freshness_assessment() -> None:
+    execution = SuiteExecutionRecord(
+        id="suite-execution-1",
+        suite_version_id="suite-version-1",
+        owner_scope="org-1",
+        ordinal=0,
+        technical_status="awaiting_evidence",
+        evidence_result_status="pending",
+        admission_status="pending",
+        review_status="pending",
+        freshness_status="current",
+        evidence_run_id=None,
+        passport_revision_id=None,
+        linked_by=None,
+        linked_at=None,
+        result_summary=None,
+        limitations=None,
+        failure_code=None,
+        failure_message=None,
+        started_at=None,
+        completed_at=None,
+        created_at="2026-08-09T00:00:00+00:00",
+        updated_at="2026-08-09T00:00:00+00:00",
+        operational_freshness=EvidenceFreshnessClassification(
+            classification_status="ok",
+            freshness_contract_version="1.0.0",
+            recorded_freshness_status="current",
+            effective_freshness_status="current",
+            evaluated_at=datetime(2026, 8, 13, 12, tzinfo=timezone.utc),
+            effective_at=datetime(2026, 8, 13, 11, tzinfo=timezone.utc),
+            expiring_at=datetime(2026, 8, 13, 13, tzinfo=timezone.utc),
+            reason_codes=(),
+            decision_eligible=True,
+        ),
+    )
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        _verify_suite_execution_state(execution)
+
+    assert caught.value.code == "binding_integrity_error"
+
+
+def test_historical_approved_verdict_remains_readable_after_evidence_revocation() -> None:
+    execution = SuiteExecutionRecord(
+        id="suite-execution-1",
+        suite_version_id="suite-version-1",
+        owner_scope="org-1",
+        ordinal=0,
+        technical_status="succeeded",
+        evidence_result_status="passed",
+        admission_status="verified",
+        review_status="accepted",
+        freshness_status="current",
+        evidence_run_id="evidence-run-1",
+        passport_revision_id="passport-revision-1",
+        linked_by="operator-1",
+        linked_at="2026-08-09T00:00:00+00:00",
+        result_summary=None,
+        limitations=(),
+        failure_code=None,
+        failure_message=None,
+        started_at="2026-08-09T00:00:00+00:00",
+        completed_at="2026-08-09T00:00:00+00:00",
+        created_at="2026-08-09T00:00:00+00:00",
+        updated_at="2026-08-09T01:00:00+00:00",
+        evidence_trust=EvidenceTrustMetadataRecord(
+            source_type="external_provider",
+            issuer_key="issuer:assurance-lab",
+            signing_key_id="key-2026-08",
+            signer_key_id="key-2026-08",
+            signer_algorithm="Ed25519",
+            effective_expires_at="2026-08-30T00:00:00+00:00",
+            reviewed_by="reviewer-1",
+            reviewed_at="2026-08-09T01:00:00+00:00",
+            admission_reasons=(),
+            signing_key_revocation_reason="internal rationale must not be public",
+        ),
+        operational_freshness=EvidenceFreshnessClassification(
+            classification_status="ok",
+            freshness_contract_version="1.0.0",
+            recorded_freshness_status="current",
+            effective_freshness_status="stale",
+            evaluated_at=datetime(2026, 8, 13, 12, tzinfo=timezone.utc),
+            effective_at=datetime(2026, 8, 12, 9, tzinfo=timezone.utc),
+            expiring_at=datetime(2026, 8, 29, tzinfo=timezone.utc),
+            reason_codes=("evaluator_registration_revoked",),
+            decision_eligible=False,
+        ),
+    )
+    run = RunRecord(
+        id="run-1",
+        organization_id="org-1",
+        workspace_id="workspace-1",
+        system_id="system-1",
+        plan_id="plan-1",
+        contract_version="2.0.0",
+        trigger="manual",
+        lifecycle_phase="pre_deploy",
+        technical_status="succeeded",
+        evidence_outcome="passed",
+        overall_verdict="approved",
+        layer_verdicts_schema_version="1.0.0",
+        layer_verdicts=FrozenJsonObject.from_mapping(
+            {
+                "suites": {"suite-execution-1": "approved"},
+                "modalities": {},
+                "components": {},
+                "riskDimensions": {},
+            }
+        ),
+        suite_executions=(execution,),
+        envelope_id="envelope-1",
+        envelope_nonce=CANONICAL_NONCE,
+        envelope=FrozenJsonObject.from_mapping({"schemaVersion": "2.0.0"}),
+        envelope_hash="a" * 64,
+        verdict_version=1,
+        requested_by="requester-1",
+        started_at="2026-08-09T00:00:00+00:00",
+        completed_at="2026-08-09T00:00:00+00:00",
+        failure_code=None,
+        failure_message=None,
+        created_at="2026-08-09T00:00:00+00:00",
+        updated_at="2026-08-09T01:00:00+00:00",
+    )
+
+    view = _run_view(run)
+
+    assert view["overallVerdict"] == "approved"
+    assert view["verdictVersion"] == 1
+    assert view["decisionEvidenceCurrentlyEligible"] is False
+    assert view["suiteExecutions"][0]["freshnessStatus"] == "stale"
+    assert "signingKeyRevocationReason" not in view["suiteExecutions"][0]["evidenceTrust"]
 
 
 def test_preflight_success_has_no_blockers() -> None:

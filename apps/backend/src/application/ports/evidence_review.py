@@ -11,6 +11,7 @@ from src.application.ports.evaluation_workbench import (
     MutationCommand,
     MutationResult,
 )
+from src.application.ports.evidence_freshness import EvidenceFreshnessClassification
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,6 +52,7 @@ class EvidenceReviewAuthorityRecord:
     run_technical_status: str
     run_evidence_outcome: str
     governance_decision_exists: bool
+    operational_freshness: EvidenceFreshnessClassification
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,6 +95,7 @@ class ReviewedEvidenceRecord:
     evidence_result_status: str
     run_technical_status: str
     run_evidence_outcome: str
+    operational_freshness: EvidenceFreshnessClassification
 
 
 class EvidenceReviewRepository(Protocol):

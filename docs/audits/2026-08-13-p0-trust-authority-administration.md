@@ -62,9 +62,9 @@ automatic enforcement, certification, or production-readiness evidence.
 ## Known boundary
 
 The PostgreSQL evidence is local and disposable; it is not staging or production
-proof. The master issuer/key/policy/admission/freshness/review row remains open:
-freshness has safe eligibility checks but no production reconciliation boundary,
-so an expired or revoked admission can still be read with its stored `current`
-projection. Service-worker identity, audited separation-of-duty overrides,
-worker execution, runtime enforcement, and the private governance pilot also
-remain open.
+proof. At this checkpoint the master issuer/key/policy/admission/freshness/review
+row remained open because operational freshness had no database-authoritative
+read projection. Migration 013g closes that later checkpoint; see
+`2026-08-13-p0-operational-evidence-freshness.md`. Service-worker identity,
+audited separation-of-duty overrides, worker execution, runtime enforcement,
+and the private governance pilot remain open.

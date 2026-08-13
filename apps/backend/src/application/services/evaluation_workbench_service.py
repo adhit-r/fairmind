@@ -32,6 +32,7 @@ from src.application.ports.evaluation_workbench import (
     TargetBindingRecord,
     TrustPolicyBindingRecord,
 )
+from src.application.services import evidence_freshness_service as freshness
 from src.domain.assurance.evaluation_v2 import (
     CONTRACT_VERSION,
     LAYER_VERDICT_AXES,
@@ -561,7 +562,6 @@ def _evidence_trust_view(
         "admissionReasons": (
             None if metadata.admission_reasons is None else list(metadata.admission_reasons)
         ),
-        "signingKeyRevocationReason": metadata.signing_key_revocation_reason,
     }
 
 
@@ -583,7 +583,7 @@ def _execution_view(execution: SuiteExecutionRecord) -> dict[str, object]:
             )
     except (AssuranceContractValidationError, UnicodeError) as error:
         raise _binding_error("A suite execution exceeds the bounded result contract.") from error
-    return {
+    result = {
         "id": execution.id,
         "suiteVersionId": execution.suite_version_id,
         "ownerScope": execution.owner_scope,
@@ -598,9 +598,32 @@ def _execution_view(execution: SuiteExecutionRecord) -> dict[str, object]:
         "failureCode": execution.failure_code,
         "failureMessage": execution.failure_message,
     }
+    if execution.operational_freshness is not None:
+        result.update(
+            freshness.public_projection(
+                execution.operational_freshness,
+                expected_recorded_status=execution.freshness_status,
+            )
+        )
+        result["decisionEvidenceEligible"] = (
+            execution.operational_freshness.decision_eligible is True
+        )
+    return result
 
 
 def _run_view(run: RunRecord) -> dict[str, object]:
+    linked = tuple(
+        item
+        for item in run.suite_executions
+        if item.evidence_run_id is not None or item.passport_revision_id is not None
+    )
+    if any(item.operational_freshness is None for item in linked):
+        raise _binding_error("Linked suite evidence has no operational freshness assessment.")
+    freshness.require_common_evaluated_at(
+        item.operational_freshness
+        for item in linked
+        if item.operational_freshness is not None
+    )
     executions = [_execution_view(item) for item in run.suite_executions]
     try:
         require_canonical_size(
@@ -632,6 +655,8 @@ def _run_view(run: RunRecord) -> dict[str, object]:
         "layerVerdictsSchemaVersion": run.layer_verdicts_schema_version,
         "layerVerdicts": run.layer_verdicts.to_dict(),
         "suiteExecutions": executions,
+        "decisionEvidenceCurrentlyEligible": bool(executions)
+        and all(item.get("decisionEvidenceEligible") is True for item in executions),
         "envelopeId": run.envelope_id,
         "envelope": run.envelope.to_dict(),
         "envelopeHash": run.envelope_hash,
@@ -899,7 +924,9 @@ def _verify_evidence_trust_metadata(metadata: EvidenceTrustMetadataRecord) -> No
         raise _binding_error("Suite evidence authority metadata is malformed.") from error
 
 
-def _verify_suite_evidence_projections(execution: SuiteExecutionRecord) -> None:
+def verify_stored_suite_link_projection(execution: SuiteExecutionRecord) -> bool:
+    """Verify persisted link identity and chronology before authority lookups."""
+
     link_tuple = (
         execution.evidence_run_id,
         execution.passport_revision_id,
@@ -909,8 +936,43 @@ def _verify_suite_evidence_projections(execution: SuiteExecutionRecord) -> None:
     present = tuple(value is not None for value in link_tuple)
     if any(present) and not all(present):
         raise _binding_error("A suite evidence link is only partially populated.")
+    if not any(present):
+        return False
+    for identifier in link_tuple[:3]:
+        try:
+            if (
+                not isinstance(identifier, str)
+                or _STORED_LINK_IDENTIFIER.fullmatch(identifier) is None
+                or len(identifier.encode("utf-8")) > 96
+            ):
+                raise ValueError("invalid stored link identifier")
+            validate_public_safe_string(identifier)
+        except (
+            AssuranceContractValidationError,
+            TypeError,
+            UnicodeError,
+            ValueError,
+        ) as error:
+            raise _binding_error("A suite evidence-link identifier is malformed.") from error
+    linked_at = _parsed_utc_timestamp(execution.linked_at, optional=False)
+    created_at = _parsed_utc_timestamp(execution.created_at, optional=False)
+    updated_at = _parsed_utc_timestamp(execution.updated_at, optional=False)
+    completed_at = _parsed_utc_timestamp(execution.completed_at, optional=True)
+    if (
+        linked_at is None
+        or created_at is None
+        or updated_at is None
+        or not created_at <= linked_at <= updated_at
+        or (completed_at is not None and linked_at < completed_at)
+    ):
+        raise _binding_error("A suite evidence-link timestamp is out of order.")
+    return True
+
+
+def _verify_suite_evidence_projections(execution: SuiteExecutionRecord) -> None:
+    linked = verify_stored_suite_link_projection(execution)
     if execution.evidence_trust is not None:
-        if not all(present):
+        if not linked:
             raise _binding_error("Unlinked suite evidence cannot carry authority metadata.")
         _verify_evidence_trust_metadata(execution.evidence_trust)
     try:
@@ -942,47 +1004,23 @@ def _verify_suite_evidence_projections(execution: SuiteExecutionRecord) -> None:
     ) as error:
         raise _binding_error("A suite evidence projection is malformed.") from error
 
-    if not any(present):
+    if not linked:
         if (
             execution.admission_status != "pending"
+            or execution.operational_freshness is not None
             or result_summary is not None
             or limitations is not None
         ):
             raise _binding_error("An unlinked suite carries evidence projections.")
         return
 
+    if execution.operational_freshness is None:
+        raise _binding_error("A linked suite lacks operational freshness authority.")
+
     if execution.admission_status in {"pending", "rejected", "trust_error"} or (
         execution.evidence_result_status == "pending" and execution.technical_status != "cancelled"
     ):
         raise _binding_error("A linked suite is not backed by eligible evidence.")
-    for identifier in link_tuple[:3]:
-        try:
-            if (
-                not isinstance(identifier, str)
-                or _STORED_LINK_IDENTIFIER.fullmatch(identifier) is None
-                or len(identifier.encode("utf-8")) > 96
-            ):
-                raise ValueError("invalid stored link identifier")
-            validate_public_safe_string(identifier)
-        except (
-            AssuranceContractValidationError,
-            TypeError,
-            UnicodeError,
-            ValueError,
-        ) as error:
-            raise _binding_error("A suite evidence-link identifier is malformed.") from error
-    linked_at = _parsed_utc_timestamp(execution.linked_at, optional=False)
-    created_at = _parsed_utc_timestamp(execution.created_at, optional=False)
-    updated_at = _parsed_utc_timestamp(execution.updated_at, optional=False)
-    completed_at = _parsed_utc_timestamp(execution.completed_at, optional=True)
-    if (
-        linked_at is None
-        or created_at is None
-        or updated_at is None
-        or not created_at <= linked_at <= updated_at
-        or (completed_at is not None and linked_at < completed_at)
-    ):
-        raise _binding_error("A suite evidence-link timestamp is out of order.")
 
 
 def _verify_suite_execution_state(execution: SuiteExecutionRecord) -> None:
@@ -2019,4 +2057,5 @@ __all__ = [
     "EvaluationWorkbenchService",
     "assurance_request_hash",
     "canonical_assurance_json",
+    "verify_stored_suite_link_projection",
 ]

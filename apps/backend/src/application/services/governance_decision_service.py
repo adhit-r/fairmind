@@ -23,6 +23,7 @@ from src.application.ports.governance_decision import (
     UuidFactory,
 )
 from src.application.services.evaluation_workbench_service import assurance_request_hash
+from src.application.services import evidence_freshness_service as freshness
 from src.domain.assurance.evaluation_v2 import (
     AssuranceContractValidationError,
     canonical_sha256,
@@ -31,7 +32,7 @@ from src.domain.assurance.evaluation_v2 import (
 )
 
 _OPERATION = "evaluation-v2.governance-decision.create"
-_AUDIT_SCHEMA = "evaluation-v2.governance-decision/v1"
+_AUDIT_SCHEMA = "evaluation-v2.governance-decision/v2"
 _CONTRACT_VERSION = "2.0.0"
 _LAYER_SCHEMA_VERSION = "1.0.0"
 _LAYER_AXES = frozenset({"suites", "modalities", "components", "riskDimensions"})
@@ -147,6 +148,21 @@ def _assert_authority(
             "governance_decision_run_not_succeeded",
             "A governance decision requires a succeeded evaluation run.",
         )
+    freshness.require_common_evaluated_at(
+        authority.operational_freshness
+    )
+    if len(authority.operational_freshness) != len(authority.suite_execution_ids):
+        raise _error(
+            "governance_decision_integrity_conflict",
+            "The locked governance-decision authority is inconsistent.",
+        )
+    for classification in authority.operational_freshness:
+        freshness.require_decision_eligible(
+            classification,
+            expected_recorded_status="current",
+            error_code="governance_decision_evidence_not_ready",
+            error_message="Every suite requires current, accepted, verified evidence.",
+        )
     if authority.current_verdict_version != expected_verdict_version:
         raise _error(
             "governance_decision_version_conflict",
@@ -177,7 +193,38 @@ def _assert_authority(
         )
 
 
+def _suite_freshness(record: GovernanceDecisionRecord) -> list[dict[str, object]]:
+    return [
+        {
+            "suiteExecutionId": suite_execution_id,
+            "recordedFreshnessStatus": classification.recorded_freshness_status,
+            "effectiveFreshnessStatus": classification.effective_freshness_status,
+            "freshnessEffectiveAt": _utc(classification.effective_at).isoformat(),
+            "expiringAt": (
+                None
+                if classification.expiring_at is None
+                else _utc(classification.expiring_at).isoformat()
+            ),
+            "freshnessReasonCodes": list(classification.reason_codes),
+            "decisionEvidenceEligibleAtDecision": classification.decision_eligible is True,
+        }
+        for suite_execution_id, classification in zip(
+            record.suite_execution_ids,
+            record.operational_freshness,
+            strict=True,
+        )
+    ]
+
+
 def _body(record: GovernanceDecisionRecord) -> dict[str, object]:
+    evaluated_at = freshness.require_common_evaluated_at(
+        record.operational_freshness
+    )
+    if evaluated_at is None or len(record.operational_freshness) == 0:
+        raise _error(
+            "governance_decision_integrity_conflict",
+            "The persisted governance-decision projection is inconsistent.",
+        )
     return {
         "decisionId": record.decision_id,
         "runId": record.scope.run_id,
@@ -190,6 +237,13 @@ def _body(record: GovernanceDecisionRecord) -> dict[str, object]:
         "decidedBy": record.decided_by,
         "evidenceSetHash": record.evidence_set_hash,
         "decidedAt": _utc(record.decided_at).isoformat(),
+        "freshnessContractVersion": "1.0.0",
+        "freshnessEvaluatedAt": evaluated_at.isoformat(),
+        "decisionEvidenceEligibleAtDecision": all(
+            classification.decision_eligible is True
+            for classification in record.operational_freshness
+        ),
+        "suiteFreshness": _suite_freshness(record),
     }
 
 
@@ -209,7 +263,7 @@ def _assert_record(
         command.rationale,
         command.actor_id,
         command.authority.evidence_set_hash,
-        _utc(command.decided_at),
+        command.authority.suite_execution_ids,
     )
     actual = (
         record.decision_id,
@@ -223,12 +277,32 @@ def _assert_record(
         record.rationale,
         record.decided_by,
         record.evidence_set_hash,
-        _utc(record.decided_at),
+        record.suite_execution_ids,
     )
     if actual != expected:
         raise _error(
             "governance_decision_integrity_conflict",
             "The persisted governance-decision projection is inconsistent.",
+        )
+    decided_at = _utc(record.decided_at)
+    classified_at = freshness.require_common_evaluated_at(
+        record.operational_freshness
+    )
+    if (
+        classified_at != decided_at
+        or len(record.operational_freshness)
+        != len(command.authority.suite_execution_ids)
+    ):
+        raise _error(
+            "governance_decision_integrity_conflict",
+            "The persisted governance-decision projection is inconsistent.",
+        )
+    for classification in record.operational_freshness:
+        freshness.require_decision_eligible(
+            classification,
+            expected_recorded_status="current",
+            error_code="governance_decision_evidence_not_ready",
+            error_message="Every suite requires current, accepted, verified evidence.",
         )
 
 
@@ -315,7 +389,6 @@ class GovernanceDecisionService:
                     "The evaluation run was not found in this scope.",
                     status_code=404,
                 )
-            decided_at = _utc(self.repository.read_fresh_utc_now())
             _assert_authority(
                 authority=authority,
                 scope=scope,
@@ -323,6 +396,14 @@ class GovernanceDecisionService:
                 expected_verdict_version=expected_verdict_version,
                 layers=layers,
             )
+            advisory_evaluated_at = freshness.require_common_evaluated_at(
+                authority.operational_freshness
+            )
+            if advisory_evaluated_at is None:
+                raise _error(
+                    "governance_decision_integrity_conflict",
+                    "The locked governance-decision authority is inconsistent.",
+                )
             command = PersistGovernanceDecisionCommand(
                 scope=scope,
                 authority=authority,
@@ -334,7 +415,7 @@ class GovernanceDecisionService:
                 layer_verdicts=layers,
                 rationale=safe_rationale,
                 owner_override_reason=None,
-                decided_at=decided_at,
+                decided_at=advisory_evaluated_at,
             )
             record = self.repository.persist_governance_decision(command)
             _assert_record(record, command)
@@ -354,6 +435,18 @@ class GovernanceDecisionService:
                         "evidenceSetHash": record.evidence_set_hash,
                         "rationaleHash": canonical_sha256({"rationale": safe_rationale}),
                         "ownerOverride": False,
+                        "freshnessContractVersion": "1.0.0",
+                        "freshnessEvaluatedAt": _utc(record.decided_at).isoformat(),
+                        "suiteFreshness": body["suiteFreshness"],
+                        "freshnessReasonCodesHash": canonical_sha256(
+                            [
+                                list(classification.reason_codes)
+                                for classification in record.operational_freshness
+                            ]
+                        ),
+                        "decisionEvidenceEligibleAtDecision": body[
+                            "decisionEvidenceEligibleAtDecision"
+                        ],
                     }
                 ),
             )

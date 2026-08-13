@@ -9,6 +9,8 @@ import json
 from types import MappingProxyType
 from typing import Callable, Mapping, Protocol, TypeAlias
 
+from src.application.ports.evidence_freshness import EvidenceFreshnessClassification
+
 JsonScalar: TypeAlias = None | bool | int | float | str
 JsonValue: TypeAlias = JsonScalar | tuple["JsonValue", ...] | Mapping[str, "JsonValue"]
 
@@ -349,6 +351,7 @@ class SuiteExecutionRecord:
     created_at: str
     updated_at: str
     evidence_trust: EvidenceTrustMetadataRecord | None = None
+    operational_freshness: EvidenceFreshnessClassification | None = None
 
 
 @dataclass(frozen=True, slots=True)

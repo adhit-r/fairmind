@@ -311,6 +311,7 @@ def _insert_identity_and_scope(
     workspace_id: str,
     system_id: str,
     trust_policy_id: str,
+    maximum_evidence_age_seconds: int = 86400,
 ) -> None:
     now = _iso(datetime.now(timezone.utc))
     session.execute(
@@ -375,7 +376,7 @@ def _insert_identity_and_scope(
         },
     )
     policy = {
-        "maximumEvidenceAgeSeconds": 86400,
+        "maximumEvidenceAgeSeconds": maximum_evidence_age_seconds,
         "schemaVersion": "1.0.0",
         "unsignedImportPolicy": "manual_review",
     }
@@ -386,13 +387,14 @@ def _insert_identity_and_scope(
             "maximum_evidence_age_seconds, unsigned_import_policy, status, "
             "created_by, created_at) "
             "VALUES (:id, :org_id, '1.0.0', :policy_json, :policy_hash, "
-            "86400, 'manual_review', 'draft', :created_by, :created_at)"
+            ":maximum_evidence_age_seconds, 'manual_review', 'draft', :created_by, :created_at)"
         ),
         {
             "id": trust_policy_id,
             "org_id": org_id,
             "policy_json": canonical_json(policy),
             "policy_hash": canonical_sha256(policy),
+            "maximum_evidence_age_seconds": maximum_evidence_age_seconds,
             "created_by": actor_id,
             "created_at": now,
         },
@@ -548,7 +550,12 @@ def _insert_approved_evaluator_registration(
     return registration_id, binding_hash
 
 
-def _seed_scenario(factory: sessionmaker, *, suite_count: int = 2) -> AdmissionScenario:
+def _seed_scenario(
+    factory: sessionmaker,
+    *,
+    suite_count: int = 2,
+    maximum_evidence_age_seconds: int = 86400,
+) -> AdmissionScenario:
     org_id = str(uuid.uuid4())
     actor_id = str(uuid.uuid4())
     workspace_id = str(uuid.uuid4())
@@ -564,6 +571,7 @@ def _seed_scenario(factory: sessionmaker, *, suite_count: int = 2) -> AdmissionS
             workspace_id=workspace_id,
             system_id=system_id,
             trust_policy_id=trust_policy_id,
+            maximum_evidence_age_seconds=maximum_evidence_age_seconds,
         )
         service = _workbench_service(session)
         target = service.create_target_version(
