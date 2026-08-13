@@ -744,14 +744,18 @@ packs, lifecycle workflows, and rollout gates remain open.
 - Server-generated execution-envelope binding
 - Passport v2 scope, signature, expiry, replay, and admission primitives
 - Atomic evidence persistence and separate execution/evidence/review/governance states
+- Literal, database-backed permissions for every live human Assurance V2 mutation;
+  direct-mounted v2 routers also enforce the master feature gate
 - Tenant-bound environmental evidence routes, response admission, and migration 013e,
   verified on SQLite and a disposable local PostgreSQL 14 instance
-- Focused unit, route, and SQLite migration-parity verification for the
-  legacy-contract slice; native PostgreSQL checks remain pending in this environment
+- Focused unit, route, SQLite migration-parity, and native PostgreSQL 14
+  verification for the legacy-contract and environmental-hardening slices
 
 **Next release gates**
 
 - Complete P0 API permissions, evaluator registry, review workflow, audit chain, and evidence UI
+- Implement the reserved trust-administration, service-worker, and audited
+  separation-override permissions before calling the granular-permission row complete
 - Pass the private governance pilot (Gate A)
 - Build the isolated worker and sandbox (Gate B)
 - Connect and independently benchmark real modality evaluators (Gate C)

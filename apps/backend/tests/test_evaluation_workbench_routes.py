@@ -90,20 +90,27 @@ BINDING_INTEGRITY_DETAIL = {
 }
 
 
-def _token(user_id: str) -> TokenData:
+def _token(
+    user_id: str,
+    *,
+    role: UserRole = UserRole.ANALYST,
+    permissions: list[str] | None = None,
+) -> TokenData:
     now = datetime.now(timezone.utc)
     return TokenData(
         user_id=user_id,
         email=f"{user_id}@example.test",
-        role=UserRole.ANALYST,
+        role=role,
         token_type=TokenType.ACCESS,
         iat=now,
         exp=now,
+        permissions=permissions or [],
     )
 
 
 @pytest.fixture
-def workbench_client():
+def workbench_client(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(settings, "assurance_v2_enabled", True)
     engine = create_engine(
         "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
     )
@@ -160,6 +167,7 @@ def workbench_client():
             org_id=uuid.UUID(ORG),
             name="admin",
             permissions=[
+                "evaluation:catalog:admin",
                 "evaluation:plan:write",
                 "evaluation:plan:activate",
                 "evaluation:run:create",
@@ -172,6 +180,7 @@ def workbench_client():
             org_id=uuid.UUID(FOREIGN_ORG),
             name="admin",
             permissions=[
+                "evaluation:catalog:admin",
                 "evaluation:plan:write",
                 "evaluation:plan:activate",
                 "evaluation:run:create",
@@ -342,6 +351,54 @@ def _grant_role_permissions(role: str, permissions: list[str]) -> None:
                 .where(roles.c.org_id == uuid.UUID(ORG), roles.c.name == role)
                 .values(permissions=merged)
             )
+        session.commit()
+    finally:
+        session_iterator.close()
+
+
+def _set_role_permissions(role: str, permissions: list[str]) -> None:
+    session_iterator = app.dependency_overrides[get_db]()
+    session = next(session_iterator)
+    try:
+        roles = OrganizationRole.__table__
+        existing = session.execute(
+            select(roles.c.id).where(
+                roles.c.org_id == uuid.UUID(ORG),
+                roles.c.name == role,
+            )
+        ).scalar_one_or_none()
+        if existing is None:
+            session.execute(
+                roles.insert().values(
+                    id=uuid.uuid4(),
+                    org_id=uuid.UUID(ORG),
+                    name=role,
+                    permissions=permissions,
+                )
+            )
+        else:
+            session.execute(
+                update(roles)
+                .where(roles.c.org_id == uuid.UUID(ORG), roles.c.name == role)
+                .values(permissions=permissions)
+            )
+        session.commit()
+    finally:
+        session_iterator.close()
+
+
+def _set_membership_role(user_id: str, role: str) -> None:
+    session_iterator = app.dependency_overrides[get_db]()
+    session = next(session_iterator)
+    try:
+        session.execute(
+            update(OrganizationMember)
+            .where(
+                OrganizationMember.__table__.c.org_id == uuid.UUID(ORG),
+                OrganizationMember.__table__.c.user_id == uuid.UUID(user_id),
+            )
+            .values(role=role)
+        )
         session.commit()
     finally:
         session_iterator.close()
@@ -539,11 +596,113 @@ def _create_active_v2_plan_and_run(
     return plan, created_run.json()
 
 
+def test_direct_mounted_core_v2_router_fails_closed_before_request_validation(
+    workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _active = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", False)
+
+    response = client.post(
+        f"{BASE}/systems/system-a/evaluation-v2/target-versions",
+        headers={"Content-Type": "application/json"},
+        content=b"{not-json",
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == {
+        "code": "assurance_feature_disabled",
+        "message": "Assurance-contract v2 is not enabled.",
+    }
+
+
+@pytest.mark.parametrize(
+    ("membership_role", "persisted_permissions", "token_role", "token_permissions"),
+    [
+        ("admin", [], UserRole.ANALYST, []),
+        ("owner", [], UserRole.ANALYST, []),
+        ("viewer", ["model:write"], UserRole.ANALYST, []),
+        ("viewer", ["evaluation:plan:write"], UserRole.ANALYST, []),
+        ("viewer", [], UserRole.ADMIN, ["*"]),
+    ],
+)
+def test_target_catalog_mutation_requires_literal_persisted_catalog_admin(
+    workbench_client,
+    membership_role: str,
+    persisted_permissions: list[str],
+    token_role: UserRole,
+    token_permissions: list[str],
+) -> None:
+    client, active = workbench_client
+    _set_membership_role(VIEWER, membership_role)
+    _set_role_permissions(membership_role, persisted_permissions)
+    active["token"] = _token(
+        VIEWER,
+        role=token_role,
+        permissions=token_permissions,
+    )
+
+    response = client.post(
+        f"{BASE}/systems/system-a/evaluation-v2/target-versions",
+        headers=_headers("target-catalog-permission"),
+        json=_target_payload(),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == {
+        "code": "evaluation_catalog_admin_forbidden",
+        "message": "The evaluation:catalog:admin permission is required.",
+    }
+
+
+def test_suite_catalog_creation_requires_literal_persisted_catalog_admin(
+    workbench_client,
+) -> None:
+    client, _active = workbench_client
+    _set_role_permissions("admin", ["model:write", "evaluation:plan:write"])
+
+    response = client.post(
+        f"{BASE}/evaluation-v2/suite-versions",
+        headers=_headers("suite-catalog-permission"),
+        json=_suite_payload(),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == {
+        "code": "evaluation_catalog_admin_forbidden",
+        "message": "The evaluation:catalog:admin permission is required.",
+    }
+
+
+def test_suite_catalog_activation_requires_literal_persisted_catalog_admin(
+    workbench_client,
+) -> None:
+    client, _active = workbench_client
+    created = client.post(
+        f"{BASE}/evaluation-v2/suite-versions",
+        headers=_headers("suite-create-for-activation-permission"),
+        json=_suite_payload(),
+    )
+    assert created.status_code == 201, created.text
+    _set_role_permissions("admin", ["model:write", "evaluation:plan:write"])
+
+    response = client.post(
+        f"{BASE}/evaluation-v2/suite-versions/{created.json()['id']}/activate",
+        headers=_headers("suite-activation-catalog-permission"),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == {
+        "code": "evaluation_catalog_admin_forbidden",
+        "message": "The evaluation:catalog:admin permission is required.",
+    }
+
+
 def test_v2_plan_creation_rejects_generic_org_mutation_permission(workbench_client) -> None:
     client, active = workbench_client
+    target, suite = _bootstrap(client)
     _grant_role_permissions("viewer", ["model:write"])
     active["token"] = _token(VIEWER)
-    target, suite = _bootstrap(client)
 
     response = client.post(
         f"{BASE}/systems/system-a/evaluation-v2/plans",
@@ -570,9 +729,9 @@ def test_v2_plan_creation_rejects_generic_org_mutation_permission(workbench_clie
 
 def test_v2_plan_activation_requires_its_own_persisted_permission(workbench_client) -> None:
     client, active = workbench_client
+    target, suite = _bootstrap(client)
     _grant_role_permissions("viewer", ["model:write", "evaluation:plan:write"])
     active["token"] = _token(VIEWER)
-    target, suite = _bootstrap(client)
     plans_url = f"{BASE}/systems/system-a/evaluation-v2/plans"
     created = client.post(
         plans_url,
@@ -605,12 +764,12 @@ def test_v2_plan_activation_requires_its_own_persisted_permission(workbench_clie
 
 def test_v2_run_creation_requires_its_own_persisted_permission(workbench_client) -> None:
     client, active = workbench_client
+    target, suite = _bootstrap(client)
     _grant_role_permissions(
         "viewer",
         ["model:write", "evaluation:plan:write", "evaluation:plan:activate"],
     )
     active["token"] = _token(VIEWER)
-    target, suite = _bootstrap(client)
     plans_url = f"{BASE}/systems/system-a/evaluation-v2/plans"
     created = client.post(
         plans_url,
@@ -2339,9 +2498,11 @@ def test_already_active_plan_gets_one_bound_noop_before_dependency_preflight(
 
 def test_v2_plan_is_hidden_from_every_v1_plan_read_and_run_creation_surface(
     workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client, _ = workbench_client
     plan, _ = _create_active_v2_plan_and_run(client)
+    monkeypatch.setattr(settings, "assurance_v2_enabled", False)
     v1_url = f"{BASE}/systems/system-a/evaluation-plans"
 
     assert client.get(v1_url).json() == []
@@ -2377,9 +2538,11 @@ def test_v2_plan_is_hidden_from_every_v1_plan_read_and_run_creation_surface(
 
 def test_v2_run_is_hidden_from_v1_reads_and_rejected_by_v1_passport_link(
     workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client, _ = workbench_client
     _, run = _create_active_v2_plan_and_run(client)
+    monkeypatch.setattr(settings, "assurance_v2_enabled", False)
     v1_runs_url = f"{BASE}/systems/system-a/evaluation-runs"
 
     assert client.get(v1_runs_url).json() == []
@@ -2412,6 +2575,7 @@ def test_v2_run_is_hidden_from_v1_reads_and_rejected_by_v1_passport_link(
 
 def test_foreign_tenant_v2_plan_and_run_ids_are_not_found_by_v1_routes(
     workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client, _ = workbench_client
     foreign_plan, foreign_run = _create_active_v2_plan_and_run(
@@ -2420,6 +2584,7 @@ def test_foreign_tenant_v2_plan_and_run_ids_are_not_found_by_v1_routes(
         system_id="system-b",
         trust_policy_id="trust-b",
     )
+    monkeypatch.setattr(settings, "assurance_v2_enabled", False)
     local_plans_url = f"{BASE}/systems/system-a/evaluation-plans"
     local_runs_url = f"{BASE}/systems/system-a/evaluation-runs"
 

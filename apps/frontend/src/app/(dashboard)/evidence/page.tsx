@@ -147,8 +147,7 @@ export default function EvidencePage() {
   const canReview = selectedOrg?.role === 'admin'
     || selectedOrg?.role === 'owner'
     || selectedOrg?.permissions?.includes('model:write') === true
-  const canViewEvaluatorCatalog = selectedOrg?.permissions?.includes('evaluation:catalog:read') === true
-    || selectedOrg?.permissions?.includes('evaluation:catalog:admin') === true
+  const canViewEvaluatorCatalog = selectedOrg?.permissions?.includes('evaluation:catalog:admin') === true
   const {
     data,
     summary,
@@ -401,7 +400,7 @@ export default function EvidencePage() {
 
       {activeView === 'evaluations' ? (
         <div className="space-y-5">
-          {EVALUATOR_CATALOG_UI_ENABLED ? (
+          {EVALUATOR_CATALOG_UI_ENABLED && canViewEvaluatorCatalog ? (
             <EvaluatorRegistrationCatalogSection
               organizationId={selectedOrg?.id}
               authorized={canViewEvaluatorCatalog}

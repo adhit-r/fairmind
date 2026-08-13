@@ -14,10 +14,6 @@ from sqlalchemy.pool import StaticPool
 
 from api.composition.evaluator_catalog import build_evaluator_catalog_service
 from api.routes.evaluator_catalog import (
-    CATALOG_READ_PERMISSION,
-    CATALOG_REVIEW_PERMISSION,
-    CATALOG_REVOKE_PERMISSION,
-    CATALOG_SUBMIT_PERMISSION,
     evaluator_catalog_router,
     get_evaluator_catalog_service,
 )
@@ -362,12 +358,18 @@ def test_catalog_requires_authentication_active_membership_and_exact_permission(
     client, active, factory, _service = catalog_client
     owner_without_permission = client.get(_registrations_url())
     assert owner_without_permission.status_code == 403
-    assert owner_without_permission.json()["detail"]["code"] == "evaluation_catalog_read_forbidden"
+    assert owner_without_permission.json()["detail"] == {
+        "code": "evaluation_catalog_admin_forbidden",
+        "message": "The evaluation:catalog:admin permission is required.",
+    }
 
     active["token"] = _token(OWNER)
     owner_without_permission = client.get(_registrations_url())
     assert owner_without_permission.status_code == 403
-    assert owner_without_permission.json()["detail"]["code"] == "evaluation_catalog_read_forbidden"
+    assert owner_without_permission.json()["detail"] == {
+        "code": "evaluation_catalog_admin_forbidden",
+        "message": "The evaluation:catalog:admin permission is required.",
+    }
 
     active["token"] = _token(INACTIVE_USER)
     inactive_member = client.get(_registrations_url())
@@ -381,26 +383,26 @@ def test_catalog_requires_authentication_active_membership_and_exact_permission(
     assert allowed.json() == {"items": [], "limit": 100, "offset": 0, "hasMore": False}
 
 
-def test_catalog_action_permissions_are_independent(
+def test_undeclared_catalog_action_aliases_cannot_authorize_any_catalog_route(
     catalog_client,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _enable_catalog(monkeypatch)
     client, active, factory, _service = catalog_client
 
-    _grant_catalog_permission(factory, "admin", [CATALOG_READ_PERMISSION])
-    readable = client.get(_registrations_url())
-    assert readable.status_code == 200
-
+    _grant_catalog_permission(factory, "admin", ["evaluation:catalog:submit"])
     submit_denied = client.post(
         _registrations_url(),
         headers=_headers("catalog-submit-denied"),
         json=_binding_payload(),
     )
     assert submit_denied.status_code == 403
-    assert submit_denied.json()["detail"]["code"] == "evaluation_catalog_submit_forbidden"
+    assert submit_denied.json()["detail"] == {
+        "code": "evaluation_catalog_admin_forbidden",
+        "message": "The evaluation:catalog:admin permission is required.",
+    }
 
-    _grant_catalog_permission(factory, "admin", [CATALOG_SUBMIT_PERMISSION])
+    _grant_catalog_permission(factory, "admin")
     submitted = client.post(
         _registrations_url(),
         headers=_headers("catalog-submit-allowed"),
@@ -409,12 +411,28 @@ def test_catalog_action_permissions_are_independent(
     assert submitted.status_code == 201
     registration_id = submitted.json()["id"]
 
+    _grant_catalog_permission(factory, "admin", ["evaluation:catalog:read"])
     read_denied = client.get(_registrations_url())
     assert read_denied.status_code == 403
-    assert read_denied.json()["detail"]["code"] == "evaluation_catalog_read_forbidden"
+    assert read_denied.json()["detail"] == {
+        "code": "evaluation_catalog_admin_forbidden",
+        "message": "The evaluation:catalog:admin permission is required.",
+    }
 
-    _grant_catalog_permission(factory, "reviewer", [CATALOG_REVIEW_PERMISSION])
+    _grant_catalog_permission(factory, "reviewer", ["evaluation:catalog:review"])
     active["token"] = _token(REVIEWER)
+    review_denied = client.post(
+        f"{_registrations_url()}/{registration_id}/approve",
+        headers=_headers("catalog-review-denied"),
+        json={"rationale": "Independent review."},
+    )
+    assert review_denied.status_code == 403
+    assert review_denied.json()["detail"] == {
+        "code": "evaluation_catalog_admin_forbidden",
+        "message": "The evaluation:catalog:admin permission is required.",
+    }
+
+    _grant_catalog_permission(factory, "reviewer")
     approved = client.post(
         f"{_registrations_url()}/{registration_id}/approve",
         headers=_headers("catalog-review-allowed"),
@@ -422,21 +440,17 @@ def test_catalog_action_permissions_are_independent(
     )
     assert approved.status_code == 200
 
+    _grant_catalog_permission(factory, "reviewer", ["evaluation:catalog:revoke"])
     revoke_denied = client.post(
         f"{_registrations_url()}/{registration_id}/revoke",
         headers=_headers("catalog-revoke-denied"),
         json={"rationale": "Revoke requires a separate permission."},
     )
     assert revoke_denied.status_code == 403
-    assert revoke_denied.json()["detail"]["code"] == "evaluation_catalog_revoke_forbidden"
-
-    _grant_catalog_permission(factory, "reviewer", [CATALOG_REVOKE_PERMISSION])
-    revoked = client.post(
-        f"{_registrations_url()}/{registration_id}/revoke",
-        headers=_headers("catalog-revoke-allowed"),
-        json={"rationale": "Independent revocation."},
-    )
-    assert revoked.status_code == 200
+    assert revoke_denied.json()["detail"] == {
+        "code": "evaluation_catalog_admin_forbidden",
+        "message": "The evaluation:catalog:admin permission is required.",
+    }
 
 
 def test_catalog_submit_is_strict_scope_bound_and_idempotent(

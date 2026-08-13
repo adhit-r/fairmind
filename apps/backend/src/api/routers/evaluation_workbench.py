@@ -21,9 +21,19 @@ from api.composition.verified_evidence_review import (
     build_verified_evidence_review_service,
 )
 from config.settings import settings
+from src.api.evaluation_permissions import (
+    EVALUATION_CATALOG_ADMIN_PERMISSION,
+    EVALUATION_DECISION_PERMISSION,
+    EVALUATION_EVIDENCE_LINK_PERMISSION,
+    EVALUATION_EVIDENCE_REVIEW_PERMISSION,
+    EVALUATION_EVIDENCE_SUBMIT_PERMISSION,
+    EVALUATION_PLAN_ACTIVATE_PERMISSION,
+    EVALUATION_PLAN_WRITE_PERMISSION,
+    EVALUATION_RUN_CREATE_PERMISSION,
+    require_assurance_v2_enabled,
+    require_evaluation_permission,
+)
 from src.api.routers.governance_assurance import (
-    _require_mutation,
-    _service as governance_service,
     organization_membership,
 )
 from src.application.ports.evidence_admission import EvidenceAdmissionScope
@@ -44,7 +54,11 @@ from src.application.services.verified_evidence_review_service import (
 from src.application.services.governance_assurance_service import OrgMembership
 from src.application.services.governance_decision_service import GovernanceDecisionService
 
-router = APIRouter(prefix="/organizations/{org_id}", tags=["evaluation-workbench-v2"])
+router = APIRouter(
+    prefix="/organizations/{org_id}",
+    tags=["evaluation-workbench-v2"],
+    dependencies=[Depends(require_assurance_v2_enabled)],
+)
 verified_evidence_router = APIRouter(
     prefix="/organizations/{org_id}",
     tags=["evaluation-workbench-v2-evidence"],
@@ -654,99 +668,6 @@ def _require_governance_decision_enabled() -> None:
     )
 
 
-def _write(membership: OrgMembership, db: Session) -> None:
-    _require_mutation(membership, governance_service(db))
-
-
-def _require_plan_write_permission(membership: OrgMembership) -> None:
-    """Require the narrow capability to create an immutable evaluation plan."""
-
-    if "evaluation:plan:write" not in membership.permissions:
-        raise HTTPException(
-            status_code=403,
-            detail={
-                "code": "evaluation_plan_write_forbidden",
-                "message": "The evaluation:plan:write permission is required.",
-            },
-        )
-
-
-def _require_plan_activate_permission(membership: OrgMembership) -> None:
-    """Require the separate capability to activate an executable plan."""
-
-    if "evaluation:plan:activate" not in membership.permissions:
-        raise HTTPException(
-            status_code=403,
-            detail={
-                "code": "evaluation_plan_activate_forbidden",
-                "message": "The evaluation:plan:activate permission is required.",
-            },
-        )
-
-
-def _require_run_create_permission(membership: OrgMembership) -> None:
-    """Require the separate capability to start an immutable evaluation run."""
-
-    if "evaluation:run:create" not in membership.permissions:
-        raise HTTPException(
-            status_code=403,
-            detail={
-                "code": "evaluation_run_create_forbidden",
-                "message": "The evaluation:run:create permission is required.",
-            },
-        )
-
-
-def _require_evidence_submit_permission(membership: OrgMembership) -> None:
-    if "evaluation:evidence:submit" not in membership.permissions:
-        raise HTTPException(
-            status_code=403,
-            detail={
-                "code": "evaluation_evidence_submit_forbidden",
-                "message": "The evaluation:evidence:submit permission is required.",
-            },
-        )
-
-
-def _require_evidence_link_permission(membership: OrgMembership) -> None:
-    """Require the separate capability for creating a suite-evidence link."""
-
-    if "evaluation:evidence:link" not in membership.permissions:
-        raise HTTPException(
-            status_code=403,
-            detail={
-                "code": "evaluation_evidence_link_forbidden",
-                "message": "The evaluation:evidence:link permission is required.",
-            },
-        )
-
-
-def _require_evidence_review_permission(membership: OrgMembership) -> None:
-    """Require the narrow review permission; admin role alone is insufficient."""
-
-    if "evaluation:evidence:review" not in membership.permissions:
-        raise HTTPException(
-            status_code=403,
-            detail={
-                "code": "evaluation_evidence_review_forbidden",
-                "message": "The evaluation:evidence:review permission is required.",
-            },
-        )
-
-
-def _require_decision_write_permission(membership: OrgMembership) -> None:
-    """Require the literal decision capability; role names are insufficient."""
-
-    if "evaluation:decision" not in membership.permissions:
-        raise HTTPException(
-            status_code=403,
-            detail={
-                "code": "evaluation_decision_write_forbidden",
-                "message": "The evaluation:decision permission is required.",
-            },
-        )
-
-
 def _require_evidence_scope(
     *,
     db: Session,
@@ -905,7 +826,7 @@ async def create_target(
     membership: OrgMembership = Depends(organization_membership),
     db: Session = Depends(get_db),
 ):
-    _write(membership, db)
+    require_evaluation_permission(membership, EVALUATION_CATALOG_ADMIN_PERMISSION)
     try:
         result = _service(db).create_target_version(
             org_id=membership.org_id,
@@ -975,7 +896,7 @@ async def create_suite(
     membership: OrgMembership = Depends(organization_membership),
     db: Session = Depends(get_db),
 ):
-    _write(membership, db)
+    require_evaluation_permission(membership, EVALUATION_CATALOG_ADMIN_PERMISSION)
     try:
         result = _service(db).create_suite_version(
             org_id=membership.org_id,
@@ -1033,7 +954,7 @@ def activate_suite(
     membership: OrgMembership = Depends(organization_membership),
     db: Session = Depends(get_db),
 ):
-    _write(membership, db)
+    require_evaluation_permission(membership, EVALUATION_CATALOG_ADMIN_PERMISSION)
     try:
         result = _service(db).activate_suite_version(
             org_id=membership.org_id,
@@ -1061,7 +982,7 @@ async def create_plan(
     membership: OrgMembership = Depends(organization_membership),
     db: Session = Depends(get_db),
 ):
-    _require_plan_write_permission(membership)
+    require_evaluation_permission(membership, EVALUATION_PLAN_WRITE_PERMISSION)
     try:
         result = _service(db).create_plan(
             org_id=membership.org_id,
@@ -1130,7 +1051,7 @@ def activate_plan(
     membership: OrgMembership = Depends(organization_membership),
     db: Session = Depends(get_db),
 ):
-    _require_plan_activate_permission(membership)
+    require_evaluation_permission(membership, EVALUATION_PLAN_ACTIVATE_PERMISSION)
     try:
         result = _service(db).activate_plan(
             org_id=membership.org_id,
@@ -1185,7 +1106,7 @@ async def create_run(
     membership: OrgMembership = Depends(organization_membership),
     db: Session = Depends(get_db),
 ):
-    _require_run_create_permission(membership)
+    require_evaluation_permission(membership, EVALUATION_RUN_CREATE_PERMISSION)
     try:
         result = _service(db).create_run(
             org_id=membership.org_id,
@@ -1285,8 +1206,8 @@ async def submit_verified_evidence(
     server-owned authority graph for this exact tenant/run/suite scope.
     """
 
-    _require_evidence_submit_permission(membership)
-    _require_evidence_link_permission(membership)
+    require_evaluation_permission(membership, EVALUATION_EVIDENCE_SUBMIT_PERMISSION)
+    require_evaluation_permission(membership, EVALUATION_EVIDENCE_LINK_PERMISSION)
     if membership.org_id != org_id:
         _missing("evidence_scope")
     _require_evidence_scope(
@@ -1354,7 +1275,7 @@ async def review_verified_evidence(
     authority and rejects any reviewer who submitted, linked, or requested it.
     """
 
-    _require_evidence_review_permission(membership)
+    require_evaluation_permission(membership, EVALUATION_EVIDENCE_REVIEW_PERMISSION)
     if membership.org_id != org_id:
         _missing("evidence_scope")
     _require_evidence_scope(
@@ -1408,7 +1329,7 @@ async def create_governance_decision(
 ):
     """Append one normal decision without enabling owner override or enforcement."""
 
-    _require_decision_write_permission(membership)
+    require_evaluation_permission(membership, EVALUATION_DECISION_PERMISSION)
     if membership.org_id != org_id:
         _missing("decision_scope")
     _require_decision_scope(
