@@ -21,34 +21,31 @@ class TestSecurityEndpoints:
     """Test security-related endpoints."""
 
     def test_security_status(self):
-        """Security endpoints may be optional in this deployment."""
+        """Security status is not anonymously discoverable."""
         response = client.get("/api/v1/security/status")
-        assert response.status_code in (200, 404, 405)
+        assert response.status_code == 401
 
     def test_container_scan(self):
-        """Container scan endpoint can be disabled depending on loaded routers."""
+        """Container scanning is not anonymously callable or discoverable."""
         response = client.post("/api/v1/security/container/scan", params={"image_name": "test:latest"})
-        assert response.status_code in (200, 404, 405)
+        assert response.status_code == 401
 
     def test_llm_security_test(self):
-        """LLM security endpoint can be disabled depending on loaded routers."""
+        """LLM security testing is not anonymously callable or discoverable."""
         response = client.post(
             "/api/v1/security/llm/test",
             params={"prompt": "test prompt", "model_id": "test-model"}
         )
-        assert response.status_code in (200, 404, 405)
+        assert response.status_code == 401
 
 
 class TestModelsEndpoints:
     """Test model-related endpoints."""
 
-    def test_get_models(self):
-        """Test get models endpoint."""
+    def test_get_models_requires_authentication(self):
+        """Model inventory is not anonymously readable."""
         response = client.get("/api/v1/models")
-        assert response.status_code == 200
-        data = response.json()
-        assert isinstance(data, dict)
-        assert "data" in data
+        assert response.status_code == 401
 
     def test_create_model(self):
         """Model create uses multipart/form-data and may be auth-protected."""

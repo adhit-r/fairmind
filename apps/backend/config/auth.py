@@ -108,8 +108,8 @@ class AuthManager:
             expires_delta = timedelta(minutes=self.access_token_expire_minutes)
         
         payload = {
-            "sub": user.email,  # Standard JWT subject claim
-            "user_id": int(user.id) if user.id.isdigit() else hash(user.id) % 2147483647,
+            "sub": user.id,
+            "user_id": user.id,
             "email": user.email,
             "roles": [user.role.value],
             "permissions": user.permissions,
@@ -123,8 +123,8 @@ class AuthManager:
         expires_delta = timedelta(days=self.refresh_token_expire_days)
         
         payload = {
-            "sub": user.email,
-            "user_id": int(user.id) if user.id.isdigit() else hash(user.id) % 2147483647,
+            "sub": user.id,
+            "user_id": user.id,
             "email": user.email,
             "roles": [user.role.value],
             "token_type": TokenType.REFRESH.value,
@@ -137,8 +137,8 @@ class AuthManager:
         expires_delta = timedelta(days=self.api_key_expire_days)
         
         payload = {
-            "sub": user.email,
-            "user_id": int(user.id) if user.id.isdigit() else hash(user.id) % 2147483647,
+            "sub": user.id,
+            "user_id": user.id,
             "email": user.email,
             "roles": [user.role.value],
             "permissions": user.permissions,
@@ -164,15 +164,18 @@ class AuthManager:
             
             # Extract data from payload
             user_id = payload.get("user_id")
-            email = payload.get("email") or payload.get("sub")
+            subject = payload.get("sub")
+            email = payload.get("email")
             roles = payload.get("roles", [])
             token_type = payload.get("token_type", TokenType.ACCESS.value)
             exp = payload.get("exp")
             iat = payload.get("iat")
             permissions = payload.get("permissions", [])
             
-            if user_id is None or email is None:
+            if user_id is None or subject is None or email is None:
                 raise InvalidTokenException("Invalid token payload")
+            if not str(user_id).strip() or str(subject) != str(user_id):
+                raise InvalidTokenException("Token subject does not match user identity")
             
             # Convert timestamps if they're datetime objects
             if isinstance(exp, datetime):

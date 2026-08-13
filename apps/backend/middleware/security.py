@@ -41,7 +41,6 @@ _PUBLIC_ROUTES = frozenset(
 
 _DEVELOPMENT_PUBLIC_PATH_PREFIXES = (
     "/api/v1/ai-bom",
-    "/api/v1/ai-governance",
     "/api/v1/analytics",
     "/api/v1/bias-detection",
     "/api/v1/bias/llm-judge",

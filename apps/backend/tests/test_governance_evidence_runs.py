@@ -24,7 +24,13 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from api.main import app
-from config.auth import TokenData, TokenType, UserRole, get_current_active_user
+from config.auth import (
+    TokenData,
+    TokenType,
+    User as AuthUser,
+    UserRole,
+    auth_manager,
+)
 from database.connection import Base, get_db
 from database.governance_models import (
     GovernanceAISystem,
@@ -106,6 +112,42 @@ def _token(user_id: str) -> TokenData:
     )
 
 
+def _access_token(token_data: TokenData) -> str:
+    return auth_manager.create_access_token(
+        AuthUser(
+            id=token_data.user_id,
+            email=token_data.email,
+            username=token_data.user_id,
+            role=token_data.role,
+            created_at=token_data.iat,
+            permissions=token_data.permissions,
+        )
+    )
+
+
+class _ActiveBearer:
+    """Switch the production-middleware bearer identity used by the client."""
+
+    def __init__(self, client: TestClient, value: TokenData) -> None:
+        self.client = client
+        self._value = value
+        self._apply(value)
+
+    def _apply(self, value: TokenData) -> None:
+        self.client.headers["Authorization"] = f"Bearer {_access_token(value)}"
+
+    def __getitem__(self, key: str) -> TokenData:
+        if key != "value":
+            raise KeyError(key)
+        return self._value
+
+    def __setitem__(self, key: str, value: TokenData) -> None:
+        if key != "value":
+            raise KeyError(key)
+        self._value = value
+        self._apply(value)
+
+
 @pytest.fixture
 def assurance_client():
     engine = create_engine(
@@ -115,7 +157,6 @@ def assurance_client():
     )
     Base.metadata.create_all(engine)
     session_factory = sessionmaker(bind=engine)
-    active_user = {"value": _token(USER_A)}
 
     def override_db():
         session = session_factory()
@@ -124,13 +165,10 @@ def assurance_client():
         finally:
             session.close()
 
-    async def override_user():
-        return active_user["value"]
-
     app.dependency_overrides[get_db] = override_db
-    app.dependency_overrides[get_current_active_user] = override_user
     try:
         with TestClient(app) as client:
+            active_user = _ActiveBearer(client, _token(USER_A))
             yield client, session_factory, active_user
     finally:
         app.dependency_overrides.clear()
@@ -181,7 +219,6 @@ def postgresql_assurance_client():
         ],
     )
     session_factory = sessionmaker(bind=engine)
-    active_user = {"value": _token(USER_A)}
 
     def override_db():
         session = session_factory()
@@ -190,13 +227,10 @@ def postgresql_assurance_client():
         finally:
             session.close()
 
-    async def override_user():
-        return active_user["value"]
-
     app.dependency_overrides[get_db] = override_db
-    app.dependency_overrides[get_current_active_user] = override_user
     try:
         with TestClient(app) as client:
+            active_user = _ActiveBearer(client, _token(USER_A))
             yield client, session_factory, active_user
     finally:
         app.dependency_overrides.clear()
@@ -931,6 +965,7 @@ def test_json_decoder_resource_limits_are_bounded_422_before_storage(
     _seed_default(session_factory)
 
     with TestClient(app, raise_server_exceptions=False) as client:
+        _ActiveBearer(client, _token(USER_A))
         response = client.post(
             f"/api/v1/ai-governance/organizations/{ORG_A}/systems/system-001/evidence-runs",
             content=raw,

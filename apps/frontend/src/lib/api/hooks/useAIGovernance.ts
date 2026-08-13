@@ -126,6 +126,7 @@ export interface EnvironmentalImpactMitigation {
 }
 
 export interface EnvironmentalImpactReport {
+  orgId?: string | null
   systemId?: string | null
   generatedAt?: string | null
   version?: string | null
@@ -151,6 +152,10 @@ export interface EnvironmentalImpactReport {
 }
 
 type EnvironmentalImpactPayload = EnvironmentalImpactReport | {
+  orgId?: string | null
+  org_id?: string | null
+  systemId?: string | null
+  system_id?: string | null
   environmentalImpact?: EnvironmentalImpactReport | null
   environmental_impact?: EnvironmentalImpactReport | null
   impact?: EnvironmentalImpactReport | null
@@ -209,6 +214,25 @@ function firstString(records: AnyRecord[], keys: string[]): string | null {
     }
   }
   return null
+}
+
+function environmentalImpactResponseMatchesScope(
+  payload: EnvironmentalImpactPayload,
+  report: EnvironmentalImpactReport | null,
+  orgId: string,
+  systemId: string,
+): boolean {
+  const outer = asRecord(payload)
+  const inner = asRecord(report)
+  const outerOrgId = firstString([outer], ['orgId', 'org_id', 'organizationId', 'organization_id'])
+  const outerSystemId = firstString([outer], ['systemId', 'system_id'])
+  const innerOrgId = firstString([inner], ['orgId', 'org_id', 'organizationId', 'organization_id'])
+  const innerSystemId = firstString([inner], ['systemId', 'system_id'])
+
+  return outerOrgId === orgId
+    && outerSystemId === systemId
+    && (innerOrgId === null || innerOrgId === orgId)
+    && (innerSystemId === null || innerSystemId === systemId)
 }
 
 function firstNumber(records: AnyRecord[], keys: string[]): number | null {
@@ -429,32 +453,61 @@ export function useAIGovernance() {
   }
 }
 
-export function useEnvironmentalImpact(systemId?: string) {
-  const [data, setData] = useState<EnvironmentalImpactReport | null>(null)
-  const [loading, setLoading] = useState(Boolean(systemId))
-  const [error, setError] = useState<Error | null>(null)
-  const [emptyReason, setEmptyReason] = useState<string | null>(null)
+type EnvironmentalImpactSnapshot = {
+  scopeKey: string | null
+  data: EnvironmentalImpactReport | null
+  loading: boolean
+  error: Error | null
+  emptyReason: string | null
+}
+
+function environmentalImpactScopeKey(orgId: string | undefined, systemId: string | undefined) {
+  return orgId && systemId ? JSON.stringify([orgId, systemId]) : null
+}
+
+function emptyEnvironmentalImpactSnapshot(
+  scopeKey: string | null,
+  orgId: string | undefined,
+  systemId: string | undefined,
+): EnvironmentalImpactSnapshot {
+  return {
+    scopeKey,
+    data: null,
+    loading: Boolean(scopeKey),
+    error: null,
+    emptyReason: scopeKey
+      ? null
+      : !orgId
+        ? 'No organization is selected.'
+        : !systemId
+          ? 'No AI system is selected.'
+          : null,
+  }
+}
+
+export function useEnvironmentalImpact(orgId: string | undefined, systemId: string | undefined) {
+  const scopeKey = environmentalImpactScopeKey(orgId, systemId)
+  const [snapshot, setSnapshot] = useState<EnvironmentalImpactSnapshot>(() =>
+    emptyEnvironmentalImpactSnapshot(scopeKey, orgId, systemId),
+  )
+  const currentSnapshot = scopeKey && snapshot.scopeKey === scopeKey
+    ? snapshot
+    : emptyEnvironmentalImpactSnapshot(scopeKey, orgId, systemId)
 
   useEffect(() => {
-    if (!systemId) {
-      setData(null)
-      setLoading(false)
-      setError(null)
-      setEmptyReason('No AI system is selected.')
+    const emptySnapshot = emptyEnvironmentalImpactSnapshot(scopeKey, orgId, systemId)
+    if (!orgId || !systemId) {
+      setSnapshot(emptySnapshot)
       return
     }
 
     let active = true
+    setSnapshot(emptySnapshot)
 
     const fetchEnvironmentalImpact = async () => {
       try {
-        setLoading(true)
-        setError(null)
-        setEmptyReason(null)
-        setData(null)
-
         const response: ApiResponse<EnvironmentalImpactPayload> = await apiClient.get(
-          API_ENDPOINTS.aiGovernance.environmentalImpact(systemId),
+          API_ENDPOINTS.aiGovernance.environmentalImpact(orgId, systemId),
           {
             enableRetry: false,
             timeout: 8000,
@@ -465,32 +518,64 @@ export function useEnvironmentalImpact(systemId?: string) {
 
         if (response.success) {
           const report = extractEnvironmentalImpactPayload(response.data)
+          if (!response.data || !environmentalImpactResponseMatchesScope(response.data, report, orgId, systemId)) {
+            setSnapshot({
+              scopeKey,
+              data: null,
+              loading: false,
+              error: new Error('Environmental impact response scope did not match the requested organization and system.'),
+              emptyReason: null,
+            })
+            return
+          }
 
           if (report && Object.keys(report).length > 0) {
-            setData(report)
-            setEmptyReason(null)
+            setSnapshot({
+              scopeKey,
+              data: report,
+              loading: false,
+              error: null,
+              emptyReason: null,
+            })
           } else {
-            setData(null)
-            setEmptyReason('No environmental impact packet has been returned for this AI system yet.')
+            setSnapshot({
+              scopeKey,
+              data: null,
+              loading: false,
+              error: null,
+              emptyReason: 'No environmental impact packet has been returned for this AI system yet.',
+            })
           }
           return
         }
 
         const message = response.error || 'Failed to load environmental impact data'
-        setData(null)
         if (/endpoint not found|not found|404/i.test(message)) {
-          setEmptyReason('The environmental impact API is not available yet.')
+          setSnapshot({
+            scopeKey,
+            data: null,
+            loading: false,
+            error: null,
+            emptyReason: 'The environmental impact API is not available yet.',
+          })
           return
         }
-        setError(new Error(message))
+        setSnapshot({
+          scopeKey,
+          data: null,
+          loading: false,
+          error: new Error(message),
+          emptyReason: null,
+        })
       } catch (err) {
         if (!active) return
-        setData(null)
-        setError(err instanceof Error ? err : new Error('Failed to load environmental impact data'))
-      } finally {
-        if (active) {
-          setLoading(false)
-        }
+        setSnapshot({
+          scopeKey,
+          data: null,
+          loading: false,
+          error: err instanceof Error ? err : new Error('Failed to load environmental impact data'),
+          emptyReason: null,
+        })
       }
     }
 
@@ -499,12 +584,12 @@ export function useEnvironmentalImpact(systemId?: string) {
     return () => {
       active = false
     }
-  }, [systemId])
+  }, [orgId, scopeKey, systemId])
 
   return {
-    data,
-    loading,
-    error,
-    emptyReason,
+    data: currentSnapshot.data,
+    loading: currentSnapshot.loading,
+    error: currentSnapshot.error,
+    emptyReason: currentSnapshot.emptyReason,
   }
 }

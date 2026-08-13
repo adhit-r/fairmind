@@ -40,18 +40,44 @@ def _constraints(model, kind):
     }
 
 
-def _fresh_connection() -> sqlite3.Connection:
+def _legacy_connection() -> sqlite3.Connection:
+    """Build the last pre-v2 schema so migration 013 backfill is exercised."""
+
     connection = sqlite3.connect(":memory:")
     connection.execute("PRAGMA foreign_keys = ON")
     connection.executescript((MIGRATIONS / "008_governance_canonical.sql").read_text())
     from migrations.governance_assurance_migration import sql_for as sql_011
     from migrations.evaluation_runs_migration import sql_for as sql_012
-    from migrations.evaluation_assurance_v2_migration import sql_for as sql_013
 
     connection.executescript(sql_011("sqlite"))
     connection.executescript(sql_012("sqlite"))
+    return connection
+
+
+def _fresh_connection() -> sqlite3.Connection:
+    connection = _legacy_connection()
+    from migrations.evaluation_assurance_v2_migration import sql_for as sql_013
+
     connection.executescript(sql_013("sqlite"))
     return connection
+
+
+def _legacy_row_snapshot(
+    connection: sqlite3.Connection,
+    table: str,
+    record_id: str,
+) -> tuple[tuple[str, ...], tuple]:
+    """Capture every column present before migration 013 for one legacy row."""
+
+    columns = tuple(
+        row[1] for row in connection.execute(f"PRAGMA table_info({table})").fetchall()
+    )
+    row = connection.execute(
+        f"SELECT {', '.join(columns)} FROM {table} WHERE id = ?",
+        (record_id,),
+    ).fetchone()
+    assert row is not None
+    return columns, row
 
 
 @pytest.fixture
@@ -695,6 +721,53 @@ def test_legacy_plan_and_run_default_to_v1_contract(connection):
     assert connection.execute(
         "SELECT contract_version FROM governance_evaluation_runs WHERE id='run-a'"
     ).fetchone() == ("1.0.0",)
+
+
+def test_migration_013_marks_existing_records_v1_without_fabricating_bindings():
+    from migrations.evaluation_assurance_v2_migration import sql_for
+
+    connection = _legacy_connection()
+    try:
+        _seed_plan_and_run(connection)
+        plan_columns, before_plan = _legacy_row_snapshot(
+            connection, "governance_evaluation_plans", "plan-a"
+        )
+        run_columns, before_run = _legacy_row_snapshot(
+            connection, "governance_evaluation_runs", "run-a"
+        )
+
+        connection.executescript(sql_for("sqlite"))
+
+        assert connection.execute(
+            f"SELECT {', '.join(plan_columns)} "
+            "FROM governance_evaluation_plans WHERE id='plan-a'"
+        ).fetchone() == before_plan
+        assert connection.execute(
+            f"SELECT {', '.join(run_columns)} "
+            "FROM governance_evaluation_runs WHERE id='run-a'"
+        ).fetchone() == before_run
+        assert connection.execute(
+            """
+            SELECT contract_version, target_version_id, plan_content_hash,
+                   trust_policy_version_id
+            FROM governance_evaluation_plans WHERE id='plan-a'
+            """
+        ).fetchone() == ("1.0.0", None, None, None)
+        assert connection.execute(
+            """
+            SELECT contract_version, lifecycle_phase, envelope_id, envelope_json,
+                   envelope_hash
+            FROM governance_evaluation_runs WHERE id='run-a'
+            """
+        ).fetchone() == ("1.0.0", None, None, None, None)
+        for table in (
+            "governance_evaluation_target_versions",
+            "governance_evaluation_suite_versions",
+            "governance_evidence_trust_policy_versions",
+        ):
+            assert connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone() == (0,)
+    finally:
+        connection.close()
 
 
 def test_v2_plan_contract_and_run_envelope_invariants_are_enforced(connection):

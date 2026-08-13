@@ -52,6 +52,8 @@ The current branch is an **internal, default-off trust-foundation alpha**. It im
 | Target and suite identity | Implemented in the v2 contract | Immutable planning metadata |
 | Execution envelope and Passport v2 binding | Implemented and tested | Evidence-integrity foundation |
 | Signature, replay, scope, and admission checks | Implemented as a default-off kernel with a separately gated route boundary | Supporting evidence verification |
+| Legacy contract v1 plans and runs | Preserved as readable historical records; v2 activation blocks legacy creation, activation, run preparation, and evidence linking | Clone into an exactly bound v2 plan before new execution |
+| Environmental governance evidence | Canonical organization/system API and tenant-bound persistence verified locally on SQLite and PostgreSQL 14 | Scoped evidence workflow only; not validated emissions accounting or compliance proof |
 | Public admission API and reviewer workflow | Route boundary is composed but disabled; reviewer workflow is not shipped | Do not claim |
 | Sandboxed worker execution | Not yet shipped | Do not claim |
 | LLM, agent, code, vision, image, audio, video, and multimodal packs | Not yet independently validated | Planned/experimental only |
@@ -731,7 +733,10 @@ See [Security Policy](docs/SECURITY.md) for complete security policy.
 
 ### Current phase: 2027 assurance foundation
 
-The current branch is an internal trust-foundation alpha. The roadmap checklist is 20/92 complete (21.7%), with the P1 worker layer, real evaluation engines, modality packs, lifecycle workflows, and rollout gates still open.
+The current branch is an internal trust-foundation alpha. The trustworthy
+control-plane checklist is 12/19 complete (63.2%), and the full roadmap is
+21/92 complete (22.8%). The P1 worker layer, real evaluation engines, modality
+packs, lifecycle workflows, and rollout gates remain open.
 
 **Implemented and verified for the current slice**
 
@@ -739,7 +744,10 @@ The current branch is an internal trust-foundation alpha. The roadmap checklist 
 - Server-generated execution-envelope binding
 - Passport v2 scope, signature, expiry, replay, and admission primitives
 - Atomic evidence persistence and separate execution/evidence/review/governance states
-- Focused unit and PostgreSQL verification for the trust-foundation slice
+- Tenant-bound environmental evidence routes, response admission, and migration 013e,
+  verified on SQLite and a disposable local PostgreSQL 14 instance
+- Focused unit, route, and SQLite migration-parity verification for the
+  legacy-contract slice; native PostgreSQL checks remain pending in this environment
 
 **Next release gates**
 

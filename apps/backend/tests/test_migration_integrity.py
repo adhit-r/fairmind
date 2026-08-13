@@ -15,9 +15,12 @@ from config.migration_integrity import (
     FROZEN_013B_OPERATOR_V2_CHECKSUM,
     FROZEN_013C_OPERATOR_CHECKSUM,
     FROZEN_013D_OPERATOR_CHECKSUM,
+    FROZEN_013E_OPERATOR_CHECKSUM,
+    FROZEN_ASSURANCE_MIGRATIONS,
     FROZEN_POSTGRESQL_ASSURANCE_CATALOGS,
     FROZEN_SQLITE_013C_FIXTURE_CHECKSUM,
     FROZEN_SQLITE_013D_FIXTURE_CHECKSUM,
+    FROZEN_SQLITE_013E_FIXTURE_CHECKSUM,
     POSTGRESQL_ASSURANCE_CATALOG_SPEC,
     POSTGRESQL_ASSURANCE_FUNCTIONS,
     POSTGRESQL_ASSURANCE_REQUIRED_TRIGGERS,
@@ -50,6 +53,7 @@ POSTGRES_BASE_CHAIN = (
     "001_initial_schema.sql",
     "007_org_rbac_schema_CORRECTED.sql",
     "008_governance_canonical.sql",
+    "010_environmental_governance.sql",
     "011_governance_assurance.sql",
     "012_evaluation_runs.sql",
 )
@@ -59,6 +63,7 @@ POSTGRES_OPERATOR_CHAIN = (
     "upgrade_paths/013a_to_013b_evaluation_assurance_trust_integrity_v2.sql",
     "upgrade_paths/013b_to_013c_evidence_verification_receipt.sql",
     "upgrade_paths/013c_to_013d_evaluator_catalog.sql",
+    "upgrade_paths/013d_to_013e_environmental_tenant_scope.sql",
 )
 POSTGRESQL_013B_PREREQUISITE_CONSTRAINTS = frozenset(
     {
@@ -141,6 +146,7 @@ POSTGRESQL_013B_RETAINED_PREREQUISITE_CONSTRAINTS = POSTGRESQL_013B_PREREQUISITE
 
 def _install_sqlite_assurance_chain(database_path: Path) -> None:
     from migrations.evaluator_catalog_migration import apply_sqlite as apply_013d
+    from migrations.environmental_tenant_scope_migration import apply_sqlite as apply_013e
     from migrations.evaluation_assurance_v2_migration import sql_for as sql_013
     from migrations.evaluation_binding_integrity_migration import sql_for as sql_013a
     from migrations.evaluation_runs_migration import sql_for as sql_012
@@ -164,6 +170,7 @@ def _install_sqlite_assurance_chain(database_path: Path) -> None:
         )
         connection.executescript(sql_013c("sqlite"))
         apply_013d(connection)
+        apply_013e(connection)
     finally:
         connection.close()
 
@@ -592,7 +599,7 @@ def test_production_postgresql_manifest_covers_audit_immutability() -> None:
     frozen = FROZEN_POSTGRESQL_ASSURANCE_CATALOGS[14]
     assert frozen.spec is POSTGRESQL_ASSURANCE_CATALOG_SPEC
     assert frozen.postgresql_major == 14
-    assert frozen.digest == "e8f66e4703666f7dabea38f329bb89970b554e8ae514e78843b1ded2e14584d5"
+    assert frozen.digest == "6d4e8f827b37c734cd11a1d6ec7feb21b3ad5bd7fb2c36954e71428a19d6e333"
     validate_frozen_postgresql_catalog(frozen)
 
 
@@ -685,6 +692,36 @@ def test_sqlite_013d_fixture_source_checksum_is_frozen() -> None:
     assert hashlib.sha256(fixture.read_bytes()).hexdigest() == (FROZEN_SQLITE_013D_FIXTURE_CHECKSUM)
 
 
+def test_013e_operator_source_checksum_is_frozen() -> None:
+    import hashlib
+
+    operator = MIGRATIONS / "upgrade_paths/013d_to_013e_environmental_tenant_scope.sql"
+    assert hashlib.sha256(operator.read_bytes()).hexdigest() == (FROZEN_013E_OPERATOR_CHECKSUM)
+
+
+def test_013e_direct_payload_and_operator_ledger_chain_are_frozen() -> None:
+    import hashlib
+
+    frozen = FROZEN_ASSURANCE_MIGRATIONS[-1]
+    direct = MIGRATIONS / "013e_environmental_tenant_scope.sql"
+    operator = MIGRATIONS / "upgrade_paths/013d_to_013e_environmental_tenant_scope.sql"
+    operator_source = operator.read_text(encoding="utf-8")
+
+    assert frozen.ledger_key == "013d-to-013e-environmental-tenant-scope-v1"
+    assert frozen.source_path == direct
+    assert hashlib.sha256(direct.read_bytes()).hexdigest() == frozen.checksum
+    assert "\\ir ../013e_environmental_tenant_scope.sql" in operator_source
+    assert frozen.ledger_key in operator_source
+    assert frozen.checksum in operator_source
+
+
+def test_sqlite_013e_fixture_source_checksum_is_frozen() -> None:
+    import hashlib
+
+    fixture = MIGRATIONS / "fixtures/013e_environmental_tenant_scope.sqlite.sql"
+    assert hashlib.sha256(fixture.read_bytes()).hexdigest() == (FROZEN_SQLITE_013E_FIXTURE_CHECKSUM)
+
+
 def test_013b_v2_operator_source_checksum_and_c_collation_are_frozen() -> None:
     import hashlib
 
@@ -695,7 +732,7 @@ def test_013b_v2_operator_source_checksum_and_c_collation_are_frozen() -> None:
     assert payload.count('COLLATE pg_catalog."C"') == 7
 
 
-def test_sqlite_startup_check_accepts_the_frozen_013c_catalog(
+def test_sqlite_startup_check_accepts_the_frozen_013e_catalog(
     tmp_path: Path,
 ) -> None:
     database_path = tmp_path / "assurance.sqlite3"

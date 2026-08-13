@@ -81,6 +81,11 @@ FROZEN_013D_OPERATOR_CHECKSUM = "7a1d368fc1556e6286e047bf73c47878ab69fb31d2b25e7
 FROZEN_SQLITE_013D_FIXTURE_CHECKSUM = (
     "1d88a2c78cb10871259471fda2b9336043756d0a989941afbc616e10df5e015f"
 )
+_FROZEN_013E_CHECKSUM = "95f5b016fa9abbffab7d7ff45547c888364ccf0d29d26b9f22d4440ce0a3cf32"
+FROZEN_013E_OPERATOR_CHECKSUM = "6397810191ab919a0bf3246a17d04284344afa96acfd291b9485e361c4fcb1e6"
+FROZEN_SQLITE_013E_FIXTURE_CHECKSUM = (
+    "055b763555474740fa72cdc16b6e351906d7716e3b980c83ec986ae04314779e"
+)
 
 FROZEN_ASSURANCE_MIGRATIONS = (
     FrozenMigration(
@@ -108,6 +113,11 @@ FROZEN_ASSURANCE_MIGRATIONS = (
         _FROZEN_013D_CHECKSUM,
         _MIGRATIONS / "013d_evaluator_catalog.sql",
     ),
+    FrozenMigration(
+        "013d-to-013e-environmental-tenant-scope-v1",
+        _FROZEN_013E_CHECKSUM,
+        _MIGRATIONS / "013e_environmental_tenant_scope.sql",
+    ),
 )
 
 POSTGRESQL_ASSURANCE_RELATIONS = frozenset(
@@ -115,6 +125,8 @@ POSTGRESQL_ASSURANCE_RELATIONS = frozenset(
         "fairmind_operator_migration_ledger",
         "governance_workspaces",
         "governance_ai_systems",
+        "governance_evidence",
+        "governance_environmental_assessments",
         "governance_evaluation_target_versions",
         "governance_evaluation_suite_versions",
         "governance_evaluation_plans",
@@ -271,7 +283,7 @@ FROZEN_POSTGRESQL_ASSURANCE_CATALOGS: Mapping[int, FrozenPostgreSQLCatalog] = Ma
         14: FrozenPostgreSQLCatalog(
             spec=POSTGRESQL_ASSURANCE_CATALOG_SPEC,
             postgresql_major=14,
-            digest=("e8f66e4703666f7dabea38f329bb89970b554e8ae514e78843b1ded2e14584d5"),
+            digest=("6d4e8f827b37c734cd11a1d6ec7feb21b3ad5bd7fb2c36954e71428a19d6e333"),
         )
     }
 )
@@ -280,6 +292,8 @@ SQLITE_ASSURANCE_TABLES = frozenset(
     {
         "governance_workspaces",
         "governance_ai_systems",
+        "governance_evidence",
+        "governance_environmental_assessments",
         "governance_evaluation_target_versions",
         "governance_evaluation_suite_versions",
         "governance_evaluation_plans",
@@ -312,6 +326,9 @@ SQLITE_ASSURANCE_INDEXES = frozenset(
         "uq_governance_workspace_org",
         "uq_governance_ai_system_tenant",
         "uq_governance_ai_system_workspace_tenant",
+        "uq_governance_evidence_tenant",
+        "idx_governance_env_assessments_org_system_version",
+        "idx_governance_env_assessments_recommendation",
         "idx_governance_evaluation_targets_scope_created_keyset",
         "uq_governance_evaluation_target_kind_tenant",
         "idx_governance_evaluation_targets_scope_status",
@@ -435,8 +452,8 @@ SQLITE_ASSURANCE_VIEWS = frozenset(
 # named above, sorted by object type and name.  Unlike a name-only inventory,
 # this freezes table columns/checks/FKs, explicit indexes, trigger bodies, and
 # security-critical view definitions.
-# Replace only after the complete 013d SQLite fixture has passed review.
-SQLITE_ASSURANCE_CATALOG_DIGEST = "6823a69b57a7b06565f58689b153dc7e4d9ad4b9a78531ab9ca0a62bfbd89234"
+# Replace only after the complete 013e SQLite fixture has passed review.
+SQLITE_ASSURANCE_CATALOG_DIGEST = "cde97767ba45ccb09aa83de28ca2446b371b9752357e5d069d4cd3c153e3151f"
 
 _SQLITE_ASSURANCE_OBJECTS = {
     "table": SQLITE_ASSURANCE_TABLES,
@@ -1321,6 +1338,11 @@ def verify_sqlite_assurance_schema(connection) -> None:
             "013d",
             _MIGRATIONS / "fixtures" / "013d_evaluator_catalog.sqlite.sql",
             FROZEN_SQLITE_013D_FIXTURE_CHECKSUM,
+        ),
+        (
+            "013e",
+            _MIGRATIONS / "fixtures" / "013e_environmental_tenant_scope.sqlite.sql",
+            FROZEN_SQLITE_013E_FIXTURE_CHECKSUM,
         ),
     )
     for version, fixture_path, frozen_checksum in fixtures:

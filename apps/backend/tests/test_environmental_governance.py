@@ -61,6 +61,13 @@ def _assessment(**overrides):
     return payload
 
 
+def _environmental_base(org_id: str, system_id: str) -> str:
+    return (
+        f"/api/v1/ai-governance/organizations/{org_id}/systems/{system_id}"
+        "/environmental-impact"
+    )
+
+
 def test_domain_import_and_environmental_gate_invariants():
     measured = run_assessment(_assessment())
     assert measured.recommendation == "conditional_go"
@@ -115,9 +122,10 @@ def test_domain_import_and_environmental_gate_invariants():
 def test_assessment_post_appends_versions_and_mirrors_evidence(environmental_governance_client):
     client, org_id = environmental_governance_client
     system_id = _create_system(client, org_id)
+    base = _environmental_base(org_id, system_id)
     first = client.post(
-        "/api/v1/ai-governance/environment/assess",
-        json={"system_id": system_id, "assessment": _assessment()},
+        f"{base}/assess",
+        json={"assessment": _assessment()},
     )
     assert first.status_code == 200
     first_payload = first.json()
@@ -126,14 +134,14 @@ def test_assessment_post_appends_versions_and_mirrors_evidence(environmental_gov
     assert first_payload["evidence_id"]
 
     second = client.post(
-        "/api/v1/ai-governance/environment/assess",
-        json={"system_id": system_id, "assessment": _assessment(confidence_score=0.90)},
+        f"{base}/assess",
+        json={"assessment": _assessment(confidence_score=0.90)},
     )
     assert second.status_code == 200
     assert second.json()["version"] == 2
     assert second.json()["assessment_id"] != first_payload["assessment_id"]
 
-    latest = client.get(f"/api/v1/systems/{system_id}/environmental-impact")
+    latest = client.get(base)
     assert latest.status_code == 200
     data = latest.json()["data"]
     assert data["latest"]["version"] == 2
@@ -147,7 +155,7 @@ def test_evidence_ingest_creates_no_go_risk_remediation_and_blocks_approval(
     client, org_id = environmental_governance_client
     system_id = _create_system(client, org_id)
     ingest = client.post(
-        f"/api/v1/systems/{system_id}/environmental-impact/evidence",
+        f"{_environmental_base(org_id, system_id)}/evidence",
         json={
             "connector_type": "codecarbon_csv",
             "content": "energy_consumed,emissions\n10,500\n",
@@ -211,8 +219,8 @@ def test_documented_conditional_go_allows_system_approval(environmental_governan
     client, org_id = environmental_governance_client
     system_id = _create_system(client, org_id)
     assessed = client.post(
-        "/api/v1/ai-governance/environment/assess",
-        json={"system_id": system_id, "assessment": _assessment()},
+        f"{_environmental_base(org_id, system_id)}/assess",
+        json={"assessment": _assessment()},
     )
     assert assessed.status_code == 200
     assert assessed.json()["recommendation"] == "conditional_go"

@@ -57,7 +57,7 @@ export default function AIGovernancePage() {
     requestSystemApproval,
     decideApprovalRequest,
   } = useAIGovernance()
-  const environmental = useEnvironmentalImpact(selectedSystem.id)
+  const environmental = useEnvironmentalImpact(orgId, selectedSystem.id)
   type ApprovalState = Awaited<ReturnType<typeof getSystemApproval>>
   const approvalRequestIdRef = useRef(0)
   const approvalSystemIdRef = useRef(selectedSystem.id)

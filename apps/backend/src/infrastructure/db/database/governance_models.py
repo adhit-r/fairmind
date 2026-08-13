@@ -2741,6 +2741,10 @@ class GovernanceAISystem(Base):
         "GovernanceEnvironmentalAssessment",
         back_populates="ai_system",
         cascade="all, delete-orphan",
+        foreign_keys=(
+            "[GovernanceEnvironmentalAssessment.system_id, "
+            "GovernanceEnvironmentalAssessment.org_id]"
+        ),
     )
     risks = relationship("GovernanceRisk", back_populates="ai_system", cascade="all, delete-orphan")
     remediation_tasks = relationship(
@@ -2830,6 +2834,12 @@ class GovernanceEvidence(Base):
     __table_args__ = (
         Index("idx_governance_evidence_system_id", "system_id"),
         Index("idx_governance_evidence_control_id", "control_id"),
+        UniqueConstraint(
+            "id",
+            "system_id",
+            "org_id",
+            name="uq_governance_evidence_tenant",
+        ),
         ForeignKeyConstraint(
             ["system_id", "org_id"],
             ["governance_ai_systems.id", "governance_ai_systems.org_id"],
@@ -2846,8 +2856,9 @@ class GovernanceEnvironmentalAssessment(Base):
     __tablename__ = "governance_environmental_assessments"
 
     id = Column(String, primary_key=True, default=_new_id)
-    system_id = Column(String, ForeignKey("governance_ai_systems.id"), nullable=False, index=True)
-    evidence_id = Column(String, ForeignKey("governance_evidence.id"), nullable=True, index=True)
+    org_id = Column(String, nullable=False)
+    system_id = Column(String, nullable=False, index=True)
+    evidence_id = Column(String, nullable=True, index=True)
     version = Column(Integer, nullable=False, default=1)
     boundary_json = Column(Text, nullable=False, default="{}")
     period_start = Column(String, nullable=True)
@@ -2877,11 +2888,36 @@ class GovernanceEnvironmentalAssessment(Base):
     payload_json = Column(Text, nullable=False, default="{}")
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
 
-    ai_system = relationship("GovernanceAISystem", back_populates="environmental_assessments")
+    ai_system = relationship(
+        "GovernanceAISystem",
+        back_populates="environmental_assessments",
+        foreign_keys=[system_id, org_id],
+    )
 
     __table_args__ = (
-        Index("idx_governance_env_assessments_system_version", "system_id", "version", unique=True),
+        Index(
+            "idx_governance_env_assessments_org_system_version",
+            "org_id",
+            "system_id",
+            "version",
+            unique=True,
+        ),
         Index("idx_governance_env_assessments_recommendation", "recommendation"),
+        ForeignKeyConstraint(
+            ["system_id", "org_id"],
+            ["governance_ai_systems.id", "governance_ai_systems.org_id"],
+            name="fk_governance_environmental_assessment_system_tenant",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["evidence_id", "system_id", "org_id"],
+            [
+                "governance_evidence.id",
+                "governance_evidence.system_id",
+                "governance_evidence.org_id",
+            ],
+            name="fk_governance_environmental_assessment_evidence_tenant",
+        ),
     )
 
     def __repr__(self) -> str:

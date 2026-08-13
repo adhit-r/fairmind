@@ -26,7 +26,7 @@
 - [ ] Add 30-day transactional idempotency and an append-only per-organization audit hash chain.
 - [ ] Feature-disable automatic enforcement, untrusted external linking, workers, and unsupported modality packs at both API and UI boundaries.
 - [x] Add forward migration 013 without rewriting migration 012; extend checksum-ledger drift detection.
-- [ ] Mark existing plans/runs contract v1 without fabricating registry identities; keep them readable but prevent new execution until upgraded.
+- [x] Mark existing plans/runs contract v1 without fabricating registry identities; keep them readable but prevent new execution until upgraded.
 
 Task 12B milestone: the checked Passport v2 binding and link-separation rows are
 implemented as an internal, default-off application kernel. They do not imply

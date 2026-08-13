@@ -13,6 +13,7 @@ from api.main import app
 from config.database import db_manager
 from config.cache import cache_manager
 from config.auth import auth_manager, User, UserRole
+from config.jwt_exceptions import InvalidTokenException
 
 
 class TestDatabasePooling:
@@ -206,6 +207,12 @@ class TestJWTAuthentication:
         api_key = auth_manager.create_api_key(user, "test_key")
         assert isinstance(api_key, str)
         assert len(api_key) > 100
+
+        for token in (access_token, refresh_token, api_key):
+            payload = auth_manager.jwt_manager.verify_token(token)
+            assert payload is not None
+            assert payload["sub"] == user.id
+            assert payload["user_id"] == user.id
     
     @pytest.mark.asyncio
     async def test_token_verification(self):
@@ -224,10 +231,26 @@ class TestJWTAuthentication:
         access_token = auth_manager.create_access_token(user)
         token_data = await auth_manager.verify_token(access_token)
         
-        assert token_data.user_id
+        assert token_data.user_id == user.id
         assert token_data.email == user.email
         assert token_data.role == user.role
         assert token_data.permissions == user.permissions
+
+    @pytest.mark.asyncio
+    async def test_token_verification_rejects_mismatched_subject(self):
+        token = auth_manager.jwt_manager.create_token(
+            {
+                "sub": "different-user",
+                "user_id": "expected-user",
+                "email": "expected@example.test",
+                "roles": [UserRole.ANALYST.value],
+                "permissions": [],
+                "token_type": "access",
+            }
+        )
+
+        with pytest.raises(InvalidTokenException):
+            await auth_manager.verify_token(token)
     
     @pytest.mark.asyncio
     async def test_token_revocation(self):
