@@ -23,7 +23,11 @@ from src.application.ports.evaluator_catalog import (
     EvaluatorCatalogRecord,
     EvaluatorCatalogUnitOfWork,
 )
-from src.application.services.evaluator_registration import (
+from src.application.evaluator_catalog_contracts import (
+    evaluator_binding_hash,
+    evaluator_binding_projection,
+)
+from src.application.evaluator_registration import (
     EvaluatorIdentityBinding,
     EvaluatorRegistrationCeremony,
     EvaluatorRegistrationCeremonyError,
@@ -77,24 +81,6 @@ def _safe_uuid(factory: Callable[[], object]) -> str:
     if str(parsed) != value:
         raise RuntimeError("The server UUID factory returned a non-canonical identity.")
     return value
-
-
-def evaluator_binding_projection(binding: EvaluatorIdentityBinding) -> dict[str, str]:
-    """Return the exact immutable tuple that is approved and later admitted."""
-
-    return {
-        "evaluatorId": binding.evaluator_id,
-        "sourceType": binding.source_type,
-        "adapterName": binding.adapter_name,
-        "adapterVersion": binding.adapter_version,
-        "resultContractVersion": binding.result_contract_version,
-        "issuerId": binding.issuer_id,
-        "signingKeyId": binding.key_id,
-    }
-
-
-def evaluator_binding_hash(binding: EvaluatorIdentityBinding) -> str:
-    return canonical_sha256(evaluator_binding_projection(binding))
 
 
 def _record_view(record: EvaluatorCatalogRecord) -> dict[str, object]:

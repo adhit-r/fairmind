@@ -33,10 +33,8 @@ from database.governance_models import (
     GovernanceEvidenceTrustPolicyVersion,
     GovernanceIdempotencyRecord,
 )
-from src.application.services.evaluation_workbench_service import (
-    EvaluationWorkbenchError,
-    EvaluationWorkbenchService,
-)
+from src.application.evaluation_workbench_contracts import EvaluationWorkbenchError
+from src.application.services.evaluation_workbench_service import EvaluationWorkbenchService
 from src.application.services.trust_administration_service import (
     TrustAdministrationService,
 )

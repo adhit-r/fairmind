@@ -26,7 +26,7 @@ from src.application.ports.evidence_admission import (
     UuidFactory,
     VerifiedPassportV2Record,
 )
-from src.application.services.evaluation_workbench_service import (
+from src.application.evaluation_workbench_contracts import (
     EVIDENCE_RESULTS_BY_TECHNICAL_STATUS,
     TERMINAL_TECHNICAL_STATUSES,
     aggregate_run_result_axes,
@@ -37,10 +37,10 @@ from src.application.services.evidence_authenticity_service import (
     EvidenceAuthenticityError,
     EvidenceAuthenticityService,
 )
-from src.application.services.evaluator_catalog_service import (
+from src.application.evaluator_catalog_contracts import (
     evaluator_binding_hash,
 )
-from src.application.services.evaluator_registration import (
+from src.application.evaluator_registration import (
     EvaluatorIdentityBinding,
     EvaluatorRegistrationCeremonyError,
 )

@@ -9,7 +9,8 @@
 ## P0 — Trustworthy control plane
 
 - [x] Capture fresh backend, frontend, browser, build, PostgreSQL, boundary, and archive-import baselines.
-- [ ] Split evaluation planning, runs, evidence admission, decisions, and worker ports while preserving `api -> application -> domain -> infrastructure`.
+- [x] Split evaluation planning, runs, evidence admission, decisions, and worker ports while preserving `api -> application -> domain -> infrastructure`.
+  - Checkpoint: catalog/version, planning, and run use cases now have narrow application services and ports composed over one request-scoped transactional UoW; evidence admission, review, governance decision, catalog, and trust retain their independently composed boundaries. Pure binding, freshness, evaluator-registration, and JWK policies live in neutral application modules, so infrastructure imports no application services. The worker port is declaration-only: no route, adapter, queue, lease, credential, persistence, or execution was added. See `docs/audits/2026-08-14-p0-assurance-service-port-split.md`.
 - [x] Add immutable target versions containing exact subject, version, digest, deployment, connector, and manifest identity.
 - [x] Preserve the current target kinds and add `vision_model`.
 - [x] Add immutable suite versions with compatible target kinds, phases, depths, delivery modes, configuration schema, budgets, runner digest, adapter version, and result contract.

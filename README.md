@@ -737,13 +737,16 @@ See [Security Policy](docs/SECURITY.md) for complete security policy.
 ### Current phase: 2027 assurance foundation
 
 The current branch is an internal trust-foundation alpha. The trustworthy
-control-plane checklist is 14/19 complete (73.7%), and the full roadmap is
-23/92 complete (25.0%). The P1 worker layer, real evaluation engines, modality
+control-plane checklist is 15/19 complete (78.9%), and the full roadmap is
+24/92 complete (26.1%). The P1 worker layer, real evaluation engines, modality
 packs, lifecycle workflows, and rollout gates remain open.
 
 **Implemented and verified for the current slice**
 
 - Immutable target and suite identity contracts
+- Narrow Assurance V2 catalog/version, planning, run, evidence, review,
+  decision, and trust application boundaries sharing one audited transactional
+  UoW; the worker port remains declaration-only and default-deny
 - Server-generated execution-envelope binding
 - Passport v2 scope, signature, expiry, replay, and admission primitives
 - Atomic evidence persistence and separate execution/evidence/review/governance states

@@ -33,7 +33,7 @@ from src.application.services.evaluator_catalog_service import (
     MAX_CATALOG_LIST_OFFSET,
     EvaluatorCatalogService,
 )
-from src.application.services.evaluator_registration import EvaluatorIdentityBinding
+from src.application.evaluator_registration import EvaluatorIdentityBinding
 from src.application.services.governance_assurance_service import OrgMembership
 
 _IDENTIFIER_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"

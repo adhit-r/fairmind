@@ -16,7 +16,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-import src.application.services.evaluation_workbench_service as evaluation_service_module
+import src.application.services.evaluation_catalog_versions_service as evaluation_catalog_versions_service_module
+import src.application.services.evaluation_plan_service as evaluation_plan_service_module
+import src.application.services.evaluation_run_service as evaluation_run_service_module
+import src.application.evaluation_workbench_contracts as evaluation_service_module
 import src.domain.assurance.evaluation_v2 as evaluation_v2_module
 from database.connection import Base, DatabaseManager
 from database.governance_models import (
@@ -36,11 +39,11 @@ from database.models import Organization, OrganizationMember, User
 from src.application.ports.evaluation_workbench import FrozenJsonObject
 from src.application.ports.evidence_freshness import EvidenceFreshnessClassification
 from src.application.ports.governance_decision import GovernanceDecisionScope
-from src.application.services.evaluation_workbench_service import (
+from src.application.evaluation_workbench_contracts import (
     EvaluationWorkbenchError,
-    EvaluationWorkbenchService,
     assurance_request_hash,
 )
+from src.application.services.evaluation_workbench_service import EvaluationWorkbenchService
 from src.domain.assurance.evaluation_v2 import (
     MAX_EXECUTION_ENVELOPE_BYTES,
     AssuranceContractValidationError,
@@ -560,7 +563,7 @@ def test_authoritative_binding_decoder_rejects_unsafe_json_before_verification(
         raise AssertionError("stored JSON must be rejected before application verification")
 
     monkeypatch.setattr(
-        evaluation_service_module,
+        evaluation_plan_service_module,
         "_verify_plan_graph",
         verifier_must_not_run,
     )
@@ -617,7 +620,7 @@ def test_catalog_string_array_rejects_an_object_member_before_verification(
     session.commit()
 
     monkeypatch.setattr(
-        evaluation_service_module,
+        evaluation_catalog_versions_service_module,
         "_verify_suite",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(
             AssertionError("stored string arrays must fail before verification")
@@ -984,7 +987,7 @@ def test_run_read_rejects_invalid_layer_verdict_encodings_before_verification(
         raise AssertionError("stored JSON must be rejected before application verification")
 
     monkeypatch.setattr(
-        evaluation_service_module,
+        evaluation_run_service_module,
         "_verify_run_record",
         verifier_must_not_run,
     )
@@ -1171,7 +1174,7 @@ def test_run_list_verifies_one_plan_graph_once_per_request(repository_fixture, m
         return load_graph(**kwargs)
 
     monkeypatch.setattr(repository, "get_plan_graph", count_graph_load)
-    verify_graph = evaluation_service_module._verify_plan_graph
+    verify_graph = evaluation_run_service_module._verify_plan_graph
     verify_calls = 0
 
     def count_graph_verification(graph):
@@ -1180,7 +1183,7 @@ def test_run_list_verifies_one_plan_graph_once_per_request(repository_fixture, m
         return verify_graph(graph)
 
     monkeypatch.setattr(
-        evaluation_service_module,
+        evaluation_run_service_module,
         "_verify_plan_graph",
         count_graph_verification,
     )
@@ -2344,7 +2347,7 @@ def test_actual_envelope_overflow_returns_compact_409_without_persistence(
         )
 
     monkeypatch.setattr(
-        evaluation_service_module,
+        evaluation_run_service_module,
         "build_execution_envelope_v2",
         reject_actual_overflow,
     )

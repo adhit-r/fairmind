@@ -20,8 +20,8 @@ from src.application.ports.evidence_review import (
     ReviewedEvidenceRecord,
     UuidFactory,
 )
-from src.application.services.evaluation_workbench_service import assurance_request_hash
-from src.application.services import evidence_freshness_service as freshness
+from src.application.evaluation_workbench_contracts import assurance_request_hash
+from src.application import evidence_freshness as freshness
 from src.domain.assurance.evaluation_v2 import (
     AssuranceContractValidationError,
     canonical_sha256,

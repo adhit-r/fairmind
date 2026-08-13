@@ -16,7 +16,7 @@ from src.application.ports.evidence_admission import (
     TrustedEvidenceAdmissionContext,
     TrustedSigningKey,
 )
-from src.application.services.evaluation_workbench_service import verify_run_record_binding
+from src.application.evaluation_workbench_contracts import verify_run_record_binding
 from src.domain.assurance.evaluation_v2 import canonical_sha256
 from src.domain.assurance.evidence_passport_v2 import expected_execution_binding_v2
 

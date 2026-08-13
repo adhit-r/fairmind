@@ -25,7 +25,7 @@ from src.application.ports.trust_administration import (
     TrustAdministrationUnitOfWork,
     TrustPolicyVersionRecord,
 )
-from src.application.services.evidence_authenticity_service import (
+from src.application.evidence_authenticity_contracts import (
     EvidenceAuthenticityError,
     canonical_ed25519_public_jwk,
 )

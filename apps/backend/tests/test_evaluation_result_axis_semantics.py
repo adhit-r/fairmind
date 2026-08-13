@@ -13,7 +13,7 @@ from src.application.ports.evaluation_workbench import (
     SuiteExecutionRecord,
 )
 from src.application.ports.evidence_freshness import EvidenceFreshnessClassification
-from src.application.services.evaluation_workbench_service import (
+from src.application.evaluation_workbench_contracts import (
     _verify_suite_execution_state,
     aggregate_run_result_axes,
 )

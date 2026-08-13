@@ -25,7 +25,7 @@ from src.application.ports.evidence_admission import (
     EvidenceAdmissionAuthorityRecord,
     EvidenceAdmissionScope,
 )
-from src.application.services.evaluation_workbench_service import (
+from src.application.evaluation_workbench_contracts import (
     _envelope_suite_binding,
     _envelope_target_binding,
     _envelope_trust_binding,

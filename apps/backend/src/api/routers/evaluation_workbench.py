@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy.orm import Session
 
 from database.connection import get_db
-from api.composition.evaluation_workbench import build_evaluation_workbench_service
+from api.composition.evaluation_workbench import build_evaluation_workbench_services
 from api.composition.governance_decision import build_governance_decision_service
 from api.composition.verified_evidence_admission import (
     build_verified_evidence_admission_service,
@@ -39,10 +39,14 @@ from src.api.routers.governance_assurance import (
 from src.application.ports.evidence_admission import EvidenceAdmissionScope
 from src.application.ports.evidence_review import EvidenceReviewScope
 from src.application.ports.governance_decision import GovernanceDecisionScope
-from src.application.services.evaluation_workbench_service import (
+from src.application.services.evaluation_catalog_versions_service import (
+    EvaluationCatalogVersionsService,
+)
+from src.application.services.evaluation_plan_service import EvaluationPlanService
+from src.application.services.evaluation_run_service import EvaluationRunService
+from src.application.evaluation_workbench_contracts import (
     EvaluationWorkbenchError,
     EvaluationWorkbenchInputError,
-    EvaluationWorkbenchService,
     canonical_assurance_json,
 )
 from src.application.services.verified_evidence_admission_service import (
@@ -646,8 +650,16 @@ async def _payload(request: Request, model: type[StrictModel]) -> dict[str, Any]
     return value
 
 
-def _service(db: Session) -> EvaluationWorkbenchService:
-    return build_evaluation_workbench_service(db)
+def _catalog_versions_service(db: Session) -> EvaluationCatalogVersionsService:
+    return build_evaluation_workbench_services(db).catalog_versions
+
+
+def _planning_service(db: Session) -> EvaluationPlanService:
+    return build_evaluation_workbench_services(db).planning
+
+
+def _run_service(db: Session) -> EvaluationRunService:
+    return build_evaluation_workbench_services(db).runs
 
 
 def get_verified_evidence_admission_service(
@@ -726,7 +738,7 @@ def _require_evidence_scope(
     """Bind every path identity to the same immutable run and suite record."""
 
     try:
-        run = _service(db).get_run(
+        run = _run_service(db).get_run(
             org_id=organization_id,
             system_id=system_id,
             run_id=run_id,
@@ -759,7 +771,7 @@ def _require_decision_scope(
     """Bind every decision path identity to the same persisted v2 run."""
 
     try:
-        run = _service(db).get_run(
+        run = _run_service(db).get_run(
             org_id=organization_id,
             system_id=system_id,
             run_id=run_id,
@@ -874,7 +886,7 @@ async def create_target(
 ):
     require_evaluation_permission(membership, EVALUATION_CATALOG_ADMIN_PERMISSION)
     try:
-        result = _service(db).create_target_version(
+        result = _catalog_versions_service(db).create_target_version(
             org_id=membership.org_id,
             system_id=system_id,
             actor_id=membership.user_id,
@@ -896,7 +908,7 @@ def list_targets(
     db: Session = Depends(get_db),
 ):
     try:
-        result = _service(db).list_target_versions(
+        result = _catalog_versions_service(db).list_target_versions(
             org_id=membership.org_id,
             system_id=system_id,
         )
@@ -918,7 +930,7 @@ def get_target(
     db: Session = Depends(get_db),
 ):
     try:
-        result = _service(db).get_target_version(
+        result = _catalog_versions_service(db).get_target_version(
             org_id=membership.org_id,
             system_id=system_id,
             target_version_id=target_version_id,
@@ -944,7 +956,7 @@ async def create_suite(
 ):
     require_evaluation_permission(membership, EVALUATION_CATALOG_ADMIN_PERMISSION)
     try:
-        result = _service(db).create_suite_version(
+        result = _catalog_versions_service(db).create_suite_version(
             org_id=membership.org_id,
             actor_id=membership.user_id,
             idempotency_key=idempotency_key,
@@ -964,7 +976,7 @@ def list_suites(
     db: Session = Depends(get_db),
 ):
     try:
-        return _service(db).list_suite_versions(org_id=membership.org_id)
+        return _catalog_versions_service(db).list_suite_versions(org_id=membership.org_id)
     except EvaluationWorkbenchError as error:
         _raise(error)
 
@@ -979,7 +991,7 @@ def get_suite(
     db: Session = Depends(get_db),
 ):
     try:
-        result = _service(db).get_suite_version(
+        result = _catalog_versions_service(db).get_suite_version(
             org_id=membership.org_id,
             suite_version_id=suite_version_id,
         )
@@ -1002,7 +1014,7 @@ def activate_suite(
 ):
     require_evaluation_permission(membership, EVALUATION_CATALOG_ADMIN_PERMISSION)
     try:
-        result = _service(db).activate_suite_version(
+        result = _catalog_versions_service(db).activate_suite_version(
             org_id=membership.org_id,
             suite_version_id=suite_version_id,
             actor_id=membership.user_id,
@@ -1030,7 +1042,7 @@ async def create_plan(
 ):
     require_evaluation_permission(membership, EVALUATION_PLAN_WRITE_PERMISSION)
     try:
-        result = _service(db).create_plan(
+        result = _planning_service(db).create_plan(
             org_id=membership.org_id,
             system_id=system_id,
             actor_id=membership.user_id,
@@ -1052,7 +1064,7 @@ def list_plans(
     db: Session = Depends(get_db),
 ):
     try:
-        result = _service(db).list_plans(
+        result = _planning_service(db).list_plans(
             org_id=membership.org_id,
             system_id=system_id,
         )
@@ -1074,7 +1086,7 @@ def get_plan(
     db: Session = Depends(get_db),
 ):
     try:
-        result = _service(db).get_plan(
+        result = _planning_service(db).get_plan(
             org_id=membership.org_id,
             system_id=system_id,
             plan_id=plan_id,
@@ -1099,7 +1111,7 @@ def activate_plan(
 ):
     require_evaluation_permission(membership, EVALUATION_PLAN_ACTIVATE_PERMISSION)
     try:
-        result = _service(db).activate_plan(
+        result = _planning_service(db).activate_plan(
             org_id=membership.org_id,
             system_id=system_id,
             plan_id=plan_id,
@@ -1125,7 +1137,7 @@ def preflight(
     db: Session = Depends(get_db),
 ):
     try:
-        result = _service(db).preflight(
+        result = _planning_service(db).preflight(
             org_id=membership.org_id,
             system_id=system_id,
             plan_id=plan_id,
@@ -1154,7 +1166,7 @@ async def create_run(
 ):
     require_evaluation_permission(membership, EVALUATION_RUN_CREATE_PERMISSION)
     try:
-        result = _service(db).create_run(
+        result = _run_service(db).create_run(
             org_id=membership.org_id,
             system_id=system_id,
             plan_id=plan_id,
@@ -1177,7 +1189,7 @@ def list_runs(
     db: Session = Depends(get_db),
 ):
     try:
-        result = _service(db).list_runs(
+        result = _run_service(db).list_runs(
             org_id=membership.org_id,
             system_id=system_id,
         )
@@ -1199,7 +1211,7 @@ def get_run(
     db: Session = Depends(get_db),
 ):
     try:
-        result = _service(db).get_run(
+        result = _run_service(db).get_run(
             org_id=membership.org_id,
             system_id=system_id,
             run_id=run_id,

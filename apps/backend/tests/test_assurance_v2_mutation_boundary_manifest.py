@@ -13,13 +13,17 @@ import ast
 import inspect
 import textwrap
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable
 
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
 from sqlalchemy.orm import Session
 
-from api.composition.evaluation_workbench import build_evaluation_workbench_service
+from api.composition.evaluation_workbench import (
+    build_evaluation_workbench_service,
+    build_evaluation_workbench_services,
+)
 from api.composition.evaluator_catalog import build_evaluator_catalog_service
 from api.composition.governance_decision import build_governance_decision_service
 from api.composition.trust_administration import build_trust_administration_service
@@ -39,6 +43,12 @@ from api.routes.evaluator_catalog import (
 )
 from api.routes.trust_administration import trust_administration_router
 from src.application.services.evaluation_workbench_service import EvaluationWorkbenchService
+from src.application.services.evaluation_catalog_versions_service import (
+    EvaluationCatalogVersionsService,
+)
+from src.application.services.evaluation_plan_service import EvaluationPlanService
+from src.application.services.evaluation_run_service import EvaluationRunService
+from src.application.ports.evaluation_worker import EvaluationWorkerPort
 from src.application.services.evaluator_catalog_service import EvaluatorCatalogService
 from src.application.services.governance_decision_service import GovernanceDecisionService
 from src.application.services.trust_administration_service import TrustAdministrationService
@@ -81,13 +91,38 @@ _CATALOG = _CORE + "/evaluation-v2/evaluator-catalog/registrations"
 _TRUST = _CORE + "/evaluation-v2/trust"
 
 
+def test_workbench_specialized_services_share_one_request_scoped_uow() -> None:
+    """The V2 catalog, plan, and run boundaries must retain one atomic UoW."""
+
+    session = Session()
+    try:
+        services = build_evaluation_workbench_services(session)
+
+        assert isinstance(services.catalog_versions, EvaluationCatalogVersionsService)
+        assert isinstance(services.planning, EvaluationPlanService)
+        assert isinstance(services.runs, EvaluationRunService)
+        assert services.catalog_versions.unit_of_work is services.planning.unit_of_work
+        assert services.planning.unit_of_work is services.runs.unit_of_work
+        assert isinstance(
+            services.runs.unit_of_work,
+            SqlAlchemyEvaluationWorkbenchUnitOfWork,
+        )
+
+        facade = EvaluationWorkbenchService(services.runs.unit_of_work)
+        assert facade.catalog_versions.unit_of_work is services.runs.unit_of_work
+        assert facade.planning.unit_of_work is services.runs.unit_of_work
+        assert facade.runs.unit_of_work is services.runs.unit_of_work
+    finally:
+        session.close()
+
+
 # This list is intentionally exact.  Adding a V2 mutation must add one line
 # here and prove it reaches the same idempotency/audit boundary.
 MUTATION_MANIFEST = (
     MutationRoute(
         _SYSTEM + "/target-versions",
         "create_target",
-        EvaluationWorkbenchService,
+        EvaluationCatalogVersionsService,
         "create_target_version",
         "evaluation-v2.target.create",
         "workbench",
@@ -96,7 +131,7 @@ MUTATION_MANIFEST = (
     MutationRoute(
         _CORE + "/evaluation-v2/suite-versions",
         "create_suite",
-        EvaluationWorkbenchService,
+        EvaluationCatalogVersionsService,
         "create_suite_version",
         "evaluation-v2.suite.create",
         "workbench",
@@ -105,7 +140,7 @@ MUTATION_MANIFEST = (
     MutationRoute(
         _CORE + "/evaluation-v2/suite-versions/{suite_version_id}/activate",
         "activate_suite",
-        EvaluationWorkbenchService,
+        EvaluationCatalogVersionsService,
         "activate_suite_version",
         "evaluation-v2.suite.activate",
         "workbench",
@@ -114,7 +149,7 @@ MUTATION_MANIFEST = (
     MutationRoute(
         _SYSTEM + "/plans",
         "create_plan",
-        EvaluationWorkbenchService,
+        EvaluationPlanService,
         "create_plan",
         "evaluation-v2.plan.create",
         "workbench",
@@ -123,7 +158,7 @@ MUTATION_MANIFEST = (
     MutationRoute(
         _SYSTEM + "/plans/{plan_id}/activate",
         "activate_plan",
-        EvaluationWorkbenchService,
+        EvaluationPlanService,
         "activate_plan",
         "evaluation-v2.plan.activate",
         "workbench",
@@ -132,7 +167,7 @@ MUTATION_MANIFEST = (
     MutationRoute(
         _SYSTEM + "/plans/{plan_id}/runs",
         "create_run",
-        EvaluationWorkbenchService,
+        EvaluationRunService,
         "create_run",
         "evaluation-v2.run.create",
         "workbench",
@@ -371,8 +406,12 @@ def _calls_service_method(node: ast.AST, *, receiver: str, method: str) -> bool:
 
 
 def _route_service_reference(item: MutationRoute) -> str:
-    if item.service is EvaluationWorkbenchService:
-        return "_service"
+    if item.service is EvaluationCatalogVersionsService:
+        return "_catalog_versions_service"
+    if item.service is EvaluationPlanService:
+        return "_planning_service"
+    if item.service is EvaluationRunService:
+        return "_run_service"
     if item.service is EvaluatorCatalogService:
         return "catalog_service"
     if item.service is VerifiedEvidenceAdmissionService:
@@ -404,6 +443,64 @@ def _mutation_command_uses_operation_parameter(node: ast.AST) -> bool:
 
 def _route_by_endpoint() -> dict[str, APIRoute]:
     return {route.endpoint.__name__: route for route in _mounted_mutation_routes()}
+
+
+def _imported_modules(path: Path) -> set[str]:
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    modules: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            modules.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module is not None:
+            if node.module == "src.application.services":
+                modules.update(f"{node.module}.{alias.name}" for alias in node.names)
+            else:
+                modules.add(node.module)
+    return modules
+
+
+def test_infrastructure_depends_on_ports_and_contracts_not_application_services() -> None:
+    """Persistence may use ports and neutral contracts, never application services."""
+
+    infrastructure = Path(__file__).parents[1] / "src" / "infrastructure"
+    imported = {
+        module
+        for path in infrastructure.rglob("*.py")
+        for module in _imported_modules(path)
+    }
+    forbidden = sorted(
+        module for module in imported if module.startswith("src.application.services.")
+    )
+    assert not forbidden, forbidden
+    assert "src.application.evaluation_workbench_contracts" in imported
+
+
+def test_contracts_module_has_no_workbench_compatibility_facade() -> None:
+    """Moving helpers cannot leave a second copy of V2 business orchestration."""
+
+    contracts = (
+        Path(__file__).parents[1]
+        / "src"
+        / "application"
+        / "evaluation_workbench_contracts.py"
+    )
+    tree = ast.parse(contracts.read_text(encoding="utf-8"), filename=str(contracts))
+    assert not any(
+        isinstance(node, ast.ClassDef) and node.name == "EvaluationWorkbenchService"
+        for node in tree.body
+    )
+
+
+def test_worker_port_is_reserved_without_a_mounted_v2_execution_route() -> None:
+    """The P0 worker port cannot become a P1 executor through this split."""
+
+    assert EvaluationWorkerPort.__name__ == "EvaluationWorkerPort"
+    assert {"capabilities", "execute"} <= set(EvaluationWorkerPort.__dict__)
+    assert not any(
+        "/evaluation-v2/workers" in route.path
+        or "/evaluation-v2/worker" in route.path
+        for route in _mounted_mutation_routes()
+    )
 
 
 def test_assurance_v2_mutation_manifest_is_the_exact_enabled_post_surface() -> None:

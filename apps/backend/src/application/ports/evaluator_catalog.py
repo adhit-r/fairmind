@@ -18,7 +18,7 @@ from src.application.ports.evaluation_workbench import (
     MutationCommand,
     MutationResult,
 )
-from src.application.services.evaluator_registration import (
+from src.application.evaluator_registration import (
     EvaluatorIdentityBinding,
     EvaluatorRegistrationRecord,
 )

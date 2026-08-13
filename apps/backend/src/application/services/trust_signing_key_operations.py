@@ -12,7 +12,7 @@ from src.application.ports.evaluation_workbench import (
     MutationResult,
 )
 from src.application.ports.trust_administration import EvidenceSigningKeyRecord
-from src.application.services.evidence_authenticity_service import (
+from src.application.evidence_authenticity_contracts import (
     EvidenceAuthenticityError,
     canonical_ed25519_public_jwk,
 )

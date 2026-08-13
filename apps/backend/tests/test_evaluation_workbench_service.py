@@ -9,13 +9,13 @@ from time import perf_counter
 
 import pytest
 
-from src.application.services.evaluation_workbench_service import (
+from src.application.evaluation_workbench_contracts import (
     EvaluationWorkbenchError,
-    EvaluationWorkbenchService,
     _execution_view,
     _run_view,
     _verify_suite_execution_state,
 )
+from src.application.services.evaluation_workbench_service import EvaluationWorkbenchService
 from src.application.ports.evaluation_workbench import (
     EvidenceTrustMetadataRecord,
     FrozenJsonObject,

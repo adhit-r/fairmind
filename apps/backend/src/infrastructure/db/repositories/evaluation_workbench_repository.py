@@ -82,12 +82,12 @@ from src.application.ports.governance_decision import (
     GovernanceDecisionScope,
     PersistGovernanceDecisionCommand,
 )
-from src.application.services.evaluator_catalog_service import evaluator_binding_hash
-from src.application.services import evidence_freshness_service as freshness
-from src.application.services.evaluation_workbench_service import (
+from src.application.evaluator_catalog_contracts import evaluator_binding_hash
+from src.application import evidence_freshness as freshness
+from src.application.evaluation_workbench_contracts import (
     verify_stored_suite_link_projection,
 )
-from src.application.services.evaluator_registration import (
+from src.application.evaluator_registration import (
     EvaluatorIdentityBinding,
     EvaluatorRegistrationCeremonyError,
     EvaluatorRegistrationRecord,
