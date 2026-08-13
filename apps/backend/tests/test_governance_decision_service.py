@@ -34,9 +34,9 @@ SCOPE = GovernanceDecisionScope(
 )
 LAYERS = {
     "suites": {"suite-execution-a": "conditional"},
-    "modalities": {"predictive_model": "conditional"},
+    "modalities": {},
     "components": {},
-    "riskDimensions": {"fairness": "conditional"},
+    "riskDimensions": {},
 }
 EVIDENCE_SET = {
     "target": {
@@ -226,6 +226,46 @@ def test_decision_rejects_classifier_result_from_a_different_database_instant() 
 
     assert caught.value.code == "governance_decision_integrity_conflict"
     assert len(repository.persisted) == 1
+
+
+@pytest.mark.parametrize(
+    ("axis", "claim"),
+    (
+        ("modalities", {"video": "approved"}),
+        ("components", {"tool-router": "conditional"}),
+        ("riskDimensions", {"safety": "approved"}),
+    ),
+)
+def test_decision_rejects_non_suite_claims_without_registered_pack_authority(
+    axis: str,
+    claim: dict[str, str],
+) -> None:
+    repository = _FakeRepository(_authority())
+    service = GovernanceDecisionService(
+        _FakeUnitOfWork(repository),
+        uuid_factory=lambda: DECISION_ID,
+    )
+    layers = {
+        "suites": {"suite-execution-a": "conditional"},
+        "modalities": {},
+        "components": {},
+        "riskDimensions": {},
+    }
+    layers[axis] = claim
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        service.decide(
+            scope=SCOPE,
+            actor_id="decider-a",
+            idempotency_key=f"decision-unsupported-{axis}",
+            expected_verdict_version=0,
+            overall_verdict="conditional",
+            layer_verdicts=layers,
+            rationale="Only evidence-bound suite claims are currently supported.",
+        )
+
+    assert caught.value.code == "governance_decision_layer_axis_unsupported"
+    assert repository.persisted == []
 
 
 @pytest.mark.parametrize(

@@ -127,6 +127,12 @@ def _validated_layers(value: object) -> FrozenJsonObject:
             "The governance-decision request is invalid.",
             status_code=422,
         )
+    if any(normalized[axis] for axis in ("modalities", "components", "riskDimensions")):
+        raise _error(
+            "governance_decision_layer_axis_unsupported",
+            "Non-suite governance claims require registered capability-pack authority.",
+            status_code=422,
+        )
     return FrozenJsonObject.from_mapping(normalized)
 
 
