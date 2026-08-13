@@ -439,7 +439,7 @@ class EvidenceAdmissionResponse(StrictModel):
     run_technical_status: TechnicalStatus = Field(alias="runTechnicalStatus")
     run_evidence_outcome: EvidenceResultStatus = Field(alias="runEvidenceOutcome")
     overall_verdict: GovernanceVerdict = Field(alias="overallVerdict")
-    verdict_version: int = Field(alias="verdictVersion", ge=1)
+    verdict_version: int = Field(alias="verdictVersion", ge=0)
     effective_expires_at: str = Field(alias="effectiveExpiresAt")
     verified_at: str = Field(alias="verifiedAt")
 

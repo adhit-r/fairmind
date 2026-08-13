@@ -8,6 +8,13 @@ export type EvidenceTrustSuiteInput = {
   admissionStatus: string
   reviewStatus: string
   freshnessStatus: string
+  recordedFreshnessStatus: string | null
+  freshnessContractVersion: '1.0.0' | null
+  freshnessEvaluatedAt: string | null
+  freshnessEffectiveAt: string | null
+  expiringAt: string | null
+  freshnessReasonCodes: string[] | null
+  decisionEvidenceEligible: boolean | null
   evidenceTrust?: {
     sourceType: string | null
     issuerKey: string | null
@@ -18,7 +25,6 @@ export type EvidenceTrustSuiteInput = {
     reviewedBy: string | null
     reviewedAt: string | null
     admissionReasons: string[] | null
-    signingKeyRevocationReason: string | null
   } | null
   limitations: unknown[]
   failureCode: string | null
@@ -67,7 +73,11 @@ export type EvidenceTrustPresentation = {
     reviewer: string
     reviewedAt: string
     admissionReasons: string[]
-    signingKeyRevocationReason: string
+    freshnessEvaluatedAt: string
+    freshnessEffectiveAt: string
+    expiringAt: string
+    freshnessReasonCodes: string[]
+    decisionEvidenceEligible: string
     evidenceResult: string
     admission: string
     freshness: string
@@ -178,7 +188,15 @@ export function buildEvidenceTrustPresentation(input: EvidenceTrustInput): Evide
       reviewer: text(suite.evidenceTrust?.reviewedBy),
       reviewedAt: text(suite.evidenceTrust?.reviewedAt),
       admissionReasons: reasons(suite.evidenceTrust),
-      signingKeyRevocationReason: text(suite.evidenceTrust?.signingKeyRevocationReason),
+      freshnessEvaluatedAt: text(suite.freshnessEvaluatedAt),
+      freshnessEffectiveAt: text(suite.freshnessEffectiveAt),
+      expiringAt: text(suite.expiringAt),
+      freshnessReasonCodes: (suite.freshnessReasonCodes ?? []).filter(
+        (reason): reason is string => typeof reason === 'string' && reason.trim().length > 0,
+      ),
+      decisionEvidenceEligible: suite.decisionEvidenceEligible === null
+        ? NOT_RETURNED
+        : suite.decisionEvidenceEligible ? 'Eligible' : 'Not eligible',
       evidenceResult: sentenceLabel(suite.evidenceResultStatus),
       admission: sentenceLabel(suite.admissionStatus),
       freshness: sentenceLabel(suite.freshnessStatus),

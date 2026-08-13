@@ -37,6 +37,7 @@ from src.application.ports.evidence_admission import (
     EvidenceAdmissionScope,
     PersistVerifiedPassportV2Command,
 )
+from src.application.ports.evidence_freshness import EvidenceFreshnessClassification
 from src.application.services.trusted_evidence_admission_resolver import (
     TrustedEvidenceAdmissionResolver,
 )
@@ -1142,10 +1143,41 @@ def test_cancelled_evaluator_keeps_pending_evidence_separate_from_technical_stat
 
 def test_mixed_suite_axes_preserve_failed_execution_and_failed_model_evidence(
     repository_fixture,
+    monkeypatch,
 ) -> None:
     """Catches collapsing evaluator execution failure into the model evidence axis."""
 
     session, _factory = repository_fixture
+
+    def classify_synthetic_linked_evidence(
+        **values: object,
+    ) -> EvidenceFreshnessClassification:
+        as_of = values["as_of"]
+        recorded_status = values["recorded_freshness_status"]
+        assert isinstance(as_of, datetime)
+        assert recorded_status == "current"
+        return EvidenceFreshnessClassification(
+            classification_status="ok",
+            freshness_contract_version="1.0.0",
+            recorded_freshness_status=recorded_status,
+            effective_freshness_status="current",
+            evaluated_at=as_of,
+            effective_at=as_of - timedelta(seconds=1),
+            expiring_at=as_of + timedelta(days=1),
+            reason_codes=(),
+            decision_eligible=False,
+        )
+
+    monkeypatch.setattr(
+        SqlAlchemyEvaluationWorkbenchRepository,
+        "_acquire_operational_freshness_read_lock",
+        lambda self, *, organization_id: None,
+    )
+    monkeypatch.setattr(
+        SqlAlchemyEvaluationWorkbenchRepository,
+        "_classify_evidence_freshness",
+        lambda self, **values: classify_synthetic_linked_evidence(**values),
+    )
     _plan, run = _create_active_plan_and_run(_service(session), suites=2)
     _seed_signing_authority(session)
     repository = SqlAlchemyEvaluationWorkbenchRepository(session)

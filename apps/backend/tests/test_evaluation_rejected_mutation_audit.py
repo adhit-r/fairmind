@@ -946,13 +946,13 @@ def test_tampered_completed_expiry_cannot_force_callback_reexecution(
     assert len(_events(audit_session)) == 1
 
 
-def test_expired_in_progress_reclaim_strictly_advances_a_rolled_back_clock(
+def test_tampered_in_progress_expiry_cannot_force_callback_execution(
     audit_session,
     monkeypatch,
 ) -> None:
-    command = _command(key="rolled-back-clock")
+    command = _command(key="tampered-in-progress-expiry")
     observed_now = datetime(2026, 1, 1, tzinfo=timezone.utc)
-    previous_claim = datetime(2030, 1, 1, tzinfo=timezone.utc)
+    previous_claim = datetime(2025, 12, 31, tzinfo=timezone.utc)
     audit_session.execute(
         GovernanceIdempotencyRecord.__table__.insert().values(
             id=str(uuid.uuid4()),
@@ -969,19 +969,50 @@ def test_expired_in_progress_reclaim_strictly_advances_a_rolled_back_clock(
     )
     audit_session.commit()
     monkeypatch.setattr(workbench_repository_module, "_now", lambda: observed_now)
-    callback_times: list[datetime] = []
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        SqlAlchemyEvaluationWorkbenchUnitOfWork(audit_session).mutate(
+            command,
+            lambda _claimed_at: pytest.fail("tampered expiry must not execute callback"),
+        )
+
+    assert caught.value.code == "idempotency_response_invalid"
+    assert _events(audit_session) == []
+
+
+def test_expired_in_progress_generation_is_reclaimed_for_exactly_thirty_days(
+    audit_session,
+    monkeypatch,
+) -> None:
+    command = _command(key="expired-in-progress-generation")
+    previous_claim = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    observed_now = previous_claim + timedelta(days=31)
+    audit_session.execute(
+        GovernanceIdempotencyRecord.__table__.insert().values(
+            id=str(uuid.uuid4()),
+            org_id=command.organization_id,
+            actor_id=command.actor_id,
+            operation=command.operation,
+            key_hash=hashlib.sha256(command.idempotency_key.encode("ascii")).hexdigest(),
+            request_hash="c" * 64,
+            status="in_progress",
+            created_at=previous_claim.isoformat(),
+            updated_at=previous_claim.isoformat(),
+            expires_at=(previous_claim + timedelta(days=30)).isoformat(),
+        )
+    )
+    audit_session.commit()
+    monkeypatch.setattr(workbench_repository_module, "_now", lambda: observed_now)
 
     result = SqlAlchemyEvaluationWorkbenchUnitOfWork(audit_session).mutate(
         command,
-        lambda claimed_at: (callback_times.append(claimed_at) or _success_outcome()),
+        lambda _claimed_at: _success_outcome(),
     )
 
-    expected_claim = previous_claim + timedelta(microseconds=1)
-    record = _idempotency_record(audit_session, key="rolled-back-clock")
+    record = _idempotency_record(audit_session, key="expired-in-progress-generation")
     assert result.status == 201
-    assert callback_times == [expected_claim]
-    assert record["created_at"] == expected_claim.isoformat()
-    assert record["expires_at"] == (expected_claim + timedelta(days=30)).isoformat()
+    assert record["created_at"] == observed_now.isoformat()
+    assert record["expires_at"] == (observed_now + timedelta(days=30)).isoformat()
 
 
 def test_tampered_rejected_idempotency_response_fails_closed_without_secret_replay(

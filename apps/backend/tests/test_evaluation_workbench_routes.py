@@ -424,7 +424,7 @@ class _RecordingAdmissionService:
                 "runTechnicalStatus": "succeeded",
                 "runEvidenceOutcome": "passed",
                 "overallVerdict": "review",
-                "verdictVersion": 1,
+                "verdictVersion": 0,
                 "effectiveExpiresAt": "2026-08-08T12:00:00+00:00",
                 "verifiedAt": "2026-08-08T11:00:00+00:00",
             },
@@ -901,6 +901,7 @@ def test_verified_evidence_submit_requires_explicit_permission_and_exact_scope(
 
         accepted = client.post(valid_url, headers=request_headers, content=b"signed-passport")
         assert accepted.status_code == 201, accepted.text
+        assert accepted.json()["verdictVersion"] == 0
         assert len(recorder.calls) == 1
         call = recorder.calls[0]
         assert call["actor_id"] == USER

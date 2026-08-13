@@ -34,6 +34,7 @@ from database.governance_models import (
 )
 from database.models import Organization, OrganizationMember, User
 from src.application.ports.evaluation_workbench import FrozenJsonObject
+from src.application.ports.evidence_freshness import EvidenceFreshnessClassification
 from src.application.ports.governance_decision import GovernanceDecisionScope
 from src.application.services.evaluation_workbench_service import (
     EvaluationWorkbenchError,
@@ -1443,7 +1444,48 @@ def test_run_verifier_rejects_partial_suite_evidence_link_tuple(
     assert caught.value.detail() == BINDING_INTEGRITY_DETAIL
 
 
-def _with_complete_evidence_link(execution, *, admission_status: str = "verified"):
+def _operational_freshness(
+    execution,
+    *,
+    recorded_status: str,
+    decision_eligible: bool = False,
+) -> EvidenceFreshnessClassification:
+    evaluated_at = datetime.fromisoformat(execution.updated_at)
+    effective_at = evaluated_at - timedelta(seconds=1)
+    if recorded_status == "current":
+        effective_status = "current"
+        expiring_at = evaluated_at + timedelta(days=1)
+        reasons: tuple[str, ...] = ()
+    elif recorded_status == "stale":
+        effective_status = "stale"
+        expiring_at = evaluated_at + timedelta(days=1)
+        reasons = ("recorded_stale",)
+    elif recorded_status == "superseded":
+        effective_status = "superseded"
+        expiring_at = evaluated_at + timedelta(days=1)
+        reasons = ("recorded_superseded",)
+    else:
+        raise ValueError("unsupported synthetic freshness status")
+    return EvidenceFreshnessClassification(
+        classification_status="ok",
+        freshness_contract_version="1.0.0",
+        recorded_freshness_status=recorded_status,
+        effective_freshness_status=effective_status,
+        evaluated_at=evaluated_at,
+        effective_at=effective_at,
+        expiring_at=expiring_at,
+        reason_codes=reasons,
+        decision_eligible=decision_eligible,
+    )
+
+
+def _with_complete_evidence_link(
+    execution,
+    *,
+    admission_status: str = "verified",
+    freshness_status: str = "current",
+    decision_eligible: bool = False,
+):
     return replace(
         execution,
         evidence_run_id=str(uuid.uuid4()),
@@ -1451,6 +1493,12 @@ def _with_complete_evidence_link(execution, *, admission_status: str = "verified
         linked_by=USER,
         linked_at=execution.updated_at,
         admission_status=admission_status,
+        freshness_status=freshness_status,
+        operational_freshness=_operational_freshness(
+            execution,
+            recorded_status=freshness_status,
+            decision_eligible=decision_eligible,
+        ),
     )
 
 
@@ -1616,6 +1664,7 @@ def test_complete_suite_evidence_links_remain_valid_across_admission_history(
         _with_complete_evidence_link(
             record.suite_executions[0],
             admission_status=admission_status,
+            freshness_status=freshness_status,
         ),
         technical_status="succeeded",
         evidence_result_status="failed",
@@ -1657,6 +1706,7 @@ def test_accepted_suite_evidence_remains_readable_after_historical_rollover(
         _with_complete_evidence_link(
             record.suite_executions[0],
             admission_status=admission_status,
+            freshness_status=freshness_status,
         ),
         technical_status="succeeded",
         evidence_result_status="failed",
@@ -1790,7 +1840,10 @@ def test_positive_verdict_version_allows_valid_layered_and_overall_decisions(
     _, run = _create_active_plan_and_run(service)
     _, record, graph = _stored_run_and_graph(session, run["id"])
     execution = replace(
-        _with_complete_evidence_link(record.suite_executions[0]),
+        _with_complete_evidence_link(
+            record.suite_executions[0],
+            decision_eligible=True,
+        ),
         technical_status="succeeded",
         evidence_result_status="failed",
         review_status="accepted",
@@ -2667,7 +2720,8 @@ def test_live_and_expired_idempotency_records_are_handled_transactionally(
     )
     now = datetime.now(timezone.utc)
 
-    def insert_record(key: str, *, expires_at: datetime) -> None:
+    def insert_record(key: str, *, created_at: datetime) -> None:
+        expires_at = created_at + timedelta(days=30)
         session.execute(
             GovernanceIdempotencyRecord.__table__.insert().values(
                 id=str(uuid.uuid4()),
@@ -2677,14 +2731,14 @@ def test_live_and_expired_idempotency_records_are_handled_transactionally(
                 key_hash=hashlib.sha256(key.encode("ascii")).hexdigest(),
                 request_hash=request_hash,
                 status="in_progress",
-                created_at=now.isoformat(),
-                updated_at=now.isoformat(),
+                created_at=created_at.isoformat(),
+                updated_at=created_at.isoformat(),
                 expires_at=expires_at.isoformat(),
             )
         )
         session.commit()
 
-    insert_record("live-key", expires_at=now + timedelta(minutes=5))
+    insert_record("live-key", created_at=now)
     with pytest.raises(EvaluationWorkbenchError) as live:
         service.create_target_version(
             org_id=ORG,
@@ -2695,7 +2749,7 @@ def test_live_and_expired_idempotency_records_are_handled_transactionally(
         )
     assert live.value.code == "idempotency_in_progress"
 
-    insert_record("expired-key", expires_at=now - timedelta(seconds=1))
+    insert_record("expired-key", created_at=now - timedelta(days=30, seconds=1))
     created = service.create_target_version(
         org_id=ORG,
         system_id="system-a",

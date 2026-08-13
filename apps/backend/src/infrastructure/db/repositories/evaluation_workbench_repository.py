@@ -4604,6 +4604,10 @@ class SqlAlchemyEvaluationWorkbenchUnitOfWork:
                     raise
         assert row is not None
         try:
+            _validate_idempotency_generation(
+                claimed_at=row["created_at"],
+                expires_at=row["expires_at"],
+            )
             previous_claimed_at = _parse_timestamp(row["created_at"])
             previous_expires_at = _parse_timestamp(row["expires_at"])
         except (AttributeError, TypeError, ValueError):
