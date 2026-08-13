@@ -303,7 +303,9 @@ async def get_current_user(
 async def get_current_active_user(
     current_user: TokenData = Depends(get_current_user)
 ) -> TokenData:
-    """Get current active user."""
+    """Return a human session authenticated with an access token."""
+    if current_user.token_type != TokenType.ACCESS:
+        raise InvalidTokenException("Access token required")
     # In production, you might want to check if user is still active in database
     return current_user
 
