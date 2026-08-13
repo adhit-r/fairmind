@@ -435,6 +435,16 @@ if settings.assurance_v2_enabled:
         )
     else:
         logger.info("Evaluator catalog administration route is disabled")
+    if settings.assurance_v2_trust_administration_enabled:
+        _include_router(
+            "api.routes.trust_administration",
+            prefix="/api/v1/ai-governance",
+            tags=["evaluation-workbench-v2-trust-administration"],
+            attr="trust_administration_router",
+            required=True,
+        )
+    else:
+        logger.info("Trust administration route is disabled")
 else:
     logger.info("Assurance-contract v2 routes are disabled")
 _include_router("api.routes.environmental", tags=["environmental"], required=False)

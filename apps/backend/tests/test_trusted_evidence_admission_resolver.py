@@ -486,6 +486,7 @@ def test_resolver_returns_protocol_identities_and_database_clock() -> None:
         ({"issuer_status": "revoked"}, "evidence_issuer_untrusted"),
         ({"issuer_type": "fairmind_worker"}, "evidence_issuer_untrusted"),
         ({"maximum_evidence_age_seconds": 0}, "trust_policy_invalid"),
+        ({"unsigned_import_policy": "allow"}, "trust_policy_invalid"),
         ({"source_restrictions": ("fairmind_worker",)}, "evidence_issuer_restricted"),
         (
             {"source_restrictions": ("external_provider", "bogus")},

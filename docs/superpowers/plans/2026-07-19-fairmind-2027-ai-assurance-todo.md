@@ -22,7 +22,7 @@
 - [ ] Require verified evidence from FairMind workers and external adapters; imports may remain unsigned only as visibly unverified human-review material.
 - [x] Keep linking separate from governance decision-making; a link yields `review` or `insufficient`, never automatic approval/blocking.
 - [ ] Add granular plan, run, evidence, decision, catalog, trust, worker, and separation-override permissions.
-  - Checkpoint: live human plan, run, evidence, decision, and catalog routes now require literal persisted permissions, and direct-mounted v2 routers fail closed. Trust administration, service-only worker authorization, audited separation override, and independent submit/link surfaces remain open.
+  - Checkpoint: live human plan, run, evidence, decision, catalog, and trust-administration routes now require literal persisted permissions, and direct-mounted v2 routers fail closed. Service-only worker authorization, audited separation override, and independent submit/link surfaces remain open.
 - [ ] Enforce four-eyes review and audited owner overrides.
 - [ ] Add 30-day transactional idempotency and an append-only per-organization audit hash chain.
 - [ ] Feature-disable automatic enforcement, untrusted external linking, workers, and unsupported modality packs at both API and UI boundaries.

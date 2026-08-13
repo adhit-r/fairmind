@@ -1,8 +1,8 @@
 """Fail-closed permission vocabulary for Assurance V2 HTTP boundaries.
 
 Only permissions in ``LIVE_HUMAN_PERMISSION_ERRORS`` authorize current human
-API routes. Reserved names document the planned vocabulary without exposing a
-trust, worker, or separation-override capability.
+API routes. Worker and separation override remain reserved; trust admin is live
+only at the independently gated trust-administration route.
 """
 
 from __future__ import annotations
@@ -23,8 +23,8 @@ EVALUATION_EVIDENCE_REVIEW_PERMISSION: Final = "evaluation:evidence:review"
 EVALUATION_DECISION_PERMISSION: Final = "evaluation:decision"
 EVALUATION_CATALOG_ADMIN_PERMISSION: Final = "evaluation:catalog:admin"
 
-# Reserved vocabulary. These constants do not authorize a current route.
 EVALUATION_TRUST_ADMIN_PERMISSION: Final = "evaluation:trust:admin"
+# Reserved vocabulary. These constants do not authorize a current human route.
 EVALUATION_SEPARATION_OVERRIDE_PERMISSION: Final = "evaluation:separation:override"
 EVALUATION_WORKER_PERMISSION: Final = "evaluation:worker"  # Service principals only.
 
@@ -60,6 +60,10 @@ LIVE_HUMAN_PERMISSION_ERRORS: Final[dict[str, tuple[str, str]]] = {
     EVALUATION_CATALOG_ADMIN_PERMISSION: (
         "evaluation_catalog_admin_forbidden",
         "The evaluation:catalog:admin permission is required.",
+    ),
+    EVALUATION_TRUST_ADMIN_PERMISSION: (
+        "evaluation_trust_admin_forbidden",
+        "The evaluation:trust:admin permission is required.",
     ),
 }
 

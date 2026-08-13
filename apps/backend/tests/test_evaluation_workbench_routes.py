@@ -46,6 +46,7 @@ from api.routes.evaluation_workbench import (
     get_verified_evidence_review_service,
 )
 from tests.evaluation_workbench_sqlite import (
+    active_trust_policy_values_for_verifier_harness,
     allow_deliberate_check_constraint_corruption,
     install_authoritative_assurance_fixtures_for_application_verifier_harness,
 )
@@ -210,32 +211,25 @@ def workbench_client(monkeypatch: pytest.MonkeyPatch):
             name="system-b",
         )
     )
+    policy_created_at = now_iso()
     session.execute(
         GovernanceEvidenceTrustPolicyVersion.__table__.insert().values(
-            id="trust-a",
-            org_id=ORG,
-            version="1.0.0",
-            policy_json="{}",
-            policy_hash=canonical_sha256({}),
-            maximum_evidence_age_seconds=86400,
-            unsigned_import_policy="manual_review",
-            status="active",
-            created_by=USER,
-            created_at=now_iso(),
+            **active_trust_policy_values_for_verifier_harness(
+                policy_id="trust-a",
+                organization_id=ORG,
+                actor_id=USER,
+                created_at=policy_created_at,
+            )
         )
     )
     session.execute(
         GovernanceEvidenceTrustPolicyVersion.__table__.insert().values(
-            id="trust-b",
-            org_id=FOREIGN_ORG,
-            version="1.0.0",
-            policy_json="{}",
-            policy_hash=canonical_sha256({}),
-            maximum_evidence_age_seconds=86400,
-            unsigned_import_policy="manual_review",
-            status="active",
-            created_by=USER,
-            created_at=now_iso(),
+            **active_trust_policy_values_for_verifier_harness(
+                policy_id="trust-b",
+                organization_id=FOREIGN_ORG,
+                actor_id=USER,
+                created_at=policy_created_at,
+            )
         )
     )
     session.commit()

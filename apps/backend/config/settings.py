@@ -61,6 +61,9 @@ class Settings(BaseSettings):
     # release gate, narrow organization permission, and audited ceremony are
     # deliberately enabled together.
     assurance_v2_evaluator_catalog_enabled: bool = False
+    # Issuer, public-key, and trust-policy administration remains independently
+    # hidden until PostgreSQL 013f and the literal trust-admin permission release.
+    assurance_v2_trust_administration_enabled: bool = False
     assurance_migration_schema: Optional[str] = None
     
     # Neon Auth + Data API

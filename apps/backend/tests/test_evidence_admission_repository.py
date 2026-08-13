@@ -62,6 +62,10 @@ from tests.test_evaluation_workbench_repository import (
     _target_payload,
     repository_fixture as base_repository_fixture,
 )
+from tests.evaluation_workbench_sqlite import (
+    active_trust_policy_values_for_verifier_harness,
+    public_signing_key_values_for_verifier_harness,
+)
 
 
 @pytest.fixture
@@ -247,6 +251,7 @@ def _seed_signing_authority(
     actor_id: str = USER,
     issuer_key: str = "issuer-protocol-key",
     signer_key_id: str = "signer-protocol-key",
+    public_x: str = "A" * 43,
     suite_restrictions: tuple[str, ...] = (),
     target_restrictions: tuple[str, ...] = (),
 ) -> tuple[str, str]:
@@ -271,18 +276,17 @@ def _seed_signing_authority(
     )
     session.execute(
         insert(GovernanceEvidenceSigningKey.__table__).values(
-            id=signing_key_internal_id,
-            org_id=org_id,
-            issuer_id=issuer_internal_id,
-            key_id=signer_key_id,
-            algorithm="Ed25519",
-            public_jwk_json=canonical_json({"crv": "Ed25519", "kty": "OKP", "x": "A" * 43}),
-            valid_from=(now - timedelta(days=1)).isoformat(),
-            valid_until=(now + timedelta(days=1)).isoformat(),
-            revoked_at=None,
-            revocation_reason=None,
-            created_by=actor_id,
-            created_at=(now - timedelta(minutes=1)).isoformat(),
+            **public_signing_key_values_for_verifier_harness(
+                signing_key_id=signing_key_internal_id,
+                organization_id=org_id,
+                issuer_id=issuer_internal_id,
+                protocol_key_id=signer_key_id,
+                actor_id=actor_id,
+                created_at=(now - timedelta(minutes=1)).isoformat(),
+                valid_from=(now - timedelta(days=1)).isoformat(),
+                valid_until=(now + timedelta(days=1)).isoformat(),
+                public_x=public_x,
+            )
         )
     )
     session.commit()
@@ -572,16 +576,12 @@ def _seed_complete_foreign_authority(session: Session) -> SimpleNamespace:
     now = datetime.now(timezone.utc)
     session.execute(
         insert(GovernanceEvidenceTrustPolicyVersion.__table__).values(
-            id=trust_policy_id,
-            org_id=OTHER_ORG,
-            version="1.0.0",
-            policy_json=canonical_json({}),
-            policy_hash=canonical_sha256({}),
-            maximum_evidence_age_seconds=86400,
-            unsigned_import_policy="manual_review",
-            status="active",
-            created_by=USER,
-            created_at=now.isoformat(),
+            **active_trust_policy_values_for_verifier_harness(
+                policy_id=trust_policy_id,
+                organization_id=OTHER_ORG,
+                actor_id=USER,
+                created_at=now.isoformat(),
+            )
         )
     )
     session.commit()
@@ -643,6 +643,7 @@ def _seed_complete_foreign_authority(session: Session) -> SimpleNamespace:
         org_id=OTHER_ORG,
         issuer_key="foreign-issuer-protocol-key",
         signer_key_id="foreign-signer-protocol-key",
+        public_x=("A" * 42) + "E",
         suite_restrictions=(suite["id"],),
         target_restrictions=(target["id"],),
     )

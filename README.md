@@ -746,16 +746,20 @@ packs, lifecycle workflows, and rollout gates remain open.
 - Atomic evidence persistence and separate execution/evidence/review/governance states
 - Literal, database-backed permissions for every live human Assurance V2 mutation;
   direct-mounted v2 routers also enforce the master feature gate
+- Default-off, PostgreSQL-authoritative administration for evidence issuers,
+  public Ed25519 verification keys, and immutable trust policies, with exact
+  persisted trust-admin authorization and hardened legacy role delegation
 - Tenant-bound environmental evidence routes, response admission, and migration 013e,
   verified on SQLite and a disposable local PostgreSQL 14 instance
-- Focused unit, route, SQLite migration-parity, and native PostgreSQL 14
-  verification for the legacy-contract and environmental-hardening slices
+- Focused unit, route, SQLite migration-parity, PostgreSQL 14 lifecycle, and
+  concurrent trust-authority verification for the current internal-alpha slices
 
 **Next release gates**
 
 - Complete P0 API permissions, evaluator registry, review workflow, audit chain, and evidence UI
-- Implement the reserved trust-administration, service-worker, and audited
-  separation-override permissions before calling the granular-permission row complete
+- Implement service-worker authorization, an audited separation override, and
+  independently invocable submit/link surfaces before calling the granular-
+  permission row complete
 - Pass the private governance pilot (Gate A)
 - Build the isolated worker and sandbox (Gate B)
 - Connect and independently benchmark real modality evaluators (Gate C)
@@ -763,7 +767,7 @@ packs, lifecycle workflows, and rollout gates remain open.
 
 No compliance certification, automatic approval, automatic enforcement, or generally available “FairMind Verified” claim is made by this branch.
 
-See the [2027 assurance roadmap](docs/superpowers/plans/2026-07-19-fairmind-2027-ai-assurance-todo.md), [Task 12B architecture note](docs/architecture/verified-evidence-admission-task12b.md), and [release-gate backlog](docs/superpowers/plans/2026-08-08-task12b-release-gate-backlog.md).
+See the [2027 assurance roadmap](docs/superpowers/plans/2026-07-19-fairmind-2027-ai-assurance-todo.md), [trust-authority evidence](docs/audits/2026-08-13-p0-trust-authority-administration.md), [Task 12B architecture note](docs/architecture/verified-evidence-admission-task12b.md), and [release-gate backlog](docs/superpowers/plans/2026-08-08-task12b-release-gate-backlog.md).
 
 ---
 

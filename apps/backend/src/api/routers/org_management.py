@@ -27,6 +27,10 @@ from config.database import get_db_connection, get_database
 from config.settings import settings
 from config.auth import get_current_active_user, TokenData
 from core.decorators.org_permissions import require_org_admin, require_org_member
+from src.application.services.governance_assurance_service import (
+    has_legacy_role_delegation_blocked_permission,
+    normalize_org_role_permissions,
+)
 
 logger = logging.getLogger("fairmind.org_management")
 router = APIRouter(prefix="/api/v1/organizations", tags=["organization-management"])
@@ -201,7 +205,7 @@ async def _log_org_audit(
 async def _check_org_membership(org_id: str, user_id: str, db):
     """Check if user is a member of the organization."""
     member = await db.fetch_one(
-        "SELECT id, role FROM org_members WHERE org_id = :org_id AND user_id = :user_id",
+        "SELECT id, role FROM org_members WHERE org_id = :org_id AND user_id = :user_id AND status = 'active'",
         {"org_id": org_id, "user_id": user_id}
     )
     return member
@@ -210,7 +214,7 @@ async def _check_org_membership(org_id: str, user_id: str, db):
 async def _check_org_admin(org_id: str, user_id: str, db):
     """Check if user is an admin of the organization."""
     admin = await db.fetch_one(
-        "SELECT id FROM org_members WHERE org_id = :org_id AND user_id = :user_id AND role IN ('admin', 'owner')",
+        "SELECT id FROM org_members WHERE org_id = :org_id AND user_id = :user_id AND status = 'active' AND role IN ('admin', 'owner')",
         {"org_id": org_id, "user_id": user_id}
     )
     return admin is not None
@@ -219,10 +223,31 @@ async def _check_org_admin(org_id: str, user_id: str, db):
 async def _count_org_admins(org_id: str, db):
     """Count number of admins in organization."""
     result = await db.fetch_one(
-        "SELECT COUNT(*) as count FROM org_members WHERE org_id = :org_id AND role IN ('admin', 'owner')",
+        "SELECT COUNT(*) as count FROM org_members WHERE org_id = :org_id AND status = 'active' AND role IN ('admin', 'owner')",
         {"org_id": org_id}
     )
     return result["count"] if result else 0
+
+
+async def _role_has_delegation_blocked_permission(org_id: str, role: str, db) -> bool:
+    role_record = await db.fetch_one(
+        "SELECT permissions FROM org_roles WHERE org_id = :org_id AND name = :name",
+        {"org_id": org_id, "name": role},
+    )
+    if not role_record:
+        return False
+
+    permissions = role_record["permissions"]
+    if isinstance(permissions, str):
+        try:
+            permissions = json.loads(permissions)
+        except (TypeError, ValueError):
+            return True
+
+    normalized_permissions = normalize_org_role_permissions(permissions)
+    if not isinstance(permissions, list) or tuple(permissions) != normalized_permissions:
+        return True
+    return has_legacy_role_delegation_blocked_permission(permissions)
 
 
 def _permission_list(value) -> List[str]:
@@ -231,9 +256,7 @@ def _permission_list(value) -> List[str]:
             value = json.loads(value)
         except (TypeError, ValueError):
             return []
-    if not isinstance(value, list):
-        return []
-    return [permission for permission in value if isinstance(permission, str)]
+    return list(normalize_org_role_permissions(value))
 
 
 # ── Endpoints ────────────────────────────────────────────────────────────────
@@ -397,6 +420,12 @@ async def invite_member(
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Admin access required"
+                )
+
+            if await _role_has_delegation_blocked_permission(org_id, payload.role, db):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="This role cannot be assigned through organization management",
                 )
 
             # Check if user already a member
@@ -645,6 +674,14 @@ async def accept_invitation(
             org_id = str(org["id"])
             org_name = org["name"]
 
+            if await _role_has_delegation_blocked_permission(
+                org_id, invitation["role"], db
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="This role cannot be assigned through organization management",
+                )
+
             # Check if user is already a member of this org
             existing_member = await db.fetch_one(
                 "SELECT id FROM org_members WHERE org_id = :org_id AND user_id = :user_id",
@@ -763,6 +800,17 @@ async def update_member(
             )
             if not member:
                 raise HTTPException(status_code=404, detail="Member not found")
+
+            assigned_role = payload.role or (
+                member["role"] if payload.status == "active" else None
+            )
+            if assigned_role and await _role_has_delegation_blocked_permission(
+                org_id, assigned_role, db
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="This role cannot be assigned through organization management",
+                )
 
             # Prevent removing last admin
             if payload.role and payload.role not in ('admin', 'owner') and member["role"] in ('admin', 'owner'):
@@ -923,7 +971,7 @@ async def list_org_roles(
                         "id": str(r["id"]),
                         "name": r["name"],
                         "description": r["description"],
-                        "permissions": r["permissions"] if isinstance(r["permissions"], list) else [],
+                        "permissions": _permission_list(r["permissions"]),
                         "is_system_role": r["is_system_role"],
                         "created_at": r["created_at"].isoformat() if r["created_at"] else None,
                     }
@@ -959,6 +1007,17 @@ async def create_org_role(
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Admin access required"
+                )
+
+            if has_legacy_role_delegation_blocked_permission(payload.permissions):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Reserved evaluation permissions cannot be assigned through organization roles",
+                )
+            if tuple(payload.permissions) != normalize_org_role_permissions(payload.permissions):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Role permissions must be a bounded unique list of valid strings",
                 )
 
             # Check for duplicate role name

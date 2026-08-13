@@ -32,6 +32,7 @@ from src.infrastructure.db.repositories import (
 from src.infrastructure.db.repositories.evaluation_audit_chain import (
     EvaluationAuditAppend,
     append_evaluation_audit_event,
+    verify_evaluation_audit_chain,
 )
 from src.infrastructure.db.repositories.evaluation_workbench_repository import (
     SqlAlchemyEvaluationWorkbenchUnitOfWork,
@@ -230,6 +231,90 @@ def test_success_replay_is_bound_to_the_exact_success_audit_receipt(
             "domainDetails": {"kind": "test"},
         },
     }
+
+
+def test_preclaim_idempotency_conflict_appends_redacted_audit_without_rebinding_record(
+    audit_session,
+) -> None:
+    unit_of_work = SqlAlchemyEvaluationWorkbenchUnitOfWork(audit_session)
+    key = "preclaim-conflict-secret-key"
+    original_command = _command(key=key, request_hash="a" * 64)
+    unit_of_work.mutate(original_command, lambda _now: _success_outcome())
+    original_record = dict(_idempotency_record(audit_session, key=key))
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        unit_of_work.mutate(
+            _command(key=key, request_hash="b" * 64),
+            lambda _now: pytest.fail("conflicting request must not execute callback"),
+        )
+
+    assert caught.value.code == "idempotency_conflict"
+    assert dict(_idempotency_record(audit_session, key=key)) == original_record
+    rows = _events(audit_session)
+    assert len(rows) == 2
+    assert rows[1]["previous_hash"] == rows[0]["event_hash"]
+    assert rows[1]["action"] == "evaluation_v2.mutation.rejected"
+    assert rows[1]["outcome"] == "rejected"
+    assert rows[1]["resource_type"] == "evaluation_idempotency_key_hash"
+    assert rows[1]["resource_id"] == hashlib.sha256(key.encode("ascii")).hexdigest()
+    assert json.loads(rows[1]["details_json"]) == {
+        "schemaVersion": "evaluation-v2.preclaim-rejection-audit/v1",
+        "operation": "evaluation-v2.test.mutation",
+        "requestHash": "b" * 64,
+        "errorCode": "idempotency_conflict",
+        "statusCode": 409,
+    }
+    assert key not in rows[1]["details_json"]
+    assert "different request" not in rows[1]["details_json"]
+    verify_evaluation_audit_chain(audit_session, org_id=ORG)
+
+
+def test_preclaim_idempotency_in_progress_appends_redacted_audit_without_rebinding_record(
+    audit_session,
+) -> None:
+    key = "preclaim-in-progress-secret-key"
+    claimed_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+    audit_session.execute(
+        GovernanceIdempotencyRecord.__table__.insert().values(
+            id=str(uuid.uuid4()),
+            org_id=ORG,
+            actor_id=ACTOR,
+            operation="evaluation-v2.test.mutation",
+            key_hash=hashlib.sha256(key.encode("ascii")).hexdigest(),
+            request_hash="a" * 64,
+            status="in_progress",
+            created_at=claimed_at.isoformat(),
+            updated_at=claimed_at.isoformat(),
+            expires_at=(claimed_at + timedelta(days=30)).isoformat(),
+        )
+    )
+    audit_session.commit()
+    original_record = dict(_idempotency_record(audit_session, key=key))
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        SqlAlchemyEvaluationWorkbenchUnitOfWork(audit_session).mutate(
+            _command(key=key, request_hash="a" * 64),
+            lambda _now: pytest.fail("in-progress request must not execute callback"),
+        )
+
+    assert caught.value.code == "idempotency_in_progress"
+    assert dict(_idempotency_record(audit_session, key=key)) == original_record
+    rows = _events(audit_session)
+    assert len(rows) == 1
+    assert rows[0]["action"] == "evaluation_v2.mutation.rejected"
+    assert rows[0]["outcome"] == "rejected"
+    assert rows[0]["resource_type"] == "evaluation_idempotency_key_hash"
+    assert rows[0]["resource_id"] == hashlib.sha256(key.encode("ascii")).hexdigest()
+    assert json.loads(rows[0]["details_json"]) == {
+        "schemaVersion": "evaluation-v2.preclaim-rejection-audit/v1",
+        "operation": "evaluation-v2.test.mutation",
+        "requestHash": "a" * 64,
+        "errorCode": "idempotency_in_progress",
+        "statusCode": 409,
+    }
+    assert key not in rows[0]["details_json"]
+    assert "still in progress" not in rows[0]["details_json"]
+    verify_evaluation_audit_chain(audit_session, org_id=ORG)
 
 
 def test_success_replay_accepts_a_domain_valid_response_above_binding_item_limit(

@@ -758,6 +758,9 @@ class GovernanceEvidenceIssuer(Base):
     created_by = Column(String, nullable=False)
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
     updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    revoked_by = Column(String, nullable=True)
+    revoked_at = Column(String, nullable=True)
+    revocation_reason = Column(Text, nullable=True)
 
     __table_args__ = (
         UniqueConstraint("id", "org_id", name="uq_governance_evidence_issuer_tenant"),
@@ -765,6 +768,23 @@ class GovernanceEvidenceIssuer(Base):
         CheckConstraint(
             "status IN ('active', 'revoked')",
             name="ck_governance_evidence_issuer_status",
+        ),
+        CheckConstraint(
+            "issuer_type IN ('fairmind_worker', 'external_provider')",
+            name="ck_governance_evidence_issuer_type_013f",
+        ),
+        CheckConstraint(
+            "(status = 'active' AND revoked_by IS NULL AND revoked_at IS NULL "
+            "AND revocation_reason IS NULL) OR "
+            "(status = 'revoked' AND revoked_by IS NOT NULL AND revoked_at IS NOT NULL "
+            "AND revocation_reason IS NOT NULL "
+            "AND length(trim(revoked_by)) BETWEEN 1 AND 200 "
+            "AND length(trim(revocation_reason)) BETWEEN 1 AND 2000)",
+            name="ck_governance_evidence_issuer_revocation_013f",
+        ),
+        CheckConstraint(
+            _canonical_utc_timestamp("revoked_at"),
+            name="ck_governance_evidence_issuer_revoked_at_013f",
         ),
         Index(
             "idx_governance_evidence_issuers_org_status",
@@ -783,10 +803,12 @@ class GovernanceEvidenceSigningKey(Base):
     key_id = Column(String, nullable=False)
     algorithm = Column(String, nullable=False)
     public_jwk_json = Column(Text, nullable=False)
+    public_key_fingerprint = Column(String, nullable=False)
     valid_from = Column(String, nullable=False)
     valid_until = Column(String, nullable=False)
     revoked_at = Column(String, nullable=True)
     revocation_reason = Column(Text, nullable=True)
+    revoked_by = Column(String, nullable=True)
     created_by = Column(String, nullable=False)
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
 
@@ -803,6 +825,10 @@ class GovernanceEvidenceSigningKey(Base):
             "key_id",
             name="uq_governance_evidence_signing_key_id",
         ),
+        UniqueConstraint(
+            "public_key_fingerprint",
+            name="uq_governance_evidence_signing_key_fingerprint",
+        ),
         ForeignKeyConstraint(
             ["issuer_id", "org_id"],
             ["governance_evidence_issuers.id", "governance_evidence_issuers.org_id"],
@@ -816,9 +842,24 @@ class GovernanceEvidenceSigningKey(Base):
             name="ck_governance_evidence_signing_key_validity",
         ),
         CheckConstraint(
-            "(revoked_at IS NULL AND revocation_reason IS NULL) OR "
-            "(revoked_at IS NOT NULL AND revocation_reason IS NOT NULL)",
+            "(revoked_at IS NULL AND revocation_reason IS NULL AND revoked_by IS NULL) OR "
+            "(revoked_at IS NOT NULL AND revocation_reason IS NOT NULL "
+            "AND revoked_by IS NOT NULL "
+            "AND length(trim(revoked_by)) BETWEEN 1 AND 200 "
+            "AND length(trim(revocation_reason)) BETWEEN 1 AND 2000)",
             name="ck_governance_evidence_signing_key_revocation",
+        ),
+        CheckConstraint(
+            _lower_hex64("public_key_fingerprint"),
+            name="ck_governance_evidence_signing_key_fingerprint_013f",
+        ),
+        CheckConstraint(
+            _canonical_utc_timestamp("valid_from", nullable=False)
+            + " AND "
+            + _canonical_utc_timestamp("valid_until", nullable=False)
+            + " AND "
+            + _canonical_utc_timestamp("revoked_at"),
+            name="ck_governance_evidence_signing_key_timestamps_013f",
         ),
         Index(
             "idx_governance_evidence_signing_keys_org_issuer_key_revoked",
@@ -951,26 +992,81 @@ class GovernanceEvidenceTrustPolicyVersion(Base):
     unsigned_import_policy = Column(String, nullable=False)
     status = Column(String, nullable=False, default="draft")
     created_by = Column(String, nullable=False)
+    policy_schema_version = Column(String, nullable=False, default="1.0.0")
+    supersedes_id = Column(String, nullable=True)
+    activated_by = Column(String, nullable=True)
+    activated_at = Column(String, nullable=True)
+    retired_by = Column(String, nullable=True)
+    retired_at = Column(String, nullable=True)
+    retirement_reason = Column(Text, nullable=True)
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
 
     __table_args__ = (
         UniqueConstraint("id", "org_id", name="uq_governance_evidence_trust_policy_tenant"),
         UniqueConstraint("org_id", "version", name="uq_governance_evidence_trust_policy_version"),
+        ForeignKeyConstraint(
+            ["supersedes_id", "org_id"],
+            [
+                "governance_evidence_trust_policy_versions.id",
+                "governance_evidence_trust_policy_versions.org_id",
+            ],
+            name="fk_governance_evidence_trust_policy_supersedes",
+        ),
         CheckConstraint(
             _lower_hex64("policy_hash"),
             name="ck_governance_evidence_trust_policy_hash",
         ),
         CheckConstraint(
-            "maximum_evidence_age_seconds >= 0",
+            "maximum_evidence_age_seconds > 0",
             name="ck_governance_evidence_trust_policy_age",
         ),
         CheckConstraint(
-            "unsigned_import_policy IN ('reject', 'manual_review', 'allow')",
+            "unsigned_import_policy IN ('reject', 'manual_review')",
             name="ck_governance_evidence_trust_policy_unsigned",
         ),
         CheckConstraint(
             "status IN ('draft', 'active', 'retired')",
             name="ck_governance_evidence_trust_policy_status",
+        ),
+        CheckConstraint(
+            "policy_schema_version = '1.0.0'",
+            name="ck_governance_evidence_trust_policy_schema_013f",
+        ),
+        CheckConstraint(
+            "length(version) BETWEEN 5 AND 32",
+            name="ck_governance_evidence_trust_policy_version_bound_013f",
+        ),
+        CheckConstraint(
+            "supersedes_id IS NULL OR supersedes_id <> id",
+            name="ck_governance_evidence_trust_policy_supersedes_013f",
+        ),
+        CheckConstraint(
+            "(status = 'draft' AND activated_by IS NULL AND activated_at IS NULL "
+            "AND retired_by IS NULL AND retired_at IS NULL AND retirement_reason IS NULL) OR "
+            "(status = 'active' AND activated_by IS NOT NULL AND activated_at IS NOT NULL "
+            "AND length(trim(activated_by)) BETWEEN 1 AND 200 "
+            "AND retired_by IS NULL AND retired_at IS NULL AND retirement_reason IS NULL) OR "
+            "(status = 'retired' AND retired_by IS NOT NULL AND retired_at IS NOT NULL "
+            "AND retirement_reason IS NOT NULL "
+            "AND length(trim(retired_by)) BETWEEN 1 AND 200 "
+            "AND length(trim(retirement_reason)) BETWEEN 1 AND 2000 "
+            "AND ((activated_by IS NULL AND activated_at IS NULL) OR "
+            "(activated_by IS NOT NULL AND activated_at IS NOT NULL "
+            "AND length(trim(activated_by)) BETWEEN 1 AND 200)))",
+            name="ck_governance_evidence_trust_policy_lifecycle_013f",
+        ),
+        CheckConstraint(
+            _canonical_utc_timestamp("activated_at")
+            + " AND "
+            + _canonical_utc_timestamp("retired_at"),
+            name="ck_governance_evidence_trust_policy_timestamps_013f",
+        ),
+        Index(
+            "uq_governance_evidence_trust_policy_active_org",
+            "org_id",
+            unique=True,
+            postgresql_where=(status == "active"),
+            sqlite_where=(status == "active"),
         ),
         Index(
             "idx_governance_evidence_trust_policies_org_status_version",

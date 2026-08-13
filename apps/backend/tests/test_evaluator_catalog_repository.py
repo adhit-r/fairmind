@@ -32,6 +32,7 @@ from src.infrastructure.db.repositories.evaluation_workbench_repository import (
 )
 from tests.evaluation_workbench_sqlite import (
     install_authoritative_assurance_fixtures_for_application_verifier_harness,
+    public_signing_key_values_for_verifier_harness,
 )
 
 
@@ -73,18 +74,16 @@ def catalog_session():
     )
     session.execute(
         GovernanceEvidenceSigningKey.__table__.insert().values(
-            id="authority-key-a",
-            org_id="org-a",
-            issuer_id="authority-issuer-a",
-            key_id="key-a",
-            algorithm="Ed25519",
-            public_jwk_json="{}",
-            valid_from="2020-01-01T00:00:00+00:00",
-            valid_until="2099-01-01T00:00:00+00:00",
-            revoked_at=None,
-            revocation_reason=None,
-            created_by="admin-a",
-            created_at=NOW.isoformat(),
+            **public_signing_key_values_for_verifier_harness(
+                signing_key_id="authority-key-a",
+                organization_id="org-a",
+                issuer_id="authority-issuer-a",
+                protocol_key_id="key-a",
+                actor_id="admin-a",
+                created_at=NOW.isoformat(),
+                valid_from="2020-01-01T00:00:00+00:00",
+                valid_until="2099-01-01T00:00:00+00:00",
+            )
         )
     )
     session.commit()

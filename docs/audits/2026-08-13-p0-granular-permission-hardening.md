@@ -38,6 +38,11 @@ literal `evaluation:catalog:admin` authority.
 - Retained `evaluation:trust:admin`, `evaluation:worker`, and
   `evaluation:separation:override` as reserved, non-authorizing vocabulary.
 
+That statement describes this checkpoint's snapshot. The subsequent
+trust-authority checkpoint makes `evaluation:trust:admin` live only behind its
+own default-off API gate and PostgreSQL-authoritative administration boundary;
+worker and separation-override permissions remain non-authorizing.
+
 ## Verification
 
 - The integrated backend authorization, catalog, evidence, review, decision,
@@ -65,7 +70,8 @@ literal `evaluation:catalog:admin` authority.
 This checkpoint closes the reproduced legacy-permission and direct-mount
 bypasses for local source and test execution. It does not prove staging or
 production configuration. The master granular-permission roadmap row remains
-open: trust administration, service-principal worker authorization, an audited
-separation-of-duty override, and independently invocable evidence submit/link
-surfaces are not yet implemented. No certification, compliance, worker, or
-automatic-enforcement claim follows from this change.
+open. Trust administration is covered by the later trust-authority checkpoint,
+while service-principal worker authorization, an audited separation-of-duty
+override, and independently invocable evidence submit/link surfaces are not yet
+implemented. No certification, compliance, worker, or automatic-enforcement
+claim follows from this change.

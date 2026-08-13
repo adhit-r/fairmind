@@ -118,6 +118,7 @@ _BINDING_INTEGRITY_MESSAGE = "Stored assurance bindings failed integrity verific
 _AUDIT_CHAIN_INTEGRITY_MESSAGE = "Stored evaluation audit chain failed integrity verification."
 _REJECTED_IDEMPOTENCY_MARKER = "_fairmindEvaluationMutationRejected"
 _REJECTED_AUDIT_SCHEMA_VERSION = "evaluation-v2.rejected-mutation-audit/v2"
+_PRECLAIM_REJECTION_AUDIT_SCHEMA_VERSION = "evaluation-v2.preclaim-rejection-audit/v1"
 _REJECTED_RESPONSE_SCHEMA_VERSION = "evaluation-v2.rejected-idempotency-response/v2"
 _REJECTED_AUDIT_ACTION = "evaluation_v2.mutation.rejected"
 _REJECTED_AUDIT_RESOURCE_TYPE = "evaluation_idempotency_key_hash"
@@ -4442,6 +4443,33 @@ class SqlAlchemyEvaluationWorkbenchUnitOfWork:
             ),
         )
 
+    def _append_preclaim_rejected_audit(
+        self,
+        *,
+        command: MutationCommand,
+        error: EvaluationWorkbenchError,
+        rejected_at: datetime,
+    ) -> EvaluationAuditReceipt:
+        return append_evaluation_audit_event(
+            self.db,
+            event=EvaluationAuditAppend(
+                organization_id=command.organization_id,
+                actor_id=command.actor_id,
+                action=_REJECTED_AUDIT_ACTION,
+                outcome="rejected",
+                resource_type=_REJECTED_AUDIT_RESOURCE_TYPE,
+                resource_id=_idempotency_key_hash(command.idempotency_key),
+                details={
+                    "schemaVersion": _PRECLAIM_REJECTION_AUDIT_SCHEMA_VERSION,
+                    "operation": _audit_safe_operation(command.operation),
+                    "requestHash": _audit_safe_request_hash(command.request_hash),
+                    "errorCode": _audit_safe_code(error.code),
+                    "statusCode": error.status_code,
+                },
+                created_at=_iso(rejected_at),
+            ),
+        )
+
     def mutate(
         self,
         command: MutationCommand,
@@ -4451,10 +4479,30 @@ class SqlAlchemyEvaluationWorkbenchUnitOfWork:
             try:
                 self._lock_org(command.organization_id)
                 request_now = _now()
-                record_id, replay, claimed_at, expires_at = self._claim_idempotency(
-                    command=command,
-                    now=request_now,
-                )
+                try:
+                    record_id, replay, claimed_at, expires_at = self._claim_idempotency(
+                        command=command,
+                        now=request_now,
+                    )
+                except EvaluationWorkbenchError as error:
+                    if error.code not in {"idempotency_conflict", "idempotency_in_progress"}:
+                        raise
+                    safe_error = _safe_rejection_error(error)
+                    try:
+                        self._append_preclaim_rejected_audit(
+                            command=command,
+                            error=safe_error,
+                            rejected_at=request_now,
+                        )
+                        self.db.commit()
+                    except Exception:
+                        self.db.rollback()
+                        raise self._error(
+                            "evaluation_persistence_failed",
+                            "The assurance workflow could not be persisted atomically.",
+                            500,
+                        ) from None
+                    raise safe_error from None
                 if replay is not None:
                     self.db.rollback()
                     if isinstance(replay, EvaluationWorkbenchError):

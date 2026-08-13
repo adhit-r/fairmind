@@ -94,7 +94,7 @@ def _plain_value(value: object) -> object:
     return value
 
 
-def _canonical_ed25519_public_jwk(
+def canonical_ed25519_public_jwk(
     public_jwk: Mapping[str, object],
 ) -> dict[str, str]:
     """Return the exact three-member public JWK fingerprint domain.
@@ -195,7 +195,7 @@ class EvidenceAuthenticityService:
             raise EvidenceAuthenticityError("key is not trusted")
         if algorithm != trusted_key.algorithm:
             raise EvidenceAuthenticityError("key algorithm does not match signature")
-        canonical_public_jwk = _canonical_ed25519_public_jwk(trusted_key.public_jwk)
+        canonical_public_jwk = canonical_ed25519_public_jwk(trusted_key.public_jwk)
 
         captured_at = _parse_timestamp(normalized.get("capturedAt"), label="captured")
         signed_at = _parse_timestamp(signature.get("signedAt"), label="signed")

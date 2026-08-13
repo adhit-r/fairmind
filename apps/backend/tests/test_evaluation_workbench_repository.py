@@ -46,11 +46,15 @@ from src.domain.assurance.evaluation_v2 import (
     canonical_json,
     canonical_sha256,
 )
+from src.infrastructure.db.repositories.evaluation_audit_chain import (
+    verify_evaluation_audit_chain,
+)
 from src.infrastructure.db.repositories.evaluation_workbench_repository import (
     SqlAlchemyEvaluationWorkbenchRepository,
     SqlAlchemyEvaluationWorkbenchUnitOfWork,
 )
 from tests.evaluation_workbench_sqlite import (
+    active_trust_policy_values_for_verifier_harness,
     allow_deliberate_check_constraint_corruption,
     install_authoritative_assurance_fixtures_for_application_verifier_harness,
 )
@@ -171,18 +175,15 @@ def repository_fixture():
                 name=system_id,
             )
         )
+    policy_created_at = datetime.now(timezone.utc).isoformat()
     session.execute(
         GovernanceEvidenceTrustPolicyVersion.__table__.insert().values(
-            id="trust-a",
-            org_id=ORG,
-            version="1.0.0",
-            policy_json="{}",
-            policy_hash=canonical_sha256({}),
-            maximum_evidence_age_seconds=86400,
-            unsigned_import_policy="manual_review",
-            status="active",
-            created_by=USER,
-            created_at=datetime.now(timezone.utc).isoformat(),
+            **active_trust_policy_values_for_verifier_harness(
+                policy_id="trust-a",
+                organization_id=ORG,
+                actor_id=USER,
+                created_at=policy_created_at,
+            )
         )
     )
     session.commit()
@@ -2348,7 +2349,8 @@ def test_exact_idempotency_replay_returns_original_and_conflict_is_rejected(
     assert caught.value.code == "idempotency_conflict"
     assert session.scalar(select(func.count()).select_from(GovernanceEvaluationTargetVersion)) == 1
     assert session.scalar(select(func.count()).select_from(GovernanceIdempotencyRecord)) == 1
-    assert session.scalar(select(func.count()).select_from(GovernanceEvaluationAuditEvent)) == 1
+    assert session.scalar(select(func.count()).select_from(GovernanceEvaluationAuditEvent)) == 2
+    verify_evaluation_audit_chain(session, org_id=ORG)
 
 
 def test_scope_isolation_hides_other_organization_catalog(repository_fixture) -> None:

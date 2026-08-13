@@ -295,7 +295,7 @@ class TrustedEvidenceAdmissionResolver:
             not isinstance(authority.maximum_evidence_age_seconds, int)
             or isinstance(authority.maximum_evidence_age_seconds, bool)
             or authority.maximum_evidence_age_seconds <= 0
-            or authority.unsigned_import_policy not in {"reject", "manual_review", "allow"}
+            or authority.unsigned_import_policy not in {"reject", "manual_review"}
         ):
             raise _error(
                 "trust_policy_invalid",

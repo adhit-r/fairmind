@@ -346,16 +346,18 @@ def test_all_new_models_have_exact_columns_unique_constraint_names_and_vocabular
             "id", "org_id", "issuer_key", "name", "issuer_type",
             "source_restrictions_json", "suite_restrictions_json",
             "target_restrictions_json", "status", "created_by", "created_at", "updated_at",
+            "revoked_by", "revoked_at", "revocation_reason",
         ),
         "GovernanceEvidenceSigningKey": (
             "id", "org_id", "issuer_id", "key_id", "algorithm", "public_jwk_json",
-            "valid_from", "valid_until", "revoked_at", "revocation_reason", "created_by",
-            "created_at",
+            "public_key_fingerprint", "valid_from", "valid_until", "revoked_at",
+            "revocation_reason", "revoked_by", "created_by", "created_at",
         ),
         "GovernanceEvidenceTrustPolicyVersion": (
             "id", "org_id", "version", "policy_json", "policy_hash",
             "maximum_evidence_age_seconds", "unsigned_import_policy", "status", "created_by",
-            "created_at",
+            "policy_schema_version", "supersedes_id", "activated_by", "activated_at",
+            "retired_by", "retired_at", "retirement_reason", "created_at",
         ),
         "GovernanceEvidenceAdmission": (
             "id", "org_id", "workspace_id", "system_id", "evidence_run_id",
@@ -420,7 +422,7 @@ def test_all_new_models_have_exact_columns_unique_constraint_names_and_vocabular
         ),
         "GovernanceEvidenceIssuer": ("active", "revoked"),
         "GovernanceEvidenceSigningKey": ("Ed25519",),
-        "GovernanceEvidenceTrustPolicyVersion": ("reject", "manual_review", "allow"),
+        "GovernanceEvidenceTrustPolicyVersion": ("reject", "manual_review"),
         "GovernanceEvidenceAdmission": ("verified", "unverified", "trust_error", "stale"),
         "GovernanceEvidenceReview": ("accepted", "rejected"),
         "GovernanceIdempotencyRecord": ("in_progress", "completed"),
@@ -432,6 +434,8 @@ def test_all_new_models_have_exact_columns_unique_constraint_names_and_vocabular
         )
         for value in values:
             assert value in checks
+        if model_name == "GovernanceEvidenceTrustPolicyVersion":
+            assert "'allow'" not in checks
 
 
 def test_vision_model_is_supported_by_legacy_plan_in_orm_and_both_migrations(connection):

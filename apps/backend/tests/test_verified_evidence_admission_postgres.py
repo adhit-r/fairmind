@@ -69,6 +69,7 @@ MIGRATION_CHAIN = (
     "013b_evaluation_assurance_trust_integrity.sql",
     "013c_evidence_verification_receipt.sql",
     "013d_evaluator_catalog.sql",
+    "013f_trust_authority_integrity.sql",
 )
 ADMISSION_OPERATION = "evaluation-v2.evidence.verified-admit"
 ADMISSION_SUCCESS_ACTION = "evaluation_v2.evidence.verified_admitted"
@@ -190,6 +191,7 @@ def postgres_session_factory():
                     "013b_evaluation_assurance_trust_integrity.sql",
                     "013c_evidence_verification_receipt.sql",
                     "013d_evaluator_catalog.sql",
+                    "013f_trust_authority_integrity.sql",
                 }:
                     cursor.execute(
                         "SELECT pg_catalog.set_config" "('fairmind.migration_schema', %s, false)",
@@ -373,8 +375,9 @@ def _insert_identity_and_scope(
         },
     )
     policy = {
-        "schemaVersion": "2.0.0",
-        "purpose": "verified-admission-postgres-contract",
+        "maximumEvidenceAgeSeconds": 86400,
+        "schemaVersion": "1.0.0",
+        "unsignedImportPolicy": "manual_review",
     }
     session.execute(
         text(
@@ -383,7 +386,7 @@ def _insert_identity_and_scope(
             "maximum_evidence_age_seconds, unsigned_import_policy, status, "
             "created_by, created_at) "
             "VALUES (:id, :org_id, '1.0.0', :policy_json, :policy_hash, "
-            "86400, 'manual_review', 'active', :created_by, :created_at)"
+            "86400, 'manual_review', 'draft', :created_by, :created_at)"
         ),
         {
             "id": trust_policy_id,
@@ -393,6 +396,13 @@ def _insert_identity_and_scope(
             "created_by": actor_id,
             "created_at": now,
         },
+    )
+    session.execute(
+        text(
+            "UPDATE governance_evidence_trust_policy_versions "
+            "SET status='active', activated_by=:actor_id WHERE id=:policy_id"
+        ),
+        {"actor_id": actor_id, "policy_id": trust_policy_id},
     )
     session.commit()
 
@@ -440,9 +450,9 @@ def _insert_signing_authority(
         text(
             "INSERT INTO governance_evidence_signing_keys "
             "(id, org_id, issuer_id, key_id, algorithm, public_jwk_json, "
-            "valid_from, valid_until, created_by, created_at) "
+            "public_key_fingerprint, valid_from, valid_until, created_by, created_at) "
             "VALUES (:id, :org_id, :issuer_id, :key_id, 'Ed25519', :jwk, "
-            ":valid_from, :valid_until, :created_by, :created_at)"
+            ":fingerprint, :valid_from, :valid_until, :created_by, :created_at)"
         ),
         {
             "id": signing_key_row_id,
@@ -450,6 +460,7 @@ def _insert_signing_authority(
             "issuer_id": issuer_row_id,
             "key_id": key_id,
             "jwk": canonical_json(public_jwk),
+            "fingerprint": canonical_sha256(public_jwk),
             "valid_from": _iso(reference_time - timedelta(days=1)),
             "valid_until": _iso(reference_time + timedelta(days=2)),
             "created_by": actor_id,
@@ -871,9 +882,9 @@ def _insert_additional_signing_key(
         text(
             "INSERT INTO governance_evidence_signing_keys "
             "(id, org_id, issuer_id, key_id, algorithm, public_jwk_json, "
-            "valid_from, valid_until, created_by, created_at) "
+            "public_key_fingerprint, valid_from, valid_until, created_by, created_at) "
             "VALUES (:id, :org_id, :issuer_id, :key_id, 'Ed25519', :jwk, "
-            ":valid_from, :valid_until, :created_by, :created_at)"
+            ":fingerprint, :valid_from, :valid_until, :created_by, :created_at)"
         ),
         {
             "id": signing_key_row_id,
@@ -881,6 +892,7 @@ def _insert_additional_signing_key(
             "issuer_id": scenario.signing.issuer_row_id,
             "key_id": key_id,
             "jwk": canonical_json(public_jwk),
+            "fingerprint": canonical_sha256(public_jwk),
             "valid_from": _iso(requested_at - timedelta(days=1)),
             "valid_until": _iso(requested_at + timedelta(days=2)),
             "created_by": scenario.actor_id,
@@ -1566,15 +1578,14 @@ def test_key_rotation_resolves_the_exact_signed_key_and_never_falls_back(
     try:
         replacement = _insert_additional_signing_key(session, scenario=scenario)
         _old_payload, old_raw = _signed_passport(scenario, signing=scenario.signing)
-        revoked_at = _iso(datetime.now(timezone.utc))
         session.execute(
             text(
                 "UPDATE governance_evidence_signing_keys "
-                "SET revoked_at = :revoked_at, revocation_reason = 'rotation' "
+                "SET revoked_by = :actor_id, revocation_reason = 'rotation' "
                 "WHERE id = :key_id AND org_id = :org_id"
             ),
             {
-                "revoked_at": revoked_at,
+                "actor_id": scenario.actor_id,
                 "key_id": scenario.signing.signing_key_row_id,
                 "org_id": scenario.org_id,
             },
@@ -1922,18 +1933,25 @@ def _revoke_authority(session, scenario: AdmissionScenario, resource: str) -> No
         session.execute(
             text(
                 "UPDATE governance_evidence_trust_policy_versions "
-                "SET status = 'retired' WHERE id = :id AND org_id = :org_id"
+                "SET status = 'retired', retired_by = :actor_id, "
+                "retirement_reason = 'adversarial race' "
+                "WHERE id = :id AND org_id = :org_id"
             ),
-            {"id": scenario.trust_policy_id, "org_id": scenario.org_id},
+            {
+                "actor_id": scenario.actor_id,
+                "id": scenario.trust_policy_id,
+                "org_id": scenario.org_id,
+            },
         )
     elif resource == "issuer":
         session.execute(
             text(
                 "UPDATE governance_evidence_issuers SET status = 'revoked', "
-                "updated_at = :updated_at WHERE id = :id AND org_id = :org_id"
+                "revoked_by = :actor_id, revocation_reason = 'adversarial race' "
+                "WHERE id = :id AND org_id = :org_id"
             ),
             {
-                "updated_at": now,
+                "actor_id": scenario.actor_id,
                 "id": scenario.signing.issuer_row_id,
                 "org_id": scenario.org_id,
             },
@@ -1941,12 +1959,12 @@ def _revoke_authority(session, scenario: AdmissionScenario, resource: str) -> No
     elif resource == "key":
         session.execute(
             text(
-                "UPDATE governance_evidence_signing_keys SET revoked_at = :revoked_at, "
+                "UPDATE governance_evidence_signing_keys SET revoked_by = :actor_id, "
                 "revocation_reason = 'adversarial race' "
                 "WHERE id = :id AND org_id = :org_id"
             ),
             {
-                "revoked_at": now,
+                "actor_id": scenario.actor_id,
                 "id": scenario.signing.signing_key_row_id,
                 "org_id": scenario.org_id,
             },
