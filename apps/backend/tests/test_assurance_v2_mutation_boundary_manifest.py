@@ -26,6 +26,7 @@ from api.composition.evaluation_workbench import (
 )
 from api.composition.evaluator_catalog import build_evaluator_catalog_service
 from api.composition.governance_decision import build_governance_decision_service
+from api.composition.imported_evidence import build_imported_evidence_service
 from api.composition.trust_administration import build_trust_administration_service
 from api.composition.verified_evidence_admission import (
     build_verified_evidence_admission_service,
@@ -37,6 +38,7 @@ from api.routes.evaluation_workbench import (
     verified_evidence_review_router,
     verified_evidence_router,
 )
+from api.routes.imported_evidence import imported_evidence_router
 from api.routes.evaluator_catalog import (
     _transition as evaluator_catalog_transition,
     evaluator_catalog_router,
@@ -51,6 +53,7 @@ from src.application.services.evaluation_run_service import EvaluationRunService
 from src.application.ports.evaluation_worker import EvaluationWorkerPort
 from src.application.services.evaluator_catalog_service import EvaluatorCatalogService
 from src.application.services.governance_decision_service import GovernanceDecisionService
+from src.application.services.imported_evidence_service import ImportedEvidenceService
 from src.application.services.trust_administration_service import TrustAdministrationService
 from src.application.services.verified_evidence_admission_service import (
     VerifiedEvidenceAdmissionService,
@@ -220,6 +223,14 @@ MUTATION_MANIFEST = (
         "workbench",
     ),
     MutationRoute(
+        _RUN + "/suite-executions/{suite_execution_id}/evidence-imports",
+        "import_unverified_evidence",
+        ImportedEvidenceService,
+        "import_unverified_report",
+        "evaluation-v2.evidence.unverified-import",
+        "import",
+    ),
+    MutationRoute(
         _RUN
         + "/suite-executions/{suite_execution_id}/evidence-admissions/{admission_id}"
         + "/passport-revisions/{passport_revision_id}/review",
@@ -297,12 +308,13 @@ MUTATION_MANIFEST = (
 
 
 def _mounted_mutation_routes() -> tuple[APIRoute, ...]:
-    """Mount the six V2 routers exactly as ``api.main`` does when enabled."""
+    """Mount the seven V2 routers exactly as ``api.main`` does when enabled."""
 
     app = FastAPI()
     for route_router in (
         evaluation_workbench_router,
         verified_evidence_router,
+        imported_evidence_router,
         verified_evidence_review_router,
         governance_decision_router,
         evaluator_catalog_router,
@@ -420,6 +432,8 @@ def _route_service_reference(item: MutationRoute) -> str:
         return "review_service"
     if item.service is GovernanceDecisionService:
         return "decision_service"
+    if item.service is ImportedEvidenceService:
+        return "import_service"
     if item.service is TrustAdministrationService:
         return "service"
     raise AssertionError(f"Unhandled assurance service: {item.service!r}")
@@ -514,8 +528,8 @@ def test_assurance_v2_mutation_manifest_is_the_exact_enabled_post_surface() -> N
         ("POST", item.path, item.endpoint) for item in MUTATION_MANIFEST
     }
 
-    assert len(MUTATION_MANIFEST) == 20
-    assert len({item.operation for item in MUTATION_MANIFEST}) == 20
+    assert len(MUTATION_MANIFEST) == 21
+    assert len({item.operation for item in MUTATION_MANIFEST}) == 21
     assert actual == expected
 
 
@@ -623,11 +637,17 @@ def test_every_manifest_operation_reaches_a_shared_sqlalchemy_mutation_uow() -> 
                 "unit_of_work",
                 SqlAlchemyEvaluationWorkbenchUnitOfWork,
             ),
+            "import": (
+                build_imported_evidence_service(session),
+                "_unit_of_work",
+                SqlAlchemyEvaluationWorkbenchUnitOfWork,
+            ),
         }
         assert {item.composition for item in MUTATION_MANIFEST} == {
             "workbench",
             "catalog",
             "trust",
+            "import",
         }
         for service, attribute, expected_type in compositions.values():
             unit_of_work = getattr(service, attribute)

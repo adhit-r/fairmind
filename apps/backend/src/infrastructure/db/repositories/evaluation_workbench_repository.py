@@ -68,6 +68,11 @@ from src.application.ports.evidence_admission import (
     PersistVerifiedPassportV2Command,
     VerifiedPassportV2Record,
 )
+from src.application.ports.imported_evidence import (
+    ImportedEvidenceAuthorityRecord,
+    ImportedEvidenceRecord,
+    PersistUnverifiedImportedEvidenceCommand,
+)
 from src.application.ports.evidence_review import (
     EvidenceReviewAuthorityRecord,
     EvidenceReviewScope,
@@ -152,6 +157,9 @@ _MAX_IDEMPOTENCY_RESPONSE_ITEMS = (
 _IDEMPOTENCY_RETENTION = timedelta(days=30)
 _EVIDENCE_OCCUPIED_MESSAGE = "The suite execution or evidence identity is already occupied."
 _EVIDENCE_INTEGRITY_MESSAGE = "The verified evidence graph failed its relational integrity checks."
+_IMPORTED_EVIDENCE_INTEGRITY_MESSAGE = (
+    "The imported evidence graph failed its relational integrity checks."
+)
 _SUITE_PROJECTION_CONFLICT_MESSAGE = "The suite execution changed before evidence could be linked."
 _RUN_PROJECTION_CONFLICT_MESSAGE = "The evaluation run changed before evidence could be linked."
 _EVIDENCE_OCCUPANCY_CONSTRAINTS = frozenset(
@@ -180,6 +188,11 @@ _EVIDENCE_P0001_INTEGRITY_MESSAGES = frozenset(
         "verification receipt relational binding failed",
         "verified admission requires exact verification receipt",
         "verification receipt requires exact verified admission",
+    }
+)
+_EVIDENCE_23514_INTEGRITY_MESSAGES = frozenset(
+    {
+        "unverified evidence delivery binding failed",
     }
 )
 _EVIDENCE_REVIEW_VERSION_CONSTRAINTS = frozenset(
@@ -672,6 +685,16 @@ class SqlAlchemyEvaluationWorkbenchRepository:
                 409,
             )
 
+    def _require_postgres_imported_evidence(self) -> None:
+        """Keep unsigned imports off SQLite and every non-authoritative dialect."""
+
+        if self.db.get_bind().dialect.name != "postgresql":
+            raise self._error(
+                "imported_evidence_postgresql_required",
+                "Imported evidence requires the PostgreSQL authority.",
+                409,
+            )
+
     def _acquire_operational_freshness_read_lock(
         self,
         *,
@@ -915,6 +938,110 @@ class SqlAlchemyEvaluationWorkbenchRepository:
             key_revoked_at=key_revoked_at,
         )
 
+    def load_imported_evidence_authority_for_update(
+        self,
+        *,
+        scope: EvidenceAdmissionScope,
+    ) -> ImportedEvidenceAuthorityRecord | None:
+        """Lock the exact unsigned-import authority graph in one transaction.
+
+        The report supplies no issuer, evaluator, or key identity.  All scope,
+        plan, target, suite, trust-policy, run, envelope, and nonce bindings
+        are instead reconstructed from locked server state.
+        """
+
+        self._require_postgres_imported_evidence()
+        scope_row = self._system_scope(
+            scope.organization_id,
+            scope.system_id,
+            lock=True,
+        )
+        if scope_row is None:
+            return None
+        workspace_id = scope_row["workspace_id"]
+        runs = GovernanceEvaluationRun.__table__
+        run_row = (
+            self.db.execute(
+                select(runs)
+                .where(
+                    runs.c.id == scope.run_id,
+                    runs.c.org_id == scope.organization_id,
+                    runs.c.workspace_id == workspace_id,
+                    runs.c.system_id == scope.system_id,
+                    runs.c.contract_version == CONTRACT_VERSION,
+                )
+                .with_for_update()
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if run_row is None:
+            return None
+
+        executions = GovernanceEvaluationRunSuiteExecution.__table__
+        execution_rows = (
+            self.db.execute(
+                select(executions)
+                .where(
+                    executions.c.run_id == scope.run_id,
+                    executions.c.org_id == scope.organization_id,
+                    executions.c.workspace_id == workspace_id,
+                    executions.c.system_id == scope.system_id,
+                )
+                .order_by(executions.c.ordinal, executions.c.id)
+                .with_for_update()
+            )
+            .mappings()
+            .all()
+        )
+        if sum(row["id"] == scope.suite_execution_id for row in execution_rows) != 1:
+            return None
+
+        plan_row = self._plan_row(
+            org_id=scope.organization_id,
+            workspace_id=workspace_id,
+            system_id=scope.system_id,
+            plan_id=run_row["plan_id"],
+            lock=True,
+        )
+        if plan_row is None:
+            return None
+        target_row = self._target_row(
+            org_id=scope.organization_id,
+            workspace_id=workspace_id,
+            system_id=scope.system_id,
+            target_id=plan_row["target_version_id"],
+            lock=True,
+        )
+        trust_row = self._trust_row(
+            org_id=scope.organization_id,
+            trust_id=plan_row["trust_policy_version_id"],
+            lock=True,
+        )
+        suite_rows = self._bound_suites(
+            plan_row["id"],
+            scope.organization_id,
+            workspace_id,
+            scope.system_id,
+            lock=True,
+        )
+        if target_row is None or trust_row is None:
+            return None
+        graph = PlanGraphRecord(
+            scope=self._scope_record(scope_row),
+            plan=self._plan_binding(plan_row),
+            target=self._target_binding(target_row),
+            trust_policy=self._trust_binding(trust_row),
+            suites=tuple(self._plan_suite_binding(row) for row in suite_rows),
+        )
+        return ImportedEvidenceAuthorityRecord(
+            scope=scope,
+            plan_graph=graph,
+            run=self._run_record_from_rows(run_row, execution_rows),
+            maximum_evidence_age_seconds=trust_row["maximum_evidence_age_seconds"],
+            unsigned_import_policy=trust_row["unsigned_import_policy"],
+        )
+
     def restriction_references_exist(
         self,
         *,
@@ -1133,6 +1260,8 @@ class SqlAlchemyEvaluationWorkbenchRepository:
             return "occupied"
         if sqlstate == "P0001" and first_line in _EVIDENCE_P0001_INTEGRITY_MESSAGES:
             return "integrity"
+        if sqlstate == "23514" and first_line in _EVIDENCE_23514_INTEGRITY_MESSAGES:
+            return "integrity"
         return None
 
     def _raise_evidence_database_error(self, error: DBAPIError) -> None:
@@ -1222,13 +1351,187 @@ class SqlAlchemyEvaluationWorkbenchRepository:
         )
         return any(self.db.execute(statement).first() is not None for statement in checks)
 
+    def _imported_graph_is_occupied(
+        self,
+        command: PersistUnverifiedImportedEvidenceCommand,
+    ) -> bool:
+        """Refuse every pre-existing identity that could bind an import graph."""
+
+        scope = command.scope
+        authority = command.authority
+        selected = next(
+            (
+                execution
+                for execution in authority.run.suite_executions
+                if execution.id == scope.suite_execution_id
+            ),
+            None,
+        )
+        if selected is None:
+            return True
+        if (
+            selected.evidence_run_id is not None
+            or selected.passport_revision_id is not None
+            or selected.linked_by is not None
+            or selected.linked_at is not None
+            or selected.admission_status != "pending"
+            or selected.review_status != "pending"
+            or selected.freshness_status != "current"
+            or selected.result_summary is not None
+            or selected.limitations is not None
+        ):
+            return True
+
+        admissions = GovernanceEvidenceAdmission.__table__
+        claims = GovernanceEvidenceNonceClaim.__table__
+        links = GovernanceEvaluationSuiteEvidenceLink.__table__
+        receipts = GovernanceEvidenceVerificationReceipt.__table__
+        revisions = GovernanceEvidencePassportRevision.__table__
+        evidence_runs = GovernanceEvidenceRun.__table__
+        checks = (
+            select(admissions.c.id).where(
+                admissions.c.org_id == scope.organization_id,
+                admissions.c.workspace_id == authority.run.workspace_id,
+                admissions.c.system_id == scope.system_id,
+                admissions.c.run_id == scope.run_id,
+                admissions.c.suite_execution_id == scope.suite_execution_id,
+            ),
+            select(claims.c.id).where(
+                claims.c.org_id == scope.organization_id,
+                claims.c.workspace_id == authority.run.workspace_id,
+                claims.c.system_id == scope.system_id,
+                claims.c.run_id == scope.run_id,
+                claims.c.suite_execution_id == scope.suite_execution_id,
+                claims.c.envelope_id == authority.run.envelope_id,
+                claims.c.envelope_nonce == authority.run.envelope_nonce,
+            ),
+            select(links.c.id).where(
+                links.c.org_id == scope.organization_id,
+                links.c.workspace_id == authority.run.workspace_id,
+                links.c.system_id == scope.system_id,
+                links.c.run_id == scope.run_id,
+                links.c.suite_execution_id == scope.suite_execution_id,
+            ),
+            select(receipts.c.id).where(
+                receipts.c.org_id == scope.organization_id,
+                receipts.c.workspace_id == authority.run.workspace_id,
+                receipts.c.system_id == scope.system_id,
+                receipts.c.run_id == scope.run_id,
+                receipts.c.suite_execution_id == scope.suite_execution_id,
+            ),
+            select(revisions.c.id).where(
+                revisions.c.org_id == scope.organization_id,
+                revisions.c.passport_id == command.passport_id,
+                revisions.c.passport_revision == 1,
+            ),
+            select(evidence_runs.c.id).where(
+                evidence_runs.c.org_id == scope.organization_id,
+                evidence_runs.c.workspace_id == authority.run.workspace_id,
+                evidence_runs.c.system_id == scope.system_id,
+                evidence_runs.c.source_type == "imported_report",
+                evidence_runs.c.source_identifier == command.report_id,
+                evidence_runs.c.run_id == scope.suite_execution_id,
+            ),
+        )
+        return any(self.db.execute(statement).first() is not None for statement in checks)
+
+    @staticmethod
+    def _unverified_import_snapshot_matches_authority(
+        command: PersistUnverifiedImportedEvidenceCommand,
+    ) -> bool:
+        """Ensure the persisted snapshot is server-bound, not caller-shaped."""
+
+        authority = command.authority
+        scope = command.scope
+        selected = next(
+            (
+                execution
+                for execution in authority.run.suite_executions
+                if execution.id == scope.suite_execution_id
+            ),
+            None,
+        )
+        suite_selection = next(
+            (
+                selection
+                for selection in authority.plan_graph.suites
+                if selected is not None
+                and selection.ordinal == selected.ordinal
+                and selection.suite.id == selected.suite_version_id
+            ),
+            None,
+        )
+        if selected is None or suite_selection is None:
+            return False
+        suite = suite_selection.suite
+        expected = {
+            "schemaVersion": "1.0.0",
+            "sourceType": "imported_report",
+            "resultAuthority": "claimed",
+            "humanReviewOnly": True,
+            "decisionEvidenceEligible": False,
+            "organizationId": scope.organization_id,
+            "workspaceId": authority.run.workspace_id,
+            "systemId": scope.system_id,
+            "runId": scope.run_id,
+            "envelope": {
+                "id": authority.run.envelope_id,
+                "hash": authority.run.envelope_hash,
+                "nonce": authority.run.envelope_nonce,
+            },
+            "plan": {
+                "id": authority.plan_graph.plan.id,
+                "contentHash": authority.plan_graph.plan.plan_content_hash,
+                "deliveryMode": "imported_report",
+            },
+            "target": {
+                "id": authority.plan_graph.target.id,
+                "subjectDigest": authority.plan_graph.target.subject_digest,
+                "manifestDigest": authority.plan_graph.target.manifest_digest,
+            },
+            "suite": {
+                "executionId": scope.suite_execution_id,
+                "versionId": suite.id,
+                "ownerScope": selected.owner_scope,
+                "ordinal": selected.ordinal,
+                "adapterName": suite.adapter_name,
+                "adapterVersion": suite.adapter_version,
+                "resultContractVersion": suite.result_contract_version,
+            },
+            "trustPolicy": {
+                "id": authority.plan_graph.trust_policy.id,
+                "hash": authority.plan_graph.trust_policy.policy_hash,
+                "maximumEvidenceAgeSeconds": authority.maximum_evidence_age_seconds,
+                "unsignedImportPolicy": "manual_review",
+            },
+            "report": {
+                "id": command.report_id,
+                "contentHash": command.report_content_hash,
+                "capturedAt": command.captured_at.astimezone(timezone.utc).isoformat(),
+                "effectiveExpiresAt": command.effective_expires_at.astimezone(
+                    timezone.utc
+                ).isoformat(),
+                "claimedTechnicalStatus": command.technical_status,
+                "claimedEvidenceResultStatus": command.evidence_result_status,
+                "claimedResultSummary": command.result_summary.to_dict(),
+                "artifactRefs": _thaw_json_array(command.artifact_refs),
+                "limitations": _thaw_json_array(command.limitations),
+            },
+        }
+        try:
+            return command.import_snapshot.to_dict() == expected and (
+                command.import_snapshot_hash == canonical_sha256(expected)
+            )
+        except (AssuranceContractValidationError, TypeError, UnicodeError, ValueError):
+            return False
+
     @staticmethod
     def _timestamp_value(value: datetime | None) -> str | None:
         return None if value is None else value.astimezone(timezone.utc).isoformat()
 
     def _exact_run_snapshot_predicates(
         self,
-        command: PersistVerifiedPassportV2Command,
+        command: PersistVerifiedPassportV2Command | PersistUnverifiedImportedEvidenceCommand,
     ) -> tuple[Any, ...]:
         run = command.authority.run
         table = GovernanceEvaluationRun.__table__
@@ -1613,6 +1916,323 @@ class SqlAlchemyEvaluationWorkbenchRepository:
             verdict_version=authority.run.verdict_version,
             effective_expires_at=command.effective_expires_at,
             verified_at=command.verified_at,
+        )
+
+    def persist_unverified_imported_evidence(
+        self,
+        command: PersistUnverifiedImportedEvidenceCommand,
+    ) -> ImportedEvidenceRecord:
+        """Persist one claimed report and its unverified link projections atomically."""
+
+        self._require_postgres_imported_evidence()
+        scope = command.scope
+        authority = command.authority
+        if (
+            authority.scope != scope
+            or authority.run.id != scope.run_id
+            or authority.run.organization_id != scope.organization_id
+            or authority.run.system_id != scope.system_id
+            or authority.run.workspace_id != authority.plan_graph.scope.workspace_id
+            or authority.plan_graph.plan.status != "active"
+            or authority.plan_graph.target.status != "active"
+            or authority.plan_graph.trust_policy.status != "active"
+            or authority.plan_graph.plan.delivery_mode != "imported_report"
+            or authority.unsigned_import_policy != "manual_review"
+            or not isinstance(authority.maximum_evidence_age_seconds, int)
+            or isinstance(authority.maximum_evidence_age_seconds, bool)
+            or authority.maximum_evidence_age_seconds <= 0
+            or command.evidence_created_at != command.imported_at
+            or command.revision_created_at != command.imported_at
+            or command.effective_expires_at
+            != command.captured_at
+            + timedelta(seconds=authority.maximum_evidence_age_seconds)
+            or not self._unverified_import_snapshot_matches_authority(command)
+        ):
+            raise self._error(
+                "imported_evidence_integrity_conflict",
+                _IMPORTED_EVIDENCE_INTEGRITY_MESSAGE,
+                409,
+            )
+        selected = next(
+            (
+                execution
+                for execution in authority.run.suite_executions
+                if execution.id == scope.suite_execution_id
+            ),
+            None,
+        )
+        if selected is None:
+            raise self._error(
+                "suite_projection_conflict",
+                _SUITE_PROJECTION_CONFLICT_MESSAGE,
+                409,
+            )
+        if self._imported_graph_is_occupied(command):
+            raise self._error(
+                "evidence_admission_occupied",
+                _EVIDENCE_OCCUPIED_MESSAGE,
+                409,
+            )
+        imported_at = self._timestamp_value(command.imported_at)
+        captured_at = self._timestamp_value(command.captured_at)
+        effective_expires_at = self._timestamp_value(command.effective_expires_at)
+        evidence_created_at = self._timestamp_value(command.evidence_created_at)
+        revision_created_at = self._timestamp_value(command.revision_created_at)
+        if any(
+            value is None
+            for value in (
+                imported_at,
+                captured_at,
+                effective_expires_at,
+                evidence_created_at,
+                revision_created_at,
+            )
+        ):
+            raise self._error(
+                "imported_evidence_integrity_conflict",
+                _IMPORTED_EVIDENCE_INTEGRITY_MESSAGE,
+                409,
+            )
+        assert imported_at is not None
+        assert captured_at is not None
+        assert effective_expires_at is not None
+        assert evidence_created_at is not None
+        assert revision_created_at is not None
+
+        try:
+            self.db.execute(
+                insert(GovernanceEvidenceRun.__table__).values(
+                    id=command.evidence_run_id,
+                    org_id=scope.organization_id,
+                    workspace_id=authority.run.workspace_id,
+                    system_id=scope.system_id,
+                    source_type="imported_report",
+                    source_identifier=command.report_id,
+                    run_id=scope.suite_execution_id,
+                    content_hash=command.report_content_hash,
+                    passport_id=command.passport_id,
+                    schema_version=CONTRACT_VERSION,
+                    capability_state="available",
+                    assurance_source="evaluation",
+                    result=command.evidence_result_status,
+                    provenance_json=canonical_json(
+                        {
+                            "sourceType": "imported_report",
+                            "resultAuthority": "claimed",
+                            "humanReviewOnly": True,
+                            "decisionEvidenceEligible": False,
+                            "importSnapshotHash": command.import_snapshot_hash,
+                        }
+                    ),
+                    artifact_refs_json=canonical_json(_thaw_json_array(command.artifact_refs)),
+                    limitations_json=canonical_json(_thaw_json_array(command.limitations)),
+                    captured_at=captured_at,
+                    expires_at=effective_expires_at,
+                    evidence_id=None,
+                    created_at=evidence_created_at,
+                )
+            )
+            self.db.execute(
+                insert(GovernanceEvidencePassportRevision.__table__).values(
+                    id=command.passport_revision_id,
+                    org_id=scope.organization_id,
+                    system_id=scope.system_id,
+                    evidence_run_id=command.evidence_run_id,
+                    passport_id=command.passport_id,
+                    passport_revision=1,
+                    previous_revision_hash=None,
+                    canonical_content_hash=command.import_snapshot_hash,
+                    snapshot_json=canonical_json(command.import_snapshot.to_dict()),
+                    created_by=command.actor_id,
+                    created_at=revision_created_at,
+                )
+            )
+            self.db.execute(
+                insert(GovernanceEvidenceAdmission.__table__).values(
+                    id=command.admission_id,
+                    org_id=scope.organization_id,
+                    workspace_id=authority.run.workspace_id,
+                    system_id=scope.system_id,
+                    evidence_run_id=command.evidence_run_id,
+                    passport_revision_id=command.passport_revision_id,
+                    trust_policy_version_id=authority.plan_graph.trust_policy.id,
+                    suite_execution_id=scope.suite_execution_id,
+                    envelope_hash=authority.run.envelope_hash,
+                    admission_status="unverified",
+                    freshness_status="current",
+                    issuer_id=None,
+                    signing_key_id=None,
+                    signer_key_id=None,
+                    signer_algorithm=None,
+                    reasons_json=canonical_json(["unverified_import_manual_review"]),
+                    checked_by="fairmind/imported-evidence-service",
+                    checked_at=imported_at,
+                    created_at=imported_at,
+                    contract_version=CONTRACT_VERSION,
+                    run_id=scope.run_id,
+                    envelope_id=authority.run.envelope_id,
+                    envelope_nonce=authority.run.envelope_nonce,
+                    submitted_by=command.actor_id,
+                    captured_at=captured_at,
+                    signed_at=None,
+                    effective_expires_at=effective_expires_at,
+                )
+            )
+            self.db.execute(
+                insert(GovernanceEvidenceNonceClaim.__table__).values(
+                    id=command.nonce_claim_id,
+                    org_id=scope.organization_id,
+                    workspace_id=authority.run.workspace_id,
+                    system_id=scope.system_id,
+                    run_id=scope.run_id,
+                    run_contract_version=CONTRACT_VERSION,
+                    suite_execution_id=scope.suite_execution_id,
+                    admission_id=command.admission_id,
+                    admission_contract_version=CONTRACT_VERSION,
+                    evidence_run_id=command.evidence_run_id,
+                    passport_revision_id=command.passport_revision_id,
+                    envelope_id=authority.run.envelope_id,
+                    envelope_hash=authority.run.envelope_hash,
+                    envelope_nonce=authority.run.envelope_nonce,
+                    claimed_by=command.actor_id,
+                    claimed_at=imported_at,
+                )
+            )
+            self.db.execute(
+                insert(GovernanceEvaluationSuiteEvidenceLink.__table__).values(
+                    id=command.suite_evidence_link_id,
+                    org_id=scope.organization_id,
+                    workspace_id=authority.run.workspace_id,
+                    system_id=scope.system_id,
+                    run_id=scope.run_id,
+                    suite_execution_id=scope.suite_execution_id,
+                    admission_id=command.admission_id,
+                    admission_contract_version=CONTRACT_VERSION,
+                    evidence_run_id=command.evidence_run_id,
+                    passport_revision_id=command.passport_revision_id,
+                    nonce_claim_id=command.nonce_claim_id,
+                    linked_by=command.actor_id,
+                    linked_at=imported_at,
+                )
+            )
+
+            suites = GovernanceEvaluationRunSuiteExecution.__table__
+            suite_result = self.db.execute(
+                update(suites)
+                .where(
+                    suites.c.id == selected.id,
+                    suites.c.org_id == authority.run.organization_id,
+                    suites.c.workspace_id == authority.run.workspace_id,
+                    suites.c.system_id == authority.run.system_id,
+                    suites.c.run_id == authority.run.id,
+                    suites.c.suite_version_id == selected.suite_version_id,
+                    suites.c.suite_owner_scope == selected.owner_scope,
+                    suites.c.ordinal == selected.ordinal,
+                    suites.c.technical_status == selected.technical_status,
+                    suites.c.evidence_result_status == selected.evidence_result_status,
+                    suites.c.admission_status == selected.admission_status,
+                    suites.c.review_status == selected.review_status,
+                    suites.c.freshness_status == selected.freshness_status,
+                    suites.c.evidence_run_id == selected.evidence_run_id,
+                    suites.c.passport_revision_id == selected.passport_revision_id,
+                    suites.c.linked_by == selected.linked_by,
+                    suites.c.linked_at == selected.linked_at,
+                    suites.c.result_summary_json.is_(None),
+                    suites.c.limitations_json.is_(None),
+                    suites.c.failure_code == selected.failure_code,
+                    suites.c.failure_message == selected.failure_message,
+                    suites.c.started_at == selected.started_at,
+                    suites.c.completed_at == selected.completed_at,
+                    suites.c.created_at == selected.created_at,
+                    suites.c.updated_at == selected.updated_at,
+                )
+                .values(
+                    technical_status=command.technical_status,
+                    evidence_result_status=command.evidence_result_status,
+                    admission_status="unverified",
+                    review_status="pending",
+                    freshness_status="current",
+                    evidence_run_id=command.evidence_run_id,
+                    passport_revision_id=command.passport_revision_id,
+                    linked_by=command.actor_id,
+                    linked_at=imported_at,
+                    result_summary_json=canonical_json(command.result_summary.to_dict()),
+                    limitations_json=canonical_json(_thaw_json_array(command.limitations)),
+                    started_at=self._timestamp_value(command.suite_started_at),
+                    completed_at=self._timestamp_value(command.suite_completed_at),
+                    updated_at=imported_at,
+                )
+            )
+            if suite_result.rowcount != 1:
+                raise self._error(
+                    "suite_projection_conflict",
+                    _SUITE_PROJECTION_CONFLICT_MESSAGE,
+                    409,
+                )
+
+            run_changed = (
+                command.run_technical_status != authority.run.technical_status
+                or command.run_evidence_outcome != authority.run.evidence_outcome
+                or self._timestamp_value(command.run_started_at) != authority.run.started_at
+                or self._timestamp_value(command.run_completed_at) != authority.run.completed_at
+            )
+            runs = GovernanceEvaluationRun.__table__
+            if run_changed:
+                run_result = self.db.execute(
+                    update(runs)
+                    .where(*self._exact_run_snapshot_predicates(command))
+                    .values(
+                        technical_status=command.run_technical_status,
+                        evidence_outcome=command.run_evidence_outcome,
+                        started_at=self._timestamp_value(command.run_started_at),
+                        completed_at=self._timestamp_value(command.run_completed_at),
+                        updated_at=imported_at,
+                    )
+                )
+                if run_result.rowcount != 1:
+                    raise self._error(
+                        "run_projection_conflict",
+                        _RUN_PROJECTION_CONFLICT_MESSAGE,
+                        409,
+                    )
+            elif (
+                self.db.execute(
+                    select(runs.c.id).where(*self._exact_run_snapshot_predicates(command))
+                ).scalar_one_or_none()
+                is None
+            ):
+                raise self._error(
+                    "run_projection_conflict",
+                    _RUN_PROJECTION_CONFLICT_MESSAGE,
+                    409,
+                )
+        except DBAPIError as error:
+            self._raise_evidence_database_error(error)
+
+        return ImportedEvidenceRecord(
+            organization_id=scope.organization_id,
+            workspace_id=authority.run.workspace_id,
+            system_id=scope.system_id,
+            run_id=scope.run_id,
+            suite_execution_id=scope.suite_execution_id,
+            evidence_run_id=command.evidence_run_id,
+            passport_revision_id=command.passport_revision_id,
+            admission_id=command.admission_id,
+            nonce_claim_id=command.nonce_claim_id,
+            suite_evidence_link_id=command.suite_evidence_link_id,
+            report_content_hash=command.report_content_hash,
+            import_snapshot_hash=command.import_snapshot_hash,
+            technical_status=command.technical_status,
+            evidence_result_status=command.evidence_result_status,
+            admission_status="unverified",
+            review_status="pending",
+            freshness_status="current",
+            run_technical_status=command.run_technical_status,
+            run_evidence_outcome=command.run_evidence_outcome,
+            overall_verdict=authority.run.overall_verdict,
+            verdict_version=authority.run.verdict_version,
+            effective_expires_at=command.effective_expires_at,
+            imported_at=command.imported_at,
         )
 
     def force_evidence_admission_constraints(self) -> None:

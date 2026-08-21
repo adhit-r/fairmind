@@ -19,6 +19,7 @@ from config.migration_integrity import (
     FROZEN_013F_OPERATOR_CHECKSUM,
     FROZEN_013G_OPERATOR_CHECKSUM,
     FROZEN_013H_OPERATOR_CHECKSUM,
+    FROZEN_013I_OPERATOR_CHECKSUM,
     FROZEN_ASSURANCE_MIGRATIONS,
     FROZEN_POSTGRESQL_ASSURANCE_CATALOGS,
     FROZEN_SQLITE_013C_FIXTURE_CHECKSUM,
@@ -27,6 +28,7 @@ from config.migration_integrity import (
     FROZEN_SQLITE_013F_FIXTURE_CHECKSUM,
     FROZEN_SQLITE_013G_FIXTURE_CHECKSUM,
     FROZEN_SQLITE_013H_FIXTURE_CHECKSUM,
+    FROZEN_SQLITE_013I_FIXTURE_CHECKSUM,
     POSTGRESQL_ASSURANCE_CATALOG_SPEC,
     POSTGRESQL_ASSURANCE_FUNCTIONS,
     POSTGRESQL_ASSURANCE_REQUIRED_TRIGGERS,
@@ -73,6 +75,7 @@ POSTGRES_OPERATOR_CHAIN = (
     "upgrade_paths/013e_to_013f_trust_authority_integrity.sql",
     "upgrade_paths/013f_to_013g_operational_evidence_freshness.sql",
     "upgrade_paths/013g_to_013h_idempotency_retention_integrity.sql",
+    "upgrade_paths/013h_to_013i_imported_evidence_delivery_integrity.sql",
 )
 POSTGRESQL_013B_PREREQUISITE_CONSTRAINTS = frozenset(
     {
@@ -168,6 +171,9 @@ def _install_sqlite_assurance_chain(database_path: Path) -> None:
     from migrations.idempotency_retention_integrity_migration import (
         apply_sqlite as apply_013h,
     )
+    from migrations.imported_evidence_delivery_integrity_migration import (
+        apply_sqlite as apply_013i,
+    )
 
     connection = sqlite3.connect(database_path)
     try:
@@ -190,6 +196,7 @@ def _install_sqlite_assurance_chain(database_path: Path) -> None:
         apply_013f(connection)
         apply_013g(connection)
         apply_013h(connection)
+        apply_013i(connection)
     finally:
         connection.close()
 
@@ -618,7 +625,7 @@ def test_production_postgresql_manifest_covers_audit_immutability() -> None:
     frozen = FROZEN_POSTGRESQL_ASSURANCE_CATALOGS[14]
     assert frozen.spec is POSTGRESQL_ASSURANCE_CATALOG_SPEC
     assert frozen.postgresql_major == 14
-    assert frozen.digest == "5789e901c7c853bce6c40dcf631f294f1e27b2d8d9f77e13623d72c17408030d"
+    assert frozen.digest == "707d784f5a3e69a29b21ca50d168fe8954e7723f1bbb1165250e5947dcf282a9"
     validate_frozen_postgresql_catalog(frozen)
 
 
@@ -785,6 +792,40 @@ def test_013h_operator_direct_ledger_and_fixture_sources_are_frozen() -> None:
         FROZEN_SQLITE_013H_FIXTURE_CHECKSUM
     )
     assert "\\ir ../013h_idempotency_retention_integrity.sql" in operator_source
+    assert frozen.ledger_key in operator_source
+    assert frozen.checksum in operator_source
+
+
+def test_013i_operator_direct_ledger_and_fixture_sources_are_frozen() -> None:
+    import hashlib
+
+    direct = MIGRATIONS / "013i_imported_evidence_delivery_integrity.sql"
+    operator = (
+        MIGRATIONS
+        / "upgrade_paths"
+        / "013h_to_013i_imported_evidence_delivery_integrity.sql"
+    )
+    fixture = (
+        MIGRATIONS
+        / "fixtures"
+        / "013i_imported_evidence_delivery_integrity.sqlite.sql"
+    )
+    frozen = next(
+        item
+        for item in FROZEN_ASSURANCE_MIGRATIONS
+        if item.ledger_key
+        == "013h-to-013i-imported-evidence-delivery-integrity-v1"
+    )
+    operator_source = operator.read_text(encoding="utf-8")
+
+    assert hashlib.sha256(direct.read_bytes()).hexdigest() == frozen.checksum
+    assert hashlib.sha256(operator.read_bytes()).hexdigest() == (
+        FROZEN_013I_OPERATOR_CHECKSUM
+    )
+    assert hashlib.sha256(fixture.read_bytes()).hexdigest() == (
+        FROZEN_SQLITE_013I_FIXTURE_CHECKSUM
+    )
+    assert "\\ir ../013i_imported_evidence_delivery_integrity.sql" in operator_source
     assert frozen.ledger_key in operator_source
     assert frozen.checksum in operator_source
 
@@ -1694,14 +1735,14 @@ def test_native_013g_operator_orphan_check_is_schema_scoped() -> None:
     not POSTGRES_URL,
     reason="requires FAIRMIND_TEST_POSTGRES_URL pointing to disposable PostgreSQL",
 )
-def test_native_013h_operator_rejects_ledger_tamper() -> None:
-    """An exact replay succeeds, but a changed 013h ledger row cannot be adopted."""
+def test_native_013i_operator_rejects_ledger_tamper() -> None:
+    """An exact replay succeeds, but a changed 013i ledger row cannot be adopted."""
 
     import psycopg2
     from psycopg2 import sql
 
     assert POSTGRES_URL is not None
-    schema_name = f"fm_013h_ledger_{uuid.uuid4().hex[:12]}"
+    schema_name = f"fm_013i_ledger_{uuid.uuid4().hex[:12]}"
     try:
         _install_postgresql_base_through_012(POSTGRES_URL, schema_name)
         for migration_name in POSTGRES_OPERATOR_CHAIN:
@@ -1729,7 +1770,7 @@ def test_native_013h_operator_rejects_ledger_tamper() -> None:
                     ).format(sql.Identifier(schema_name)),
                     (
                         "0" * 64,
-                        "013g-to-013h-idempotency-retention-integrity-v1",
+                        "013h-to-013i-imported-evidence-delivery-integrity-v1",
                     ),
                 )
         finally:
@@ -1740,7 +1781,7 @@ def test_native_013h_operator_rejects_ledger_tamper() -> None:
             POSTGRES_OPERATOR_CHAIN[-1],
         )
         assert tampered.returncode != 0
-        assert "checksum drift for 013g-to-013h" in tampered.stderr
+        assert "checksum drift for 013h-to-013i" in tampered.stderr
     finally:
         cleanup = psycopg2.connect(POSTGRES_URL)
         cleanup.autocommit = True
@@ -1769,7 +1810,7 @@ def test_native_013h_failed_operator_upgrade_rolls_back_catalog_and_ledger() -> 
     schema_name = f"fm_013h_rollback_{uuid.uuid4().hex[:12]}"
     try:
         _install_postgresql_base_through_012(POSTGRES_URL, schema_name)
-        for migration_name in POSTGRES_OPERATOR_CHAIN[:-1]:
+        for migration_name in POSTGRES_OPERATOR_CHAIN[:-2]:
             result = _run_postgresql_operator_migration(
                 POSTGRES_URL,
                 schema_name,
@@ -1806,7 +1847,7 @@ def test_native_013h_failed_operator_upgrade_rolls_back_catalog_and_ledger() -> 
         failed = _run_postgresql_operator_migration(
             POSTGRES_URL,
             schema_name,
-            POSTGRES_OPERATOR_CHAIN[-1],
+            POSTGRES_OPERATOR_CHAIN[-2],
         )
         assert failed.returncode != 0
         assert "migration 013h found invalid idempotency records" in failed.stderr
@@ -1853,14 +1894,14 @@ def test_native_013h_failed_operator_upgrade_rolls_back_catalog_and_ledger() -> 
     not POSTGRES_URL,
     reason="requires FAIRMIND_TEST_POSTGRES_URL pointing to disposable PostgreSQL",
 )
-def test_native_013h_startup_rejects_disabled_and_missing_trigger() -> None:
-    """Startup detects both live disablement and removal of the 013h authority."""
+def test_native_013i_startup_rejects_disabled_and_missing_trigger() -> None:
+    """Startup detects both live disablement and removal of the 013i authority."""
 
     import psycopg2
     from psycopg2 import sql
 
     assert POSTGRES_URL is not None
-    schema_name = f"fm_013h_startup_{uuid.uuid4().hex[:12]}"
+    schema_name = f"fm_013i_startup_{uuid.uuid4().hex[:12]}"
     engine = None
     try:
         _install_postgresql_base_through_012(POSTGRES_URL, schema_name)
@@ -1880,8 +1921,8 @@ def test_native_013h_startup_rejects_disabled_and_missing_trigger() -> None:
         )
         with engine.begin() as connection:
             connection.exec_driver_sql(
-                "ALTER TABLE governance_idempotency_records DISABLE TRIGGER "
-                "governance_idempotency_records_integrity_013h"
+                "ALTER TABLE governance_evidence_admissions DISABLE TRIGGER "
+                '"000_013i_unverified_import_delivery_guard"'
             )
         with pytest.raises(MigrationIntegrityError, match="disabled required triggers"):
             verify_assurance_migration_integrity(
@@ -1891,8 +1932,8 @@ def test_native_013h_startup_rejects_disabled_and_missing_trigger() -> None:
             )
         with engine.begin() as connection:
             connection.exec_driver_sql(
-                "ALTER TABLE governance_idempotency_records ENABLE ALWAYS TRIGGER "
-                "governance_idempotency_records_integrity_013h"
+                "ALTER TABLE governance_evidence_admissions ENABLE ALWAYS TRIGGER "
+                '"000_013i_unverified_import_delivery_guard"'
             )
         verify_assurance_migration_integrity(
             engine,
@@ -1901,8 +1942,8 @@ def test_native_013h_startup_rejects_disabled_and_missing_trigger() -> None:
         )
         with engine.begin() as connection:
             connection.exec_driver_sql(
-                "DROP TRIGGER governance_idempotency_records_integrity_013h "
-                "ON governance_idempotency_records"
+                'DROP TRIGGER "000_013i_unverified_import_delivery_guard" '
+                "ON governance_evidence_admissions"
             )
         with pytest.raises(MigrationIntegrityError, match="missing required triggers"):
             verify_assurance_migration_integrity(

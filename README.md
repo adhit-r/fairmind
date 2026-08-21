@@ -737,8 +737,8 @@ See [Security Policy](docs/SECURITY.md) for complete security policy.
 ### Current phase: 2027 assurance foundation
 
 The current branch is an internal trust-foundation alpha. The trustworthy
-control-plane checklist is 15/19 complete (78.9%), and the full roadmap is
-24/92 complete (26.1%). The P1 worker layer, real evaluation engines, modality
+control-plane checklist is 16/19 complete (84.2%), and the full roadmap is
+25/92 complete (27.2%). The P1 worker layer, real evaluation engines, modality
 packs, lifecycle workflows, and rollout gates remain open.
 
 **Implemented and verified for the current slice**
@@ -749,6 +749,12 @@ packs, lifecycle workflows, and rollout gates remain open.
   UoW; the worker port remains declaration-only and default-deny
 - Server-generated execution-envelope binding
 - Passport v2 scope, signature, expiry, replay, and admission primitives
+- A separate default-off, dual-permission imported-report route that persists
+  only terminal claimed material as unverified, human-review-only, and
+  decision-ineligible; PostgreSQL 013i binds its immutable snapshot, exact
+  execution, active authority graph, provenance, chronology, policy expiry,
+  link, and suite projection, while the UI keeps claimed and mixed authority
+  visibly distinct
 - Atomic evidence persistence and separate execution/evidence/review/governance states
 - Literal, database-backed permissions for every live human Assurance V2 mutation;
   direct-mounted v2 routers also enforce the master feature gate
@@ -761,7 +767,7 @@ packs, lifecycle workflows, and rollout gates remain open.
   against evaluator revocation
 - PostgreSQL-authoritative transactional idempotency with exact 2,592,000-second
   generations, immutable response/audit bindings, expired-only atomic rollover,
-  and one append-only per-organization audit chain across all 20 enabled
+  and one append-only per-organization audit chain across all 21 enabled
   Assurance V2 mutation routes
 - Tenant-bound environmental evidence routes, response admission, and migration 013e,
   verified on SQLite and a disposable local PostgreSQL 14 instance
@@ -770,10 +776,10 @@ packs, lifecycle workflows, and rollout gates remain open.
 
 **Next release gates**
 
-- Split the remaining oversized control-plane service/repository boundaries
-- Implement service-worker authorization, trusted external-adapter and imported-
-  report workflows, an audited separation override, and independently invocable
-  submit/link surfaces
+- Split the remaining oversized SQL repository implementation without changing
+  the shared transaction boundary
+- Implement service-worker authorization, an audited separation override, and
+  independently invocable submit/link surfaces
 - Close the feature-switch row and implement the evidence UI without weakening
   the default-off boundary
 - Add a separately authenticated least-privilege database runtime identity,
@@ -786,7 +792,7 @@ packs, lifecycle workflows, and rollout gates remain open.
 
 No compliance certification, automatic approval, automatic enforcement, or generally available “FairMind Verified” claim is made by this branch.
 
-See the [2027 assurance roadmap](docs/superpowers/plans/2026-07-19-fairmind-2027-ai-assurance-todo.md), [trust-authority evidence](docs/audits/2026-08-13-p0-trust-authority-administration.md), [operational-freshness evidence](docs/audits/2026-08-13-p0-operational-evidence-freshness.md), [Task 12B architecture note](docs/architecture/verified-evidence-admission-task12b.md), and [release-gate backlog](docs/superpowers/plans/2026-08-08-task12b-release-gate-backlog.md).
+See the [2027 assurance roadmap](docs/superpowers/plans/2026-07-19-fairmind-2027-ai-assurance-todo.md), [trust-authority evidence](docs/audits/2026-08-13-p0-trust-authority-administration.md), [operational-freshness evidence](docs/audits/2026-08-13-p0-operational-evidence-freshness.md), [evidence-source/import evidence](docs/audits/2026-08-21-p0-evidence-source-import.md), [Task 12B architecture note](docs/architecture/verified-evidence-admission-task12b.md), and [release-gate backlog](docs/superpowers/plans/2026-08-08-task12b-release-gate-backlog.md).
 
 ---
 

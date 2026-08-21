@@ -2,7 +2,8 @@ import type { EvaluationRunV2 } from '@/lib/api/hooks/useEvaluationWorkbenchV2'
 
 import { buildEvidenceTrustPresentation, sentenceLabel } from './evidenceTrust'
 
-function axisClass(label: string, value: string) {
+function axisClass(label: string, value: string, tone?: 'warning') {
+  if (tone === 'warning') return 'border-[#9A5B14] bg-[#FFF1D6] text-[#73420B]'
   if (label === 'Governance verdict') {
     if (value === 'Blocked') return 'border-[#D83A2E] bg-[#D83A2E] text-white'
     if (value === 'Approved') return 'border-[#155D46] bg-[#DFF4EA] text-[#155D46]'
@@ -13,6 +14,15 @@ function axisClass(label: string, value: string) {
   if (value === 'Passed' || value === 'Succeeded' || value === 'Verified' || value === 'Current' || value === 'Accepted') return 'border-[#155D46] bg-[#DFF4EA] text-[#155D46]'
   if (value === 'Passed with limitations' || value === 'Expiring' || value === 'Review') return 'border-[#9A5B14] bg-[#FFF1D6] text-[#73420B]'
   return 'border-[#59615D] bg-[#F3F5F0] text-[#303834]'
+}
+
+function evidenceResultClass(
+  tone: 'standard' | 'warning' | 'neutral',
+  value: string,
+) {
+  if (tone === 'warning') return 'border-[#9A5B14] bg-[#FFF1D6] text-[#73420B]'
+  if (tone === 'neutral') return 'border-[#59615D] bg-[#F3F5F0] text-[#303834]'
+  return axisClass('Evidence result', value)
 }
 
 function Timestamp({ value }: { value: string | null }) {
@@ -54,6 +64,40 @@ export function EvidenceTrustPanel({ run }: { run: EvaluationRunV2 }) {
           Execution, evaluator evidence, and governance remain separate records. A successful run is not a governance approval.
         </p>
       </div>
+
+      {presentation.evidenceTrustWarnings.hasUnverifiedImportedMaterial ? (
+        <section role="alert" aria-labelledby="unverified-imported-material-heading" className="border-b-4 border-[#0F1412] bg-[#FFF1D6] p-4 sm:p-5">
+          <h3 id="unverified-imported-material-heading" className="text-base font-black text-[#73420B]">Unverified imported material</h3>
+          <p className="mt-1 max-w-[72ch] text-sm font-semibold text-[#73420B]">
+            <strong>Claimed result.</strong> The result has not been cryptographically verified. <strong>Human review only.</strong> <strong>Not eligible for governance decision.</strong>
+          </p>
+          <ul aria-label="Suites with unverified imported material" className="mt-3 grid gap-2 sm:grid-cols-2">
+            {presentation.evidenceTrustWarnings.unverifiedImportedSuites.map((suite) => (
+              <li key={suite.suiteExecutionId} className="min-w-0 border-2 border-[#9A5B14] bg-[#FCFDF8] px-3 py-2 text-sm font-bold text-[#73420B]">
+                <span className="block break-words">{suite.suiteVersionId}</span>
+                <span className="mt-1 block break-all font-mono text-xs text-[#73420B]">Execution {suite.suiteExecutionId}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {presentation.evidenceTrustWarnings.hasInconsistentEvidenceTrust ? (
+        <section role="alert" aria-labelledby="inconsistent-evidence-trust-heading" className="border-b-4 border-[#D83A2E] bg-red-50 p-4 sm:p-5">
+          <h3 id="inconsistent-evidence-trust-heading" className="text-base font-black text-[#8F2019]">Evidence trust record requires review</h3>
+          <p className="mt-1 max-w-[72ch] text-sm font-semibold text-[#5B211D]">
+            These suites report an unsupported source and admission combination. FairMind does not present their claimed results as cryptographically verified or as governance decision evidence.
+          </p>
+          <ul aria-label="Suites with inconsistent evidence trust data" className="mt-3 grid gap-2 sm:grid-cols-2">
+            {presentation.evidenceTrustWarnings.inconsistentEvidenceSuites.map((suite) => (
+              <li key={suite.suiteExecutionId} className="min-w-0 border-2 border-[#D83A2E] bg-[#FCFDF8] px-3 py-2 text-sm font-bold text-[#8F2019]">
+                <span className="block break-words">{suite.suiteVersionId}</span>
+                <span className="mt-1 block break-all font-mono text-xs text-[#8F2019]">Execution {suite.suiteExecutionId}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       <div className="border-b-2 border-[#0F1412] p-4 sm:p-5">
         <h3 className="text-base font-black">Exact execution binding</h3>
@@ -103,7 +147,7 @@ export function EvidenceTrustPanel({ run }: { run: EvaluationRunV2 }) {
         {presentation.axes.map((axis) => (
           <div key={axis.label} className="p-4">
             <p className="text-xs font-black uppercase tracking-wide text-[#59615D]">{axis.label}</p>
-            <p className={`mt-2 inline-flex min-h-8 items-center border-2 px-2.5 py-1 text-xs font-black uppercase ${axisClass(axis.label, axis.value)}`}>
+            <p className={`mt-2 inline-flex min-h-8 items-center border-2 px-2.5 py-1 text-xs font-black uppercase ${axisClass(axis.label, axis.value, axis.tone)}`}>
               {axis.value}
             </p>
           </div>
@@ -147,7 +191,7 @@ export function EvidenceTrustPanel({ run }: { run: EvaluationRunV2 }) {
           </div>
         ) : (
           <div className="mt-3 max-w-full overflow-x-auto border-2 border-[#0F1412]">
-            <table aria-label="Suite evidence trust metadata" className="w-full min-w-[2400px] border-collapse text-left text-sm">
+            <table aria-label="Suite evidence trust metadata" className="w-full min-w-[2600px] border-collapse text-left text-sm">
               <thead className="bg-[#0F1412] text-white">
                 <tr>
                   <th scope="col" className="px-3 py-3 font-black">Suite</th>
@@ -159,6 +203,7 @@ export function EvidenceTrustPanel({ run }: { run: EvaluationRunV2 }) {
                   <th scope="col" className="px-3 py-3 font-black">Authority reasons</th>
                   <th scope="col" className="px-3 py-3 font-black">Freshness evaluated</th>
                   <th scope="col" className="px-3 py-3 font-black">Freshness effective</th>
+                  <th scope="col" className="px-3 py-3 font-black">Result authority</th>
                   <th scope="col" className="px-3 py-3 font-black">Decision support</th>
                   <th scope="col" className="px-3 py-3 font-black">Evidence result</th>
                   <th scope="col" className="px-3 py-3 font-black">Admission</th>
@@ -172,21 +217,22 @@ export function EvidenceTrustPanel({ run }: { run: EvaluationRunV2 }) {
                   const suite = run.suiteExecutions.find((candidate) => candidate.id === metadata.suiteExecutionId)
                   return (
                     <tr key={metadata.suiteExecutionId} className="border-t-2 border-[#0F1412] bg-[#FCFDF8]">
-                      <td className="px-3 py-3"><p className="font-mono text-xs font-bold">{suite?.suiteVersionId ?? metadata.suiteExecutionId}</p><p className="mt-1 text-xs font-semibold text-[#59615D]">Execution {suite?.ordinal ?? 'not recorded'} · {suite ? sentenceLabel(suite.technicalStatus) : 'Not recorded'}</p></td>
-                      <td className="px-3 py-3 font-semibold">{metadata.source}</td>
-                      <td className="px-3 py-3 text-[#59615D]"><p className="font-mono text-xs font-bold">{metadata.issuer}</p><p className="mt-1 font-mono text-xs">{metadata.signingKey}</p></td>
-                      <td className="px-3 py-3 text-[#59615D]">{metadata.signer}</td>
+                      <td className="min-w-0 px-3 py-3"><p className="break-words font-mono text-xs font-bold">{suite?.suiteVersionId ?? metadata.suiteExecutionId}</p><p className="mt-1 break-words text-xs font-semibold text-[#59615D]">Execution {suite?.ordinal ?? 'not recorded'} · {suite ? sentenceLabel(suite.technicalStatus) : 'Not recorded'}</p></td>
+                      <td className="min-w-0 break-words px-3 py-3 font-semibold">{metadata.source}</td>
+                      <td className="min-w-0 break-words px-3 py-3 text-[#59615D]"><p className="break-all font-mono text-xs font-bold">{metadata.issuer}</p><p className="mt-1 break-all font-mono text-xs">{metadata.signingKey}</p></td>
+                      <td className="min-w-0 break-words px-3 py-3 text-[#59615D]">{metadata.signer}</td>
                       <td className="px-3 py-3 text-xs font-semibold text-[#59615D]"><Timestamp value={metadata.effectiveExpiry === 'Not returned by this response' ? null : metadata.effectiveExpiry} /></td>
                       <td className="px-3 py-3 text-[#59615D]"><p className="font-mono text-xs font-bold">{metadata.reviewer}</p><p className="mt-1 text-xs">{metadata.reviewedAt}</p></td>
                       <td className="px-3 py-3 text-xs font-semibold text-[#59615D]">{metadata.admissionReasons.length > 0 || metadata.freshnessReasonCodes.length > 0 ? <>{metadata.admissionReasons.length > 0 ? <ul className="list-disc space-y-1 pl-4">{metadata.admissionReasons.map((reason, index) => <li key={`${metadata.suiteExecutionId}-admission-reason-${index}`}>{reason}</li>)}</ul> : null}{metadata.freshnessReasonCodes.length > 0 ? <ul className={`${metadata.admissionReasons.length > 0 ? 'mt-2 ' : ''}list-disc space-y-1 pl-4`}>{metadata.freshnessReasonCodes.map((reason) => <li key={`${metadata.suiteExecutionId}-freshness-reason-${reason}`}>{sentenceLabel(reason)}</li>)}</ul> : null}</> : 'Not returned by this response'}</td>
                       <td className="px-3 py-3 text-xs font-semibold text-[#59615D]"><Timestamp value={metadata.freshnessEvaluatedAt === 'Not returned by this response' ? null : metadata.freshnessEvaluatedAt} /></td>
                       <td className="px-3 py-3 text-xs font-semibold text-[#59615D]"><p><Timestamp value={metadata.freshnessEffectiveAt === 'Not returned by this response' ? null : metadata.freshnessEffectiveAt} /></p><p className="mt-1">Warning onset: <Timestamp value={metadata.expiringAt === 'Not returned by this response' ? null : metadata.expiringAt} /></p></td>
+                      <td className="px-3 py-3"><span className={`inline-flex min-h-8 items-center border-2 px-2 py-1 text-xs font-black uppercase ${metadata.resultAuthority === 'Claimed' ? 'border-[#9A5B14] bg-[#FFF1D6] text-[#73420B]' : metadata.resultAuthority === 'Verified' ? 'border-[#155D46] bg-[#DFF4EA] text-[#155D46]' : 'border-[#59615D] bg-[#F3F5F0] text-[#303834]'}`}>{metadata.resultAuthority}</span></td>
                       <td className="px-3 py-3 text-xs font-black uppercase text-[#303834]">{metadata.decisionEvidenceEligible}</td>
-                      <td className="px-3 py-3"><span className={`inline-flex min-h-8 items-center border-2 px-2 py-1 text-xs font-black uppercase ${axisClass('Evidence result', metadata.evidenceResult)}`}>{metadata.evidenceResult}</span></td>
+                      <td className="px-3 py-3"><span className={`inline-flex min-h-8 max-w-full items-center border-2 px-2 py-1 text-xs font-black uppercase ${evidenceResultClass(metadata.evidenceResultTone, metadata.evidenceResult)}`}><span className="break-words">{metadata.evidenceResult}</span></span></td>
                       <td className="px-3 py-3"><span className={`inline-flex min-h-8 items-center border-2 px-2 py-1 text-xs font-black uppercase ${axisClass('Admission', metadata.admission)}`}>{metadata.admission}</span></td>
                       <td className="px-3 py-3"><span className={`inline-flex min-h-8 items-center border-2 px-2 py-1 text-xs font-black uppercase ${axisClass('Freshness', metadata.freshness)}`}>{metadata.freshness}</span></td>
                       <td className="px-3 py-3"><span className={`inline-flex min-h-8 items-center border-2 px-2 py-1 text-xs font-black uppercase ${axisClass('Review', metadata.review)}`}>{metadata.review}</span></td>
-                      <td className="px-3 py-3 text-sm font-semibold text-[#59615D]">{metadata.limitations.length > 0 ? <ul className="list-disc space-y-1 pl-4">{metadata.limitations.map((limitation, index) => <li key={`${metadata.suiteExecutionId}-${index}`}>{limitation}</li>)}</ul> : 'None reported'}</td>
+                      <td className="min-w-0 break-words px-3 py-3 text-sm font-semibold text-[#59615D]">{metadata.limitations.length > 0 ? <ul className="list-disc space-y-1 break-words pl-4">{metadata.limitations.map((limitation, index) => <li key={`${metadata.suiteExecutionId}-${index}`} className="break-words">{limitation}</li>)}</ul> : 'None reported'}</td>
                     </tr>
                   )
                 })}

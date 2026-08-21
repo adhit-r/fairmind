@@ -25,6 +25,11 @@ GOVERNANCE_DECISION_PATH = (
     "/api/v1/ai-governance/organizations/{org_id}/workspaces/{workspace_id}"
     "/systems/{system_id}/evaluation-v2/runs/{run_id}/decisions"
 )
+IMPORTED_EVIDENCE_PATH = (
+    "/api/v1/ai-governance/organizations/{org_id}/workspaces/{workspace_id}"
+    "/systems/{system_id}/evaluation-v2/runs/{run_id}"
+    "/suite-executions/{suite_execution_id}/evidence-imports"
+)
 EVALUATOR_CATALOG_PATH = (
     "/api/v1/ai-governance/organizations/{org_id}" "/evaluation-v2/evaluator-catalog/registrations"
 )
@@ -48,12 +53,14 @@ def test_assurance_v2_routes_are_mounted_only_when_enabled() -> None:
     original = settings.assurance_v2_enabled
     original_evidence_submit = settings.assurance_v2_evidence_submit_enabled
     original_evidence_review = settings.assurance_v2_evidence_review_enabled
+    original_evidence_import = getattr(settings, "assurance_v2_evidence_import_enabled", False)
     original_governance_decision = settings.assurance_v2_governance_decision_enabled
     original_evaluator_catalog = getattr(settings, "assurance_v2_evaluator_catalog_enabled", False)
     try:
         settings.assurance_v2_enabled = False
         settings.assurance_v2_evidence_submit_enabled = False
         settings.assurance_v2_evidence_review_enabled = False
+        settings.assurance_v2_evidence_import_enabled = False
         settings.assurance_v2_governance_decision_enabled = True
         settings.assurance_v2_evaluator_catalog_enabled = False
         importlib.reload(main_module)
@@ -63,6 +70,7 @@ def test_assurance_v2_routes_are_mounted_only_when_enabled() -> None:
         assert VERIFIED_EVIDENCE_PATH not in disabled_paths
         assert VERIFIED_EVIDENCE_REVIEW_PATH not in disabled_paths
         assert GOVERNANCE_DECISION_PATH not in disabled_paths
+        assert IMPORTED_EVIDENCE_PATH not in disabled_paths
         assert EVALUATOR_CATALOG_PATH not in disabled_paths
         assert LEGACY_PLAN_PATH in disabled_paths
         assert LEGACY_RUN_PATH in disabled_paths
@@ -70,6 +78,7 @@ def test_assurance_v2_routes_are_mounted_only_when_enabled() -> None:
         settings.assurance_v2_enabled = True
         settings.assurance_v2_evidence_submit_enabled = False
         settings.assurance_v2_evidence_review_enabled = False
+        settings.assurance_v2_evidence_import_enabled = False
         settings.assurance_v2_governance_decision_enabled = False
         importlib.reload(main_module)
         enabled_paths_without_evidence_submit = _route_paths()
@@ -78,6 +87,7 @@ def test_assurance_v2_routes_are_mounted_only_when_enabled() -> None:
         assert VERIFIED_EVIDENCE_PATH not in enabled_paths_without_evidence_submit
         assert VERIFIED_EVIDENCE_REVIEW_PATH not in enabled_paths_without_evidence_submit
         assert GOVERNANCE_DECISION_PATH not in enabled_paths_without_evidence_submit
+        assert IMPORTED_EVIDENCE_PATH not in enabled_paths_without_evidence_submit
         assert EVALUATOR_CATALOG_PATH not in enabled_paths_without_evidence_submit
         assert LEGACY_PLAN_PATH in enabled_paths_without_evidence_submit
         assert LEGACY_RUN_PATH in enabled_paths_without_evidence_submit
@@ -91,6 +101,16 @@ def test_assurance_v2_routes_are_mounted_only_when_enabled() -> None:
         assert EVALUATOR_CATALOG_PATH not in enabled_paths
 
         settings.assurance_v2_evidence_submit_enabled = False
+        settings.assurance_v2_evidence_import_enabled = True
+        importlib.reload(main_module)
+        enabled_paths_with_import = _route_paths()
+        assert IMPORTED_EVIDENCE_PATH in enabled_paths_with_import
+        assert VERIFIED_EVIDENCE_PATH not in enabled_paths_with_import
+        assert VERIFIED_EVIDENCE_REVIEW_PATH not in enabled_paths_with_import
+        assert GOVERNANCE_DECISION_PATH not in enabled_paths_with_import
+
+        settings.assurance_v2_evidence_submit_enabled = False
+        settings.assurance_v2_evidence_import_enabled = False
         settings.assurance_v2_evidence_review_enabled = True
         importlib.reload(main_module)
         enabled_paths_without_evidence_submit = _route_paths()
@@ -117,6 +137,7 @@ def test_assurance_v2_routes_are_mounted_only_when_enabled() -> None:
         settings.assurance_v2_enabled = original
         settings.assurance_v2_evidence_submit_enabled = original_evidence_submit
         settings.assurance_v2_evidence_review_enabled = original_evidence_review
+        settings.assurance_v2_evidence_import_enabled = original_evidence_import
         settings.assurance_v2_governance_decision_enabled = original_governance_decision
         settings.assurance_v2_evaluator_catalog_enabled = original_evaluator_catalog
         importlib.reload(main_module)

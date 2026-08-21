@@ -21,6 +21,11 @@ from api.routes.evaluation_workbench import (
     verified_evidence_router,
     verified_evidence_review_router,
 )
+from api.routes.imported_evidence import (
+    get_imported_evidence_service,
+    imported_evidence_router,
+)
+from api.routes.governance_assurance import organization_membership
 from api.routes.governance_assurance import router as governance_assurance_router
 from config.auth import TokenData, TokenType, UserRole, get_current_active_user
 from config.settings import settings
@@ -66,6 +71,11 @@ app.include_router(
     verified_evidence_router,
     prefix="/api/v1/ai-governance",
     tags=["evaluation-workbench-v2-evidence"],
+)
+app.include_router(
+    imported_evidence_router,
+    prefix="/api/v1/ai-governance",
+    tags=["evaluation-workbench-v2-imported-evidence"],
 )
 app.include_router(
     verified_evidence_review_router,
@@ -279,6 +289,21 @@ def _admission_url(
     )
 
 
+def _import_url(
+    *,
+    run_id: str,
+    suite_execution_id: str,
+    workspace_id: str = "workspace-a",
+    system_id: str = "system-a",
+    org_id: str = ORG,
+) -> str:
+    return (
+        f"/api/v1/ai-governance/organizations/{org_id}/workspaces/{workspace_id}"
+        f"/systems/{system_id}/evaluation-v2/runs/{run_id}"
+        f"/suite-executions/{suite_execution_id}/evidence-imports"
+    )
+
+
 def _review_url(
     *,
     run_id: str,
@@ -314,18 +339,48 @@ def _grant_evidence_submit_permission() -> None:
     _grant_role_permissions("admin", ["evaluation:evidence:submit", "evaluation:evidence:link"])
 
 
+def _grant_evidence_import_permission() -> None:
+    _grant_role_permissions("admin", ["evaluation:evidence:import", "evaluation:evidence:link"])
+
+
+def _import_payload() -> dict[str, object]:
+    return {
+        "reportId": "report-a",
+        "reportContentHash": "a" * 64,
+        "capturedAt": "2026-08-08T08:02:00+00:00",
+        "claimedTechnicalStatus": "succeeded",
+        "claimedEvidenceResultStatus": "passed",
+        "claimedResultSummary": {"caseCount": 4},
+        "artifactRefs": [
+            {
+                "artifactId": "artifact-a",
+                "role": "report",
+                "sha256": "b" * 64,
+                "mediaType": "application/json",
+                "sizeBytes": 4096,
+            }
+        ],
+        "limitations": [],
+    }
+
+
 def _grant_evidence_review_permission() -> None:
     _grant_role_permissions("reviewer", ["evaluation:evidence:review"])
 
 
-def _grant_role_permissions(role: str, permissions: list[str]) -> None:
+def _grant_role_permissions(
+    role: str,
+    permissions: list[str],
+    *,
+    org_id: str = ORG,
+) -> None:
     session_iterator = app.dependency_overrides[get_db]()
     session = next(session_iterator)
     try:
         roles = OrganizationRole.__table__
         current = session.execute(
             select(roles.c.permissions).where(
-                roles.c.org_id == uuid.UUID(ORG),
+                roles.c.org_id == uuid.UUID(org_id),
                 roles.c.name == role,
             )
         ).scalar_one_or_none()
@@ -333,7 +388,7 @@ def _grant_role_permissions(role: str, permissions: list[str]) -> None:
             session.execute(
                 roles.insert().values(
                     id=uuid.uuid4(),
-                    org_id=uuid.UUID(ORG),
+                    org_id=uuid.UUID(org_id),
                     name=role,
                     permissions=permissions,
                 )
@@ -342,7 +397,7 @@ def _grant_role_permissions(role: str, permissions: list[str]) -> None:
             merged = list(dict.fromkeys([*current, *permissions]))
             session.execute(
                 update(roles)
-                .where(roles.c.org_id == uuid.UUID(ORG), roles.c.name == role)
+                .where(roles.c.org_id == uuid.UUID(org_id), roles.c.name == role)
                 .values(permissions=merged)
             )
         session.commit()
@@ -427,6 +482,45 @@ class _RecordingAdmissionService:
                 "verdictVersion": 0,
                 "effectiveExpiresAt": "2026-08-08T12:00:00+00:00",
                 "verifiedAt": "2026-08-08T11:00:00+00:00",
+            },
+            status=201,
+        )
+
+
+class _RecordingImportedEvidenceService:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    def import_unverified_report(self, **kwargs):
+        self.calls.append(kwargs)
+        payload = kwargs["payload"]
+        assert isinstance(payload, dict)
+        scope = kwargs["scope"]
+        return MutationResult.create(
+            body={
+                "admissionId": "admission-import-1",
+                "evidenceRunId": "evidence-run-import-1",
+                "passportRevisionId": "passport-revision-import-1",
+                "nonceClaimId": "nonce-import-1",
+                "suiteEvidenceLinkId": "suite-link-import-1",
+                "runId": scope.run_id,
+                "suiteExecutionId": scope.suite_execution_id,
+                "reportContentHash": payload["reportContentHash"],
+                "importSnapshotHash": "c" * 64,
+                "resultAuthority": "claimed",
+                "humanReviewOnly": True,
+                "decisionEvidenceEligible": False,
+                "technicalStatus": payload["claimedTechnicalStatus"],
+                "evidenceResultStatus": payload["claimedEvidenceResultStatus"],
+                "admissionStatus": "unverified",
+                "reviewStatus": "pending",
+                "freshnessStatus": "current",
+                "runTechnicalStatus": payload["claimedTechnicalStatus"],
+                "runEvidenceOutcome": payload["claimedEvidenceResultStatus"],
+                "overallVerdict": "insufficient",
+                "verdictVersion": 0,
+                "effectiveExpiresAt": "2026-08-08T08:12:00+00:00",
+                "importedAt": "2026-08-08T08:04:00+00:00",
             },
             status=201,
         )
@@ -837,6 +931,213 @@ def test_verified_evidence_submit_is_hidden_when_feature_flag_is_off(
     )
 
     assert response.status_code == 404
+
+
+def test_unverified_evidence_import_checks_its_literal_permission_before_scope(
+    workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The independently enabled import route must never fall through to scope parsing."""
+
+    client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", True)
+    monkeypatch.setattr(settings, "assurance_v2_evidence_import_enabled", True)
+
+    response = client.post(
+        _import_url(run_id="run-not-visible", suite_execution_id="suite-not-visible"),
+        headers={**_headers("import-permission-first"), "Content-Type": "application/json"},
+        json={},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == {
+        "code": "evaluation_evidence_import_forbidden",
+        "message": "The evaluation:evidence:import permission is required.",
+    }
+
+
+@pytest.mark.parametrize(
+    ("master_enabled", "import_enabled"),
+    ((False, True), (True, False)),
+)
+def test_import_direct_mount_gates_before_auth_database_body_or_service(
+    workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
+    master_enabled: bool,
+    import_enabled: bool,
+) -> None:
+    """A direct child mount cannot parse or authorize while either gate is off."""
+
+    client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", master_enabled)
+    monkeypatch.setattr(settings, "assurance_v2_evidence_import_enabled", import_enabled)
+
+    def unexpected_dependency() -> object:
+        raise AssertionError("the import gate must run before this dependency")
+
+    original_db = app.dependency_overrides[get_db]
+    app.dependency_overrides[get_db] = unexpected_dependency
+    app.dependency_overrides[organization_membership] = unexpected_dependency
+    app.dependency_overrides[get_imported_evidence_service] = unexpected_dependency
+    try:
+        response = client.post(
+            _import_url(run_id="run-hidden", suite_execution_id="suite-hidden"),
+            headers={**_headers("import-direct-gate"), "Content-Type": "application/json"},
+            content=b'{"malformed":',
+        )
+    finally:
+        app.dependency_overrides[get_db] = original_db
+        app.dependency_overrides.pop(organization_membership, None)
+        app.dependency_overrides.pop(get_imported_evidence_service, None)
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == {
+        "code": "assurance_feature_disabled",
+        "message": "Unverified evidence import is not enabled.",
+    }
+
+
+def test_unverified_import_requires_link_permission_before_scope_or_service(
+    workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", True)
+    monkeypatch.setattr(settings, "assurance_v2_evidence_import_enabled", True)
+    _grant_role_permissions("admin", ["evaluation:evidence:import"])
+    recorder = _RecordingImportedEvidenceService()
+    app.dependency_overrides[get_imported_evidence_service] = lambda: recorder
+    try:
+        response = client.post(
+            _import_url(run_id="run-not-visible", suite_execution_id="suite-not-visible"),
+            headers={**_headers("import-link-boundary"), "Content-Type": "application/json"},
+            content=b'{"malformed":',
+        )
+    finally:
+        app.dependency_overrides.pop(get_imported_evidence_service, None)
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == {
+        "code": "evaluation_evidence_link_forbidden",
+        "message": "The evaluation:evidence:link permission is required.",
+    }
+    assert recorder.calls == []
+
+
+def test_unverified_import_requires_exact_scope_and_exposes_claimed_only_response(
+    workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", True)
+    monkeypatch.setattr(settings, "assurance_v2_evidence_import_enabled", True)
+    _plan, run = _create_active_v2_plan_and_run(client)
+    suite_execution_id = run["suiteExecutions"][0]["id"]
+    _grant_evidence_import_permission()
+    recorder = _RecordingImportedEvidenceService()
+    app.dependency_overrides[get_imported_evidence_service] = lambda: recorder
+    headers = {**_headers("import-scope-boundary"), "Content-Type": "application/json"}
+    try:
+        _grant_role_permissions(
+            "admin",
+            ["evaluation:evidence:import", "evaluation:evidence:link"],
+            org_id=FOREIGN_ORG,
+        )
+        wrong_org = client.post(
+            _import_url(
+                org_id=FOREIGN_ORG,
+                run_id=run["id"],
+                suite_execution_id=suite_execution_id,
+            ),
+            headers=headers,
+            json=_import_payload(),
+        )
+        wrong_workspace = client.post(
+            _import_url(
+                workspace_id="workspace-wrong",
+                run_id=run["id"],
+                suite_execution_id=suite_execution_id,
+            ),
+            headers=headers,
+            json=_import_payload(),
+        )
+        wrong_system = client.post(
+            _import_url(
+                system_id="system-wrong",
+                run_id=run["id"],
+                suite_execution_id=suite_execution_id,
+            ),
+            headers=headers,
+            json=_import_payload(),
+        )
+        wrong_run = client.post(
+            _import_url(run_id="run-wrong", suite_execution_id=suite_execution_id),
+            headers=headers,
+            json=_import_payload(),
+        )
+        wrong_suite = client.post(
+            _import_url(run_id=run["id"], suite_execution_id="suite-wrong"),
+            headers=headers,
+            json=_import_payload(),
+        )
+        accepted = client.post(
+            _import_url(run_id=run["id"], suite_execution_id=suite_execution_id),
+            headers=headers,
+            json=_import_payload(),
+        )
+    finally:
+        app.dependency_overrides.pop(get_imported_evidence_service, None)
+
+    assert all(
+        response.status_code == 404
+        for response in (wrong_org, wrong_workspace, wrong_system, wrong_run, wrong_suite)
+    )
+    assert accepted.status_code == 201, accepted.text
+    assert accepted.json()["resultAuthority"] == "claimed"
+    assert accepted.json()["humanReviewOnly"] is True
+    assert accepted.json()["decisionEvidenceEligible"] is False
+    assert "verificationReceiptId" not in accepted.json()
+    assert "verifiedAt" not in accepted.json()
+    assert len(recorder.calls) == 1
+
+
+def test_unverified_import_requires_exact_json_and_rejects_duplicate_keys_before_service(
+    workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", True)
+    monkeypatch.setattr(settings, "assurance_v2_evidence_import_enabled", True)
+    _plan, run = _create_active_v2_plan_and_run(client)
+    suite_execution_id = run["suiteExecutions"][0]["id"]
+    _grant_evidence_import_permission()
+    recorder = _RecordingImportedEvidenceService()
+    app.dependency_overrides[get_imported_evidence_service] = lambda: recorder
+    try:
+        non_exact_media_type = client.post(
+            _import_url(run_id=run["id"], suite_execution_id=suite_execution_id),
+            headers={**_headers("import-media-type"), "Content-Type": "application/problem+json"},
+            content=b"{}",
+        )
+        duplicate_keys = client.post(
+            _import_url(run_id=run["id"], suite_execution_id=suite_execution_id),
+            headers={**_headers("import-duplicate"), "Content-Type": "application/json"},
+            content=(
+                b'{"reportId":"report-a","reportId":"report-b",'
+                b'"reportContentHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",'
+                b'"capturedAt":"2026-08-08T08:02:00+00:00",'
+                b'"claimedTechnicalStatus":"succeeded",'
+                b'"claimedEvidenceResultStatus":"passed",'
+                b'"claimedResultSummary":{"caseCount":4},'
+                b'"artifactRefs":[],"limitations":[]}'
+            ),
+        )
+    finally:
+        app.dependency_overrides.pop(get_imported_evidence_service, None)
+
+    assert non_exact_media_type.status_code == 415
+    assert duplicate_keys.status_code == 422
+    assert recorder.calls == []
 
 
 def test_verified_evidence_submit_is_hidden_when_master_gate_is_off(

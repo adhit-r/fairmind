@@ -51,6 +51,9 @@ class Settings(BaseSettings):
     # Verified Evidence Passport admission remains independently disabled until
     # the route, trust catalog, and reviewer workflow pass their release gate.
     assurance_v2_evidence_submit_enabled: bool = False
+    # Unsigned reports are separately disabled by default. When enabled, they
+    # remain explicitly unverified, human-review-only material.
+    assurance_v2_evidence_import_enabled: bool = False
     # Four-eyes evidence review remains separately disabled until its
     # persistence, authorization, and release-gate controls are validated.
     assurance_v2_evidence_review_enabled: bool = False

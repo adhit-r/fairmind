@@ -107,6 +107,11 @@ FROZEN_013H_OPERATOR_CHECKSUM = (
 FROZEN_SQLITE_013H_FIXTURE_CHECKSUM = (
     "33e6eb96c95c9734a8efe50c760c59bd225099aa5ab2fb3a0441c3fe706fdf78"
 )
+_FROZEN_013I_CHECKSUM = "83c77841beb21dbf96d1e40260534d262dbf21941b21fac4121964a065e36f94"
+FROZEN_013I_OPERATOR_CHECKSUM = "69c4bda5b5485da32f522d8dffd690f3875c05fe3bba576a21338cd814159c8d"
+FROZEN_SQLITE_013I_FIXTURE_CHECKSUM = (
+    "fda2fcf715e0622aa8bfde7e07ff2c37dca4028e7ae56511357e01b6ee9befc2"
+)
 
 FROZEN_ASSURANCE_MIGRATIONS = (
     FrozenMigration(
@@ -153,6 +158,11 @@ FROZEN_ASSURANCE_MIGRATIONS = (
         "013g-to-013h-idempotency-retention-integrity-v1",
         _FROZEN_013H_CHECKSUM,
         _MIGRATIONS / "013h_idempotency_retention_integrity.sql",
+    ),
+    FrozenMigration(
+        "013h-to-013i-imported-evidence-delivery-integrity-v1",
+        _FROZEN_013I_CHECKSUM,
+        _MIGRATIONS / "013i_imported_evidence_delivery_integrity.sql",
     ),
 )
 
@@ -221,6 +231,10 @@ POSTGRESQL_ASSURANCE_FUNCTIONS = frozenset(
         "fairmind_idempotency_clock_utc_013h",
         "fairmind_idempotency_row_is_valid_013h",
         "fairmind_guard_idempotency_record_013h",
+        "fairmind_unverified_import_delivery_is_valid_013i",
+        "fairmind_unverified_import_projection_is_valid_013i",
+        "fairmind_guard_unverified_import_delivery_013i",
+        "fairmind_guard_unverified_import_projection_013i",
         "fairmind_initial_layer_verdicts_v1_for_run",
         "fairmind_is_canonical_utc_timestamp",
         "fairmind_is_initial_layer_verdicts",
@@ -328,6 +342,8 @@ POSTGRESQL_ASSURANCE_REQUIRED_TRIGGERS = frozenset(
         "000_013g_evidence_reviews_freshness_gate",
         "000_013g_evaluation_decisions_freshness_gate",
         "governance_idempotency_records_integrity_013h",
+        "000_013i_unverified_import_delivery_guard",
+        "000_013i_unverified_import_projection_guard",
     }
 )
 
@@ -346,7 +362,7 @@ FROZEN_POSTGRESQL_ASSURANCE_CATALOGS: Mapping[int, FrozenPostgreSQLCatalog] = Ma
         14: FrozenPostgreSQLCatalog(
             spec=POSTGRESQL_ASSURANCE_CATALOG_SPEC,
             postgresql_major=14,
-            digest=("5789e901c7c853bce6c40dcf631f294f1e27b2d8d9f77e13623d72c17408030d"),
+            digest=("707d784f5a3e69a29b21ca50d168fe8954e7723f1bbb1165250e5947dcf282a9"),
         )
     }
 )
@@ -500,6 +516,8 @@ SQLITE_ASSURANCE_TRIGGERS = frozenset(
         "governance_idempotency_records_insert_unavailable_013h",
         "governance_idempotency_records_update_unavailable_013h",
         "governance_idempotency_records_delete_unavailable_013h",
+        "governance_evidence_admissions_import_delivery_guard_013i",
+        "governance_evaluation_suite_executions_import_projection_guard_013i",
         "governance_evidence_org_insert",
         "governance_evidence_org_update",
         "governance_evaluation_audit_events_no_update",
@@ -523,9 +541,9 @@ SQLITE_ASSURANCE_VIEWS = frozenset(
 # named above, sorted by object type and name.  Unlike a name-only inventory,
 # this freezes table columns/checks/FKs, explicit indexes, trigger bodies, and
 # security-critical view definitions.
-# Measured after the complete 013h SQLite fail-closed fixture was installed
+# Measured after the complete 013i SQLite fail-closed fixture was installed
 # twice and its source checksum was frozen.
-SQLITE_ASSURANCE_CATALOG_DIGEST = "3bd2973106d368f55332095d98fcecc23dbc588e0ec2c72cefae32ba69c51118"
+SQLITE_ASSURANCE_CATALOG_DIGEST = "12207079275059e083c57e252ddb8f9e32283a0c5fa3a8aea1b24fa09af746e9"
 
 _SQLITE_ASSURANCE_OBJECTS = {
     "table": SQLITE_ASSURANCE_TABLES,
@@ -1430,6 +1448,11 @@ def verify_sqlite_assurance_schema(connection) -> None:
             "013h",
             _MIGRATIONS / "fixtures" / "013h_idempotency_retention_integrity.sqlite.sql",
             FROZEN_SQLITE_013H_FIXTURE_CHECKSUM,
+        ),
+        (
+            "013i",
+            _MIGRATIONS / "fixtures" / "013i_imported_evidence_delivery_integrity.sqlite.sql",
+            FROZEN_SQLITE_013I_FIXTURE_CHECKSUM,
         ),
     )
     for version, fixture_path, frozen_checksum in fixtures:

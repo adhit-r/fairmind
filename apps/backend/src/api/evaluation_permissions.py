@@ -18,6 +18,7 @@ EVALUATION_PLAN_WRITE_PERMISSION: Final = "evaluation:plan:write"
 EVALUATION_PLAN_ACTIVATE_PERMISSION: Final = "evaluation:plan:activate"
 EVALUATION_RUN_CREATE_PERMISSION: Final = "evaluation:run:create"
 EVALUATION_EVIDENCE_SUBMIT_PERMISSION: Final = "evaluation:evidence:submit"
+EVALUATION_EVIDENCE_IMPORT_PERMISSION: Final = "evaluation:evidence:import"
 EVALUATION_EVIDENCE_LINK_PERMISSION: Final = "evaluation:evidence:link"
 EVALUATION_EVIDENCE_REVIEW_PERMISSION: Final = "evaluation:evidence:review"
 EVALUATION_DECISION_PERMISSION: Final = "evaluation:decision"
@@ -44,6 +45,10 @@ LIVE_HUMAN_PERMISSION_ERRORS: Final[dict[str, tuple[str, str]]] = {
     EVALUATION_EVIDENCE_SUBMIT_PERMISSION: (
         "evaluation_evidence_submit_forbidden",
         "The evaluation:evidence:submit permission is required.",
+    ),
+    EVALUATION_EVIDENCE_IMPORT_PERMISSION: (
+        "evaluation_evidence_import_forbidden",
+        "The evaluation:evidence:import permission is required.",
     ),
     EVALUATION_EVIDENCE_LINK_PERMISSION: (
         "evaluation_evidence_link_forbidden",
@@ -102,6 +107,7 @@ __all__ = [
     "EVALUATION_CATALOG_ADMIN_PERMISSION",
     "EVALUATION_DECISION_PERMISSION",
     "EVALUATION_EVIDENCE_LINK_PERMISSION",
+    "EVALUATION_EVIDENCE_IMPORT_PERMISSION",
     "EVALUATION_EVIDENCE_REVIEW_PERMISSION",
     "EVALUATION_EVIDENCE_SUBMIT_PERMISSION",
     "EVALUATION_PLAN_ACTIVATE_PERMISSION",

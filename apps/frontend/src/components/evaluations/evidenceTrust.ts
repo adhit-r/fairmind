@@ -47,7 +47,23 @@ export type EvidenceTrustInput = {
 }
 
 export type EvidenceTrustPresentation = {
-  axes: Array<{ label: string; value: string }>
+  axes: Array<{
+    label: string
+    value: string
+    tone?: 'warning'
+  }>
+  evidenceTrustWarnings: {
+    hasUnverifiedImportedMaterial: boolean
+    unverifiedImportedSuites: Array<{
+      suiteExecutionId: string
+      suiteVersionId: string
+    }>
+    hasInconsistentEvidenceTrust: boolean
+    inconsistentEvidenceSuites: Array<{
+      suiteExecutionId: string
+      suiteVersionId: string
+    }>
+  }
   binding: {
     scope: Array<{ label: string; value: string }>
     execution: Array<{ label: string; value: string }>
@@ -78,7 +94,9 @@ export type EvidenceTrustPresentation = {
     expiringAt: string
     freshnessReasonCodes: string[]
     decisionEvidenceEligible: string
+    resultAuthority: 'Verified' | 'Claimed' | 'Not established'
     evidenceResult: string
+    evidenceResultTone: 'standard' | 'warning' | 'neutral'
     admission: string
     freshness: string
     review: string
@@ -116,6 +134,39 @@ function reasons(value: EvidenceTrustSuiteInput['evidenceTrust']) {
   )
 }
 
+function sourceType(suite: EvidenceTrustSuiteInput) {
+  return typeof suite.evidenceTrust?.sourceType === 'string'
+    ? suite.evidenceTrust.sourceType
+    : ''
+}
+
+function isUnverifiedImportedMaterial(suite: EvidenceTrustSuiteInput) {
+  return suite.admissionStatus === 'unverified' && sourceType(suite) === 'imported_report'
+}
+
+function hasInconsistentEvidenceTrust(suite: EvidenceTrustSuiteInput) {
+  const source = sourceType(suite)
+  return (suite.admissionStatus === 'unverified' && source !== 'imported_report')
+    || (source === 'imported_report' && suite.admissionStatus !== 'unverified')
+}
+
+function claimedResultAuthority(suite: EvidenceTrustSuiteInput) {
+  return suite.admissionStatus === 'unverified' || sourceType(suite) === 'imported_report'
+}
+
+function resultAuthority(suite: EvidenceTrustSuiteInput): 'Verified' | 'Claimed' | 'Not established' {
+  if (claimedResultAuthority(suite)) return 'Claimed'
+  if (suite.admissionStatus === 'verified') return 'Verified'
+  return 'Not established'
+}
+
+function warningSuite(suite: EvidenceTrustSuiteInput) {
+  return {
+    suiteExecutionId: text(suite.id),
+    suiteVersionId: text(suite.suiteVersionId),
+  }
+}
+
 export function sentenceLabel(value: string) {
   return value.replace(/_/g, ' ').replace(/^./, (character) => character.toUpperCase())
 }
@@ -125,14 +176,47 @@ export function buildEvidenceTrustPresentation(input: EvidenceTrustInput): Evide
   const target = record(envelope.target)
   const trustPolicy = record(envelope.trustPolicy)
   const envelopeSuites = Array.isArray(envelope.suites) ? envelope.suites : []
-  const executionsById = new Map((input.suiteExecutions ?? []).map((suite) => [suite.id, suite]))
+  const suiteExecutions = input.suiteExecutions ?? []
+  const executionsById = new Map(suiteExecutions.map((suite) => [suite.id, suite]))
+  const unverifiedImportedSuites = suiteExecutions
+    .filter(isUnverifiedImportedMaterial)
+    .map(warningSuite)
+  const inconsistentEvidenceSuites = suiteExecutions
+    .filter(hasInconsistentEvidenceTrust)
+    .map(warningSuite)
+  const evaluatorEvidenceResult = sentenceLabel(input.evidenceOutcome)
+  const governanceVerdict = sentenceLabel(input.overallVerdict)
+  const hasClaimedEvaluatorMaterial = unverifiedImportedSuites.length > 0
+    || inconsistentEvidenceSuites.length > 0
+  const allEvaluatorMaterialIsClaimed = suiteExecutions.length > 0
+    && suiteExecutions.every((suite) => claimedResultAuthority(suite))
 
   return {
     axes: [
       { label: 'Execution status', value: sentenceLabel(input.technicalStatus) },
-      { label: 'Evaluator evidence result', value: sentenceLabel(input.evidenceOutcome) },
-      { label: 'Governance verdict', value: sentenceLabel(input.overallVerdict) },
+      {
+        label: 'Evaluator evidence result',
+        value: hasClaimedEvaluatorMaterial
+          ? allEvaluatorMaterialIsClaimed
+            ? `Claimed result: ${evaluatorEvidenceResult}`
+            : `Mixed-authority aggregate: ${evaluatorEvidenceResult}`
+          : evaluatorEvidenceResult,
+        ...(hasClaimedEvaluatorMaterial ? { tone: 'warning' as const } : {}),
+      },
+      {
+        label: 'Governance verdict',
+        value: hasClaimedEvaluatorMaterial
+          ? `Recorded verdict: ${governanceVerdict}`
+          : governanceVerdict,
+        ...(hasClaimedEvaluatorMaterial ? { tone: 'warning' as const } : {}),
+      },
     ],
+    evidenceTrustWarnings: {
+      hasUnverifiedImportedMaterial: unverifiedImportedSuites.length > 0,
+      unverifiedImportedSuites,
+      hasInconsistentEvidenceTrust: inconsistentEvidenceSuites.length > 0,
+      inconsistentEvidenceSuites,
+    },
     binding: {
       scope: [
         row('Organization', input.organizationId),
@@ -177,7 +261,10 @@ export function buildEvidenceTrustPresentation(input: EvidenceTrustInput): Evide
         }
       }),
     },
-    suiteMetadata: (input.suiteExecutions ?? []).map((suite) => ({
+    suiteMetadata: suiteExecutions.map((suite) => {
+      const authority = resultAuthority(suite)
+      const result = sentenceLabel(suite.evidenceResultStatus)
+      return {
       suiteExecutionId: suite.id,
       // ownerScope describes suite ownership, not the source of this evidence.
       source: text(suite.evidenceTrust?.sourceType),
@@ -194,16 +281,23 @@ export function buildEvidenceTrustPresentation(input: EvidenceTrustInput): Evide
       freshnessReasonCodes: (suite.freshnessReasonCodes ?? []).filter(
         (reason): reason is string => typeof reason === 'string' && reason.trim().length > 0,
       ),
-      decisionEvidenceEligible: suite.decisionEvidenceEligible === null
+      decisionEvidenceEligible: authority === 'Claimed'
+        ? 'Not eligible'
+        : suite.decisionEvidenceEligible === null
         ? NOT_RETURNED
         : suite.decisionEvidenceEligible ? 'Eligible' : 'Not eligible',
-      evidenceResult: sentenceLabel(suite.evidenceResultStatus),
+      resultAuthority: authority,
+      evidenceResult: authority === 'Claimed' ? `Claimed result: ${result}` : result,
+      evidenceResultTone: authority === 'Claimed'
+        ? 'warning'
+        : authority === 'Verified' ? 'standard' : 'neutral',
       admission: sentenceLabel(suite.admissionStatus),
       freshness: sentenceLabel(suite.freshnessStatus),
       review: sentenceLabel(suite.reviewStatus),
       limitations: suite.limitations.filter(
         (limitation): limitation is string => typeof limitation === 'string' && limitation.trim().length > 0,
       ),
-    })),
+      }
+    }),
   }
 }
