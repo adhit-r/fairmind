@@ -412,6 +412,14 @@ def test_all_new_models_have_exact_columns_unique_constraint_names_and_vocabular
         "admission_contract_version",
     ):
         assert review_columns[factual_scope_column].nullable is False
+    review_checks = {
+        constraint.name: str(constraint.sqltext)
+        for constraint in governance_models.GovernanceEvidenceReview.__table__.constraints
+        if isinstance(constraint, CheckConstraint) and constraint.name
+    }
+    assert review_checks["ck_governance_evidence_review_no_override_013j"] == (
+        "separation_override_reason IS NULL"
+    )
 
     vocabulary = {
         "GovernanceEvaluationSuiteVersion": ("draft", "active", "deprecated", "revoked"),

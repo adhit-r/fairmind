@@ -1821,6 +1821,10 @@ class GovernanceEvidenceReview(Base):
             name="ck_governance_evidence_review_decision",
         ),
         CheckConstraint("review_version >= 1", name="ck_governance_evidence_review_version"),
+        CheckConstraint(
+            "separation_override_reason IS NULL",
+            name="ck_governance_evidence_review_no_override_013j",
+        ),
         Index(
             "idx_governance_evidence_reviews_admission_version",
             "admission_id",
