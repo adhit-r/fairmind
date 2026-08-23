@@ -59,7 +59,7 @@ from src.application.services.governance_assurance_service import OrgMembership
 from src.application.services.governance_decision_service import GovernanceDecisionService
 from src.domain.assurance.evaluation_v2 import (
     AssuranceContractValidationError,
-    validate_public_safe_string,
+    validate_owner_override_reason,
 )
 
 router = APIRouter(
@@ -513,7 +513,7 @@ class OwnerDecisionOverrideRequest(GovernanceDecisionRequest):
     @classmethod
     def _validate_owner_override_reason(cls, value: str) -> str:
         try:
-            validate_public_safe_string(value)
+            validate_owner_override_reason(value)
         except AssuranceContractValidationError as error:
             raise ValueError("owner override reason is unsafe") from error
         return value

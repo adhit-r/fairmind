@@ -1689,6 +1689,64 @@ def test_owner_decision_override_rejects_invalid_reason_before_service(
     assert recorder.calls == []
 
 
+@pytest.mark.parametrize(
+    ("reason", "expected_status"),
+    (
+        ("é" * 256, 201),  # 512 UTF-8 bytes
+        ("é" * 256 + "x", 201),  # 513 UTF-8 bytes
+        ("é" * 1000, 201),  # 2000 UTF-8 bytes
+        ("é" * 1000 + "x", 422),  # 2001 UTF-8 bytes
+    ),
+)
+def test_owner_decision_override_reason_uses_the_2000_byte_contract(
+    workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
+    reason: str,
+    expected_status: int,
+) -> None:
+    client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", True)
+    monkeypatch.setattr(
+        settings, "assurance_v2_governance_decision_enabled", True, raising=False
+    )
+    monkeypatch.setattr(
+        settings, "assurance_v2_separation_override_enabled", True, raising=False
+    )
+    _plan, run = _create_active_v2_plan_and_run(client)
+    suite_execution_id = run["suiteExecutions"][0]["id"]
+    _grant_role_permissions("admin", ["evaluation:decision"])
+    recorder = _RecordingGovernanceDecisionService()
+    app.dependency_overrides[get_governance_decision_service] = lambda: recorder
+    try:
+        response = client.post(
+            _owner_override_url(run_id=run["id"]),
+            headers=_headers(f"owner-override-{len(reason.encode('utf-8'))}-bytes"),
+            json={
+                "expectedVerdictVersion": 0,
+                "overallVerdict": "conditional",
+                "layerVerdicts": {
+                    "suites": {suite_execution_id: "conditional"},
+                    "modalities": {},
+                    "components": {},
+                    "riskDimensions": {},
+                },
+                "rationale": "The owner must record the separation exception.",
+                "ownerOverrideReason": reason,
+            },
+        )
+    finally:
+        app.dependency_overrides.pop(get_governance_decision_service, None)
+
+    assert len(reason.encode("utf-8")) in {512, 513, 2000, 2001}
+    assert response.status_code == expected_status, response.text
+    if expected_status == 201:
+        assert response.json()["ownerOverrideApplied"] is True
+        assert recorder.calls[0]["owner_override_reason"] == reason
+    else:
+        assert response.json()["detail"]["code"] == "invalid_request"
+        assert recorder.calls == []
+
+
 def test_governance_decision_requires_exact_permission_and_run_scope(
     workbench_client,
     monkeypatch: pytest.MonkeyPatch,

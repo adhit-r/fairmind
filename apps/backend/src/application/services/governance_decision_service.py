@@ -27,6 +27,7 @@ from src.application import evidence_freshness as freshness
 from src.domain.assurance.evaluation_v2 import (
     AssuranceContractValidationError,
     canonical_sha256,
+    validate_owner_override_reason,
     validate_idempotency_key,
     validate_public_safe_string,
 )
@@ -76,6 +77,24 @@ def _safe_string(value: object, *, code: str, maximum: int) -> str:
     except AssuranceContractValidationError as error:
         raise _error(
             code, "The governance-decision request is invalid.", status_code=422
+        ) from error
+    return value.strip()
+
+
+def _safe_owner_override_reason(value: object) -> str:
+    if not isinstance(value, str):
+        raise _error(
+            "governance_decision_request_invalid",
+            "The governance-decision request is invalid.",
+            status_code=422,
+        )
+    try:
+        validate_owner_override_reason(value)
+    except AssuranceContractValidationError as error:
+        raise _error(
+            "governance_decision_request_invalid",
+            "The governance-decision request is invalid.",
+            status_code=422,
         ) from error
     return value.strip()
 
@@ -413,11 +432,7 @@ class GovernanceDecisionService:
         rationale: str,
         owner_override_reason: str,
     ) -> MutationResult:
-        reason = _safe_string(
-            owner_override_reason,
-            code="governance_decision_request_invalid",
-            maximum=2000,
-        )
+        reason = _safe_owner_override_reason(owner_override_reason)
         return self._decide(
             scope=scope,
             actor_id=actor_id,
