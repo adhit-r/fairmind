@@ -11,7 +11,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Mapping
 
-from sqlalchemy import insert, select, text, update
+from sqlalchemy import Text, cast, insert, select, text, update
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import Session
 
@@ -1529,6 +1530,16 @@ class SqlAlchemyEvaluationWorkbenchRepository:
     def _timestamp_value(value: datetime | None) -> str | None:
         return None if value is None else value.astimezone(timezone.utc).isoformat()
 
+    def _layer_verdicts_snapshot_predicate(
+        self,
+        column: Any,
+        layer_verdicts: FrozenJsonObject,
+    ) -> Any:
+        expected = canonical_json(layer_verdicts.to_dict())
+        if self.db.get_bind().dialect.name == "postgresql":
+            return cast(column, JSONB) == cast(cast(expected, Text), JSONB)
+        return column == expected
+
     def _exact_run_snapshot_predicates(
         self,
         command: PersistVerifiedPassportV2Command | PersistUnverifiedImportedEvidenceCommand,
@@ -1546,7 +1557,10 @@ class SqlAlchemyEvaluationWorkbenchRepository:
             table.c.evidence_outcome == run.evidence_outcome,
             table.c.overall_verdict == run.overall_verdict,
             table.c.layer_verdicts_schema_version == run.layer_verdicts_schema_version,
-            table.c.layer_verdicts_json == canonical_json(run.layer_verdicts.to_dict()),
+            self._layer_verdicts_snapshot_predicate(
+                table.c.layer_verdicts_json,
+                run.layer_verdicts,
+            ),
             table.c.envelope_id == run.envelope_id,
             table.c.envelope_hash == run.envelope_hash,
             table.c.envelope_nonce == run.envelope_nonce,
@@ -2891,10 +2905,7 @@ class SqlAlchemyEvaluationWorkbenchRepository:
                 canonical_json(evidence_value),
                 maximum_bytes=_MAX_GOVERNANCE_DECISION_EVIDENCE_SET_BYTES,
             )
-            current_layers = self._stored_json_object(
-                run["layer_verdicts_json"],
-                maximum_bytes=_MAX_LAYER_VERDICTS_BYTES,
-            )
+            current_layers = self._layer_verdicts_object(run["layer_verdicts_json"])
         except (
             AssuranceContractValidationError,
             json.JSONDecodeError,
@@ -3102,8 +3113,10 @@ class SqlAlchemyEvaluationWorkbenchRepository:
                     runs.c.overall_verdict == authority.current_overall_verdict,
                     runs.c.layer_verdicts_schema_version
                     == LAYER_VERDICTS_SCHEMA_VERSION,
-                    runs.c.layer_verdicts_json
-                    == canonical_json(authority.current_layer_verdicts.to_dict()),
+                    self._layer_verdicts_snapshot_predicate(
+                        runs.c.layer_verdicts_json,
+                        authority.current_layer_verdicts,
+                    ),
                 )
                 .values(
                     overall_verdict=command.overall_verdict,
@@ -4037,6 +4050,47 @@ class SqlAlchemyEvaluationWorkbenchRepository:
         )
         return FrozenJsonObject.from_mapping(decoded)
 
+    def _layer_verdicts_object(self, raw: Any) -> FrozenJsonObject:
+        if self.db.get_bind().dialect.name != "postgresql":
+            return self._stored_json_object(
+                raw,
+                maximum_bytes=_MAX_LAYER_VERDICTS_BYTES,
+            )
+        try:
+            if not isinstance(raw, str):
+                raise ValueError("stored layer verdicts must be text")
+            encoded = raw.encode("utf-8")
+            if len(encoded) > _MAX_LAYER_VERDICTS_BYTES:
+                raise ValueError("stored layer verdicts exceed their byte budget")
+            decoded = json.loads(
+                encoded,
+                object_pairs_hook=_unique_json_object,
+                parse_constant=_reject_json_constant,
+            )
+            if not isinstance(decoded, dict):
+                raise ValueError("stored layer verdicts must be an object")
+            _validate_stored_json_shape(decoded)
+            canonical = json.loads(
+                canonical_json(decoded),
+                object_pairs_hook=_unique_json_object,
+                parse_constant=_reject_json_constant,
+            )
+            return FrozenJsonObject.from_mapping(canonical)
+        except (
+            AssuranceContractValidationError,
+            json.JSONDecodeError,
+            OverflowError,
+            RecursionError,
+            TypeError,
+            UnicodeError,
+            ValueError,
+        ) as error:
+            raise self._error(
+                "binding_integrity_error",
+                _BINDING_INTEGRITY_MESSAGE,
+                409,
+            ) from error
+
     def _stored_json_array(
         self,
         raw: Any,
@@ -4142,10 +4196,7 @@ class SqlAlchemyEvaluationWorkbenchRepository:
             evidence_outcome=row["evidence_outcome"],
             overall_verdict=row["overall_verdict"],
             layer_verdicts_schema_version=row["layer_verdicts_schema_version"],
-            layer_verdicts=self._stored_json_object(
-                row["layer_verdicts_json"],
-                maximum_bytes=_MAX_LAYER_VERDICTS_BYTES,
-            ),
+            layer_verdicts=self._layer_verdicts_object(row["layer_verdicts_json"]),
             suite_executions=tuple(
                 self._suite_execution_record(
                     execution,

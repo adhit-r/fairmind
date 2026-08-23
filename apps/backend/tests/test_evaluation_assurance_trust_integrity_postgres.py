@@ -16,7 +16,7 @@ import re
 import subprocess
 import uuid
 from dataclasses import replace
-from datetime import UTC, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -31,6 +31,7 @@ from src.application.ports.governance_decision import (
     GovernanceDecisionScope,
     PersistGovernanceDecisionCommand,
 )
+from src.application.ports.evidence_freshness import EvidenceFreshnessClassification
 from src.domain.assurance.evaluation_v2 import canonical_json
 from src.infrastructure.db.repositories.evaluation_workbench_repository import (
     SqlAlchemyEvaluationWorkbenchRepository,
@@ -3910,22 +3911,29 @@ def test_postgresql_migration_rejects_preexisting_gapped_audit_chain_atomically(
 
 def test_postgresql_decision_repository_commits_canonical_cas_and_rejects_stale(
     postgres_seeded_upgrade_connection,
+    monkeypatch,
 ) -> None:
     """Exercise the application adapter against the production 013b triggers."""
 
     assert POSTGRES_URL is not None
     connection = postgres_seeded_upgrade_connection
-    _prepare_verified_v2_admission(connection, submitted_by="actor-submit")
-    _insert_nonce_claim(connection)
-    _link_and_accept_verified_v2_admission(
-        connection,
-        link_id="link-adapter-decision",
-        review_id="review-adapter-decision",
-    )
     with connection.cursor() as cursor:
         cursor.execute("SELECT current_schema()")
         schema_name = cursor.fetchone()[0]
+        cursor.execute(
+            "SELECT layer_verdicts_json FROM governance_evaluation_runs "
+            "WHERE id='run-a'"
+        )
+        upgraded_layer_verdicts_json = cursor.fetchone()[0]
     assert isinstance(schema_name, str) and schema_name
+    upgraded_layers = {
+        "suites": {"execution-a": "insufficient"},
+        "modalities": {},
+        "components": {},
+        "riskDimensions": {},
+    }
+    assert json.loads(upgraded_layer_verdicts_json) == upgraded_layers
+    assert upgraded_layer_verdicts_json != canonical_json(upgraded_layers)
 
     engine = create_engine(
         POSTGRES_URL,
@@ -3945,6 +3953,43 @@ def test_postgresql_decision_repository_commits_canonical_cas_and_rejects_stale(
             "components": {},
             "riskDimensions": {"fairness": "conditional"},
         }
+    )
+    read_session = Session(engine, expire_on_commit=False)
+    try:
+        read_repository = SqlAlchemyEvaluationWorkbenchRepository(read_session)
+        monkeypatch.setattr(read_repository, "_verify_audit_chain", lambda **_kwargs: None)
+        upgraded_run = read_repository.get_run_record(
+            org_id="org-a",
+            system_id="sys-a",
+            run_id="run-a",
+        )
+        assert upgraded_run is not None
+        assert upgraded_run.layer_verdicts.to_dict() == upgraded_layers
+    finally:
+        read_session.close()
+
+    _prepare_verified_v2_admission(connection, submitted_by="actor-submit")
+    _insert_nonce_claim(connection)
+    _link_and_accept_verified_v2_admission(
+        connection,
+        link_id="link-adapter-decision",
+        review_id="review-adapter-decision",
+    )
+    freshness = EvidenceFreshnessClassification(
+        classification_status="ok",
+        freshness_contract_version="1.0.0",
+        recorded_freshness_status="current",
+        effective_freshness_status="current",
+        evaluated_at=datetime.fromisoformat(NOW),
+        effective_at=datetime.fromisoformat(NOW),
+        expiring_at=datetime.fromisoformat(VALID_EVIDENCE_EXPIRES_AT),
+        reason_codes=(),
+        decision_eligible=True,
+    )
+    monkeypatch.setattr(
+        SqlAlchemyEvaluationWorkbenchRepository,
+        "_classify_evidence_freshness",
+        lambda _self, **_kwargs: freshness,
     )
     session = Session(engine, expire_on_commit=False)
     try:
