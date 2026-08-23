@@ -28,6 +28,7 @@ from tests.test_owner_decision_override_integrity_013j import (
     _assert_schema_dropped,
     _insert_raw_review,
     _install_owner_role,
+    _mutate_owner_authority,
 )
 from tests.test_verified_evidence_admission_postgres import postgres_session_factory
 
@@ -36,6 +37,18 @@ OWNER_OPERATION = "evaluation-v2.governance-decision.owner-override"
 OWNER_AUDIT_ACTION = "evaluation_v2.governance_decision.owner_override_created"
 REJECTED_AUDIT_ACTION = "evaluation_v2.mutation.rejected"
 OWNER_REASON = "Canonical owner is also the request and evidence actor."
+_RACE_AUTHORITY_CASES = (
+    "organization-owner",
+    "organization-inactive",
+    "member-inactive",
+    "member-role",
+    "role-non-system",
+    "permission-missing-decision",
+    "permission-missing-override",
+    "organization-deleted",
+    "member-deleted",
+    "role-deleted",
+)
 
 
 @pytest.fixture(scope="module")
@@ -424,6 +437,75 @@ def _wait_for_postgres_lock(factory, application_name: str) -> None:
         observer.close()
 
 
+def _wait_for_postgres_blocker(
+    factory,
+    application_name: str,
+    blocker_pid: int,
+) -> None:
+    observer = factory()
+    try:
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            blocked_by_expected_pid = observer.scalar(
+                text(
+                    "SELECT :blocker_pid = ANY(pg_catalog.pg_blocking_pids(pid)) "
+                    "FROM pg_catalog.pg_stat_activity "
+                    "WHERE application_name=:application_name"
+                ),
+                {
+                    "application_name": application_name,
+                    "blocker_pid": blocker_pid,
+                },
+            )
+            observer.rollback()
+            if blocked_by_expected_pid is True:
+                return
+        raise AssertionError(
+            f"{application_name} was not blocked by backend {blocker_pid}"
+        )
+    finally:
+        observer.close()
+
+
+def _wait_for_transaction_bracket(factory, application_prefix: str, count: int) -> None:
+    observer = factory()
+    try:
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            ready = observer.scalar(
+                text(
+                    "SELECT count(DISTINCT pid) FROM pg_catalog.pg_stat_activity "
+                    "WHERE application_name LIKE :application_name "
+                    "AND state='idle in transaction'"
+                ),
+                {"application_name": f"{application_prefix}%"},
+            )
+            observer.rollback()
+            if ready == count:
+                return
+        raise AssertionError(
+            f"only {ready!r} of {count} workers reached the transaction bracket"
+        )
+    finally:
+        observer.close()
+
+
+def _authority_is_authorized(session, graph) -> bool:
+    return (
+        session.scalar(
+            text(
+                "SELECT fairmind_owner_decision_override_authorized_013j"
+                "(:org_id, :actor_id)"
+            ),
+            {
+                "org_id": graph.scenario.org_id,
+                "actor_id": graph.scenario.actor_id,
+            },
+        )
+        is True
+    )
+
+
 class _EventRepository(SqlAlchemyEvaluationWorkbenchRepository):
     def __init__(
         self,
@@ -475,14 +557,17 @@ def _owner_worker(
     start: Event | None = None,
     ready: Event | None = None,
 ):
-    if ready is not None:
-        ready.set()
-    if start is not None:
-        assert start.wait(timeout=10)
     session = factory()
     try:
         if application_name is not None:
             _set_application_name(session, application_name)
+        elif ready is not None:
+            session.execute(text("SELECT 1"))
+        if ready is not None:
+            assert session.in_transaction()
+            ready.set()
+        if start is not None:
+            assert start.wait(timeout=10)
         repository = repository_factory(session) if repository_factory else None
         unit_of_work = SqlAlchemyEvaluationWorkbenchUnitOfWork(
             session,
@@ -569,33 +654,10 @@ async def test_owner_override_http_rejects_every_scope_substitution_before_servi
     assert service.calls == []
 
 
-@pytest.mark.parametrize(
-    ("table", "statement", "column"),
-    (
-        (
-            "organization",
-            "UPDATE organizations SET is_active=false WHERE id=:org_id",
-            "is_active",
-        ),
-        (
-            "member",
-            "UPDATE org_members SET status='inactive' "
-            "WHERE org_id=:org_id AND user_id=:actor_id",
-            "status",
-        ),
-        (
-            "role",
-            "UPDATE org_roles SET is_system_role=false "
-            "WHERE org_id=:org_id AND name='owner'",
-            "is_system_role",
-        ),
-    ),
-)
+@pytest.mark.parametrize("case", _RACE_AUTHORITY_CASES)
 def test_owner_override_locks_each_authority_row_until_commit(
     owner_override_session_factory,
-    table: str,
-    statement: str,
-    column: str,
+    case: str,
 ) -> None:
     factory = owner_override_session_factory
     graph = _ready_owner_graph(factory)
@@ -616,13 +678,7 @@ def test_owner_override_locks_each_authority_row_until_commit(
         try:
             _set_application_name(session, application_name)
             writer_started.set()
-            session.execute(
-                text(statement),
-                {
-                    "org_id": graph.scenario.org_id,
-                    "actor_id": graph.scenario.actor_id,
-                },
-            )
+            _mutate_owner_authority(session, graph, case)
             session.commit()
         finally:
             session.close()
@@ -632,7 +688,7 @@ def test_owner_override_locks_each_authority_row_until_commit(
             _owner_worker,
             factory,
             graph,
-            key=f"authority-lock-{table}-{uuid.uuid4()}",
+            key=f"authority-lock-{case}-{uuid.uuid4()}",
             repository_factory=repository,
         )
         assert authority_locked.wait(timeout=10)
@@ -646,28 +702,68 @@ def test_owner_override_locks_each_authority_row_until_commit(
 
     session = factory()
     try:
-        table_name = {
-            "organization": "organizations",
-            "member": "org_members",
-            "role": "org_roles",
-        }[table]
-        predicate = {
-            "organization": "id=:org_id",
-            "member": "org_id=:org_id AND user_id=:actor_id",
-            "role": "org_id=:org_id AND name='owner'",
-        }[table]
-        value = session.scalar(
-            text(f"SELECT {column} FROM {table_name} WHERE {predicate}"),
-            {"org_id": graph.scenario.org_id, "actor_id": graph.scenario.actor_id},
-        )
-        assert value in (False, "inactive")
+        assert _authority_is_authorized(session, graph) is False
         assert tuple(map(len, _owner_rows(session, graph))) == (1, 1, 1)
     finally:
         session.close()
 
 
+def test_owner_authority_helper_locks_organization_then_membership_then_role(
+    owner_override_session_factory,
+) -> None:
+    factory = owner_override_session_factory
+    graph = _ready_owner_graph(factory)
+    application_name = f"owner-authority-order-{uuid.uuid4()}"
+    helper_started = Event()
+    blockers = [factory(), factory(), factory()]
+    statements = (
+        "SELECT 1 FROM organizations WHERE id=:org_id FOR UPDATE",
+        "SELECT 1 FROM org_members WHERE org_id=:org_id "
+        "AND user_id=:actor_id FOR UPDATE",
+        "SELECT 1 FROM org_roles WHERE org_id=:org_id "
+        "AND name='owner' FOR UPDATE",
+    )
+    values = {
+        "org_id": graph.scenario.org_id,
+        "actor_id": graph.scenario.actor_id,
+    }
+
+    def authorize() -> bool:
+        session = factory()
+        try:
+            _set_application_name(session, application_name)
+            helper_started.set()
+            return _authority_is_authorized(session, graph)
+        finally:
+            session.close()
+
+    try:
+        blocker_pids = []
+        for blocker, statement in zip(blockers, statements, strict=True):
+            blocker_pids.append(blocker.scalar(text("SELECT pg_backend_pid()")))
+            assert blocker.scalar(text(statement), values) == 1
+
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            authorized = pool.submit(authorize)
+            assert helper_started.wait(timeout=10)
+            for blocker, blocker_pid in zip(blockers, blocker_pids, strict=True):
+                _wait_for_postgres_blocker(
+                    factory,
+                    application_name,
+                    blocker_pid,
+                )
+                blocker.commit()
+            assert authorized.result(timeout=30) is True
+    finally:
+        for blocker in blockers:
+            blocker.rollback()
+            blocker.close()
+
+
+@pytest.mark.parametrize("case", _RACE_AUTHORITY_CASES)
 def test_owner_override_reloads_authority_after_writer_commits_first(
     owner_override_session_factory,
+    case: str,
 ) -> None:
     factory = owner_override_session_factory
     graph = _ready_owner_graph(factory)
@@ -678,10 +774,7 @@ def test_owner_override_reloads_authority_after_writer_commits_first(
     def write_authority() -> None:
         session = factory()
         try:
-            session.execute(
-                text("UPDATE organizations SET is_active=false WHERE id=:org_id"),
-                {"org_id": graph.scenario.org_id},
-            )
+            _mutate_owner_authority(session, graph, case)
             writer_updated.set()
             assert release_writer.wait(timeout=10)
             session.commit()
@@ -695,7 +788,7 @@ def test_owner_override_reloads_authority_after_writer_commits_first(
             _owner_worker,
             factory,
             graph,
-            key=f"authority-writer-first-{uuid.uuid4()}",
+            key=f"authority-writer-first-{case}-{uuid.uuid4()}",
             application_name=application_name,
         )
         _wait_for_postgres_lock(factory, application_name)
@@ -811,6 +904,7 @@ def test_review_insert_and_override_serialize_on_the_run_lock(
     release_decision = Event()
     review_application_name = f"owner-review-race-review-{uuid.uuid4()}"
     decision_application_name = f"owner-review-race-decision-{uuid.uuid4()}"
+    inserted_review_ids: list[str] = []
 
     def insert_review(*, pause_after_insert: bool) -> None:
         session = factory()
@@ -821,6 +915,15 @@ def test_review_insert_and_override_serialize_on_the_run_lock(
                 graph,
                 reviewer_sql="'second-independent-reviewer'",
                 review_version=2,
+            )
+            inserted_review_ids.append(
+                session.scalar(
+                    text(
+                        "SELECT id FROM governance_evidence_reviews "
+                        "WHERE admission_id=:admission_id AND review_version=2"
+                    ),
+                    {"admission_id": graph.admission_id},
+                )
             )
             review_reached.set()
             if pause_after_insert:
@@ -884,6 +987,22 @@ def test_review_insert_and_override_serialize_on_the_run_lock(
             ),
             {"run_id": graph.scenario.run_id},
         ) == 1
+        if ordering == "review-first":
+            assert len(inserted_review_ids) == 1
+            evidence_set = json.loads(
+                session.scalar(
+                    text(
+                        "SELECT evidence_set_json "
+                        "FROM governance_evaluation_decisions "
+                        "WHERE run_id=:run_id"
+                    ),
+                    {"run_id": graph.scenario.run_id},
+                )
+            )
+            suite_evidence = evidence_set["suites"]
+            assert len(suite_evidence) == 1
+            assert suite_evidence[0]["reviewVersion"] == 2
+            assert suite_evidence[0]["reviewId"] == inserted_review_ids[0]
     finally:
         session.close()
 
@@ -896,6 +1015,8 @@ def test_twenty_identical_owner_overrides_produce_one_commit_and_nineteen_replay
     start = Event()
     ready = [Event() for _ in range(20)]
     key = f"owner-twenty-replays-{uuid.uuid4()}"
+    application_prefix = f"owner20-{uuid.uuid4().hex}-"
+    assert factory.kw["bind"].pool.size() >= 21
     with ThreadPoolExecutor(max_workers=20) as pool:
         futures = [
             pool.submit(
@@ -903,18 +1024,25 @@ def test_twenty_identical_owner_overrides_produce_one_commit_and_nineteen_replay
                 factory,
                 graph,
                 key=key,
+                application_name=f"{application_prefix}{index}",
                 start=start,
                 ready=ready[index],
             )
             for index in range(20)
         ]
         assert all(event.wait(timeout=10) for event in ready)
+        _wait_for_transaction_bracket(factory, application_prefix, 20)
         start.set()
         results = [future.result(timeout=60) for future in futures]
 
-    assert sum(result.replayed is False for result in results) == 1
-    assert sum(result.replayed is True for result in results) == 19
-    assert len({canonical_json(result.body) for result in results}) == 1
+    committed = [result for result in results if result.replayed is False]
+    replays = [result for result in results if result.replayed is True]
+    assert len(committed) == 1
+    assert len(replays) == 19
+    assert committed[0].status == 201
+    expected_body = canonical_json(committed[0].body)
+    assert all(replay.status == 201 for replay in replays)
+    assert all(canonical_json(replay.body) == expected_body for replay in replays)
     session = factory()
     try:
         decisions, idempotency, audits = _owner_rows(session, graph)
