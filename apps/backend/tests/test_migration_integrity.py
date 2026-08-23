@@ -895,7 +895,47 @@ def test_013j_catalog_manifest_covers_owner_authority_and_guards() -> None:
     } <= SQLITE_ASSURANCE_TRIGGERS
 
 
-def test_sqlite_startup_check_accepts_the_frozen_013f_catalog(
+def test_sqlite_two_clean_full_chain_installs_match_the_frozen_013j_catalog(
+    tmp_path: Path,
+) -> None:
+    database_paths = (
+        tmp_path / "assurance-first.sqlite3",
+        tmp_path / "assurance-second.sqlite3",
+    )
+    for database_path in database_paths:
+        _install_sqlite_assurance_chain(database_path)
+
+    connections = tuple(sqlite3.connect(path) for path in database_paths)
+    try:
+        digests: list[str] = []
+        for connection in connections:
+            connection.execute("PRAGMA foreign_keys = ON")
+            rows = connection.execute(
+                "SELECT type, name, sql FROM sqlite_master "
+                "WHERE type IN ('table', 'index', 'trigger', 'view') "
+                "AND sql IS NOT NULL"
+            ).fetchall()
+            installed = {
+                (object_type, name): sql
+                for object_type, name, sql in rows
+            }
+            selected = (
+                (object_type, name, installed[(object_type, name)])
+                for object_type, names in (
+                    migration_integrity._SQLITE_ASSURANCE_OBJECTS.items()
+                )
+                for name in names
+            )
+            digests.append(migration_integrity._sqlite_catalog_digest(selected))
+
+        assert digests[0] == digests[1]
+        assert digests[0] == migration_integrity.SQLITE_ASSURANCE_CATALOG_DIGEST
+    finally:
+        for connection in connections:
+            connection.close()
+
+
+def test_sqlite_startup_check_accepts_the_frozen_013j_catalog(
     tmp_path: Path,
 ) -> None:
     database_path = tmp_path / "assurance.sqlite3"
