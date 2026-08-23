@@ -244,6 +244,11 @@ def postgresql_013j_connection():
                         sql.Identifier(schema)
                     )
                 )
+                cursor.execute(
+                    "SELECT pg_catalog.to_regnamespace(%s) IS NULL",
+                    (schema,),
+                )
+                assert cursor.fetchone()[0] is True
         finally:
             cleanup.close()
 
@@ -384,6 +389,7 @@ def postgresql_013i_session_factory():
     chain = postgres_session_factory.__wrapped__()
     factory = next(chain)
     session = factory()
+    schema = ""
     try:
         schema = session.scalar(text("SELECT current_schema()"))
         for migration in (
@@ -407,6 +413,7 @@ def postgresql_013i_session_factory():
             next(chain)
         except StopIteration:
             pass
+        _assert_schema_dropped(schema)
 
 
 @pytest.fixture
@@ -419,6 +426,7 @@ def postgresql_013j_session_factory():
     chain = postgres_session_factory.__wrapped__()
     factory = next(chain)
     session = factory()
+    schema = ""
     try:
         schema = session.scalar(text("SELECT current_schema()"))
         for migration in (
@@ -443,6 +451,22 @@ def postgresql_013j_session_factory():
             next(chain)
         except StopIteration:
             pass
+        _assert_schema_dropped(schema)
+
+
+def _assert_schema_dropped(schema: str) -> None:
+    import psycopg2
+
+    connection = psycopg2.connect(POSTGRES_URL)
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT pg_catalog.to_regnamespace(%s) IS NULL",
+                (schema,),
+            )
+            assert cursor.fetchone()[0] is True
+    finally:
+        connection.close()
 
 
 def _ready_graph(factory):
@@ -459,6 +483,7 @@ def _insert_raw_review(
     *,
     reviewer_sql: str,
     separation_override_reason: str | None = None,
+    review_version: int = 1,
 ) -> None:
     from sqlalchemy import text
 
@@ -473,7 +498,7 @@ def _insert_raw_review(
             "admission.evidence_run_id, admission.passport_revision_id, admission.id, "
             "'accepted', 'Direct database separation test.', "
             + reviewer_sql
-            + ", 1, :reason, fairmind_canonical_clock_utc_013f(), "
+            + ", :review_version, :reason, fairmind_canonical_clock_utc_013f(), "
             "admission.workspace_id, admission.run_id, admission.suite_execution_id, "
             "admission.contract_version "
             "FROM governance_evidence_admissions AS admission "
@@ -485,6 +510,7 @@ def _insert_raw_review(
         {
             "id": str(uuid.uuid4()),
             "reason": separation_override_reason,
+            "review_version": review_version,
             "admission_id": graph.admission_id,
         },
     )
@@ -715,7 +741,6 @@ def test_postgresql14_013j_preflight_waits_for_inflight_legacy_review(
                 observer.rollback()
                 if waiting:
                     break
-                time.sleep(0.05)
             assert waiting, "013j migration did not wait on the in-flight review write"
         finally:
             observer.close()
@@ -770,7 +795,18 @@ def _install_owner_role(session, graph, actor_id: str) -> None:
     )
 
 
-def _insert_raw_override(session, graph, *, actor_id: str, verdict_version: int = 1) -> None:
+def _insert_raw_override(
+    session,
+    graph,
+    *,
+    actor_id: str,
+    verdict_version: int = 1,
+    organization_id: str | None = None,
+    workspace_id: str | None = None,
+    system_id: str | None = None,
+    run_id: str | None = None,
+    admission_id: str | None = None,
+) -> str:
     from sqlalchemy import text
     from src.domain.assurance.evaluation_v2 import canonical_json, canonical_sha256
     from src.infrastructure.db.repositories.evaluation_workbench_repository import (
@@ -782,6 +818,8 @@ def _insert_raw_override(session, graph, *, actor_id: str, verdict_version: int 
     ).load_governance_decision_authority_for_update(scope=graph.decision_scope)
     assert authority is not None
     evidence_set = authority.evidence_set.to_dict()
+    if admission_id is not None:
+        evidence_set["suites"][0]["admissionId"] = admission_id
     layers = {
         "suites": {graph.suite_execution_id: "conditional"},
         "modalities": {},
@@ -804,10 +842,10 @@ def _insert_raw_override(session, graph, *, actor_id: str, verdict_version: int 
         ),
         {
             "id": str(uuid.uuid4()),
-            "org_id": graph.scenario.org_id,
-            "workspace_id": graph.scenario.workspace_id,
-            "system_id": graph.scenario.system_id,
-            "run_id": graph.scenario.run_id,
+            "org_id": organization_id or graph.scenario.org_id,
+            "workspace_id": workspace_id or graph.scenario.workspace_id,
+            "system_id": system_id or graph.scenario.system_id,
+            "run_id": run_id or graph.scenario.run_id,
             "envelope_id": authority.envelope_id,
             "envelope_hash": authority.envelope_hash,
             "verdict_version": verdict_version,
@@ -831,6 +869,184 @@ def _insert_raw_override(session, graph, *, actor_id: str, verdict_version: int 
             "run_id": graph.scenario.run_id,
         },
     )
+    return str(
+        session.scalar(
+            text(
+                "SELECT id FROM governance_evaluation_decisions "
+                "WHERE run_id=:run_id AND verdict_version=:verdict_version"
+            ),
+            {
+                "run_id": run_id or graph.scenario.run_id,
+                "verdict_version": verdict_version,
+            },
+        )
+    )
+
+
+_AUTHORITY_CASES = (
+    "organization-owner",
+    "organization-inactive",
+    "member-inactive",
+    "member-role",
+    "role-non-system",
+    "role-name-only",
+    "permission-missing-decision",
+    "permission-missing-override",
+    "permissions-malformed",
+    "permissions-duplicate",
+    "permissions-non-string",
+    "permissions-over-64",
+    "organization-deleted",
+    "member-deleted",
+    "role-deleted",
+)
+
+
+def _mutate_owner_authority(session, graph, case: str) -> None:
+    from sqlalchemy import text
+
+    values = {"org_id": graph.scenario.org_id, "actor_id": graph.scenario.actor_id}
+    if case == "organization-owner":
+        other_actor = f"other-owner-{uuid.uuid4().hex}"
+        _add_independent_member(session, graph, other_actor)
+        session.execute(
+            text("UPDATE organizations SET owner_id=:other WHERE id=:org_id"),
+            {"other": other_actor, **values},
+        )
+    elif case == "organization-inactive":
+        session.execute(
+            text("UPDATE organizations SET is_active=false WHERE id=:org_id"),
+            values,
+        )
+    elif case == "member-inactive":
+        session.execute(
+            text(
+                "UPDATE org_members SET status='inactive' "
+                "WHERE org_id=:org_id AND user_id=:actor_id"
+            ),
+            values,
+        )
+    elif case == "member-role":
+        session.execute(
+            text(
+                "UPDATE org_members SET role='admin' "
+                "WHERE org_id=:org_id AND user_id=:actor_id"
+            ),
+            values,
+        )
+    elif case == "role-non-system":
+        session.execute(
+            text(
+                "UPDATE org_roles SET is_system_role=false "
+                "WHERE org_id=:org_id AND name='owner'"
+            ),
+            values,
+        )
+    elif case.startswith("permission") or case == "role-name-only":
+        permissions = {
+            "permission-missing-decision": ["evaluation:separation:override"],
+            "permission-missing-override": ["evaluation:decision"],
+            "role-name-only": [],
+            "permissions-malformed": {"evaluation:decision": True},
+            "permissions-duplicate": [
+                "evaluation:decision",
+                "evaluation:decision",
+                "evaluation:separation:override",
+            ],
+            "permissions-non-string": [
+                "evaluation:decision",
+                "evaluation:separation:override",
+                7,
+            ],
+            "permissions-over-64": [
+                "evaluation:decision",
+                "evaluation:separation:override",
+                *[f"scope:item-{index}" for index in range(63)],
+            ],
+        }[case]
+        session.execute(
+            text(
+                "UPDATE org_roles SET permissions=CAST(:permissions AS jsonb) "
+                "WHERE org_id=:org_id AND name='owner'"
+            ),
+            {"permissions": json.dumps(permissions, separators=(",", ":")), **values},
+        )
+    elif case == "organization-deleted":
+        session.execute(text("ALTER TABLE organizations DISABLE TRIGGER ALL"))
+        session.execute(text("DELETE FROM organizations WHERE id=:org_id"), values)
+        session.execute(text("ALTER TABLE organizations ENABLE TRIGGER ALL"))
+    elif case == "member-deleted":
+        session.execute(
+            text(
+                "DELETE FROM org_members "
+                "WHERE org_id=:org_id AND user_id=:actor_id"
+            ),
+            values,
+        )
+    elif case == "role-deleted":
+        session.execute(
+            text("DELETE FROM org_roles WHERE org_id=:org_id AND name='owner'"),
+            values,
+        )
+    else:  # pragma: no cover - the parameter list is the exhaustive contract
+        raise AssertionError(case)
+
+
+@pytest.mark.parametrize("case", _AUTHORITY_CASES)
+def test_postgresql14_013j_authority_matrix_fails_closed_for_helper_and_raw_insert(
+    postgresql_013j_session_factory,
+    case: str,
+) -> None:
+    from sqlalchemy import text
+    from sqlalchemy.exc import IntegrityError
+
+    factory = postgresql_013j_session_factory
+    graph = _ready_graph(factory)
+    setup = factory()
+    try:
+        _install_owner_role(setup, graph, graph.scenario.actor_id)
+        setup.commit()
+    finally:
+        setup.close()
+
+    session = factory()
+    try:
+        _mutate_owner_authority(session, graph, case)
+        assert session.scalar(
+            text(
+                "SELECT fairmind_owner_decision_override_authorized_013j"
+                "(:org_id, :actor_id)"
+            ),
+            {"org_id": graph.scenario.org_id, "actor_id": graph.scenario.actor_id},
+        ) is False
+        with pytest.raises(
+            IntegrityError,
+            match="owner decision override authority failed",
+        ):
+            _insert_raw_override(
+                session,
+                graph,
+                actor_id=graph.scenario.actor_id,
+            )
+        session.rollback()
+        assert session.scalar(
+            text(
+                "SELECT count(*) FROM governance_evaluation_decisions "
+                "WHERE run_id=:run_id"
+            ),
+            {"run_id": graph.scenario.run_id},
+        ) == 0
+        assert session.scalar(
+            text(
+                "SELECT count(*) FROM governance_evaluation_audit_events "
+                "WHERE org_id=:org_id AND outcome='success' AND action="
+                "'evaluation_v2.governance_decision.owner_override_created'"
+            ),
+            {"org_id": graph.scenario.org_id},
+        ) == 0
+    finally:
+        session.rollback()
+        session.close()
 
 
 def test_postgresql14_013j_raw_override_requires_deferred_success_binding(
@@ -849,6 +1065,295 @@ def test_postgresql14_013j_raw_override_requires_deferred_success_binding(
             match="owner decision override audit binding failed",
         ):
             session.commit()
+    finally:
+        session.rollback()
+        session.close()
+
+
+@pytest.mark.parametrize(
+    ("substitution", "expected_message"),
+    (
+        ("organization", "evidence is not decision-eligible at database time"),
+        ("workspace", "evidence is not decision-eligible at database time"),
+        ("system", "evidence is not decision-eligible at database time"),
+        ("run", "evidence is not decision-eligible at database time"),
+        ("admission", "decision requires the exact hashed evidence set"),
+    ),
+)
+def test_postgresql14_013j_rejects_cross_tenant_identifier_substitution(
+    postgresql_013j_session_factory,
+    substitution: str,
+    expected_message: str,
+) -> None:
+    from sqlalchemy import text
+    from sqlalchemy.exc import DBAPIError
+
+    factory = postgresql_013j_session_factory
+    first = _ready_graph(factory)
+    second = _ready_graph(factory)
+    setup = factory()
+    try:
+        _install_owner_role(setup, first, first.scenario.actor_id)
+        setup.commit()
+    finally:
+        setup.close()
+
+    substitutions = {
+        "organization": {"organization_id": second.scenario.org_id},
+        "workspace": {"workspace_id": second.scenario.workspace_id},
+        "system": {"system_id": second.scenario.system_id},
+        "run": {"run_id": second.scenario.run_id},
+        "admission": {"admission_id": second.admission_id},
+    }
+    session = factory()
+    try:
+        with pytest.raises(DBAPIError, match=expected_message):
+            _insert_raw_override(
+                session,
+                first,
+                actor_id=first.scenario.actor_id,
+                **substitutions[substitution],
+            )
+        session.rollback()
+        assert session.scalar(
+            text(
+                "SELECT count(*) FROM governance_evaluation_decisions "
+                "WHERE run_id IN (:first_run, :second_run)"
+            ),
+            {
+                "first_run": first.scenario.run_id,
+                "second_run": second.scenario.run_id,
+            },
+        ) == 0
+        assert session.scalar(
+            text(
+                "SELECT count(*) FROM governance_evaluation_audit_events "
+                "WHERE org_id IN (:first_org, :second_org) AND outcome='success' "
+                "AND action="
+                "'evaluation_v2.governance_decision.owner_override_created'"
+            ),
+            {
+                "first_org": first.scenario.org_id,
+                "second_org": second.scenario.org_id,
+            },
+        ) == 0
+    finally:
+        session.rollback()
+        session.close()
+
+
+def _insert_raw_override_binding(session, graph, *, fabrication: str | None) -> tuple[str, str]:
+    from sqlalchemy import text
+    from src.domain.assurance.evaluation_v2 import canonical_json, canonical_sha256
+    from src.infrastructure.db.repositories.evaluation_audit_chain import (
+        EvaluationAuditAppend,
+        append_evaluation_audit_event,
+    )
+
+    actor_id = graph.scenario.actor_id
+    decision_id = _insert_raw_override(session, graph, actor_id=actor_id)
+    idempotency_id = str(uuid.uuid4())
+    event_id = str(uuid.uuid4())
+    bound_event_id = str(uuid.uuid4()) if fabrication == "audit-event-id" else event_id
+    operation = (
+        "evaluation-v2.governance-decision.fabricated"
+        if fabrication == "operation"
+        else "evaluation-v2.governance-decision.owner-override"
+    )
+    bound_actor = "fabricated-actor" if fabrication == "actor" else actor_id
+    action = (
+        "evaluation_v2.governance_decision.fabricated"
+        if fabrication == "action"
+        else "evaluation_v2.governance_decision.owner_override_created"
+    )
+    resource_type = (
+        "fabricated_resource"
+        if fabrication == "resource"
+        else "evaluation_governance_decision"
+    )
+    resource_id = "fabricated-resource" if fabrication == "resource" else decision_id
+    key_hash = "1" * 64
+    request_hash = "2" * 64
+    claim = (
+        session.execute(
+            text(
+                "INSERT INTO governance_idempotency_records ("
+                "id, org_id, actor_id, operation, key_hash, request_hash, status, "
+                "created_at, updated_at, expires_at) VALUES ("
+                ":id, :org_id, :actor_id, :operation, :key_hash, :request_hash, "
+                "'in_progress', fairmind_idempotency_clock_utc_013h(), "
+                "fairmind_idempotency_clock_utc_013h(), "
+                "fairmind_idempotency_clock_utc_013h()) "
+                "RETURNING created_at, expires_at"
+            ),
+            {
+                "id": idempotency_id,
+                "org_id": graph.scenario.org_id,
+                "actor_id": bound_actor,
+                "operation": operation,
+                "key_hash": key_hash,
+                "request_hash": request_hash,
+            },
+        )
+        .mappings()
+        .one()
+    )
+    relationships = [
+        {
+            "actorId": actor_id,
+            "relationshipType": "evidence_submitter",
+            "resourceIds": [
+                "fabricated-admission"
+                if fabrication == "waived-ids"
+                else graph.admission_id
+            ],
+            "resourceType": "evidence_admission",
+        },
+        {
+            "actorId": actor_id,
+            "relationshipType": "run_requester",
+            "resourceIds": [graph.scenario.run_id],
+            "resourceType": "evaluation_run",
+        },
+    ]
+    reason_hash = (
+        "3" * 64
+        if fabrication == "reason-hash"
+        else canonical_sha256({"ownerOverrideReason": "No independent owner."})
+    )
+    details = {
+        "_fairmindEvaluationSuccessBinding": {
+            "schemaVersion": "1.0.0",
+            "auditEventId": bound_event_id,
+            "idempotencyRecordId": idempotency_id,
+            "idempotencyKeyHash": key_hash,
+            "operation": operation,
+            "requestHash": request_hash,
+            "claimedAt": claim["created_at"],
+            "expiresAt": claim["expires_at"],
+            "resourceType": resource_type,
+            "resourceId": resource_id,
+            "responseStatus": 201,
+            "responseHash": "4" * 64,
+            "action": action,
+            "domainDetails": {
+                "ownerOverride": True,
+                "ownerActorId": actor_id,
+                "ownerOverrideReasonHash": reason_hash,
+                "waivedRelationships": relationships,
+                "waivedRelationshipsHash": canonical_sha256(relationships),
+            },
+        }
+    }
+    append_evaluation_audit_event(
+        session,
+        event=EvaluationAuditAppend(
+            organization_id=graph.scenario.org_id,
+            actor_id=bound_actor,
+            action=action,
+            outcome="success",
+            resource_type=resource_type,
+            resource_id=resource_id,
+            details=details,
+            created_at=claim["created_at"],
+            event_id=event_id,
+        ),
+    )
+    response = canonical_json(
+        {
+            "_fairmindEvaluationMutationSucceeded": True,
+            "auditEventId": bound_event_id,
+            "responseBody": {
+                "decisionId": decision_id,
+                "ownerOverrideApplied": True,
+            },
+        }
+    )
+    session.execute(
+        text(
+            "UPDATE governance_idempotency_records SET status='completed', "
+            "response_status=201, response_body_json=:response, "
+            "resource_type=:resource_type, resource_id=:resource_id, "
+            "updated_at=:updated_at WHERE id=:id"
+        ),
+        {
+            "response": response,
+            "resource_type": resource_type,
+            "resource_id": resource_id,
+            "updated_at": claim["created_at"],
+            "id": idempotency_id,
+        },
+    )
+    return decision_id, event_id
+
+
+@pytest.mark.parametrize(
+    "fabrication",
+    (
+        "operation",
+        "actor",
+        "action",
+        "resource",
+        "reason-hash",
+        "waived-ids",
+        "audit-event-id",
+    ),
+)
+def test_postgresql14_013j_rejects_each_fabricated_override_binding_at_commit(
+    postgresql_013j_session_factory,
+    fabrication: str,
+) -> None:
+    from sqlalchemy.exc import IntegrityError
+
+    graph = _ready_graph(postgresql_013j_session_factory)
+    session = postgresql_013j_session_factory()
+    try:
+        _install_owner_role(session, graph, graph.scenario.actor_id)
+        _insert_raw_override_binding(session, graph, fabrication=fabrication)
+        with pytest.raises(
+            IntegrityError,
+            match="owner decision override audit binding failed",
+        ):
+            session.commit()
+    finally:
+        session.rollback()
+        session.close()
+
+
+def test_postgresql14_013j_accepts_complete_binding_and_keeps_rows_append_only(
+    postgresql_013j_session_factory,
+) -> None:
+    from sqlalchemy import text
+    from sqlalchemy.exc import DBAPIError
+
+    graph = _ready_graph(postgresql_013j_session_factory)
+    session = postgresql_013j_session_factory()
+    try:
+        _install_owner_role(session, graph, graph.scenario.actor_id)
+        decision_id, event_id = _insert_raw_override_binding(
+            session,
+            graph,
+            fabrication=None,
+        )
+        session.commit()
+        mutations = (
+            (
+                "UPDATE governance_evaluation_decisions SET rationale='fabricated' "
+                "WHERE id=:id",
+                decision_id,
+            ),
+            ("DELETE FROM governance_evaluation_decisions WHERE id=:id", decision_id),
+            (
+                "UPDATE governance_evaluation_audit_events SET action='fabricated' "
+                "WHERE id=:id",
+                event_id,
+            ),
+            ("DELETE FROM governance_evaluation_audit_events WHERE id=:id", event_id),
+        )
+        for statement, row_id in mutations:
+            with pytest.raises(DBAPIError, match="append-only"):
+                session.execute(text(statement), {"id": row_id})
+            session.rollback()
     finally:
         session.rollback()
         session.close()
