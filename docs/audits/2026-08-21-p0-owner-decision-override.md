@@ -5,9 +5,9 @@ Date: 2026-08-23
 ## Checkpoint identity
 
 - Baseline commit: `98208b63c3591eb57ce57864e96bf8a6c7905eb6`
-- Final implementation commit: `9e6020ee2d693063397d62fce4487840c20da06f`
-- Documentation checkpoint: this audit and the single roadmap-row update are
-  the current commit-to-be-created. This report does not invent or claim its
+- Final implementation commit: `f6c076f7ec666bb99d6eb0a18635ec05427e9106`
+- Documentation checkpoint: this audit and the prescribed roadmap prose update
+  are the current commit-to-be-created. This report does not invent or claim its
   own self-referential commit hash.
 
 This checkpoint closes one internal control-plane roadmap item: evidence review
@@ -20,7 +20,7 @@ frontend release.
 
 ## Exact implementation range
 
-`98208b6..9e6020e` changes exactly these implementation and proof files:
+`98208b6..f6c076f` changes exactly these implementation and proof files:
 
 - `apps/backend/api/main.py`
 - `apps/backend/config/migration_integrity.py`
@@ -116,7 +116,11 @@ decision route and response remain unchanged and reject override fields.
 ### Reason, response, idempotency, and audit handling
 
 The bounded 1-2000 UTF-8 byte `ownerOverrideReason` is stored only in the
-immutable decision row. The public response exposes only
+immutable decision row. PostgreSQL requires every non-null reason to equal its
+`btrim` value and have `octet_length` from 1 through 2000; migration 013j locks
+the decision table, rejects legacy-invalid values without rewriting them, and
+recreates and validates the named check constraint. The ORM mirrors trimming
+and its portable character-length bound. The public response exposes only
 `ownerOverrideApplied: true`. Success and rejected audit material, response
 material, errors, and completed idempotency responses exclude the raw reason.
 The request and success audit bind its canonical SHA-256 hash.
@@ -131,11 +135,15 @@ actor, action, resource, reason hash, waived IDs, or audit-event ID fails.
 Normal decisions are outside this override-only deferred constraint.
 
 The shared SQLAlchemy mutation UoW remains the sole idempotency, decision,
-audit, and commit boundary. An injected infrastructure failure rolls back the
-decision, audit, and idempotency claim so the same key can retry. Expected
-domain rejection persists only a sanitized rejected audit and replayable
-bounded response. SQLite cannot prove canonical PostgreSQL owner authority and
-therefore rejects every non-null owner override reason.
+audit, and commit boundary. PostgreSQL lock timeout, deadlock, serialization,
+privilege, and infrastructure errors escape the owner-authority predicate
+rather than becoming a domain denial. A native locked-authority-row test proves
+that a bounded `lock_timeout` becomes a persistence failure, rollback leaves no
+decision, success or rejected audit, or completed idempotency generation, and
+the same key succeeds after the blocker releases. Expected domain rejection
+persists only a sanitized rejected audit and replayable bounded response.
+SQLite cannot prove canonical PostgreSQL owner authority and therefore rejects
+every non-null owner override reason.
 
 ## TDD and review history
 
@@ -207,9 +215,25 @@ insert plus a same-transaction hook proving the run CAS matched zero rows and
 rollback removed the inserted decision. The corrected native regression passed
 and review was clean after one test fix round.
 
+### Final-review fix wave
+
+The final-review RED slice was `6 failed, 1 passed`: PostgreSQL was converting a
+transient authority-row lock failure into false, direct SQL still accepted
+untrimmed and over-2000-byte multibyte reasons, migration preflight did not
+reject a legacy-invalid reason, and the ORM/operator contracts lacked the exact
+new checks. The already-valid exact 2000-byte application case passed at RED.
+
+Migration 013j now lets transient database failures escape, locks decisions
+against concurrent writes, preflights existing reasons, and enforces the exact
+trimmed 1-2000 UTF-8-byte database contract. The operator verifies that exact
+validated constraint. The focused native transient/reason/operator GREEN
+matrix was `96 passed, 70 warnings in 119.90s`; it includes same-key retry after
+rollback and valid `"é" * 1000` application persistence. Frozen migrations 013
+through 013i and the SQLite fixture remained byte-identical.
+
 ## Fresh Task 7 release evidence
 
-The following results were generated from implementation commit `9e6020e`; the
+The following results were generated from implementation commit `f6c076f`; the
 earlier failed release attempt is not reused as final evidence.
 
 ### Complete focused backend matrix
@@ -229,7 +253,7 @@ uv run pytest -q -p no:cacheprovider \
   tests/test_migration_integrity.py
 ```
 
-Result: `425 passed, 64 skipped, 133 warnings in 147.45s`. The skips are
+Result: `425 passed, 68 skipped, 133 warnings in 148.11s`. The skips are
 explicit native/environment cases because this focused command does not set a
 PostgreSQL DSN. Warnings are existing FastAPI, Pydantic, SQLAlchemy,
 `pythonjsonlogger`, HTTP-status, and `datetime.utcnow()` deprecations.
@@ -238,7 +262,7 @@ PostgreSQL DSN. Warnings are existing FastAPI, Pydantic, SQLAlchemy,
 
 ```bash
 cd apps/backend
-FAIRMIND_TEST_POSTGRES_URL='postgresql://adhi@127.0.0.1:55446/postgres' \
+FAIRMIND_TEST_POSTGRES_URL='postgresql://adhi@127.0.0.1:55447/postgres' \
 uv run pytest -q -p no:cacheprovider \
   tests/test_owner_decision_override_integrity_013j.py \
   tests/test_owner_decision_override_postgres.py \
@@ -248,11 +272,8 @@ uv run pytest -q -p no:cacheprovider \
   tests/test_migration_integrity.py
 ```
 
-Result: `274 passed, 1 skipped, 71 warnings in 372.13s` on PostgreSQL 14.18.
-The sole skip is
-`test_native_non_c_locale_013b_v2_uses_exact_frozen_prerequisites`; the
-disposable database uses C collation and that case explicitly requires a non-C
-database. Warnings are the existing deprecations.
+Result: `281 passed, 71 warnings in 244.83s` on PostgreSQL 14.18, with no
+skips. Warnings are the existing deprecations.
 
 This native matrix includes canonical owner/member/role authority, deterministic
 lock order, every authority writer-first and override-first ordering, normal
@@ -260,7 +281,9 @@ versus override verdict CAS, both review/decision commit orderings with exact
 review-version binding, twenty ready-session same-key calls producing one
 commit and nineteen exact `201` replays, direct deferred-binding fabrication
 rejection, successful shared-UoW binding, rollback/retry, append-only update and
-delete denial, operator replay, startup verification, and catalog drift.
+delete denial, transient authority-lock rollback and same-key retry, direct
+trimmed/UTF-8-byte reason enforcement, legacy-invalid migration preflight,
+operator replay, startup verification, and catalog drift.
 
 ### Architecture, source, and compilation gates
 
@@ -293,20 +316,21 @@ Result: exit zero with no output.
 ## Frozen sources and catalogs
 
 - PostgreSQL 013j direct SHA-256:
-  `76f38c55173e34ed6733ded221e87a94aac1fe9ed7cfd1a96a5621bb20e10902`
+  `bc5deb123981ee968061ec695821e8d00a8cc860d3c2169f9ca81ae6805846b5`
 - PostgreSQL 013i-to-013j operator SHA-256:
-  `e3ffeb9809b9e8ac19da05c427df81521d3290c8d1bc5aa876bbd88695cedd20`
+  `3a3cab3184178958bacd67c6573dedc9b624293b3b5cb773d899b20e02eb2f53`
 - SQLite 013j fixture SHA-256:
   `60e6377e21e739ab1ce845d265ed736fb50d74af47846a227a628182f6ebc746`
 - PostgreSQL 14 catalog digest:
-  `c4a2a891640a309a07a2421cb0951615b82e32645757e0c1469cacf501020be2`
+  `c181fd00d2c65009cd17a673c0462d92d557c73dc7976f800a4bcb83ae4c6fd2`
 - SQLite catalog digest:
   `90e595b216e7907a92872dcfc4e0478c831298eabd5536919cb05eb85fdfc6c7`
 
-The three source hashes were independently recomputed during Task 7 and match
-the frozen manifest. The PostgreSQL and SQLite catalog digests were each frozen
-from two identical clean full-chain installations and are executable startup
-contracts.
+The three source hashes were independently recomputed during the final-review
+wave and match the frozen manifest. The PostgreSQL digest was re-frozen from
+two independently named clean full-chain PostgreSQL 14 installations with the
+same result. The unchanged SQLite source and catalog digest retain their prior
+two-clean-install proof. Both remain executable startup contracts.
 
 ## Explicitly open boundaries
 
@@ -315,14 +339,16 @@ contracts.
   a compromised schema owner or provide an external immutable audit anchor.
 - A separately authenticated, least-privilege worker/runtime identity remains
   open. Worker execution and automatic enforcement remain disabled.
-- Granular permissions remain incomplete; the reserved override permission is
-  intentionally not delegable through existing human role APIs.
+- Granular/delegable separation-override authorization remains incomplete. The
+  implemented reserved override permission is intentionally not delegable
+  through existing human role APIs.
 - Evidence submit and link operations remain service-mediated rather than
   independently invocable production surfaces.
 - Capability switches, unsupported modality packs, and automatic enforcement
   remain open and must stay disabled at API and UI boundaries.
 - No frontend owner-override workflow is provided.
-- Staging, production verification, rollout gates, operational provisioning,
-  monitoring, rollback exercises, and public rollout remain open.
+- The owner override is implemented but default-off. Production provisioning,
+  enablement, verification, rollout gates, monitoring, rollback exercises, and
+  public rollout remain independent and open.
 - This checkpoint creates no `FairMind Verified`, certification, compliance,
   production-safety, or public-assurance claim.
