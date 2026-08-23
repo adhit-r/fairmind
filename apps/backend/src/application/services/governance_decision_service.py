@@ -32,7 +32,11 @@ from src.domain.assurance.evaluation_v2 import (
 )
 
 _OPERATION = "evaluation-v2.governance-decision.create"
+_OWNER_OVERRIDE_OPERATION = "evaluation-v2.governance-decision.owner-override"
 _AUDIT_SCHEMA = "evaluation-v2.governance-decision/v2"
+_OWNER_OVERRIDE_AUDIT_ACTION = (
+    "evaluation_v2.governance_decision.owner_override_created"
+)
 _CONTRACT_VERSION = "2.0.0"
 _LAYER_SCHEMA_VERSION = "1.0.0"
 _LAYER_AXES = frozenset({"suites", "modalities", "components", "riskDimensions"})
@@ -143,6 +147,7 @@ def _assert_authority(
     actor_id: str,
     expected_verdict_version: int,
     layers: FrozenJsonObject,
+    require_independent_actor: bool,
 ) -> None:
     if authority.scope != scope or authority.run_contract_version != _CONTRACT_VERSION:
         raise _error(
@@ -174,7 +179,9 @@ def _assert_authority(
             "governance_decision_version_conflict",
             "The governance verdict version is stale.",
         )
-    if actor_id == authority.requested_by or actor_id in authority.evidence_submitters:
+    if require_independent_actor and (
+        actor_id == authority.requested_by or actor_id in authority.evidence_submitters
+    ):
         raise _error(
             "governance_decision_separation_required",
             "The decider must be independent from the run requester and evidence submitters.",
@@ -197,6 +204,51 @@ def _assert_authority(
             "governance_decision_integrity_conflict",
             "The locked governance-decision authority is inconsistent.",
         )
+
+
+def _waived_relationships(
+    authority: GovernanceDecisionAuthorityRecord,
+    actor_id: str,
+) -> list[dict[str, object]]:
+    if len(authority.admission_ids) != len(authority.admission_submitters):
+        raise _error(
+            "governance_decision_integrity_conflict",
+            "The locked governance-decision authority is inconsistent.",
+        )
+    relationships: list[dict[str, object]] = []
+    admission_ids = sorted(
+        {
+            admission_id
+            for admission_id, submitted_by in zip(
+                authority.admission_ids,
+                authority.admission_submitters,
+                strict=True,
+            )
+            if submitted_by == actor_id
+        }
+    )
+    if admission_ids:
+        relationships.append(
+            {
+                "relationshipType": "evidence_submitter",
+                "actorId": actor_id,
+                "resourceType": "evidence_admission",
+                "resourceIds": admission_ids,
+            }
+        )
+    if authority.requested_by == actor_id:
+        relationships.append(
+            {
+                "relationshipType": "run_requester",
+                "actorId": actor_id,
+                "resourceType": "evaluation_run",
+                "resourceIds": [authority.scope.run_id],
+            }
+        )
+    return sorted(
+        relationships,
+        key=lambda item: (str(item["relationshipType"]), str(item["actorId"])),
+    )
 
 
 def _suite_freshness(record: GovernanceDecisionRecord) -> list[dict[str, object]]:
@@ -269,6 +321,7 @@ def _assert_record(
         command.rationale,
         command.actor_id,
         command.authority.evidence_set_hash,
+        command.owner_override_reason,
         command.authority.suite_execution_ids,
     )
     actual = (
@@ -283,6 +336,7 @@ def _assert_record(
         record.rationale,
         record.decided_by,
         record.evidence_set_hash,
+        record.owner_override_reason,
         record.suite_execution_ids,
     )
     if actual != expected:
@@ -313,7 +367,7 @@ def _assert_record(
 
 
 class GovernanceDecisionService:
-    """Create normal decisions only; owner override and enforcement stay unavailable."""
+    """Create normal governance decisions and authorized owner overrides."""
 
     def __init__(
         self,
@@ -335,6 +389,57 @@ class GovernanceDecisionService:
         overall_verdict: str,
         layer_verdicts: Mapping[str, object],
         rationale: str,
+    ) -> MutationResult:
+        return self._decide(
+            scope=scope,
+            actor_id=actor_id,
+            idempotency_key=idempotency_key,
+            expected_verdict_version=expected_verdict_version,
+            overall_verdict=overall_verdict,
+            layer_verdicts=layer_verdicts,
+            rationale=rationale,
+            owner_override_reason=None,
+        )
+
+    def decide_owner_override(
+        self,
+        *,
+        scope: GovernanceDecisionScope,
+        actor_id: str,
+        idempotency_key: str,
+        expected_verdict_version: int,
+        overall_verdict: str,
+        layer_verdicts: Mapping[str, object],
+        rationale: str,
+        owner_override_reason: str,
+    ) -> MutationResult:
+        reason = _safe_string(
+            owner_override_reason,
+            code="governance_decision_request_invalid",
+            maximum=2000,
+        )
+        return self._decide(
+            scope=scope,
+            actor_id=actor_id,
+            idempotency_key=idempotency_key,
+            expected_verdict_version=expected_verdict_version,
+            overall_verdict=overall_verdict,
+            layer_verdicts=layer_verdicts,
+            rationale=rationale,
+            owner_override_reason=reason,
+        )
+
+    def _decide(
+        self,
+        *,
+        scope: GovernanceDecisionScope,
+        actor_id: str,
+        idempotency_key: str,
+        expected_verdict_version: int,
+        overall_verdict: str,
+        layer_verdicts: Mapping[str, object],
+        rationale: str,
+        owner_override_reason: str | None,
     ) -> MutationResult:
         _validate_scope(scope)
         actor = _safe_string(actor_id, code="governance_decision_actor_invalid", maximum=128)
@@ -364,30 +469,50 @@ class GovernanceDecisionService:
                 status_code=422,
             ) from error
 
+        operation = (
+            _OWNER_OVERRIDE_OPERATION
+            if owner_override_reason is not None
+            else _OPERATION
+        )
+        request_body: dict[str, object] = {
+            "expectedVerdictVersion": expected_verdict_version,
+            "overallVerdict": overall_verdict,
+            "layerVerdicts": layers.to_dict(),
+            "rationale": safe_rationale,
+        }
+        if owner_override_reason is not None:
+            request_body["ownerOverrideReason"] = owner_override_reason
+
         mutation = MutationCommand(
             organization_id=scope.organization_id,
             actor_id=actor,
-            operation=_OPERATION,
+            operation=operation,
             idempotency_key=key,
             request_hash=assurance_request_hash(
                 method="POST",
-                operation=_OPERATION,
+                operation=operation,
                 scope={
                     "organizationId": scope.organization_id,
                     "workspaceId": scope.workspace_id,
                     "systemId": scope.system_id,
                     "runId": scope.run_id,
                 },
-                body={
-                    "expectedVerdictVersion": expected_verdict_version,
-                    "overallVerdict": overall_verdict,
-                    "layerVerdicts": layers.to_dict(),
-                    "rationale": safe_rationale,
-                },
+                body=request_body,
             ),
         )
 
         def persist(_mutation_now: datetime) -> MutationOutcome:
+            if owner_override_reason is not None and not (
+                self.repository.authorize_owner_decision_override_for_update(
+                    organization_id=scope.organization_id,
+                    actor_id=actor,
+                )
+            ):
+                raise _error(
+                    "evaluation_separation_override_forbidden",
+                    "Owner decision override authority is not available.",
+                    status_code=403,
+                )
             authority = self.repository.load_governance_decision_authority_for_update(scope=scope)
             if authority is None:
                 raise _error(
@@ -401,7 +526,18 @@ class GovernanceDecisionService:
                 actor_id=actor,
                 expected_verdict_version=expected_verdict_version,
                 layers=layers,
+                require_independent_actor=owner_override_reason is None,
             )
+            waived_relationships = (
+                _waived_relationships(authority, actor)
+                if owner_override_reason is not None
+                else []
+            )
+            if owner_override_reason is not None and not waived_relationships:
+                raise _error(
+                    "governance_decision_override_not_required",
+                    "The canonical owner has no decision-separation conflict to override.",
+                )
             advisory_evaluated_at = freshness.require_common_evaluated_at(
                 authority.operational_freshness
             )
@@ -420,41 +556,57 @@ class GovernanceDecisionService:
                 overall_verdict=overall_verdict,
                 layer_verdicts=layers,
                 rationale=safe_rationale,
-                owner_override_reason=None,
+                owner_override_reason=owner_override_reason,
                 decided_at=advisory_evaluated_at,
             )
             record = self.repository.persist_governance_decision(command)
             _assert_record(record, command)
             body = _body(record)
+            if owner_override_reason is not None:
+                body["ownerOverrideApplied"] = True
+            audit_details: dict[str, object] = {
+                "schemaVersion": _AUDIT_SCHEMA,
+                "runId": scope.run_id,
+                "verdictVersion": record.verdict_version,
+                "overallVerdict": record.overall_verdict,
+                "evidenceSetHash": record.evidence_set_hash,
+                "rationaleHash": canonical_sha256({"rationale": safe_rationale}),
+                "ownerOverride": owner_override_reason is not None,
+                "freshnessContractVersion": "1.0.0",
+                "freshnessEvaluatedAt": _utc(record.decided_at).isoformat(),
+                "suiteFreshness": body["suiteFreshness"],
+                "freshnessReasonCodesHash": canonical_sha256(
+                    [
+                        list(classification.reason_codes)
+                        for classification in record.operational_freshness
+                    ]
+                ),
+                "decisionEvidenceEligibleAtDecision": body[
+                    "decisionEvidenceEligibleAtDecision"
+                ],
+            }
+            if owner_override_reason is not None:
+                audit_details.update(
+                    {
+                        "ownerActorId": actor,
+                        "waivedRelationships": waived_relationships,
+                        "waivedRelationshipsHash": canonical_sha256(waived_relationships),
+                        "ownerOverrideReasonHash": canonical_sha256(
+                            {"ownerOverrideReason": owner_override_reason}
+                        ),
+                    }
+                )
             return MutationOutcome(
                 body=FrozenJsonObject.from_mapping(body),
                 status=201,
                 resource_type="evaluation_governance_decision",
                 resource_id=record.decision_id,
-                audit_action="evaluation_v2.governance_decision.created",
-                audit_details=FrozenJsonObject.from_mapping(
-                    {
-                        "schemaVersion": _AUDIT_SCHEMA,
-                        "runId": scope.run_id,
-                        "verdictVersion": record.verdict_version,
-                        "overallVerdict": record.overall_verdict,
-                        "evidenceSetHash": record.evidence_set_hash,
-                        "rationaleHash": canonical_sha256({"rationale": safe_rationale}),
-                        "ownerOverride": False,
-                        "freshnessContractVersion": "1.0.0",
-                        "freshnessEvaluatedAt": _utc(record.decided_at).isoformat(),
-                        "suiteFreshness": body["suiteFreshness"],
-                        "freshnessReasonCodesHash": canonical_sha256(
-                            [
-                                list(classification.reason_codes)
-                                for classification in record.operational_freshness
-                            ]
-                        ),
-                        "decisionEvidenceEligibleAtDecision": body[
-                            "decisionEvidenceEligibleAtDecision"
-                        ],
-                    }
+                audit_action=(
+                    _OWNER_OVERRIDE_AUDIT_ACTION
+                    if owner_override_reason is not None
+                    else "evaluation_v2.governance_decision.created"
                 ),
+                audit_details=FrozenJsonObject.from_mapping(audit_details),
             )
 
         return self.unit_of_work.mutate(mutation, persist)

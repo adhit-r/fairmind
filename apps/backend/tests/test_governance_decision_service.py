@@ -81,6 +81,7 @@ def _authority() -> GovernanceDecisionAuthorityRecord:
         },
         requested_by="requester-a",
         evidence_submitters=("submitter-a",),
+        admission_submitters=("submitter-a",),
         suite_execution_ids=("suite-execution-a",),
         admission_ids=("admission-a",),
         evidence_set=EVIDENCE_SET,
@@ -104,15 +105,23 @@ def _authority() -> GovernanceDecisionAuthorityRecord:
 @dataclass
 class _FakeRepository:
     authority: GovernanceDecisionAuthorityRecord
+    owner_authorized: bool = False
 
     def __post_init__(self) -> None:
         self.persisted: list[object] = []
+        self.owner_authorization_calls: list[tuple[str, str]] = []
 
     def read_fresh_utc_now(self) -> datetime:
         return NOW
 
     def load_governance_decision_authority_for_update(self, *, scope):
         return self.authority if scope == self.authority.scope else None
+
+    def authorize_owner_decision_override_for_update(
+        self, *, organization_id: str, actor_id: str
+    ) -> bool:
+        self.owner_authorization_calls.append((organization_id, actor_id))
+        return self.owner_authorized
 
     def persist_governance_decision(self, command):
         self.persisted.append(command)
@@ -137,6 +146,7 @@ class _FakeRepository:
             decided_at=decided_at,
             suite_execution_ids=command.authority.suite_execution_ids,
             operational_freshness=operational_freshness,
+            owner_override_reason=command.owner_override_reason,
         )
 
 
@@ -198,6 +208,97 @@ def test_decision_appends_server_bound_record_and_advances_expected_version() ->
     assert persisted.next_verdict_version == 1
     assert persisted.authority.evidence_set.to_dict() == EVIDENCE_SET
     assert persisted.owner_override_reason is None
+    assert "ownerOverrideApplied" not in result.body
+    assert unit_of_work.command.operation == "evaluation-v2.governance-decision.create"
+    assert unit_of_work.outcome.audit_action == "evaluation_v2.governance_decision.created"
+    assert repository.owner_authorization_calls == []
+
+
+def test_owner_override_records_exact_waived_relationships_without_raw_reason() -> None:
+    repository = _FakeRepository(
+        replace(
+            _authority(),
+            requested_by="owner-a",
+            evidence_submitters=("owner-a",),
+            admission_submitters=("owner-a",),
+        ),
+        owner_authorized=True,
+    )
+    unit_of_work = _FakeUnitOfWork(repository)
+    service = GovernanceDecisionService(unit_of_work, uuid_factory=lambda: DECISION_ID)
+
+    result = service.decide_owner_override(
+        scope=SCOPE,
+        actor_id="owner-a",
+        idempotency_key="owner-override-key",
+        expected_verdict_version=0,
+        overall_verdict="conditional",
+        layer_verdicts=LAYERS,
+        rationale="Current evidence supports a conditional verdict.",
+        owner_override_reason="No independent decision owner is available.",
+    )
+
+    assert result.status == 201
+    assert result.body["ownerOverrideApplied"] is True
+    assert "ownerOverrideReason" not in result.body
+    assert unit_of_work.command.operation == (
+        "evaluation-v2.governance-decision.owner-override"
+    )
+    assert unit_of_work.outcome.audit_action == (
+        "evaluation_v2.governance_decision.owner_override_created"
+    )
+    details = unit_of_work.outcome.audit_details.to_dict()
+    assert details["waivedRelationships"] == [
+        {
+            "relationshipType": "evidence_submitter",
+            "actorId": "owner-a",
+            "resourceType": "evidence_admission",
+            "resourceIds": ["admission-a"],
+        },
+        {
+            "relationshipType": "run_requester",
+            "actorId": "owner-a",
+            "resourceType": "evaluation_run",
+            "resourceIds": ["run-a"],
+        },
+    ]
+    assert "No independent decision owner" not in repr(details)
+    assert repository.persisted[0].owner_override_reason == (
+        "No independent decision owner is available."
+    )
+
+
+@pytest.mark.parametrize(
+    ("owner_authorized", "actor_id", "expected_code"),
+    (
+        (False, "owner-a", "evaluation_separation_override_forbidden"),
+        (True, "independent-owner", "governance_decision_override_not_required"),
+    ),
+)
+def test_owner_override_requires_canonical_authority_and_a_real_conflict(
+    owner_authorized: bool,
+    actor_id: str,
+    expected_code: str,
+) -> None:
+    repository = _FakeRepository(_authority(), owner_authorized=owner_authorized)
+    service = GovernanceDecisionService(
+        _FakeUnitOfWork(repository), uuid_factory=lambda: DECISION_ID
+    )
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        service.decide_owner_override(
+            scope=SCOPE,
+            actor_id=actor_id,
+            idempotency_key=f"owner-override-{expected_code}",
+            expected_verdict_version=0,
+            overall_verdict="conditional",
+            layer_verdicts=LAYERS,
+            rationale="Evidence remains authoritative.",
+            owner_override_reason="Documented ownership conflict.",
+        )
+
+    assert caught.value.code == expected_code
+    assert repository.persisted == []
 
 
 def test_decision_rejects_classifier_result_from_a_different_database_instant() -> None:

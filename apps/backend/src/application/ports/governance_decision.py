@@ -39,6 +39,7 @@ class GovernanceDecisionAuthorityRecord:
     evidence_submitters: tuple[str, ...]
     suite_execution_ids: tuple[str, ...]
     admission_ids: tuple[str, ...]
+    admission_submitters: tuple[str, ...]
     evidence_set: FrozenJsonObject
     evidence_set_hash: str
     operational_freshness: tuple[EvidenceFreshnessClassification, ...]
@@ -59,6 +60,7 @@ class GovernanceDecisionAuthorityRecord:
         evidence_submitters: tuple[str, ...],
         suite_execution_ids: tuple[str, ...],
         admission_ids: tuple[str, ...],
+        admission_submitters: tuple[str, ...],
         evidence_set: Mapping[str, object],
         evidence_set_hash: str,
         operational_freshness: tuple[EvidenceFreshnessClassification, ...],
@@ -76,6 +78,7 @@ class GovernanceDecisionAuthorityRecord:
             evidence_submitters=tuple(evidence_submitters),
             suite_execution_ids=tuple(suite_execution_ids),
             admission_ids=tuple(admission_ids),
+            admission_submitters=tuple(admission_submitters),
             evidence_set=FrozenJsonObject.from_mapping(evidence_set),
             evidence_set_hash=evidence_set_hash,
             operational_freshness=tuple(operational_freshness),
@@ -93,7 +96,7 @@ class PersistGovernanceDecisionCommand:
     overall_verdict: str
     layer_verdicts: FrozenJsonObject
     rationale: str
-    owner_override_reason: None
+    owner_override_reason: str | None
     decided_at: datetime
 
 
@@ -111,6 +114,7 @@ class GovernanceDecisionRecord:
     decided_by: str
     evidence_set_hash: str
     decided_at: datetime
+    owner_override_reason: str | None
     suite_execution_ids: tuple[str, ...]
     operational_freshness: tuple[EvidenceFreshnessClassification, ...]
 
@@ -130,6 +134,7 @@ class GovernanceDecisionRecord:
         decided_by: str,
         evidence_set_hash: str,
         decided_at: datetime,
+        owner_override_reason: str | None,
         suite_execution_ids: tuple[str, ...],
         operational_freshness: tuple[EvidenceFreshnessClassification, ...],
     ) -> "GovernanceDecisionRecord":
@@ -146,6 +151,7 @@ class GovernanceDecisionRecord:
             decided_by=decided_by,
             evidence_set_hash=evidence_set_hash,
             decided_at=decided_at,
+            owner_override_reason=owner_override_reason,
             suite_execution_ids=tuple(suite_execution_ids),
             operational_freshness=tuple(operational_freshness),
         )
@@ -153,6 +159,14 @@ class GovernanceDecisionRecord:
 
 class GovernanceDecisionRepository(Protocol):
     def read_fresh_utc_now(self) -> datetime: ...
+
+    def authorize_owner_decision_override_for_update(
+        self,
+        *,
+        organization_id: str,
+        actor_id: str,
+    ) -> bool:
+        raise NotImplementedError
 
     def load_governance_decision_authority_for_update(
         self,
