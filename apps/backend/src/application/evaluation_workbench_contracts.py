@@ -6,7 +6,7 @@ import base64
 import binascii
 import re
 from datetime import datetime, timedelta
-from typing import Mapping
+from typing import Mapping, cast
 
 from src.application.ports.evaluation_workbench import (
     EvidenceTrustMetadataRecord,
@@ -43,6 +43,7 @@ from src.domain.assurance.evaluation_v2 import (
     reject_sensitive_keys,
     require_canonical_size,
     validate_mutation_detail_body,
+    validate_owner_override_reason as _validate_owner_override_reason,
     validate_plan_schema_complexity,
     validate_public_safe_string,
     validate_selected_configuration,
@@ -133,6 +134,16 @@ def canonical_assurance_json(value: object) -> str:
         return canonical_json(value)
     except AssuranceContractValidationError as error:
         raise EvaluationWorkbenchInputError(str(error)) from error
+
+
+def validate_owner_override_reason_input(value: object) -> str:
+    """Validate an owner override reason without exposing domain errors to the API."""
+    reason = cast(str, value)
+    try:
+        _validate_owner_override_reason(reason)
+    except AssuranceContractValidationError as error:
+        raise EvaluationWorkbenchInputError(str(error)) from error
+    return reason
 
 
 def _translate(error: AssuranceContractValidationError) -> EvaluationWorkbenchError:
@@ -1269,6 +1280,7 @@ __all__ = [
     "aggregate_run_result_axes",
     "assurance_request_hash",
     "canonical_assurance_json",
+    "validate_owner_override_reason_input",
     "verify_run_record_binding",
     "verify_stored_suite_link_projection",
 ]

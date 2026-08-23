@@ -48,6 +48,7 @@ from src.application.evaluation_workbench_contracts import (
     EvaluationWorkbenchError,
     EvaluationWorkbenchInputError,
     canonical_assurance_json,
+    validate_owner_override_reason_input,
 )
 from src.application.services.verified_evidence_admission_service import (
     VerifiedEvidenceAdmissionService,
@@ -57,10 +58,6 @@ from src.application.services.verified_evidence_review_service import (
 )
 from src.application.services.governance_assurance_service import OrgMembership
 from src.application.services.governance_decision_service import GovernanceDecisionService
-from src.domain.assurance.evaluation_v2 import (
-    AssuranceContractValidationError,
-    validate_owner_override_reason,
-)
 
 router = APIRouter(
     prefix="/organizations/{org_id}",
@@ -513,8 +510,8 @@ class OwnerDecisionOverrideRequest(GovernanceDecisionRequest):
     @classmethod
     def _validate_owner_override_reason(cls, value: str) -> str:
         try:
-            validate_owner_override_reason(value)
-        except AssuranceContractValidationError as error:
+            validate_owner_override_reason_input(value)
+        except EvaluationWorkbenchInputError as error:
             raise ValueError("owner override reason is unsafe") from error
         return value
 
