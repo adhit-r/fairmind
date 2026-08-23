@@ -60,6 +60,9 @@ class Settings(BaseSettings):
     # Normal governance decisions remain independently disabled until their
     # PostgreSQL CAS path and authorization gate are deliberately released.
     assurance_v2_governance_decision_enabled: bool = False
+    # Owner decision overrides remain separately disabled until their
+    # PostgreSQL owner-authority proof and audited exception path are released.
+    assurance_v2_separation_override_enabled: bool = False
     # Evaluator registration administration is inert until the dedicated
     # release gate, narrow organization permission, and audited ceremony are
     # deliberately enabled together.

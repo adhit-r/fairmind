@@ -17,6 +17,7 @@ from sqlalchemy.pool import StaticPool
 
 from api.routes.evaluation_workbench import (
     governance_decision_router,
+    governance_decision_override_router,
     router as evaluation_workbench_router,
     verified_evidence_router,
     verified_evidence_review_router,
@@ -86,6 +87,11 @@ app.include_router(
     governance_decision_router,
     prefix="/api/v1/ai-governance",
     tags=["evaluation-workbench-v2-governance-decision"],
+)
+app.include_router(
+    governance_decision_override_router,
+    prefix="/api/v1/ai-governance",
+    tags=["evaluation-workbench-v2-governance-decision-owner-override"],
 )
 
 ORG = str(uuid.uuid4())
@@ -335,6 +341,21 @@ def _decision_url(
     )
 
 
+def _owner_override_url(
+    *,
+    run_id: str,
+    workspace_id: str = "workspace-a",
+    system_id: str = "system-a",
+    org_id: str = ORG,
+) -> str:
+    return _decision_url(
+        run_id=run_id,
+        workspace_id=workspace_id,
+        system_id=system_id,
+        org_id=org_id,
+    ) + "/owner-override"
+
+
 def _grant_evidence_submit_permission() -> None:
     _grant_role_permissions("admin", ["evaluation:evidence:submit", "evaluation:evidence:link"])
 
@@ -569,35 +590,46 @@ class _RecordingGovernanceDecisionService:
 
     def decide(self, **kwargs):
         self.calls.append(kwargs)
+        return self._result(kwargs)
+
+    def decide_owner_override(self, **kwargs):
+        self.calls.append(kwargs)
+        return self._result(kwargs, owner_override_applied=True)
+
+    @staticmethod
+    def _result(kwargs, *, owner_override_applied: bool = False):
         suite_execution_id = next(iter(kwargs["layer_verdicts"]["suites"]))
+        body = {
+            "decisionId": "11111111-1111-4111-8111-111111111111",
+            "runId": kwargs["scope"].run_id,
+            "contractVersion": "2.0.0",
+            "verdictVersion": kwargs["expected_verdict_version"] + 1,
+            "overallVerdict": kwargs["overall_verdict"],
+            "layerVerdictsSchemaVersion": "1.0.0",
+            "layerVerdicts": kwargs["layer_verdicts"],
+            "rationale": kwargs["rationale"],
+            "decidedBy": kwargs["actor_id"],
+            "evidenceSetHash": "a" * 64,
+            "decidedAt": "2026-08-09T12:00:00+00:00",
+            "freshnessContractVersion": "1.0.0",
+            "freshnessEvaluatedAt": "2026-08-09T12:00:00+00:00",
+            "decisionEvidenceEligibleAtDecision": True,
+            "suiteFreshness": [
+                {
+                    "suiteExecutionId": suite_execution_id,
+                    "recordedFreshnessStatus": "current",
+                    "effectiveFreshnessStatus": "current",
+                    "freshnessEffectiveAt": "2026-08-09T11:00:00+00:00",
+                    "expiringAt": "2026-08-10T11:00:00+00:00",
+                    "freshnessReasonCodes": [],
+                    "decisionEvidenceEligibleAtDecision": True,
+                }
+            ],
+        }
+        if owner_override_applied:
+            body["ownerOverrideApplied"] = True
         return MutationResult.create(
-            body={
-                "decisionId": "11111111-1111-4111-8111-111111111111",
-                "runId": kwargs["scope"].run_id,
-                "contractVersion": "2.0.0",
-                "verdictVersion": kwargs["expected_verdict_version"] + 1,
-                "overallVerdict": kwargs["overall_verdict"],
-                "layerVerdictsSchemaVersion": "1.0.0",
-                "layerVerdicts": kwargs["layer_verdicts"],
-                "rationale": kwargs["rationale"],
-                "decidedBy": kwargs["actor_id"],
-                "evidenceSetHash": "a" * 64,
-                "decidedAt": "2026-08-09T12:00:00+00:00",
-                "freshnessContractVersion": "1.0.0",
-                "freshnessEvaluatedAt": "2026-08-09T12:00:00+00:00",
-                "decisionEvidenceEligibleAtDecision": True,
-                "suiteFreshness": [
-                    {
-                        "suiteExecutionId": suite_execution_id,
-                        "recordedFreshnessStatus": "current",
-                        "effectiveFreshnessStatus": "current",
-                        "freshnessEffectiveAt": "2026-08-09T11:00:00+00:00",
-                        "expiringAt": "2026-08-10T11:00:00+00:00",
-                        "freshnessReasonCodes": [],
-                        "decisionEvidenceEligibleAtDecision": True,
-                    }
-                ],
-            },
+            body=body,
             status=201,
         )
 
@@ -1491,6 +1523,169 @@ def test_governance_decision_is_hidden_when_master_gate_is_off(
         app.dependency_overrides.pop(get_governance_decision_service, None)
 
     assert response.status_code == 404
+    assert recorder.calls == []
+
+
+@pytest.mark.parametrize(
+    ("master", "decision", "override"),
+    ((False, True, True), (True, False, True), (True, True, False)),
+)
+def test_owner_decision_override_direct_mount_requires_all_flags(
+    monkeypatch: pytest.MonkeyPatch,
+    master: bool,
+    decision: bool,
+    override: bool,
+) -> None:
+    mounted = FastAPI()
+    mounted.include_router(
+        governance_decision_override_router,
+        prefix="/api/v1/ai-governance",
+    )
+    recorder = _RecordingGovernanceDecisionService()
+    mounted.dependency_overrides[get_governance_decision_service] = lambda: recorder
+    monkeypatch.setattr(settings, "assurance_v2_enabled", master)
+    monkeypatch.setattr(
+        settings, "assurance_v2_governance_decision_enabled", decision, raising=False
+    )
+    monkeypatch.setattr(
+        settings, "assurance_v2_separation_override_enabled", override, raising=False
+    )
+
+    with TestClient(mounted) as client:
+        response = client.post(
+            _owner_override_url(run_id="run-hidden"),
+            headers=_headers("owner-override-hidden"),
+            json={
+                "expectedVerdictVersion": 0,
+                "overallVerdict": "conditional",
+                "layerVerdicts": {
+                    "suites": {"suite-hidden": "conditional"},
+                    "modalities": {},
+                    "components": {},
+                    "riskDimensions": {},
+                },
+                "rationale": "This route remains hidden.",
+                "ownerOverrideReason": "The decision owner requires an exception.",
+            },
+        )
+
+    assert response.status_code == 404
+    assert recorder.calls == []
+
+
+def test_owner_decision_override_requires_normal_decision_permission(
+    workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", True)
+    monkeypatch.setattr(
+        settings, "assurance_v2_governance_decision_enabled", True, raising=False
+    )
+    monkeypatch.setattr(
+        settings, "assurance_v2_separation_override_enabled", True, raising=False
+    )
+    _plan, run = _create_active_v2_plan_and_run(client)
+    suite_execution_id = run["suiteExecutions"][0]["id"]
+    payload = {
+        "expectedVerdictVersion": 0,
+        "overallVerdict": "conditional",
+        "layerVerdicts": {
+            "suites": {suite_execution_id: "conditional"},
+            "modalities": {},
+            "components": {},
+            "riskDimensions": {},
+        },
+        "rationale": "The owner must record the separation exception.",
+        "ownerOverrideReason": "No independent owner is available for this decision.",
+    }
+    recorder = _RecordingGovernanceDecisionService()
+    app.dependency_overrides[get_governance_decision_service] = lambda: recorder
+    try:
+        _grant_role_permissions("admin", ["evaluation:separation:override"])
+        denied = client.post(
+            _owner_override_url(run_id=run["id"]),
+            headers=_headers("owner-override-reserved-only"),
+            json=payload,
+        )
+        _grant_role_permissions("admin", ["evaluation:decision"])
+        accepted = client.post(
+            _owner_override_url(run_id=run["id"]),
+            headers=_headers("owner-override-accepted"),
+            json=payload,
+        )
+    finally:
+        app.dependency_overrides.pop(get_governance_decision_service, None)
+
+    assert denied.status_code == 403
+    assert denied.json()["detail"] == {
+        "code": "evaluation_decision_write_forbidden",
+        "message": "The evaluation:decision permission is required.",
+    }
+    assert accepted.status_code == 201, accepted.text
+    assert accepted.json()["ownerOverrideApplied"] is True
+    assert payload["ownerOverrideReason"] not in accepted.text
+    assert len(recorder.calls) == 1
+    assert recorder.calls[0]["owner_override_reason"] == payload["ownerOverrideReason"]
+
+
+def test_owner_decision_override_rejects_invalid_reason_before_service(
+    workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", True)
+    monkeypatch.setattr(
+        settings, "assurance_v2_governance_decision_enabled", True, raising=False
+    )
+    monkeypatch.setattr(
+        settings, "assurance_v2_separation_override_enabled", True, raising=False
+    )
+    _plan, run = _create_active_v2_plan_and_run(client)
+    suite_execution_id = run["suiteExecutions"][0]["id"]
+    _grant_role_permissions("admin", ["evaluation:decision"])
+    payload = {
+        "expectedVerdictVersion": 0,
+        "overallVerdict": "conditional",
+        "layerVerdicts": {
+            "suites": {suite_execution_id: "conditional"},
+            "modalities": {},
+            "components": {},
+            "riskDimensions": {},
+        },
+        "rationale": "The owner must record the separation exception.",
+        "ownerOverrideReason": "Documented owner exception.",
+    }
+    invalid_bodies = [
+        {**payload, "ownerOverrideReason": ""},
+        {**payload, "ownerOverrideReason": "unsafe\x00value"},
+        {**payload, "ownerOverrideReason": "x" * 2001},
+        {**payload, "unexpected": "value"},
+    ]
+    duplicate = json.dumps(payload)[:-1] + ',"ownerOverrideReason":"duplicate"}'
+    recorder = _RecordingGovernanceDecisionService()
+    app.dependency_overrides[get_governance_decision_service] = lambda: recorder
+    try:
+        responses = [
+            client.post(
+                _owner_override_url(run_id=run["id"]),
+                headers=_headers(f"owner-override-invalid-{index}"),
+                json=body,
+            )
+            for index, body in enumerate(invalid_bodies)
+        ]
+        responses.append(
+            client.post(
+                _owner_override_url(run_id=run["id"]),
+                headers={**_headers("owner-override-duplicate"), "Content-Type": "application/json"},
+                content=duplicate,
+            )
+        )
+    finally:
+        app.dependency_overrides.pop(get_governance_decision_service, None)
+
+    assert all(response.status_code == 422 for response in responses)
+    assert all(response.json()["detail"]["code"] == "invalid_request" for response in responses)
     assert recorder.calls == []
 
 

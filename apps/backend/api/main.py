@@ -435,6 +435,19 @@ if settings.assurance_v2_enabled:
         )
     else:
         logger.info("Governance decision route is disabled")
+    if (
+        settings.assurance_v2_governance_decision_enabled
+        and settings.assurance_v2_separation_override_enabled
+    ):
+        _include_router(
+            "api.routes.evaluation_workbench",
+            prefix="/api/v1/ai-governance",
+            tags=["evaluation-workbench-v2-governance-decision-owner-override"],
+            attr="governance_decision_override_router",
+            required=True,
+        )
+    else:
+        logger.info("Owner governance-decision override route is disabled")
     if settings.assurance_v2_evaluator_catalog_enabled:
         _include_router(
             "api.routes.evaluator_catalog",

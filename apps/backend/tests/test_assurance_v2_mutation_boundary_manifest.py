@@ -34,6 +34,7 @@ from api.composition.verified_evidence_admission import (
 from api.composition.verified_evidence_review import build_verified_evidence_review_service
 from api.routes.evaluation_workbench import (
     governance_decision_router,
+    governance_decision_override_router,
     router as evaluation_workbench_router,
     verified_evidence_review_router,
     verified_evidence_router,
@@ -249,6 +250,14 @@ MUTATION_MANIFEST = (
         "workbench",
     ),
     MutationRoute(
+        _RUN + "/decisions/owner-override",
+        "create_owner_decision_override",
+        GovernanceDecisionService,
+        "decide_owner_override",
+        "evaluation-v2.governance-decision.owner-override",
+        "workbench",
+    ),
+    MutationRoute(
         _TRUST + "/issuers",
         "create_issuer",
         TrustAdministrationService,
@@ -317,6 +326,7 @@ def _mounted_mutation_routes() -> tuple[APIRoute, ...]:
         imported_evidence_router,
         verified_evidence_review_router,
         governance_decision_router,
+        governance_decision_override_router,
         evaluator_catalog_router,
         trust_administration_router,
     ):
@@ -528,8 +538,8 @@ def test_assurance_v2_mutation_manifest_is_the_exact_enabled_post_surface() -> N
         ("POST", item.path, item.endpoint) for item in MUTATION_MANIFEST
     }
 
-    assert len(MUTATION_MANIFEST) == 21
-    assert len({item.operation for item in MUTATION_MANIFEST}) == 21
+    assert len(MUTATION_MANIFEST) == 22
+    assert len({item.operation for item in MUTATION_MANIFEST}) == 22
     assert actual == expected
 
 
@@ -581,7 +591,14 @@ def test_every_manifest_operation_reaches_a_shared_sqlalchemy_mutation_uow() -> 
         operation_function = service_method
         mutation_node = method_node
 
-        if item.operation_helper is not None:
+        if item.service is GovernanceDecisionService:
+            operation_function = item.service._decide
+            operation_node = _function_node(operation_function)
+            mutation_node = operation_node
+            assert item.operation in _string_constants(
+                operation_function, operation_node
+            ).values()
+        elif item.operation_helper is not None:
             assert item.operation in _call_operation(
                 method_node,
                 callee=item.operation_helper,
@@ -593,7 +610,9 @@ def test_every_manifest_operation_reaches_a_shared_sqlalchemy_mutation_uow() -> 
             if item.mutation_helper is not None:
                 mutation_node = operation_node
 
-        if item.operation_helper is None:
+        if item.service is GovernanceDecisionService:
+            pass
+        elif item.operation_helper is None:
             assert item.operation in _call_operation(
                 operation_node,
                 callee="MutationCommand",

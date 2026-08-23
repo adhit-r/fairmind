@@ -8,7 +8,7 @@ import re
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from sqlalchemy.orm import Session
 
 from database.connection import get_db
@@ -57,6 +57,10 @@ from src.application.services.verified_evidence_review_service import (
 )
 from src.application.services.governance_assurance_service import OrgMembership
 from src.application.services.governance_decision_service import GovernanceDecisionService
+from src.domain.assurance.evaluation_v2 import (
+    AssuranceContractValidationError,
+    validate_public_safe_string,
+)
 
 router = APIRouter(
     prefix="/organizations/{org_id}",
@@ -74,6 +78,10 @@ verified_evidence_review_router = APIRouter(
 governance_decision_router = APIRouter(
     prefix="/organizations/{org_id}",
     tags=["evaluation-workbench-v2-governance-decision"],
+)
+governance_decision_override_router = APIRouter(
+    prefix="/organizations/{org_id}",
+    tags=["evaluation-workbench-v2-governance-decision-owner-override"],
 )
 MAX_REQUEST_BYTES = 1024 * 1024
 MAX_JSON_DEPTH = 32
@@ -496,6 +504,21 @@ class GovernanceDecisionRequest(StrictModel):
     rationale: str = Field(min_length=1, max_length=4000)
 
 
+class OwnerDecisionOverrideRequest(GovernanceDecisionRequest):
+    owner_override_reason: str = Field(
+        alias="ownerOverrideReason", min_length=1, max_length=2000
+    )
+
+    @field_validator("owner_override_reason")
+    @classmethod
+    def _validate_owner_override_reason(cls, value: str) -> str:
+        try:
+            validate_public_safe_string(value)
+        except AssuranceContractValidationError as error:
+            raise ValueError("owner override reason is unsafe") from error
+        return value
+
+
 class GovernanceDecisionSuiteFreshnessResponse(StrictModel):
     suite_execution_id: str = Field(alias="suiteExecutionId")
     recorded_freshness_status: FreshnessStatus = Field(alias="recordedFreshnessStatus")
@@ -530,6 +553,10 @@ class GovernanceDecisionResponse(StrictModel):
     suite_freshness: list[GovernanceDecisionSuiteFreshnessResponse] = Field(
         alias="suiteFreshness"
     )
+
+
+class OwnerDecisionOverrideResponse(GovernanceDecisionResponse):
+    owner_override_applied: Literal[True] = Field(alias="ownerOverrideApplied")
 
 
 def _depth(value: Any, level: int = 0) -> int:
@@ -724,6 +751,23 @@ def _require_governance_decision_enabled() -> None:
         settings.assurance_v2_governance_decision_enabled,
         "Governance decisions are not enabled.",
     )
+
+
+def _require_owner_decision_override_enabled() -> None:
+    """Hide the owner exception route until all three release gates pass."""
+
+    if not (
+        settings.assurance_v2_enabled
+        and settings.assurance_v2_governance_decision_enabled
+        and settings.assurance_v2_separation_override_enabled
+    ):
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "code": "assurance_feature_disabled",
+                "message": "Owner decision override is not enabled.",
+            },
+        )
 
 
 def _require_evidence_scope(
@@ -1414,5 +1458,57 @@ async def create_governance_decision(
             rationale=payload["rationale"],
         )
         return _respond(result, GovernanceDecisionResponse)
+    except EvaluationWorkbenchError as error:
+        _raise(error)
+
+
+@governance_decision_override_router.post(
+    "/workspaces/{workspace_id}/systems/{system_id}/evaluation-v2/runs/{run_id}/decisions/owner-override",
+    status_code=201,
+    response_model=OwnerDecisionOverrideResponse,
+    dependencies=[Depends(_require_owner_decision_override_enabled)],
+    openapi_extra=_request_body_schema(OwnerDecisionOverrideRequest),
+)
+async def create_owner_decision_override(
+    org_id: str,
+    workspace_id: str,
+    system_id: str,
+    run_id: str,
+    request: Request,
+    idempotency_key: str = Header(alias="Idempotency-Key"),
+    membership: OrgMembership = Depends(organization_membership),
+    db: Session = Depends(get_db),
+    decision_service: GovernanceDecisionService = Depends(get_governance_decision_service),
+):
+    """Append a separately gated owner-authorized decision exception."""
+
+    require_evaluation_permission(membership, EVALUATION_DECISION_PERMISSION)
+    if membership.org_id != org_id:
+        _missing("decision_scope")
+    _require_decision_scope(
+        db=db,
+        organization_id=membership.org_id,
+        workspace_id=workspace_id,
+        system_id=system_id,
+        run_id=run_id,
+    )
+    payload = await _payload(request, OwnerDecisionOverrideRequest)
+    try:
+        result = decision_service.decide_owner_override(
+            scope=GovernanceDecisionScope(
+                organization_id=membership.org_id,
+                workspace_id=workspace_id,
+                system_id=system_id,
+                run_id=run_id,
+            ),
+            actor_id=membership.user_id,
+            idempotency_key=idempotency_key,
+            expected_verdict_version=payload["expectedVerdictVersion"],
+            overall_verdict=payload["overallVerdict"],
+            layer_verdicts=payload["layerVerdicts"],
+            rationale=payload["rationale"],
+            owner_override_reason=payload["ownerOverrideReason"],
+        )
+        return _respond(result, OwnerDecisionOverrideResponse)
     except EvaluationWorkbenchError as error:
         _raise(error)
