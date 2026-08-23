@@ -20,7 +20,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import Session
 
 from src.application.ports.evaluation_workbench import (
@@ -4049,21 +4049,100 @@ def test_postgresql_decision_repository_commits_canonical_cas_and_rejects_stale(
     stale_session = Session(engine, expire_on_commit=False)
     try:
         stale_repository = SqlAlchemyEvaluationWorkbenchRepository(stale_session)
+        stale_authority = stale_repository.load_governance_decision_authority_for_update(
+            scope=scope
+        )
+        assert stale_authority is not None
+        assert stale_authority.current_verdict_version == 1
+        assert (
+            stale_session.execute(
+                text(
+                    "SELECT count(*) FROM governance_evaluation_decisions "
+                    "WHERE run_id='run-a' AND verdict_version=2"
+                )
+            ).scalar_one()
+            == 0
+        )
+        stale_decided_at = stale_repository.read_fresh_utc_now()
         stale_command = replace(
             command,
+            authority=stale_authority,
             decision_id="22222222-2222-4222-8222-222222222222",
-            decided_at=stale_repository.read_fresh_utc_now(),
+            expected_verdict_version=1,
+            next_verdict_version=2,
+            decided_at=stale_decided_at,
         )
-        with pytest.raises(EvaluationWorkbenchError) as caught:
-            stale_repository.persist_governance_decision(stale_command)
-        assert caught.value.code == "governance_decision_version_conflict"
-        stale_session.rollback()
+        sqlalchemy_connection = stale_session.connection()
+        stale_projection_injected = False
+
+        def inject_stale_projection(
+            _connection,
+            cursor,
+            statement,
+            _parameters,
+            _context,
+            _executemany,
+        ) -> None:
+            nonlocal stale_projection_injected
+            if stale_projection_injected or not statement.startswith(
+                "UPDATE governance_evaluation_runs SET"
+            ):
+                return
+            stale_projection_injected = True
+            cursor.execute(
+                "UPDATE governance_evaluation_runs "
+                "SET verdict_version=%s, overall_verdict=%s, "
+                "layer_verdicts_json=%s, updated_at=%s WHERE id='run-a'",
+                (
+                    stale_command.next_verdict_version,
+                    stale_command.overall_verdict,
+                    canonical_json(stale_command.layer_verdicts.to_dict()),
+                    stale_decided_at.isoformat(),
+                ),
+            )
+
+        event.listen(
+            sqlalchemy_connection,
+            "before_cursor_execute",
+            inject_stale_projection,
+        )
+        try:
+            with pytest.raises(EvaluationWorkbenchError) as caught:
+                stale_repository.persist_governance_decision(stale_command)
+            assert caught.value.code == "governance_decision_version_conflict"
+            assert stale_projection_injected is True
+            assert (
+                stale_session.execute(
+                    text(
+                        "SELECT count(*) FROM governance_evaluation_decisions "
+                        "WHERE run_id='run-a' AND verdict_version=2"
+                    )
+                ).scalar_one()
+                == 1
+            )
+        finally:
+            event.remove(
+                sqlalchemy_connection,
+                "before_cursor_execute",
+                inject_stale_projection,
+            )
+            stale_session.rollback()
     finally:
         stale_session.close()
         engine.dispose()
 
     with connection.cursor() as cursor:
         cursor.execute(
-            "SELECT count(*) FROM governance_evaluation_decisions " "WHERE run_id='run-a'"
+            "SELECT count(*) FROM governance_evaluation_decisions "
+            "WHERE run_id='run-a' AND verdict_version=2"
         )
-        assert cursor.fetchone() == (1,)
+        assert cursor.fetchone() == (0,)
+        cursor.execute(
+            "SELECT verdict_version, overall_verdict, layer_verdicts_json "
+            "FROM governance_evaluation_runs WHERE id='run-a'"
+        )
+        assert cursor.fetchone() == (
+            1,
+            "conditional",
+            canonical_json(layers.to_dict()),
+        )
