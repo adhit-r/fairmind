@@ -713,7 +713,11 @@ def test_013f_direct_operator_and_startup_manifest_are_frozen() -> None:
     assert direct.is_file()
     assert operator.is_file()
 
-    frozen = migration_integrity.FROZEN_ASSURANCE_MIGRATIONS[-1]
+    frozen = next(
+        item
+        for item in migration_integrity.FROZEN_ASSURANCE_MIGRATIONS
+        if item.ledger_key == "013e-to-013f-trust-authority-integrity-v1"
+    )
     assert frozen.ledger_key == "013e-to-013f-trust-authority-integrity-v1"
     assert frozen.source_path == direct
     assert frozen.checksum == hashlib.sha256(direct.read_bytes()).hexdigest()
