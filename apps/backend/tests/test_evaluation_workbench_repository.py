@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import create_engine, event, func, select, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -126,6 +126,54 @@ def test_sqlite_repository_explicitly_rejects_governance_decision_authority(
         )
 
     assert caught.value.code == "governance_decision_postgresql_required"
+
+
+def test_sqlite_repository_explicitly_rejects_owner_override_authorization(
+    repository_fixture,
+) -> None:
+    session, _factory = repository_fixture
+    repository = SqlAlchemyEvaluationWorkbenchRepository(session)
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        repository.authorize_owner_decision_override_for_update(
+            organization_id=ORG,
+            actor_id=USER,
+        )
+
+    assert caught.value.code == "governance_decision_postgresql_required"
+
+
+@pytest.mark.parametrize(
+    ("message", "expected_code", "expected_status"),
+    (
+        (
+            "owner decision override authority failed",
+            "evaluation_separation_override_forbidden",
+            403,
+        ),
+        (
+            "owner decision override is not required",
+            "governance_decision_override_not_required",
+            409,
+        ),
+    ),
+)
+def test_owner_override_trigger_errors_map_to_expected_rejections(
+    message: str,
+    expected_code: str,
+    expected_status: int,
+) -> None:
+    class TriggerError(Exception):
+        sqlstate = "23514"
+
+    original = TriggerError(message)
+    mapped = SqlAlchemyEvaluationWorkbenchRepository._governance_decision_database_error(
+        DBAPIError.instance("INSERT", {}, original, DBAPIError)
+    )
+
+    assert mapped is not None
+    assert mapped.code == expected_code
+    assert mapped.status_code == expected_status
 
 
 @pytest.fixture

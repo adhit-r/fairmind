@@ -2715,6 +2715,22 @@ class SqlAlchemyEvaluationWorkbenchRepository:
                 409,
             )
 
+    def authorize_owner_decision_override_for_update(
+        self,
+        *,
+        organization_id: str,
+        actor_id: str,
+    ) -> bool:
+        self._require_postgres_governance_decisions()
+        value = self.db.execute(
+            text(
+                "SELECT fairmind_owner_decision_override_authorized_013j"
+                "(:organization_id, :actor_id)"
+            ),
+            {"organization_id": organization_id, "actor_id": actor_id},
+        ).scalar_one()
+        return value is True
+
     def load_governance_decision_authority_for_update(
         self,
         *,
@@ -2922,6 +2938,9 @@ class SqlAlchemyEvaluationWorkbenchRepository:
             evidence_submitters=tuple(
                 dict.fromkeys(row["submitted_by"] for row in admission_rows)
             ),
+            admission_submitters=tuple(
+                row["submitted_by"] for row in admission_rows
+            ),
             suite_execution_ids=suite_execution_ids,
             admission_ids=tuple(row["admission_id"] for row in admission_rows),
             evidence_set=evidence_set.to_dict(),
@@ -2959,6 +2978,21 @@ class SqlAlchemyEvaluationWorkbenchRepository:
         if sqlstate == "23514" and first_line in freshness_trigger_messages:
             code, message = freshness_trigger_messages[first_line]
             return EvaluationWorkbenchError(code, message, status_code=409)
+        owner_override_trigger_messages = {
+            "owner decision override authority failed": (
+                "evaluation_separation_override_forbidden",
+                "Owner decision override authority is not available.",
+                403,
+            ),
+            "owner decision override is not required": (
+                "governance_decision_override_not_required",
+                "The canonical owner has no decision-separation conflict to override.",
+                409,
+            ),
+        }
+        if sqlstate == "23514" and first_line in owner_override_trigger_messages:
+            code, message, status_code = owner_override_trigger_messages[first_line]
+            return EvaluationWorkbenchError(code, message, status_code=status_code)
         if sqlstate == "P0001" and first_line in _GOVERNANCE_DECISION_TRIGGER_MESSAGES:
             code, message = _GOVERNANCE_DECISION_TRIGGER_MESSAGES[first_line]
             return EvaluationWorkbenchError(code, message, status_code=409)
@@ -2989,7 +3023,6 @@ class SqlAlchemyEvaluationWorkbenchRepository:
             authority.scope != scope
             or authority.run_contract_version != CONTRACT_VERSION
             or authority.technical_status != "succeeded"
-            or command.owner_override_reason is not None
             or command.expected_verdict_version != authority.current_verdict_version
             or command.next_verdict_version != command.expected_verdict_version + 1
             or evidence_set_hash != authority.evidence_set_hash
@@ -3013,28 +3046,38 @@ class SqlAlchemyEvaluationWorkbenchRepository:
         decisions = GovernanceEvaluationDecision.__table__
         runs = GovernanceEvaluationRun.__table__
         try:
-            persisted_decided_at_raw = self.db.execute(
-                insert(decisions).values(
-                    id=command.decision_id,
-                    org_id=scope.organization_id,
-                    workspace_id=scope.workspace_id,
-                    system_id=scope.system_id,
-                    run_id=scope.run_id,
-                    run_contract_version=CONTRACT_VERSION,
-                    envelope_id=authority.envelope_id,
-                    envelope_hash=authority.envelope_hash,
-                    verdict_version=command.next_verdict_version,
-                    overall_verdict=command.overall_verdict,
-                    layer_verdicts_schema_version=LAYER_VERDICTS_SCHEMA_VERSION,
-                    layer_verdicts_json=layer_verdicts_json,
-                    rationale=command.rationale,
-                    decided_by=command.actor_id,
-                    owner_override_reason=None,
-                    evidence_set_json=evidence_set_json,
-                    evidence_set_hash=evidence_set_hash,
-                    decided_at=decided_at,
-                ).returning(decisions.c.decided_at)
-            ).scalar_one()
+            persisted = (
+                self.db.execute(
+                    insert(decisions)
+                    .values(
+                        id=command.decision_id,
+                        org_id=scope.organization_id,
+                        workspace_id=scope.workspace_id,
+                        system_id=scope.system_id,
+                        run_id=scope.run_id,
+                        run_contract_version=CONTRACT_VERSION,
+                        envelope_id=authority.envelope_id,
+                        envelope_hash=authority.envelope_hash,
+                        verdict_version=command.next_verdict_version,
+                        overall_verdict=command.overall_verdict,
+                        layer_verdicts_schema_version=LAYER_VERDICTS_SCHEMA_VERSION,
+                        layer_verdicts_json=layer_verdicts_json,
+                        rationale=command.rationale,
+                        decided_by=command.actor_id,
+                        owner_override_reason=command.owner_override_reason,
+                        evidence_set_json=evidence_set_json,
+                        evidence_set_hash=evidence_set_hash,
+                        decided_at=decided_at,
+                    )
+                    .returning(
+                        decisions.c.decided_at,
+                        decisions.c.owner_override_reason,
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            persisted_decided_at_raw = persisted["decided_at"]
             if not isinstance(persisted_decided_at_raw, str):
                 raise self._error(
                     "governance_decision_chronology_invalid",
@@ -3126,6 +3169,7 @@ class SqlAlchemyEvaluationWorkbenchRepository:
             decided_at=persisted_decided_at,
             suite_execution_ids=authority.suite_execution_ids,
             operational_freshness=operational_freshness,
+            owner_override_reason=persisted["owner_override_reason"],
         )
 
     # ------------------------------------------------------------------
