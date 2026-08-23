@@ -26,7 +26,8 @@
 - [x] Keep linking separate from governance decision-making; a link yields `review` or `insufficient`, never automatic approval/blocking.
 - [ ] Add granular plan, run, evidence, decision, catalog, trust, worker, and separation-override permissions.
   - Checkpoint: live human plan, run, evidence, decision, catalog, and trust-administration routes now require literal persisted permissions, and direct-mounted v2 routers fail closed. Service-only worker authorization, audited separation override, and independent submit/link surfaces remain open.
-- [ ] Enforce four-eyes review and audited owner overrides.
+- [x] Enforce four-eyes review and audited owner overrides.
+  - Checkpoint: migration 013j makes evidence review permanently non-overridable and binds decision-only canonical-owner exceptions to exact persisted authority, one immutable decision, completed idempotency, and the per-organization success-audit chain. The route is separately default-off and PostgreSQL-authoritative. See `docs/audits/2026-08-21-p0-owner-decision-override.md`.
 - [x] Add 30-day transactional idempotency and an append-only per-organization audit hash chain.
   - Checkpoint: migration 013h makes PostgreSQL the database-clock authority for exact 2,592,000-second idempotency generations, immutable completion bindings, expired-only atomic rollover, and non-deletable identity anchors. Every enabled Assurance V2 mutation reaches the shared transactional UoW, and successful plus expected/domain-rejected outcomes bind to the per-organization audit chain. This is a minimum anti-reexecution window, not bounded data retention or production-runtime proof. See `docs/audits/2026-08-13-p0-idempotency-audit-integrity.md`.
 - [ ] Feature-disable automatic enforcement, untrusted external linking, workers, and unsupported modality packs at both API and UI boundaries.
