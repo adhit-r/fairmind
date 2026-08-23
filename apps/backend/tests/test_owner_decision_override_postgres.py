@@ -732,18 +732,21 @@ def test_owner_authority_helper_locks_organization_then_membership_then_role(
         session = factory()
         try:
             _set_application_name(session, application_name)
+            session.execute(text("SET LOCAL lock_timeout='5s'"))
             helper_started.set()
             return _authority_is_authorized(session, graph)
         finally:
             session.close()
 
+    pool = ThreadPoolExecutor(max_workers=1)
+    authorized = None
     try:
-        blocker_pids = []
-        for blocker, statement in zip(blockers, statements, strict=True):
-            blocker_pids.append(blocker.scalar(text("SELECT pg_backend_pid()")))
-            assert blocker.scalar(text(statement), values) == 1
+        try:
+            blocker_pids = []
+            for blocker, statement in zip(blockers, statements, strict=True):
+                blocker_pids.append(blocker.scalar(text("SELECT pg_backend_pid()")))
+                assert blocker.scalar(text(statement), values) == 1
 
-        with ThreadPoolExecutor(max_workers=1) as pool:
             authorized = pool.submit(authorize)
             assert helper_started.wait(timeout=10)
             for blocker, blocker_pid in zip(blockers, blocker_pids, strict=True):
@@ -753,11 +756,14 @@ def test_owner_authority_helper_locks_organization_then_membership_then_role(
                     blocker_pid,
                 )
                 blocker.commit()
-            assert authorized.result(timeout=30) is True
+        finally:
+            for blocker in blockers:
+                blocker.rollback()
+                blocker.close()
+        assert authorized is not None
+        assert authorized.result(timeout=30) is True
     finally:
-        for blocker in blockers:
-            blocker.rollback()
-            blocker.close()
+        pool.shutdown(wait=True, cancel_futures=True)
 
 
 @pytest.mark.parametrize("case", _RACE_AUTHORITY_CASES)
