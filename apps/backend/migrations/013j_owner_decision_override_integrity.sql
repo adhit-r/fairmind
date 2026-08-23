@@ -113,6 +113,8 @@ EXCEPTION WHEN OTHERS THEN
 END;
 $function$;
 
+LOCK TABLE governance_evidence_reviews IN SHARE ROW EXCLUSIVE MODE;
+
 DO $fairmind_013j_review_preflight$
 BEGIN
     IF EXISTS (

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
 
@@ -42,29 +43,43 @@ def _installed_sqlite_triggers(connection: object) -> set[str]:
     }
 
 
+def _sqlite_statements(payload: str) -> tuple[str, ...]:
+    statements: list[str] = []
+    pending: list[str] = []
+    for line in payload.splitlines(keepends=True):
+        pending.append(line)
+        candidate = "".join(pending)
+        if sqlite3.complete_statement(candidate):
+            if candidate.strip():
+                statements.append(candidate)
+            pending.clear()
+    if "".join(pending).strip():
+        raise RuntimeError("013j SQLite migration contains incomplete SQL")
+    return tuple(statements)
+
+
 def apply_sqlite(connection: object) -> None:
     """Install SQLite's fail-closed review and decision override guards."""
 
     execute = getattr(connection, "execute", None)
-    executescript = getattr(connection, "executescript", None)
-    if not callable(execute) or not callable(executescript):
-        raise TypeError("sqlite connection with execute and executescript is required")
+    if not callable(execute):
+        raise TypeError("sqlite connection with execute is required")
     if execute("PRAGMA foreign_keys").fetchone() != (1,):
         raise RuntimeError("013j SQLite migration requires foreign key enforcement")
     if _installed_sqlite_triggers(connection) == set(_SQLITE_TRIGGERS):
         return
+    savepoint = "fairmind_013j_trigger_install"
     try:
-        executescript(sql_for("sqlite"))
+        execute(f"SAVEPOINT {savepoint}")
+        for statement in _sqlite_statements(sql_for("sqlite")):
+            execute(statement)
+        if _installed_sqlite_triggers(connection) != set(_SQLITE_TRIGGERS):
+            raise RuntimeError("013j SQLite owner-override guards drifted")
+        execute(f"RELEASE SAVEPOINT {savepoint}")
     except Exception:
-        rollback = getattr(connection, "rollback", None)
-        if callable(rollback):
-            rollback()
+        execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+        execute(f"RELEASE SAVEPOINT {savepoint}")
         raise
-    if _installed_sqlite_triggers(connection) != set(_SQLITE_TRIGGERS):
-        rollback = getattr(connection, "rollback", None)
-        if callable(rollback):
-            rollback()
-        raise RuntimeError("013j SQLite owner-override guards drifted")
 
 
 __all__ = ["apply_sqlite", "sql_for"]

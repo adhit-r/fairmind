@@ -5,11 +5,14 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import time
 import uuid
 from pathlib import Path
+from threading import Event, Thread
 
 import pytest
 
+from migrations import owner_decision_override_integrity_migration as migration_013j
 from migrations.owner_decision_override_integrity_migration import (
     apply_sqlite as apply_013j,
     sql_for,
@@ -138,6 +141,33 @@ def test_sqlite_013j_loader_requires_foreign_keys_and_is_idempotent() -> None:
         )
     }
     assert {SQLITE_REVIEW_TRIGGER, SQLITE_DECISION_TRIGGER} <= installed
+
+
+def test_sqlite_013j_loader_rolls_back_partial_trigger_installation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    broken_payload = sql_for("sqlite").replace(
+        f"DROP TRIGGER IF EXISTS {SQLITE_DECISION_TRIGGER};",
+        "THIS IS NOT VALID SQLITE;\n"
+        f"DROP TRIGGER IF EXISTS {SQLITE_DECISION_TRIGGER};",
+    )
+    broken_path = tmp_path / "broken_013j.sqlite.sql"
+    broken_path.write_text(broken_payload, encoding="utf-8")
+    monkeypatch.setattr(migration_013j, "_SQLITE_PATH", broken_path)
+
+    connection = _minimal_sqlite()
+    with pytest.raises(sqlite3.OperationalError, match="near \"THIS\""):
+        migration_013j.apply_sqlite(connection)
+
+    installed = {
+        row[0]
+        for row in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='trigger'"
+        )
+    }
+    assert SQLITE_REVIEW_TRIGGER not in installed
+    assert SQLITE_DECISION_TRIGGER not in installed
 
 
 def test_sqlite_013j_rejects_every_review_override_reason() -> None:
@@ -345,6 +375,41 @@ def test_postgresql14_013j_catalog_hardening(postgresql_013j_connection) -> None
 
 
 @pytest.fixture
+def postgresql_013i_session_factory():
+    if not POSTGRES_URL:
+        pytest.skip("requires FAIRMIND_TEST_POSTGRES_URL pointing to disposable PostgreSQL 14")
+    from sqlalchemy import text
+    from tests.test_verified_evidence_admission_postgres import postgres_session_factory
+
+    chain = postgres_session_factory.__wrapped__()
+    factory = next(chain)
+    session = factory()
+    try:
+        schema = session.scalar(text("SELECT current_schema()"))
+        for migration in (
+            "013g_operational_evidence_freshness.sql",
+            "013h_idempotency_retention_integrity.sql",
+            "013i_imported_evidence_delivery_integrity.sql",
+        ):
+            session.execute(
+                text(
+                    "SELECT pg_catalog.set_config"
+                    "('fairmind.migration_schema', :schema, false)"
+                ),
+                {"schema": schema},
+            )
+            session.execute(text((MIGRATIONS / migration).read_text(encoding="utf-8")))
+        session.commit()
+        yield factory
+    finally:
+        session.close()
+        try:
+            next(chain)
+        except StopIteration:
+            pass
+
+
+@pytest.fixture
 def postgresql_013j_session_factory():
     if not POSTGRES_URL:
         pytest.skip("requires FAIRMIND_TEST_POSTGRES_URL pointing to disposable PostgreSQL 14")
@@ -457,8 +522,31 @@ def test_postgresql14_013j_rejects_every_review_separation_escape(
         session.close()
 
 
+@pytest.mark.parametrize(
+    "legacy_update",
+    (
+        "UPDATE governance_evidence_reviews AS review "
+        "SET reviewed_by=admission.submitted_by "
+        "FROM governance_evidence_admissions AS admission "
+        "WHERE review.admission_id=admission.id "
+        "AND review.admission_id=:admission_id",
+        "UPDATE governance_evidence_reviews AS review "
+        "SET reviewed_by=link.linked_by "
+        "FROM governance_evaluation_suite_evidence_links AS link "
+        "WHERE review.admission_id=link.admission_id "
+        "AND review.admission_id=:admission_id",
+        "UPDATE governance_evidence_reviews AS review "
+        "SET reviewed_by=run.requested_by "
+        "FROM governance_evaluation_runs AS run "
+        "WHERE review.run_id=run.id AND review.admission_id=:admission_id",
+        "UPDATE governance_evidence_reviews SET separation_override_reason='forbidden' "
+        "WHERE admission_id=:admission_id",
+    ),
+    ids=("submitter", "linker", "requester", "reason"),
+)
 def test_postgresql14_013j_upgrade_preflight_rejects_legacy_conflict(
     postgresql_013j_session_factory,
+    legacy_update: str,
 ) -> None:
     from sqlalchemy import text
     from sqlalchemy.exc import DBAPIError
@@ -471,12 +559,12 @@ def test_postgresql14_013j_upgrade_preflight_rejects_legacy_conflict(
         )
         session.execute(
             text(
-                "UPDATE governance_evidence_reviews AS review "
-                "SET reviewed_by=admission.submitted_by "
-                "FROM governance_evidence_admissions AS admission "
-                "WHERE review.admission_id=admission.id "
-                "AND review.admission_id=:admission_id"
-            ),
+                "ALTER TABLE governance_evidence_reviews DROP CONSTRAINT "
+                "ck_governance_evidence_review_no_override_013j"
+            )
+        )
+        session.execute(
+            text(legacy_update),
             {"admission_id": graph.admission_id},
         )
         session.execute(
@@ -496,6 +584,153 @@ def test_postgresql14_013j_upgrade_preflight_rejects_legacy_conflict(
     finally:
         session.rollback()
         session.close()
+
+
+def test_postgresql14_013j_preflight_waits_for_inflight_legacy_review(
+    postgresql_013i_session_factory,
+) -> None:
+    from sqlalchemy import text
+    from sqlalchemy.exc import DBAPIError
+    from tests.test_operational_freshness_postgres import _admitted_graph
+
+    factory = postgresql_013i_session_factory
+    graph = _admitted_graph(factory)
+    setup = factory()
+    try:
+        setup.execute(
+            text(
+                "ALTER TABLE governance_evaluation_suite_evidence_links "
+                "DISABLE TRIGGER USER"
+            )
+        )
+        setup.execute(
+            text(
+                "UPDATE governance_evaluation_suite_evidence_links "
+                "SET linked_by='legacy-linker' WHERE admission_id=:admission_id"
+            ),
+            {"admission_id": graph.admission_id},
+        )
+        setup.execute(
+            text(
+                "ALTER TABLE governance_evaluation_suite_evidence_links "
+                "ENABLE TRIGGER USER"
+            )
+        )
+        setup.execute(
+            text(
+                "ALTER TABLE governance_evaluation_run_suite_executions "
+                "DISABLE TRIGGER USER"
+            )
+        )
+        setup.execute(
+            text(
+                "UPDATE governance_evaluation_run_suite_executions "
+                "SET linked_by='legacy-linker' WHERE id=:suite_execution_id"
+            ),
+            {"suite_execution_id": graph.suite_execution_id},
+        )
+        setup.execute(
+            text(
+                "ALTER TABLE governance_evaluation_run_suite_executions "
+                "ENABLE TRIGGER USER"
+            )
+        )
+        setup.commit()
+    finally:
+        setup.close()
+
+    writer = factory()
+    migration_started = Event()
+    migration_finished = Event()
+    migration_pid: list[int] = []
+    migration_errors: list[BaseException] = []
+
+    def apply_migration() -> None:
+        migration = factory()
+        try:
+            schema = migration.scalar(text("SELECT current_schema()"))
+            migration.execute(
+                text(
+                    "SELECT pg_catalog.set_config"
+                    "('fairmind.migration_schema', :schema, false)"
+                ),
+                {"schema": schema},
+            )
+            migration.execute(text("SET application_name='013j-preflight-lock-test'"))
+            migration_pid.append(migration.scalar(text("SELECT pg_backend_pid()")))
+            migration_started.set()
+            migration.execute(
+                text(
+                    (MIGRATIONS / "013j_owner_decision_override_integrity.sql").read_text(
+                        encoding="utf-8"
+                    )
+                )
+            )
+            migration.commit()
+        except BaseException as error:
+            migration_errors.append(error)
+            migration.rollback()
+        finally:
+            migration.close()
+            migration_finished.set()
+
+    try:
+        _insert_raw_review(writer, graph, reviewer_sql="link.linked_by")
+        reviewed_at = writer.scalar(
+            text(
+                "SELECT reviewed_at FROM governance_evidence_reviews "
+                "WHERE admission_id=:admission_id"
+            ),
+            {"admission_id": graph.admission_id},
+        )
+        writer.execute(
+            text(
+                "UPDATE governance_evaluation_run_suite_executions "
+                "SET review_status='accepted', updated_at=:reviewed_at "
+                "WHERE id=:suite_execution_id"
+            ),
+            {
+                "reviewed_at": reviewed_at,
+                "suite_execution_id": graph.suite_execution_id,
+            },
+        )
+        thread = Thread(target=apply_migration, daemon=True)
+        thread.start()
+        assert migration_started.wait(timeout=5)
+
+        observer = factory()
+        try:
+            deadline = time.monotonic() + 5
+            waiting = False
+            while time.monotonic() < deadline:
+                waiting = bool(
+                    observer.scalar(
+                        text(
+                            "SELECT wait_event_type='Lock' FROM pg_stat_activity "
+                            "WHERE pid=:pid"
+                        ),
+                        {"pid": migration_pid[0]},
+                    )
+                )
+                observer.rollback()
+                if waiting:
+                    break
+                time.sleep(0.05)
+            assert waiting, "013j migration did not wait on the in-flight review write"
+        finally:
+            observer.close()
+
+        writer.commit()
+        assert migration_finished.wait(timeout=10)
+        thread.join(timeout=1)
+        assert len(migration_errors) == 1
+        assert isinstance(migration_errors[0], DBAPIError)
+        assert "migration 013j found invalid review separation provenance" in str(
+            migration_errors[0]
+        )
+    finally:
+        writer.rollback()
+        writer.close()
 
 
 def test_postgresql14_013j_preserves_normal_governance_decisions(
