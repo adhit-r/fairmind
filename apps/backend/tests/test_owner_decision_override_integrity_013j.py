@@ -125,6 +125,21 @@ def test_013j_artifacts_and_loader_contract() -> None:
         sql_for("mysql")
 
 
+def test_013j_operator_packaging_contract() -> None:
+    operator = (
+        MIGRATIONS
+        / "upgrade_paths"
+        / "013i_to_013j_owner_decision_override_integrity.sql"
+    )
+    assert operator.is_file()
+
+    source = operator.read_text(encoding="utf-8")
+    assert source.count("\\ir ../013j_owner_decision_override_integrity.sql") == 1
+    assert "013i-to-013j-owner-decision-override-integrity-v1" in source
+    assert "83c77841beb21dbf96d1e40260534d262dbf21941b21fac4121964a065e36f94" in source
+    assert "76f38c55173e34ed6733ded221e87a94aac1fe9ed7cfd1a96a5621bb20e10902" in source
+
+
 def test_sqlite_013j_loader_requires_foreign_keys_and_is_idempotent() -> None:
     disabled = _minimal_sqlite()
     disabled.execute("PRAGMA foreign_keys = OFF")

@@ -11,6 +11,7 @@ from typing import Mapping
 import pytest
 from sqlalchemy import create_engine, text
 
+import config.migration_integrity as migration_integrity
 from config.migration_integrity import (
     FROZEN_013B_OPERATOR_V2_CHECKSUM,
     FROZEN_013C_OPERATOR_CHECKSUM,
@@ -76,6 +77,12 @@ POSTGRES_OPERATOR_CHAIN = (
     "upgrade_paths/013f_to_013g_operational_evidence_freshness.sql",
     "upgrade_paths/013g_to_013h_idempotency_retention_integrity.sql",
     "upgrade_paths/013h_to_013i_imported_evidence_delivery_integrity.sql",
+)
+POSTGRES_013J_OPERATOR = (
+    "upgrade_paths/013i_to_013j_owner_decision_override_integrity.sql"
+)
+POSTGRES_OPERATOR_CHAIN_THROUGH_013J = POSTGRES_OPERATOR_CHAIN + (
+    POSTGRES_013J_OPERATOR,
 )
 POSTGRESQL_013B_PREREQUISITE_CONSTRAINTS = frozenset(
     {
@@ -174,6 +181,9 @@ def _install_sqlite_assurance_chain(database_path: Path) -> None:
     from migrations.imported_evidence_delivery_integrity_migration import (
         apply_sqlite as apply_013i,
     )
+    from migrations.owner_decision_override_integrity_migration import (
+        apply_sqlite as apply_013j,
+    )
 
     connection = sqlite3.connect(database_path)
     try:
@@ -197,6 +207,7 @@ def _install_sqlite_assurance_chain(database_path: Path) -> None:
         apply_013g(connection)
         apply_013h(connection)
         apply_013i(connection)
+        apply_013j(connection)
     finally:
         connection.close()
 
@@ -625,7 +636,7 @@ def test_production_postgresql_manifest_covers_audit_immutability() -> None:
     frozen = FROZEN_POSTGRESQL_ASSURANCE_CATALOGS[14]
     assert frozen.spec is POSTGRESQL_ASSURANCE_CATALOG_SPEC
     assert frozen.postgresql_major == 14
-    assert frozen.digest == "707d784f5a3e69a29b21ca50d168fe8954e7723f1bbb1165250e5947dcf282a9"
+    assert frozen.digest == "c4a2a891640a309a07a2421cb0951615b82e32645757e0c1469cacf501020be2"
     validate_frozen_postgresql_catalog(frozen)
 
 
@@ -828,6 +839,60 @@ def test_013i_operator_direct_ledger_and_fixture_sources_are_frozen() -> None:
     assert "\\ir ../013i_imported_evidence_delivery_integrity.sql" in operator_source
     assert frozen.ledger_key in operator_source
     assert frozen.checksum in operator_source
+
+
+def test_013j_operator_direct_ledger_and_fixture_sources_are_frozen() -> None:
+    import hashlib
+
+    direct = MIGRATIONS / "013j_owner_decision_override_integrity.sql"
+    operator = MIGRATIONS / POSTGRES_013J_OPERATOR
+    fixture = (
+        MIGRATIONS
+        / "fixtures"
+        / "013j_owner_decision_override_integrity.sqlite.sql"
+    )
+    frozen = next(
+        item
+        for item in FROZEN_ASSURANCE_MIGRATIONS
+        if item.ledger_key
+        == "013i-to-013j-owner-decision-override-integrity-v1"
+    )
+    operator_source = operator.read_text(encoding="utf-8")
+
+    assert hashlib.sha256(direct.read_bytes()).hexdigest() == frozen.checksum
+    assert hashlib.sha256(operator.read_bytes()).hexdigest() == getattr(
+        migration_integrity,
+        "FROZEN_013J_OPERATOR_CHECKSUM",
+    )
+    assert hashlib.sha256(fixture.read_bytes()).hexdigest() == getattr(
+        migration_integrity,
+        "FROZEN_SQLITE_013J_FIXTURE_CHECKSUM",
+    )
+    assert operator_source.count(
+        "\\ir ../013j_owner_decision_override_integrity.sql"
+    ) == 1
+    assert frozen.ledger_key in operator_source
+    assert frozen.checksum in operator_source
+
+
+def test_013j_catalog_manifest_covers_owner_authority_and_guards() -> None:
+    assert {"organizations", "org_members", "org_roles"} <= (
+        POSTGRESQL_ASSURANCE_CATALOG_SPEC.relations
+    )
+    assert {
+        "fairmind_owner_permission_array_is_valid_013j",
+        "fairmind_owner_decision_override_authorized_013j",
+        "fairmind_validate_owner_override_audit_013j",
+    } <= POSTGRESQL_ASSURANCE_FUNCTIONS
+    assert {
+        "governance_evidence_reviews_guard_insert",
+        "governance_evaluation_decisions_guard_insert",
+        "governance_evaluation_decisions_owner_override_audit_013j",
+    } <= POSTGRESQL_ASSURANCE_REQUIRED_TRIGGERS
+    assert {
+        "governance_evidence_reviews_separation_guard_013j",
+        "governance_evaluation_decisions_owner_override_unavailable_013j",
+    } <= SQLITE_ASSURANCE_TRIGGERS
 
 
 def test_sqlite_startup_check_accepts_the_frozen_013f_catalog(
@@ -1616,7 +1681,7 @@ def test_native_production_catalog_freeze_matches_two_operator_installs_and_tamp
     try:
         for ordinal, schema_name in enumerate(schemas):
             _install_postgresql_base_through_012(POSTGRES_URL, schema_name)
-            for migration_name in POSTGRES_OPERATOR_CHAIN:
+            for migration_name in POSTGRES_OPERATOR_CHAIN_THROUGH_013J:
                 result = _run_postgresql_operator_migration(
                     POSTGRES_URL,
                     schema_name,
@@ -1627,7 +1692,7 @@ def test_native_production_catalog_freeze_matches_two_operator_installs_and_tamp
                 replay = _run_postgresql_operator_migration(
                     POSTGRES_URL,
                     schema_name,
-                    POSTGRES_OPERATOR_CHAIN[-1],
+                    POSTGRES_013J_OPERATOR,
                 )
                 assert replay.returncode == 0, replay.stderr
 
@@ -1681,6 +1746,421 @@ def test_native_production_catalog_freeze_matches_two_operator_installs_and_tamp
                             sql.Identifier(schema_name)
                         )
                     )
+        finally:
+            cleanup.close()
+
+
+@pytest.mark.skipif(
+    not POSTGRES_URL,
+    reason="requires FAIRMIND_TEST_POSTGRES_URL pointing to disposable PostgreSQL",
+)
+def test_native_013j_operator_accepts_exact_replay_and_rejects_ledger_tamper() -> None:
+    import psycopg2
+    from psycopg2 import sql
+
+    assert POSTGRES_URL is not None
+    schema_name = f"fm_013j_ledger_{uuid.uuid4().hex[:12]}"
+    try:
+        _install_postgresql_base_through_012(POSTGRES_URL, schema_name)
+        for migration_name in POSTGRES_OPERATOR_CHAIN_THROUGH_013J:
+            result = _run_postgresql_operator_migration(
+                POSTGRES_URL,
+                schema_name,
+                migration_name,
+            )
+            assert result.returncode == 0, result.stderr
+
+        replay = _run_postgresql_operator_migration(
+            POSTGRES_URL,
+            schema_name,
+            POSTGRES_013J_OPERATOR,
+        )
+        assert replay.returncode == 0, replay.stderr
+
+        connection = psycopg2.connect(POSTGRES_URL)
+        connection.autocommit = True
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    sql.SQL(
+                        "UPDATE {}.fairmind_operator_migration_ledger "
+                        "SET migration_checksum = %s WHERE migration_key = %s"
+                    ).format(sql.Identifier(schema_name)),
+                    (
+                        "0" * 64,
+                        "013i-to-013j-owner-decision-override-integrity-v1",
+                    ),
+                )
+        finally:
+            connection.close()
+
+        tampered = _run_postgresql_operator_migration(
+            POSTGRES_URL,
+            schema_name,
+            POSTGRES_013J_OPERATOR,
+        )
+        assert tampered.returncode != 0
+        assert "checksum drift for 013i-to-013j" in tampered.stderr
+    finally:
+        cleanup = psycopg2.connect(POSTGRES_URL)
+        cleanup.autocommit = True
+        try:
+            with cleanup.cursor() as cursor:
+                cursor.execute(
+                    sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(
+                        sql.Identifier(schema_name)
+                    )
+                )
+        finally:
+            cleanup.close()
+
+
+@pytest.mark.skipif(
+    not POSTGRES_URL,
+    reason="requires FAIRMIND_TEST_POSTGRES_URL pointing to disposable PostgreSQL",
+)
+def test_native_013j_operator_requires_the_exact_frozen_013i_prerequisite() -> None:
+    import psycopg2
+    from psycopg2 import sql
+
+    assert POSTGRES_URL is not None
+    missing_schema = f"fm_013j_missing_{uuid.uuid4().hex[:12]}"
+    drift_schema = f"fm_013j_prereq_{uuid.uuid4().hex[:12]}"
+    try:
+        _install_postgresql_base_through_012(POSTGRES_URL, missing_schema)
+        for migration_name in POSTGRES_OPERATOR_CHAIN[:-1]:
+            result = _run_postgresql_operator_migration(
+                POSTGRES_URL,
+                missing_schema,
+                migration_name,
+            )
+            assert result.returncode == 0, result.stderr
+        missing = _run_postgresql_operator_migration(
+            POSTGRES_URL,
+            missing_schema,
+            POSTGRES_013J_OPERATOR,
+        )
+        assert missing.returncode != 0
+        assert "prerequisite ledger row 013h-to-013i" in missing.stderr
+
+        _install_postgresql_base_through_012(POSTGRES_URL, drift_schema)
+        for migration_name in POSTGRES_OPERATOR_CHAIN_THROUGH_013J:
+            result = _run_postgresql_operator_migration(
+                POSTGRES_URL,
+                drift_schema,
+                migration_name,
+            )
+            assert result.returncode == 0, result.stderr
+        connection = psycopg2.connect(POSTGRES_URL)
+        connection.autocommit = True
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    sql.SQL(
+                        "UPDATE {}.fairmind_operator_migration_ledger "
+                        "SET migration_checksum = %s WHERE migration_key = %s"
+                    ).format(sql.Identifier(drift_schema)),
+                    (
+                        "0" * 64,
+                        "013h-to-013i-imported-evidence-delivery-integrity-v1",
+                    ),
+                )
+        finally:
+            connection.close()
+        drift = _run_postgresql_operator_migration(
+            POSTGRES_URL,
+            drift_schema,
+            POSTGRES_013J_OPERATOR,
+        )
+        assert drift.returncode != 0
+        assert "prerequisite checksum drift for migration 013i" in drift.stderr
+    finally:
+        cleanup = psycopg2.connect(POSTGRES_URL)
+        cleanup.autocommit = True
+        try:
+            with cleanup.cursor() as cursor:
+                for schema_name in (missing_schema, drift_schema):
+                    cursor.execute(
+                        sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(
+                            sql.Identifier(schema_name)
+                        )
+                    )
+        finally:
+            cleanup.close()
+
+
+@pytest.mark.skipif(
+    not POSTGRES_URL,
+    reason="requires FAIRMIND_TEST_POSTGRES_URL pointing to disposable PostgreSQL",
+)
+def test_native_013j_operator_orphan_rejection_is_schema_scoped() -> None:
+    import psycopg2
+    from psycopg2 import sql
+
+    assert POSTGRES_URL is not None
+    orphan_schema = f"fm_013j_orphan_{uuid.uuid4().hex[:12]}"
+    clean_schema = f"fm_013j_clean_{uuid.uuid4().hex[:12]}"
+    try:
+        for schema_name in (orphan_schema, clean_schema):
+            _install_postgresql_base_through_012(POSTGRES_URL, schema_name)
+            for migration_name in POSTGRES_OPERATOR_CHAIN:
+                result = _run_postgresql_operator_migration(
+                    POSTGRES_URL,
+                    schema_name,
+                    migration_name,
+                )
+                assert result.returncode == 0, result.stderr
+
+        connection = psycopg2.connect(POSTGRES_URL)
+        connection.autocommit = True
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    sql.SQL(
+                        "CREATE FUNCTION {}.fairmind_owner_permission_array_is_valid_013j(jsonb) "
+                        "RETURNS boolean LANGUAGE sql IMMUTABLE AS 'SELECT false'"
+                    ).format(sql.Identifier(orphan_schema))
+                )
+        finally:
+            connection.close()
+
+        rejected = _run_postgresql_operator_migration(
+            POSTGRES_URL,
+            orphan_schema,
+            POSTGRES_013J_OPERATOR,
+        )
+        assert rejected.returncode != 0
+        assert "preexisting 013j catalog exists without its immutable ledger row" in (
+            rejected.stderr
+        )
+
+        installed = _run_postgresql_operator_migration(
+            POSTGRES_URL,
+            clean_schema,
+            POSTGRES_013J_OPERATOR,
+        )
+        assert installed.returncode == 0, installed.stderr
+    finally:
+        cleanup = psycopg2.connect(POSTGRES_URL)
+        cleanup.autocommit = True
+        try:
+            with cleanup.cursor() as cursor:
+                for schema_name in (orphan_schema, clean_schema):
+                    cursor.execute(
+                        sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(
+                            sql.Identifier(schema_name)
+                        )
+                    )
+        finally:
+            cleanup.close()
+
+
+@pytest.mark.skipif(
+    not POSTGRES_URL,
+    reason="requires FAIRMIND_TEST_POSTGRES_URL pointing to disposable PostgreSQL",
+)
+def test_native_013j_startup_rejects_every_missing_or_disabled_guard() -> None:
+    import psycopg2
+    from psycopg2 import sql
+
+    assert POSTGRES_URL is not None
+    schema_name = f"fm_013j_startup_{uuid.uuid4().hex[:12]}"
+    engine = None
+    guards = (
+        ("governance_evidence_reviews", "governance_evidence_reviews_guard_insert"),
+        (
+            "governance_evaluation_decisions",
+            "governance_evaluation_decisions_guard_insert",
+        ),
+        (
+            "governance_evaluation_decisions",
+            "governance_evaluation_decisions_owner_override_audit_013j",
+        ),
+    )
+    try:
+        _install_postgresql_base_through_012(POSTGRES_URL, schema_name)
+        for migration_name in POSTGRES_OPERATOR_CHAIN_THROUGH_013J:
+            result = _run_postgresql_operator_migration(
+                POSTGRES_URL,
+                schema_name,
+                migration_name,
+            )
+            assert result.returncode == 0, result.stderr
+
+        engine = create_engine(POSTGRES_URL)
+        bind_postgresql_engine_search_path(engine, schema_name)
+        verify_assurance_migration_integrity(
+            engine,
+            enabled=True,
+            postgresql_schema=schema_name,
+        )
+        for relation_name, trigger_name in guards:
+            with engine.begin() as connection:
+                connection.exec_driver_sql(
+                    f'ALTER TABLE "{relation_name}" DISABLE TRIGGER "{trigger_name}"'
+                )
+            with pytest.raises(
+                MigrationIntegrityError,
+                match="disabled required triggers",
+            ):
+                verify_assurance_migration_integrity(
+                    engine,
+                    enabled=True,
+                    postgresql_schema=schema_name,
+                )
+            with engine.begin() as connection:
+                connection.exec_driver_sql(
+                    f'ALTER TABLE "{relation_name}" ENABLE ALWAYS TRIGGER "{trigger_name}"'
+                )
+
+            with engine.begin() as connection:
+                connection.exec_driver_sql(
+                    f'DROP TRIGGER "{trigger_name}" ON "{relation_name}"'
+                )
+            with pytest.raises(
+                MigrationIntegrityError,
+                match="missing required triggers",
+            ):
+                verify_assurance_migration_integrity(
+                    engine,
+                    enabled=True,
+                    postgresql_schema=schema_name,
+                )
+            replay = _run_postgresql_operator_migration(
+                POSTGRES_URL,
+                schema_name,
+                POSTGRES_013J_OPERATOR,
+            )
+            assert replay.returncode == 0, replay.stderr
+    finally:
+        if engine is not None:
+            engine.dispose()
+        cleanup = psycopg2.connect(POSTGRES_URL)
+        cleanup.autocommit = True
+        try:
+            with cleanup.cursor() as cursor:
+                cursor.execute(
+                    sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(
+                        sql.Identifier(schema_name)
+                    )
+                )
+        finally:
+            cleanup.close()
+
+
+@pytest.mark.skipif(
+    not POSTGRES_URL,
+    reason="requires FAIRMIND_TEST_POSTGRES_URL pointing to disposable PostgreSQL",
+)
+def test_native_013j_catalog_rejects_function_acl_relation_and_trigger_drift() -> None:
+    import psycopg2
+    from psycopg2 import sql
+
+    assert POSTGRES_URL is not None
+    schema_name = f"fm_013j_drift_{uuid.uuid4().hex[:12]}"
+    owner_role = f"fm_013j_owner_{uuid.uuid4().hex[:12]}"
+    engine = None
+    try:
+        _install_postgresql_base_through_012(POSTGRES_URL, schema_name)
+        for migration_name in POSTGRES_OPERATOR_CHAIN_THROUGH_013J:
+            result = _run_postgresql_operator_migration(
+                POSTGRES_URL,
+                schema_name,
+                migration_name,
+            )
+            assert result.returncode == 0, result.stderr
+
+        engine = create_engine(POSTGRES_URL)
+        bind_postgresql_engine_search_path(engine, schema_name)
+        cases = (
+            (
+                "function body",
+                (
+                    "CREATE OR REPLACE FUNCTION "
+                    f'"{schema_name}".fairmind_owner_permission_array_is_valid_013j('
+                    "p_permissions JSONB) RETURNS BOOLEAN LANGUAGE plpgsql IMMUTABLE "
+                    "SECURITY INVOKER "
+                    f'SET search_path TO pg_catalog, "{schema_name}", pg_temp '
+                    "AS 'BEGIN RETURN false; END;'"
+                ),
+                "catalog definition drift",
+            ),
+            (
+                "function search path",
+                "ALTER FUNCTION fairmind_owner_permission_array_is_valid_013j(JSONB) "
+                "SET search_path TO pg_catalog",
+                "fixed search_path",
+            ),
+            (
+                "function owner",
+                f'CREATE ROLE "{owner_role}" NOLOGIN; '
+                "ALTER FUNCTION fairmind_owner_permission_array_is_valid_013j(JSONB) "
+                f'OWNER TO "{owner_role}"',
+                "function ownership invariant",
+            ),
+            (
+                "function ACL",
+                "REVOKE EXECUTE ON FUNCTION "
+                "fairmind_owner_permission_array_is_valid_013j(JSONB) FROM PUBLIC",
+                "catalog definition drift",
+            ),
+            (
+                "relation ACL",
+                "GRANT SELECT ON TABLE org_roles TO PUBLIC",
+                "catalog definition drift",
+            ),
+            (
+                "trigger state",
+                "ALTER TABLE governance_evidence_reviews DISABLE TRIGGER "
+                "governance_evidence_reviews_guard_insert",
+                "disabled required triggers",
+            ),
+        )
+        with engine.connect() as connection:
+            baseline = postgresql_assurance_catalog_digest(
+                connection,
+                trusted_schema=schema_name,
+            )
+            assert baseline == FROZEN_POSTGRESQL_ASSURANCE_CATALOGS[14].digest
+            connection.commit()
+            for case_name, statement, message in cases:
+                transaction = connection.begin()
+                try:
+                    connection.exec_driver_sql(statement)
+                    try:
+                        verify_postgresql_assurance_catalog(
+                            connection,
+                            trusted_schema=schema_name,
+                            frozen_by_major=FROZEN_POSTGRESQL_ASSURANCE_CATALOGS,
+                        )
+                    except MigrationIntegrityError as error:
+                        assert message in str(error), case_name
+                    else:
+                        pytest.fail(f"{case_name} drift was accepted")
+                finally:
+                    transaction.rollback()
+                assert postgresql_assurance_catalog_digest(
+                    connection,
+                    trusted_schema=schema_name,
+                ) == baseline
+                connection.commit()
+    finally:
+        if engine is not None:
+            engine.dispose()
+        cleanup = psycopg2.connect(POSTGRES_URL)
+        cleanup.autocommit = True
+        try:
+            with cleanup.cursor() as cursor:
+                cursor.execute(
+                    sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(
+                        sql.Identifier(schema_name)
+                    )
+                )
+                cursor.execute(
+                    sql.SQL("DROP ROLE IF EXISTS {}").format(
+                        sql.Identifier(owner_role)
+                    )
+                )
         finally:
             cleanup.close()
 
@@ -1905,7 +2385,7 @@ def test_native_013i_startup_rejects_disabled_and_missing_trigger() -> None:
     engine = None
     try:
         _install_postgresql_base_through_012(POSTGRES_URL, schema_name)
-        for migration_name in POSTGRES_OPERATOR_CHAIN:
+        for migration_name in POSTGRES_OPERATOR_CHAIN_THROUGH_013J:
             result = _run_postgresql_operator_migration(
                 POSTGRES_URL,
                 schema_name,
