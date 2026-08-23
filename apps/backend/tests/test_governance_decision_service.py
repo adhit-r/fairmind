@@ -81,7 +81,6 @@ def _authority() -> GovernanceDecisionAuthorityRecord:
         },
         requested_by="requester-a",
         evidence_submitters=("submitter-a",),
-        admission_submitters=("submitter-a",),
         suite_execution_ids=("suite-execution-a",),
         admission_ids=("admission-a",),
         evidence_set=EVIDENCE_SET,
@@ -131,7 +130,7 @@ class _FakeRepository:
             "returned_operational_freshness",
             command.authority.operational_freshness,
         )
-        return GovernanceDecisionRecord.create(
+        record = GovernanceDecisionRecord.create(
             decision_id=command.decision_id,
             scope=command.scope,
             run_contract_version=command.authority.run_contract_version,
@@ -146,8 +145,10 @@ class _FakeRepository:
             decided_at=decided_at,
             suite_execution_ids=command.authority.suite_execution_ids,
             operational_freshness=operational_freshness,
-            owner_override_reason=command.owner_override_reason,
         )
+        if command.owner_override_reason is None:
+            return record
+        return replace(record, owner_override_reason=command.owner_override_reason)
 
 
 @dataclass
@@ -280,7 +281,10 @@ def test_owner_override_requires_canonical_authority_and_a_real_conflict(
     actor_id: str,
     expected_code: str,
 ) -> None:
-    repository = _FakeRepository(_authority(), owner_authorized=owner_authorized)
+    authority = _authority()
+    if owner_authorized:
+        authority = replace(authority, admission_submitters=("submitter-a",))
+    repository = _FakeRepository(authority, owner_authorized=owner_authorized)
     service = GovernanceDecisionService(
         _FakeUnitOfWork(repository), uuid_factory=lambda: DECISION_ID
     )
@@ -298,6 +302,35 @@ def test_owner_override_requires_canonical_authority_and_a_real_conflict(
         )
 
     assert caught.value.code == expected_code
+    assert repository.persisted == []
+
+
+def test_owner_override_fails_closed_without_aligned_admission_provenance() -> None:
+    repository = _FakeRepository(
+        replace(
+            _authority(),
+            requested_by="owner-a",
+            evidence_submitters=("owner-a",),
+        ),
+        owner_authorized=True,
+    )
+    service = GovernanceDecisionService(
+        _FakeUnitOfWork(repository), uuid_factory=lambda: DECISION_ID
+    )
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        service.decide_owner_override(
+            scope=SCOPE,
+            actor_id="owner-a",
+            idempotency_key="owner-override-missing-admission-provenance",
+            expected_verdict_version=0,
+            overall_verdict="conditional",
+            layer_verdicts=LAYERS,
+            rationale="Evidence remains authoritative.",
+            owner_override_reason="Documented ownership conflict.",
+        )
+
+    assert caught.value.code == "governance_decision_integrity_conflict"
     assert repository.persisted == []
 
 

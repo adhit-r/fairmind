@@ -39,10 +39,10 @@ class GovernanceDecisionAuthorityRecord:
     evidence_submitters: tuple[str, ...]
     suite_execution_ids: tuple[str, ...]
     admission_ids: tuple[str, ...]
-    admission_submitters: tuple[str, ...]
     evidence_set: FrozenJsonObject
     evidence_set_hash: str
     operational_freshness: tuple[EvidenceFreshnessClassification, ...]
+    admission_submitters: tuple[str, ...] = ()
 
     @classmethod
     def create(
@@ -60,10 +60,10 @@ class GovernanceDecisionAuthorityRecord:
         evidence_submitters: tuple[str, ...],
         suite_execution_ids: tuple[str, ...],
         admission_ids: tuple[str, ...],
-        admission_submitters: tuple[str, ...],
         evidence_set: Mapping[str, object],
         evidence_set_hash: str,
         operational_freshness: tuple[EvidenceFreshnessClassification, ...],
+        admission_submitters: tuple[str, ...] = (),
     ) -> "GovernanceDecisionAuthorityRecord":
         return cls(
             scope=scope,
@@ -78,10 +78,10 @@ class GovernanceDecisionAuthorityRecord:
             evidence_submitters=tuple(evidence_submitters),
             suite_execution_ids=tuple(suite_execution_ids),
             admission_ids=tuple(admission_ids),
-            admission_submitters=tuple(admission_submitters),
             evidence_set=FrozenJsonObject.from_mapping(evidence_set),
             evidence_set_hash=evidence_set_hash,
             operational_freshness=tuple(operational_freshness),
+            admission_submitters=tuple(admission_submitters),
         )
 
 
@@ -114,9 +114,9 @@ class GovernanceDecisionRecord:
     decided_by: str
     evidence_set_hash: str
     decided_at: datetime
-    owner_override_reason: str | None
     suite_execution_ids: tuple[str, ...]
     operational_freshness: tuple[EvidenceFreshnessClassification, ...]
+    owner_override_reason: str | None = None
 
     @classmethod
     def create(
@@ -134,9 +134,9 @@ class GovernanceDecisionRecord:
         decided_by: str,
         evidence_set_hash: str,
         decided_at: datetime,
-        owner_override_reason: str | None,
         suite_execution_ids: tuple[str, ...],
         operational_freshness: tuple[EvidenceFreshnessClassification, ...],
+        owner_override_reason: str | None = None,
     ) -> "GovernanceDecisionRecord":
         return cls(
             decision_id=decision_id,
@@ -151,9 +151,9 @@ class GovernanceDecisionRecord:
             decided_by=decided_by,
             evidence_set_hash=evidence_set_hash,
             decided_at=decided_at,
-            owner_override_reason=owner_override_reason,
             suite_execution_ids=tuple(suite_execution_ids),
             operational_freshness=tuple(operational_freshness),
+            owner_override_reason=owner_override_reason,
         )
 
 
