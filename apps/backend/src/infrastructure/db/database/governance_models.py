@@ -2189,6 +2189,7 @@ class GovernanceEvaluationDecision(Base):
         ),
         CheckConstraint(
             "owner_override_reason IS NULL OR "
+            "owner_override_reason = trim(owner_override_reason) AND "
             "length(trim(owner_override_reason)) BETWEEN 1 AND 2000",
             name="ck_governance_evaluation_decision_owner_override",
         ),

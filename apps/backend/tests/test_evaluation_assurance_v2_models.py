@@ -420,6 +420,16 @@ def test_all_new_models_have_exact_columns_unique_constraint_names_and_vocabular
     assert review_checks["ck_governance_evidence_review_no_override_013j"] == (
         "separation_override_reason IS NULL"
     )
+    decision_checks = {
+        constraint.name: str(constraint.sqltext)
+        for constraint in governance_models.GovernanceEvaluationDecision.__table__.constraints
+        if isinstance(constraint, CheckConstraint) and constraint.name
+    }
+    assert decision_checks["ck_governance_evaluation_decision_owner_override"] == (
+        "owner_override_reason IS NULL OR "
+        "owner_override_reason = trim(owner_override_reason) AND "
+        "length(trim(owner_override_reason)) BETWEEN 1 AND 2000"
+    )
 
     vocabulary = {
         "GovernanceEvaluationSuiteVersion": ("draft", "active", "deprecated", "revoked"),

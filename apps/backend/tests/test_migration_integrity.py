@@ -636,7 +636,7 @@ def test_production_postgresql_manifest_covers_audit_immutability() -> None:
     frozen = FROZEN_POSTGRESQL_ASSURANCE_CATALOGS[14]
     assert frozen.spec is POSTGRESQL_ASSURANCE_CATALOG_SPEC
     assert frozen.postgresql_major == 14
-    assert frozen.digest == "c4a2a891640a309a07a2421cb0951615b82e32645757e0c1469cacf501020be2"
+    assert frozen.digest == "c181fd00d2c65009cd17a673c0462d92d557c73dc7976f800a4bcb83ae4c6fd2"
     validate_frozen_postgresql_catalog(frozen)
 
 

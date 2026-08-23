@@ -343,6 +343,104 @@ def test_owner_override_rolls_back_decision_claim_and_retries_after_audit_failur
         session.close()
 
 
+def test_owner_override_transient_authority_lock_failure_rolls_back_and_retries(
+    owner_override_session_factory,
+) -> None:
+    factory = owner_override_session_factory
+    graph = _ready_owner_graph(factory)
+    blocker = factory()
+    blocker_pid = blocker.scalar(text("SELECT pg_backend_pid()"))
+    application_name = f"owner-authority-timeout-{uuid.uuid4()}"
+    attempt_started = Event()
+
+    def attempt_override():
+        session = factory()
+        try:
+            _set_application_name(session, application_name)
+            session.execute(text("SET LOCAL lock_timeout='2s'"))
+            attempt_started.set()
+            return _decide_owner(
+                session,
+                graph,
+                key="native-owner-override-transient-lock",
+            )
+        finally:
+            session.close()
+
+    try:
+        assert blocker.scalar(
+            text(
+                "SELECT 1 FROM org_roles WHERE org_id=:org_id "
+                "AND name='owner' FOR UPDATE"
+            ),
+            {"org_id": graph.scenario.org_id},
+        ) == 1
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            attempt = pool.submit(attempt_override)
+            assert attempt_started.wait(timeout=10)
+            _wait_for_postgres_blocker(factory, application_name, blocker_pid)
+            with pytest.raises(EvaluationWorkbenchError) as failed:
+                attempt.result(timeout=10)
+        assert failed.value.code == "evaluation_persistence_failed"
+        assert failed.value.status_code == 500
+
+        observer = factory()
+        try:
+            assert tuple(map(len, _owner_rows(observer, graph))) == (0, 0, 0)
+            assert tuple(
+                map(
+                    len,
+                    _rejected_rows(
+                        observer,
+                        graph,
+                        actor_id=graph.scenario.actor_id,
+                    ),
+                )
+            ) == (0, 0, 0)
+        finally:
+            observer.close()
+
+        blocker.commit()
+        retry = factory()
+        try:
+            result = _decide_owner(
+                retry,
+                graph,
+                key="native-owner-override-transient-lock",
+            )
+            assert result.status == 201
+            assert tuple(map(len, _owner_rows(retry, graph))) == (1, 1, 1)
+        finally:
+            retry.close()
+    finally:
+        blocker.rollback()
+        blocker.close()
+
+
+def test_owner_override_accepts_exactly_2000_utf8_reason_bytes(
+    owner_override_session_factory,
+) -> None:
+    factory = owner_override_session_factory
+    graph = _ready_owner_graph(factory)
+    reason = "é" * 1000
+    assert len(reason.encode("utf-8")) == 2000
+
+    session = factory()
+    try:
+        result = _decide_owner(
+            session,
+            graph,
+            key="native-owner-override-2000-bytes",
+            reason=reason,
+        )
+        assert result.status == 201
+        decisions, idempotency, audits = _owner_rows(session, graph)
+        assert decisions[0]["owner_override_reason"] == reason
+        assert len(idempotency) == len(audits) == 1
+    finally:
+        session.close()
+
+
 @pytest.mark.parametrize(
     ("case", "expected_code", "expected_status"),
     (

@@ -137,7 +137,7 @@ def test_013j_operator_packaging_contract() -> None:
     assert source.count("\\ir ../013j_owner_decision_override_integrity.sql") == 1
     assert "013i-to-013j-owner-decision-override-integrity-v1" in source
     assert "83c77841beb21dbf96d1e40260534d262dbf21941b21fac4121964a065e36f94" in source
-    assert "76f38c55173e34ed6733ded221e87a94aac1fe9ed7cfd1a96a5621bb20e10902" in source
+    assert "bc5deb123981ee968061ec695821e8d00a8cc860d3c2169f9ca81ae6805846b5" in source
 
 
 def test_sqlite_013j_loader_requires_foreign_keys_and_is_idempotent() -> None:
@@ -389,9 +389,30 @@ def test_postgresql14_013j_catalog_hardening(postgresql_013j_connection) -> None
             """
         )
         rows = cursor.fetchall()
+        cursor.execute(
+            """
+            SELECT constraint_entry.convalidated,
+                   pg_catalog.pg_get_constraintdef(constraint_entry.oid, true)
+            FROM pg_catalog.pg_constraint AS constraint_entry
+            JOIN pg_catalog.pg_class AS relation_entry
+              ON relation_entry.oid = constraint_entry.conrelid
+            WHERE relation_entry.relnamespace = pg_catalog.to_regnamespace(current_schema())
+              AND relation_entry.relname = 'governance_evaluation_decisions'
+              AND constraint_entry.conname =
+                  'ck_governance_evaluation_decision_owner_override'
+            """
+        )
+        decision_reason_constraint = cursor.fetchone()
     assert rows
     assert all("search_path=pg_catalog, " in next(iter(config)) for _, config, _, _ in rows)
     assert all(acl_is_null and owner_matches for _, _, acl_is_null, owner_matches in rows)
+    assert decision_reason_constraint == (
+        True,
+        "CHECK (owner_override_reason IS NULL OR "
+        "owner_override_reason = btrim(owner_override_reason) AND "
+        "octet_length(owner_override_reason) >= 1 AND "
+        "octet_length(owner_override_reason) <= 2000)",
+    )
 
 
 @pytest.fixture
@@ -821,6 +842,7 @@ def _insert_raw_override(
     system_id: str | None = None,
     run_id: str | None = None,
     admission_id: str | None = None,
+    reason: str = "No independent owner.",
 ) -> str:
     from sqlalchemy import text
     from src.domain.assurance.evaluation_v2 import canonical_json, canonical_sha256
@@ -851,7 +873,7 @@ def _insert_raw_override(
             "decided_at) VALUES ("
             ":id, :org_id, :workspace_id, :system_id, :run_id, '2.0.0', "
             ":envelope_id, :envelope_hash, :verdict_version, 'conditional', '1.0.0', "
-            ":layers, 'Documented owner conflict.', :actor_id, 'No independent owner.', "
+            ":layers, 'Documented owner conflict.', :actor_id, :reason, "
             ":evidence_set, :evidence_set_hash, fairmind_canonical_clock_utc_013f()) "
             "RETURNING decided_at"
         ),
@@ -866,6 +888,7 @@ def _insert_raw_override(
             "verdict_version": verdict_version,
             "layers": canonical_json(layers),
             "actor_id": actor_id,
+            "reason": reason,
             "evidence_set": canonical_json(evidence_set),
             "evidence_set_hash": canonical_sha256(evidence_set),
         },
@@ -896,6 +919,87 @@ def _insert_raw_override(
             },
         )
     )
+
+
+@pytest.mark.parametrize(
+    "reason",
+    (
+        " leading whitespace",
+        "trailing whitespace ",
+        "é" * 1001,
+    ),
+    ids=("leading-whitespace", "trailing-whitespace", "over-2000-utf8-bytes"),
+)
+def test_postgresql14_013j_rejects_noncanonical_owner_override_reason(
+    postgresql_013j_session_factory,
+    reason: str,
+) -> None:
+    from sqlalchemy.exc import IntegrityError
+
+    graph = _ready_graph(postgresql_013j_session_factory)
+    session = postgresql_013j_session_factory()
+    try:
+        _install_owner_role(session, graph, graph.scenario.actor_id)
+        with pytest.raises(
+            IntegrityError,
+            match="ck_governance_evaluation_decision_owner_override",
+        ):
+            _insert_raw_override(
+                session,
+                graph,
+                actor_id=graph.scenario.actor_id,
+                reason=reason,
+            )
+    finally:
+        session.rollback()
+        session.close()
+
+
+def test_postgresql14_013j_upgrade_preflight_rejects_invalid_existing_reason(
+    postgresql_013i_session_factory,
+) -> None:
+    from sqlalchemy import text
+    from sqlalchemy.exc import DBAPIError
+
+    factory = postgresql_013i_session_factory
+    graph = _ready_graph(factory)
+    session = factory()
+    try:
+        session.execute(
+            text("ALTER TABLE governance_evaluation_decisions DISABLE TRIGGER USER")
+        )
+        _insert_raw_override(
+            session,
+            graph,
+            actor_id=graph.scenario.actor_id,
+            reason=" legacy whitespace ",
+        )
+        session.execute(
+            text("ALTER TABLE governance_evaluation_decisions ENABLE TRIGGER USER")
+        )
+        session.commit()
+        schema = session.scalar(text("SELECT current_schema()"))
+        session.execute(
+            text(
+                "SELECT pg_catalog.set_config"
+                "('fairmind.migration_schema', :schema, false)"
+            ),
+            {"schema": schema},
+        )
+        with pytest.raises(
+            DBAPIError,
+            match="migration 013j found invalid owner override reason",
+        ):
+            session.execute(
+                text(
+                    (MIGRATIONS / "013j_owner_decision_override_integrity.sql").read_text(
+                        encoding="utf-8"
+                    )
+                )
+            )
+    finally:
+        session.rollback()
+        session.close()
 
 
 _AUTHORITY_CASES = (

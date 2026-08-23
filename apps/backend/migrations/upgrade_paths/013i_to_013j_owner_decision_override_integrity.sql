@@ -51,7 +51,7 @@ DECLARE
     expected_013i CONSTANT TEXT :=
         '83c77841beb21dbf96d1e40260534d262dbf21941b21fac4121964a065e36f94';
     expected_013j CONSTANT TEXT :=
-        '76f38c55173e34ed6733ded221e87a94aac1fe9ed7cfd1a96a5621bb20e10902';
+        'bc5deb123981ee968061ec695821e8d00a8cc860d3c2169f9ca81ae6805846b5';
 BEGIN
     SELECT migration_checksum INTO recorded_013i
     FROM fairmind_operator_migration_ledger
@@ -245,6 +245,29 @@ BEGIN
     ) THEN
         RAISE EXCEPTION '013j review check postcondition failed';
     END IF;
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_constraint AS constraint_entry
+        JOIN pg_catalog.pg_class AS relation_entry
+          ON relation_entry.oid = constraint_entry.conrelid
+        JOIN pg_catalog.pg_namespace AS namespace_entry
+          ON namespace_entry.oid = relation_entry.relnamespace
+        WHERE namespace_entry.nspname = trusted_schema
+          AND relation_entry.relname = 'governance_evaluation_decisions'
+          AND relation_entry.relowner = schema_owner
+          AND constraint_entry.conname =
+              'ck_governance_evaluation_decision_owner_override'
+          AND constraint_entry.contype = 'c'
+          AND constraint_entry.convalidated
+          AND pg_catalog.pg_get_constraintdef(
+              constraint_entry.oid, true
+          ) = 'CHECK (owner_override_reason IS NULL OR '
+              || 'owner_override_reason = btrim(owner_override_reason) AND '
+              || 'octet_length(owner_override_reason) >= 1 AND '
+              || 'octet_length(owner_override_reason) <= 2000)'
+    ) THEN
+        RAISE EXCEPTION '013j decision reason check postcondition failed';
+    END IF;
 END;
 $fairmind_operator_postcondition$ LANGUAGE plpgsql;
 
@@ -252,7 +275,7 @@ INSERT INTO fairmind_operator_migration_ledger (
     migration_key, migration_checksum
 ) VALUES (
     '013i-to-013j-owner-decision-override-integrity-v1',
-    '76f38c55173e34ed6733ded221e87a94aac1fe9ed7cfd1a96a5621bb20e10902'
+    'bc5deb123981ee968061ec695821e8d00a8cc860d3c2169f9ca81ae6805846b5'
 )
 ON CONFLICT (migration_key) DO NOTHING;
 
@@ -264,7 +287,7 @@ BEGIN
         WHERE migration_key =
               '013i-to-013j-owner-decision-override-integrity-v1'
           AND migration_checksum =
-              '76f38c55173e34ed6733ded221e87a94aac1fe9ed7cfd1a96a5621bb20e10902'
+              'bc5deb123981ee968061ec695821e8d00a8cc860d3c2169f9ca81ae6805846b5'
     ) THEN
         RAISE EXCEPTION '013j operator ledger write failed';
     END IF;

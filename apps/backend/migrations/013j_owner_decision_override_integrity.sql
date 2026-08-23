@@ -108,10 +108,42 @@ BEGIN
     RETURN fairmind_owner_permission_array_is_valid_013j(v_permissions)
        AND v_permissions ? 'evaluation:decision'
        AND v_permissions ? 'evaluation:separation:override';
-EXCEPTION WHEN OTHERS THEN
-    RETURN false;
 END;
 $function$;
+
+LOCK TABLE governance_evaluation_decisions IN SHARE ROW EXCLUSIVE MODE;
+
+DO $fairmind_013j_decision_reason_preflight$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM governance_evaluation_decisions AS decision
+        WHERE decision.owner_override_reason IS NOT NULL
+          AND (
+              decision.owner_override_reason IS DISTINCT FROM
+                  pg_catalog.btrim(decision.owner_override_reason)
+              OR pg_catalog.octet_length(decision.owner_override_reason)
+                  NOT BETWEEN 1 AND 2000
+          )
+    ) THEN
+        RAISE EXCEPTION USING ERRCODE = '23514',
+            MESSAGE = 'migration 013j found invalid owner override reason';
+    END IF;
+END;
+$fairmind_013j_decision_reason_preflight$ LANGUAGE plpgsql;
+
+ALTER TABLE governance_evaluation_decisions
+    DROP CONSTRAINT IF EXISTS ck_governance_evaluation_decision_owner_override;
+ALTER TABLE governance_evaluation_decisions
+    ADD CONSTRAINT ck_governance_evaluation_decision_owner_override CHECK (
+        owner_override_reason IS NULL
+        OR (
+            owner_override_reason = pg_catalog.btrim(owner_override_reason)
+            AND pg_catalog.octet_length(owner_override_reason) BETWEEN 1 AND 2000
+        )
+    ) NOT VALID;
+ALTER TABLE governance_evaluation_decisions
+    VALIDATE CONSTRAINT ck_governance_evaluation_decision_owner_override;
 
 LOCK TABLE governance_evidence_reviews IN SHARE ROW EXCLUSIVE MODE;
 
@@ -808,6 +840,28 @@ BEGIN
           AND constraint_entry.convalidated
     ) THEN
         RAISE EXCEPTION '013j review constraint validation drift';
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_constraint AS constraint_entry
+        JOIN pg_catalog.pg_class AS relation_entry
+          ON relation_entry.oid = constraint_entry.conrelid
+        JOIN pg_catalog.pg_namespace AS namespace_entry
+          ON namespace_entry.oid = relation_entry.relnamespace
+        WHERE namespace_entry.nspname = trusted_schema
+          AND relation_entry.relname = 'governance_evaluation_decisions'
+          AND constraint_entry.conname =
+              'ck_governance_evaluation_decision_owner_override'
+          AND constraint_entry.contype = 'c'
+          AND constraint_entry.convalidated
+          AND pg_catalog.pg_get_constraintdef(
+              constraint_entry.oid, true
+          ) = 'CHECK (owner_override_reason IS NULL OR '
+              || 'owner_override_reason = btrim(owner_override_reason) AND '
+              || 'octet_length(owner_override_reason) >= 1 AND '
+              || 'octet_length(owner_override_reason) <= 2000)'
+    ) THEN
+        RAISE EXCEPTION '013j decision reason constraint validation drift';
     END IF;
 END;
 $fairmind_013j_harden_and_verify$ LANGUAGE plpgsql;
