@@ -37,7 +37,7 @@ def user_a_token():
         role=UserRole.ANALYST,
         token_type=TokenType.ACCESS,
         iat=now,
-        exp=now,
+        exp=now + timedelta(hours=1),
     )
 
 
@@ -51,7 +51,7 @@ def user_b_token():
         role=UserRole.ANALYST,
         token_type=TokenType.ACCESS,
         iat=now,
-        exp=now,
+        exp=now + timedelta(hours=1),
     )
 
 
@@ -65,7 +65,7 @@ def user_c_token():
         role=UserRole.ANALYST,
         token_type=TokenType.ACCESS,
         iat=now,
-        exp=now,
+        exp=now + timedelta(hours=1),
     )
 
 

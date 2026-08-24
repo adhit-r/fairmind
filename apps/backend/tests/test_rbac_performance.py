@@ -34,7 +34,7 @@ def user_token():
         role=UserRole.ANALYST,
         token_type=TokenType.ACCESS,
         iat=now,
-        exp=now,
+        exp=now + timedelta(hours=1),
     )
 
 
