@@ -4,7 +4,10 @@ Tests for the production improvements: Database pooling, Redis caching, JWT auth
 
 import pytest
 import asyncio
+from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 from fastapi.testclient import TestClient
+from starlette.requests import Request
 from unittest.mock import AsyncMock, patch
 import json
 import time
@@ -12,8 +15,9 @@ import time
 from api.main import app
 from config.database import db_manager
 from config.cache import cache_manager
-from config.auth import auth_manager, User, UserRole
+from config.auth import auth_manager, TokenData, TokenType, User, UserRole
 from config.jwt_exceptions import InvalidTokenException
+from api.routes import core as core_routes
 
 
 class TestDatabasePooling:
@@ -309,49 +313,81 @@ class TestIntegration:
     """Integration tests for all improvements together."""
     
     @pytest.mark.asyncio
-    async def test_authenticated_cached_endpoint(self):
-        """Test an endpoint that uses authentication and caching."""
-        # Initialize services
-        await db_manager.initialize()
-        await cache_manager.initialize()
-        
-        client = TestClient(app)
-        
-        # First, login to get a token
-        login_data = {
-            "email": "admin@fairmind.ai",
-            "password": "admin123"
+    async def test_authenticated_cached_endpoint(self, monkeypatch):
+        """Cache an org-scoped model query after production authorization."""
+        now = datetime.now(timezone.utc)
+        request = Request(
+            {
+                "type": "http",
+                "method": "GET",
+                "path": "/api/v1/core/models",
+                "headers": [],
+            }
+        )
+        request.state.user = TokenData(
+            user_id="user-123",
+            email="admin@example.test",
+            role=UserRole.ADMIN,
+            token_type=TokenType.ACCESS,
+            exp=now + timedelta(minutes=5),
+            iat=now,
+            permissions=["model:read"],
+        )
+        request.state.org_id = "org-123"
+        request.state.user_id = "user-123"
+
+        model = {
+            "id": "model-123",
+            "name": "Credit model",
+            "description": "Test model",
+            "model_type": "classification",
+            "version": "1.0.0",
+            "upload_date": now,
+            "file_path": "/models/model-123.bin",
+            "file_size": 128,
+            "tags": "[]",
+            "metadata": "{}",
+            "status": "active",
+            "org_id": "org-123",
         }
-        
-        login_response = client.post("/api/v1/auth/login", json=login_data)
-        
-        if login_response.status_code == 200:
-            token_data = login_response.json()
-            access_token = token_data["access_token"]
-            
-            # Use token to access protected endpoint
-            headers = {"Authorization": f"Bearer {access_token}"}
-            
-            # Test cached endpoint
-            response1 = client.get("/api/v1/models", headers=headers)
-            response2 = client.get("/api/v1/models", headers=headers)
-            
-            # Both should succeed
-            assert response1.status_code == 200
-            assert response2.status_code == 200
-            
-            # Response should be JSON
-            data1 = response1.json()
-            data2 = response2.json()
-            
-            assert "success" in data1
-            assert "data" in data1
-            assert data1["success"] == data2["success"]
-            assert data1["count"] == data2["count"]
-        
-        # Clean up
-        await db_manager.disconnect()
-        await cache_manager.disconnect()
+
+        class FakeConnection:
+            query_count = 0
+
+            async def fetch_all(self, query, params):
+                self.query_count += 1
+                assert "org_id = :org_id" in query
+                assert params == {"org_id": "org-123", "limit": 10, "offset": 0}
+                return [model]
+
+        class FakeCache:
+            def __init__(self):
+                self.values = {}
+
+            async def get(self, key):
+                return self.values.get(key)
+
+            async def set(self, key, value, ttl):
+                assert ttl == 300
+                self.values[key] = value
+                return True
+
+        connection = FakeConnection()
+
+        @asynccontextmanager
+        async def fake_get_db_connection():
+            yield connection
+
+        monkeypatch.setattr(core_routes, "cache_manager", FakeCache())
+        monkeypatch.setattr(core_routes, "get_db_connection", fake_get_db_connection)
+        monkeypatch.setattr(core_routes.settings, "environment", "production")
+
+        first = await core_routes.get_models(request=request, limit=10, offset=0)
+        second = await core_routes.get_models(request=request, limit=10, offset=0)
+
+        assert first == {"success": True, "data": [model], "count": 1}
+        assert second == first
+        assert connection.query_count == 1
     
     def test_rate_limiting(self):
         """Test rate limiting functionality."""

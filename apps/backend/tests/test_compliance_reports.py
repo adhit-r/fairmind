@@ -306,9 +306,8 @@ async def test_format_validation():
 # ── Integration Tests: API Endpoints ──────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_get_audit_report_json_format(client):
-    """Test GET /audit-report with JSON format."""
-    # Setup: Mock database and auth
+async def test_get_audit_report_rejects_malformed_token(client):
+    """Reject a malformed bearer token before generating a GET report."""
     start = datetime(2026, 3, 1).isoformat()
     end = datetime(2026, 3, 15).isoformat()
 
@@ -317,13 +316,12 @@ async def test_get_audit_report_json_format(client):
         headers={"Authorization": "Bearer valid_token"}
     )
 
-    # Should require admin access
-    assert response.status_code in [200, 403]  # Depends on auth setup
+    assert response.status_code == 401
 
 
 @pytest.mark.asyncio
-async def test_post_audit_report_json_format(client):
-    """Test POST /audit-report with JSON format."""
+async def test_post_audit_report_rejects_malformed_token(client):
+    """Reject a malformed bearer token before generating a POST report."""
     payload = {
         "start_date": "2026-03-01",
         "end_date": "2026-03-15",
@@ -336,8 +334,7 @@ async def test_post_audit_report_json_format(client):
         headers={"Authorization": "Bearer valid_token"}
     )
 
-    # Should require admin access
-    assert response.status_code in [200, 403]
+    assert response.status_code == 401
 
 
 @pytest.mark.asyncio
