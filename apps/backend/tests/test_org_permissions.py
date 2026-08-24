@@ -13,7 +13,7 @@ Tests cover:
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 from fastapi import Request
 from uuid import uuid4
 
@@ -34,7 +34,7 @@ from core.decorators import (
 @pytest.fixture
 def mock_request():
     """Create a mock request with state object."""
-    request = MagicMock(spec=Request)
+    request = Mock(spec=Request)
     request.state = MagicMock()
     request.headers = {}
     request.client = MagicMock(host="192.168.1.1")
@@ -425,11 +425,11 @@ async def test_audit_org_action_success(
 
     # Verify audit log was written
     mock_db.execute.assert_called_once()
-    call_args = mock_db.execute.call_args
-    assert "org_audit_logs" in call_args[0][0]
-    assert call_args[1]["action"] == "invite_member"
-    assert call_args[1]["resource_type"] == "org_member"
-    assert call_args[1]["status"] == "success"
+    query, values = mock_db.execute.call_args.args
+    assert "org_audit_logs" in query
+    assert "'success'" in query
+    assert values["action"] == "invite_member"
+    assert values["resource_type"] == "org_member"
 
 
 @pytest.mark.asyncio
@@ -454,9 +454,9 @@ async def test_audit_org_action_failure(
 
     # Verify failure was logged
     mock_db.execute.assert_called_once()
-    call_args = mock_db.execute.call_args
-    assert call_args[1]["status"] == "failure"
-    assert "error_message" in call_args[1]
+    query, values = mock_db.execute.call_args.args
+    assert "'failure'" in query
+    assert values["error"] == "Test error"
 
 
 @pytest.mark.asyncio
@@ -479,8 +479,8 @@ async def test_audit_org_action_ip_extraction_forwarded(
     )
 
     # Verify correct IP was logged
-    call_args = mock_db.execute.call_args
-    assert call_args[1]["ip_address"] == "203.0.113.1"
+    _, values = mock_db.execute.call_args.args
+    assert values["ip_address"] == "203.0.113.1"
 
 
 @pytest.mark.asyncio
@@ -503,8 +503,8 @@ async def test_audit_org_action_ip_extraction_real_ip(
     )
 
     # Verify correct IP was logged
-    call_args = mock_db.execute.call_args
-    assert call_args[1]["ip_address"] == "203.0.113.2"
+    _, values = mock_db.execute.call_args.args
+    assert values["ip_address"] == "203.0.113.2"
 
 
 @pytest.mark.asyncio
@@ -527,8 +527,8 @@ async def test_audit_org_action_ip_extraction_client_host(
     )
 
     # Verify correct IP was logged
-    call_args = mock_db.execute.call_args
-    assert call_args[1]["ip_address"] == "203.0.113.3"
+    _, values = mock_db.execute.call_args.args
+    assert values["ip_address"] == "203.0.113.3"
 
 
 # ── Decorator Stacking Tests ────────────────────────────────────────────
@@ -572,7 +572,7 @@ async def test_decorator_stacking_success(
 async def test_decorator_stacking_permission_denied(
     mock_request, mock_db, sample_org_id, sample_user_id
 ):
-    """Test that permission denial prevents audit logging."""
+    """Test that permission denial is captured as a failed audit action."""
     mock_request.state.user_id = sample_user_id
     mock_request.state.ip_address = "192.168.1.100"
     mock_request.headers = {}
@@ -592,8 +592,9 @@ async def test_decorator_stacking_permission_denied(
             org_id=sample_org_id, request=mock_request, db=mock_db
         )
 
-    # Audit log should NOT have been called (permission denied before execution)
-    mock_db.execute.assert_not_called()
+    query, values = mock_db.execute.call_args.args
+    assert "'failure'" in query
+    assert values["error"] == "403: Admin access required"
 
 
 # ── Error Handling Tests ────────────────────────────────────────────────

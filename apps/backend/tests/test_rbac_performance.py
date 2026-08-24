@@ -14,12 +14,12 @@ Uses pytest-benchmark or time.perf_counter() for measurements.
 import pytest
 import uuid
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock
 import random
 import string
 
-from config.auth import TokenData
+from config.auth import TokenData, TokenType, UserRole
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -27,13 +27,14 @@ from config.auth import TokenData
 @pytest.fixture
 def user_token():
     """Valid user token."""
+    now = datetime.now(timezone.utc)
     return TokenData(
         user_id="user-id",
         email="user@example.com",
-        full_name="User",
-        org_id=None,
-        primary_org_id=None,
-        scopes=[]
+        role=UserRole.ANALYST,
+        token_type=TokenType.ACCESS,
+        iat=now,
+        exp=now,
     )
 
 
@@ -44,7 +45,7 @@ def org_id():
 
 
 @pytest.fixture
-async def mock_db():
+def mock_db():
     """Mock database connection."""
     db = AsyncMock()
     db.execute = AsyncMock()
@@ -95,7 +96,7 @@ class TestListMembersPerformance:
     """Benchmark member list retrieval."""
 
     @pytest.mark.asyncio
-    async def test_list_members_1000_under_50ms(self, user_token, org_id, mock_db, large_member_list, benchmark):
+    async def test_list_members_1000_under_50ms(self, user_token, org_id, mock_db, large_member_list):
         """Listing 1000 members should complete in < 50ms."""
         # Mock: 1000 members returned
         mock_db.fetch_all.return_value = large_member_list
@@ -105,8 +106,11 @@ class TestListMembersPerformance:
             # Simulate the query
             return len(large_member_list)
 
-        result = benchmark(run_test)
+        start = time.perf_counter()
+        result = run_test()
+        elapsed = (time.perf_counter() - start) * 1000
         assert result == 1000
+        assert elapsed < 50
 
     @pytest.mark.asyncio
     async def test_list_members_pagination(self, user_token, org_id, mock_db, large_member_list):

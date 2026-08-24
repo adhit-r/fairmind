@@ -12,11 +12,11 @@ Comprehensive security testing:
 
 import pytest
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 from fastapi import HTTPException, status
 
-from config.auth import TokenData
+from config.auth import TokenData, TokenType, UserRole
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -24,13 +24,14 @@ from config.auth import TokenData
 @pytest.fixture
 def user_token():
     """Valid user token."""
+    now = datetime.now(timezone.utc)
     return TokenData(
         user_id="user-id",
         email="user@example.com",
-        full_name="User",
-        org_id=None,
-        primary_org_id=None,
-        scopes=[]
+        role=UserRole.ANALYST,
+        token_type=TokenType.ACCESS,
+        iat=now,
+        exp=now,
     )
 
 
@@ -41,7 +42,7 @@ def org_id():
 
 
 @pytest.fixture
-async def mock_db():
+def mock_db():
     """Mock database connection."""
     db = AsyncMock()
     db.execute = AsyncMock()
@@ -130,10 +131,7 @@ class TestCrossOrgAccessPrevention:
         member_id = str(uuid.uuid4())
 
         # Mock: user is admin in org1 (not org2)
-        mock_db.fetch_one.side_effect = [
-            {"id": "admin-member-id"},  # Is admin in org1
-            None,  # Is NOT admin in org2
-        ]
+        mock_db.fetch_one.return_value = None  # Is NOT admin in org2
 
         # Try to update member in org2 (should fail auth check)
         is_admin = (await mock_db.fetch_one(
