@@ -70,6 +70,7 @@ MIGRATION_CHAIN = (
     "013c_evidence_verification_receipt.sql",
     "013d_evaluator_catalog.sql",
     "013f_trust_authority_integrity.sql",
+    "013g_operational_evidence_freshness.sql",
 )
 ADMISSION_OPERATION = "evaluation-v2.evidence.verified-admit"
 ADMISSION_SUCCESS_ACTION = "evaluation_v2.evidence.verified_admitted"
@@ -192,6 +193,7 @@ def postgres_session_factory():
                     "013c_evidence_verification_receipt.sql",
                     "013d_evaluator_catalog.sql",
                     "013f_trust_authority_integrity.sql",
+                    "013g_operational_evidence_freshness.sql",
                 }:
                     cursor.execute(
                         "SELECT pg_catalog.set_config" "('fairmind.migration_schema', %s, false)",
@@ -1171,7 +1173,29 @@ def test_same_key_with_changed_exact_signed_bytes_is_an_idempotency_conflict(
 
     _assert_one_graph(factory, scenario)
     assert _operation_idempotency_count(factory, scenario) == 1
-    assert _admission_audit_count(factory, scenario) == 1
+    assert _admission_audit_count(factory, scenario) == 2
+    audit_session = factory()
+    try:
+        rejected_event = audit_session.execute(
+            text(
+                "SELECT action, outcome, resource_type, details_json "
+                "FROM governance_evaluation_audit_events "
+                "WHERE org_id = :org_id "
+                "AND details_json::jsonb ->> 'operation' = :operation "
+                "ORDER BY sequence_number DESC LIMIT 1"
+            ),
+            {"org_id": scenario.org_id, "operation": ADMISSION_OPERATION},
+        ).mappings().one()
+    finally:
+        audit_session.close()
+    assert rejected_event["action"] == "evaluation_v2.mutation.rejected"
+    assert rejected_event["outcome"] == "rejected"
+    assert rejected_event["resource_type"] == "evaluation_idempotency_key_hash"
+    rejected_details = json.loads(rejected_event["details_json"])
+    assert rejected_details["schemaVersion"] == "evaluation-v2.preclaim-rejection-audit/v1"
+    assert rejected_details["operation"] == ADMISSION_OPERATION
+    assert rejected_details["errorCode"] == "idempotency_conflict"
+    assert rejected_details["statusCode"] == 409
 
 
 def test_new_key_cannot_overwrite_an_occupied_suite_projection(

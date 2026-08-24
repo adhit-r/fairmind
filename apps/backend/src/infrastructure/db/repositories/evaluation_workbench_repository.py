@@ -4938,6 +4938,7 @@ class SqlAlchemyEvaluationWorkbenchUnitOfWork:
             raise TypeError("SQLAlchemy Session required")
         self.db = session
         self._repository = repository or SqlAlchemyEvaluationWorkbenchRepository(session)
+        self._clock_repository = SqlAlchemyEvaluationWorkbenchRepository(session)
 
     @property
     def repository(self) -> SqlAlchemyEvaluationWorkbenchRepository:
@@ -5634,7 +5635,7 @@ class SqlAlchemyEvaluationWorkbenchUnitOfWork:
             try:
                 self._lock_org(command.organization_id)
                 request_now = (
-                    self._repository.read_fresh_utc_now()
+                    self._clock_repository.read_fresh_utc_now()
                     if self.db.get_bind().dialect.name == "postgresql"
                     else _now()
                 )
