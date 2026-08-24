@@ -5,9 +5,9 @@ Tests for the production improvements: Database pooling, Redis caching, JWT auth
 import pytest
 import asyncio
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from fastapi.testclient import TestClient
-from starlette.requests import Request
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 import json
 import time
@@ -15,7 +15,7 @@ import time
 from api.main import app
 from config.database import db_manager
 from config.cache import cache_manager
-from config.auth import auth_manager, TokenData, TokenType, User, UserRole
+from config.auth import auth_manager, User, UserRole
 from config.jwt_exceptions import InvalidTokenException
 from api.routes import core as core_routes
 
@@ -314,27 +314,17 @@ class TestIntegration:
     
     @pytest.mark.asyncio
     async def test_authenticated_cached_endpoint(self, monkeypatch):
-        """Cache an org-scoped model query after production authorization."""
+        """Cache the mounted org-scoped model route after JWT authorization."""
         now = datetime.now(timezone.utc)
-        request = Request(
-            {
-                "type": "http",
-                "method": "GET",
-                "path": "/api/v1/core/models",
-                "headers": [],
-            }
-        )
-        request.state.user = TokenData(
-            user_id="user-123",
+        user = User(
+            id="user-123",
             email="admin@example.test",
-            role=UserRole.ADMIN,
-            token_type=TokenType.ACCESS,
-            exp=now + timedelta(minutes=5),
-            iat=now,
+            username="admin",
+            role=UserRole.ANALYST,
+            created_at=now,
             permissions=["model:read"],
         )
-        request.state.org_id = "org-123"
-        request.state.user_id = "user-123"
+        access_token = auth_manager.create_access_token(user)
 
         model = {
             "id": "model-123",
@@ -378,15 +368,39 @@ class TestIntegration:
         async def fake_get_db_connection():
             yield connection
 
+        verify_token = auth_manager.verify_token
+
+        async def verify_token_with_org(token):
+            token_data = await verify_token(token)
+            return SimpleNamespace(
+                id=token_data.user_id,
+                org_id="org-123",
+                email=token_data.email,
+                role=token_data.role,
+                permissions=token_data.permissions,
+                token_type=token_data.token_type,
+            )
+
         monkeypatch.setattr(core_routes, "cache_manager", FakeCache())
         monkeypatch.setattr(core_routes, "get_db_connection", fake_get_db_connection)
         monkeypatch.setattr(core_routes.settings, "environment", "production")
+        monkeypatch.setattr(auth_manager, "verify_token", verify_token_with_org)
 
-        first = await core_routes.get_models(request=request, limit=10, offset=0)
-        second = await core_routes.get_models(request=request, limit=10, offset=0)
+        client = TestClient(app)
+        try:
+            headers = {"Authorization": f"Bearer {access_token}"}
+            first = client.get("/api/v1/core/models", headers=headers)
+            second = client.get("/api/v1/core/models", headers=headers)
+        finally:
+            client.close()
 
-        assert first == {"success": True, "data": [model], "count": 1}
-        assert second == first
+        assert first.status_code == second.status_code == 200
+        assert first.json() == {
+            "success": True,
+            "data": [{**model, "upload_date": now.isoformat()}],
+            "count": 1,
+        }
+        assert second.json() == first.json()
         assert connection.query_count == 1
     
     def test_rate_limiting(self):

@@ -10,6 +10,7 @@ process-local clocks for admission decisions.
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import os
 import uuid
@@ -1178,7 +1179,7 @@ def test_same_key_with_changed_exact_signed_bytes_is_an_idempotency_conflict(
     try:
         rejected_event = audit_session.execute(
             text(
-                "SELECT action, outcome, resource_type, details_json "
+                "SELECT action, outcome, resource_type, resource_id, details_json "
                 "FROM governance_evaluation_audit_events "
                 "WHERE org_id = :org_id "
                 "AND details_json::jsonb ->> 'operation' = :operation "
@@ -1191,9 +1192,36 @@ def test_same_key_with_changed_exact_signed_bytes_is_an_idempotency_conflict(
     assert rejected_event["action"] == "evaluation_v2.mutation.rejected"
     assert rejected_event["outcome"] == "rejected"
     assert rejected_event["resource_type"] == "evaluation_idempotency_key_hash"
+    assert rejected_event["resource_id"] == hashlib.sha256(key.encode("ascii")).hexdigest()
     rejected_details = json.loads(rejected_event["details_json"])
+    scope = _scope(scenario)
+    expected_request_hash = hashlib.sha256(
+        json.dumps(
+            {
+                "body": {
+                    "contractVersion": "2.0.0",
+                    "rawPassport": {
+                        "byteLength": len(raw_b),
+                        "sha256": hashlib.sha256(raw_b).hexdigest(),
+                    },
+                },
+                "method": "POST",
+                "operation": ADMISSION_OPERATION,
+                "scope": {
+                    "organizationId": scope.organization_id,
+                    "runId": scope.run_id,
+                    "suiteExecutionId": scope.suite_execution_id,
+                    "systemId": scope.system_id,
+                },
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()
     assert rejected_details["schemaVersion"] == "evaluation-v2.preclaim-rejection-audit/v1"
     assert rejected_details["operation"] == ADMISSION_OPERATION
+    assert rejected_details["requestHash"] == expected_request_hash
     assert rejected_details["errorCode"] == "idempotency_conflict"
     assert rejected_details["statusCode"] == 409
 
