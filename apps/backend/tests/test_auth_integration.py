@@ -250,15 +250,15 @@ class TestAuthenticationMiddleware:
     def test_public_endpoints_accessible(self, client, setup_jwt):
         """Test that public endpoints are accessible without authentication."""
         public_endpoints = [
-            "/health",
-            "/",
-            "/api",
-            "/api/v1/auth/login",
-            "/api/v1/auth/health"
+            ("GET", "/health"),
+            ("GET", "/"),
+            ("GET", "/api"),
+            ("POST", "/api/v1/auth/login"),
+            ("GET", "/api/v1/auth/health"),
         ]
         
-        for endpoint in public_endpoints:
-            response = client.get(endpoint)
+        for method, endpoint in public_endpoints:
+            response = client.request(method, endpoint)
             # Should not return 401 (may return other status codes for different reasons)
             assert response.status_code != 401
     

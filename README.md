@@ -43,7 +43,7 @@
 
 FairMind is evolving from a model-focused governance application into an evidence-grade AI assurance control plane. The 2027 objective is to make evaluation evidence reproducible, correctly scoped, reviewable, and useful across predictive models, LLMs, agents, code generation, image, audio, video, and multimodal systems.
 
-The current branch is an **internal, default-off trust-foundation alpha**. It implements the evidence contract and verification kernel, but it is not yet a generally available evaluator, certification service, or automatic enforcement product.
+The current branch is an **internal, default-off trust-foundation alpha**. It implements the evidence contract, trust/admission/review foundation, and PostgreSQL-authoritative operational freshness, but it is not yet a generally available evaluator, certification service, or automatic enforcement product.
 
 ### Current assurance boundary
 
@@ -52,7 +52,11 @@ The current branch is an **internal, default-off trust-foundation alpha**. It im
 | Target and suite identity | Implemented in the v2 contract | Immutable planning metadata |
 | Execution envelope and Passport v2 binding | Implemented and tested | Evidence-integrity foundation |
 | Signature, replay, scope, and admission checks | Implemented as a default-off kernel with a separately gated route boundary | Supporting evidence verification |
-| Public admission API and reviewer workflow | Route boundary is composed but disabled; reviewer workflow is not shipped | Do not claim |
+| Issuer, public Ed25519 key, and trust-policy administration | Implemented behind independent default-off gates with PostgreSQL-authoritative mutations | Internal trust-root administration only |
+| Operational evidence freshness | Derived at database time from exact admission, receipt, evaluator, issuer, key, policy, review, expiry, and supersession bindings | Internal evidence-support status; not certification or compliance |
+| Legacy contract v1 plans and runs | Preserved as readable historical records; v2 activation blocks legacy creation, activation, run preparation, and evidence linking | Clone into an exactly bound v2 plan before new execution |
+| Environmental governance evidence | Canonical organization/system API and tenant-bound persistence verified locally on SQLite and PostgreSQL 14 | Scoped evidence workflow only; not validated emissions accounting or compliance proof |
+| Admission, reviewer, and governance-decision workflow | Internal routes and PostgreSQL gates are implemented but remain default-off and are not a public execution capability | Internal alpha only; do not claim general availability |
 | Sandboxed worker execution | Not yet shipped | Do not claim |
 | LLM, agent, code, vision, image, audio, video, and multimodal packs | Not yet independently validated | Planned/experimental only |
 | Pre-deployment, realtime, and post-deployment assurance | Not yet shipped | Do not claim |
@@ -172,12 +176,10 @@ Legacy integrations exist for experiment tracking platforms. Their presence does
 
 FairMind is intended to gather and organize evidence for governance frameworks. Framework mapping is not the same as legal compliance, certification, or an automatic conformity decision.
 
-**AI Bill of Materials (BOM)**
-- Standard SBOM format for AI models
-- Component tracking and provenance
-- Dependency analysis and vulnerability scanning
-- Model lineage and version history
-- Training data documentation
+**AI Bill of Materials (BOM) — planned**
+- The legacy global HTTP API is quarantined and the dashboard is intentionally unavailable.
+- A replacement must enforce authenticated tenant scope, exact action permissions, server-derived identity, and audited persistence.
+- Component provenance, dependency analysis, vulnerability metadata, lineage, and training-data documentation remain roadmap capabilities until independently validated.
 
 **Regulatory Compliance**
 
@@ -372,7 +374,6 @@ Full interactive API documentation with request/response examples:
 
 **Compliance and Governance**
 - `POST /api/v1/compliance/report` - Generate compliance report
-- `POST /api/v1/aibom/generate` - Create AI Bill of Materials
 - `GET /api/v1/compliance/frameworks` - List supported frameworks
 
 **Model Management**
@@ -391,7 +392,7 @@ Full interactive API documentation with request/response examples:
 - `GET /health` - Health check endpoint
 - `GET /api/v1/system/info` - System information
 
-The API catalog includes legacy endpoints. Endpoint presence does not imply that the route is bound to the v2 evidence contract or independently validated.
+The API catalog includes legacy endpoints. Endpoint presence does not imply that the route is bound to the v2 evidence contract or independently validated. The legacy `/api/v1/ai-bom` HTTP surface is intentionally unmounted and also fails closed if mounted directly. It remains quarantined until it has authenticated membership, exact action permissions, server-derived organization and actor identity, and tenant-scoped persistence.
 
 For complete API reference, see [API Documentation](docs/API_ENDPOINTS.md)
 
@@ -410,7 +411,7 @@ For complete API reference, see [API Documentation](docs/API_ENDPOINTS.md)
 | **Test Results** | `/tests/[id]` | Detailed test analysis, W&B/MLflow links, JSON export |
 | **Remediation** | `/remediation` | Select strategies, generate Python code |
 | **Compliance Dashboard** | `/compliance-dashboard` | Policy management, report generation |
-| **AI BOM** | `/ai-bom` | Bill of Materials generation and tracking |
+| **AI BOM** | `/ai-bom` | Explicit unavailable state; legacy read/write API quarantined pending tenant-safe replacement |
 | **Models** | `/models` | Model registry, versioning, lifecycle management |
 | **Monitoring** | `/monitoring` | Real-time metrics, alerts, performance tracking |
 | **Analytics** | `/analytics` | Performance analytics, trend analysis, insights |
@@ -467,7 +468,8 @@ For complete API reference, see [API Documentation](docs/API_ENDPOINTS.md)
 **Testing**
 - pytest with coverage
 - Playwright (E2E)
-- Focused assurance tests: 548 non-PostgreSQL tests and 73 native PostgreSQL tests recorded for the current trust-foundation slice
+- Recorded trust-foundation baseline: 548 non-PostgreSQL tests and 73 native PostgreSQL tests
+- Operational-freshness checkpoint: 212 focused application/API tests and 87 native migration/PostgreSQL tests; one environment-specific collation branch skipped
 - Full-repository backend baseline: not yet green; see the release-gate backlog
 
 ### Frontend
@@ -734,19 +736,55 @@ See [Security Policy](docs/SECURITY.md) for complete security policy.
 
 ### Current phase: 2027 assurance foundation
 
-The current branch is an internal trust-foundation alpha. The roadmap checklist is 20/92 complete (21.7%), with the P1 worker layer, real evaluation engines, modality packs, lifecycle workflows, and rollout gates still open.
+The current branch is an internal trust-foundation alpha. The trustworthy
+control-plane checklist is 16/19 complete (84.2%), and the full roadmap is
+25/92 complete (27.2%). The P1 worker layer, real evaluation engines, modality
+packs, lifecycle workflows, and rollout gates remain open.
 
 **Implemented and verified for the current slice**
 
 - Immutable target and suite identity contracts
+- Narrow Assurance V2 catalog/version, planning, run, evidence, review,
+  decision, and trust application boundaries sharing one audited transactional
+  UoW; the worker port remains declaration-only and default-deny
 - Server-generated execution-envelope binding
 - Passport v2 scope, signature, expiry, replay, and admission primitives
+- A separate default-off, dual-permission imported-report route that persists
+  only terminal claimed material as unverified, human-review-only, and
+  decision-ineligible; PostgreSQL 013i binds its immutable snapshot, exact
+  execution, active authority graph, provenance, chronology, policy expiry,
+  link, and suite projection, while the UI keeps claimed and mixed authority
+  visibly distinct
 - Atomic evidence persistence and separate execution/evidence/review/governance states
-- Focused unit and PostgreSQL verification for the trust-foundation slice
+- Literal, database-backed permissions for every live human Assurance V2 mutation;
+  direct-mounted v2 routers also enforce the master feature gate
+- Default-off, PostgreSQL-authoritative administration for evidence issuers,
+  public Ed25519 verification keys, and immutable trust policies, with exact
+  persisted trust-admin authorization and hardened legacy role delegation
+- Database-time operational freshness derived from the exact evidence and
+  authority graph, with verified-only review gates, current-only governance
+  decisions, historical response qualification, and common-lock serialization
+  against evaluator revocation
+- PostgreSQL-authoritative transactional idempotency with exact 2,592,000-second
+  generations, immutable response/audit bindings, expired-only atomic rollover,
+  and one append-only per-organization audit chain across all 21 enabled
+  Assurance V2 mutation routes
+- Tenant-bound environmental evidence routes, response admission, and migration 013e,
+  verified on SQLite and a disposable local PostgreSQL 14 instance
+- Focused unit, route, SQLite migration-parity, PostgreSQL 14 lifecycle, and
+  concurrent trust-authority verification for the current internal-alpha slices
 
 **Next release gates**
 
-- Complete P0 API permissions, evaluator registry, review workflow, audit chain, and evidence UI
+- Split the remaining oversized SQL repository implementation without changing
+  the shared transaction boundary
+- Implement service-worker authorization, an audited separation override, and
+  independently invocable submit/link surfaces
+- Close the feature-switch row and implement the evidence UI without weakening
+  the default-off boundary
+- Add a separately authenticated least-privilege database runtime identity,
+  runtime-stable catalog proof, and a reviewed purge/erasure lifecycle before
+  describing the idempotency store as production-ready data retention
 - Pass the private governance pilot (Gate A)
 - Build the isolated worker and sandbox (Gate B)
 - Connect and independently benchmark real modality evaluators (Gate C)
@@ -754,7 +792,7 @@ The current branch is an internal trust-foundation alpha. The roadmap checklist 
 
 No compliance certification, automatic approval, automatic enforcement, or generally available “FairMind Verified” claim is made by this branch.
 
-See the [2027 assurance roadmap](docs/superpowers/plans/2026-07-19-fairmind-2027-ai-assurance-todo.md), [Task 12B architecture note](docs/architecture/verified-evidence-admission-task12b.md), and [release-gate backlog](docs/superpowers/plans/2026-08-08-task12b-release-gate-backlog.md).
+See the [2027 assurance roadmap](docs/superpowers/plans/2026-07-19-fairmind-2027-ai-assurance-todo.md), [trust-authority evidence](docs/audits/2026-08-13-p0-trust-authority-administration.md), [operational-freshness evidence](docs/audits/2026-08-13-p0-operational-evidence-freshness.md), [evidence-source/import evidence](docs/audits/2026-08-21-p0-evidence-source-import.md), [Task 12B architecture note](docs/architecture/verified-evidence-admission-task12b.md), and [release-gate backlog](docs/superpowers/plans/2026-08-08-task12b-release-gate-backlog.md).
 
 ---
 

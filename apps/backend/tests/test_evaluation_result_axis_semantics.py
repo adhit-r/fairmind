@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -11,7 +12,8 @@ from src.application.ports.evaluation_workbench import (
     FrozenJsonObject,
     SuiteExecutionRecord,
 )
-from src.application.services.evaluation_workbench_service import (
+from src.application.ports.evidence_freshness import EvidenceFreshnessClassification
+from src.application.evaluation_workbench_contracts import (
     _verify_suite_execution_state,
     aggregate_run_result_axes,
 )
@@ -161,6 +163,17 @@ def test_linked_cancelled_suite_may_retain_pending_evidence_without_false_failur
             {"diagnostic": "Evaluation cancelled before evidence completed."}
         ),
         limitations=("No completed evaluator result was produced.",),
+        operational_freshness=EvidenceFreshnessClassification(
+            classification_status="ok",
+            freshness_contract_version="1.0.0",
+            recorded_freshness_status="current",
+            effective_freshness_status="current",
+            evaluated_at=datetime.fromisoformat(NOW),
+            effective_at=datetime.fromisoformat(NOW) - timedelta(seconds=1),
+            expiring_at=datetime.fromisoformat(NOW) + timedelta(days=1),
+            reason_codes=(),
+            decision_eligible=False,
+        ),
     )
 
     _verify_suite_execution_state(linked)

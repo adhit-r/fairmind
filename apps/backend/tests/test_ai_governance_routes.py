@@ -1,6 +1,6 @@
 """Tests for AI Governance phase-1 routes."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 import uuid
 
 import pytest
@@ -10,7 +10,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from api.main import app
-from config.auth import TokenData, TokenType, UserRole, get_current_active_user
+from config.auth import User as AuthUser, UserRole, auth_manager
 from database.connection import Base, get_db
 from database.models import Organization, OrganizationMember, User
 
@@ -59,27 +59,28 @@ def authenticated_org_database():
         finally:
             db.close()
 
-    async def override_user():
-        now = datetime.now(timezone.utc)
-        return TokenData(
-            user_id=str(user_id),
+    now = datetime.now(timezone.utc)
+    access_token = auth_manager.create_access_token(
+        AuthUser(
+            id=str(user_id),
             email="governance@example.test",
+            username="governance-owner",
             role=UserRole.ADMIN,
-            token_type=TokenType.ACCESS,
-            iat=now,
-            exp=now + timedelta(hours=1),
+            created_at=now,
             permissions=["*"],
         )
+    )
 
     app.dependency_overrides[get_db] = override_db
-    app.dependency_overrides[get_current_active_user] = override_user
+    client.headers["Authorization"] = f"Bearer {access_token}"
     try:
         yield {
             "session_factory": session_factory,
             "org_id": str(org_id),
-            "override_user": override_user,
+            "user_id": str(user_id),
         }
     finally:
+        client.headers.pop("Authorization", None)
         app.dependency_overrides.clear()
         Base.metadata.drop_all(engine)
         engine.dispose()
@@ -250,9 +251,10 @@ def test_ai_governance_lifecycle_summary_persists_stage_progression(authenticate
     request_id = approval_req.json()["request"]["id"]
 
     environmental_resp = client.post(
-        "/api/v1/ai-governance/environment/assess",
+        "/api/v1/ai-governance/organizations/"
+        f"{authenticated_org_database['org_id']}/systems/{system_id}"
+        "/environmental-impact/assess",
         json={
-            "system_id": system_id,
             "assessment": {
                 "boundary_json": {"scope": "release gate"},
                 "lifecycle_phase": "training",
@@ -425,7 +427,7 @@ def test_ai_governance_system_approval_request_flow(authenticated_org_database):
 
 def test_ai_governance_evidence_endpoints_require_authentication(authenticated_org_database):
     system_id = f"model-abc-{uuid.uuid4().hex[:8]}"
-    app.dependency_overrides.pop(get_current_active_user)
+    authorization = client.headers.pop("Authorization")
     try:
         collect_resp = client.post(
             "/api/v1/ai-governance/evidence/collect",
@@ -445,9 +447,7 @@ def test_ai_governance_evidence_endpoints_require_authentication(authenticated_o
             json={"evidence_type": "policy", "content": {}},
         ).status_code == 401
     finally:
-        app.dependency_overrides[get_current_active_user] = authenticated_org_database[
-            "override_user"
-        ]
+        client.headers["Authorization"] = authorization
 
 
 def test_ai_governance_risk_dashboard_and_assessment():

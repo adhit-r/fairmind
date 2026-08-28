@@ -54,7 +54,7 @@ The platform follows a lifecycle model: **Onboard → Assess → Govern → Reme
 | **LLM Bias Detection** | WEAT, SEAT, Minimal Pairs, attention viz, activation patching endpoints | Results rendering, end-to-end testing |
 | **Multimodal Bias** | Image/audio/video bias detection endpoints | Frontend integration, real model inference |
 | **India Compliance** | 14 DPDP requirements, NITI Aayog principles, framework definitions | Deep automated checks, evidence auto-collection |
-| **AI Bill of Materials** | CycloneDX generation service, component management | Frontend polish, dependency graph viz |
+| **AI Bill of Materials** | Legacy implementation retained but HTTP access quarantined | Tenant-safe identity, authorization, persistence, audit, and independent validation before UI re-enable |
 | **Marketplace** | Model listing, search, detail pages | Community features, publishing workflow |
 | **MLOps Integration** | W&B and MLflow service stubs | Actual pipeline integration |
 | **Model Provenance** | Lineage tracking endpoint | Frontend visualization |

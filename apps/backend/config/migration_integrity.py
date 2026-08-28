@@ -76,6 +76,47 @@ FROZEN_013C_OPERATOR_CHECKSUM = "8f7ec1bda9041f16a03ace75202e590fc8a92947495a792
 FROZEN_SQLITE_013C_FIXTURE_CHECKSUM = (
     "876c377bfb6063b063c0f6cbd20d31089187f0ceae7d40d5ba1ab44c81ecb50d"
 )
+_FROZEN_013D_CHECKSUM = "d5d167dabc3d2458aa5aab6d2cb120ae9c90f798bf4ace6b193b58d4660c6cb9"
+FROZEN_013D_OPERATOR_CHECKSUM = "7a1d368fc1556e6286e047bf73c47878ab69fb31d2b25e7cf139b6919a00d77d"
+FROZEN_SQLITE_013D_FIXTURE_CHECKSUM = (
+    "1d88a2c78cb10871259471fda2b9336043756d0a989941afbc616e10df5e015f"
+)
+_FROZEN_013E_CHECKSUM = "95f5b016fa9abbffab7d7ff45547c888364ccf0d29d26b9f22d4440ce0a3cf32"
+FROZEN_013E_OPERATOR_CHECKSUM = "6397810191ab919a0bf3246a17d04284344afa96acfd291b9485e361c4fcb1e6"
+FROZEN_SQLITE_013E_FIXTURE_CHECKSUM = (
+    "055b763555474740fa72cdc16b6e351906d7716e3b980c83ec986ae04314779e"
+)
+_FROZEN_013F_CHECKSUM = "c6cd4b77875b3fe3cc9c2140d9ca1f619e17adbefbedc37a31cea342dbc64fb6"
+FROZEN_013F_OPERATOR_CHECKSUM = (
+    "55cae25a29e05bcb538b049dbe743994d8e19f759dd0c19992ed494405f1120d"
+)
+FROZEN_SQLITE_013F_FIXTURE_CHECKSUM = (
+    "0b0b7ba6d7bb5616445b1ea9c00cf1dbe18ffb3f213a3f5037883ba341434c25"
+)
+_FROZEN_013G_CHECKSUM = "ec8c29cabc98906d43c44aaf138e0d5e6a4458e86702298170b3b5964849ebf8"
+FROZEN_013G_OPERATOR_CHECKSUM = (
+    "4d7e1db2453832b409b9dcc8dcf9f8027e589a0f081dd1a64a4d0806cf2541f3"
+)
+FROZEN_SQLITE_013G_FIXTURE_CHECKSUM = (
+    "9d0a3df360936577e08dfa25fb249e180bafa208053b0cc646e67ce74abf9e61"
+)
+_FROZEN_013H_CHECKSUM = "9798cca6bae5e66036ff08caf3eeebcb9d8ed78e5ea669ec403a4bf06e4df84b"
+FROZEN_013H_OPERATOR_CHECKSUM = (
+    "71c58297d218c9da7c54d0f13887eec1250d11e463c02bbca2f3981b2b13e180"
+)
+FROZEN_SQLITE_013H_FIXTURE_CHECKSUM = (
+    "33e6eb96c95c9734a8efe50c760c59bd225099aa5ab2fb3a0441c3fe706fdf78"
+)
+_FROZEN_013I_CHECKSUM = "83c77841beb21dbf96d1e40260534d262dbf21941b21fac4121964a065e36f94"
+FROZEN_013I_OPERATOR_CHECKSUM = "69c4bda5b5485da32f522d8dffd690f3875c05fe3bba576a21338cd814159c8d"
+FROZEN_SQLITE_013I_FIXTURE_CHECKSUM = (
+    "fda2fcf715e0622aa8bfde7e07ff2c37dca4028e7ae56511357e01b6ee9befc2"
+)
+_FROZEN_013J_CHECKSUM = "bc5deb123981ee968061ec695821e8d00a8cc860d3c2169f9ca81ae6805846b5"
+FROZEN_013J_OPERATOR_CHECKSUM = "3a3cab3184178958bacd67c6573dedc9b624293b3b5cb773d899b20e02eb2f53"
+FROZEN_SQLITE_013J_FIXTURE_CHECKSUM = (
+    "60e6377e21e739ab1ce845d265ed736fb50d74af47846a227a628182f6ebc746"
+)
 
 FROZEN_ASSURANCE_MIGRATIONS = (
     FrozenMigration(
@@ -98,13 +139,53 @@ FROZEN_ASSURANCE_MIGRATIONS = (
         _FROZEN_013C_CHECKSUM,
         _MIGRATIONS / "013c_evidence_verification_receipt.sql",
     ),
+    FrozenMigration(
+        "013c-to-013d-evaluator-catalog-v1",
+        _FROZEN_013D_CHECKSUM,
+        _MIGRATIONS / "013d_evaluator_catalog.sql",
+    ),
+    FrozenMigration(
+        "013d-to-013e-environmental-tenant-scope-v1",
+        _FROZEN_013E_CHECKSUM,
+        _MIGRATIONS / "013e_environmental_tenant_scope.sql",
+    ),
+    FrozenMigration(
+        "013e-to-013f-trust-authority-integrity-v1",
+        _FROZEN_013F_CHECKSUM,
+        _MIGRATIONS / "013f_trust_authority_integrity.sql",
+    ),
+    FrozenMigration(
+        "013f-to-013g-operational-evidence-freshness-v1",
+        _FROZEN_013G_CHECKSUM,
+        _MIGRATIONS / "013g_operational_evidence_freshness.sql",
+    ),
+    FrozenMigration(
+        "013g-to-013h-idempotency-retention-integrity-v1",
+        _FROZEN_013H_CHECKSUM,
+        _MIGRATIONS / "013h_idempotency_retention_integrity.sql",
+    ),
+    FrozenMigration(
+        "013h-to-013i-imported-evidence-delivery-integrity-v1",
+        _FROZEN_013I_CHECKSUM,
+        _MIGRATIONS / "013i_imported_evidence_delivery_integrity.sql",
+    ),
+    FrozenMigration(
+        "013i-to-013j-owner-decision-override-integrity-v1",
+        _FROZEN_013J_CHECKSUM,
+        _MIGRATIONS / "013j_owner_decision_override_integrity.sql",
+    ),
 )
 
 POSTGRESQL_ASSURANCE_RELATIONS = frozenset(
     {
         "fairmind_operator_migration_ledger",
+        "organizations",
+        "org_members",
+        "org_roles",
         "governance_workspaces",
         "governance_ai_systems",
+        "governance_evidence",
+        "governance_environmental_assessments",
         "governance_evaluation_target_versions",
         "governance_evaluation_suite_versions",
         "governance_evaluation_plans",
@@ -119,6 +200,7 @@ POSTGRESQL_ASSURANCE_RELATIONS = frozenset(
         "governance_evidence_passport_revisions",
         "governance_evidence_admissions",
         "governance_evidence_verification_receipts",
+        "governance_evaluator_registrations",
         "governance_evidence_reviews",
         "governance_evidence_nonce_claims",
         "governance_evaluation_suite_evidence_links",
@@ -140,11 +222,35 @@ POSTGRESQL_ASSURANCE_FUNCTIONS = frozenset(
         "fairmind_expected_decision_evidence_set_013b",
         "fairmind_is_exact_decision_evidence_set_shape_013b",
         "fairmind_jsonb_object_member_count_013c",
+        "fairmind_evaluator_registration_binding_hash_013d",
         "fairmind_verification_receipt_has_exact_verified_admission_013c",
         "fairmind_verification_receipt_is_relationally_valid_013c",
         "fairmind_verification_receipt_matches_admission_013c",
         "fairmind_verified_admission_has_exact_receipt_013c",
         "fairmind_freshness_transition_allowed",
+        "fairmind_canonical_clock_utc_013f",
+        "fairmind_is_canonical_ed25519_jwk_013f",
+        "fairmind_is_canonical_text_array_013f",
+        "fairmind_is_exact_trust_policy_013f",
+        "fairmind_is_semver_013f",
+        "fairmind_semver_gt_013f",
+        "fairmind_sha256_text_013f",
+        "fairmind_classify_evidence_freshness_013g",
+        "fairmind_lock_evidence_authority_org_013g",
+        "fairmind_gate_evidence_review_013g",
+        "fairmind_stamp_evaluator_registration_revocation_013g",
+        "fairmind_gate_evaluation_decision_013g",
+        "fairmind_idempotency_format_utc_013h",
+        "fairmind_idempotency_clock_utc_013h",
+        "fairmind_idempotency_row_is_valid_013h",
+        "fairmind_guard_idempotency_record_013h",
+        "fairmind_unverified_import_delivery_is_valid_013i",
+        "fairmind_unverified_import_projection_is_valid_013i",
+        "fairmind_guard_unverified_import_delivery_013i",
+        "fairmind_guard_unverified_import_projection_013i",
+        "fairmind_owner_permission_array_is_valid_013j",
+        "fairmind_owner_decision_override_authorized_013j",
+        "fairmind_validate_owner_override_audit_013j",
         "fairmind_initial_layer_verdicts_v1_for_run",
         "fairmind_is_canonical_utc_timestamp",
         "fairmind_is_initial_layer_verdicts",
@@ -167,13 +273,20 @@ POSTGRESQL_ASSURANCE_FUNCTIONS = frozenset(
         "guard_governance_evidence_admission_signer_013b",
         "guard_governance_evidence_admission_receipt_013c",
         "guard_governance_evidence_issuer_013b",
+        "guard_governance_evidence_issuer_013f",
         "guard_governance_evidence_nonce_claim_013b",
         "guard_governance_evidence_review_013b",
         "guard_governance_evidence_run_namespace_013b",
         "guard_governance_evidence_signing_key_013b",
+        "guard_governance_evidence_signing_key_013f",
         "guard_governance_evidence_trust_policy_013b",
+        "guard_governance_evidence_trust_policy_013f",
         "guard_governance_evidence_verification_receipt_013c",
         "guard_governance_evidence_verification_receipt_parent_013c",
+        "guard_governance_evaluator_registration_insert_013d",
+        "guard_governance_evaluator_registration_update_013d",
+        "guard_governance_evaluator_registration_delete_013d",
+        "guard_governance_evidence_receipt_catalog_013d",
         "reject_governance_evaluation_013b_mutation",
         "reject_governance_evaluation_audit_mutation",
     }
@@ -232,7 +345,22 @@ POSTGRESQL_ASSURANCE_REQUIRED_TRIGGERS = frozenset(
         "governance_evidence_trust_policies_guard_update",
         "governance_evidence_verification_receipts_guard_insert",
         "governance_evidence_verification_receipts_no_delete",
+        "governance_evaluator_registrations_guard_insert",
+        "governance_evaluator_registrations_guard_update",
+        "governance_evaluator_registrations_no_delete",
+        "governance_evidence_verification_receipts_catalog_guard_013d",
         "governance_evidence_verification_receipts_no_update",
+        "000_013g_evidence_issuers_common_lock",
+        "000_013g_evidence_signing_keys_common_lock",
+        "000_013g_evidence_trust_policies_common_lock",
+        "000_013g_evaluator_registrations_common_lock",
+        "001_013g_evaluator_registration_revocation_clock",
+        "000_013g_evidence_reviews_freshness_gate",
+        "000_013g_evaluation_decisions_freshness_gate",
+        "governance_idempotency_records_integrity_013h",
+        "000_013i_unverified_import_delivery_guard",
+        "000_013i_unverified_import_projection_guard",
+        "governance_evaluation_decisions_owner_override_audit_013j",
     }
 )
 
@@ -242,7 +370,7 @@ POSTGRESQL_ASSURANCE_CATALOG_SPEC = PostgreSQLCatalogSpec(
     required_triggers=POSTGRESQL_ASSURANCE_REQUIRED_TRIGGERS,
 )
 
-# Measured from two independent full operator-chain installations on
+# Measured from two independent full operator-chain installations through 013j on
 # PostgreSQL 14 and cross-checked against a direct-payload installation. The
 # PostgreSQL major is part of the canonical catalog payload because PostgreSQL
 # deparser output can change across major versions.
@@ -251,7 +379,7 @@ FROZEN_POSTGRESQL_ASSURANCE_CATALOGS: Mapping[int, FrozenPostgreSQLCatalog] = Ma
         14: FrozenPostgreSQLCatalog(
             spec=POSTGRESQL_ASSURANCE_CATALOG_SPEC,
             postgresql_major=14,
-            digest=("714fc4ea6f69085ad13bdc3142d38432e405cc17d33d77f93161f3e957f3c9c6"),
+            digest=("c181fd00d2c65009cd17a673c0462d92d557c73dc7976f800a4bcb83ae4c6fd2"),
         )
     }
 )
@@ -260,6 +388,8 @@ SQLITE_ASSURANCE_TABLES = frozenset(
     {
         "governance_workspaces",
         "governance_ai_systems",
+        "governance_evidence",
+        "governance_environmental_assessments",
         "governance_evaluation_target_versions",
         "governance_evaluation_suite_versions",
         "governance_evaluation_plans",
@@ -274,6 +404,7 @@ SQLITE_ASSURANCE_TABLES = frozenset(
         "governance_evidence_passport_revisions",
         "governance_evidence_admissions",
         "governance_evidence_verification_receipts",
+        "governance_evaluator_registrations",
         "governance_evidence_reviews",
         "governance_evidence_nonce_claims",
         "governance_evaluation_suite_evidence_links",
@@ -291,6 +422,9 @@ SQLITE_ASSURANCE_INDEXES = frozenset(
         "uq_governance_workspace_org",
         "uq_governance_ai_system_tenant",
         "uq_governance_ai_system_workspace_tenant",
+        "uq_governance_evidence_tenant",
+        "idx_governance_env_assessments_org_system_version",
+        "idx_governance_env_assessments_recommendation",
         "idx_governance_evaluation_targets_scope_created_keyset",
         "uq_governance_evaluation_target_kind_tenant",
         "idx_governance_evaluation_targets_scope_status",
@@ -304,12 +438,16 @@ SQLITE_ASSURANCE_INDEXES = frozenset(
         "uq_governance_evaluation_run_org_envelope_nonce",
         "idx_governance_evidence_issuers_org_status",
         "idx_governance_evidence_signing_keys_org_issuer_key_revoked",
+        "uq_governance_evidence_signing_key_fingerprint",
         "idx_governance_evidence_trust_policies_org_status_version",
+        "uq_governance_evidence_trust_policy_active_org",
         "idx_governance_evidence_runs_org_system_schema_created",
         "uq_governance_evidence_run_workspace_tenant",
         "idx_evidence_passport_revisions_tenant_run",
         "idx_governance_evidence_admissions_scope_execution_created",
         "idx_governance_evidence_verification_receipts_scope",
+        "idx_governance_evaluator_registrations_org_status",
+        "idx_governance_evidence_receipts_catalog_registration",
         "idx_governance_evidence_reviews_admission_version",
         "idx_governance_evidence_nonce_claims_scope_admission",
         "idx_governance_evaluation_suite_evidence_links_scope",
@@ -355,6 +493,10 @@ SQLITE_ASSURANCE_TRIGGERS = frozenset(
         "governance_evidence_verification_receipts_guard_insert",
         "governance_evidence_verification_receipts_no_update",
         "governance_evidence_verification_receipts_no_delete",
+        "governance_evaluator_registrations_guard_insert",
+        "governance_evaluator_registrations_guard_update",
+        "governance_evaluator_registrations_no_delete",
+        "governance_evidence_verification_receipts_catalog_guard_013d",
         "governance_evidence_reviews_guard_insert",
         "governance_evidence_reviews_no_update",
         "governance_evidence_reviews_no_delete",
@@ -367,15 +509,16 @@ SQLITE_ASSURANCE_TRIGGERS = frozenset(
         "governance_evaluation_decisions_guard_insert",
         "governance_evaluation_decisions_no_update",
         "governance_evaluation_decisions_no_delete",
-        "governance_evidence_trust_policies_guard_insert",
-        "governance_evidence_trust_policies_guard_update",
-        "governance_evidence_trust_policies_guard_delete",
-        "governance_evidence_issuers_guard_insert",
-        "governance_evidence_issuers_guard_update",
-        "governance_evidence_issuers_guard_delete",
-        "governance_evidence_signing_keys_guard_insert",
-        "governance_evidence_signing_keys_guard_update",
-        "governance_evidence_signing_keys_guard_delete",
+        "governance_evidence_trust_policies_guard_insert_013f",
+        "governance_evidence_trust_policies_guard_update_013f",
+        "governance_evidence_trust_policies_lineage_activate_013f",
+        "governance_evidence_trust_policies_guard_delete_013f",
+        "governance_evidence_issuers_guard_insert_013f",
+        "governance_evidence_issuers_guard_update_013f",
+        "governance_evidence_issuers_guard_delete_013f",
+        "governance_evidence_signing_keys_guard_insert_013f",
+        "governance_evidence_signing_keys_guard_update_013f",
+        "governance_evidence_signing_keys_guard_delete_013f",
         "governance_evidence_runs_schema_source_guard_insert",
         "governance_evidence_runs_immutable_update",
         "governance_evidence_runs_immutable_delete",
@@ -385,6 +528,15 @@ SQLITE_ASSURANCE_TRIGGERS = frozenset(
         "governance_evidence_passport_revisions_immutable_delete",
         "governance_evidence_artifacts_immutable_update",
         "governance_evidence_artifacts_immutable_delete",
+        "governance_evidence_reviews_freshness_unavailable_013g",
+        "governance_evaluation_decisions_freshness_unavailable_013g",
+        "governance_idempotency_records_insert_unavailable_013h",
+        "governance_idempotency_records_update_unavailable_013h",
+        "governance_idempotency_records_delete_unavailable_013h",
+        "governance_evidence_admissions_import_delivery_guard_013i",
+        "governance_evaluation_suite_executions_import_projection_guard_013i",
+        "governance_evidence_reviews_separation_guard_013j",
+        "governance_evaluation_decisions_owner_override_unavailable_013j",
         "governance_evidence_org_insert",
         "governance_evidence_org_update",
         "governance_evaluation_audit_events_no_update",
@@ -408,8 +560,9 @@ SQLITE_ASSURANCE_VIEWS = frozenset(
 # named above, sorted by object type and name.  Unlike a name-only inventory,
 # this freezes table columns/checks/FKs, explicit indexes, trigger bodies, and
 # security-critical view definitions.
-# Replace only after the complete 013c SQLite fixture has passed review.
-SQLITE_ASSURANCE_CATALOG_DIGEST = "4e73091e481f1259ce830c6697d678e3f60d368d3d0b4deec1911cb2516b8b82"
+# Measured after the complete 013j SQLite fail-closed fixture was installed
+# twice and its source checksum was frozen.
+SQLITE_ASSURANCE_CATALOG_DIGEST = "90e595b216e7907a92872dcfc4e0478c831298eabd5536919cb05eb85fdfc6c7"
 
 _SQLITE_ASSURANCE_OBJECTS = {
     "table": SQLITE_ASSURANCE_TABLES,
@@ -1284,15 +1437,59 @@ def _sqlite_catalog_digest(
 
 def verify_sqlite_assurance_schema(connection) -> None:
     """Validate the parity fixture without inventing a PostgreSQL ledger."""
-    fixture_path = _MIGRATIONS / "fixtures" / "013c_evidence_verification_receipt.sqlite.sql"
-    try:
-        fixture_checksum = hashlib.sha256(fixture_path.read_bytes()).hexdigest()
-    except OSError as error:
-        raise MigrationIntegrityError(
-            "SQLite 013c bundled fixture source is unavailable"
-        ) from error
-    if fixture_checksum != FROZEN_SQLITE_013C_FIXTURE_CHECKSUM:
-        raise MigrationIntegrityError("SQLite 013c bundled fixture checksum drift")
+    fixtures = (
+        (
+            "013c",
+            _MIGRATIONS / "fixtures" / "013c_evidence_verification_receipt.sqlite.sql",
+            FROZEN_SQLITE_013C_FIXTURE_CHECKSUM,
+        ),
+        (
+            "013d",
+            _MIGRATIONS / "fixtures" / "013d_evaluator_catalog.sqlite.sql",
+            FROZEN_SQLITE_013D_FIXTURE_CHECKSUM,
+        ),
+        (
+            "013e",
+            _MIGRATIONS / "fixtures" / "013e_environmental_tenant_scope.sqlite.sql",
+            FROZEN_SQLITE_013E_FIXTURE_CHECKSUM,
+        ),
+        (
+            "013f",
+            _MIGRATIONS / "fixtures" / "013f_trust_authority_integrity.sqlite.sql",
+            FROZEN_SQLITE_013F_FIXTURE_CHECKSUM,
+        ),
+        (
+            "013g",
+            _MIGRATIONS / "fixtures" / "013g_operational_evidence_freshness.sqlite.sql",
+            FROZEN_SQLITE_013G_FIXTURE_CHECKSUM,
+        ),
+        (
+            "013h",
+            _MIGRATIONS / "fixtures" / "013h_idempotency_retention_integrity.sqlite.sql",
+            FROZEN_SQLITE_013H_FIXTURE_CHECKSUM,
+        ),
+        (
+            "013i",
+            _MIGRATIONS / "fixtures" / "013i_imported_evidence_delivery_integrity.sqlite.sql",
+            FROZEN_SQLITE_013I_FIXTURE_CHECKSUM,
+        ),
+        (
+            "013j",
+            _MIGRATIONS / "fixtures" / "013j_owner_decision_override_integrity.sqlite.sql",
+            FROZEN_SQLITE_013J_FIXTURE_CHECKSUM,
+        ),
+    )
+    for version, fixture_path, frozen_checksum in fixtures:
+        try:
+            fixture_checksum = hashlib.sha256(fixture_path.read_bytes()).hexdigest()
+        except OSError as error:
+            raise MigrationIntegrityError(
+                f"SQLite {version} bundled fixture source is unavailable"
+            ) from error
+        if fixture_checksum != frozen_checksum:
+            raise MigrationIntegrityError(
+                f"SQLite {version} bundled fixture checksum drift"
+            )
 
     foreign_keys = connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one()
     if foreign_keys != 1:

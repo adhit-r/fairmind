@@ -4,7 +4,8 @@ Test configuration and fixtures for FairMind backend tests.
 
 import pytest
 import pytest_asyncio
-from typing import AsyncGenerator, Generator
+from dataclasses import dataclass
+from typing import Any, AsyncGenerator, Generator
 from fastapi.testclient import TestClient
 from httpx import AsyncClient, ASGITransport
 import tempfile
@@ -14,15 +15,15 @@ from pathlib import Path
 import uuid
 
 from api.main import app
-from config.auth import TokenData, TokenType, UserRole, get_current_active_user
+from config.auth import User as AuthUser, UserRole, auth_manager
 from config.settings import Settings
 from database.connection import Base, get_db
+from database.governance_models import GovernanceAISystem, GovernanceWorkspace
 from database.models import Organization, OrganizationMember, User
 from middleware.security import RateLimitMiddleware
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
-from src.application.services import environmental_service
 
 
 class TestSettings(Settings):
@@ -92,9 +93,24 @@ def client(test_settings: TestSettings, temp_dir: Path) -> Generator[TestClient,
     app.dependency_overrides = {}
 
 
+@dataclass(frozen=True)
+class EnvironmentalGovernanceFixture:
+    client: TestClient
+    org_id: str
+    foreign_org_id: str
+    foreign_system_id: str
+    session_factory: Any
+
+    def __iter__(self):
+        """Keep the original ``client, org_id`` fixture contract readable."""
+
+        yield self.client
+        yield self.org_id
+
+
 @pytest.fixture
-def environmental_governance_client() -> Generator[tuple[TestClient, str], None, None]:
-    """Provide an authenticated, organization-scoped isolated API client."""
+def environmental_governance_client() -> Generator[EnvironmentalGovernanceFixture, None, None]:
+    """Provide a bearer-authenticated client with an isolated organization fixture."""
     engine = create_engine(
         "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
     )
@@ -102,42 +118,96 @@ def environmental_governance_client() -> Generator[tuple[TestClient, str], None,
     session_factory = sessionmaker(bind=engine)
     org_id = str(uuid.uuid4())
     user_id = uuid.uuid4()
+    foreign_org_id = str(uuid.uuid4())
+    foreign_user_id = uuid.uuid4()
+    foreign_workspace_id = str(uuid.uuid4())
+    foreign_system_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
-    active_user = TokenData(
-        user_id=str(user_id),
-        email="environment-owner@example.test",
-        role=UserRole.ADMIN,
-        token_type=TokenType.ACCESS,
-        iat=now,
-        exp=now,
+    access_token = auth_manager.create_access_token(
+        AuthUser(
+            id=str(user_id),
+            email="environment-owner@example.test",
+            username="environment-owner",
+            role=UserRole.ADMIN,
+            created_at=now,
+            permissions=["*"],
+        )
     )
 
     session = session_factory()
     session.execute(
-        User.__table__.insert().values(
-            id=user_id,
-            email=active_user.email,
-            username="environment-owner",
+        User.__table__.insert(),
+        [
+            {
+                "id": user_id,
+                "email": "environment-owner@example.test",
+                "username": "environment-owner",
+            },
+            {
+                "id": foreign_user_id,
+                "email": "environment-foreign@example.test",
+                "username": "environment-foreign",
+            },
+        ],
+    )
+    session.execute(
+        Organization.__table__.insert(),
+        [
+            {
+                "id": uuid.UUID(org_id),
+                "name": "Environmental Test Organization",
+                "slug": f"environment-{org_id[:8]}",
+                "owner_id": user_id,
+            },
+            {
+                "id": uuid.UUID(foreign_org_id),
+                "name": "Foreign Environmental Organization",
+                "slug": f"environment-{foreign_org_id[:8]}",
+                "owner_id": foreign_user_id,
+            },
+        ],
+    )
+    session.execute(
+        OrganizationMember.__table__.insert(),
+        [
+            {
+                "id": uuid.uuid4(),
+                "org_id": uuid.UUID(org_id),
+                "user_id": user_id,
+                "role": "owner",
+                "status": "active",
+            },
+            {
+                "id": uuid.uuid4(),
+                "org_id": uuid.UUID(foreign_org_id),
+                "user_id": foreign_user_id,
+                "role": "owner",
+                "status": "active",
+            },
+        ],
+    )
+    session.execute(
+        GovernanceWorkspace.__table__.insert().values(
+            id=foreign_workspace_id,
+            org_id=foreign_org_id,
+            name="Foreign Environmental Workspace",
+            created_at=now.isoformat(),
+            updated_at=now.isoformat(),
         )
     )
     session.execute(
-        Organization.__table__.insert().values(
-            id=uuid.UUID(org_id),
-            name="Environmental Test Organization",
-            slug=f"environment-{org_id[:8]}",
-            owner_id=user_id,
+        GovernanceAISystem.__table__.insert().values(
+            id=foreign_system_id,
+            workspace_id=foreign_workspace_id,
+            org_id=foreign_org_id,
+            name="Foreign Environmental System",
+            risk_tier="high",
+            lifecycle_stage="govern",
+            metadata_json="{}",
+            created_at=now.isoformat(),
+            updated_at=now.isoformat(),
         )
     )
-    session.execute(
-        OrganizationMember.__table__.insert().values(
-            id=uuid.uuid4(),
-            org_id=uuid.UUID(org_id),
-            user_id=user_id,
-            role="owner",
-            status="active",
-        )
-    )
-    environmental_service._ensure_environmental_schema(session)
     session.commit()
     session.close()
 
@@ -148,14 +218,19 @@ def environmental_governance_client() -> Generator[tuple[TestClient, str], None,
         finally:
             database_session.close()
 
-    async def override_user():
-        return active_user
-
     app.dependency_overrides[get_db] = override_db
-    app.dependency_overrides[get_current_active_user] = override_user
     try:
-        with TestClient(app) as test_client:
-            yield test_client, org_id
+        with TestClient(
+            app,
+            headers={"Authorization": f"Bearer {access_token}"},
+        ) as test_client:
+            yield EnvironmentalGovernanceFixture(
+                client=test_client,
+                org_id=org_id,
+                foreign_org_id=foreign_org_id,
+                foreign_system_id=foreign_system_id,
+                session_factory=session_factory,
+            )
     finally:
         app.dependency_overrides.clear()
         Base.metadata.drop_all(engine)

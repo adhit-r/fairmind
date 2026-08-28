@@ -264,6 +264,7 @@ async function mockWorkbench(page: Page, options: MockOptions = {}) {
   let firstSystemApprovalLoads = 0
   let savedReports = structuredClone(options.savedReports ?? [])
   let secondSavedReports = structuredClone(options.secondSavedReports ?? [])
+  const environmentalImpactRequests: string[] = []
 
   await page.addInitScript(() => {
     window.localStorage.setItem('access_token', 'playwright-token')
@@ -559,8 +560,18 @@ async function mockWorkbench(page: Page, options: MockOptions = {}) {
       approvalRequest = approvalRequest ? { ...approvalRequest, status: decision.decision } : null
       return fulfillJson(route, approvalDecisions.at(-1))
     }
-    if (path === '/api/v1/systems/system-1/environmental-impact') {
-      return fulfillJson(route, options.environmentalImpact ?? {})
+    if (path.endsWith('/environmental-impact')) {
+      environmentalImpactRequests.push(path)
+      const scopedPath = path.match(
+        /^\/api\/v1\/ai-governance\/organizations\/([^/]+)\/systems\/([^/]+)\/environmental-impact$/,
+      )
+      return fulfillJson(route, options.environmentalImpact ?? {
+        orgId: scopedPath?.[1] ?? organization.id,
+        systemId: scopedPath?.[2] ?? system.id,
+        latest: null,
+        versionTrail: [],
+        empty: true,
+      })
     }
     if (path === '/api/v1/ai-governance/reports' && request.method() === 'GET') {
       const systemId = url.searchParams.get('system_id')
@@ -596,7 +607,7 @@ async function mockWorkbench(page: Page, options: MockOptions = {}) {
     return fulfillJson(route, [])
   })
 
-  return { patchedAssessmentIds }
+  return { patchedAssessmentIds, environmentalImpactRequests }
 }
 
 test('activates a framework and completes the control review journey by keyboard', async ({ page }) => {
@@ -992,9 +1003,10 @@ test('uses the reports route as a read-only auditor lens and redirects legacy bo
 })
 
 test('retains persisted approval decisions and environmental governance on the assurance overview', async ({ page }) => {
-  await mockWorkbench(page, {
+  const mocks = await mockWorkbench(page, {
     initiallyAssigned: true,
     environmentalImpact: {
+      orgId: organization.id,
       systemId: system.id,
       generatedAt: '2026-07-16T08:00:00Z',
       version: 'env-3',
@@ -1021,6 +1033,52 @@ test('retains persisted approval decisions and environmental governance on the a
   await expect(environmental).toContainText('31.8 kg CO2e')
   await expect(environmental).toContainText('Conditional')
   await expect(environmental).toContainText('Cloud energy export')
+  expect(mocks.environmentalImpactRequests).toContain(
+    '/api/v1/ai-governance/organizations/org-1/systems/system-1/environmental-impact',
+  )
+  expect(mocks.environmentalImpactRequests.some((path) => path.startsWith('/api/v1/systems/'))).toBe(false)
+})
+
+test('rejects environmental governance returned for another organization', async ({ page }) => {
+  await mockWorkbench(page, {
+    initiallyAssigned: true,
+    environmentalImpact: {
+      orgId: 'org-other',
+      systemId: system.id,
+      latest: null,
+      versionTrail: [],
+      empty: true,
+    },
+  })
+
+  await page.goto('/ai-governance')
+  const environmental = page
+    .getByTestId('governance-assurance-overview')
+    .getByRole('region', { name: 'Environmental governance' })
+  await expect(environmental.getByRole('alert')).toContainText('response scope did not match')
+})
+
+test('rejects a nested environmental record returned for another system', async ({ page }) => {
+  await mockWorkbench(page, {
+    initiallyAssigned: true,
+    environmentalImpact: {
+      orgId: organization.id,
+      systemId: system.id,
+      latest: {
+        orgId: organization.id,
+        systemId: secondSystem.id,
+        metrics: { total_kwh: 999, total_kg_co2e_location: 999 },
+      },
+      versionTrail: [],
+    },
+  })
+
+  await page.goto('/ai-governance')
+  const environmental = page
+    .getByTestId('governance-assurance-overview')
+    .getByRole('region', { name: 'Environmental governance' })
+  await expect(environmental.getByRole('alert')).toContainText('response scope did not match')
+  await expect(environmental).not.toContainText('999 kWh')
 })
 
 test('matches each selected assignment to its own framework version across multiple catalogs', async ({ page }) => {

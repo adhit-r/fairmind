@@ -31,9 +31,7 @@ const endpoints: Array<{ path: string; method: 'GET' | 'POST' | 'PUT' | 'DELETE'
   { path: '/api/v1/bias-detection/detect', method: 'POST', description: 'Bias detection' },
   { path: '/api/v1/modern-bias-detection/comprehensive-evaluation', method: 'POST', description: 'Modern bias evaluation' },
   
-  // AI BOM
-  { path: '/api/v1/ai-bom/documents', method: 'GET', description: 'AI BOM documents' },
-  { path: '/api/v1/ai-bom/stats', method: 'GET', description: 'AI BOM stats' },
+  // The legacy AI-BOM HTTP API is intentionally excluded while quarantined.
   
   // Analytics
   { path: '/api/v1/core/metrics/summary', method: 'GET', description: 'Metrics summary' },
@@ -160,4 +158,3 @@ async function verifyAllIntegrations() {
 
 // Run verification
 verifyAllIntegrations().catch(console.error)
-

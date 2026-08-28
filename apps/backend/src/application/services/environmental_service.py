@@ -29,106 +29,8 @@ ENV_EVIDENCE_TYPE = "environmental_impact"
 ENV_FRAMEWORK = "environmental_governance"
 PROFILE_VERSION = "0.2.0"
 
-_tables_ready = False
-
-
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
-
-
-def _ensure_tables(db: Session) -> None:
-    """Create governance tables on first use."""
-    global _tables_ready
-    if _tables_ready:
-        return
-    import database.governance_models  # noqa: F401
-    from database.connection import Base, db_manager
-
-    Base.metadata.create_all(bind=db_manager.engine)
-    _ensure_environmental_schema(db)
-    _tables_ready = True
-
-
-def _sqlite_columns(db: Session, table_name: str) -> set[str]:
-    rows = db.execute(text(f"PRAGMA table_info({table_name})")).fetchall()
-    return {row.name for row in rows}
-
-
-def _add_column_if_missing(db: Session, table_name: str, column_name: str, ddl: str) -> None:
-    dialect = db.bind.dialect.name if db.bind is not None else "sqlite"
-    if dialect == "sqlite":
-        if column_name in _sqlite_columns(db, table_name):
-            return
-        db.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {ddl}"))
-        return
-    db.execute(text(f"ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS {ddl}"))
-
-
-def _ensure_environmental_schema(db: Session) -> None:
-    """Patch existing runtime DBs that predate the FairMind-E schema."""
-    db.execute(
-        text(
-            """
-            CREATE TABLE IF NOT EXISTS governance_environmental_assessments (
-                id TEXT PRIMARY KEY,
-                system_id TEXT NOT NULL,
-                evidence_id TEXT,
-                version INTEGER NOT NULL DEFAULT 1,
-                boundary_json TEXT NOT NULL DEFAULT '{}',
-                period_start TEXT,
-                period_end TEXT,
-                lifecycle_phase TEXT NOT NULL DEFAULT 'inference',
-                functional_unit TEXT NOT NULL DEFAULT '1000_requests',
-                impact_type TEXT NOT NULL DEFAULT 'carbon',
-                total_kwh DOUBLE PRECISION,
-                total_kg_co2e_location DOUBLE PRECISION,
-                total_kg_co2e_market DOUBLE PRECISION,
-                kg_co2e_per_1000_requests DOUBLE PRECISION,
-                kg_co2e_per_1m_tokens DOUBLE PRECISION,
-                measurement_source TEXT NOT NULL DEFAULT 'unknown',
-                provenance_class TEXT NOT NULL DEFAULT 'unknown',
-                uncertainty_pct DOUBLE PRECISION,
-                confidence_score DOUBLE PRECISION NOT NULL DEFAULT 0,
-                intensity_vs_baseline DOUBLE PRECISION,
-                risk_tier TEXT NOT NULL DEFAULT 'high',
-                recommendation TEXT NOT NULL DEFAULT 'no_go',
-                mitigation_readiness TEXT NOT NULL DEFAULT 'missing',
-                mitigations_json TEXT NOT NULL DEFAULT '[]',
-                evidence_refs_json TEXT NOT NULL DEFAULT '[]',
-                controls_json TEXT NOT NULL DEFAULT '{}',
-                blockers_json TEXT NOT NULL DEFAULT '[]',
-                reviewer_state TEXT NOT NULL DEFAULT 'draft',
-                exception_json TEXT NOT NULL DEFAULT '{}',
-                payload_json TEXT NOT NULL DEFAULT '{}',
-                created_at TEXT,
-                UNIQUE (system_id, version)
-            )
-            """
-        )
-    )
-    db.execute(
-        text(
-            "CREATE INDEX IF NOT EXISTS idx_governance_env_assessments_system_version "
-            "ON governance_environmental_assessments(system_id, version)"
-        )
-    )
-    db.execute(
-        text(
-            "CREATE INDEX IF NOT EXISTS idx_governance_env_assessments_recommendation "
-            "ON governance_environmental_assessments(recommendation)"
-        )
-    )
-
-    for column_name, ddl in {
-        "control_id": "control_id TEXT",
-        "title": "title TEXT",
-        "source": "source TEXT",
-        "status": "status TEXT DEFAULT 'draft'",
-        "uploaded_by": "uploaded_by TEXT",
-        "captured_at": "captured_at TEXT",
-    }.items():
-        _add_column_if_missing(db, "governance_evidence", column_name, ddl)
-    db.commit()
 
 
 def _json_dumps(value: Any) -> str:
@@ -248,8 +150,6 @@ def _blockers(result: EnvironmentalEngineResult) -> list[dict[str, str]]:
 
 def seed_env_controls(db: Session) -> int:
     """Idempotently seed ENV-1..ENV-6 into governance_framework_controls."""
-    _ensure_tables(db)
-
     inserted = 0
     for control in CONTROLS:
         exists = db.execute(
@@ -302,34 +202,49 @@ def control_definitions() -> list[dict[str, Any]]:
     ]
 
 
-def controls_payload(db: Session, system_id: str | None = None) -> dict[str, Any]:
+def controls_payload(
+    db: Session,
+    system_id: str | None = None,
+    *,
+    org_id: str | None = None,
+) -> dict[str, Any]:
     cov = None
     if system_id:
-        latest = get_latest_env_assessment(db, system_id)
+        latest = get_latest_env_assessment(db, system_id, org_id=org_id)
         if latest is not None:
             cov = latest.get("coverage") or (latest.get("result") or {}).get("coverage")
     return {"controls": control_definitions(), "coverage": cov}
 
 
-def _next_version(db: Session, system_id: str) -> int:
+def _next_version(db: Session, org_id: str, system_id: str) -> int:
     row = db.execute(
         text(
             "SELECT COALESCE(MAX(version), 0) AS current_version "
-            "FROM governance_environmental_assessments WHERE system_id = :system_id"
+            "FROM governance_environmental_assessments "
+            "WHERE org_id = :org_id AND system_id = :system_id"
         ),
-        {"system_id": system_id},
+        {"org_id": org_id, "system_id": system_id},
     ).fetchone()
     return int((row.current_version if row else 0) or 0) + 1
 
 
-def _system_exists(db: Session, system_id: str) -> bool:
-    return (
-        db.execute(
-            text("SELECT id FROM governance_ai_systems WHERE id = :id"),
-            {"id": system_id},
-        ).fetchone()
-        is not None
-    )
+def resolve_system_org(
+    db: Session,
+    system_id: str,
+    *,
+    org_id: str | None = None,
+) -> str:
+    """Resolve an immutable tenant binding or fail closed."""
+    row = db.execute(
+        text("SELECT org_id FROM governance_ai_systems WHERE id = :id"),
+        {"id": system_id},
+    ).fetchone()
+    if row is None or not row[0]:
+        raise LookupError(f"AI system '{system_id}' was not found")
+    resolved_org_id = str(row[0])
+    if org_id is not None and resolved_org_id != str(org_id):
+        raise LookupError(f"AI system '{system_id}' was not found")
+    return resolved_org_id
 
 
 def _payload_for_storage(
@@ -430,15 +345,14 @@ def save_assessment(
     system_id: str,
     assessment_input: Any,
     *,
+    org_id: str | None = None,
     uploaded_by: Optional[str] = None,
 ) -> dict[str, Any]:
     """Evaluate, append, and mirror one environmental assessment."""
-    _ensure_tables(db)
-    if not _system_exists(db, system_id):
-        raise LookupError(f"AI system '{system_id}' was not found")
+    resolved_org_id = resolve_system_org(db, system_id, org_id=org_id)
 
     assessment, result = evaluate_assessment(assessment_input, system_id=system_id)
-    version = _next_version(db, system_id)
+    version = _next_version(db, resolved_org_id, system_id)
     assessment_id = str(uuid.uuid4())
     evidence_id = str(uuid.uuid4())
     evidence_refs = list(assessment.get("evidence_refs_json") or [])
@@ -459,11 +373,12 @@ def save_assessment(
     db.execute(
         text(
             "INSERT INTO governance_evidence "
-            "(id, system_id, control_id, evidence_type, title, source, content_json, confidence, status, uploaded_by, metadata_json, captured_at, created_at) "
-            "VALUES (:id, :system_id, :control_id, :evidence_type, :title, :source, :content_json, :confidence, :status, :uploaded_by, :metadata_json, :captured_at, :created_at)"
+            "(id, org_id, system_id, control_id, evidence_type, title, source, content_json, confidence, status, uploaded_by, metadata_json, captured_at, created_at) "
+            "VALUES (:id, :org_id, :system_id, :control_id, :evidence_type, :title, :source, :content_json, :confidence, :status, :uploaded_by, :metadata_json, :captured_at, :created_at)"
         ),
         {
             "id": evidence_id,
+            "org_id": resolved_org_id,
             "system_id": system_id,
             "control_id": "ENV-5",
             "evidence_type": ENV_EVIDENCE_TYPE,
@@ -490,11 +405,12 @@ def save_assessment(
     db.execute(
         text(
             "INSERT INTO governance_environmental_assessments "
-            "(id, system_id, evidence_id, version, boundary_json, period_start, period_end, lifecycle_phase, functional_unit, impact_type, total_kwh, total_kg_co2e_location, total_kg_co2e_market, kg_co2e_per_1000_requests, kg_co2e_per_1m_tokens, measurement_source, provenance_class, uncertainty_pct, confidence_score, intensity_vs_baseline, risk_tier, recommendation, mitigation_readiness, mitigations_json, evidence_refs_json, controls_json, blockers_json, reviewer_state, exception_json, payload_json, created_at) "
-            "VALUES (:id, :system_id, :evidence_id, :version, :boundary_json, :period_start, :period_end, :lifecycle_phase, :functional_unit, :impact_type, :total_kwh, :total_kg_co2e_location, :total_kg_co2e_market, :kg_co2e_per_1000_requests, :kg_co2e_per_1m_tokens, :measurement_source, :provenance_class, :uncertainty_pct, :confidence_score, :intensity_vs_baseline, :risk_tier, :recommendation, :mitigation_readiness, :mitigations_json, :evidence_refs_json, :controls_json, :blockers_json, :reviewer_state, :exception_json, :payload_json, :created_at)"
+            "(id, org_id, system_id, evidence_id, version, boundary_json, period_start, period_end, lifecycle_phase, functional_unit, impact_type, total_kwh, total_kg_co2e_location, total_kg_co2e_market, kg_co2e_per_1000_requests, kg_co2e_per_1m_tokens, measurement_source, provenance_class, uncertainty_pct, confidence_score, intensity_vs_baseline, risk_tier, recommendation, mitigation_readiness, mitigations_json, evidence_refs_json, controls_json, blockers_json, reviewer_state, exception_json, payload_json, created_at) "
+            "VALUES (:id, :org_id, :system_id, :evidence_id, :version, :boundary_json, :period_start, :period_end, :lifecycle_phase, :functional_unit, :impact_type, :total_kwh, :total_kg_co2e_location, :total_kg_co2e_market, :kg_co2e_per_1000_requests, :kg_co2e_per_1m_tokens, :measurement_source, :provenance_class, :uncertainty_pct, :confidence_score, :intensity_vs_baseline, :risk_tier, :recommendation, :mitigation_readiness, :mitigations_json, :evidence_refs_json, :controls_json, :blockers_json, :reviewer_state, :exception_json, :payload_json, :created_at)"
         ),
         {
             "id": assessment_id,
+            "org_id": resolved_org_id,
             "system_id": system_id,
             "evidence_id": evidence_id,
             "version": version,
@@ -535,7 +451,7 @@ def save_assessment(
     )
     db.commit()
 
-    latest = get_latest_env_assessment(db, system_id)
+    latest = get_latest_env_assessment(db, system_id, org_id=resolved_org_id)
     return {
         "assessmentId": assessment_id,
         "evidenceId": evidence_id,
@@ -553,23 +469,9 @@ def save_assessment(
         "riskId": risk_id,
         "remediationTaskId": remediation_task_id,
         "latest": latest,
-        "versionTrail": get_env_assessment_history(db, system_id),
+        "versionTrail": get_env_assessment_history(db, system_id, org_id=resolved_org_id),
         "warnings": result.warnings,
     }
-
-
-def save_assessment_as_evidence(
-    db: Session,
-    system_id: str,
-    assessment: Mapping[str, Any],
-    *,
-    uploaded_by: Optional[str] = None,
-) -> tuple[str, EnvironmentalEngineResult]:
-    """Backward-compatible wrapper for the first FairMind-E endpoint tests."""
-    saved = save_assessment(db, system_id, assessment, uploaded_by=uploaded_by)
-    latest = saved.get("latest") or {}
-    result = run_assessment((latest.get("assessment") or assessment))
-    return str(saved["evidenceId"]), result
 
 
 def _row_to_dict(row: Any) -> dict[str, Any]:
@@ -580,6 +482,7 @@ def _row_to_dict(row: Any) -> dict[str, Any]:
     return {
         "id": row.id,
         "assessmentId": row.id,
+        "orgId": row.org_id,
         "systemId": row.system_id,
         "system_id": row.system_id,
         "evidenceId": row.evidence_id,
@@ -613,47 +516,76 @@ def _row_to_dict(row: Any) -> dict[str, Any]:
     }
 
 
-def get_latest_env_assessment(db: Session, system_id: str) -> Optional[dict[str, Any]]:
-    _ensure_tables(db)
+def get_latest_env_assessment(
+    db: Session,
+    system_id: str,
+    *,
+    org_id: str | None = None,
+) -> Optional[dict[str, Any]]:
+    resolved_org_id = resolve_system_org(db, system_id, org_id=org_id)
     row = db.execute(
         text(
             "SELECT * FROM governance_environmental_assessments "
-            "WHERE system_id = :system_id ORDER BY version DESC LIMIT 1"
+            "WHERE org_id = :org_id AND system_id = :system_id "
+            "ORDER BY version DESC LIMIT 1"
         ),
-        {"system_id": system_id},
+        {"org_id": resolved_org_id, "system_id": system_id},
     ).fetchone()
     return _row_to_dict(row) if row else None
 
 
-def get_env_assessment_history(db: Session, system_id: str) -> list[dict[str, Any]]:
-    _ensure_tables(db)
+def get_env_assessment_history(
+    db: Session,
+    system_id: str,
+    *,
+    org_id: str | None = None,
+) -> list[dict[str, Any]]:
+    resolved_org_id = resolve_system_org(db, system_id, org_id=org_id)
     rows = db.execute(
         text(
             "SELECT * FROM governance_environmental_assessments "
-            "WHERE system_id = :system_id ORDER BY version DESC"
+            "WHERE org_id = :org_id AND system_id = :system_id ORDER BY version DESC"
         ),
-        {"system_id": system_id},
+        {"org_id": resolved_org_id, "system_id": system_id},
     ).fetchall()
     return [_row_to_dict(row) for row in rows]
 
 
-def get_assessment_by_id(db: Session, system_id: str, assessment_id: str) -> Optional[dict[str, Any]]:
-    _ensure_tables(db)
+def get_assessment_by_id(
+    db: Session,
+    system_id: str,
+    assessment_id: str,
+    *,
+    org_id: str | None = None,
+) -> Optional[dict[str, Any]]:
+    resolved_org_id = resolve_system_org(db, system_id, org_id=org_id)
     row = db.execute(
         text(
             "SELECT * FROM governance_environmental_assessments "
-            "WHERE id = :id AND system_id = :system_id"
+            "WHERE id = :id AND org_id = :org_id AND system_id = :system_id"
         ),
-        {"id": assessment_id, "system_id": system_id},
+        {"id": assessment_id, "org_id": resolved_org_id, "system_id": system_id},
     ).fetchone()
     return _row_to_dict(row) if row else None
 
 
 def update_mitigation(
-    db: Session, system_id: str, assessment_id: str, mitigation: Mapping[str, Any]
+    db: Session,
+    system_id: str,
+    assessment_id: str,
+    mitigation: Mapping[str, Any],
+    *,
+    org_id: str | None = None,
+    uploaded_by: str | None = None,
 ) -> Optional[dict[str, Any]]:
     """Append a mitigation by creating a new assessment version."""
-    current = get_assessment_by_id(db, system_id, assessment_id)
+    resolved_org_id = resolve_system_org(db, system_id, org_id=org_id)
+    current = get_assessment_by_id(
+        db,
+        system_id,
+        assessment_id,
+        org_id=resolved_org_id,
+    )
     if current is None:
         return None
     assessment = dict(current.get("assessment") or {})
@@ -661,7 +593,13 @@ def update_mitigation(
     mitigations.append(dict(mitigation))
     assessment["mitigations_json"] = mitigations
     assessment["mitigation_readiness"] = "documented"
-    return save_assessment(db, system_id, assessment).get("latest")
+    return save_assessment(
+        db,
+        system_id,
+        assessment,
+        org_id=resolved_org_id,
+        uploaded_by=uploaded_by,
+    ).get("latest")
 
 
 def _valid_exception(exception: Any) -> bool:
@@ -676,10 +614,18 @@ def _valid_exception(exception: Any) -> bool:
     return expiry >= date.today()
 
 
-def env_gate_status(db: Session, system_id: str) -> dict[str, Any]:
+def env_gate_status(
+    db: Session,
+    system_id: str,
+    *,
+    org_id: str | None = None,
+) -> dict[str, Any]:
     """Environmental release-gate status for approval decisions."""
-    _ensure_tables(db)
-    if not _system_exists(db, system_id):
+    row = db.execute(
+        text("SELECT org_id FROM governance_ai_systems WHERE id = :id"),
+        {"id": system_id},
+    ).fetchone()
+    if row is None:
         return {
             "blocked": False,
             "code": "system_not_registered",
@@ -687,8 +633,17 @@ def env_gate_status(db: Session, system_id: str) -> dict[str, Any]:
             "recommendation": None,
             "assessmentId": None,
         }
+    if not row[0] or (org_id is not None and str(row[0]) != str(org_id)):
+        return {
+            "blocked": True,
+            "code": "system_scope_unavailable",
+            "reason": "Environmental approval requires an organization-bound AI system.",
+            "recommendation": "no_go",
+            "assessmentId": None,
+        }
+    resolved_org_id = str(row[0])
 
-    latest = get_latest_env_assessment(db, system_id)
+    latest = get_latest_env_assessment(db, system_id, org_id=resolved_org_id)
     if latest is None:
         return {
             "blocked": True,
@@ -734,16 +689,17 @@ def mark_assessment_reviewed(
     system_id: str,
     assessment_id: str,
     *,
+    org_id: str | None = None,
     reviewer: str,
     attestation: str = "",
 ) -> Optional[dict[str, Any]]:
-    _ensure_tables(db)
+    resolved_org_id = resolve_system_org(db, system_id, org_id=org_id)
     row = db.execute(
         text(
             "SELECT * FROM governance_environmental_assessments "
-            "WHERE id = :id AND system_id = :system_id"
+            "WHERE id = :id AND org_id = :org_id AND system_id = :system_id"
         ),
-        {"id": assessment_id, "system_id": system_id},
+        {"id": assessment_id, "org_id": resolved_org_id, "system_id": system_id},
     ).fetchone()
     if row is None:
         return None
@@ -759,12 +715,13 @@ def mark_assessment_reviewed(
         text(
             "UPDATE governance_environmental_assessments "
             "SET payload_json = :payload_json, reviewer_state = :reviewer_state "
-            "WHERE id = :id AND system_id = :system_id"
+            "WHERE id = :id AND org_id = :org_id AND system_id = :system_id"
         ),
         {
             "payload_json": payload_json,
             "reviewer_state": "accepted",
             "id": assessment_id,
+            "org_id": resolved_org_id,
             "system_id": system_id,
         },
     )
@@ -773,12 +730,23 @@ def mark_assessment_reviewed(
             text(
                 "UPDATE governance_evidence "
                 "SET status = :status, uploaded_by = COALESCE(uploaded_by, :uploaded_by) "
-                "WHERE id = :id"
+                "WHERE id = :id AND org_id = :org_id AND system_id = :system_id"
             ),
-            {"status": "accepted", "uploaded_by": reviewer, "id": row.evidence_id},
+            {
+                "status": "accepted",
+                "uploaded_by": reviewer,
+                "id": row.evidence_id,
+                "org_id": resolved_org_id,
+                "system_id": system_id,
+            },
         )
     db.commit()
-    return get_assessment_by_id(db, system_id, assessment_id)
+    return get_assessment_by_id(
+        db,
+        system_id,
+        assessment_id,
+        org_id=resolved_org_id,
+    )
 
 
 def build_csrd_export(assessment_record: Mapping[str, Any]) -> dict[str, Any]:
@@ -845,15 +813,11 @@ def _metric(record: Mapping[str, Any], *keys: str) -> float | None:
 
 
 def fetch_connector_url(url: str) -> Any:
-    """Fetch a no-secret public/export URL using the existing httpx dependency."""
-    import httpx
-
-    response = httpx.get(url, timeout=10.0)
-    response.raise_for_status()
-    ctype = response.headers.get("content-type", "")
-    if "json" in ctype:
-        return response.json()
-    return response.text
+    """Fail closed until URL ingestion is mediated by a restricted fetch broker."""
+    del url
+    raise ValueError(
+        "URL connector ingestion is disabled; upload evidence content directly"
+    )
 
 
 def normalize_connector_payload(connector_type: str, content: Any) -> dict[str, Any]:
@@ -927,14 +891,22 @@ def ingest_environmental_evidence(
     db: Session,
     system_id: str,
     *,
+    org_id: str | None = None,
     connector_type: str,
     content: Any = None,
     url: str | None = None,
     assessment_overrides: Mapping[str, Any] | None = None,
     uploaded_by: str | None = None,
 ) -> dict[str, Any]:
+    resolved_org_id = resolve_system_org(db, system_id, org_id=org_id)
     if url:
         content = fetch_connector_url(url)
     fragment = normalize_connector_payload(connector_type, content)
     assessment = _deep_merge_assessment(fragment, assessment_overrides)
-    return save_assessment(db, system_id, assessment, uploaded_by=uploaded_by)
+    return save_assessment(
+        db,
+        system_id,
+        assessment,
+        org_id=resolved_org_id,
+        uploaded_by=uploaded_by,
+    )

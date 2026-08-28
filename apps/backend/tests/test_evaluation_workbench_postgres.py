@@ -5,8 +5,8 @@ run creates a unique empty schema and applies the production SQL chain.  The
 governance slice begins at migration 008, but exact user/organization seeding
 requires its identity/RBAC prerequisites, so 001 and corrected 007 are applied
 first.  The assurance migrations then run in the required order:
-008 -> 011 -> 012 -> 013 -> 013a -> 013b -> 013c. Nothing depends on ORM-generated
-DDL.
+008 -> 011 -> 012 -> 013 -> 013a -> 013b -> 013c -> 013f. Nothing depends on
+ORM-generated DDL.
 """
 
 from __future__ import annotations
@@ -29,12 +29,14 @@ from database.governance_models import (
     GovernanceEvaluationAuditEvent,
     GovernanceEvaluationRun,
     GovernanceEvaluationRunSuiteExecution,
+    GovernanceEvidenceIssuer,
     GovernanceEvidenceTrustPolicyVersion,
     GovernanceIdempotencyRecord,
 )
-from src.application.services.evaluation_workbench_service import (
-    EvaluationWorkbenchError,
-    EvaluationWorkbenchService,
+from src.application.evaluation_workbench_contracts import EvaluationWorkbenchError
+from src.application.services.evaluation_workbench_service import EvaluationWorkbenchService
+from src.application.services.trust_administration_service import (
+    TrustAdministrationService,
 )
 from src.domain.assurance.evaluation_v2 import canonical_json, canonical_sha256
 from src.infrastructure.db.repositories.evaluation_audit_chain import (
@@ -42,6 +44,9 @@ from src.infrastructure.db.repositories.evaluation_audit_chain import (
 )
 from src.infrastructure.db.repositories.evaluation_workbench_repository import (
     SqlAlchemyEvaluationWorkbenchUnitOfWork,
+)
+from src.infrastructure.db.repositories.trust_administration_repository import (
+    SqlAlchemyTrustAdministrationUnitOfWork,
 )
 
 POSTGRES_URL = os.getenv("FAIRMIND_TEST_POSTGRES_URL")
@@ -71,6 +76,7 @@ ASSURANCE_MIGRATIONS = (
     "013a_evaluation_binding_integrity.sql",
     "013b_evaluation_assurance_trust_integrity.sql",
     "013c_evidence_verification_receipt.sql",
+    "013f_trust_authority_integrity.sql",
 )
 
 
@@ -143,6 +149,7 @@ def postgres_session_factory():
                     "013a_evaluation_binding_integrity.sql",
                     "013b_evaluation_assurance_trust_integrity.sql",
                     "013c_evidence_verification_receipt.sql",
+                    "013f_trust_authority_integrity.sql",
                 }:
                     cursor.execute(
                         "SELECT pg_catalog.set_config" "('fairmind.migration_schema', %s, false)",
@@ -245,19 +252,31 @@ def _seed_active_plan(factory: sessionmaker) -> tuple[str, list[str]]:
                 "updated_at": now,
             },
         )
+        policy = {
+            "maximumEvidenceAgeSeconds": 86400,
+            "schemaVersion": "1.0.0",
+            "unsignedImportPolicy": "manual_review",
+        }
         session.execute(
             GovernanceEvidenceTrustPolicyVersion.__table__.insert().values(
                 id=TRUST_POLICY_ID,
                 org_id=ORG_ID,
                 version="1.0.0",
-                policy_json="{}",
-                policy_hash=canonical_sha256({}),
+                policy_json=canonical_json(policy),
+                policy_hash=canonical_sha256(policy),
                 maximum_evidence_age_seconds=86400,
                 unsigned_import_policy="manual_review",
-                status="active",
+                status="draft",
                 created_by=ACTOR_ID,
                 created_at=now,
             )
+        )
+        session.execute(
+            text(
+                "UPDATE governance_evidence_trust_policy_versions "
+                "SET status='active', activated_by=:actor_id WHERE id=:policy_id"
+            ),
+            {"actor_id": ACTOR_ID, "policy_id": TRUST_POLICY_ID},
         )
         session.commit()
 
@@ -392,6 +411,136 @@ def _assert_audit_event_is_database_append_only(
             )
         finally:
             mutation_session.close()
+
+
+def test_trust_admin_changed_body_conflict_uses_shared_audited_uow(
+    postgres_session_factory,
+) -> None:
+    factory = postgres_session_factory
+    _seed_active_plan(factory)
+    session = factory()
+    try:
+        key = "postgres-trust-issuer-key"
+        operation = "evaluation-v2.trust.issuer.create"
+        original_payload = {
+            "issuerKey": "provider-pg",
+            "name": "Provider PostgreSQL",
+            "issuerType": "external_provider",
+            "sourceRestrictions": ["external_provider"],
+            "suiteVersionRestrictions": [],
+            "targetVersionRestrictions": [],
+        }
+        service = TrustAdministrationService(
+            SqlAlchemyTrustAdministrationUnitOfWork(session),
+            uuid_factory=lambda: "99999999-9999-4999-8999-999999999999",
+        )
+        created = service.create_issuer(
+            organization_id=ORG_ID,
+            actor_id=ACTOR_ID,
+            idempotency_key=key,
+            payload=original_payload,
+        )
+        replay = service.create_issuer(
+            organization_id=ORG_ID,
+            actor_id=ACTOR_ID,
+            idempotency_key=key,
+            payload=original_payload,
+        )
+        assert replay.replayed is True
+        assert replay.body == created.body
+
+        key_hash = hashlib.sha256(key.encode("ascii")).hexdigest()
+        identity = (
+            GovernanceIdempotencyRecord.org_id == ORG_ID,
+            GovernanceIdempotencyRecord.actor_id == ACTOR_ID,
+            GovernanceIdempotencyRecord.operation == operation,
+            GovernanceIdempotencyRecord.key_hash == key_hash,
+        )
+        original_record = dict(
+            session.execute(
+                select(GovernanceIdempotencyRecord.__table__).where(*identity)
+            )
+            .mappings()
+            .one()
+        )
+        audit_count = session.scalar(
+            select(func.count())
+            .select_from(GovernanceEvaluationAuditEvent)
+            .where(GovernanceEvaluationAuditEvent.org_id == ORG_ID)
+        )
+        changed_payload = {**original_payload, "name": "Provider PostgreSQL Changed"}
+
+        with pytest.raises(EvaluationWorkbenchError) as caught:
+            service.create_issuer(
+                organization_id=ORG_ID,
+                actor_id=ACTOR_ID,
+                idempotency_key=key,
+                payload=changed_payload,
+            )
+
+        assert caught.value.code == "idempotency_conflict"
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(GovernanceEvidenceIssuer)
+                .where(GovernanceEvidenceIssuer.org_id == ORG_ID)
+            )
+            == 1
+        )
+        assert dict(
+            session.execute(
+                select(GovernanceIdempotencyRecord.__table__).where(*identity)
+            )
+            .mappings()
+            .one()
+        ) == original_record
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(GovernanceEvaluationAuditEvent)
+                .where(GovernanceEvaluationAuditEvent.org_id == ORG_ID)
+            )
+            == audit_count + 1
+        )
+        rejected_event = (
+            session.execute(
+                select(GovernanceEvaluationAuditEvent.__table__)
+                .where(GovernanceEvaluationAuditEvent.org_id == ORG_ID)
+                .order_by(GovernanceEvaluationAuditEvent.sequence_number.desc())
+                .limit(1)
+            )
+            .mappings()
+            .one()
+        )
+        request_projection = {
+            "body": changed_payload,
+            "method": "POST",
+            "operation": operation,
+            "scope": {"organizationId": ORG_ID},
+        }
+        expected_request_hash = hashlib.sha256(
+            json.dumps(
+                request_projection,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode("utf-8")
+        ).hexdigest()
+        assert rejected_event["action"] == "evaluation_v2.mutation.rejected"
+        assert rejected_event["outcome"] == "rejected"
+        assert rejected_event["resource_type"] == "evaluation_idempotency_key_hash"
+        assert rejected_event["resource_id"] == key_hash
+        assert json.loads(rejected_event["details_json"]) == {
+            "schemaVersion": "evaluation-v2.preclaim-rejection-audit/v1",
+            "operation": operation,
+            "requestHash": expected_request_hash,
+            "errorCode": "idempotency_conflict",
+            "statusCode": 409,
+        }
+        assert key not in rejected_event["details_json"]
+        verify_evaluation_audit_chain(session, org_id=ORG_ID)
+    finally:
+        session.close()
 
 
 def test_twenty_postgres_sessions_create_exactly_one_idempotent_run(

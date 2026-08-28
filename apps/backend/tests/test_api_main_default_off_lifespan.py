@@ -10,22 +10,24 @@ from fastapi.testclient import TestClient
 import pytest
 
 import api.main as main_module
-from config.auth import TokenData, TokenType, UserRole, get_current_active_user
+from config.auth import User as AuthUser, UserRole, auth_manager
 from config.settings import settings
 from database import connection as repository_connection
 from database.governance_models import GovernanceAISystem, GovernanceWorkspace
 from database.models import Organization, OrganizationMember, User
 
 
-def _token(user_id: str) -> TokenData:
+def _token(user_id: str) -> str:
     now = datetime.now(timezone.utc)
-    return TokenData(
-        user_id=user_id,
-        email=f"{user_id}@example.test",
-        role=UserRole.ANALYST,
-        token_type=TokenType.ACCESS,
-        iat=now,
-        exp=now,
+    return auth_manager.create_access_token(
+        AuthUser(
+            id=user_id,
+            email=f"{user_id}@example.test",
+            username=user_id,
+            role=UserRole.ANALYST,
+            created_at=now,
+            permissions=["*"],
+        )
     )
 
 
@@ -135,17 +137,15 @@ def test_default_off_main_lifespan_keeps_legacy_plan_write_and_read_available(
     original_manager = repository_connection.db_manager
     repository_connection.db_manager = legacy_manager
 
-    async def override_user() -> TokenData:
-        return _token(user_id)
-
-    original_overrides = dict(main_module.app.dependency_overrides)
-    main_module.app.dependency_overrides[get_current_active_user] = override_user
     plans_url = (
         f"/api/v1/ai-governance/organizations/{org_id}/systems/"
         "system-default-off/evaluation-plans"
     )
     try:
-        with TestClient(main_module.app) as client:
+        with TestClient(
+            main_module.app,
+            headers={"Authorization": f"Bearer {_token(user_id)}"},
+        ) as client:
             assert not any("/evaluation-v2/" in route.path for route in main_module.app.routes)
             created = client.post(plans_url, json=_plan_payload())
             assert created.status_code == 201, created.text
@@ -153,7 +153,5 @@ def test_default_off_main_lifespan_keeps_legacy_plan_write_and_read_available(
             assert listed.status_code == 200, listed.text
             assert [item["id"] for item in listed.json()] == [created.json()["id"]]
     finally:
-        main_module.app.dependency_overrides.clear()
-        main_module.app.dependency_overrides.update(original_overrides)
         repository_connection.db_manager = original_manager
         legacy_manager.engine.dispose()

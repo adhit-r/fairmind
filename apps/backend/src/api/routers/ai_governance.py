@@ -1843,7 +1843,12 @@ async def make_approval_decision(
     db: Session = Depends(get_db),
 ):
     _ensure_tables(db)
-    _require_approval_request_access(db, request_id, current_user, mutate=True)
+    approval_system_id = _require_approval_request_access(
+        db,
+        request_id,
+        current_user,
+        mutate=True,
+    )
     new_status = "approved" if request.decision == "approved" else "rejected"
     now = _utc_now_iso()
     existing = db.execute(
@@ -1857,7 +1862,17 @@ async def make_approval_decision(
     if new_status == "approved" and existing.entity_type == "ai_system":
         from src.application.services.environmental_service import env_gate_status
 
-        environmental_gate = env_gate_status(db, existing.entity_id)
+        membership = _require_system_access(
+            db,
+            approval_system_id,
+            current_user,
+            mutate=True,
+        )
+        environmental_gate = env_gate_status(
+            db,
+            approval_system_id,
+            org_id=membership.org_id,
+        )
         if environmental_gate.get("blocked"):
             raise HTTPException(
                 status_code=409,

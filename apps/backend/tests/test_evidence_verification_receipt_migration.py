@@ -192,6 +192,8 @@ def _insert_receipt(
     connection: sqlite3.Connection,
     *,
     binding: dict[str, object] | None = None,
+    evaluator_registration_id: str | None = None,
+    evaluator_registration_binding_hash: str | None = None,
 ) -> None:
     from tests.test_evaluation_assurance_trust_integrity_sqlite_migration import (
         LATER,
@@ -222,8 +224,24 @@ def _insert_receipt(
         "SELECT snapshot_json FROM governance_evidence_passport_revisions "
         "WHERE id = 'revision-a'"
     ).fetchone()[0]
+    catalog_columns = ""
+    catalog_values = ""
+    catalog_parameters: tuple[str | None, ...] = ()
+    if (
+        evaluator_registration_id is not None
+        or evaluator_registration_binding_hash is not None
+    ):
+        # Keep malformed single-column provenance representable so 013d's
+        # receipt constraint/trigger, rather than this test helper, proves
+        # that every new receipt supplies the pair.
+        catalog_columns = "evaluator_registration_id, evaluator_registration_binding_hash,"
+        catalog_values = ", ?, ?"
+        catalog_parameters = (
+            evaluator_registration_id,
+            evaluator_registration_binding_hash,
+        )
     connection.execute(
-        """
+        f"""
         INSERT INTO governance_evidence_verification_receipts (
             id, org_id, workspace_id, system_id, run_id, suite_execution_id,
             evidence_run_id, passport_revision_id, admission_id,
@@ -234,6 +252,7 @@ def _insert_receipt(
             signing_key_id, signer_key_id, signer_algorithm, public_jwk_json,
             public_key_fingerprint, evaluator_issuer_id, evaluator_id, source_type,
             adapter_name, adapter_version, result_contract_version,
+            {catalog_columns}
             evaluator_projection_json, evaluator_projection_hash,
             verifier_contract, verifier_version, verified_at
         ) VALUES (
@@ -241,7 +260,7 @@ def _insert_receipt(
             'evidence-a', 'revision-a', 'admission-a', '2.0.0', ?, ?, ?, ?, ?,
             'policy-a', ?, 'issuer-a', 'issuer-key-a', 'signing-a', 'key-a',
             'Ed25519', ?, ?, 'issuer-key-a', 'evaluator-a', 'external_provider',
-            'inspect', '1.0.0', '1.0.0', ?, ?,
+            'inspect', '1.0.0', '1.0.0'{catalog_values}, ?, ?,
             'fairmind/evidence-passport-v2/verified-admission', '2.0.0', ?
         )
         """,
@@ -254,6 +273,7 @@ def _insert_receipt(
             "a" * 64,
             canonical_json(public_jwk),
             canonical_sha256(public_jwk),
+            *catalog_parameters,
             canonical_json(evaluator),
             canonical_sha256(evaluator),
             LATEST,
@@ -399,6 +419,8 @@ def test_verification_receipt_orm_is_structural_only() -> None:
         "result_contract_version",
         "evaluator_projection_json",
         "evaluator_projection_hash",
+        "evaluator_registration_id",
+        "evaluator_registration_binding_hash",
         "verifier_contract",
         "verifier_version",
         "verified_at",
@@ -410,6 +432,7 @@ def test_verification_receipt_orm_is_structural_only() -> None:
         "ck_governance_evidence_verification_receipt_contract",
         "ck_governance_evidence_verification_receipt_hashes",
         "ck_governance_evidence_verification_receipt_timestamp",
+        "ck_governance_evidence_receipt_evaluator_registration",
     } <= constraint_names
     admission_fk = next(
         constraint
@@ -418,6 +441,13 @@ def test_verification_receipt_orm_is_structural_only() -> None:
     )
     assert admission_fk.deferrable is True
     assert admission_fk.initially == "DEFERRED"
+    evaluator_registration_fk = next(
+        constraint
+        for constraint in model.__table__.foreign_key_constraints
+        if constraint.name == "fk_governance_evidence_receipt_evaluator_registration"
+    )
+    assert evaluator_registration_fk.deferrable is True
+    assert evaluator_registration_fk.initially == "DEFERRED"
     assert model.__table__.c.admission_id.index in (False, None)
 
 
@@ -453,15 +483,20 @@ def test_application_harness_replaces_structural_orm_receipt_ddl() -> None:
             "SELECT sql FROM sqlite_master WHERE type = 'table' "
             "AND name = 'governance_evidence_verification_receipts'"
         ).scalar_one()
-        trigger_count = connection.exec_driver_sql(
-            "SELECT count(*) FROM sqlite_master WHERE type = 'trigger' "
+        trigger_names = set(connection.exec_driver_sql(
+            "SELECT name FROM sqlite_master WHERE type = 'trigger' "
             "AND tbl_name = 'governance_evidence_verification_receipts'"
-        ).scalar_one()
+        ).scalars())
     engine.dispose()
 
     assert "json_valid(execution_binding_json)" in authoritative_sql
     assert "uq_governance_evidence_verification_receipt_scope" not in authoritative_sql
-    assert trigger_count == 3
+    assert trigger_names == {
+        "governance_evidence_verification_receipts_guard_insert",
+        "governance_evidence_verification_receipts_no_update",
+        "governance_evidence_verification_receipts_no_delete",
+        "governance_evidence_verification_receipts_catalog_guard_013d",
+    }
 
 
 def test_postgresql_013c_source_freezes_the_narrow_database_claim() -> None:

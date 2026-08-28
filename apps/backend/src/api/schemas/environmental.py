@@ -17,9 +17,7 @@ class AssessRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    system_id: str = Field(min_length=1)
     assessment: dict[str, Any] = Field(default_factory=dict)
-    uploaded_by: Optional[str] = None
 
 
 class AssessResponse(BaseModel):
@@ -48,19 +46,8 @@ class MitigationRequest(BaseModel):
 class ApproveRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    reviewer: str = Field(min_length=1)
+    reviewer: Optional[str] = Field(default=None, min_length=1, deprecated=True)
     attestation: str = ""
-
-
-class EvidenceAttachRequest(BaseModel):
-    """Attach a measurement artefact reference to a system's environmental record."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    title: str = Field(min_length=1)
-    source: str = "unknown"
-    uri: Optional[str] = None
-    detail: dict[str, Any] = Field(default_factory=dict)
 
 
 class EnvironmentalEvidenceIngestRequest(BaseModel):
@@ -72,7 +59,6 @@ class EnvironmentalEvidenceIngestRequest(BaseModel):
     content: Any = None
     url: Optional[str] = None
     assessment: dict[str, Any] = Field(default_factory=dict)
-    uploaded_by: Optional[str] = None
 
 
 class GenericResponse(BaseModel):

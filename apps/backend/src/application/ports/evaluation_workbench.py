@@ -9,6 +9,8 @@ import json
 from types import MappingProxyType
 from typing import Callable, Mapping, Protocol, TypeAlias
 
+from src.application.ports.evidence_freshness import EvidenceFreshnessClassification
+
 JsonScalar: TypeAlias = None | bool | int | float | str
 JsonValue: TypeAlias = JsonScalar | tuple["JsonValue", ...] | Mapping[str, "JsonValue"]
 
@@ -310,6 +312,22 @@ class PersistRunCommand:
 
 
 @dataclass(frozen=True, slots=True)
+class EvidenceTrustMetadataRecord:
+    """Read-only authority metadata attached to one linked suite execution."""
+
+    source_type: str | None
+    issuer_key: str | None
+    signing_key_id: str | None
+    signer_key_id: str | None
+    signer_algorithm: str | None
+    effective_expires_at: str | None
+    reviewed_by: str | None
+    reviewed_at: str | None
+    admission_reasons: tuple[str, ...] | None
+    signing_key_revocation_reason: str | None
+
+
+@dataclass(frozen=True, slots=True)
 class SuiteExecutionRecord:
     id: str
     suite_version_id: str
@@ -332,6 +350,8 @@ class SuiteExecutionRecord:
     completed_at: str | None
     created_at: str
     updated_at: str
+    evidence_trust: EvidenceTrustMetadataRecord | None = None
+    operational_freshness: EvidenceFreshnessClassification | None = None
 
 
 @dataclass(frozen=True, slots=True)

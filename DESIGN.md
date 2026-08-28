@@ -190,18 +190,54 @@ Every icon-only button or link has a specific accessible name. The icon itself i
 
 ### Illustrated Identity
 
-The profile identity uses the approved illustrated portrait inside a square bordered frame. Expanded navigation shows portrait, name, and supporting account text; collapsed and header treatments retain a labelled 44px portrait control. The current approved remote portrait source is centralized in `FramedIdentity` and must not be duplicated elsewhere. Replace it with a local, licensed asset when one is available while retaining the same crop and frame.
+The profile identity uses the approved illustrated portrait inside a square bordered frame. Expanded navigation shows portrait, name, and supporting account text; collapsed and header treatments retain a labelled 44px portrait control. The portrait is self-hosted at `/profile-portrait.svg` through `FramedIdentity`; authenticated screens must not request an avatar from a third-party UI host. Keep the asset path centralized and retain the same crop and frame.
 
 Image failure is a designed state. Failed or already-broken portrait loads switch to labelled two-letter initials on Action Orange, including failures that occur before client hydration. The initials fallback keeps the same dimensions, accessible name, border, focus treatment, and interaction target.
 
 ### Evaluation State Semantics
 
-Evaluation runs always expose two independent axes:
+Evaluation runs always expose three independent axes. They are rendered as labelled rows or columns, never collapsed into one score or one traffic-light color:
 
-- **Technical status:** `awaiting_evidence`, `running`, `succeeded`, `failed`, or `cancelled`. It describes execution lifecycle only.
-- **Governance verdict:** `approved`, `conditional`, `review`, `blocked`, or `insufficient`. It describes the current review judgment supported by available evidence.
+- **Execution status:** `queued`, `leased`, `running`, `awaiting_evidence`, `succeeded`, `failed`, `timed_out`, or `cancelled`. It describes whether the evaluator completed its work.
+- **Evaluator evidence result:** `pending`, `passed`, `passed_with_limitations`, `failed`, `informational`, `error`, `unavailable`, `insufficient_data`, or `unknown`. It describes what the evaluator found, including a failed model result from a successfully completed evaluator.
+- **Governance verdict:** `approved`, `conditional`, `review`, `blocked`, or `insufficient`. It describes the current human-governed decision supported by admitted evidence.
 
-`succeeded` never implies `approved`. `awaiting_evidence` and `insufficient` remain neutral, explicit states rather than being presented as success or failure. `review` uses Action Orange to signal required human attention, not a passed result. Component-layer verdicts and risk-dimension verdicts remain separate labelled sections; an absent axis reads “Not assessed.”
+`succeeded` never implies `passed`, and neither implies `approved`. `awaiting_evidence`, `unavailable`, `insufficient_data`, and `insufficient` remain neutral, explicit states rather than being presented as success or failure. `review` uses Action Orange to signal required human attention, not a passed result. Component-layer verdicts and risk-dimension verdicts remain separate labelled sections; an absent axis reads “Not assessed.”
+
+### Evidence Admission And Trust Panel
+
+These are the v2 trust-panel and API contract rules. A legacy response that does not carry a field renders `Not returned by this response` or `Not assessed`; it is never upgraded into a stronger claim by the client.
+
+Every evidence detail view shows the exact scope before the result: organization, workspace, AI system, target version and digest, plan hash, suite version and digest, suite execution, lifecycle phase, execution depth, delivery source, evaluator identity and adapter version, and envelope/passport identifiers. Scope is part of the query key; when any scope identity changes, the prior panel clears before the next response is shown. Responses whose organization, system, plan, run, suite execution, target, or envelope does not match the requested scope are rejected and rendered as a bounded error.
+
+The v2 preview route is `/assurance/evaluations/:runId` and is gated independently by `NEXT_PUBLIC_ASSURANCE_V2_UI_ENABLED` and the backend `assurance_v2_enabled` flag. When either gate is off, the UI renders a disabled/unavailable state and does not fall back to v1 or fixture evidence.
+
+The trust panel keeps these states visible beside the three result axes:
+
+- **Admission:** `pending`, `verified`, `unverified`, `expired`, `superseded`, `rejected`, or `trust_error`.
+- **Review:** `pending`, `accepted`, or `rejected`.
+- **Freshness:** `current`, `expiring`, `stale`, or `superseded`.
+- **Provenance:** signer, issuer, signing-key identifier, source (`fairmind_worker`, `external_provider`, or `imported_report`), verification time, expiry, and invalidation reason.
+
+Imported or unsigned reports remain visibly `unverified` and human-review-only. Linking a Passport can produce `review` or `insufficient`; it never directly produces `approved` or `blocked`. A reviewer outcome changes the review axis only. It must not rewrite technical status, evaluator evidence result, run outcome, or governance verdict.
+
+### Capability Truth Table
+
+The capability registry is the source for dashboard labels, documentation, website copy, and sales claims. A visible screen or an imported fixture is not evidence that an execution capability is available.
+
+| Capability state | Runtime behavior | UI treatment | Permitted claim |
+| --- | --- | --- | --- |
+| `planned` | No route or worker is composed | Show roadmap or unavailable state | Planned only |
+| `experimental` | Explicitly allowlisted and independently benchmarked below a public gate | Show version, limitations, and experimental badge | Experimental evaluation support |
+| `advisory` | Runs may produce supporting evidence; no automatic action | Show evidence and reviewer-needed state | Advisory evidence collection |
+| `verified` | Adapter, benchmark, sandbox, red-team, and soak gates are current | Show executable capability with exact version and freshness | Named execution capability |
+| `retired` | New execution is rejected; historical evidence remains readable | Show retired and invalidation/freshness state | Historical evidence only |
+
+The current product remains an internal, default-off evidence-integrity foundation. It may claim governance planning, evidence ingestion, and reviewer workflow only after their respective release gates; it must not claim certification, automatic compliance, automatic enforcement, or “FairMind Verified.”
+
+### Worker Security Envelope
+
+The UI may expose a worker attempt only through its server-generated Execution Envelope. The envelope contains immutable target and suite bindings, configuration and plan hashes, phase/depth/delivery, nonce, runner-image digest, budgets, input bindings, and trust-policy version. It excludes credentials, raw secrets, unrestricted model weights, private reasoning traces, and host paths. Artifact references are immutable SHA-256 content-addressed identifiers resolved through short-lived brokers. A worker result is not decision-grade until its signed Passport matches the envelope, suite execution, target digest, nonce, and current trust policy.
 
 ### Evaluation Runs Workbench
 

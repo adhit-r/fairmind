@@ -14,6 +14,7 @@ import { useSidebar } from '@/components/ui/sidebar'
 import { Input } from '@/components/ui/input'
 import { FramedIcon } from '@/components/ui/FramedIcon'
 import { FramedIdentity } from '@/components/ui/FramedIdentity'
+import { useSession } from '@/context/SessionContext'
 import {
   IconSearch,
   IconBell,
@@ -35,6 +36,7 @@ export function Header({ onMenuToggle }: HeaderProps) {
   const [isDark, setIsDark] = React.useState(false)
   const [isSearchFocused, setIsSearchFocused] = React.useState(false)
   const { toggleSidebar } = useSidebar()
+  const { user, loading: sessionLoading, logout } = useSession()
 
   const handleNavigationToggle = () => {
     onMenuToggle?.()
@@ -105,36 +107,48 @@ export function Header({ onMenuToggle }: HeaderProps) {
           />
 
           {/* User Menu */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <FramedIdentity
-                name="User Name"
-                collapsed
-                label="Open user menu for User Name"
-              />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-64 border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] bg-white rounded-none p-0 mt-2">
-              <div className="px-5 py-4 bg-orange border-b-2 border-black">
-                <p className="text-base font-black text-black uppercase tracking-tight">User Name</p>
-                <p className="text-xs text-black font-bold opacity-80">user@example.com</p>
-              </div>
-              <div className="p-2 space-y-1">
-                <DropdownMenuItem className="min-h-11 px-4 border-2 border-transparent focus:border-black focus:bg-gray-100 focus:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer font-bold text-sm rounded-none">
-                  <IconUser className="mr-3 h-5 w-5" />
-                  PROFILE
-                </DropdownMenuItem>
-                <DropdownMenuItem className="min-h-11 px-4 border-2 border-transparent focus:border-black focus:bg-gray-100 focus:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer font-bold text-sm rounded-none">
-                  <IconSettings className="mr-3 h-5 w-5" />
-                  SETTINGS
-                </DropdownMenuItem>
-                <DropdownMenuSeparator className="bg-black h-0.5 my-2" />
-                <DropdownMenuItem className="min-h-11 px-4 border-2 border-transparent text-red-600 focus:text-red-600 focus:border-black focus:bg-red-50 focus:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer font-bold text-sm rounded-none">
-                  <IconLogout className="mr-3 h-5 w-5" />
-                  LOGOUT
-                </DropdownMenuItem>
-              </div>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {user ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <FramedIdentity
+                  name={user.username}
+                  collapsed
+                  label={`Open user menu for ${user.username}`}
+                />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64 border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] bg-white rounded-none p-0 mt-2">
+                <div className="px-5 py-4 bg-orange border-b-2 border-black">
+                  <p className="text-base font-black text-black uppercase tracking-tight">{user.username}</p>
+                  <p className="text-xs text-black font-bold opacity-80">{user.email}</p>
+                </div>
+                <div className="p-2 space-y-1">
+                  <DropdownMenuItem className="min-h-11 px-4 border-2 border-transparent focus:border-black focus:bg-gray-100 focus:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer font-bold text-sm rounded-none">
+                    <IconUser className="mr-3 h-5 w-5" />
+                    PROFILE
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="min-h-11 px-4 border-2 border-transparent focus:border-black focus:bg-gray-100 focus:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer font-bold text-sm rounded-none">
+                    <IconSettings className="mr-3 h-5 w-5" />
+                    SETTINGS
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator className="bg-black h-0.5 my-2" />
+                  <DropdownMenuItem
+                    onSelect={() => void logout()}
+                    className="min-h-11 px-4 border-2 border-transparent text-red-600 focus:text-red-600 focus:border-black focus:bg-red-50 focus:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer font-bold text-sm rounded-none"
+                  >
+                    <IconLogout className="mr-3 h-5 w-5" />
+                    LOGOUT
+                  </DropdownMenuItem>
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <span
+              aria-live="polite"
+              className="hidden text-xs font-bold text-[#59615D] sm:inline"
+            >
+              {sessionLoading ? 'Loading session' : 'Session unavailable'}
+            </span>
+          )}
         </div>
       </div>
     </header>

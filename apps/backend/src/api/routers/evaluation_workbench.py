@@ -8,36 +8,77 @@ import re
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from sqlalchemy.orm import Session
 
 from database.connection import get_db
-from api.composition.evaluation_workbench import build_evaluation_workbench_service
+from api.composition.evaluation_workbench import build_evaluation_workbench_services
+from api.composition.governance_decision import build_governance_decision_service
 from api.composition.verified_evidence_admission import (
     build_verified_evidence_admission_service,
 )
+from api.composition.verified_evidence_review import (
+    build_verified_evidence_review_service,
+)
 from config.settings import settings
+from src.api.evaluation_permissions import (
+    EVALUATION_CATALOG_ADMIN_PERMISSION,
+    EVALUATION_DECISION_PERMISSION,
+    EVALUATION_EVIDENCE_LINK_PERMISSION,
+    EVALUATION_EVIDENCE_REVIEW_PERMISSION,
+    EVALUATION_EVIDENCE_SUBMIT_PERMISSION,
+    EVALUATION_PLAN_ACTIVATE_PERMISSION,
+    EVALUATION_PLAN_WRITE_PERMISSION,
+    EVALUATION_RUN_CREATE_PERMISSION,
+    require_assurance_v2_enabled,
+    require_evaluation_permission,
+)
 from src.api.routers.governance_assurance import (
-    _require_mutation,
-    _service as governance_service,
     organization_membership,
 )
 from src.application.ports.evidence_admission import EvidenceAdmissionScope
-from src.application.services.evaluation_workbench_service import (
+from src.application.ports.evidence_review import EvidenceReviewScope
+from src.application.ports.governance_decision import GovernanceDecisionScope
+from src.application.services.evaluation_catalog_versions_service import (
+    EvaluationCatalogVersionsService,
+)
+from src.application.services.evaluation_plan_service import EvaluationPlanService
+from src.application.services.evaluation_run_service import EvaluationRunService
+from src.application.evaluation_workbench_contracts import (
     EvaluationWorkbenchError,
     EvaluationWorkbenchInputError,
-    EvaluationWorkbenchService,
     canonical_assurance_json,
+    validate_owner_override_reason_input,
 )
 from src.application.services.verified_evidence_admission_service import (
     VerifiedEvidenceAdmissionService,
 )
+from src.application.services.verified_evidence_review_service import (
+    VerifiedEvidenceReviewService,
+)
 from src.application.services.governance_assurance_service import OrgMembership
+from src.application.services.governance_decision_service import GovernanceDecisionService
 
-router = APIRouter(prefix="/organizations/{org_id}", tags=["evaluation-workbench-v2"])
+router = APIRouter(
+    prefix="/organizations/{org_id}",
+    tags=["evaluation-workbench-v2"],
+    dependencies=[Depends(require_assurance_v2_enabled)],
+)
 verified_evidence_router = APIRouter(
     prefix="/organizations/{org_id}",
     tags=["evaluation-workbench-v2-evidence"],
+)
+verified_evidence_review_router = APIRouter(
+    prefix="/organizations/{org_id}",
+    tags=["evaluation-workbench-v2-evidence-review"],
+)
+governance_decision_router = APIRouter(
+    prefix="/organizations/{org_id}",
+    tags=["evaluation-workbench-v2-governance-decision"],
+)
+governance_decision_override_router = APIRouter(
+    prefix="/organizations/{org_id}",
+    tags=["evaluation-workbench-v2-governance-decision-owner-override"],
 )
 MAX_REQUEST_BYTES = 1024 * 1024
 MAX_JSON_DEPTH = 32
@@ -303,6 +344,20 @@ class EvaluationPreflightResponse(StrictModel):
     blockers: list[PreflightBlockerResponse]
 
 
+class SuiteEvidenceTrustResponse(StrictModel):
+    """Read-only, scoped provenance returned only from persisted authority records."""
+
+    source_type: str | None = Field(alias="sourceType")
+    issuer_key: str | None = Field(alias="issuerKey")
+    signing_key_id: str | None = Field(alias="signingKeyId")
+    signer_key_id: str | None = Field(alias="signerKeyId")
+    signer_algorithm: str | None = Field(alias="signerAlgorithm")
+    effective_expires_at: str | None = Field(alias="effectiveExpiresAt")
+    reviewed_by: str | None = Field(alias="reviewedBy")
+    reviewed_at: str | None = Field(alias="reviewedAt")
+    admission_reasons: list[str] | None = Field(alias="admissionReasons")
+
+
 class SuiteExecutionResponse(StrictModel):
     id: str
     suite_version_id: str = Field(alias="suiteVersionId")
@@ -313,6 +368,22 @@ class SuiteExecutionResponse(StrictModel):
     admission_status: AdmissionStatus = Field(alias="admissionStatus")
     review_status: ReviewStatus = Field(alias="reviewStatus")
     freshness_status: FreshnessStatus = Field(alias="freshnessStatus")
+    recorded_freshness_status: FreshnessStatus | None = Field(
+        default=None, alias="recordedFreshnessStatus"
+    )
+    freshness_contract_version: Literal["1.0.0"] | None = Field(
+        default=None, alias="freshnessContractVersion"
+    )
+    freshness_evaluated_at: str | None = Field(default=None, alias="freshnessEvaluatedAt")
+    freshness_effective_at: str | None = Field(default=None, alias="freshnessEffectiveAt")
+    expiring_at: str | None = Field(default=None, alias="expiringAt")
+    freshness_reason_codes: list[str] | None = Field(
+        default=None, alias="freshnessReasonCodes"
+    )
+    decision_evidence_eligible: bool | None = Field(
+        default=None, alias="decisionEvidenceEligible"
+    )
+    evidence_trust: SuiteEvidenceTrustResponse | None = Field(alias="evidenceTrust")
     limitations: list[Any]
     failure_code: str | None = Field(alias="failureCode")
     failure_message: str | None = Field(alias="failureMessage")
@@ -340,6 +411,9 @@ class EvaluationRunV2Response(StrictModel):
     layer_verdicts_schema_version: Literal["1.0.0"] = Field(alias="layerVerdictsSchemaVersion")
     layer_verdicts: LayerVerdictsResponse = Field(alias="layerVerdicts")
     suite_executions: list[SuiteExecutionResponse] = Field(alias="suiteExecutions")
+    decision_evidence_currently_eligible: bool = Field(
+        alias="decisionEvidenceCurrentlyEligible"
+    )
     envelope_id: str = Field(alias="envelopeId")
     envelope: dict[str, Any]
     envelope_hash: str = Field(alias="envelopeHash")
@@ -374,9 +448,112 @@ class EvidenceAdmissionResponse(StrictModel):
     run_technical_status: TechnicalStatus = Field(alias="runTechnicalStatus")
     run_evidence_outcome: EvidenceResultStatus = Field(alias="runEvidenceOutcome")
     overall_verdict: GovernanceVerdict = Field(alias="overallVerdict")
-    verdict_version: int = Field(alias="verdictVersion", ge=1)
+    verdict_version: int = Field(alias="verdictVersion", ge=0)
     effective_expires_at: str = Field(alias="effectiveExpiresAt")
     verified_at: str = Field(alias="verifiedAt")
+
+
+class EvidenceReviewRequest(StrictModel):
+    """One explicit reviewer outcome for a scope-bound admitted Passport V2."""
+
+    decision: Literal["accepted", "rejected"]
+    rationale: str = Field(min_length=1, max_length=512)
+    expected_review_version: int = Field(alias="expectedReviewVersion", ge=0)
+
+
+class EvidenceReviewResponse(StrictModel):
+    """Evidence-review projection; deliberately not a governance decision."""
+
+    review_id: str = Field(alias="reviewId")
+    admission_id: str = Field(alias="admissionId")
+    passport_revision_id: str = Field(alias="passportRevisionId")
+    run_id: str = Field(alias="runId")
+    suite_execution_id: str = Field(alias="suiteExecutionId")
+    decision: Literal["accepted", "rejected"]
+    rationale: str
+    review_version: int = Field(alias="reviewVersion", ge=1)
+    reviewed_by: str = Field(alias="reviewedBy")
+    reviewed_at: str = Field(alias="reviewedAt")
+    admission_status: Literal["verified"] = Field(alias="admissionStatus")
+    review_status: Literal["accepted", "rejected"] = Field(alias="reviewStatus")
+    freshness_status: FreshnessStatus = Field(alias="freshnessStatus")
+    recorded_freshness_status: FreshnessStatus = Field(alias="recordedFreshnessStatus")
+    freshness_contract_version: Literal["1.0.0"] = Field(alias="freshnessContractVersion")
+    freshness_evaluated_at: str = Field(alias="freshnessEvaluatedAt")
+    freshness_effective_at: str = Field(alias="freshnessEffectiveAt")
+    expiring_at: str | None = Field(alias="expiringAt")
+    freshness_reason_codes: list[str] = Field(alias="freshnessReasonCodes")
+    decision_evidence_eligible_at_review: bool = Field(
+        alias="decisionEvidenceEligibleAtReview"
+    )
+    technical_status: TechnicalStatus = Field(alias="technicalStatus")
+    evidence_result_status: EvidenceResultStatus = Field(alias="evidenceResultStatus")
+    run_technical_status: TechnicalStatus = Field(alias="runTechnicalStatus")
+    run_evidence_outcome: EvidenceResultStatus = Field(alias="runEvidenceOutcome")
+
+
+class GovernanceDecisionRequest(StrictModel):
+    """Normal decision input; no evidence authority or owner override is accepted."""
+
+    expected_verdict_version: int = Field(alias="expectedVerdictVersion", ge=0)
+    overall_verdict: GovernanceVerdict = Field(alias="overallVerdict")
+    layer_verdicts: LayerVerdictsResponse = Field(alias="layerVerdicts")
+    rationale: str = Field(min_length=1, max_length=4000)
+
+
+class OwnerDecisionOverrideRequest(GovernanceDecisionRequest):
+    owner_override_reason: str = Field(
+        alias="ownerOverrideReason", min_length=1, max_length=2000
+    )
+
+    @field_validator("owner_override_reason")
+    @classmethod
+    def _validate_owner_override_reason(cls, value: str) -> str:
+        try:
+            validate_owner_override_reason_input(value)
+        except EvaluationWorkbenchInputError as error:
+            raise ValueError("owner override reason is unsafe") from error
+        return value
+
+
+class GovernanceDecisionSuiteFreshnessResponse(StrictModel):
+    suite_execution_id: str = Field(alias="suiteExecutionId")
+    recorded_freshness_status: FreshnessStatus = Field(alias="recordedFreshnessStatus")
+    effective_freshness_status: FreshnessStatus = Field(alias="effectiveFreshnessStatus")
+    freshness_effective_at: str = Field(alias="freshnessEffectiveAt")
+    expiring_at: str | None = Field(alias="expiringAt")
+    freshness_reason_codes: list[str] = Field(alias="freshnessReasonCodes")
+    decision_evidence_eligible_at_decision: bool = Field(
+        alias="decisionEvidenceEligibleAtDecision"
+    )
+
+
+class GovernanceDecisionResponse(StrictModel):
+    decision_id: str = Field(alias="decisionId")
+    run_id: str = Field(alias="runId")
+    contract_version: Literal["2.0.0"] = Field(alias="contractVersion")
+    verdict_version: int = Field(alias="verdictVersion", ge=1)
+    overall_verdict: GovernanceVerdict = Field(alias="overallVerdict")
+    layer_verdicts_schema_version: Literal["1.0.0"] = Field(
+        alias="layerVerdictsSchemaVersion"
+    )
+    layer_verdicts: LayerVerdictsResponse = Field(alias="layerVerdicts")
+    rationale: str
+    decided_by: str = Field(alias="decidedBy")
+    evidence_set_hash: str = Field(alias="evidenceSetHash", pattern="^[0-9a-f]{64}$")
+    decided_at: str = Field(alias="decidedAt")
+    freshness_contract_version: Literal["1.0.0"] = Field(alias="freshnessContractVersion")
+    freshness_evaluated_at: str = Field(alias="freshnessEvaluatedAt")
+    decision_evidence_eligible_at_decision: bool = Field(
+        alias="decisionEvidenceEligibleAtDecision"
+    )
+    suite_freshness: list[GovernanceDecisionSuiteFreshnessResponse] = Field(
+        alias="suiteFreshness"
+    )
+
+
+class OwnerDecisionOverrideResponse(GovernanceDecisionResponse):
+    owner_override_applied: Literal[True] = Field(alias="ownerOverrideApplied")
 
 
 def _depth(value: Any, level: int = 0) -> int:
@@ -497,8 +674,16 @@ async def _payload(request: Request, model: type[StrictModel]) -> dict[str, Any]
     return value
 
 
-def _service(db: Session) -> EvaluationWorkbenchService:
-    return build_evaluation_workbench_service(db)
+def _catalog_versions_service(db: Session) -> EvaluationCatalogVersionsService:
+    return build_evaluation_workbench_services(db).catalog_versions
+
+
+def _planning_service(db: Session) -> EvaluationPlanService:
+    return build_evaluation_workbench_services(db).planning
+
+
+def _run_service(db: Session) -> EvaluationRunService:
+    return build_evaluation_workbench_services(db).runs
 
 
 def get_verified_evidence_admission_service(
@@ -509,30 +694,75 @@ def get_verified_evidence_admission_service(
     return build_verified_evidence_admission_service(db)
 
 
-def _require_verified_evidence_submit_enabled() -> None:
-    """Hide the route until its independent execution/admission gate passes."""
+def get_verified_evidence_review_service(
+    db: Session = Depends(get_db),
+) -> VerifiedEvidenceReviewService:
+    """Compose the review service only at the independently gated boundary."""
 
-    if not settings.assurance_v2_evidence_submit_enabled:
+    return build_verified_evidence_review_service(db)
+
+
+def get_governance_decision_service(
+    db: Session = Depends(get_db),
+) -> GovernanceDecisionService:
+    """Compose normal decisions only at the independently gated boundary."""
+
+    return build_governance_decision_service(db)
+
+
+def _require_assurance_v2_capability(child_enabled: bool, message: str) -> None:
+    """Require both the master switch and one independently gated capability."""
+
+    if not (settings.assurance_v2_enabled and child_enabled):
         raise HTTPException(
             status_code=404,
             detail={
                 "code": "assurance_feature_disabled",
-                "message": "Verified evidence submission is not enabled.",
+                "message": message,
             },
         )
 
 
-def _write(membership: OrgMembership, db: Session) -> None:
-    _require_mutation(membership, governance_service(db))
+def _require_verified_evidence_submit_enabled() -> None:
+    """Hide the route until its independent execution/admission gate passes."""
+
+    _require_assurance_v2_capability(
+        settings.assurance_v2_evidence_submit_enabled,
+        "Verified evidence submission is not enabled.",
+    )
 
 
-def _require_evidence_submit_permission(membership: OrgMembership) -> None:
-    if "evaluation:evidence:submit" not in membership.permissions:
+def _require_verified_evidence_review_enabled() -> None:
+    """Hide review until its separate authorization and integrity gate passes."""
+
+    _require_assurance_v2_capability(
+        settings.assurance_v2_evidence_review_enabled,
+        "Verified evidence review is not enabled.",
+    )
+
+
+def _require_governance_decision_enabled() -> None:
+    """Hide normal decisions until their PostgreSQL release gate passes."""
+
+    _require_assurance_v2_capability(
+        settings.assurance_v2_governance_decision_enabled,
+        "Governance decisions are not enabled.",
+    )
+
+
+def _require_owner_decision_override_enabled() -> None:
+    """Hide the owner exception route until all three release gates pass."""
+
+    if not (
+        settings.assurance_v2_enabled
+        and settings.assurance_v2_governance_decision_enabled
+        and settings.assurance_v2_separation_override_enabled
+    ):
         raise HTTPException(
-            status_code=403,
+            status_code=404,
             detail={
-                "code": "evaluation_evidence_submit_forbidden",
-                "message": "The evaluation:evidence:submit permission is required.",
+                "code": "assurance_feature_disabled",
+                "message": "Owner decision override is not enabled.",
             },
         )
 
@@ -549,7 +779,7 @@ def _require_evidence_scope(
     """Bind every path identity to the same immutable run and suite record."""
 
     try:
-        run = _service(db).get_run(
+        run = _run_service(db).get_run(
             org_id=organization_id,
             system_id=system_id,
             run_id=run_id,
@@ -569,6 +799,34 @@ def _require_evidence_scope(
         )
     ):
         _missing("evidence_scope")
+
+
+def _require_decision_scope(
+    *,
+    db: Session,
+    organization_id: str,
+    workspace_id: str,
+    system_id: str,
+    run_id: str,
+) -> None:
+    """Bind every decision path identity to the same persisted v2 run."""
+
+    try:
+        run = _run_service(db).get_run(
+            org_id=organization_id,
+            system_id=system_id,
+            run_id=run_id,
+        )
+    except EvaluationWorkbenchError as error:
+        _raise(error)
+    if not isinstance(run, dict) or (
+        run.get("organizationId") != organization_id
+        or run.get("workspaceId") != workspace_id
+        or run.get("systemId") != system_id
+        or run.get("id") != run_id
+        or run.get("contractVersion") != "2.0.0"
+    ):
+        _missing("decision_scope")
 
 
 def _raise(error: EvaluationWorkbenchError) -> None:
@@ -667,9 +925,9 @@ async def create_target(
     membership: OrgMembership = Depends(organization_membership),
     db: Session = Depends(get_db),
 ):
-    _write(membership, db)
+    require_evaluation_permission(membership, EVALUATION_CATALOG_ADMIN_PERMISSION)
     try:
-        result = _service(db).create_target_version(
+        result = _catalog_versions_service(db).create_target_version(
             org_id=membership.org_id,
             system_id=system_id,
             actor_id=membership.user_id,
@@ -691,7 +949,7 @@ def list_targets(
     db: Session = Depends(get_db),
 ):
     try:
-        result = _service(db).list_target_versions(
+        result = _catalog_versions_service(db).list_target_versions(
             org_id=membership.org_id,
             system_id=system_id,
         )
@@ -713,7 +971,7 @@ def get_target(
     db: Session = Depends(get_db),
 ):
     try:
-        result = _service(db).get_target_version(
+        result = _catalog_versions_service(db).get_target_version(
             org_id=membership.org_id,
             system_id=system_id,
             target_version_id=target_version_id,
@@ -737,9 +995,9 @@ async def create_suite(
     membership: OrgMembership = Depends(organization_membership),
     db: Session = Depends(get_db),
 ):
-    _write(membership, db)
+    require_evaluation_permission(membership, EVALUATION_CATALOG_ADMIN_PERMISSION)
     try:
-        result = _service(db).create_suite_version(
+        result = _catalog_versions_service(db).create_suite_version(
             org_id=membership.org_id,
             actor_id=membership.user_id,
             idempotency_key=idempotency_key,
@@ -759,7 +1017,7 @@ def list_suites(
     db: Session = Depends(get_db),
 ):
     try:
-        return _service(db).list_suite_versions(org_id=membership.org_id)
+        return _catalog_versions_service(db).list_suite_versions(org_id=membership.org_id)
     except EvaluationWorkbenchError as error:
         _raise(error)
 
@@ -774,7 +1032,7 @@ def get_suite(
     db: Session = Depends(get_db),
 ):
     try:
-        result = _service(db).get_suite_version(
+        result = _catalog_versions_service(db).get_suite_version(
             org_id=membership.org_id,
             suite_version_id=suite_version_id,
         )
@@ -795,9 +1053,9 @@ def activate_suite(
     membership: OrgMembership = Depends(organization_membership),
     db: Session = Depends(get_db),
 ):
-    _write(membership, db)
+    require_evaluation_permission(membership, EVALUATION_CATALOG_ADMIN_PERMISSION)
     try:
-        result = _service(db).activate_suite_version(
+        result = _catalog_versions_service(db).activate_suite_version(
             org_id=membership.org_id,
             suite_version_id=suite_version_id,
             actor_id=membership.user_id,
@@ -823,9 +1081,9 @@ async def create_plan(
     membership: OrgMembership = Depends(organization_membership),
     db: Session = Depends(get_db),
 ):
-    _write(membership, db)
+    require_evaluation_permission(membership, EVALUATION_PLAN_WRITE_PERMISSION)
     try:
-        result = _service(db).create_plan(
+        result = _planning_service(db).create_plan(
             org_id=membership.org_id,
             system_id=system_id,
             actor_id=membership.user_id,
@@ -847,7 +1105,7 @@ def list_plans(
     db: Session = Depends(get_db),
 ):
     try:
-        result = _service(db).list_plans(
+        result = _planning_service(db).list_plans(
             org_id=membership.org_id,
             system_id=system_id,
         )
@@ -869,7 +1127,7 @@ def get_plan(
     db: Session = Depends(get_db),
 ):
     try:
-        result = _service(db).get_plan(
+        result = _planning_service(db).get_plan(
             org_id=membership.org_id,
             system_id=system_id,
             plan_id=plan_id,
@@ -892,9 +1150,9 @@ def activate_plan(
     membership: OrgMembership = Depends(organization_membership),
     db: Session = Depends(get_db),
 ):
-    _write(membership, db)
+    require_evaluation_permission(membership, EVALUATION_PLAN_ACTIVATE_PERMISSION)
     try:
-        result = _service(db).activate_plan(
+        result = _planning_service(db).activate_plan(
             org_id=membership.org_id,
             system_id=system_id,
             plan_id=plan_id,
@@ -920,7 +1178,7 @@ def preflight(
     db: Session = Depends(get_db),
 ):
     try:
-        result = _service(db).preflight(
+        result = _planning_service(db).preflight(
             org_id=membership.org_id,
             system_id=system_id,
             plan_id=plan_id,
@@ -947,9 +1205,9 @@ async def create_run(
     membership: OrgMembership = Depends(organization_membership),
     db: Session = Depends(get_db),
 ):
-    _write(membership, db)
+    require_evaluation_permission(membership, EVALUATION_RUN_CREATE_PERMISSION)
     try:
-        result = _service(db).create_run(
+        result = _run_service(db).create_run(
             org_id=membership.org_id,
             system_id=system_id,
             plan_id=plan_id,
@@ -972,7 +1230,7 @@ def list_runs(
     db: Session = Depends(get_db),
 ):
     try:
-        result = _service(db).list_runs(
+        result = _run_service(db).list_runs(
             org_id=membership.org_id,
             system_id=system_id,
         )
@@ -994,7 +1252,7 @@ def get_run(
     db: Session = Depends(get_db),
 ):
     try:
-        result = _service(db).get_run(
+        result = _run_service(db).get_run(
             org_id=membership.org_id,
             system_id=system_id,
             run_id=run_id,
@@ -1047,7 +1305,8 @@ async def submit_verified_evidence(
     server-owned authority graph for this exact tenant/run/suite scope.
     """
 
-    _require_evidence_submit_permission(membership)
+    require_evaluation_permission(membership, EVALUATION_EVIDENCE_SUBMIT_PERMISSION)
+    require_evaluation_permission(membership, EVALUATION_EVIDENCE_LINK_PERMISSION)
     if membership.org_id != org_id:
         _missing("evidence_scope")
     _require_evidence_scope(
@@ -1081,5 +1340,172 @@ async def submit_verified_evidence(
             raw_passport=raw_passport,
         )
         return _respond(result, EvidenceAdmissionResponse)
+    except EvaluationWorkbenchError as error:
+        _raise(error)
+
+
+@verified_evidence_review_router.post(
+    "/workspaces/{workspace_id}/systems/{system_id}/evaluation-v2/runs/{run_id}"
+    "/suite-executions/{suite_execution_id}/evidence-admissions/{admission_id}"
+    "/passport-revisions/{passport_revision_id}/review",
+    status_code=201,
+    response_model=EvidenceReviewResponse,
+    dependencies=[Depends(_require_verified_evidence_review_enabled)],
+    openapi_extra=_request_body_schema(EvidenceReviewRequest),
+)
+async def review_verified_evidence(
+    org_id: str,
+    workspace_id: str,
+    system_id: str,
+    run_id: str,
+    suite_execution_id: str,
+    admission_id: str,
+    passport_revision_id: str,
+    request: Request,
+    idempotency_key: str = Header(alias="Idempotency-Key"),
+    membership: OrgMembership = Depends(organization_membership),
+    db: Session = Depends(get_db),
+    review_service: VerifiedEvidenceReviewService = Depends(get_verified_evidence_review_service),
+):
+    """Append one four-eyes reviewer outcome for exactly one admitted Passport.
+
+    This endpoint deliberately cannot issue a governance verdict.  The service
+    accepts only a pending, verified, current admission with live trust/key
+    authority and rejects any reviewer who submitted, linked, or requested it.
+    """
+
+    require_evaluation_permission(membership, EVALUATION_EVIDENCE_REVIEW_PERMISSION)
+    if membership.org_id != org_id:
+        _missing("evidence_scope")
+    _require_evidence_scope(
+        db=db,
+        organization_id=membership.org_id,
+        workspace_id=workspace_id,
+        system_id=system_id,
+        run_id=run_id,
+        suite_execution_id=suite_execution_id,
+    )
+    payload = await _payload(request, EvidenceReviewRequest)
+    try:
+        result = review_service.review_verified_evidence(
+            scope=EvidenceReviewScope(
+                organization_id=membership.org_id,
+                workspace_id=workspace_id,
+                system_id=system_id,
+                run_id=run_id,
+                suite_execution_id=suite_execution_id,
+                admission_id=admission_id,
+                passport_revision_id=passport_revision_id,
+            ),
+            actor_id=membership.user_id,
+            idempotency_key=idempotency_key,
+            decision=payload["decision"],
+            rationale=payload["rationale"],
+            expected_review_version=payload["expectedReviewVersion"],
+        )
+        return _respond(result, EvidenceReviewResponse)
+    except EvaluationWorkbenchError as error:
+        _raise(error)
+
+
+@governance_decision_router.post(
+    "/workspaces/{workspace_id}/systems/{system_id}/evaluation-v2/runs/{run_id}/decisions",
+    status_code=201,
+    response_model=GovernanceDecisionResponse,
+    dependencies=[Depends(_require_governance_decision_enabled)],
+    openapi_extra=_request_body_schema(GovernanceDecisionRequest),
+)
+async def create_governance_decision(
+    org_id: str,
+    workspace_id: str,
+    system_id: str,
+    run_id: str,
+    request: Request,
+    idempotency_key: str = Header(alias="Idempotency-Key"),
+    membership: OrgMembership = Depends(organization_membership),
+    db: Session = Depends(get_db),
+    decision_service: GovernanceDecisionService = Depends(get_governance_decision_service),
+):
+    """Append one normal decision without enabling owner override or enforcement."""
+
+    require_evaluation_permission(membership, EVALUATION_DECISION_PERMISSION)
+    if membership.org_id != org_id:
+        _missing("decision_scope")
+    _require_decision_scope(
+        db=db,
+        organization_id=membership.org_id,
+        workspace_id=workspace_id,
+        system_id=system_id,
+        run_id=run_id,
+    )
+    payload = await _payload(request, GovernanceDecisionRequest)
+    try:
+        result = decision_service.decide(
+            scope=GovernanceDecisionScope(
+                organization_id=membership.org_id,
+                workspace_id=workspace_id,
+                system_id=system_id,
+                run_id=run_id,
+            ),
+            actor_id=membership.user_id,
+            idempotency_key=idempotency_key,
+            expected_verdict_version=payload["expectedVerdictVersion"],
+            overall_verdict=payload["overallVerdict"],
+            layer_verdicts=payload["layerVerdicts"],
+            rationale=payload["rationale"],
+        )
+        return _respond(result, GovernanceDecisionResponse)
+    except EvaluationWorkbenchError as error:
+        _raise(error)
+
+
+@governance_decision_override_router.post(
+    "/workspaces/{workspace_id}/systems/{system_id}/evaluation-v2/runs/{run_id}/decisions/owner-override",
+    status_code=201,
+    response_model=OwnerDecisionOverrideResponse,
+    dependencies=[Depends(_require_owner_decision_override_enabled)],
+    openapi_extra=_request_body_schema(OwnerDecisionOverrideRequest),
+)
+async def create_owner_decision_override(
+    org_id: str,
+    workspace_id: str,
+    system_id: str,
+    run_id: str,
+    request: Request,
+    idempotency_key: str = Header(alias="Idempotency-Key"),
+    membership: OrgMembership = Depends(organization_membership),
+    db: Session = Depends(get_db),
+    decision_service: GovernanceDecisionService = Depends(get_governance_decision_service),
+):
+    """Append a separately gated owner-authorized decision exception."""
+
+    require_evaluation_permission(membership, EVALUATION_DECISION_PERMISSION)
+    if membership.org_id != org_id:
+        _missing("decision_scope")
+    _require_decision_scope(
+        db=db,
+        organization_id=membership.org_id,
+        workspace_id=workspace_id,
+        system_id=system_id,
+        run_id=run_id,
+    )
+    payload = await _payload(request, OwnerDecisionOverrideRequest)
+    try:
+        result = decision_service.decide_owner_override(
+            scope=GovernanceDecisionScope(
+                organization_id=membership.org_id,
+                workspace_id=workspace_id,
+                system_id=system_id,
+                run_id=run_id,
+            ),
+            actor_id=membership.user_id,
+            idempotency_key=idempotency_key,
+            expected_verdict_version=payload["expectedVerdictVersion"],
+            overall_verdict=payload["overallVerdict"],
+            layer_verdicts=payload["layerVerdicts"],
+            rationale=payload["rationale"],
+            owner_override_reason=payload["ownerOverrideReason"],
+        )
+        return _respond(result, OwnerDecisionOverrideResponse)
     except EvaluationWorkbenchError as error:
         _raise(error)

@@ -9,7 +9,8 @@
 ## P0 — Trustworthy control plane
 
 - [x] Capture fresh backend, frontend, browser, build, PostgreSQL, boundary, and archive-import baselines.
-- [ ] Split evaluation planning, runs, evidence admission, decisions, and worker ports while preserving `api -> application -> domain -> infrastructure`.
+- [x] Split evaluation planning, runs, evidence admission, decisions, and worker ports while preserving `api -> application -> domain -> infrastructure`.
+  - Checkpoint: catalog/version, planning, and run use cases now have narrow application services and ports composed over one request-scoped transactional UoW; evidence admission, review, governance decision, catalog, and trust retain their independently composed boundaries. Pure binding, freshness, evaluator-registration, and JWK policies live in neutral application modules, so infrastructure imports no application services. The worker port is declaration-only: no route, adapter, queue, lease, credential, persistence, or execution was added. See `docs/audits/2026-08-14-p0-assurance-service-port-split.md`.
 - [x] Add immutable target versions containing exact subject, version, digest, deployment, connector, and manifest identity.
 - [x] Preserve the current target kinds and add `vision_model`.
 - [x] Add immutable suite versions with compatible target kinds, phases, depths, delivery modes, configuration schema, budgets, runner digest, adapter version, and result contract.
@@ -18,21 +19,32 @@
 - [x] Create one suite-execution record per selected suite.
 - [x] Bind Passport v2 to exact tenant, system, target, suite, plan, configuration, lifecycle, delivery, evaluator, nonce, and chronology.
 - [x] Keep Passport v1 readable but ineligible for v2 runs.
-- [ ] Add evidence issuers, Ed25519 keys, immutable trust policies, admissions, freshness, and append-only reviews.
-- [ ] Require verified evidence from FairMind workers and external adapters; imports may remain unsigned only as visibly unverified human-review material.
+- [x] Add evidence issuers, Ed25519 keys, immutable trust policies, admissions, freshness, and append-only reviews.
+  - Checkpoint: migration 013g derives current operational freshness from the exact admission, receipt, evaluator registration, issuer, signing key, policy, review, and chronology graph. PostgreSQL owns gate time and serializes authority changes with review/decision mutations; SQLite remains a fail-closed parity fixture. See `docs/audits/2026-08-13-p0-operational-evidence-freshness.md` for proof and remaining public-release gaps.
+- [x] Require verified evidence from FairMind workers and external adapters; imports may remain unsigned only as visibly unverified human-review material.
+  - Checkpoint: signed Passport V2 evidence still requires its exact approved evaluator registration, issuer, and key. A separate default-off import route can persist only terminal `imported_report` material as claimed, unverified, human-review-only, and decision-ineligible. Migration 013i binds the immutable import snapshot, evidence row, admission, link, suite projection, active authority graph, provenance, chronology, and policy-derived expiry; PostgreSQL rejects mismatches and the UI never presents the material as verified. See `docs/audits/2026-08-21-p0-evidence-source-import.md`.
 - [x] Keep linking separate from governance decision-making; a link yields `review` or `insufficient`, never automatic approval/blocking.
 - [ ] Add granular plan, run, evidence, decision, catalog, trust, worker, and separation-override permissions.
-- [ ] Enforce four-eyes review and audited owner overrides.
-- [ ] Add 30-day transactional idempotency and an append-only per-organization audit hash chain.
+  - Checkpoint: live human plan, run, evidence, decision, catalog, and trust-administration routes now require literal persisted permissions, and direct-mounted v2 routers fail closed. The decision-only audited canonical-owner override is implemented and default-off; granular/delegable separation-override authorization, service-only worker authorization, and independent submit/link surfaces remain open.
+- [x] Enforce four-eyes review and audited owner overrides.
+  - Checkpoint: migration 013j makes evidence review permanently non-overridable and binds decision-only canonical-owner exceptions to exact persisted authority, one immutable decision, completed idempotency, and the per-organization success-audit chain. The route is separately default-off and PostgreSQL-authoritative. See `docs/audits/2026-08-21-p0-owner-decision-override.md`.
+- [x] Add 30-day transactional idempotency and an append-only per-organization audit hash chain.
+  - Checkpoint: migration 013h makes PostgreSQL the database-clock authority for exact 2,592,000-second idempotency generations, immutable completion bindings, expired-only atomic rollover, and non-deletable identity anchors. Every enabled Assurance V2 mutation reaches the shared transactional UoW, and successful plus expected/domain-rejected outcomes bind to the per-organization audit chain. This is a minimum anti-reexecution window, not bounded data retention or production-runtime proof. See `docs/audits/2026-08-13-p0-idempotency-audit-integrity.md`.
 - [ ] Feature-disable automatic enforcement, untrusted external linking, workers, and unsupported modality packs at both API and UI boundaries.
 - [x] Add forward migration 013 without rewriting migration 012; extend checksum-ledger drift detection.
-- [ ] Mark existing plans/runs contract v1 without fabricating registry identities; keep them readable but prevent new execution until upgraded.
+- [x] Mark existing plans/runs contract v1 without fabricating registry identities; keep them readable but prevent new execution until upgraded.
 
-Task 12B milestone: the checked Passport v2 binding and link-separation rows are
-implemented as an internal, default-off application kernel. They do not imply
-an exposed API, reviewer acceptance, governance approval, compliance,
-certification, worker execution, or runtime enforcement. The remaining issuer,
-review, permission, and route rows are independent release gates.
+Task 12B milestone: Passport v2 binding, trust authority, verified admission,
+append-only review, operational freshness, and link separation are implemented
+as an internal, default-off PostgreSQL-authoritative control-plane kernel. They
+do not imply generally available evaluator execution, compliance,
+certification, automatic approval, worker execution, or runtime enforcement.
+The canonical-owner decision override is implemented but default-off;
+production provisioning, enablement, and rollout remain an independent gate.
+Worker execution identity, remaining feature switches, independently invocable
+submit/link surfaces, and public execution routes remain independent release
+gates. Imported reports are inspection material only and cannot enter formal
+evidence review or governance decision authority.
 
 ## P0 — Frontend and design
 

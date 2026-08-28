@@ -21,6 +21,9 @@ from database.governance_models import (
 )
 from database.models import OrganizationAuditLog
 from src.domain.assurance.evidence_passport import CapabilityState, EvaluationStatus
+from src.application.services.legacy_evaluation_feature_gates import (
+    LegacyEvaluationFeatureGates,
+)
 
 
 TARGET_KINDS = frozenset(
@@ -44,6 +47,19 @@ RUN_TRIGGERS = frozenset(
 )
 SUITE_REF_PATTERN = re.compile(
     r"^[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9._-]*$"
+)
+
+LEGACY_CONTRACT_VERSION = "1.0.0"
+CONTRACT_UPGRADE_REQUIRED_CODE = "contract_upgrade_required"
+CONTRACT_UPGRADE_REQUIRED_MESSAGE = (
+    "Legacy evaluation mutations are disabled while Assurance V2 is enabled."
+)
+CONTRACT_UPGRADE_REQUIRED_NEXT_ACTION = (
+    "Clone legacy records into a bound v2 plan and use the evaluation-v2 workflow."
+)
+CONTRACT_UPGRADE_PREFLIGHT_MESSAGE = (
+    "This legacy assurance-contract v1 plan cannot prepare a new run while "
+    "Assurance V2 is enabled."
 )
 
 
@@ -155,8 +171,70 @@ def validate_trigger(trigger: str) -> str:
 
 
 class EvaluationRunsService:
-    def __init__(self, db: Session) -> None:
+    def __init__(
+        self,
+        db: Session,
+        *,
+        legacy_mutations_enabled: bool = True,
+        feature_gates: LegacyEvaluationFeatureGates | None = None,
+    ) -> None:
         self.db = db
+        self.legacy_mutations_enabled = legacy_mutations_enabled
+        self.feature_gates = feature_gates or LegacyEvaluationFeatureGates.from_environment()
+
+    def _require_legacy_mutations_enabled(self) -> None:
+        if not self.legacy_mutations_enabled:
+            raise _error(
+                CONTRACT_UPGRADE_REQUIRED_CODE,
+                CONTRACT_UPGRADE_REQUIRED_MESSAGE,
+                CONTRACT_UPGRADE_REQUIRED_NEXT_ACTION,
+                409,
+            )
+
+    def _require_automatic_enforcement_enabled(self, enforcement_mode: str) -> None:
+        if (
+            enforcement_mode == "automatic"
+            and not self.feature_gates.automatic_enforcement_enabled
+        ):
+            raise _error(
+                "automatic_enforcement_disabled",
+                "Automatic enforcement is disabled for legacy evaluation plans.",
+                (
+                    "Use advisory or human approval, or enable the reviewed "
+                    "automatic-enforcement capability."
+                ),
+                409,
+            )
+
+    def _require_fairmind_worker_enabled(self, delivery_mode: str) -> None:
+        if (
+            delivery_mode == "fairmind_worker"
+            and not self.feature_gates.fairmind_worker_enabled
+        ):
+            raise _error(
+                "fairmind_worker_delivery_disabled",
+                "FairMind worker delivery is disabled for legacy evaluation plans.",
+                (
+                    "Use an external provider or imported report, or enable the "
+                    "reviewed worker capability."
+                ),
+                409,
+            )
+
+    def _require_legacy_evidence_linking_enabled(self) -> None:
+        if not self.feature_gates.evidence_linking_enabled:
+            raise _error(
+                "legacy_evidence_linking_disabled",
+                (
+                    "Legacy evidence linking is disabled because it bypasses the "
+                    "trusted-evidence admission workflow."
+                ),
+                (
+                    "Use the Assurance V2 trusted-evidence workflow, or enable the "
+                    "reviewed legacy-link capability."
+                ),
+                409,
+            )
 
     def _system_scope(self, org_id: str, system_id: str):
         systems = GovernanceAISystem.__table__
@@ -186,6 +264,7 @@ class EvaluationRunsService:
     def _plan_dict(row) -> dict[str, Any]:
         return {
             "id": row["id"],
+            "contractVersion": row["contract_version"],
             "orgId": row["org_id"],
             "workspaceId": row["workspace_id"],
             "systemId": row["system_id"],
@@ -207,6 +286,7 @@ class EvaluationRunsService:
     def _run_dict(row) -> dict[str, Any]:
         return {
             "id": row["id"],
+            "contractVersion": row["contract_version"],
             "orgId": row["org_id"],
             "workspaceId": row["workspace_id"],
             "systemId": row["system_id"],
@@ -283,7 +363,10 @@ class EvaluationRunsService:
 
     @staticmethod
     def _require_v1_mutation(row) -> None:
-        if row.get("contract_version", "1.0.0") != "1.0.0":
+        if (
+            row.get("contract_version", LEGACY_CONTRACT_VERSION)
+            != LEGACY_CONTRACT_VERSION
+        ):
             raise _error(
                 "contract_version_requires_v2",
                 "Assurance-contract v2 records must use the evaluation-v2 workflow.",
@@ -300,6 +383,9 @@ class EvaluationRunsService:
         payload: dict,
     ) -> dict:
         normalized = validate_plan_payload(payload)
+        self._require_legacy_mutations_enabled()
+        self._require_automatic_enforcement_enabled(normalized["enforcementMode"])
+        self._require_fairmind_worker_enabled(normalized["deliveryMode"])
         try:
             scope = self._system_scope(org_id, system_id)
             if scope is None:
@@ -367,7 +453,7 @@ class EvaluationRunsService:
                 plans.c.org_id == org_id,
                 plans.c.workspace_id == scope["workspace_id"],
                 plans.c.system_id == system_id,
-                plans.c.contract_version == "1.0.0",
+                plans.c.contract_version == LEGACY_CONTRACT_VERSION,
             )
             .order_by(plans.c.created_at.desc(), plans.c.id.desc())
         ).mappings().all()
@@ -382,6 +468,7 @@ class EvaluationRunsService:
         actor_id: str,
     ) -> dict | None:
         try:
+            self._require_legacy_mutations_enabled()
             scope = self._system_scope(org_id, system_id)
             if scope is None:
                 return None
@@ -394,6 +481,8 @@ class EvaluationRunsService:
             if row is None:
                 return None
             self._require_v1_mutation(row)
+            self._require_automatic_enforcement_enabled(row["enforcement_mode"])
+            self._require_fairmind_worker_enabled(row["delivery_mode"])
             if row["status"] == "archived":
                 raise _error(
                     "plan_archived",
@@ -475,8 +564,20 @@ class EvaluationRunsService:
         )
         if plan is None:
             return None
-        if plan.get("contract_version", "1.0.0") != "1.0.0":
+        if (
+            plan.get("contract_version", LEGACY_CONTRACT_VERSION)
+            != LEGACY_CONTRACT_VERSION
+        ):
             return None
+        if not self.legacy_mutations_enabled:
+            return {
+                "planId": plan_id,
+                "canPrepareRun": False,
+                "fairmindExecutionAvailable": False,
+                "code": CONTRACT_UPGRADE_REQUIRED_CODE,
+                "message": CONTRACT_UPGRADE_PREFLIGHT_MESSAGE,
+                "nextAction": CONTRACT_UPGRADE_REQUIRED_NEXT_ACTION,
+            }
         if plan["delivery_mode"] == "fairmind_worker":
             return {
                 "planId": plan_id,
@@ -528,6 +629,7 @@ class EvaluationRunsService:
     ) -> dict:
         validate_trigger(trigger)
         try:
+            self._require_legacy_mutations_enabled()
             scope = self._system_scope(org_id, system_id)
             if scope is None:
                 raise _error(
@@ -550,6 +652,8 @@ class EvaluationRunsService:
                     404,
                 )
             self._require_v1_mutation(plan)
+            self._require_automatic_enforcement_enabled(plan["enforcement_mode"])
+            self._require_fairmind_worker_enabled(plan["delivery_mode"])
             if plan["status"] != "active":
                 raise _error(
                     "plan_inactive",
@@ -619,7 +723,7 @@ class EvaluationRunsService:
                 runs.c.org_id == org_id,
                 runs.c.workspace_id == scope["workspace_id"],
                 runs.c.system_id == system_id,
-                runs.c.contract_version == "1.0.0",
+                runs.c.contract_version == LEGACY_CONTRACT_VERSION,
             )
             .order_by(runs.c.created_at.desc(), runs.c.id.desc())
         ).mappings().all()
@@ -641,7 +745,11 @@ class EvaluationRunsService:
             workspace_id=scope["workspace_id"],
             run_id=run_id,
         )
-        if row and row.get("contract_version", "1.0.0") != "1.0.0":
+        if (
+            row
+            and row.get("contract_version", LEGACY_CONTRACT_VERSION)
+            != LEGACY_CONTRACT_VERSION
+        ):
             return None
         return self._run_dict(row) if row else None
 
@@ -743,6 +851,7 @@ class EvaluationRunsService:
         actor_id: str,
     ) -> dict | None:
         try:
+            self._require_legacy_mutations_enabled()
             scope = self._system_scope(org_id, system_id)
             if scope is None:
                 return None
@@ -755,6 +864,10 @@ class EvaluationRunsService:
             if run is None:
                 return None
             self._require_v1_mutation(run)
+            # Preserve the authoritative v1 scope/contract response before
+            # applying the capability gate.  A v2 or foreign run must remain
+            # a contract/scope error, never reveal a legacy feature flag.
+            self._require_legacy_evidence_linking_enabled()
             if run["linked_passport_revision_id"] is not None:
                 if (
                     run["linked_evidence_run_id"] == evidence_run_id

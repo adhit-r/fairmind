@@ -1,4 +1,5 @@
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from api.main import app
@@ -9,8 +10,10 @@ from api.routes import real_ai_bom
 class StubAIBOMService:
     def __init__(self, document):
         self.document = document
+        self.calls: list[str] = []
 
     def get_bom_document(self, document_id: str):
+        self.calls.append(document_id)
         if document_id == self.document.id:
             return self.document
         return None
@@ -55,37 +58,48 @@ async def test_fairness_evidence_profile_route_exposes_missing_evidence_as_unkno
     assert "No bias tests attached." in component["unknowns"]
 
 
-def test_fairness_evidence_profile_endpoint_is_registered(monkeypatch):
+def test_fairness_evidence_profile_endpoint_is_not_registered_by_default() -> None:
+    assert not any(
+        route.path
+        == "/api/v1/ai-bom/documents/{bom_id}/fairness-evidence-profile"
+        and "GET" in (getattr(route, "methods", None) or set())
+        for route in app.routes
+    )
+
+
+def test_quarantined_ai_bom_http_api_is_not_advertised() -> None:
+    client = TestClient(app)
+
+    root_payload = client.get("/").json()
+    api_payload = client.get("/api").json()
+
+    assert not any("AI BOM" in feature for feature in root_payload["features"])
+    assert "ai_bom" not in api_payload["endpoints"]
+    assert not any(tag["name"] == "ai-bom" for tag in app.openapi_tags)
+
+
+def test_fairness_evidence_profile_router_fails_closed_when_mounted_directly(monkeypatch):
     document = AIBOMDocument(
-        id="bom-route-001",
-        name="Route BOM",
+        id="bom-direct-001",
+        name="Direct Route BOM",
         version="1.0.0",
-        project_name="Route Coverage",
+        project_name="Direct Route Coverage",
         organization="FairMind",
         overall_risk_level="medium",
         overall_compliance_status="partial",
-        total_components=1,
-        components=[
-            AIBOMComponent(
-                id="route.model",
-                name="Route Model",
-                type="model",
-                version="1.0.0",
-                risk_level="medium",
-                compliance_status="partial",
-            )
-        ],
+        total_components=0,
     )
-    monkeypatch.setattr(real_ai_bom, "ai_bom_service", StubAIBOMService(document))
+    service = StubAIBOMService(document)
+    monkeypatch.setattr(real_ai_bom, "ai_bom_service", service)
+    direct_app = FastAPI()
+    direct_app.include_router(real_ai_bom.router, prefix="/api/v1")
 
-    client = TestClient(app)
-    response = client.get("/api/v1/ai-bom/documents/bom-route-001/fairness-evidence-profile")
+    response = TestClient(direct_app).get(
+        "/api/v1/ai-bom/documents/bom-direct-001/fairness-evidence-profile"
+    )
 
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["success"] is True
-    assert payload["data"]["bom_ref"] == "bom-route-001"
-    assert payload["data"]["components"][0]["risk_summary"]["overall_severity"] == "unknown"
+    assert response.status_code == 404
+    assert service.calls == []
 
 
 @pytest.mark.asyncio

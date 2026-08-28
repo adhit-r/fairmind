@@ -28,6 +28,24 @@ from database.models import OrganizationMember, OrganizationRole
 
 
 MUTATION_PERMISSION = "model:write"
+MAX_ORG_ROLE_PERMISSIONS = 64
+MAX_ORG_ROLE_PERMISSION_LENGTH = 128
+_ORG_ROLE_PERMISSION_PATTERN = re.compile(
+    r"^[a-z][a-z0-9_-]*(?::[a-z][a-z0-9_-]*)*$"
+)
+LEGACY_ROLE_DELEGATION_BLOCKED_PERMISSIONS = frozenset(
+    {
+        "evaluation:trust:admin",
+        "evaluation:worker",
+        "evaluation:separation:override",
+    }
+)
+_NON_HUMAN_ORG_ROLE_PERMISSIONS = frozenset(
+    {
+        "evaluation:worker",
+        "evaluation:separation:override",
+    }
+)
 _CONTROL_STATUSES = {"not_started", "partial", "ready_for_review", "accepted", "rejected"}
 _APPLICABILITY = {"applicable", "not_applicable", "pending"}
 _MAPPING_STATES = {"candidate", "accepted", "rejected"}
@@ -83,6 +101,38 @@ def _reject_raw_outputs(value: object) -> None:
             _reject_raw_outputs(child)
 
 
+def normalize_org_role_permissions(value: object) -> tuple[str, ...]:
+    """Return only a bounded, literal permission list safe for authorization."""
+
+    if not isinstance(value, list) or len(value) > MAX_ORG_ROLE_PERMISSIONS:
+        return ()
+    if any(
+        not isinstance(permission, str)
+        or not permission
+        or len(permission) > MAX_ORG_ROLE_PERMISSION_LENGTH
+        or _ORG_ROLE_PERMISSION_PATTERN.fullmatch(permission) is None
+        for permission in value
+    ):
+        return ()
+    if len(set(value)) != len(value):
+        return ()
+    return tuple(
+        permission
+        for permission in value
+        if permission not in _NON_HUMAN_ORG_ROLE_PERMISSIONS
+    )
+
+
+def has_legacy_role_delegation_blocked_permission(value: object) -> bool:
+    """Report whether a role payload carries a permission legacy APIs cannot delegate."""
+
+    return isinstance(value, list) and any(
+        isinstance(permission, str)
+        and permission in LEGACY_ROLE_DELEGATION_BLOCKED_PERMISSIONS
+        for permission in value
+    )
+
+
 class GovernanceAssuranceService:
     def __init__(self, db: Session) -> None:
         self.db = db
@@ -106,7 +156,12 @@ class GovernanceAssuranceService:
                 OrganizationRole.__table__.c.name == member,
             )
         ).scalar_one_or_none()
-        return OrgMembership(org_id, user_id, member, tuple(permissions or ()))
+        return OrgMembership(
+            org_id,
+            user_id,
+            member,
+            normalize_org_role_permissions(permissions),
+        )
 
     @staticmethod
     def may_mutate(membership: OrgMembership) -> bool:

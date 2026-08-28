@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 88 88" role="img" aria-labelledby="title desc">
+  <title id="title">FairMind account portrait</title>
+  <desc id="desc">An abstract illustrated profile in the FairMind visual system.</desc>
+  <rect width="88" height="88" fill="#FCFDF8"/>
+  <path d="M8 0h72v8H8zM0 8h8v72H0zM80 8h8v72h-8zM8 80h72v8H8z" fill="#0F1412"/>
+  <path d="M16 68c4-16 13-23 28-23s24 7 28 23v12H16z" fill="#0F9D8A"/>
+  <path d="M25 34c0-13 8-22 19-22s19 9 19 22v8c0 12-8 21-19 21s-19-9-19-21z" fill="#FFB37D" stroke="#0F1412" stroke-width="4"/>
+  <path d="M24 35c0-18 11-27 22-27 11 0 19 8 19 22-7-4-13-6-21-6-7 0-13 4-20 11z" fill="#0F1412"/>
+  <path d="M33 42h5M50 42h5" stroke="#0F1412" stroke-linecap="square" stroke-width="4"/>
+  <path d="M37 53c4 3 10 3 14 0" fill="none" stroke="#0F1412" stroke-linecap="square" stroke-width="3"/>
+  <path d="M18 72h52v8H18z" fill="#FF6B35"/>
+</svg>

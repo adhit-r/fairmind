@@ -11,14 +11,22 @@ from types import SimpleNamespace
 import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, event, func, select, text
+from sqlalchemy import create_engine, event, func, select, text, update
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from api.routes.evaluation_workbench import (
+    governance_decision_router,
+    governance_decision_override_router,
     router as evaluation_workbench_router,
     verified_evidence_router,
+    verified_evidence_review_router,
 )
+from api.routes.imported_evidence import (
+    get_imported_evidence_service,
+    imported_evidence_router,
+)
+from api.routes.governance_assurance import organization_membership
 from api.routes.governance_assurance import router as governance_assurance_router
 from config.auth import TokenData, TokenType, UserRole, get_current_active_user
 from config.settings import settings
@@ -38,8 +46,13 @@ from database.governance_models import (
 from database.models import Organization, OrganizationMember, OrganizationRole, User
 from src.domain.assurance.evaluation_v2 import canonical_json, canonical_sha256
 from src.application.ports.evaluation_workbench import MutationResult
-from api.routes.evaluation_workbench import get_verified_evidence_admission_service
+from api.routes.evaluation_workbench import (
+    get_governance_decision_service,
+    get_verified_evidence_admission_service,
+    get_verified_evidence_review_service,
+)
 from tests.evaluation_workbench_sqlite import (
+    active_trust_policy_values_for_verifier_harness,
     allow_deliberate_check_constraint_corruption,
     install_authoritative_assurance_fixtures_for_application_verifier_harness,
 )
@@ -60,11 +73,32 @@ app.include_router(
     prefix="/api/v1/ai-governance",
     tags=["evaluation-workbench-v2-evidence"],
 )
+app.include_router(
+    imported_evidence_router,
+    prefix="/api/v1/ai-governance",
+    tags=["evaluation-workbench-v2-imported-evidence"],
+)
+app.include_router(
+    verified_evidence_review_router,
+    prefix="/api/v1/ai-governance",
+    tags=["evaluation-workbench-v2-evidence-review"],
+)
+app.include_router(
+    governance_decision_router,
+    prefix="/api/v1/ai-governance",
+    tags=["evaluation-workbench-v2-governance-decision"],
+)
+app.include_router(
+    governance_decision_override_router,
+    prefix="/api/v1/ai-governance",
+    tags=["evaluation-workbench-v2-governance-decision-owner-override"],
+)
 
 ORG = str(uuid.uuid4())
 FOREIGN_ORG = str(uuid.uuid4())
 USER = str(uuid.uuid4())
 VIEWER = str(uuid.uuid4())
+REVIEWER = str(uuid.uuid4())
 BASE = f"/api/v1/ai-governance/organizations/{ORG}"
 FOREIGN_BASE = f"/api/v1/ai-governance/organizations/{FOREIGN_ORG}"
 BINDING_INTEGRITY_DETAIL = {
@@ -73,20 +107,27 @@ BINDING_INTEGRITY_DETAIL = {
 }
 
 
-def _token(user_id: str) -> TokenData:
+def _token(
+    user_id: str,
+    *,
+    role: UserRole = UserRole.ANALYST,
+    permissions: list[str] | None = None,
+) -> TokenData:
     now = datetime.now(timezone.utc)
     return TokenData(
         user_id=user_id,
         email=f"{user_id}@example.test",
-        role=UserRole.ANALYST,
+        role=role,
         token_type=TokenType.ACCESS,
         iat=now,
         exp=now,
+        permissions=permissions or [],
     )
 
 
 @pytest.fixture
-def workbench_client():
+def workbench_client(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(settings, "assurance_v2_enabled", True)
     engine = create_engine(
         "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
     )
@@ -99,7 +140,7 @@ def workbench_client():
     install_authoritative_assurance_fixtures_for_application_verifier_harness(engine)
     factory = sessionmaker(bind=engine)
     session = factory()
-    for user_id in (USER, VIEWER):
+    for user_id in (USER, VIEWER, REVIEWER):
         session.execute(
             User.__table__.insert().values(
                 id=uuid.UUID(user_id), email=f"{user_id}@example.test", username=user_id
@@ -118,7 +159,7 @@ def workbench_client():
             owner_id=uuid.UUID(USER),
         )
     )
-    for user_id, role in ((USER, "admin"), (VIEWER, "viewer")):
+    for user_id, role in ((USER, "admin"), (VIEWER, "viewer"), (REVIEWER, "reviewer")):
         session.execute(
             OrganizationMember.__table__.insert().values(
                 id=uuid.uuid4(),
@@ -135,6 +176,32 @@ def workbench_client():
             user_id=uuid.UUID(USER),
             role="admin",
             status="active",
+        )
+    )
+    session.execute(
+        OrganizationRole.__table__.insert().values(
+            id=uuid.uuid4(),
+            org_id=uuid.UUID(ORG),
+            name="admin",
+            permissions=[
+                "evaluation:catalog:admin",
+                "evaluation:plan:write",
+                "evaluation:plan:activate",
+                "evaluation:run:create",
+            ],
+        )
+    )
+    session.execute(
+        OrganizationRole.__table__.insert().values(
+            id=uuid.uuid4(),
+            org_id=uuid.UUID(FOREIGN_ORG),
+            name="admin",
+            permissions=[
+                "evaluation:catalog:admin",
+                "evaluation:plan:write",
+                "evaluation:plan:activate",
+                "evaluation:run:create",
+            ],
         )
     )
     session.execute(
@@ -160,32 +227,25 @@ def workbench_client():
             name="system-b",
         )
     )
+    policy_created_at = now_iso()
     session.execute(
         GovernanceEvidenceTrustPolicyVersion.__table__.insert().values(
-            id="trust-a",
-            org_id=ORG,
-            version="1.0.0",
-            policy_json="{}",
-            policy_hash=canonical_sha256({}),
-            maximum_evidence_age_seconds=86400,
-            unsigned_import_policy="manual_review",
-            status="active",
-            created_by=USER,
-            created_at=now_iso(),
+            **active_trust_policy_values_for_verifier_harness(
+                policy_id="trust-a",
+                organization_id=ORG,
+                actor_id=USER,
+                created_at=policy_created_at,
+            )
         )
     )
     session.execute(
         GovernanceEvidenceTrustPolicyVersion.__table__.insert().values(
-            id="trust-b",
-            org_id=FOREIGN_ORG,
-            version="1.0.0",
-            policy_json="{}",
-            policy_hash=canonical_sha256({}),
-            maximum_evidence_age_seconds=86400,
-            unsigned_import_policy="manual_review",
-            status="active",
-            created_by=USER,
-            created_at=now_iso(),
+            **active_trust_policy_values_for_verifier_harness(
+                policy_id="trust-b",
+                organization_id=FOREIGN_ORG,
+                actor_id=USER,
+                created_at=policy_created_at,
+            )
         )
     )
     session.commit()
@@ -235,17 +295,179 @@ def _admission_url(
     )
 
 
+def _import_url(
+    *,
+    run_id: str,
+    suite_execution_id: str,
+    workspace_id: str = "workspace-a",
+    system_id: str = "system-a",
+    org_id: str = ORG,
+) -> str:
+    return (
+        f"/api/v1/ai-governance/organizations/{org_id}/workspaces/{workspace_id}"
+        f"/systems/{system_id}/evaluation-v2/runs/{run_id}"
+        f"/suite-executions/{suite_execution_id}/evidence-imports"
+    )
+
+
+def _review_url(
+    *,
+    run_id: str,
+    suite_execution_id: str,
+    admission_id: str = "admission-a",
+    passport_revision_id: str = "passport-revision-a",
+    workspace_id: str = "workspace-a",
+    system_id: str = "system-a",
+    org_id: str = ORG,
+) -> str:
+    return (
+        f"/api/v1/ai-governance/organizations/{org_id}/workspaces/{workspace_id}"
+        f"/systems/{system_id}/evaluation-v2/runs/{run_id}"
+        f"/suite-executions/{suite_execution_id}/evidence-admissions/{admission_id}"
+        f"/passport-revisions/{passport_revision_id}/review"
+    )
+
+
+def _decision_url(
+    *,
+    run_id: str,
+    workspace_id: str = "workspace-a",
+    system_id: str = "system-a",
+    org_id: str = ORG,
+) -> str:
+    return (
+        f"/api/v1/ai-governance/organizations/{org_id}/workspaces/{workspace_id}"
+        f"/systems/{system_id}/evaluation-v2/runs/{run_id}/decisions"
+    )
+
+
+def _owner_override_url(
+    *,
+    run_id: str,
+    workspace_id: str = "workspace-a",
+    system_id: str = "system-a",
+    org_id: str = ORG,
+) -> str:
+    return _decision_url(
+        run_id=run_id,
+        workspace_id=workspace_id,
+        system_id=system_id,
+        org_id=org_id,
+    ) + "/owner-override"
+
+
 def _grant_evidence_submit_permission() -> None:
+    _grant_role_permissions("admin", ["evaluation:evidence:submit", "evaluation:evidence:link"])
+
+
+def _grant_evidence_import_permission() -> None:
+    _grant_role_permissions("admin", ["evaluation:evidence:import", "evaluation:evidence:link"])
+
+
+def _import_payload() -> dict[str, object]:
+    return {
+        "reportId": "report-a",
+        "reportContentHash": "a" * 64,
+        "capturedAt": "2026-08-08T08:02:00+00:00",
+        "claimedTechnicalStatus": "succeeded",
+        "claimedEvidenceResultStatus": "passed",
+        "claimedResultSummary": {"caseCount": 4},
+        "artifactRefs": [
+            {
+                "artifactId": "artifact-a",
+                "role": "report",
+                "sha256": "b" * 64,
+                "mediaType": "application/json",
+                "sizeBytes": 4096,
+            }
+        ],
+        "limitations": [],
+    }
+
+
+def _grant_evidence_review_permission() -> None:
+    _grant_role_permissions("reviewer", ["evaluation:evidence:review"])
+
+
+def _grant_role_permissions(
+    role: str,
+    permissions: list[str],
+    *,
+    org_id: str = ORG,
+) -> None:
+    session_iterator = app.dependency_overrides[get_db]()
+    session = next(session_iterator)
+    try:
+        roles = OrganizationRole.__table__
+        current = session.execute(
+            select(roles.c.permissions).where(
+                roles.c.org_id == uuid.UUID(org_id),
+                roles.c.name == role,
+            )
+        ).scalar_one_or_none()
+        if current is None:
+            session.execute(
+                roles.insert().values(
+                    id=uuid.uuid4(),
+                    org_id=uuid.UUID(org_id),
+                    name=role,
+                    permissions=permissions,
+                )
+            )
+        else:
+            merged = list(dict.fromkeys([*current, *permissions]))
+            session.execute(
+                update(roles)
+                .where(roles.c.org_id == uuid.UUID(org_id), roles.c.name == role)
+                .values(permissions=merged)
+            )
+        session.commit()
+    finally:
+        session_iterator.close()
+
+
+def _set_role_permissions(role: str, permissions: list[str]) -> None:
+    session_iterator = app.dependency_overrides[get_db]()
+    session = next(session_iterator)
+    try:
+        roles = OrganizationRole.__table__
+        existing = session.execute(
+            select(roles.c.id).where(
+                roles.c.org_id == uuid.UUID(ORG),
+                roles.c.name == role,
+            )
+        ).scalar_one_or_none()
+        if existing is None:
+            session.execute(
+                roles.insert().values(
+                    id=uuid.uuid4(),
+                    org_id=uuid.UUID(ORG),
+                    name=role,
+                    permissions=permissions,
+                )
+            )
+        else:
+            session.execute(
+                update(roles)
+                .where(roles.c.org_id == uuid.UUID(ORG), roles.c.name == role)
+                .values(permissions=permissions)
+            )
+        session.commit()
+    finally:
+        session_iterator.close()
+
+
+def _set_membership_role(user_id: str, role: str) -> None:
     session_iterator = app.dependency_overrides[get_db]()
     session = next(session_iterator)
     try:
         session.execute(
-            OrganizationRole.__table__.insert().values(
-                id=uuid.uuid4(),
-                org_id=uuid.UUID(ORG),
-                name="admin",
-                permissions=["evaluation:evidence:submit"],
+            update(OrganizationMember)
+            .where(
+                OrganizationMember.__table__.c.org_id == uuid.UUID(ORG),
+                OrganizationMember.__table__.c.user_id == uuid.UUID(user_id),
             )
+            .values(role=role)
         )
         session.commit()
     finally:
@@ -278,10 +500,136 @@ class _RecordingAdmissionService:
                 "runTechnicalStatus": "succeeded",
                 "runEvidenceOutcome": "passed",
                 "overallVerdict": "review",
-                "verdictVersion": 1,
+                "verdictVersion": 0,
                 "effectiveExpiresAt": "2026-08-08T12:00:00+00:00",
                 "verifiedAt": "2026-08-08T11:00:00+00:00",
             },
+            status=201,
+        )
+
+
+class _RecordingImportedEvidenceService:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    def import_unverified_report(self, **kwargs):
+        self.calls.append(kwargs)
+        payload = kwargs["payload"]
+        assert isinstance(payload, dict)
+        scope = kwargs["scope"]
+        return MutationResult.create(
+            body={
+                "admissionId": "admission-import-1",
+                "evidenceRunId": "evidence-run-import-1",
+                "passportRevisionId": "passport-revision-import-1",
+                "nonceClaimId": "nonce-import-1",
+                "suiteEvidenceLinkId": "suite-link-import-1",
+                "runId": scope.run_id,
+                "suiteExecutionId": scope.suite_execution_id,
+                "reportContentHash": payload["reportContentHash"],
+                "importSnapshotHash": "c" * 64,
+                "resultAuthority": "claimed",
+                "humanReviewOnly": True,
+                "decisionEvidenceEligible": False,
+                "technicalStatus": payload["claimedTechnicalStatus"],
+                "evidenceResultStatus": payload["claimedEvidenceResultStatus"],
+                "admissionStatus": "unverified",
+                "reviewStatus": "pending",
+                "freshnessStatus": "current",
+                "runTechnicalStatus": payload["claimedTechnicalStatus"],
+                "runEvidenceOutcome": payload["claimedEvidenceResultStatus"],
+                "overallVerdict": "insufficient",
+                "verdictVersion": 0,
+                "effectiveExpiresAt": "2026-08-08T08:12:00+00:00",
+                "importedAt": "2026-08-08T08:04:00+00:00",
+            },
+            status=201,
+        )
+
+
+class _RecordingEvidenceReviewService:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    def review_verified_evidence(self, **kwargs):
+        self.calls.append(kwargs)
+        return MutationResult.create(
+            body={
+                "reviewId": "review-1",
+                "admissionId": kwargs["scope"].admission_id,
+                "passportRevisionId": kwargs["scope"].passport_revision_id,
+                "runId": kwargs["scope"].run_id,
+                "suiteExecutionId": kwargs["scope"].suite_execution_id,
+                "decision": kwargs["decision"],
+                "rationale": kwargs["rationale"],
+                "reviewVersion": 1,
+                "reviewedBy": kwargs["actor_id"],
+                "reviewedAt": "2026-08-08T12:00:00+00:00",
+                "admissionStatus": "verified",
+                "reviewStatus": kwargs["decision"],
+                "freshnessStatus": "current",
+                "recordedFreshnessStatus": "current",
+                "freshnessContractVersion": "1.0.0",
+                "freshnessEvaluatedAt": "2026-08-08T12:00:00+00:00",
+                "freshnessEffectiveAt": "2026-08-08T11:00:00+00:00",
+                "expiringAt": "2026-08-09T11:00:00+00:00",
+                "freshnessReasonCodes": [],
+                "decisionEvidenceEligibleAtReview": kwargs["decision"] == "accepted",
+                "technicalStatus": "succeeded",
+                "evidenceResultStatus": "failed",
+                "runTechnicalStatus": "succeeded",
+                "runEvidenceOutcome": "failed",
+            },
+            status=201,
+        )
+
+
+class _RecordingGovernanceDecisionService:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    def decide(self, **kwargs):
+        self.calls.append(kwargs)
+        return self._result(kwargs)
+
+    def decide_owner_override(self, **kwargs):
+        self.calls.append(kwargs)
+        return self._result(kwargs, owner_override_applied=True)
+
+    @staticmethod
+    def _result(kwargs, *, owner_override_applied: bool = False):
+        suite_execution_id = next(iter(kwargs["layer_verdicts"]["suites"]))
+        body = {
+            "decisionId": "11111111-1111-4111-8111-111111111111",
+            "runId": kwargs["scope"].run_id,
+            "contractVersion": "2.0.0",
+            "verdictVersion": kwargs["expected_verdict_version"] + 1,
+            "overallVerdict": kwargs["overall_verdict"],
+            "layerVerdictsSchemaVersion": "1.0.0",
+            "layerVerdicts": kwargs["layer_verdicts"],
+            "rationale": kwargs["rationale"],
+            "decidedBy": kwargs["actor_id"],
+            "evidenceSetHash": "a" * 64,
+            "decidedAt": "2026-08-09T12:00:00+00:00",
+            "freshnessContractVersion": "1.0.0",
+            "freshnessEvaluatedAt": "2026-08-09T12:00:00+00:00",
+            "decisionEvidenceEligibleAtDecision": True,
+            "suiteFreshness": [
+                {
+                    "suiteExecutionId": suite_execution_id,
+                    "recordedFreshnessStatus": "current",
+                    "effectiveFreshnessStatus": "current",
+                    "freshnessEffectiveAt": "2026-08-09T11:00:00+00:00",
+                    "expiringAt": "2026-08-10T11:00:00+00:00",
+                    "freshnessReasonCodes": [],
+                    "decisionEvidenceEligibleAtDecision": True,
+                }
+            ],
+        }
+        if owner_override_applied:
+            body["ownerOverrideApplied"] = True
+        return MutationResult.create(
+            body=body,
             status=201,
         )
 
@@ -390,11 +738,222 @@ def _create_active_v2_plan_and_run(
     return plan, created_run.json()
 
 
+def test_direct_mounted_core_v2_router_fails_closed_before_request_validation(
+    workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _active = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", False)
+
+    response = client.post(
+        f"{BASE}/systems/system-a/evaluation-v2/target-versions",
+        headers={"Content-Type": "application/json"},
+        content=b"{not-json",
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == {
+        "code": "assurance_feature_disabled",
+        "message": "Assurance-contract v2 is not enabled.",
+    }
+
+
+@pytest.mark.parametrize(
+    ("membership_role", "persisted_permissions", "token_role", "token_permissions"),
+    [
+        ("admin", [], UserRole.ANALYST, []),
+        ("owner", [], UserRole.ANALYST, []),
+        ("viewer", ["model:write"], UserRole.ANALYST, []),
+        ("viewer", ["evaluation:plan:write"], UserRole.ANALYST, []),
+        ("viewer", [], UserRole.ADMIN, ["*"]),
+    ],
+)
+def test_target_catalog_mutation_requires_literal_persisted_catalog_admin(
+    workbench_client,
+    membership_role: str,
+    persisted_permissions: list[str],
+    token_role: UserRole,
+    token_permissions: list[str],
+) -> None:
+    client, active = workbench_client
+    _set_membership_role(VIEWER, membership_role)
+    _set_role_permissions(membership_role, persisted_permissions)
+    active["token"] = _token(
+        VIEWER,
+        role=token_role,
+        permissions=token_permissions,
+    )
+
+    response = client.post(
+        f"{BASE}/systems/system-a/evaluation-v2/target-versions",
+        headers=_headers("target-catalog-permission"),
+        json=_target_payload(),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == {
+        "code": "evaluation_catalog_admin_forbidden",
+        "message": "The evaluation:catalog:admin permission is required.",
+    }
+
+
+def test_suite_catalog_creation_requires_literal_persisted_catalog_admin(
+    workbench_client,
+) -> None:
+    client, _active = workbench_client
+    _set_role_permissions("admin", ["model:write", "evaluation:plan:write"])
+
+    response = client.post(
+        f"{BASE}/evaluation-v2/suite-versions",
+        headers=_headers("suite-catalog-permission"),
+        json=_suite_payload(),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == {
+        "code": "evaluation_catalog_admin_forbidden",
+        "message": "The evaluation:catalog:admin permission is required.",
+    }
+
+
+def test_suite_catalog_activation_requires_literal_persisted_catalog_admin(
+    workbench_client,
+) -> None:
+    client, _active = workbench_client
+    created = client.post(
+        f"{BASE}/evaluation-v2/suite-versions",
+        headers=_headers("suite-create-for-activation-permission"),
+        json=_suite_payload(),
+    )
+    assert created.status_code == 201, created.text
+    _set_role_permissions("admin", ["model:write", "evaluation:plan:write"])
+
+    response = client.post(
+        f"{BASE}/evaluation-v2/suite-versions/{created.json()['id']}/activate",
+        headers=_headers("suite-activation-catalog-permission"),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == {
+        "code": "evaluation_catalog_admin_forbidden",
+        "message": "The evaluation:catalog:admin permission is required.",
+    }
+
+
+def test_v2_plan_creation_rejects_generic_org_mutation_permission(workbench_client) -> None:
+    client, active = workbench_client
+    target, suite = _bootstrap(client)
+    _grant_role_permissions("viewer", ["model:write"])
+    active["token"] = _token(VIEWER)
+
+    response = client.post(
+        f"{BASE}/systems/system-a/evaluation-v2/plans",
+        headers=_headers("plan-generic-mutator"),
+        json={
+            "contractVersion": "2.0.0",
+            "name": "Generic mutator plan",
+            "targetVersionId": target["id"],
+            "lifecyclePhases": ["pre_deploy"],
+            "executionDepth": "deep",
+            "enforcementMode": "human_approval",
+            "deliveryMode": "external_provider",
+            "trustPolicyVersionId": "trust-a",
+            "suites": [{"suiteVersionId": suite["id"]}],
+        },
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == {
+        "code": "evaluation_plan_write_forbidden",
+        "message": "The evaluation:plan:write permission is required.",
+    }
+
+
+def test_v2_plan_activation_requires_its_own_persisted_permission(workbench_client) -> None:
+    client, active = workbench_client
+    target, suite = _bootstrap(client)
+    _grant_role_permissions("viewer", ["model:write", "evaluation:plan:write"])
+    active["token"] = _token(VIEWER)
+    plans_url = f"{BASE}/systems/system-a/evaluation-v2/plans"
+    created = client.post(
+        plans_url,
+        headers=_headers("plan-activation-boundary-create"),
+        json={
+            "contractVersion": "2.0.0",
+            "name": "Activation boundary plan",
+            "targetVersionId": target["id"],
+            "lifecyclePhases": ["pre_deploy"],
+            "executionDepth": "deep",
+            "enforcementMode": "human_approval",
+            "deliveryMode": "external_provider",
+            "trustPolicyVersionId": "trust-a",
+            "suites": [{"suiteVersionId": suite["id"]}],
+        },
+    )
+    assert created.status_code == 201, created.text
+
+    response = client.post(
+        f"{plans_url}/{created.json()['id']}/activate",
+        headers=_headers("plan-activation-boundary"),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == {
+        "code": "evaluation_plan_activate_forbidden",
+        "message": "The evaluation:plan:activate permission is required.",
+    }
+
+
+def test_v2_run_creation_requires_its_own_persisted_permission(workbench_client) -> None:
+    client, active = workbench_client
+    target, suite = _bootstrap(client)
+    _grant_role_permissions(
+        "viewer",
+        ["model:write", "evaluation:plan:write", "evaluation:plan:activate"],
+    )
+    active["token"] = _token(VIEWER)
+    plans_url = f"{BASE}/systems/system-a/evaluation-v2/plans"
+    created = client.post(
+        plans_url,
+        headers=_headers("run-creation-boundary-plan"),
+        json={
+            "contractVersion": "2.0.0",
+            "name": "Run creation boundary plan",
+            "targetVersionId": target["id"],
+            "lifecyclePhases": ["pre_deploy"],
+            "executionDepth": "deep",
+            "enforcementMode": "human_approval",
+            "deliveryMode": "external_provider",
+            "trustPolicyVersionId": "trust-a",
+            "suites": [{"suiteVersionId": suite["id"]}],
+        },
+    )
+    assert created.status_code == 201, created.text
+    activated = client.post(
+        f"{plans_url}/{created.json()['id']}/activate",
+        headers=_headers("run-creation-boundary-activate"),
+    )
+    assert activated.status_code == 200, activated.text
+
+    response = client.post(
+        f"{plans_url}/{created.json()['id']}/runs",
+        headers=_headers("run-creation-boundary"),
+        json={"trigger": "manual", "lifecyclePhase": "pre_deploy"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == {
+        "code": "evaluation_run_create_forbidden",
+        "message": "The evaluation:run:create permission is required.",
+    }
+
+
 def test_verified_evidence_submit_is_hidden_when_feature_flag_is_off(
     workbench_client,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", True)
     monkeypatch.setattr(settings, "assurance_v2_evidence_submit_enabled", False)
 
     response = client.post(
@@ -406,11 +965,241 @@ def test_verified_evidence_submit_is_hidden_when_feature_flag_is_off(
     assert response.status_code == 404
 
 
+def test_unverified_evidence_import_checks_its_literal_permission_before_scope(
+    workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The independently enabled import route must never fall through to scope parsing."""
+
+    client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", True)
+    monkeypatch.setattr(settings, "assurance_v2_evidence_import_enabled", True)
+
+    response = client.post(
+        _import_url(run_id="run-not-visible", suite_execution_id="suite-not-visible"),
+        headers={**_headers("import-permission-first"), "Content-Type": "application/json"},
+        json={},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == {
+        "code": "evaluation_evidence_import_forbidden",
+        "message": "The evaluation:evidence:import permission is required.",
+    }
+
+
+@pytest.mark.parametrize(
+    ("master_enabled", "import_enabled"),
+    ((False, True), (True, False)),
+)
+def test_import_direct_mount_gates_before_auth_database_body_or_service(
+    workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
+    master_enabled: bool,
+    import_enabled: bool,
+) -> None:
+    """A direct child mount cannot parse or authorize while either gate is off."""
+
+    client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", master_enabled)
+    monkeypatch.setattr(settings, "assurance_v2_evidence_import_enabled", import_enabled)
+
+    def unexpected_dependency() -> object:
+        raise AssertionError("the import gate must run before this dependency")
+
+    original_db = app.dependency_overrides[get_db]
+    app.dependency_overrides[get_db] = unexpected_dependency
+    app.dependency_overrides[organization_membership] = unexpected_dependency
+    app.dependency_overrides[get_imported_evidence_service] = unexpected_dependency
+    try:
+        response = client.post(
+            _import_url(run_id="run-hidden", suite_execution_id="suite-hidden"),
+            headers={**_headers("import-direct-gate"), "Content-Type": "application/json"},
+            content=b'{"malformed":',
+        )
+    finally:
+        app.dependency_overrides[get_db] = original_db
+        app.dependency_overrides.pop(organization_membership, None)
+        app.dependency_overrides.pop(get_imported_evidence_service, None)
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == {
+        "code": "assurance_feature_disabled",
+        "message": "Unverified evidence import is not enabled.",
+    }
+
+
+def test_unverified_import_requires_link_permission_before_scope_or_service(
+    workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", True)
+    monkeypatch.setattr(settings, "assurance_v2_evidence_import_enabled", True)
+    _grant_role_permissions("admin", ["evaluation:evidence:import"])
+    recorder = _RecordingImportedEvidenceService()
+    app.dependency_overrides[get_imported_evidence_service] = lambda: recorder
+    try:
+        response = client.post(
+            _import_url(run_id="run-not-visible", suite_execution_id="suite-not-visible"),
+            headers={**_headers("import-link-boundary"), "Content-Type": "application/json"},
+            content=b'{"malformed":',
+        )
+    finally:
+        app.dependency_overrides.pop(get_imported_evidence_service, None)
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == {
+        "code": "evaluation_evidence_link_forbidden",
+        "message": "The evaluation:evidence:link permission is required.",
+    }
+    assert recorder.calls == []
+
+
+def test_unverified_import_requires_exact_scope_and_exposes_claimed_only_response(
+    workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", True)
+    monkeypatch.setattr(settings, "assurance_v2_evidence_import_enabled", True)
+    _plan, run = _create_active_v2_plan_and_run(client)
+    suite_execution_id = run["suiteExecutions"][0]["id"]
+    _grant_evidence_import_permission()
+    recorder = _RecordingImportedEvidenceService()
+    app.dependency_overrides[get_imported_evidence_service] = lambda: recorder
+    headers = {**_headers("import-scope-boundary"), "Content-Type": "application/json"}
+    try:
+        _grant_role_permissions(
+            "admin",
+            ["evaluation:evidence:import", "evaluation:evidence:link"],
+            org_id=FOREIGN_ORG,
+        )
+        wrong_org = client.post(
+            _import_url(
+                org_id=FOREIGN_ORG,
+                run_id=run["id"],
+                suite_execution_id=suite_execution_id,
+            ),
+            headers=headers,
+            json=_import_payload(),
+        )
+        wrong_workspace = client.post(
+            _import_url(
+                workspace_id="workspace-wrong",
+                run_id=run["id"],
+                suite_execution_id=suite_execution_id,
+            ),
+            headers=headers,
+            json=_import_payload(),
+        )
+        wrong_system = client.post(
+            _import_url(
+                system_id="system-wrong",
+                run_id=run["id"],
+                suite_execution_id=suite_execution_id,
+            ),
+            headers=headers,
+            json=_import_payload(),
+        )
+        wrong_run = client.post(
+            _import_url(run_id="run-wrong", suite_execution_id=suite_execution_id),
+            headers=headers,
+            json=_import_payload(),
+        )
+        wrong_suite = client.post(
+            _import_url(run_id=run["id"], suite_execution_id="suite-wrong"),
+            headers=headers,
+            json=_import_payload(),
+        )
+        accepted = client.post(
+            _import_url(run_id=run["id"], suite_execution_id=suite_execution_id),
+            headers=headers,
+            json=_import_payload(),
+        )
+    finally:
+        app.dependency_overrides.pop(get_imported_evidence_service, None)
+
+    assert all(
+        response.status_code == 404
+        for response in (wrong_org, wrong_workspace, wrong_system, wrong_run, wrong_suite)
+    )
+    assert accepted.status_code == 201, accepted.text
+    assert accepted.json()["resultAuthority"] == "claimed"
+    assert accepted.json()["humanReviewOnly"] is True
+    assert accepted.json()["decisionEvidenceEligible"] is False
+    assert "verificationReceiptId" not in accepted.json()
+    assert "verifiedAt" not in accepted.json()
+    assert len(recorder.calls) == 1
+
+
+def test_unverified_import_requires_exact_json_and_rejects_duplicate_keys_before_service(
+    workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", True)
+    monkeypatch.setattr(settings, "assurance_v2_evidence_import_enabled", True)
+    _plan, run = _create_active_v2_plan_and_run(client)
+    suite_execution_id = run["suiteExecutions"][0]["id"]
+    _grant_evidence_import_permission()
+    recorder = _RecordingImportedEvidenceService()
+    app.dependency_overrides[get_imported_evidence_service] = lambda: recorder
+    try:
+        non_exact_media_type = client.post(
+            _import_url(run_id=run["id"], suite_execution_id=suite_execution_id),
+            headers={**_headers("import-media-type"), "Content-Type": "application/problem+json"},
+            content=b"{}",
+        )
+        duplicate_keys = client.post(
+            _import_url(run_id=run["id"], suite_execution_id=suite_execution_id),
+            headers={**_headers("import-duplicate"), "Content-Type": "application/json"},
+            content=(
+                b'{"reportId":"report-a","reportId":"report-b",'
+                b'"reportContentHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",'
+                b'"capturedAt":"2026-08-08T08:02:00+00:00",'
+                b'"claimedTechnicalStatus":"succeeded",'
+                b'"claimedEvidenceResultStatus":"passed",'
+                b'"claimedResultSummary":{"caseCount":4},'
+                b'"artifactRefs":[],"limitations":[]}'
+            ),
+        )
+    finally:
+        app.dependency_overrides.pop(get_imported_evidence_service, None)
+
+    assert non_exact_media_type.status_code == 415
+    assert duplicate_keys.status_code == 422
+    assert recorder.calls == []
+
+
+def test_verified_evidence_submit_is_hidden_when_master_gate_is_off(
+    workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", False)
+    monkeypatch.setattr(settings, "assurance_v2_evidence_submit_enabled", True)
+    recorder = _RecordingAdmissionService()
+    app.dependency_overrides[get_verified_evidence_admission_service] = lambda: recorder
+    try:
+        response = client.post(
+            _admission_url(run_id="run-not-visible", suite_execution_id="suite-not-visible"),
+            headers={**_headers("evidence-master-hidden"), "Content-Type": "application/json"},
+            content=b"{}",
+        )
+    finally:
+        app.dependency_overrides.pop(get_verified_evidence_admission_service, None)
+
+    assert response.status_code == 404
+    assert recorder.calls == []
+
+
 def test_verified_evidence_submit_requires_explicit_permission_and_exact_scope(
     workbench_client,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", True)
     monkeypatch.setattr(settings, "assurance_v2_evidence_submit_enabled", True)
     _plan, run = _create_active_v2_plan_and_run(client)
     suite_execution_id = run["suiteExecutions"][0]["id"]
@@ -445,6 +1234,7 @@ def test_verified_evidence_submit_requires_explicit_permission_and_exact_scope(
 
         accepted = client.post(valid_url, headers=request_headers, content=b"signed-passport")
         assert accepted.status_code == 201, accepted.text
+        assert accepted.json()["verdictVersion"] == 0
         assert len(recorder.calls) == 1
         call = recorder.calls[0]
         assert call["actor_id"] == USER
@@ -458,6 +1248,30 @@ def test_verified_evidence_submit_requires_explicit_permission_and_exact_scope(
         app.dependency_overrides.pop(get_verified_evidence_admission_service, None)
 
 
+def test_verified_evidence_link_permission_is_separate_from_submission(
+    workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", True)
+    monkeypatch.setattr(settings, "assurance_v2_evidence_submit_enabled", True)
+    _plan, run = _create_active_v2_plan_and_run(client)
+    suite_execution_id = run["suiteExecutions"][0]["id"]
+    _grant_role_permissions("admin", ["evaluation:evidence:submit"])
+
+    response = client.post(
+        _admission_url(run_id=run["id"], suite_execution_id=suite_execution_id),
+        headers={**_headers("evidence-link-boundary"), "Content-Type": "application/json"},
+        content=b"signed-passport",
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == {
+        "code": "evaluation_evidence_link_forbidden",
+        "message": "The evaluation:evidence:link permission is required.",
+    }
+
+
 def test_verified_evidence_submit_rejects_oversized_body_before_service(
     workbench_client,
     monkeypatch: pytest.MonkeyPatch,
@@ -465,6 +1279,7 @@ def test_verified_evidence_submit_rejects_oversized_body_before_service(
     from src.api.routers.evaluation_workbench import MAX_REQUEST_BYTES
 
     client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", True)
     monkeypatch.setattr(settings, "assurance_v2_evidence_submit_enabled", True)
     _plan, run = _create_active_v2_plan_and_run(client)
     suite_execution_id = run["suiteExecutions"][0]["id"]
@@ -482,6 +1297,578 @@ def test_verified_evidence_submit_rejects_oversized_body_before_service(
 
     assert response.status_code == 413
     assert response.json()["detail"]["code"] == "request_too_large"
+    assert recorder.calls == []
+
+
+def test_verified_evidence_review_is_hidden_when_its_feature_flag_is_off(
+    workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", True)
+    monkeypatch.setattr(settings, "assurance_v2_evidence_review_enabled", False, raising=False)
+    recorder = _RecordingEvidenceReviewService()
+    app.dependency_overrides[get_verified_evidence_review_service] = lambda: recorder
+    try:
+        response = client.post(
+            _review_url(run_id="run-not-visible", suite_execution_id="suite-not-visible"),
+            headers=_headers("review-hidden"),
+            json={
+                "decision": "accepted",
+                "rationale": "Independent evidence review completed.",
+                "expectedReviewVersion": 0,
+            },
+        )
+    finally:
+        app.dependency_overrides.pop(get_verified_evidence_review_service, None)
+
+    assert response.status_code == 404
+    assert recorder.calls == []
+
+
+def test_verified_evidence_review_is_hidden_when_master_gate_is_off(
+    workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", False)
+    monkeypatch.setattr(settings, "assurance_v2_evidence_review_enabled", True, raising=False)
+    recorder = _RecordingEvidenceReviewService()
+    app.dependency_overrides[get_verified_evidence_review_service] = lambda: recorder
+    try:
+        response = client.post(
+            _review_url(run_id="run-not-visible", suite_execution_id="suite-not-visible"),
+            headers=_headers("review-master-hidden"),
+            json={
+                "decision": "accepted",
+                "rationale": "Master gate remains authoritative.",
+                "expectedReviewVersion": 0,
+            },
+        )
+    finally:
+        app.dependency_overrides.pop(get_verified_evidence_review_service, None)
+
+    assert response.status_code == 404
+    assert recorder.calls == []
+
+
+def test_verified_evidence_review_requires_permission_and_binds_exact_run_suite_scope(
+    workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, active = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", True)
+    monkeypatch.setattr(settings, "assurance_v2_evidence_review_enabled", True, raising=False)
+    _plan, run = _create_active_v2_plan_and_run(client)
+    suite_execution_id = run["suiteExecutions"][0]["id"]
+    valid_url = _review_url(run_id=run["id"], suite_execution_id=suite_execution_id)
+    request_headers = _headers("review-boundary")
+    payload = {
+        "decision": "accepted",
+        "rationale": "Independent evidence review completed.",
+        "expectedReviewVersion": 0,
+    }
+    recorder = _RecordingEvidenceReviewService()
+    app.dependency_overrides[get_verified_evidence_review_service] = lambda: recorder
+    try:
+        denied = client.post(valid_url, headers=request_headers, json=payload)
+        assert denied.status_code == 403
+        assert denied.json()["detail"]["code"] == "evaluation_evidence_review_forbidden"
+        assert recorder.calls == []
+
+        _grant_evidence_review_permission()
+        active["token"] = _token(REVIEWER)
+
+        wrong_workspace = client.post(
+            _review_url(
+                run_id=run["id"],
+                suite_execution_id=suite_execution_id,
+                workspace_id="workspace-wrong",
+            ),
+            headers=request_headers,
+            json=payload,
+        )
+        assert wrong_workspace.status_code == 404
+
+        wrong_suite = client.post(
+            _review_url(run_id=run["id"], suite_execution_id="suite-wrong"),
+            headers=request_headers,
+            json=payload,
+        )
+        assert wrong_suite.status_code == 404
+        assert recorder.calls == []
+
+        accepted = client.post(valid_url, headers=request_headers, json=payload)
+        assert accepted.status_code == 201, accepted.text
+        assert "overallVerdict" not in accepted.json()
+        assert "verdictVersion" not in accepted.json()
+        assert len(recorder.calls) == 1
+        call = recorder.calls[0]
+        assert call["actor_id"] == REVIEWER
+        assert call["idempotency_key"] == "review-boundary"
+        assert call["decision"] == "accepted"
+        assert call["rationale"] == "Independent evidence review completed."
+        assert call["expected_review_version"] == 0
+        assert call["scope"].organization_id == ORG
+        assert call["scope"].workspace_id == "workspace-a"
+        assert call["scope"].system_id == "system-a"
+        assert call["scope"].run_id == run["id"]
+        assert call["scope"].suite_execution_id == suite_execution_id
+        assert call["scope"].admission_id == "admission-a"
+        assert call["scope"].passport_revision_id == "passport-revision-a"
+    finally:
+        app.dependency_overrides.pop(get_verified_evidence_review_service, None)
+
+
+def test_verified_evidence_review_rejects_non_strict_body_before_service(
+    workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, active = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", True)
+    monkeypatch.setattr(settings, "assurance_v2_evidence_review_enabled", True, raising=False)
+    _plan, run = _create_active_v2_plan_and_run(client)
+    suite_execution_id = run["suiteExecutions"][0]["id"]
+    _grant_evidence_review_permission()
+    active["token"] = _token(REVIEWER)
+    recorder = _RecordingEvidenceReviewService()
+    app.dependency_overrides[get_verified_evidence_review_service] = lambda: recorder
+    try:
+        response = client.post(
+            _review_url(run_id=run["id"], suite_execution_id=suite_execution_id),
+            headers=_headers("review-invalid"),
+            json={
+                "decision": "accepted",
+                "rationale": "Independent evidence review completed.",
+                "expectedReviewVersion": 0,
+                "overallVerdict": "approved",
+            },
+        )
+    finally:
+        app.dependency_overrides.pop(get_verified_evidence_review_service, None)
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "invalid_request"
+    assert recorder.calls == []
+
+
+def test_governance_decision_is_hidden_when_its_feature_flag_is_off(
+    workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", True)
+    monkeypatch.setattr(
+        settings,
+        "assurance_v2_governance_decision_enabled",
+        False,
+        raising=False,
+    )
+    recorder = _RecordingGovernanceDecisionService()
+    app.dependency_overrides[get_governance_decision_service] = lambda: recorder
+    try:
+        response = client.post(
+            _decision_url(run_id="run-not-visible"),
+            headers=_headers("decision-hidden"),
+            json={
+                "expectedVerdictVersion": 0,
+                "overallVerdict": "conditional",
+                "layerVerdicts": {
+                    "suites": {"suite-not-visible": "conditional"},
+                    "modalities": {},
+                    "components": {},
+                    "riskDimensions": {},
+                },
+                "rationale": "Not visible while disabled.",
+            },
+        )
+    finally:
+        app.dependency_overrides.pop(get_governance_decision_service, None)
+
+    assert response.status_code == 404
+    assert recorder.calls == []
+
+
+def test_governance_decision_is_hidden_when_master_gate_is_off(
+    workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", False)
+    monkeypatch.setattr(
+        settings,
+        "assurance_v2_governance_decision_enabled",
+        True,
+        raising=False,
+    )
+    recorder = _RecordingGovernanceDecisionService()
+    app.dependency_overrides[get_governance_decision_service] = lambda: recorder
+    try:
+        response = client.post(
+            _decision_url(run_id="run-not-visible"),
+            headers=_headers("decision-master-hidden"),
+            json={
+                "expectedVerdictVersion": 0,
+                "overallVerdict": "conditional",
+                "layerVerdicts": {
+                    "suites": {"suite-not-visible": "conditional"},
+                    "modalities": {},
+                    "components": {},
+                    "riskDimensions": {},
+                },
+                "rationale": "Master gate remains authoritative.",
+            },
+        )
+    finally:
+        app.dependency_overrides.pop(get_governance_decision_service, None)
+
+    assert response.status_code == 404
+    assert recorder.calls == []
+
+
+@pytest.mark.parametrize(
+    ("master", "decision", "override"),
+    ((False, True, True), (True, False, True), (True, True, False)),
+)
+def test_owner_decision_override_direct_mount_requires_all_flags(
+    monkeypatch: pytest.MonkeyPatch,
+    master: bool,
+    decision: bool,
+    override: bool,
+) -> None:
+    mounted = FastAPI()
+    mounted.include_router(
+        governance_decision_override_router,
+        prefix="/api/v1/ai-governance",
+    )
+    recorder = _RecordingGovernanceDecisionService()
+    mounted.dependency_overrides[get_governance_decision_service] = lambda: recorder
+    monkeypatch.setattr(settings, "assurance_v2_enabled", master)
+    monkeypatch.setattr(
+        settings, "assurance_v2_governance_decision_enabled", decision, raising=False
+    )
+    monkeypatch.setattr(
+        settings, "assurance_v2_separation_override_enabled", override, raising=False
+    )
+
+    with TestClient(mounted) as client:
+        response = client.post(
+            _owner_override_url(run_id="run-hidden"),
+            headers=_headers("owner-override-hidden"),
+            json={
+                "expectedVerdictVersion": 0,
+                "overallVerdict": "conditional",
+                "layerVerdicts": {
+                    "suites": {"suite-hidden": "conditional"},
+                    "modalities": {},
+                    "components": {},
+                    "riskDimensions": {},
+                },
+                "rationale": "This route remains hidden.",
+                "ownerOverrideReason": "The decision owner requires an exception.",
+            },
+        )
+
+    assert response.status_code == 404
+    assert recorder.calls == []
+
+
+def test_owner_decision_override_requires_normal_decision_permission(
+    workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", True)
+    monkeypatch.setattr(
+        settings, "assurance_v2_governance_decision_enabled", True, raising=False
+    )
+    monkeypatch.setattr(
+        settings, "assurance_v2_separation_override_enabled", True, raising=False
+    )
+    _plan, run = _create_active_v2_plan_and_run(client)
+    suite_execution_id = run["suiteExecutions"][0]["id"]
+    payload = {
+        "expectedVerdictVersion": 0,
+        "overallVerdict": "conditional",
+        "layerVerdicts": {
+            "suites": {suite_execution_id: "conditional"},
+            "modalities": {},
+            "components": {},
+            "riskDimensions": {},
+        },
+        "rationale": "The owner must record the separation exception.",
+        "ownerOverrideReason": "No independent owner is available for this decision.",
+    }
+    recorder = _RecordingGovernanceDecisionService()
+    app.dependency_overrides[get_governance_decision_service] = lambda: recorder
+    try:
+        _grant_role_permissions("admin", ["evaluation:separation:override"])
+        denied = client.post(
+            _owner_override_url(run_id=run["id"]),
+            headers=_headers("owner-override-reserved-only"),
+            json=payload,
+        )
+        _grant_role_permissions("admin", ["evaluation:decision"])
+        accepted = client.post(
+            _owner_override_url(run_id=run["id"]),
+            headers=_headers("owner-override-accepted"),
+            json=payload,
+        )
+    finally:
+        app.dependency_overrides.pop(get_governance_decision_service, None)
+
+    assert denied.status_code == 403
+    assert denied.json()["detail"] == {
+        "code": "evaluation_decision_write_forbidden",
+        "message": "The evaluation:decision permission is required.",
+    }
+    assert accepted.status_code == 201, accepted.text
+    assert accepted.json()["ownerOverrideApplied"] is True
+    assert payload["ownerOverrideReason"] not in accepted.text
+    assert len(recorder.calls) == 1
+    assert recorder.calls[0]["owner_override_reason"] == payload["ownerOverrideReason"]
+
+
+def test_owner_decision_override_rejects_invalid_reason_before_service(
+    workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", True)
+    monkeypatch.setattr(
+        settings, "assurance_v2_governance_decision_enabled", True, raising=False
+    )
+    monkeypatch.setattr(
+        settings, "assurance_v2_separation_override_enabled", True, raising=False
+    )
+    _plan, run = _create_active_v2_plan_and_run(client)
+    suite_execution_id = run["suiteExecutions"][0]["id"]
+    _grant_role_permissions("admin", ["evaluation:decision"])
+    payload = {
+        "expectedVerdictVersion": 0,
+        "overallVerdict": "conditional",
+        "layerVerdicts": {
+            "suites": {suite_execution_id: "conditional"},
+            "modalities": {},
+            "components": {},
+            "riskDimensions": {},
+        },
+        "rationale": "The owner must record the separation exception.",
+        "ownerOverrideReason": "Documented owner exception.",
+    }
+    invalid_bodies = [
+        {**payload, "ownerOverrideReason": ""},
+        {**payload, "ownerOverrideReason": "unsafe\x00value"},
+        {**payload, "ownerOverrideReason": "x" * 2001},
+        {**payload, "unexpected": "value"},
+    ]
+    duplicate = json.dumps(payload)[:-1] + ',"ownerOverrideReason":"duplicate"}'
+    recorder = _RecordingGovernanceDecisionService()
+    app.dependency_overrides[get_governance_decision_service] = lambda: recorder
+    try:
+        responses = [
+            client.post(
+                _owner_override_url(run_id=run["id"]),
+                headers=_headers(f"owner-override-invalid-{index}"),
+                json=body,
+            )
+            for index, body in enumerate(invalid_bodies)
+        ]
+        responses.append(
+            client.post(
+                _owner_override_url(run_id=run["id"]),
+                headers={**_headers("owner-override-duplicate"), "Content-Type": "application/json"},
+                content=duplicate,
+            )
+        )
+    finally:
+        app.dependency_overrides.pop(get_governance_decision_service, None)
+
+    assert all(response.status_code == 422 for response in responses)
+    assert all(response.json()["detail"]["code"] == "invalid_request" for response in responses)
+    assert recorder.calls == []
+
+
+@pytest.mark.parametrize(
+    ("reason", "expected_status"),
+    (
+        ("é" * 256, 201),  # 512 UTF-8 bytes
+        ("é" * 256 + "x", 201),  # 513 UTF-8 bytes
+        ("é" * 1000, 201),  # 2000 UTF-8 bytes
+        ("é" * 1000 + "x", 422),  # 2001 UTF-8 bytes
+    ),
+)
+def test_owner_decision_override_reason_uses_the_2000_byte_contract(
+    workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
+    reason: str,
+    expected_status: int,
+) -> None:
+    client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", True)
+    monkeypatch.setattr(
+        settings, "assurance_v2_governance_decision_enabled", True, raising=False
+    )
+    monkeypatch.setattr(
+        settings, "assurance_v2_separation_override_enabled", True, raising=False
+    )
+    _plan, run = _create_active_v2_plan_and_run(client)
+    suite_execution_id = run["suiteExecutions"][0]["id"]
+    _grant_role_permissions("admin", ["evaluation:decision"])
+    recorder = _RecordingGovernanceDecisionService()
+    app.dependency_overrides[get_governance_decision_service] = lambda: recorder
+    try:
+        response = client.post(
+            _owner_override_url(run_id=run["id"]),
+            headers=_headers(f"owner-override-{len(reason.encode('utf-8'))}-bytes"),
+            json={
+                "expectedVerdictVersion": 0,
+                "overallVerdict": "conditional",
+                "layerVerdicts": {
+                    "suites": {suite_execution_id: "conditional"},
+                    "modalities": {},
+                    "components": {},
+                    "riskDimensions": {},
+                },
+                "rationale": "The owner must record the separation exception.",
+                "ownerOverrideReason": reason,
+            },
+        )
+    finally:
+        app.dependency_overrides.pop(get_governance_decision_service, None)
+
+    assert len(reason.encode("utf-8")) in {512, 513, 2000, 2001}
+    assert response.status_code == expected_status, response.text
+    if expected_status == 201:
+        assert response.json()["ownerOverrideApplied"] is True
+        assert recorder.calls[0]["owner_override_reason"] == reason
+    else:
+        assert response.json()["detail"]["code"] == "invalid_request"
+        assert recorder.calls == []
+
+
+def test_governance_decision_requires_exact_permission_and_run_scope(
+    workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", True)
+    monkeypatch.setattr(
+        settings,
+        "assurance_v2_governance_decision_enabled",
+        True,
+        raising=False,
+    )
+    _plan, run = _create_active_v2_plan_and_run(client)
+    suite_execution_id = run["suiteExecutions"][0]["id"]
+    payload = {
+        "expectedVerdictVersion": 0,
+        "overallVerdict": "conditional",
+        "layerVerdicts": {
+            "suites": {suite_execution_id: "conditional"},
+            "modalities": {"agent": "conditional"},
+            "components": {},
+            "riskDimensions": {"safety": "conditional"},
+        },
+        "rationale": "Current reviewed evidence supports conditional approval.",
+    }
+    recorder = _RecordingGovernanceDecisionService()
+    app.dependency_overrides[get_governance_decision_service] = lambda: recorder
+    try:
+        denied = client.post(
+            _decision_url(run_id=run["id"]),
+            headers=_headers("decision-denied"),
+            json=payload,
+        )
+        assert denied.status_code == 403
+        assert denied.json()["detail"]["code"] == "evaluation_decision_write_forbidden"
+
+        _grant_role_permissions(
+            "admin",
+            ["model:write", "evaluation:decision:write"],
+        )
+        alias_denied = client.post(
+            _decision_url(run_id=run["id"]),
+            headers=_headers("decision-alias-denied"),
+            json=payload,
+        )
+        assert alias_denied.status_code == 403
+        assert alias_denied.json()["detail"] == {
+            "code": "evaluation_decision_write_forbidden",
+            "message": "The evaluation:decision permission is required.",
+        }
+        assert recorder.calls == []
+
+        _grant_role_permissions("admin", ["evaluation:decision"])
+        wrong_workspace = client.post(
+            _decision_url(run_id=run["id"], workspace_id="workspace-wrong"),
+            headers=_headers("decision-wrong-scope"),
+            json=payload,
+        )
+        assert wrong_workspace.status_code == 404
+
+        accepted = client.post(
+            _decision_url(run_id=run["id"]),
+            headers=_headers("decision-accepted"),
+            json=payload,
+        )
+    finally:
+        app.dependency_overrides.pop(get_governance_decision_service, None)
+
+    assert accepted.status_code == 201, accepted.text
+    assert accepted.json()["verdictVersion"] == 1
+    assert len(recorder.calls) == 1
+    call = recorder.calls[0]
+    assert call["actor_id"] == USER
+    assert call["idempotency_key"] == "decision-accepted"
+    assert call["scope"].organization_id == ORG
+    assert call["scope"].workspace_id == "workspace-a"
+    assert call["scope"].system_id == "system-a"
+    assert call["scope"].run_id == run["id"]
+    assert call["expected_verdict_version"] == 0
+    assert call["overall_verdict"] == "conditional"
+    assert call["layer_verdicts"] == payload["layerVerdicts"]
+
+
+def test_governance_decision_request_cannot_enable_owner_override(
+    workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", True)
+    monkeypatch.setattr(
+        settings,
+        "assurance_v2_governance_decision_enabled",
+        True,
+        raising=False,
+    )
+    _plan, run = _create_active_v2_plan_and_run(client)
+    suite_execution_id = run["suiteExecutions"][0]["id"]
+    _grant_role_permissions("admin", ["evaluation:decision"])
+    recorder = _RecordingGovernanceDecisionService()
+    app.dependency_overrides[get_governance_decision_service] = lambda: recorder
+    try:
+        response = client.post(
+            _decision_url(run_id=run["id"]),
+            headers=_headers("decision-owner-override"),
+            json={
+                "expectedVerdictVersion": 0,
+                "overallVerdict": "approved",
+                "layerVerdicts": {
+                    "suites": {suite_execution_id: "approved"},
+                    "modalities": {},
+                    "components": {},
+                    "riskDimensions": {},
+                },
+                "rationale": "Attempted owner override.",
+                "ownerOverrideReason": "Not supported by this boundary.",
+            },
+        )
+    finally:
+        app.dependency_overrides.pop(get_governance_decision_service, None)
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "invalid_request"
     assert recorder.calls == []
 
 
@@ -527,7 +1914,20 @@ def test_complete_additive_route_flow_and_three_axis_run(workbench_client) -> No
     assert body["evidenceOutcome"] == "pending"
     assert body["overallVerdict"] == "insufficient"
     assert body["layerVerdictsSchemaVersion"] == "1.0.0"
+    assert body["decisionEvidenceCurrentlyEligible"] is False
     assert len(body["suiteExecutions"]) == 1
+    pending_suite = body["suiteExecutions"][0]
+    assert pending_suite["evidenceTrust"] is None
+    for field in (
+        "recordedFreshnessStatus",
+        "freshnessContractVersion",
+        "freshnessEvaluatedAt",
+        "freshnessEffectiveAt",
+        "expiringAt",
+        "freshnessReasonCodes",
+        "decisionEvidenceEligible",
+    ):
+        assert pending_suite[field] is None
     assert body["layerVerdicts"] == {
         "suites": {body["suiteExecutions"][0]["id"]: "insufficient"},
         "modalities": {},
@@ -535,8 +1935,12 @@ def test_complete_additive_route_flow_and_three_axis_run(workbench_client) -> No
         "riskDimensions": {},
     }
     runs_url = f"{BASE}/systems/system-a/evaluation-v2/runs"
-    assert client.get(runs_url).json()[0]["id"] == body["id"]
-    assert client.get(f"{runs_url}/{body['id']}").json()["envelopeHash"] == body["envelopeHash"]
+    listed = client.get(runs_url).json()[0]
+    detailed = client.get(f"{runs_url}/{body['id']}").json()
+    assert listed["id"] == body["id"]
+    assert detailed["envelopeHash"] == body["envelopeHash"]
+    assert listed["suiteExecutions"][0]["freshnessEvaluatedAt"] is None
+    assert detailed["suiteExecutions"][0]["freshnessEvaluatedAt"] is None
 
 
 def test_missing_or_malformed_idempotency_key_and_viewer_mutation_are_rejected(
@@ -1201,6 +2605,23 @@ def test_openapi_exposes_strict_request_and_response_contracts() -> None:
         "accepted",
         "rejected",
     ]
+    assert suite_execution["properties"]["evidenceTrust"]["anyOf"] == [
+        {"$ref": "#/components/schemas/SuiteEvidenceTrustResponse"},
+        {"type": "null"},
+    ]
+    trust_metadata = schemas["SuiteEvidenceTrustResponse"]
+    assert trust_metadata["additionalProperties"] is False
+    assert set(trust_metadata["required"]) == {
+        "sourceType",
+        "issuerKey",
+        "signingKeyId",
+        "signerKeyId",
+        "signerAlgorithm",
+        "effectiveExpiresAt",
+        "reviewedBy",
+        "reviewedAt",
+        "admissionReasons",
+    }
 
     def assert_refs_resolve(value) -> None:
         if isinstance(value, dict):
@@ -1663,9 +3084,11 @@ def test_already_active_plan_gets_one_bound_noop_before_dependency_preflight(
 
 def test_v2_plan_is_hidden_from_every_v1_plan_read_and_run_creation_surface(
     workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client, _ = workbench_client
     plan, _ = _create_active_v2_plan_and_run(client)
+    monkeypatch.setattr(settings, "assurance_v2_enabled", False)
     v1_url = f"{BASE}/systems/system-a/evaluation-plans"
 
     assert client.get(v1_url).json() == []
@@ -1701,9 +3124,11 @@ def test_v2_plan_is_hidden_from_every_v1_plan_read_and_run_creation_surface(
 
 def test_v2_run_is_hidden_from_v1_reads_and_rejected_by_v1_passport_link(
     workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client, _ = workbench_client
     _, run = _create_active_v2_plan_and_run(client)
+    monkeypatch.setattr(settings, "assurance_v2_enabled", False)
     v1_runs_url = f"{BASE}/systems/system-a/evaluation-runs"
 
     assert client.get(v1_runs_url).json() == []
@@ -1736,6 +3161,7 @@ def test_v2_run_is_hidden_from_v1_reads_and_rejected_by_v1_passport_link(
 
 def test_foreign_tenant_v2_plan_and_run_ids_are_not_found_by_v1_routes(
     workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client, _ = workbench_client
     foreign_plan, foreign_run = _create_active_v2_plan_and_run(
@@ -1744,6 +3170,7 @@ def test_foreign_tenant_v2_plan_and_run_ids_are_not_found_by_v1_routes(
         system_id="system-b",
         trust_policy_id="trust-b",
     )
+    monkeypatch.setattr(settings, "assurance_v2_enabled", False)
     local_plans_url = f"{BASE}/systems/system-a/evaluation-plans"
     local_runs_url = f"{BASE}/systems/system-a/evaluation-runs"
 

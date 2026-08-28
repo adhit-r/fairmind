@@ -159,10 +159,6 @@ openapi_tags = [
         "description": "Multimodal bias detection for image, audio, video, and cross-modal analysis",
     },
     {
-        "name": "ai-bom",
-        "description": "AI Bill of Materials management and compliance tracking",
-    },
-    {
         "name": "security",
         "description": "OWASP AI security testing and vulnerability scanning",
     },
@@ -215,7 +211,6 @@ app = FastAPI(
 - **Advanced Bias Detection**: Comprehensive bias detection for text and image models
 - **Modern LLM Bias Detection**: WEAT, SEAT, and Minimal Pairs testing
 - **Multimodal Bias Detection**: Image, audio, video, and cross-modal analysis
-- **AI BOM Management**: Bill of Materials tracking and compliance
 - **Security Testing**: OWASP AI security testing
 - **Real-time Monitoring**: Live monitoring and alerting
 - **Fairness Governance**: Policy management and compliance
@@ -410,13 +405,75 @@ if settings.assurance_v2_enabled:
         )
     else:
         logger.info("Verified Evidence Passport admission route is disabled")
+    if settings.assurance_v2_evidence_import_enabled:
+        _include_router(
+            "api.routes.imported_evidence",
+            prefix="/api/v1/ai-governance",
+            tags=["evaluation-workbench-v2-imported-evidence"],
+            attr="imported_evidence_router",
+            required=True,
+        )
+    else:
+        logger.info("Unverified imported-evidence route is disabled")
+    if settings.assurance_v2_evidence_review_enabled:
+        _include_router(
+            "api.routes.evaluation_workbench",
+            prefix="/api/v1/ai-governance",
+            tags=["evaluation-workbench-v2-evidence-review"],
+            attr="verified_evidence_review_router",
+            required=True,
+        )
+    else:
+        logger.info("Verified Evidence Passport review route is disabled")
+    if settings.assurance_v2_governance_decision_enabled:
+        _include_router(
+            "api.routes.evaluation_workbench",
+            prefix="/api/v1/ai-governance",
+            tags=["evaluation-workbench-v2-governance-decision"],
+            attr="governance_decision_router",
+            required=True,
+        )
+    else:
+        logger.info("Governance decision route is disabled")
+    if (
+        settings.assurance_v2_governance_decision_enabled
+        and settings.assurance_v2_separation_override_enabled
+    ):
+        _include_router(
+            "api.routes.evaluation_workbench",
+            prefix="/api/v1/ai-governance",
+            tags=["evaluation-workbench-v2-governance-decision-owner-override"],
+            attr="governance_decision_override_router",
+            required=True,
+        )
+    else:
+        logger.info("Owner governance-decision override route is disabled")
+    if settings.assurance_v2_evaluator_catalog_enabled:
+        _include_router(
+            "api.routes.evaluator_catalog",
+            prefix="/api/v1/ai-governance",
+            tags=["evaluation-workbench-v2-evaluator-catalog"],
+            attr="evaluator_catalog_router",
+            required=True,
+        )
+    else:
+        logger.info("Evaluator catalog administration route is disabled")
+    if settings.assurance_v2_trust_administration_enabled:
+        _include_router(
+            "api.routes.trust_administration",
+            prefix="/api/v1/ai-governance",
+            tags=["evaluation-workbench-v2-trust-administration"],
+            attr="trust_administration_router",
+            required=True,
+        )
+    else:
+        logger.info("Trust administration route is disabled")
 else:
     logger.info("Assurance-contract v2 routes are disabled")
 _include_router("api.routes.environmental", tags=["environmental"], required=False)
 _include_router("api.routes.settings", prefix="/api/v1", tags=["settings"], required=False)
 
 # Optional feature routers.
-_include_router("api.routes.real_ai_bom", prefix="/api/v1", tags=["ai-bom"], required=False)
 _include_router("api.routes.advanced_bias_detection", prefix="/api/v1", tags=["advanced-bias-detection"], required=False)
 _include_router("api.routes.bias_detection", prefix="/api/v1", tags=["bias-detection"], required=False)
 _include_router("api.routes.compliance_check", tags=["compliance"], required=False)
@@ -552,7 +609,6 @@ async def root():
             "Advanced Bias Detection & Fairness Analysis",
             "Modern LLM Bias Detection (WEAT, SEAT, Minimal Pairs)",
             "Multimodal Bias Detection (Image, Audio, Video)",
-            "AI BOM Management & Compliance Tracking",
             "Real-time Monitoring & Alerting",
             "Model Explainability & Interpretability",
             "OWASP AI Security Testing",
@@ -583,8 +639,7 @@ async def api_info():
         "endpoints": {
             "health": "/health",
             "core": "/api/v1/core",
-            "database": "/api/v1/database",
-            "ai_bom": "/api/v1/ai-bom"
+            "database": "/api/v1/database"
         }
     }
 

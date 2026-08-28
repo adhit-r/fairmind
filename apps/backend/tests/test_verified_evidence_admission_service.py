@@ -19,6 +19,7 @@ from src.application.ports.evaluation_workbench import (
     SuiteExecutionRecord,
 )
 from src.application.ports.evidence_admission import (
+    ApprovedEvaluatorRegistration,
     EvidenceAdmissionScope,
     ExpectedServerBinding,
     TrustedEvidenceAdmissionContext,
@@ -29,9 +30,11 @@ from src.application.services.evidence_authenticity_service import (
     AuthenticityCandidate,
     EvidenceAuthenticityError,
 )
-from src.application.services.evaluator_registry import (
-    EvaluatorRegistration,
-    StaticEvaluatorRegistry,
+from src.application.services.evaluator_catalog_service import (
+    evaluator_binding_hash,
+)
+from src.application.services.evaluator_registration import (
+    EvaluatorIdentityBinding,
 )
 from src.application.services.verified_evidence_admission_service import (
     VerifiedEvidenceAdmissionService,
@@ -348,9 +351,18 @@ class FakeAuthenticityService:
 
 
 class FakeRepository:
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        catalog_registration: ApprovedEvaluatorRegistration | None,
+    ) -> None:
         self.persisted = []
         self.events: list[str] = []
+        self.catalog_registration = catalog_registration
+        self.catalog_resolution_calls: list[dict[str, object]] = []
+
+    def load_approved_evaluator_registration_for_update(self, **kwargs):
+        self.catalog_resolution_calls.append(kwargs)
+        return self.catalog_registration
 
     def persist_verified_passport_v2(self, command):
         self.events.append("persist")
@@ -417,6 +429,41 @@ class SequentialUuidFactory:
         return UUID(int=self.value)
 
 
+def _approved_catalog_registration(
+    *,
+    evaluator_id: str = "evaluator-a",
+    source_type: str = "external_provider",
+    adapter_name: str = "inspect",
+    adapter_version: str = "0.3.0",
+    result_contract_version: str = "1.0.0",
+    issuer_id: str = "issuer-protocol-a",
+    signing_key_id: str = "key-protocol-a",
+) -> ApprovedEvaluatorRegistration:
+    binding = EvaluatorIdentityBinding(
+        evaluator_id=evaluator_id,
+        source_type=source_type,
+        adapter_name=adapter_name,
+        adapter_version=adapter_version,
+        result_contract_version=result_contract_version,
+        issuer_id=issuer_id,
+        key_id=signing_key_id,
+    )
+    return ApprovedEvaluatorRegistration(
+        registration_id="catalog-registration-a",
+        binding_hash=evaluator_binding_hash(binding),
+        evaluator_id=evaluator_id,
+        source_type=source_type,
+        adapter_name=adapter_name,
+        adapter_version=adapter_version,
+        result_contract_version=result_contract_version,
+        issuer_id=issuer_id,
+        signing_key_id=signing_key_id,
+    )
+
+
+_DEFAULT_CATALOG_REGISTRATION = object()
+
+
 def _configured_service(
     *,
     authority: SimpleNamespace | None = None,
@@ -426,11 +473,15 @@ def _configured_service(
     first_hash: str = "9" * 64,
     second_hash: str = "9" * 64,
     authenticity_failure: Exception | None = None,
-    evaluator_registry: StaticEvaluatorRegistry | None = None,
+    catalog_registration: ApprovedEvaluatorRegistration | None | object = _DEFAULT_CATALOG_REGISTRATION,
 ):
     initial = authority or _authority()
     verified = second_authority or initial
-    repository = FakeRepository()
+    repository = FakeRepository(
+        _approved_catalog_registration()
+        if catalog_registration is _DEFAULT_CATALOG_REGISTRATION
+        else catalog_registration  # type: ignore[arg-type]
+    )
     unit_of_work = FakeUnitOfWork(repository)
     authenticity = FakeAuthenticityService(authenticity_failure)
     resolver = FakeResolver(
@@ -442,19 +493,6 @@ def _configured_service(
     service = VerifiedEvidenceAdmissionService(
         unit_of_work,
         authenticity,  # type: ignore[arg-type]
-        evaluator_registry=evaluator_registry
-        or StaticEvaluatorRegistry(
-            catalog_version="2026.08.1",
-            registrations=(
-                EvaluatorRegistration(
-                    evaluator_id="evaluator-a",
-                    adapter_name="inspect",
-                    adapter_version="0.3.0",
-                    result_contract_version="1.0.0",
-                    source_types=frozenset({"external_provider"}),
-                ),
-            ),
-        ),
         uuid_factory=SequentialUuidFactory(),
     )
     service._resolver = resolver
@@ -530,6 +568,15 @@ def test_verified_admission_persists_exact_graph_with_fresh_database_time() -> N
         "adapterVersion": "0.3.0",
         "resultContractVersion": "1.0.0",
     }
+    assert command.evaluator_registration_id == "catalog-registration-a"
+    assert command.evaluator_registration_binding_hash == _approved_catalog_registration().binding_hash
+    assert len(repository.catalog_resolution_calls) == 1
+    resolution = repository.catalog_resolution_calls[0]
+    assert resolution["scope"] == SCOPE
+    assert resolution["evaluator_id"] == "evaluator-a"
+    assert resolution["issuer_id"] == "issuer-protocol-a"
+    assert resolution["signing_key_id"] == "key-protocol-a"
+    assert resolution["verified_at"] == VERIFIED_AT
     expected_request_hash = canonical_sha256(
         {
             "method": "POST",
@@ -569,25 +616,14 @@ def test_verified_admission_persists_exact_graph_with_fresh_database_time() -> N
         "freshnessStatus": "current",
         "runTechnicalStatus": "succeeded",
         "runEvidenceOutcome": "failed",
-        "evaluatorRegistryHash": "e816008e154dd1c5509c2158ca1e0ff0f40a8f75c209a22f2d473fc375e5c617",
-        "evaluatorRegistrationHash": "eba56d312a0fe0e4ce7e6af6bc4b20b4660f75da7d4accc343772ea9298d62c3",
+        "evaluatorRegistrationId": command.evaluator_registration_id,
+        "evaluatorRegistrationBindingHash": command.evaluator_registration_binding_hash,
     }
 
 
-def test_signed_evaluator_must_be_registered_by_server_catalog() -> None:
+def test_signed_evaluator_must_have_an_approved_persistent_registration() -> None:
     service, unit_of_work, repository, _, _ = _configured_service(
-        evaluator_registry=StaticEvaluatorRegistry(
-            catalog_version="2026.08.1",
-            registrations=(
-                EvaluatorRegistration(
-                    evaluator_id="different-evaluator",
-                    adapter_name="inspect",
-                    adapter_version="0.3.0",
-                    result_contract_version="1.0.0",
-                    source_types=frozenset({"external_provider"}),
-                ),
-            ),
-        )
+        catalog_registration=None,
     )
 
     with pytest.raises(EvaluationWorkbenchError) as caught:

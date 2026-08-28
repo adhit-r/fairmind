@@ -51,6 +51,25 @@ class Settings(BaseSettings):
     # Verified Evidence Passport admission remains independently disabled until
     # the route, trust catalog, and reviewer workflow pass their release gate.
     assurance_v2_evidence_submit_enabled: bool = False
+    # Unsigned reports are separately disabled by default. When enabled, they
+    # remain explicitly unverified, human-review-only material.
+    assurance_v2_evidence_import_enabled: bool = False
+    # Four-eyes evidence review remains separately disabled until its
+    # persistence, authorization, and release-gate controls are validated.
+    assurance_v2_evidence_review_enabled: bool = False
+    # Normal governance decisions remain independently disabled until their
+    # PostgreSQL CAS path and authorization gate are deliberately released.
+    assurance_v2_governance_decision_enabled: bool = False
+    # Owner decision overrides remain separately disabled until their
+    # PostgreSQL owner-authority proof and audited exception path are released.
+    assurance_v2_separation_override_enabled: bool = False
+    # Evaluator registration administration is inert until the dedicated
+    # release gate, narrow organization permission, and audited ceremony are
+    # deliberately enabled together.
+    assurance_v2_evaluator_catalog_enabled: bool = False
+    # Issuer, public-key, and trust-policy administration remains independently
+    # hidden until PostgreSQL 013f and the literal trust-admin permission release.
+    assurance_v2_trust_administration_enabled: bool = False
     assurance_migration_schema: Optional[str] = None
     
     # Neon Auth + Data API

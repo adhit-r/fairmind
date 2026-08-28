@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/tooltip'
 import { FramedIcon } from '@/components/ui/FramedIcon'
 import { FramedIdentity } from '@/components/ui/FramedIdentity'
+import { useSession } from '@/context/SessionContext'
 import { NAVIGATION_ITEMS as navigationCategories } from '@/lib/constants/navigation'
 import { cn } from '@/lib/utils'
 
@@ -52,6 +53,7 @@ function FramedTooltip({ label, children }: { label: string; children: React.Rea
 export function AppSidebar({ className }: AppSidebarProps) {
   const pathname = usePathname()
   const { state } = useSidebar()
+  const { user, logout } = useSession()
   const [expandedCategories, setExpandedCategories] = useState<string[]>([])
   const isCollapsed = state === 'collapsed'
 
@@ -185,9 +187,25 @@ export function AppSidebar({ className }: AppSidebarProps) {
               <FramedTooltip label="Settings">
                 <FramedIcon href="/settings" icon={IconSettings} label="Settings" />
               </FramedTooltip>
-              <FramedTooltip label="User Name">
-                <FramedIdentity name="User Name" collapsed label="User Name profile" />
-              </FramedTooltip>
+              {user && (
+                <FramedTooltip label={user.username}>
+                  <FramedIdentity
+                    name={user.username}
+                    collapsed
+                    label={`${user.username} profile`}
+                  />
+                </FramedTooltip>
+              )}
+              {user && (
+                <FramedTooltip label="Logout">
+                  <FramedIcon
+                    icon={IconLogout}
+                    label="Logout"
+                    onClick={() => void logout()}
+                    className="hover:border-[#D83A2E] hover:bg-[#D83A2E] hover:text-white"
+                  />
+                </FramedTooltip>
+              )}
             </div>
           ) : (
             <div className="space-y-3">
@@ -198,17 +216,22 @@ export function AppSidebar({ className }: AppSidebarProps) {
                 text="Settings"
                 active={isNavigationItemActive(pathname, '/settings')}
               />
-              <FramedIdentity
-                name="User Name"
-                email="user@example.com"
-                label="User Name profile"
-              />
-              <FramedIcon
-                icon={IconLogout}
-                label="Logout"
-                text="Logout"
-                className="hover:border-[#D83A2E] hover:bg-[#D83A2E] hover:text-white"
-              />
+              {user && (
+                <FramedIdentity
+                  name={user.username}
+                  email={user.email}
+                  label={`${user.username} profile`}
+                />
+              )}
+              {user && (
+                <FramedIcon
+                  icon={IconLogout}
+                  label="Logout"
+                  text="Logout"
+                  onClick={() => void logout()}
+                  className="hover:border-[#D83A2E] hover:bg-[#D83A2E] hover:text-white"
+                />
+              )}
             </div>
           )}
         </div>

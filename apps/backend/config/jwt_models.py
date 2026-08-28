@@ -33,8 +33,8 @@ class JWTPayload(BaseModel):
     
     Represents the claims contained within a JWT token.
     """
-    sub: str = Field(..., description="Subject (user email or ID)")
-    user_id: int = Field(..., description="User database ID")
+    sub: str = Field(..., description="Stable user identifier")
+    user_id: str = Field(..., description="Stable user identifier")
     exp: datetime = Field(..., description="Expiration time")
     iat: datetime = Field(..., description="Issued at time")
     nbf: Optional[datetime] = Field(None, description="Not before time")
@@ -75,7 +75,7 @@ class JWTPayload(BaseModel):
 
 class TokenRequest(BaseModel):
     """Request model for token creation."""
-    user_id: int = Field(..., description="User ID")
+    user_id: str = Field(..., description="Stable user identifier")
     email: str = Field(..., description="User email")
     roles: List[UserRole] = Field(default_factory=list, description="User roles")
     permissions: List[str] = Field(default_factory=list, description="User permissions")
@@ -131,7 +131,7 @@ class TokenIntrospection(BaseModel):
     """Token introspection response (RFC 7662 style)."""
     active: bool = Field(..., description="Whether token is active")
     sub: Optional[str] = Field(None, description="Subject")
-    user_id: Optional[int] = Field(None, description="User ID")
+    user_id: Optional[str] = Field(None, description="Stable user identifier")
     exp: Optional[int] = Field(None, description="Expiration timestamp")
     iat: Optional[int] = Field(None, description="Issued at timestamp")
     token_type: Optional[str] = Field(None, description="Token type")
@@ -237,7 +237,7 @@ class TokenBlacklist(BaseModel):
     """Token blacklist model for revoked tokens."""
     jti: str = Field(..., description="JWT ID (unique token identifier)")
     token_hash: str = Field(..., description="Hash of the token")
-    user_id: int = Field(..., description="User ID")
+    user_id: str = Field(..., description="Stable user identifier")
     revoked_at: datetime = Field(..., description="When token was revoked")
     reason: Optional[str] = Field(None, description="Reason for revocation")
     
@@ -251,7 +251,7 @@ class TokenBlacklist(BaseModel):
 class JWTSecurityEvent(BaseModel):
     """JWT security event model for logging."""
     event_type: str = Field(..., description="Type of security event")
-    user_id: Optional[int] = Field(None, description="User ID if applicable")
+    user_id: Optional[str] = Field(None, description="Stable user identifier if applicable")
     ip_address: Optional[str] = Field(None, description="Client IP address")
     user_agent: Optional[str] = Field(None, description="Client user agent")
     timestamp: datetime = Field(default_factory=datetime.utcnow, description="Event timestamp")

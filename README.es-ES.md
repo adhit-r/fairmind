@@ -771,7 +771,7 @@ Este proyecto está licenciado bajo la Licencia MIT - consulta el archivo [LICEN
 
 **Contacto**
 - Repositorio: [github.com/adhit-r/fairmind](https://github.com/adhit-r/fairmind)
-- correo de soporte : adhi.r@fairmind.xyz 
+- correo de soporte : adhi.r@fairmind.xyz
 ---
 
 **FairMind - Haciendo la IA justa, transparente y responsable para todos.**

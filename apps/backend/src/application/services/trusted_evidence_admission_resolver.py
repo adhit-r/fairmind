@@ -16,7 +16,7 @@ from src.application.ports.evidence_admission import (
     TrustedEvidenceAdmissionContext,
     TrustedSigningKey,
 )
-from src.application.services.evaluation_workbench_service import verify_run_record_binding
+from src.application.evaluation_workbench_contracts import verify_run_record_binding
 from src.domain.assurance.evaluation_v2 import canonical_sha256
 from src.domain.assurance.evidence_passport_v2 import expected_execution_binding_v2
 
@@ -295,7 +295,7 @@ class TrustedEvidenceAdmissionResolver:
             not isinstance(authority.maximum_evidence_age_seconds, int)
             or isinstance(authority.maximum_evidence_age_seconds, bool)
             or authority.maximum_evidence_age_seconds <= 0
-            or authority.unsigned_import_policy not in {"reject", "manual_review", "allow"}
+            or authority.unsigned_import_policy not in {"reject", "manual_review"}
         ):
             raise _error(
                 "trust_policy_invalid",

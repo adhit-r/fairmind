@@ -17,12 +17,12 @@ Comprehensive testing of:
 import pytest
 import uuid
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch, MagicMock
 from httpx import AsyncClient
 import asyncio
 
-from config.auth import TokenData
+from config.auth import TokenData, TokenType, UserRole
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -30,39 +30,42 @@ from config.auth import TokenData
 @pytest.fixture
 def user_a_token():
     """Token for User A."""
+    now = datetime.now(timezone.utc)
     return TokenData(
         user_id="user-a-id",
         email="usera@example.com",
-        full_name="User A",
-        org_id=None,
-        primary_org_id=None,
-        scopes=[]
+        role=UserRole.ANALYST,
+        token_type=TokenType.ACCESS,
+        iat=now,
+        exp=now + timedelta(hours=1),
     )
 
 
 @pytest.fixture
 def user_b_token():
     """Token for User B."""
+    now = datetime.now(timezone.utc)
     return TokenData(
         user_id="user-b-id",
         email="userb@example.com",
-        full_name="User B",
-        org_id=None,
-        primary_org_id=None,
-        scopes=[]
+        role=UserRole.ANALYST,
+        token_type=TokenType.ACCESS,
+        iat=now,
+        exp=now + timedelta(hours=1),
     )
 
 
 @pytest.fixture
 def user_c_token():
     """Token for User C (non-member)."""
+    now = datetime.now(timezone.utc)
     return TokenData(
         user_id="user-c-id",
         email="userc@example.com",
-        full_name="User C",
-        org_id=None,
-        primary_org_id=None,
-        scopes=[]
+        role=UserRole.ANALYST,
+        token_type=TokenType.ACCESS,
+        iat=now,
+        exp=now + timedelta(hours=1),
     )
 
 
@@ -79,7 +82,7 @@ def org2_id():
 
 
 @pytest.fixture
-async def mock_db():
+def mock_db():
     """Mock database connection."""
     db = AsyncMock()
     db.execute = AsyncMock()
@@ -122,7 +125,7 @@ class TestSingleUserSingleOrg:
 
         # Verify call was made
         assert mock_db.execute.called
-        assert mock_db.execute.call_args[1]["owner_id"] == user_a_token.user_id
+        assert mock_db.execute.call_args.args[1]["owner_id"] == user_a_token.user_id
 
     @pytest.mark.asyncio
     async def test_user_is_org_admin(self, user_a_token, org1_id, mock_db):
@@ -236,7 +239,7 @@ class TestSingleUserSingleOrg:
                 "id": str(uuid.uuid4()),
                 "user_id": user_a_token.user_id,
                 "email": user_a_token.email,
-                "name": user_a_token.full_name,
+                "name": "User A",
                 "role": "owner",
                 "status": "active",
                 "joined_at": datetime.utcnow()
@@ -245,7 +248,7 @@ class TestSingleUserSingleOrg:
                 "id": str(uuid.uuid4()),
                 "user_id": user_b_token.user_id,
                 "email": user_b_token.email,
-                "name": user_b_token.full_name,
+                "name": "User B",
                 "role": "analyst",
                 "status": "active",
                 "joined_at": datetime.utcnow()
@@ -461,7 +464,7 @@ class TestOrgIsolation:
         # Should have 2 members, but NOT any org2 data
         assert len(org1_members) == 2
         # Verify the query was org-id filtered
-        assert mock_db.fetch_all.call_args[1]["org_id"] == org1_id
+        assert mock_db.fetch_all.call_args.args[1]["org_id"] == org1_id
 
 
 # ── Test Suite 4: Role-Based Access Control ───────────────────────────────────
@@ -672,12 +675,12 @@ class TestAuditTrail:
         )
 
         # Verify all required fields were passed
-        call_args = mock_db.execute.call_args[1]
-        assert call_args["org_id"] == org_id
-        assert call_args["user_id"] == user_id
-        assert call_args["action"] == action
-        assert call_args["resource_type"] == resource_type
-        assert call_args["created_at"] is not None
+        values = mock_db.execute.call_args.args[1]
+        assert values["org_id"] == org_id
+        assert values["user_id"] == user_id
+        assert values["action"] == action
+        assert values["resource_type"] == resource_type
+        assert values["created_at"] is not None
 
 
 # ── Test Suite 6: Concurrent Operations ───────────────────────────────────────

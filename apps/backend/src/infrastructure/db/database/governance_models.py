@@ -758,6 +758,9 @@ class GovernanceEvidenceIssuer(Base):
     created_by = Column(String, nullable=False)
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
     updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    revoked_by = Column(String, nullable=True)
+    revoked_at = Column(String, nullable=True)
+    revocation_reason = Column(Text, nullable=True)
 
     __table_args__ = (
         UniqueConstraint("id", "org_id", name="uq_governance_evidence_issuer_tenant"),
@@ -765,6 +768,23 @@ class GovernanceEvidenceIssuer(Base):
         CheckConstraint(
             "status IN ('active', 'revoked')",
             name="ck_governance_evidence_issuer_status",
+        ),
+        CheckConstraint(
+            "issuer_type IN ('fairmind_worker', 'external_provider')",
+            name="ck_governance_evidence_issuer_type_013f",
+        ),
+        CheckConstraint(
+            "(status = 'active' AND revoked_by IS NULL AND revoked_at IS NULL "
+            "AND revocation_reason IS NULL) OR "
+            "(status = 'revoked' AND revoked_by IS NOT NULL AND revoked_at IS NOT NULL "
+            "AND revocation_reason IS NOT NULL "
+            "AND length(trim(revoked_by)) BETWEEN 1 AND 200 "
+            "AND length(trim(revocation_reason)) BETWEEN 1 AND 2000)",
+            name="ck_governance_evidence_issuer_revocation_013f",
+        ),
+        CheckConstraint(
+            _canonical_utc_timestamp("revoked_at"),
+            name="ck_governance_evidence_issuer_revoked_at_013f",
         ),
         Index(
             "idx_governance_evidence_issuers_org_status",
@@ -783,10 +803,12 @@ class GovernanceEvidenceSigningKey(Base):
     key_id = Column(String, nullable=False)
     algorithm = Column(String, nullable=False)
     public_jwk_json = Column(Text, nullable=False)
+    public_key_fingerprint = Column(String, nullable=False)
     valid_from = Column(String, nullable=False)
     valid_until = Column(String, nullable=False)
     revoked_at = Column(String, nullable=True)
     revocation_reason = Column(Text, nullable=True)
+    revoked_by = Column(String, nullable=True)
     created_by = Column(String, nullable=False)
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
 
@@ -803,6 +825,10 @@ class GovernanceEvidenceSigningKey(Base):
             "key_id",
             name="uq_governance_evidence_signing_key_id",
         ),
+        UniqueConstraint(
+            "public_key_fingerprint",
+            name="uq_governance_evidence_signing_key_fingerprint",
+        ),
         ForeignKeyConstraint(
             ["issuer_id", "org_id"],
             ["governance_evidence_issuers.id", "governance_evidence_issuers.org_id"],
@@ -816,9 +842,24 @@ class GovernanceEvidenceSigningKey(Base):
             name="ck_governance_evidence_signing_key_validity",
         ),
         CheckConstraint(
-            "(revoked_at IS NULL AND revocation_reason IS NULL) OR "
-            "(revoked_at IS NOT NULL AND revocation_reason IS NOT NULL)",
+            "(revoked_at IS NULL AND revocation_reason IS NULL AND revoked_by IS NULL) OR "
+            "(revoked_at IS NOT NULL AND revocation_reason IS NOT NULL "
+            "AND revoked_by IS NOT NULL "
+            "AND length(trim(revoked_by)) BETWEEN 1 AND 200 "
+            "AND length(trim(revocation_reason)) BETWEEN 1 AND 2000)",
             name="ck_governance_evidence_signing_key_revocation",
+        ),
+        CheckConstraint(
+            _lower_hex64("public_key_fingerprint"),
+            name="ck_governance_evidence_signing_key_fingerprint_013f",
+        ),
+        CheckConstraint(
+            _canonical_utc_timestamp("valid_from", nullable=False)
+            + " AND "
+            + _canonical_utc_timestamp("valid_until", nullable=False)
+            + " AND "
+            + _canonical_utc_timestamp("revoked_at"),
+            name="ck_governance_evidence_signing_key_timestamps_013f",
         ),
         Index(
             "idx_governance_evidence_signing_keys_org_issuer_key_revoked",
@@ -826,6 +867,115 @@ class GovernanceEvidenceSigningKey(Base):
             "issuer_id",
             "key_id",
             "revoked_at",
+        ),
+    )
+
+
+class GovernanceEvaluatorRegistration(Base):
+    """Structural projection; migration 013d owns lifecycle authority.
+
+    A row authorizes an exact evaluator identity tuple only.  It is not a
+    provider certification, execution-readiness record, or outcome claim.
+    """
+
+    __tablename__ = "governance_evaluator_registrations"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    evaluator_id = Column(String, nullable=False)
+    source_type = Column(String, nullable=False)
+    adapter_name = Column(String, nullable=False)
+    adapter_version = Column(String, nullable=False)
+    result_contract_version = Column(String, nullable=False)
+    issuer_id = Column(String, nullable=False)
+    signing_key_id = Column(String, nullable=False)
+    authority_issuer_id = Column(String, nullable=False)
+    authority_signing_key_id = Column(String, nullable=False)
+    binding_hash = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="pending")
+    submitted_by = Column(String, nullable=False)
+    submitted_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    reviewed_by = Column(String, nullable=True)
+    reviewed_at = Column(String, nullable=True)
+    review_rationale = Column(Text, nullable=True)
+    revoked_by = Column(String, nullable=True)
+    revoked_at = Column(String, nullable=True)
+    revocation_rationale = Column(Text, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("id", "org_id", name="uq_governance_evaluator_registration_tenant"),
+        UniqueConstraint(
+            "org_id",
+            "binding_hash",
+            name="uq_governance_evaluator_registration_binding_hash",
+        ),
+        UniqueConstraint(
+            "org_id",
+            "evaluator_id",
+            "source_type",
+            "adapter_name",
+            "adapter_version",
+            "result_contract_version",
+            "issuer_id",
+            "signing_key_id",
+            name="uq_governance_evaluator_registration_exact_binding",
+        ),
+        ForeignKeyConstraint(
+            ["authority_issuer_id", "org_id"],
+            ["governance_evidence_issuers.id", "governance_evidence_issuers.org_id"],
+            name="fk_governance_evaluator_registration_issuer",
+        ),
+        ForeignKeyConstraint(
+            ["authority_signing_key_id", "authority_issuer_id", "org_id"],
+            [
+                "governance_evidence_signing_keys.id",
+                "governance_evidence_signing_keys.issuer_id",
+                "governance_evidence_signing_keys.org_id",
+            ],
+            name="fk_governance_evaluator_registration_signing_key",
+        ),
+        CheckConstraint(
+            "source_type IN ('fairmind_worker', 'external_provider')",
+            name="ck_governance_evaluator_registration_source",
+        ),
+        CheckConstraint(
+            _lower_hex64("binding_hash"),
+            name="ck_governance_evaluator_registration_hash",
+        ),
+        CheckConstraint(
+            _canonical_utc_timestamp("submitted_at", nullable=False),
+            name="ck_governance_evaluator_registration_submitted_at",
+        ),
+        CheckConstraint(
+            "(reviewed_at IS NULL OR "
+            f"({_canonical_utc_timestamp('reviewed_at', nullable=False)}) AND "
+            "reviewed_at >= submitted_at) AND "
+            "(revoked_at IS NULL OR "
+            f"({_canonical_utc_timestamp('revoked_at', nullable=False)}) AND "
+            "reviewed_at IS NOT NULL AND revoked_at >= reviewed_at)",
+            name="ck_governance_evaluator_registration_timestamps",
+        ),
+        CheckConstraint(
+            "(status = 'pending' AND reviewed_by IS NULL AND reviewed_at IS NULL "
+            "AND review_rationale IS NULL AND revoked_by IS NULL AND revoked_at IS NULL "
+            "AND revocation_rationale IS NULL) OR "
+            "(status IN ('approved', 'rejected') AND reviewed_by IS NOT NULL "
+            "AND reviewed_by <> submitted_by AND reviewed_at IS NOT NULL "
+            "AND review_rationale IS NOT NULL AND length(trim(review_rationale)) BETWEEN 1 AND 2000 "
+            "AND revoked_by IS NULL AND revoked_at IS NULL AND revocation_rationale IS NULL) OR "
+            "(status = 'revoked' AND reviewed_by IS NOT NULL "
+            "AND reviewed_by <> submitted_by AND reviewed_at IS NOT NULL "
+            "AND review_rationale IS NOT NULL AND length(trim(review_rationale)) BETWEEN 1 AND 2000 "
+            "AND revoked_by IS NOT NULL AND revoked_at IS NOT NULL "
+            "AND revocation_rationale IS NOT NULL "
+            "AND length(trim(revocation_rationale)) BETWEEN 1 AND 2000)",
+            name="ck_governance_evaluator_registration_lifecycle",
+        ),
+        Index(
+            "idx_governance_evaluator_registrations_org_status",
+            "org_id",
+            "status",
+            "id",
         ),
     )
 
@@ -842,26 +992,81 @@ class GovernanceEvidenceTrustPolicyVersion(Base):
     unsigned_import_policy = Column(String, nullable=False)
     status = Column(String, nullable=False, default="draft")
     created_by = Column(String, nullable=False)
+    policy_schema_version = Column(String, nullable=False, default="1.0.0")
+    supersedes_id = Column(String, nullable=True)
+    activated_by = Column(String, nullable=True)
+    activated_at = Column(String, nullable=True)
+    retired_by = Column(String, nullable=True)
+    retired_at = Column(String, nullable=True)
+    retirement_reason = Column(Text, nullable=True)
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
 
     __table_args__ = (
         UniqueConstraint("id", "org_id", name="uq_governance_evidence_trust_policy_tenant"),
         UniqueConstraint("org_id", "version", name="uq_governance_evidence_trust_policy_version"),
+        ForeignKeyConstraint(
+            ["supersedes_id", "org_id"],
+            [
+                "governance_evidence_trust_policy_versions.id",
+                "governance_evidence_trust_policy_versions.org_id",
+            ],
+            name="fk_governance_evidence_trust_policy_supersedes",
+        ),
         CheckConstraint(
             _lower_hex64("policy_hash"),
             name="ck_governance_evidence_trust_policy_hash",
         ),
         CheckConstraint(
-            "maximum_evidence_age_seconds >= 0",
+            "maximum_evidence_age_seconds > 0",
             name="ck_governance_evidence_trust_policy_age",
         ),
         CheckConstraint(
-            "unsigned_import_policy IN ('reject', 'manual_review', 'allow')",
+            "unsigned_import_policy IN ('reject', 'manual_review')",
             name="ck_governance_evidence_trust_policy_unsigned",
         ),
         CheckConstraint(
             "status IN ('draft', 'active', 'retired')",
             name="ck_governance_evidence_trust_policy_status",
+        ),
+        CheckConstraint(
+            "policy_schema_version = '1.0.0'",
+            name="ck_governance_evidence_trust_policy_schema_013f",
+        ),
+        CheckConstraint(
+            "length(version) BETWEEN 5 AND 32",
+            name="ck_governance_evidence_trust_policy_version_bound_013f",
+        ),
+        CheckConstraint(
+            "supersedes_id IS NULL OR supersedes_id <> id",
+            name="ck_governance_evidence_trust_policy_supersedes_013f",
+        ),
+        CheckConstraint(
+            "(status = 'draft' AND activated_by IS NULL AND activated_at IS NULL "
+            "AND retired_by IS NULL AND retired_at IS NULL AND retirement_reason IS NULL) OR "
+            "(status = 'active' AND activated_by IS NOT NULL AND activated_at IS NOT NULL "
+            "AND length(trim(activated_by)) BETWEEN 1 AND 200 "
+            "AND retired_by IS NULL AND retired_at IS NULL AND retirement_reason IS NULL) OR "
+            "(status = 'retired' AND retired_by IS NOT NULL AND retired_at IS NOT NULL "
+            "AND retirement_reason IS NOT NULL "
+            "AND length(trim(retired_by)) BETWEEN 1 AND 200 "
+            "AND length(trim(retirement_reason)) BETWEEN 1 AND 2000 "
+            "AND ((activated_by IS NULL AND activated_at IS NULL) OR "
+            "(activated_by IS NOT NULL AND activated_at IS NOT NULL "
+            "AND length(trim(activated_by)) BETWEEN 1 AND 200)))",
+            name="ck_governance_evidence_trust_policy_lifecycle_013f",
+        ),
+        CheckConstraint(
+            _canonical_utc_timestamp("activated_at")
+            + " AND "
+            + _canonical_utc_timestamp("retired_at"),
+            name="ck_governance_evidence_trust_policy_timestamps_013f",
+        ),
+        Index(
+            "uq_governance_evidence_trust_policy_active_org",
+            "org_id",
+            unique=True,
+            postgresql_where=(status == "active"),
+            sqlite_where=(status == "active"),
         ),
         Index(
             "idx_governance_evidence_trust_policies_org_status_version",
@@ -1365,6 +1570,8 @@ class GovernanceEvidenceVerificationReceipt(Base):
     result_contract_version = Column(String, nullable=False)
     evaluator_projection_json = Column(Text, nullable=False)
     evaluator_projection_hash = Column(String, nullable=False)
+    evaluator_registration_id = Column(String, nullable=True)
+    evaluator_registration_binding_hash = Column(String, nullable=True)
     verifier_contract = Column(String, nullable=False)
     verifier_version = Column(String, nullable=False)
     verified_at = Column(String, nullable=False)
@@ -1410,6 +1617,16 @@ class GovernanceEvidenceVerificationReceipt(Base):
                 "governance_evidence_signing_keys.issuer_id",
                 "governance_evidence_signing_keys.org_id",
             ],
+        ),
+        ForeignKeyConstraint(
+            ["evaluator_registration_id", "org_id"],
+            [
+                "governance_evaluator_registrations.id",
+                "governance_evaluator_registrations.org_id",
+            ],
+            name="fk_governance_evidence_receipt_evaluator_registration",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         ForeignKeyConstraint(
             ["run_id", "workspace_id", "system_id", "org_id"],
@@ -1497,6 +1714,14 @@ class GovernanceEvidenceVerificationReceipt(Base):
         CheckConstraint(
             _canonical_utc_timestamp("verified_at", nullable=False),
             name="ck_governance_evidence_verification_receipt_timestamp",
+        ),
+        CheckConstraint(
+            "(evaluator_registration_id IS NULL AND "
+            "evaluator_registration_binding_hash IS NULL) OR "
+            "(evaluator_registration_id IS NOT NULL AND "
+            "evaluator_registration_binding_hash IS NOT NULL AND "
+            f"({_lower_hex64('evaluator_registration_binding_hash')}))",
+            name="ck_governance_evidence_receipt_evaluator_registration",
         ),
         Index(
             "idx_governance_evidence_verification_receipts_scope",
@@ -1596,6 +1821,10 @@ class GovernanceEvidenceReview(Base):
             name="ck_governance_evidence_review_decision",
         ),
         CheckConstraint("review_version >= 1", name="ck_governance_evidence_review_version"),
+        CheckConstraint(
+            "separation_override_reason IS NULL",
+            name="ck_governance_evidence_review_no_override_013j",
+        ),
         Index(
             "idx_governance_evidence_reviews_admission_version",
             "admission_id",
@@ -1960,6 +2189,7 @@ class GovernanceEvaluationDecision(Base):
         ),
         CheckConstraint(
             "owner_override_reason IS NULL OR "
+            "owner_override_reason = trim(owner_override_reason) AND "
             "length(trim(owner_override_reason)) BETWEEN 1 AND 2000",
             name="ck_governance_evaluation_decision_owner_override",
         ),
@@ -2612,6 +2842,10 @@ class GovernanceAISystem(Base):
         "GovernanceEnvironmentalAssessment",
         back_populates="ai_system",
         cascade="all, delete-orphan",
+        foreign_keys=(
+            "[GovernanceEnvironmentalAssessment.system_id, "
+            "GovernanceEnvironmentalAssessment.org_id]"
+        ),
     )
     risks = relationship("GovernanceRisk", back_populates="ai_system", cascade="all, delete-orphan")
     remediation_tasks = relationship(
@@ -2701,6 +2935,12 @@ class GovernanceEvidence(Base):
     __table_args__ = (
         Index("idx_governance_evidence_system_id", "system_id"),
         Index("idx_governance_evidence_control_id", "control_id"),
+        UniqueConstraint(
+            "id",
+            "system_id",
+            "org_id",
+            name="uq_governance_evidence_tenant",
+        ),
         ForeignKeyConstraint(
             ["system_id", "org_id"],
             ["governance_ai_systems.id", "governance_ai_systems.org_id"],
@@ -2717,8 +2957,9 @@ class GovernanceEnvironmentalAssessment(Base):
     __tablename__ = "governance_environmental_assessments"
 
     id = Column(String, primary_key=True, default=_new_id)
-    system_id = Column(String, ForeignKey("governance_ai_systems.id"), nullable=False, index=True)
-    evidence_id = Column(String, ForeignKey("governance_evidence.id"), nullable=True, index=True)
+    org_id = Column(String, nullable=False)
+    system_id = Column(String, nullable=False, index=True)
+    evidence_id = Column(String, nullable=True, index=True)
     version = Column(Integer, nullable=False, default=1)
     boundary_json = Column(Text, nullable=False, default="{}")
     period_start = Column(String, nullable=True)
@@ -2748,11 +2989,36 @@ class GovernanceEnvironmentalAssessment(Base):
     payload_json = Column(Text, nullable=False, default="{}")
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
 
-    ai_system = relationship("GovernanceAISystem", back_populates="environmental_assessments")
+    ai_system = relationship(
+        "GovernanceAISystem",
+        back_populates="environmental_assessments",
+        foreign_keys=[system_id, org_id],
+    )
 
     __table_args__ = (
-        Index("idx_governance_env_assessments_system_version", "system_id", "version", unique=True),
+        Index(
+            "idx_governance_env_assessments_org_system_version",
+            "org_id",
+            "system_id",
+            "version",
+            unique=True,
+        ),
         Index("idx_governance_env_assessments_recommendation", "recommendation"),
+        ForeignKeyConstraint(
+            ["system_id", "org_id"],
+            ["governance_ai_systems.id", "governance_ai_systems.org_id"],
+            name="fk_governance_environmental_assessment_system_tenant",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["evidence_id", "system_id", "org_id"],
+            [
+                "governance_evidence.id",
+                "governance_evidence.system_id",
+                "governance_evidence.org_id",
+            ],
+            name="fk_governance_environmental_assessment_evidence_tenant",
+        ),
     )
 
     def __repr__(self) -> str:

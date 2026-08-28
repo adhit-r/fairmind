@@ -17,7 +17,23 @@ from src.application.services.fairness_evidence_profile_service import (
     FairnessEvidenceProfileService,
 )
 
-router = APIRouter(prefix="/ai-bom", tags=["ai-bom"])
+def _reject_quarantined_ai_bom_http() -> None:
+    """Keep the legacy global AI-BOM surface unavailable until it is tenant-safe."""
+
+    raise HTTPException(
+        status_code=404,
+        detail={
+            "code": "legacy_ai_bom_quarantined",
+            "message": "The legacy AI-BOM HTTP surface is not available.",
+        },
+    )
+
+
+router = APIRouter(
+    prefix="/ai-bom",
+    tags=["ai-bom"],
+    dependencies=[Depends(_reject_quarantined_ai_bom_http)],
+)
 
 logger = logging.getLogger(__name__)
 

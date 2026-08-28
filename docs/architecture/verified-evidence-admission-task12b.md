@@ -23,14 +23,18 @@ as lookup selectors. It cannot supply authoritative target, plan, suite,
 envelope, policy, issuer, or key state.
 
 `evaluatorId` is signed, stored, and receipt-bound. The internal admission
-kernel now resolves it through an immutable, server-owned evaluator catalog and
-requires the catalog entry to match source, adapter name/version, and result
-contract exactly. The catalog hash and registration hash are included in the
-append-only successful-admission audit event. This is an in-process catalog for
-the current default-off slice: persistent catalog administration, external and
-FairMind-worker registration ceremonies, and route-level catalog permissions
-remain separate release gates. Product claims must not describe an evaluator or
-provider as generally authorized until those gates exist.
+kernel resolves it through an installed durable evaluator-registration catalog,
+locks an approved row in the same transaction as receipt persistence, and
+requires the exact source, adapter name/version, result contract, issuer, and
+signing-key binding. The registration ID and binding hash are included in the
+append-only successful-admission audit event. A separate, independently
+default-off catalog-administration API now exposes the registration ceremony;
+it requires the literal `evaluation:catalog:admin` permission, exact
+organization scope, idempotency, four-eyes transitions, CAS, and audit
+events. The API records identity authorization only. External and
+FairMind-worker execution, trust lifecycle administration, and product
+release gates remain separate. Product claims must not describe an evaluator
+or provider as generally authorized until those gates exist.
 
 Inside the organization-scoped mutation transaction, the trusted resolver:
 
@@ -167,8 +171,8 @@ flag and the independent evidence-submit flag are enabled:
 
 `POST /api/v1/ai-governance/organizations/{org_id}/workspaces/{workspace_id}/systems/{system_id}/evaluation-v2/runs/{run_id}/suite-executions/{suite_execution_id}/evidence`
 
-The route requires the organization role permission
-`evaluation:evidence:submit`. It binds the organization, workspace, system,
+The route requires both organization role permissions
+`evaluation:evidence:submit` and `evaluation:evidence:link`. It binds the organization, workspace, system,
 run, and suite execution path identities to the same immutable run projection
 before reading the request body. It accepts only JSON media types and streams
 at most the existing one-MiB request limit; the admission service receives the
@@ -176,20 +180,21 @@ raw bytes so canonical Passport parsing and authentication remain authoritative
 inside the application transaction. Missing permission, any scope mismatch,
 unsupported media type, and oversized bodies fail before an admission call.
 
-The production composition uses real Ed25519 verification and the existing
-transactional admission service, but its bootstrap evaluator registry is empty.
-Therefore a flag-enabled deployment still rejects every evaluator as
-unregistered until server-owned evaluator registration persistence and
-approval ceremonies are released.
+The production composition uses real Ed25519 verification and the transactional
+admission service. Admission resolves and locks an exact approved persistent
+evaluator registration in the receipt transaction. A flag-enabled deployment
+still fails closed when no approved evaluator, adapter, result-contract, issuer,
+and signing-key binding matches the submitted evidence.
 
 ## Capability boundary
 
-Task 12B deliberately adds no UI, worker, external-provider registration
-ceremony, unsigned-import flow, reviewer action,
-governance decision, framework mapping, certification, compliance claim, or
-runtime enforcement. The kernel remains internal and default-off until its
-native PostgreSQL adversarial suite, independent security review, and later
-product release gates pass.
+Task 12B deliberately adds no worker execution, external-provider execution,
+unsigned-import flow, governance decision, framework mapping, certification,
+compliance claim, or runtime enforcement. The catalog UI and API remain
+identity-and-ceremony surfaces only, independently default-off, and do not
+attest evaluator quality or readiness. The kernel remains internal and
+default-off until its native PostgreSQL adversarial suite, independent
+security review, and later product release gates pass.
 
 ## Verification coverage
 

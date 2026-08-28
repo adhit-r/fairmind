@@ -441,8 +441,13 @@ def _valid_role_identifier(value: Any) -> bool:
     )
 
 
-def _unsafe_public_string(value: str, *, allow_digest: bool = False) -> bool:
-    if not value or len(value.encode("utf-8")) > 512:
+def _unsafe_public_string(
+    value: str,
+    *,
+    allow_digest: bool = False,
+    maximum_bytes: int = 512,
+) -> bool:
+    if not value or len(value.encode("utf-8")) > maximum_bytes:
         return True
     if value != value.strip() or any(ord(character) < 0x20 for character in value):
         return True
@@ -525,6 +530,15 @@ def validate_public_safe_string(
 ) -> None:
     """Reject caller strings that cannot safely become persisted public evidence."""
     if _unsafe_public_string(value, allow_digest=allow_digest):
+        raise AssuranceContractValidationError(
+            "unsafe_string_value",
+            UNSAFE_STRING_VALUE_MESSAGE,
+        )
+
+
+def validate_owner_override_reason(value: str) -> None:
+    """Apply the public-safe policy to the owner override's 2000-byte contract."""
+    if _unsafe_public_string(value, maximum_bytes=2000):
         raise AssuranceContractValidationError(
             "unsafe_string_value",
             UNSAFE_STRING_VALUE_MESSAGE,

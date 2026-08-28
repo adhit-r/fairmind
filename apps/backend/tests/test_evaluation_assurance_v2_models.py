@@ -40,18 +40,44 @@ def _constraints(model, kind):
     }
 
 
-def _fresh_connection() -> sqlite3.Connection:
+def _legacy_connection() -> sqlite3.Connection:
+    """Build the last pre-v2 schema so migration 013 backfill is exercised."""
+
     connection = sqlite3.connect(":memory:")
     connection.execute("PRAGMA foreign_keys = ON")
     connection.executescript((MIGRATIONS / "008_governance_canonical.sql").read_text())
     from migrations.governance_assurance_migration import sql_for as sql_011
     from migrations.evaluation_runs_migration import sql_for as sql_012
-    from migrations.evaluation_assurance_v2_migration import sql_for as sql_013
 
     connection.executescript(sql_011("sqlite"))
     connection.executescript(sql_012("sqlite"))
+    return connection
+
+
+def _fresh_connection() -> sqlite3.Connection:
+    connection = _legacy_connection()
+    from migrations.evaluation_assurance_v2_migration import sql_for as sql_013
+
     connection.executescript(sql_013("sqlite"))
     return connection
+
+
+def _legacy_row_snapshot(
+    connection: sqlite3.Connection,
+    table: str,
+    record_id: str,
+) -> tuple[tuple[str, ...], tuple]:
+    """Capture every column present before migration 013 for one legacy row."""
+
+    columns = tuple(
+        row[1] for row in connection.execute(f"PRAGMA table_info({table})").fetchall()
+    )
+    row = connection.execute(
+        f"SELECT {', '.join(columns)} FROM {table} WHERE id = ?",
+        (record_id,),
+    ).fetchone()
+    assert row is not None
+    return columns, row
 
 
 @pytest.fixture
@@ -320,16 +346,18 @@ def test_all_new_models_have_exact_columns_unique_constraint_names_and_vocabular
             "id", "org_id", "issuer_key", "name", "issuer_type",
             "source_restrictions_json", "suite_restrictions_json",
             "target_restrictions_json", "status", "created_by", "created_at", "updated_at",
+            "revoked_by", "revoked_at", "revocation_reason",
         ),
         "GovernanceEvidenceSigningKey": (
             "id", "org_id", "issuer_id", "key_id", "algorithm", "public_jwk_json",
-            "valid_from", "valid_until", "revoked_at", "revocation_reason", "created_by",
-            "created_at",
+            "public_key_fingerprint", "valid_from", "valid_until", "revoked_at",
+            "revocation_reason", "revoked_by", "created_by", "created_at",
         ),
         "GovernanceEvidenceTrustPolicyVersion": (
             "id", "org_id", "version", "policy_json", "policy_hash",
             "maximum_evidence_age_seconds", "unsigned_import_policy", "status", "created_by",
-            "created_at",
+            "policy_schema_version", "supersedes_id", "activated_by", "activated_at",
+            "retired_by", "retired_at", "retirement_reason", "created_at",
         ),
         "GovernanceEvidenceAdmission": (
             "id", "org_id", "workspace_id", "system_id", "evidence_run_id",
@@ -384,6 +412,24 @@ def test_all_new_models_have_exact_columns_unique_constraint_names_and_vocabular
         "admission_contract_version",
     ):
         assert review_columns[factual_scope_column].nullable is False
+    review_checks = {
+        constraint.name: str(constraint.sqltext)
+        for constraint in governance_models.GovernanceEvidenceReview.__table__.constraints
+        if isinstance(constraint, CheckConstraint) and constraint.name
+    }
+    assert review_checks["ck_governance_evidence_review_no_override_013j"] == (
+        "separation_override_reason IS NULL"
+    )
+    decision_checks = {
+        constraint.name: str(constraint.sqltext)
+        for constraint in governance_models.GovernanceEvaluationDecision.__table__.constraints
+        if isinstance(constraint, CheckConstraint) and constraint.name
+    }
+    assert decision_checks["ck_governance_evaluation_decision_owner_override"] == (
+        "owner_override_reason IS NULL OR "
+        "owner_override_reason = trim(owner_override_reason) AND "
+        "length(trim(owner_override_reason)) BETWEEN 1 AND 2000"
+    )
 
     vocabulary = {
         "GovernanceEvaluationSuiteVersion": ("draft", "active", "deprecated", "revoked"),
@@ -394,7 +440,7 @@ def test_all_new_models_have_exact_columns_unique_constraint_names_and_vocabular
         ),
         "GovernanceEvidenceIssuer": ("active", "revoked"),
         "GovernanceEvidenceSigningKey": ("Ed25519",),
-        "GovernanceEvidenceTrustPolicyVersion": ("reject", "manual_review", "allow"),
+        "GovernanceEvidenceTrustPolicyVersion": ("reject", "manual_review"),
         "GovernanceEvidenceAdmission": ("verified", "unverified", "trust_error", "stale"),
         "GovernanceEvidenceReview": ("accepted", "rejected"),
         "GovernanceIdempotencyRecord": ("in_progress", "completed"),
@@ -406,6 +452,8 @@ def test_all_new_models_have_exact_columns_unique_constraint_names_and_vocabular
         )
         for value in values:
             assert value in checks
+        if model_name == "GovernanceEvidenceTrustPolicyVersion":
+            assert "'allow'" not in checks
 
 
 def test_vision_model_is_supported_by_legacy_plan_in_orm_and_both_migrations(connection):
@@ -695,6 +743,53 @@ def test_legacy_plan_and_run_default_to_v1_contract(connection):
     assert connection.execute(
         "SELECT contract_version FROM governance_evaluation_runs WHERE id='run-a'"
     ).fetchone() == ("1.0.0",)
+
+
+def test_migration_013_marks_existing_records_v1_without_fabricating_bindings():
+    from migrations.evaluation_assurance_v2_migration import sql_for
+
+    connection = _legacy_connection()
+    try:
+        _seed_plan_and_run(connection)
+        plan_columns, before_plan = _legacy_row_snapshot(
+            connection, "governance_evaluation_plans", "plan-a"
+        )
+        run_columns, before_run = _legacy_row_snapshot(
+            connection, "governance_evaluation_runs", "run-a"
+        )
+
+        connection.executescript(sql_for("sqlite"))
+
+        assert connection.execute(
+            f"SELECT {', '.join(plan_columns)} "
+            "FROM governance_evaluation_plans WHERE id='plan-a'"
+        ).fetchone() == before_plan
+        assert connection.execute(
+            f"SELECT {', '.join(run_columns)} "
+            "FROM governance_evaluation_runs WHERE id='run-a'"
+        ).fetchone() == before_run
+        assert connection.execute(
+            """
+            SELECT contract_version, target_version_id, plan_content_hash,
+                   trust_policy_version_id
+            FROM governance_evaluation_plans WHERE id='plan-a'
+            """
+        ).fetchone() == ("1.0.0", None, None, None)
+        assert connection.execute(
+            """
+            SELECT contract_version, lifecycle_phase, envelope_id, envelope_json,
+                   envelope_hash
+            FROM governance_evaluation_runs WHERE id='run-a'
+            """
+        ).fetchone() == ("1.0.0", None, None, None, None)
+        for table in (
+            "governance_evaluation_target_versions",
+            "governance_evaluation_suite_versions",
+            "governance_evidence_trust_policy_versions",
+        ):
+            assert connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone() == (0,)
+    finally:
+        connection.close()
 
 
 def test_v2_plan_contract_and_run_envelope_invariants_are_enforced(connection):
