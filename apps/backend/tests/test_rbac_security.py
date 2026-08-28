@@ -125,13 +125,10 @@ class TestCrossOrgAccessPrevention:
 
     @pytest.mark.asyncio
     async def test_user_cannot_update_other_org_member(self, mock_db):
-        """User from org1 cannot update member in org2."""
-        org1_id = str(uuid.uuid4())
+        """User cannot update a member in an organization they do not administer."""
         org2_id = str(uuid.uuid4())
-        member_id = str(uuid.uuid4())
 
-        # Mock: user is admin in org1 (not org2)
-        mock_db.fetch_one.return_value = None  # Is NOT admin in org2
+        mock_db.fetch_one.return_value = None
 
         # Try to update member in org2 (should fail auth check)
         is_admin = (await mock_db.fetch_one(

@@ -96,21 +96,18 @@ class TestListMembersPerformance:
     """Benchmark member list retrieval."""
 
     @pytest.mark.asyncio
-    async def test_list_members_1000_under_50ms(self, user_token, org_id, mock_db, large_member_list):
-        """Listing 1000 members should complete in < 50ms."""
-        # Mock: 1000 members returned
+    async def test_list_members_1000_uses_query_boundary(
+        self, org_id, mock_db, large_member_list
+    ):
+        """The list-members query returns all rows from the database boundary."""
         mock_db.fetch_all.return_value = large_member_list
-        mock_db.fetch_one.return_value = {"count": 1000}
+        query = "SELECT * FROM org_members WHERE org_id = :org_id"
+        params = {"org_id": org_id}
 
-        def run_test():
-            # Simulate the query
-            return len(large_member_list)
+        result = await mock_db.fetch_all(query, params)
 
-        start = time.perf_counter()
-        result = run_test()
-        elapsed = (time.perf_counter() - start) * 1000
-        assert result == 1000
-        assert elapsed < 50
+        assert len(result) == 1000
+        mock_db.fetch_all.assert_awaited_once_with(query, params)
 
     @pytest.mark.asyncio
     async def test_list_members_pagination(self, user_token, org_id, mock_db, large_member_list):

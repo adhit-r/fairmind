@@ -801,7 +801,7 @@ def test_postgresql14_013j_preserves_normal_governance_decisions(
 
     factory = postgresql_013j_session_factory
     graph = _ready_graph(factory)
-    result = _decide(factory, graph, decider_id=f"independent-decider-{uuid.uuid4()}")
+    result = _decide(factory, graph, decider_id=str(uuid.uuid4()))
     assert result["verdictVersion"] == 1
 
 
