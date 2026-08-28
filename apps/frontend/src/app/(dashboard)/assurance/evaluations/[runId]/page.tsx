@@ -19,6 +19,8 @@ interface PageProps {
 }
 
 const ASSURANCE_V2_UI_ENABLED = process.env.NEXT_PUBLIC_ASSURANCE_V2_UI_ENABLED === 'true'
+const ASSURANCE_V2_RUN_UI_ENABLED = ASSURANCE_V2_UI_ENABLED
+  && process.env.NEXT_PUBLIC_ASSURANCE_V2_RUN_UI_ENABLED === 'true'
 
 export default function AssuranceEvaluationDetailPage({ params }: PageProps) {
   const { runId } = use(params)
@@ -26,9 +28,9 @@ export default function AssuranceEvaluationDetailPage({ params }: PageProps) {
   const { selectedSystem, loading: systemLoading } = useSystemContext()
   const realSystem = selectedSystem.metadata?.source === 'fallback' ? undefined : selectedSystem
   const workbench = useEvaluationWorkbenchV2(
-    ASSURANCE_V2_UI_ENABLED ? selectedOrg?.id : undefined,
-    ASSURANCE_V2_UI_ENABLED ? realSystem?.workspaceId : undefined,
-    ASSURANCE_V2_UI_ENABLED ? realSystem?.id : undefined,
+    ASSURANCE_V2_RUN_UI_ENABLED ? selectedOrg?.id : undefined,
+    ASSURANCE_V2_RUN_UI_ENABLED ? realSystem?.workspaceId : undefined,
+    ASSURANCE_V2_RUN_UI_ENABLED ? realSystem?.id : undefined,
   )
   const scopeKey = [selectedOrg?.id ?? '', realSystem?.workspaceId ?? '', realSystem?.id ?? '', runId].join(':')
   const [runState, setRunState] = useState<{ scopeKey: string; run: EvaluationRunV2 | null }>({
@@ -47,7 +49,7 @@ export default function AssuranceEvaluationDetailPage({ params }: PageProps) {
     let current = true
     setRunState({ scopeKey, run: null })
     setDetailError(null)
-    if (!ASSURANCE_V2_UI_ENABLED || !selectedOrg?.id || !realSystem?.workspaceId || !realSystem.id) {
+    if (!ASSURANCE_V2_RUN_UI_ENABLED || !selectedOrg?.id || !realSystem?.workspaceId || !realSystem.id) {
       return () => { current = false }
     }
 
@@ -68,7 +70,7 @@ export default function AssuranceEvaluationDetailPage({ params }: PageProps) {
   }, [realSystem?.id, realSystem?.workspaceId, runId, scopeKey, selectedOrg?.id, workbench.getRun])
 
   const initialLoading = orgLoading || systemLoading || detailLoading || (!run && !detailError && Boolean(
-    ASSURANCE_V2_UI_ENABLED && selectedOrg?.id && realSystem?.workspaceId && realSystem.id,
+    ASSURANCE_V2_RUN_UI_ENABLED && selectedOrg?.id && realSystem?.workspaceId && realSystem.id,
   ))
 
   return (
@@ -101,6 +103,11 @@ export default function AssuranceEvaluationDetailPage({ params }: PageProps) {
         <section className="border-4 border-[#0F1412] bg-[#F3F5F0] p-6">
           <h2 className="text-xl font-black">Assurance preview disabled</h2>
           <p className="mt-2 text-sm font-semibold text-[#59615D]">Set <code className="font-mono font-black">NEXT_PUBLIC_ASSURANCE_V2_UI_ENABLED=true</code> only in an allowlisted environment. The API must independently enable <code className="font-mono font-black">assurance_v2_enabled</code> before any v2 response can render.</p>
+        </section>
+      ) : !ASSURANCE_V2_RUN_UI_ENABLED ? (
+        <section className="border-4 border-[#0F1412] bg-[#F3F5F0] p-6">
+          <h2 className="text-xl font-black">Assurance run preview disabled</h2>
+          <p className="mt-2 text-sm font-semibold text-[#59615D]">Set <code className="font-mono font-black">NEXT_PUBLIC_ASSURANCE_V2_RUN_UI_ENABLED=true</code> only when this read-only surface is approved. The API must independently enable <code className="font-mono font-black">assurance_v2_runs_enabled</code> before any run response can render.</p>
         </section>
       ) : !selectedOrg && !initialLoading ? (
         <section className="border-4 border-[#0F1412] bg-[#FCFDF8] p-6">

@@ -128,6 +128,10 @@ def _token(
 @pytest.fixture
 def workbench_client(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(settings, "assurance_v2_enabled", True)
+    monkeypatch.setattr(settings, "assurance_v2_target_versions_enabled", True)
+    monkeypatch.setattr(settings, "assurance_v2_suite_versions_enabled", True)
+    monkeypatch.setattr(settings, "assurance_v2_plans_enabled", True)
+    monkeypatch.setattr(settings, "assurance_v2_runs_enabled", True)
     engine = create_engine(
         "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
     )
@@ -755,6 +759,64 @@ def test_direct_mounted_core_v2_router_fails_closed_before_request_validation(
     assert response.json()["detail"] == {
         "code": "assurance_feature_disabled",
         "message": "Assurance-contract v2 is not enabled.",
+    }
+
+
+@pytest.mark.parametrize(
+    ("setting_name", "path", "message"),
+    (
+        (
+            "assurance_v2_target_versions_enabled",
+            f"{BASE}/systems/system-a/evaluation-v2/target-versions",
+            "Target versions are not enabled.",
+        ),
+        (
+            "assurance_v2_suite_versions_enabled",
+            f"{BASE}/evaluation-v2/suite-versions",
+            "Suite versions are not enabled.",
+        ),
+        (
+            "assurance_v2_plans_enabled",
+            f"{BASE}/systems/system-a/evaluation-v2/plans",
+            "Evaluation plans are not enabled.",
+        ),
+        (
+            "assurance_v2_runs_enabled",
+            f"{BASE}/systems/system-a/evaluation-v2/plans/plan-a/runs",
+            "Evaluation runs are not enabled.",
+        ),
+    ),
+)
+def test_direct_mounted_core_child_gate_runs_before_auth_database_or_body(
+    workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
+    setting_name: str,
+    path: str,
+    message: str,
+) -> None:
+    monkeypatch.setattr(settings, setting_name, False)
+
+    def unexpected_dependency() -> object:
+        raise AssertionError("the core child gate must run before this dependency")
+
+    original_db = app.dependency_overrides[get_db]
+    app.dependency_overrides[get_db] = unexpected_dependency
+    app.dependency_overrides[organization_membership] = unexpected_dependency
+    try:
+        with TestClient(app, raise_server_exceptions=False) as client:
+            response = client.post(
+                path,
+                headers={"Content-Type": "application/json"},
+                content=b"{not-json",
+            )
+    finally:
+        app.dependency_overrides[get_db] = original_db
+        app.dependency_overrides.pop(organization_membership, None)
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == {
+        "code": "assurance_feature_disabled",
+        "message": message,
     }
 
 
