@@ -171,8 +171,8 @@ flag and the independent evidence-submit flag are enabled:
 
 `POST /api/v1/ai-governance/organizations/{org_id}/workspaces/{workspace_id}/systems/{system_id}/evaluation-v2/runs/{run_id}/suite-executions/{suite_execution_id}/evidence`
 
-The route requires the organization role permission
-`evaluation:evidence:submit`. It binds the organization, workspace, system,
+The route requires both organization role permissions
+`evaluation:evidence:submit` and `evaluation:evidence:link`. It binds the organization, workspace, system,
 run, and suite execution path identities to the same immutable run projection
 before reading the request body. It accepts only JSON media types and streams
 at most the existing one-MiB request limit; the admission service receives the
@@ -180,11 +180,11 @@ raw bytes so canonical Passport parsing and authentication remain authoritative
 inside the application transaction. Missing permission, any scope mismatch,
 unsupported media type, and oversized bodies fail before an admission call.
 
-The production composition uses real Ed25519 verification and the existing
-transactional admission service, but its bootstrap evaluator registry is empty.
-Therefore a flag-enabled deployment still rejects every evaluator as
-unregistered until server-owned evaluator registration persistence and
-approval ceremonies are released.
+The production composition uses real Ed25519 verification and the transactional
+admission service. Admission resolves and locks an exact approved persistent
+evaluator registration in the receipt transaction. A flag-enabled deployment
+still fails closed when no approved evaluator, adapter, result-contract, issuer,
+and signing-key binding matches the submitted evidence.
 
 ## Capability boundary
 
