@@ -931,6 +931,37 @@ def test_v2_plan_creation_rejects_generic_org_mutation_permission(workbench_clie
     }
 
 
+def test_v2_plan_creation_rejects_automatic_enforcement_before_persistence(
+    workbench_client,
+) -> None:
+    client, _ = workbench_client
+    target, suite = _bootstrap(client)
+    plans_url = f"{BASE}/systems/system-a/evaluation-v2/plans"
+
+    response = client.post(
+        plans_url,
+        headers=_headers("automatic-enforcement-plan"),
+        json={
+            "contractVersion": "2.0.0",
+            "name": "Automatic enforcement plan",
+            "targetVersionId": target["id"],
+            "lifecyclePhases": ["pre_deploy"],
+            "executionDepth": "deep",
+            "enforcementMode": "automatic",
+            "deliveryMode": "external_provider",
+            "trustPolicyVersionId": "trust-a",
+            "suites": [{"suiteVersionId": suite["id"]}],
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == {
+        "code": "automatic_enforcement_disabled",
+        "message": "Automatic enforcement is disabled in this release slice.",
+    }
+    assert client.get(plans_url).json() == []
+
+
 def test_v2_plan_activation_requires_its_own_persisted_permission(workbench_client) -> None:
     client, active = workbench_client
     target, suite = _bootstrap(client)

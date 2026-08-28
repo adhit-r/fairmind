@@ -38,7 +38,6 @@ from src.application.services.evaluation_runs_service import (
     EvaluationWorkflowError,
 )
 from src.application.services.legacy_evaluation_feature_gates import (
-    AUTOMATIC_ENFORCEMENT_FLAG,
     EVIDENCE_LINKING_FLAG,
     FAIRMIND_WORKER_FLAG,
     LegacyEvaluationFeatureGates,
@@ -51,7 +50,9 @@ USER_A = str(uuid.uuid4())
 USER_B = str(uuid.uuid4())
 VIEWER = str(uuid.uuid4())
 BASE = "/api/v1/ai-governance/organizations"
-LEGACY_AUTOMATIC_ENFORCEMENT_FLAG = AUTOMATIC_ENFORCEMENT_FLAG
+RETIRED_LEGACY_AUTOMATIC_ENFORCEMENT_FLAG = (
+    "FAIRMIND_ASSURANCE_LEGACY_AUTOMATIC_ENFORCEMENT_ENABLED"
+)
 LEGACY_FAIRMIND_WORKER_FLAG = FAIRMIND_WORKER_FLAG
 LEGACY_EVIDENCE_LINKING_FLAG = EVIDENCE_LINKING_FLAG
 
@@ -284,7 +285,6 @@ def _workflow_detail(message: str, next_action: str) -> dict:
 def test_legacy_capability_flags_require_literal_true() -> None:
     gates = LegacyEvaluationFeatureGates.from_environment(
         {
-            LEGACY_AUTOMATIC_ENFORCEMENT_FLAG: "TRUE",
             LEGACY_FAIRMIND_WORKER_FLAG: "1",
             LEGACY_EVIDENCE_LINKING_FLAG: "yes",
         }
@@ -298,7 +298,7 @@ def test_legacy_mutation_capabilities_default_deny_unsupported_paths(
     monkeypatch,
 ) -> None:
     client, session_factory, _ = evaluation_client
-    monkeypatch.delenv(LEGACY_AUTOMATIC_ENFORCEMENT_FLAG, raising=False)
+    monkeypatch.delenv(RETIRED_LEGACY_AUTOMATIC_ENFORCEMENT_FLAG, raising=False)
     monkeypatch.delenv(LEGACY_FAIRMIND_WORKER_FLAG, raising=False)
     monkeypatch.delenv(LEGACY_EVIDENCE_LINKING_FLAG, raising=False)
 
@@ -348,21 +348,123 @@ def test_legacy_mutation_capabilities_default_deny_unsupported_paths(
         session.close()
 
 
-def test_explicit_legacy_capability_flags_permit_plan_shapes(evaluation_client, monkeypatch) -> None:
+def test_legacy_automatic_enforcement_cannot_be_enabled(
+    evaluation_client,
+    monkeypatch,
+) -> None:
+    client, session_factory, _ = evaluation_client
+    monkeypatch.setenv(RETIRED_LEGACY_AUTOMATIC_ENFORCEMENT_FLAG, "true")
+
+    response = client.post(
+        _plans_url(),
+        json=_plan_payload(enforcementMode="automatic"),
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "automatic_enforcement_disabled"
+    session = session_factory()
+    try:
+        assert session.execute(
+            select(GovernanceEvaluationPlan.__table__.c.id)
+        ).all() == []
+    finally:
+        session.close()
+
+
+def test_historical_automatic_plan_is_readable_but_cannot_activate_or_prepare_run(
+    evaluation_client,
+    monkeypatch,
+) -> None:
+    client, session_factory, _ = evaluation_client
+    monkeypatch.setenv(RETIRED_LEGACY_AUTOMATIC_ENFORCEMENT_FLAG, "true")
+    plan = _create_plan(client)
+    session = session_factory()
+    try:
+        session.execute(
+            update(GovernanceEvaluationPlan.__table__)
+            .where(GovernanceEvaluationPlan.__table__.c.id == plan["id"])
+            .values(enforcement_mode="automatic")
+        )
+        session.commit()
+    finally:
+        session.close()
+
+    activation = _activate(client, plan["id"])
+
+    assert activation.status_code == 409
+    assert activation.json()["detail"] == {
+        "code": "automatic_enforcement_disabled",
+        "message": "Automatic enforcement is unavailable.",
+        "nextAction": "Use advisory or human approval.",
+    }
+    session = session_factory()
+    try:
+        assert session.execute(
+            select(GovernanceEvaluationPlan.__table__.c.status).where(
+                GovernanceEvaluationPlan.__table__.c.id == plan["id"]
+            )
+        ).scalar_one() == "draft"
+        assert "evaluation_plan.activated" not in _audit_actions(session_factory)
+    finally:
+        session.close()
+
+    session = session_factory()
+    try:
+        session.execute(
+            update(GovernanceEvaluationPlan.__table__)
+            .where(GovernanceEvaluationPlan.__table__.c.id == plan["id"])
+            .values(status="active")
+        )
+        session.commit()
+    finally:
+        session.close()
+
+    plans = client.get(_plans_url())
+    preflight = client.get(f"{_plans_url()}/{plan['id']}/preflight")
+    prepared = _create_run(client, plan["id"])
+
+    assert plans.status_code == 200
+    assert plans.json()[0]["enforcementMode"] == "automatic"
+    assert preflight.status_code == 200
+    assert preflight.json() == {
+        "planId": plan["id"],
+        "canPrepareRun": False,
+        "fairmindExecutionAvailable": False,
+        "code": "automatic_enforcement_disabled",
+        "message": "Automatic enforcement is unavailable.",
+        "nextAction": "Use advisory or human approval.",
+    }
+    assert prepared.status_code == 409
+    assert prepared.json()["detail"] == {
+        "code": "automatic_enforcement_disabled",
+        "message": "Automatic enforcement is unavailable.",
+        "nextAction": "Use advisory or human approval.",
+    }
+    session = session_factory()
+    try:
+        assert session.execute(
+            select(GovernanceEvaluationRun.__table__.c.id)
+        ).all() == []
+    finally:
+        session.close()
+
+
+def test_explicit_legacy_worker_flag_permits_worker_plan_shape(
+    evaluation_client,
+    monkeypatch,
+) -> None:
     client, _, _ = evaluation_client
-    monkeypatch.setenv(LEGACY_AUTOMATIC_ENFORCEMENT_FLAG, "true")
     monkeypatch.setenv(LEGACY_FAIRMIND_WORKER_FLAG, "true")
 
     response = client.post(
         _plans_url(),
         json=_plan_payload(
-            enforcementMode="automatic",
             deliveryMode="fairmind_worker",
         ),
     )
 
     assert response.status_code == 201, response.text
-    assert response.json()["enforcementMode"] == "automatic"
+    assert response.json()["enforcementMode"] == "human_approval"
     assert response.json()["deliveryMode"] == "fairmind_worker"
 
 

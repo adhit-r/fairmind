@@ -69,7 +69,11 @@ const evaluationPreflightSchema = z.strictObject({
   planId: z.string(),
   canPrepareRun: z.boolean(),
   fairmindExecutionAvailable: z.boolean(),
-  code: z.enum(['executor_unavailable', 'evidence_link_required']),
+  code: z.enum([
+    'automatic_enforcement_disabled',
+    'executor_unavailable',
+    'evidence_link_required',
+  ]),
   message: z.string(),
   nextAction: z.string(),
 })

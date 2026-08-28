@@ -60,6 +60,12 @@ class EvaluationPlanService(EvaluationServiceSupport):
             plan = normalize_plan_create(payload)
         except AssuranceContractValidationError as error:
             raise _translate(error) from error
+        if plan["enforcementMode"] == "automatic":
+            raise EvaluationWorkbenchError(
+                "automatic_enforcement_disabled",
+                "Automatic enforcement is disabled in this release slice.",
+                status_code=409,
+            )
         command = self._command(
             org_id=org_id,
             actor_id=actor_id,

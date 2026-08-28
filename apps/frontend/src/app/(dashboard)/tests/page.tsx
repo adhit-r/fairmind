@@ -84,7 +84,7 @@ const deliveryModeLabels: Record<DeliveryMode, string> = {
   imported_report: 'Imported report',
 }
 
-const enabledEnforcementModes = allowedLegacyEnforcementModes(legacyEvaluationFeatureGates)
+const enabledEnforcementModes = allowedLegacyEnforcementModes()
 const enabledDeliveryModes = allowedLegacyDeliveryModes(legacyEvaluationFeatureGates)
 
 function sentenceLabel(value: string) {
@@ -135,7 +135,11 @@ function preflightPresentation(plan: EvaluationPlan, preflight: EvaluationPrefli
   }
   return {
     canPrepareRun,
-    stateLabel: preflight.code === 'executor_unavailable' ? 'Executor unavailable' : 'Evidence link required',
+    stateLabel: preflight.code === 'automatic_enforcement_disabled'
+      ? 'Automatic enforcement unavailable'
+      : preflight.code === 'executor_unavailable'
+        ? 'Executor unavailable'
+        : 'Evidence link required',
     message: preflight.message,
     nextAction: preflight.nextAction,
   }
@@ -305,16 +309,14 @@ function EvaluationPlanForm({ onCreate, submitting }: PlanFormProps) {
         </div>
       </div>
 
-      {(!legacyEvaluationFeatureGates.automaticEnforcement || !legacyEvaluationFeatureGates.fairmindWorkerDelivery || !legacyEvaluationFeatureGates.legacyEvidenceLinking) && (
-        <aside data-testid="legacy-evaluation-capability-notice" className="border-2 border-[#0F1412] bg-[#F3F5F0] p-3 text-sm font-semibold text-[#303834]">
-          <p className="font-black">Release-gated capabilities are unavailable in this legacy workflow.</p>
-          <ul className="mt-2 list-disc space-y-1 pl-5">
-            {!legacyEvaluationFeatureGates.automaticEnforcement && <li>Automatic enforcement is unavailable; use advisory or human approval.</li>}
-            {!legacyEvaluationFeatureGates.fairmindWorkerDelivery && <li>FairMind worker delivery is unavailable; use an external provider or imported report.</li>}
-            {!legacyEvaluationFeatureGates.legacyEvidenceLinking && <li>Legacy Passport linking is unavailable; use the Assurance V2 trusted-evidence workflow.</li>}
-          </ul>
-        </aside>
-      )}
+      <aside data-testid="legacy-evaluation-capability-notice" className="border-2 border-[#0F1412] bg-[#F3F5F0] p-3 text-sm font-semibold text-[#303834]">
+        <p className="font-black">Unavailable capabilities in this legacy workflow.</p>
+        <ul className="mt-2 list-disc space-y-1 pl-5">
+          <li>Automatic enforcement is unavailable; use advisory or human approval.</li>
+          {!legacyEvaluationFeatureGates.fairmindWorkerDelivery && <li>FairMind worker delivery is unavailable; use an external provider or imported report.</li>}
+          {!legacyEvaluationFeatureGates.legacyEvidenceLinking && <li>Legacy Passport linking is unavailable; use the Assurance V2 trusted-evidence workflow.</li>}
+        </ul>
+      </aside>
 
       {validationError && (
         <p role="alert" className="border-2 border-[#D83A2E] bg-red-50 p-3 text-sm font-bold text-[#8F2019]">

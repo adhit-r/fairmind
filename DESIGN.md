@@ -235,6 +235,8 @@ The capability registry is the source for dashboard labels, documentation, websi
 
 The current product remains an internal, default-off evidence-integrity foundation. It may claim governance planning, evidence ingestion, and reviewer workflow only after their respective release gates; it must not claim certification, automatic compliance, automatic enforcement, or “FairMind Verified.”
 
+Automatic-enforcement values remain part of the stored contract so historical plans and runs stay readable, but new legacy and Assurance V2 plans cannot select that mode. The retired legacy API and UI environment switches do not re-enable it.
+
 ### Worker Security Envelope
 
 The UI may expose a worker attempt only through its server-generated Execution Envelope. The envelope contains immutable target and suite bindings, configuration and plan hashes, phase/depth/delivery, nonce, runner-image digest, budgets, input bindings, and trust-policy version. It excludes credentials, raw secrets, unrestricted model weights, private reasoning traces, and host paths. Artifact references are immutable SHA-256 content-addressed identifiers resolved through short-lived brokers. A worker result is not decision-grade until its signed Passport matches the envelope, suite execution, target digest, nonce, and current trust policy.

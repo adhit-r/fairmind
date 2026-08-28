@@ -109,6 +109,7 @@ async function mockEvaluationWorkbench(page: Page, options: MockOptions = {}) {
   let runs = structuredClone(options.runs ?? [])
   const evaluationRequestPaths: string[] = []
   const evaluationMutationPaths: string[] = []
+  const createdPlanInputs: Array<Record<string, unknown>> = []
 
   await page.addInitScript(() => {
     window.localStorage.setItem('access_token', 'playwright-token')
@@ -183,6 +184,7 @@ async function mockEvaluationWorkbench(page: Page, options: MockOptions = {}) {
     if (path === `${evaluationPrefix}/evaluation-plans`) {
       if (request.method() === 'POST') {
         const input = request.postDataJSON()
+        createdPlanInputs.push(input)
         const created = {
           id: `plan-${plans.length + 1}`,
           orgId: 'org-1',
@@ -227,15 +229,24 @@ async function mockEvaluationWorkbench(page: Page, options: MockOptions = {}) {
     if (preflightMatch && request.method() === 'GET') {
       const plan = plans.find((candidate) => candidate.id === preflightMatch[1])
       const isWorker = plan?.deliveryMode === 'fairmind_worker'
+      const isAutomatic = plan?.enforcementMode === 'automatic'
       return fulfillJson(route, {
         planId: preflightMatch[1],
-        canPrepareRun: !isWorker,
+        canPrepareRun: !isWorker && !isAutomatic,
         fairmindExecutionAvailable: false,
-        code: isWorker ? 'executor_unavailable' : 'evidence_link_required',
-        message: isWorker
+        code: isAutomatic
+          ? 'automatic_enforcement_disabled'
+          : isWorker
+            ? 'executor_unavailable'
+            : 'evidence_link_required',
+        message: isAutomatic
+          ? 'Automatic enforcement is unavailable.'
+          : isWorker
           ? 'FairMind execution workers are unavailable in this release.'
           : 'Prepare the run, then link evidence from the configured provider.',
-        nextAction: isWorker
+        nextAction: isAutomatic
+          ? 'Use advisory or human approval.'
+          : isWorker
           ? 'Choose an external provider or imported report delivery mode.'
           : 'Link an exact Evidence Passport revision after external execution.',
       })
@@ -279,6 +290,7 @@ async function mockEvaluationWorkbench(page: Page, options: MockOptions = {}) {
     getEvaluationRequestCount: () => evaluationRequestPaths.length,
     getEvaluationRequestPaths: () => [...evaluationRequestPaths],
     getEvaluationMutationPaths: () => [...evaluationMutationPaths],
+    getCreatedPlanInputs: () => structuredClone(createdPlanInputs),
   }
 }
 
@@ -424,6 +436,41 @@ test('creates a version-pinned plan from the compact empty-state form', async ({
 
   await expect(page.getByLabel('Selected plan')).toHaveValue('plan-1')
   await expect(page.getByText('Draft', { exact: true })).toBeVisible()
+})
+
+test('never offers automatic enforcement in plan creation', async ({ page }) => {
+  const mocks = await mockEvaluationWorkbench(page)
+  await page.goto('/tests')
+
+  const form = page.getByRole('form', { name: 'Create evaluation plan' })
+  const enforcement = form.getByLabel('Enforcement mode')
+  await expect(enforcement.locator('option[value="automatic"]')).toHaveCount(0)
+  await expect(form.getByText('Automatic enforcement is unavailable')).toBeVisible()
+
+  await form.getByLabel('Plan name').fill('Human review release gate')
+  await form.getByLabel('Versioned suite references').fill('fairmind/agent-safety@2026.07')
+  await form.getByRole('button', { name: 'Create evaluation plan' }).click()
+
+  await expect(page.getByLabel('Selected plan')).toHaveValue('plan-1')
+  expect(mocks.getCreatedPlanInputs()).toEqual([
+    expect.objectContaining({ enforcementMode: 'human_approval' }),
+  ])
+})
+
+test('shows historical automatic plans as readable but blocked', async ({ page }) => {
+  const automaticPlan = {
+    ...basePlan,
+    id: 'plan-automatic',
+    enforcementMode: 'automatic',
+  }
+  await mockEvaluationWorkbench(page, { plans: [automaticPlan] })
+  await page.goto('/tests')
+
+  const preflight = page.getByRole('region', { name: 'Evaluation preflight' })
+  await expect(preflight.getByText('Automatic enforcement unavailable', { exact: true })).toBeVisible()
+  await expect(preflight.getByText('Run preparation: blocked', { exact: true })).toBeVisible()
+  await expect(preflight).toContainText('Use advisory or human approval.')
+  await expect(preflight.getByRole('button', { name: 'Prepare evidence run' })).toBeDisabled()
 })
 
 test('blocks unavailable FairMind workers with an explicit next action', async ({ page }) => {
