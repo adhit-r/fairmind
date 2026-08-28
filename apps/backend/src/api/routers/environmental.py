@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from config.auth import TokenData, UserRole, get_current_active_user
@@ -29,25 +28,25 @@ _CANONICAL_ROOT = (
 )
 
 
-def _require_scoped_system(
+def _resolve_system_org_or_404(
+    db: Session,
+    system_id: str,
+    *,
+    org_id: str | None = None,
+) -> str:
+    try:
+        return svc.resolve_system_org(db, system_id, org_id=org_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail="AI system not found") from exc
+
+
+def _require_system_membership(
     db: Session,
     org_id: str,
-    system_id: str,
     current_user: TokenData,
     *,
     mutate: bool = False,
 ) -> str:
-    """Resolve exact system/organization membership without leaking existence."""
-    row = db.execute(
-        text(
-            "SELECT org_id FROM governance_ai_systems "
-            "WHERE id = :system_id AND org_id = :org_id"
-        ),
-        {"system_id": system_id, "org_id": org_id},
-    ).fetchone()
-    if row is None or not row[0]:
-        raise HTTPException(status_code=404, detail="AI system not found")
-
     assurance = GovernanceAssuranceService(db)
     membership = assurance.membership(str(org_id), current_user.user_id)
     if membership is None:
@@ -57,7 +56,25 @@ def _require_scoped_system(
             status_code=403,
             detail="Organization mutation permission required",
         )
-    return str(row[0])
+    return org_id
+
+
+def _require_scoped_system(
+    db: Session,
+    org_id: str,
+    system_id: str,
+    current_user: TokenData,
+    *,
+    mutate: bool = False,
+) -> str:
+    """Resolve exact system/organization membership without leaking existence."""
+    resolved_org_id = _resolve_system_org_or_404(db, system_id, org_id=org_id)
+    return _require_system_membership(
+        db,
+        resolved_org_id,
+        current_user,
+        mutate=mutate,
+    )
 
 
 def _require_legacy_system(
@@ -68,16 +85,10 @@ def _require_legacy_system(
     mutate: bool = False,
 ) -> str:
     """Safely bind a legacy system-only route to its authoritative tenant."""
-    row = db.execute(
-        text("SELECT org_id FROM governance_ai_systems WHERE id = :system_id"),
-        {"system_id": system_id},
-    ).fetchone()
-    if row is None or not row[0]:
-        raise HTTPException(status_code=404, detail="AI system not found")
-    return _require_scoped_system(
+    resolved_org_id = _resolve_system_org_or_404(db, system_id)
+    return _require_system_membership(
         db,
-        str(row[0]),
-        system_id,
+        resolved_org_id,
         current_user,
         mutate=mutate,
     )

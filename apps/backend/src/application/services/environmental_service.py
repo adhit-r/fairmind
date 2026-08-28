@@ -228,7 +228,7 @@ def _next_version(db: Session, org_id: str, system_id: str) -> int:
     return int((row.current_version if row else 0) or 0) + 1
 
 
-def _resolve_system_org(
+def resolve_system_org(
     db: Session,
     system_id: str,
     *,
@@ -349,7 +349,7 @@ def save_assessment(
     uploaded_by: Optional[str] = None,
 ) -> dict[str, Any]:
     """Evaluate, append, and mirror one environmental assessment."""
-    resolved_org_id = _resolve_system_org(db, system_id, org_id=org_id)
+    resolved_org_id = resolve_system_org(db, system_id, org_id=org_id)
 
     assessment, result = evaluate_assessment(assessment_input, system_id=system_id)
     version = _next_version(db, resolved_org_id, system_id)
@@ -522,7 +522,7 @@ def get_latest_env_assessment(
     *,
     org_id: str | None = None,
 ) -> Optional[dict[str, Any]]:
-    resolved_org_id = _resolve_system_org(db, system_id, org_id=org_id)
+    resolved_org_id = resolve_system_org(db, system_id, org_id=org_id)
     row = db.execute(
         text(
             "SELECT * FROM governance_environmental_assessments "
@@ -540,7 +540,7 @@ def get_env_assessment_history(
     *,
     org_id: str | None = None,
 ) -> list[dict[str, Any]]:
-    resolved_org_id = _resolve_system_org(db, system_id, org_id=org_id)
+    resolved_org_id = resolve_system_org(db, system_id, org_id=org_id)
     rows = db.execute(
         text(
             "SELECT * FROM governance_environmental_assessments "
@@ -558,7 +558,7 @@ def get_assessment_by_id(
     *,
     org_id: str | None = None,
 ) -> Optional[dict[str, Any]]:
-    resolved_org_id = _resolve_system_org(db, system_id, org_id=org_id)
+    resolved_org_id = resolve_system_org(db, system_id, org_id=org_id)
     row = db.execute(
         text(
             "SELECT * FROM governance_environmental_assessments "
@@ -579,7 +579,7 @@ def update_mitigation(
     uploaded_by: str | None = None,
 ) -> Optional[dict[str, Any]]:
     """Append a mitigation by creating a new assessment version."""
-    resolved_org_id = _resolve_system_org(db, system_id, org_id=org_id)
+    resolved_org_id = resolve_system_org(db, system_id, org_id=org_id)
     current = get_assessment_by_id(
         db,
         system_id,
@@ -693,7 +693,7 @@ def mark_assessment_reviewed(
     reviewer: str,
     attestation: str = "",
 ) -> Optional[dict[str, Any]]:
-    resolved_org_id = _resolve_system_org(db, system_id, org_id=org_id)
+    resolved_org_id = resolve_system_org(db, system_id, org_id=org_id)
     row = db.execute(
         text(
             "SELECT * FROM governance_environmental_assessments "
@@ -898,7 +898,7 @@ def ingest_environmental_evidence(
     assessment_overrides: Mapping[str, Any] | None = None,
     uploaded_by: str | None = None,
 ) -> dict[str, Any]:
-    resolved_org_id = _resolve_system_org(db, system_id, org_id=org_id)
+    resolved_org_id = resolve_system_org(db, system_id, org_id=org_id)
     if url:
         content = fetch_connector_url(url)
     fragment = normalize_connector_payload(connector_type, content)

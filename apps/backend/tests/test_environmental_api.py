@@ -7,6 +7,7 @@ the approvals workflow.
 """
 
 import inspect
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -14,9 +15,78 @@ from sqlalchemy import text
 from unittest.mock import patch
 
 from api.main import app
+from src.api.routers import environmental as environmental_router
 from src.application.services import environmental_service
 
 pytestmark = pytest.mark.integration
+
+
+class _NoRouterSqlSession:
+    def execute(self, *_args, **_kwargs):
+        raise AssertionError("environmental router must not execute SQL directly")
+
+
+class _AllowingAssuranceService:
+    def __init__(self, _db):
+        pass
+
+    def membership(self, org_id: str, user_id: str):
+        return SimpleNamespace(org_id=org_id, user_id=user_id)
+
+    @staticmethod
+    def may_mutate(_membership) -> bool:
+        return True
+
+
+def test_scoped_environmental_route_uses_application_scope_resolver(monkeypatch):
+    calls = []
+
+    def resolve_system_org(_db, system_id: str, *, org_id: str | None = None):
+        calls.append((system_id, org_id))
+        return "org-1"
+
+    monkeypatch.setattr(environmental_router.svc, "resolve_system_org", resolve_system_org)
+    monkeypatch.setattr(
+        environmental_router,
+        "GovernanceAssuranceService",
+        _AllowingAssuranceService,
+    )
+
+    resolved = environmental_router._require_scoped_system(
+        _NoRouterSqlSession(),
+        "org-1",
+        "system-1",
+        SimpleNamespace(user_id="user-1"),
+        mutate=True,
+    )
+
+    assert resolved == "org-1"
+    assert calls == [("system-1", "org-1")]
+
+
+def test_legacy_environmental_route_uses_application_scope_resolver(monkeypatch):
+    calls = []
+
+    def resolve_system_org(_db, system_id: str, *, org_id: str | None = None):
+        calls.append((system_id, org_id))
+        return "org-1"
+
+    monkeypatch.setattr(environmental_router.svc, "resolve_system_org", resolve_system_org)
+    monkeypatch.setattr(
+        environmental_router,
+        "GovernanceAssuranceService",
+        _AllowingAssuranceService,
+    )
+
+    resolved = environmental_router._require_legacy_system(
+        _NoRouterSqlSession(),
+        "system-1",
+        SimpleNamespace(user_id="user-1"),
+        mutate=True,
+    )
+
+    assert resolved == "org-1"
+    assert calls == [("system-1", None)]
 
 
 def test_environmental_service_uses_migrations_instead_of_request_time_ddl():
