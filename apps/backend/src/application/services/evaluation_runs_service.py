@@ -61,6 +61,9 @@ CONTRACT_UPGRADE_PREFLIGHT_MESSAGE = (
     "This legacy assurance-contract v1 plan cannot prepare a new run while "
     "Assurance V2 is enabled."
 )
+AUTOMATIC_ENFORCEMENT_DISABLED_CODE = "automatic_enforcement_disabled"
+AUTOMATIC_ENFORCEMENT_DISABLED_MESSAGE = "Automatic enforcement is unavailable."
+AUTOMATIC_ENFORCEMENT_DISABLED_NEXT_ACTION = "Use advisory or human approval."
 
 
 class EvaluationWorkflowError(ValueError):
@@ -191,18 +194,12 @@ class EvaluationRunsService:
                 409,
             )
 
-    def _require_automatic_enforcement_enabled(self, enforcement_mode: str) -> None:
-        if (
-            enforcement_mode == "automatic"
-            and not self.feature_gates.automatic_enforcement_enabled
-        ):
+    def _reject_automatic_enforcement(self, enforcement_mode: str) -> None:
+        if enforcement_mode == "automatic":
             raise _error(
-                "automatic_enforcement_disabled",
-                "Automatic enforcement is disabled for legacy evaluation plans.",
-                (
-                    "Use advisory or human approval, or enable the reviewed "
-                    "automatic-enforcement capability."
-                ),
+                AUTOMATIC_ENFORCEMENT_DISABLED_CODE,
+                AUTOMATIC_ENFORCEMENT_DISABLED_MESSAGE,
+                AUTOMATIC_ENFORCEMENT_DISABLED_NEXT_ACTION,
                 409,
             )
 
@@ -384,7 +381,7 @@ class EvaluationRunsService:
     ) -> dict:
         normalized = validate_plan_payload(payload)
         self._require_legacy_mutations_enabled()
-        self._require_automatic_enforcement_enabled(normalized["enforcementMode"])
+        self._reject_automatic_enforcement(normalized["enforcementMode"])
         self._require_fairmind_worker_enabled(normalized["deliveryMode"])
         try:
             scope = self._system_scope(org_id, system_id)
@@ -481,7 +478,7 @@ class EvaluationRunsService:
             if row is None:
                 return None
             self._require_v1_mutation(row)
-            self._require_automatic_enforcement_enabled(row["enforcement_mode"])
+            self._reject_automatic_enforcement(row["enforcement_mode"])
             self._require_fairmind_worker_enabled(row["delivery_mode"])
             if row["status"] == "archived":
                 raise _error(
@@ -578,6 +575,15 @@ class EvaluationRunsService:
                 "message": CONTRACT_UPGRADE_PREFLIGHT_MESSAGE,
                 "nextAction": CONTRACT_UPGRADE_REQUIRED_NEXT_ACTION,
             }
+        if plan["enforcement_mode"] == "automatic":
+            return {
+                "planId": plan_id,
+                "canPrepareRun": False,
+                "fairmindExecutionAvailable": False,
+                "code": AUTOMATIC_ENFORCEMENT_DISABLED_CODE,
+                "message": AUTOMATIC_ENFORCEMENT_DISABLED_MESSAGE,
+                "nextAction": AUTOMATIC_ENFORCEMENT_DISABLED_NEXT_ACTION,
+            }
         if plan["delivery_mode"] == "fairmind_worker":
             return {
                 "planId": plan_id,
@@ -652,7 +658,7 @@ class EvaluationRunsService:
                     404,
                 )
             self._require_v1_mutation(plan)
-            self._require_automatic_enforcement_enabled(plan["enforcement_mode"])
+            self._reject_automatic_enforcement(plan["enforcement_mode"])
             self._require_fairmind_worker_enabled(plan["delivery_mode"])
             if plan["status"] != "active":
                 raise _error(
