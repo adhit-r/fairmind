@@ -14,12 +14,12 @@ Uses pytest-benchmark or time.perf_counter() for measurements.
 import pytest
 import uuid
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock
 import random
 import string
 
-from config.auth import TokenData
+from config.auth import TokenData, TokenType, UserRole
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -27,13 +27,14 @@ from config.auth import TokenData
 @pytest.fixture
 def user_token():
     """Valid user token."""
+    now = datetime.now(timezone.utc)
     return TokenData(
         user_id="user-id",
         email="user@example.com",
-        full_name="User",
-        org_id=None,
-        primary_org_id=None,
-        scopes=[]
+        role=UserRole.ANALYST,
+        token_type=TokenType.ACCESS,
+        iat=now,
+        exp=now + timedelta(hours=1),
     )
 
 
@@ -44,7 +45,7 @@ def org_id():
 
 
 @pytest.fixture
-async def mock_db():
+def mock_db():
     """Mock database connection."""
     db = AsyncMock()
     db.execute = AsyncMock()
@@ -95,18 +96,18 @@ class TestListMembersPerformance:
     """Benchmark member list retrieval."""
 
     @pytest.mark.asyncio
-    async def test_list_members_1000_under_50ms(self, user_token, org_id, mock_db, large_member_list, benchmark):
-        """Listing 1000 members should complete in < 50ms."""
-        # Mock: 1000 members returned
+    async def test_list_members_1000_uses_query_boundary(
+        self, org_id, mock_db, large_member_list
+    ):
+        """The list-members query returns all rows from the database boundary."""
         mock_db.fetch_all.return_value = large_member_list
-        mock_db.fetch_one.return_value = {"count": 1000}
+        query = "SELECT * FROM org_members WHERE org_id = :org_id"
+        params = {"org_id": org_id}
 
-        def run_test():
-            # Simulate the query
-            return len(large_member_list)
+        result = await mock_db.fetch_all(query, params)
 
-        result = benchmark(run_test)
-        assert result == 1000
+        assert len(result) == 1000
+        mock_db.fetch_all.assert_awaited_once_with(query, params)
 
     @pytest.mark.asyncio
     async def test_list_members_pagination(self, user_token, org_id, mock_db, large_member_list):

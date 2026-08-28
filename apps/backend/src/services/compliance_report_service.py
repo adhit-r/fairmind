@@ -67,6 +67,9 @@ class ComplianceReportGenerator:
         if (end_date - start_date).days > 365:
             raise ValueError("Date range cannot exceed 365 days")
 
+        if format not in {'json', 'csv', 'pdf'}:
+            raise ValueError(f"Unsupported format: {format}")
+
         # Fetch audit logs and metadata
         logs = await self._fetch_audit_logs(
             org_id=org_id,
@@ -85,10 +88,7 @@ class ComplianceReportGenerator:
             return self._generate_json_report(logs, metrics, start_date, end_date)
         elif format == 'csv':
             return self._generate_csv_report(logs)
-        elif format == 'pdf':
-            return await self._generate_pdf_report(logs, metrics, org_id, start_date, end_date)
-        else:
-            raise ValueError(f"Unsupported format: {format}")
+        return await self._generate_pdf_report(logs, metrics, org_id, start_date, end_date)
 
     async def _fetch_audit_logs(
         self,
