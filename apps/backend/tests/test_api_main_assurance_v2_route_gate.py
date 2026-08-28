@@ -4,12 +4,40 @@ from __future__ import annotations
 
 import importlib
 
+import pytest
+
 import api.main as main_module
 from config.settings import settings
 
+V2_TARGET_PATHS = {
+    "/api/v1/ai-governance/organizations/{org_id}/systems/{system_id}"
+    "/evaluation-v2/target-versions",
+    "/api/v1/ai-governance/organizations/{org_id}/systems/{system_id}"
+    "/evaluation-v2/target-versions/{target_version_id}",
+}
+V2_SUITE_PATHS = {
+    "/api/v1/ai-governance/organizations/{org_id}/evaluation-v2/suite-versions",
+    "/api/v1/ai-governance/organizations/{org_id}/evaluation-v2/suite-versions"
+    "/{suite_version_id}",
+    "/api/v1/ai-governance/organizations/{org_id}/evaluation-v2/suite-versions"
+    "/{suite_version_id}/activate",
+}
 V2_PLAN_PATH = (
     "/api/v1/ai-governance/organizations/{org_id}/systems/{system_id}" "/evaluation-v2/plans"
 )
+V2_PLAN_PATHS = {
+    V2_PLAN_PATH,
+    V2_PLAN_PATH + "/{plan_id}",
+    V2_PLAN_PATH + "/{plan_id}/activate",
+    V2_PLAN_PATH + "/{plan_id}/preflight",
+}
+V2_RUN_PATHS = {
+    V2_PLAN_PATH + "/{plan_id}/runs",
+    "/api/v1/ai-governance/organizations/{org_id}/systems/{system_id}"
+    "/evaluation-v2/runs",
+    "/api/v1/ai-governance/organizations/{org_id}/systems/{system_id}"
+    "/evaluation-v2/runs/{run_id}",
+}
 VERIFIED_EVIDENCE_PATH = (
     "/api/v1/ai-governance/organizations/{org_id}/workspaces/{workspace_id}"
     "/systems/{system_id}/evaluation-v2/runs/{run_id}"
@@ -41,6 +69,20 @@ LEGACY_RUN_PATH = (
     "/api/v1/ai-governance/organizations/{org_id}/systems/{system_id}" "/evaluation-runs"
 )
 
+CORE_CAPABILITY_SETTINGS = (
+    "assurance_v2_target_versions_enabled",
+    "assurance_v2_suite_versions_enabled",
+    "assurance_v2_plans_enabled",
+    "assurance_v2_runs_enabled",
+)
+CORE_CAPABILITY_PATHS = {
+    "assurance_v2_target_versions_enabled": V2_TARGET_PATHS,
+    "assurance_v2_suite_versions_enabled": V2_SUITE_PATHS,
+    "assurance_v2_plans_enabled": V2_PLAN_PATHS,
+    "assurance_v2_runs_enabled": V2_RUN_PATHS,
+}
+ALL_CORE_CAPABILITY_PATHS = set().union(*CORE_CAPABILITY_PATHS.values())
+
 
 def _route_paths() -> set[str]:
     return {route.path for route in main_module.app.routes}
@@ -50,8 +92,45 @@ def _assurance_v2_paths(paths: set[str]) -> set[str]:
     return {path for path in paths if "/evaluation-v2/" in path}
 
 
+def test_core_assurance_capabilities_are_independently_default_off() -> None:
+    assert {
+        setting_name: getattr(settings, setting_name, None)
+        for setting_name in CORE_CAPABILITY_SETTINGS
+    } == {setting_name: False for setting_name in CORE_CAPABILITY_SETTINGS}
+
+
+@pytest.mark.parametrize("enabled_setting", CORE_CAPABILITY_SETTINGS)
+def test_core_assurance_capability_routes_mount_independently(
+    enabled_setting: str,
+) -> None:
+    original_master = settings.assurance_v2_enabled
+    original_children = {
+        setting_name: getattr(settings, setting_name)
+        for setting_name in CORE_CAPABILITY_SETTINGS
+    }
+    try:
+        settings.assurance_v2_enabled = True
+        for setting_name in CORE_CAPABILITY_SETTINGS:
+            setattr(settings, setting_name, setting_name == enabled_setting)
+
+        importlib.reload(main_module)
+
+        assert _route_paths() & ALL_CORE_CAPABILITY_PATHS == CORE_CAPABILITY_PATHS[
+            enabled_setting
+        ]
+    finally:
+        settings.assurance_v2_enabled = original_master
+        for setting_name, original_value in original_children.items():
+            setattr(settings, setting_name, original_value)
+        importlib.reload(main_module)
+
+
 def test_assurance_v2_routes_are_mounted_only_when_enabled() -> None:
     original = settings.assurance_v2_enabled
+    original_core_children = {
+        setting_name: getattr(settings, setting_name)
+        for setting_name in CORE_CAPABILITY_SETTINGS
+    }
     original_evidence_submit = settings.assurance_v2_evidence_submit_enabled
     original_evidence_review = settings.assurance_v2_evidence_review_enabled
     original_evidence_import = getattr(settings, "assurance_v2_evidence_import_enabled", False)
@@ -60,6 +139,8 @@ def test_assurance_v2_routes_are_mounted_only_when_enabled() -> None:
     original_evaluator_catalog = getattr(settings, "assurance_v2_evaluator_catalog_enabled", False)
     try:
         settings.assurance_v2_enabled = False
+        for setting_name in CORE_CAPABILITY_SETTINGS:
+            setattr(settings, setting_name, True)
         settings.assurance_v2_evidence_submit_enabled = False
         settings.assurance_v2_evidence_review_enabled = False
         settings.assurance_v2_evidence_import_enabled = False
@@ -153,6 +234,8 @@ def test_assurance_v2_routes_are_mounted_only_when_enabled() -> None:
         assert EVALUATOR_CATALOG_PATH not in enabled_paths_with_decisions
     finally:
         settings.assurance_v2_enabled = original
+        for setting_name, original_value in original_core_children.items():
+            setattr(settings, setting_name, original_value)
         settings.assurance_v2_evidence_submit_enabled = original_evidence_submit
         settings.assurance_v2_evidence_review_enabled = original_evidence_review
         settings.assurance_v2_evidence_import_enabled = original_evidence_import

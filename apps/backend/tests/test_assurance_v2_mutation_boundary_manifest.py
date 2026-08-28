@@ -35,7 +35,10 @@ from api.composition.verified_evidence_review import build_verified_evidence_rev
 from api.routes.evaluation_workbench import (
     governance_decision_router,
     governance_decision_override_router,
-    router as evaluation_workbench_router,
+    plans_router,
+    runs_router,
+    suite_versions_router,
+    target_versions_router,
     verified_evidence_review_router,
     verified_evidence_router,
 )
@@ -317,11 +320,14 @@ MUTATION_MANIFEST = (
 
 
 def _mounted_mutation_routes() -> tuple[APIRoute, ...]:
-    """Mount the seven V2 routers exactly as ``api.main`` does when enabled."""
+    """Mount the V2 child routers exactly as ``api.main`` does when enabled."""
 
     app = FastAPI()
     for route_router in (
-        evaluation_workbench_router,
+        target_versions_router,
+        suite_versions_router,
+        plans_router,
+        runs_router,
         verified_evidence_router,
         imported_evidence_router,
         verified_evidence_review_router,

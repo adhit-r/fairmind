@@ -59,11 +59,7 @@ from src.application.services.verified_evidence_review_service import (
 from src.application.services.governance_assurance_service import OrgMembership
 from src.application.services.governance_decision_service import GovernanceDecisionService
 
-router = APIRouter(
-    prefix="/organizations/{org_id}",
-    tags=["evaluation-workbench-v2"],
-    dependencies=[Depends(require_assurance_v2_enabled)],
-)
+router = APIRouter(tags=["evaluation-workbench-v2"])
 verified_evidence_router = APIRouter(
     prefix="/organizations/{org_id}",
     tags=["evaluation-workbench-v2-evidence"],
@@ -723,6 +719,71 @@ def _require_assurance_v2_capability(child_enabled: bool, message: str) -> None:
         )
 
 
+def _require_target_versions_enabled() -> None:
+    """Hide target-version reads and writes until their child gate passes."""
+
+    _require_assurance_v2_capability(
+        settings.assurance_v2_target_versions_enabled,
+        "Target versions are not enabled.",
+    )
+
+
+def _require_suite_versions_enabled() -> None:
+    """Hide suite-version reads and writes until their child gate passes."""
+
+    _require_assurance_v2_capability(
+        settings.assurance_v2_suite_versions_enabled,
+        "Suite versions are not enabled.",
+    )
+
+
+def _require_plans_enabled() -> None:
+    """Hide evaluation-plan reads and writes until their child gate passes."""
+
+    _require_assurance_v2_capability(
+        settings.assurance_v2_plans_enabled,
+        "Evaluation plans are not enabled.",
+    )
+
+
+def _require_runs_enabled() -> None:
+    """Hide evaluation-run reads and writes until their child gate passes."""
+
+    _require_assurance_v2_capability(
+        settings.assurance_v2_runs_enabled,
+        "Evaluation runs are not enabled.",
+    )
+
+
+def _core_capability_router(child_dependency: Any, tag: str) -> APIRouter:
+    return APIRouter(
+        prefix="/organizations/{org_id}",
+        tags=[tag],
+        dependencies=[
+            Depends(require_assurance_v2_enabled),
+            Depends(child_dependency),
+        ],
+    )
+
+
+target_versions_router = _core_capability_router(
+    _require_target_versions_enabled,
+    "evaluation-workbench-v2-target-versions",
+)
+suite_versions_router = _core_capability_router(
+    _require_suite_versions_enabled,
+    "evaluation-workbench-v2-suite-versions",
+)
+plans_router = _core_capability_router(
+    _require_plans_enabled,
+    "evaluation-workbench-v2-plans",
+)
+runs_router = _core_capability_router(
+    _require_runs_enabled,
+    "evaluation-workbench-v2-runs",
+)
+
+
 def _require_verified_evidence_submit_enabled() -> None:
     """Hide the route until its independent execution/admission gate passes."""
 
@@ -912,7 +973,7 @@ def _request_body_schema(model: type[StrictModel]) -> dict[str, Any]:
     }
 
 
-@router.post(
+@target_versions_router.post(
     "/systems/{system_id}/evaluation-v2/target-versions",
     status_code=201,
     response_model=TargetVersionResponse,
@@ -939,7 +1000,7 @@ async def create_target(
         _raise(error)
 
 
-@router.get(
+@target_versions_router.get(
     "/systems/{system_id}/evaluation-v2/target-versions",
     response_model=list[TargetVersionResponse],
 )
@@ -960,7 +1021,7 @@ def list_targets(
     return result
 
 
-@router.get(
+@target_versions_router.get(
     "/systems/{system_id}/evaluation-v2/target-versions/{target_version_id}",
     response_model=TargetVersionResponse,
 )
@@ -983,7 +1044,7 @@ def get_target(
     return result
 
 
-@router.post(
+@suite_versions_router.post(
     "/evaluation-v2/suite-versions",
     status_code=201,
     response_model=SuiteVersionResponse,
@@ -1008,7 +1069,7 @@ async def create_suite(
         _raise(error)
 
 
-@router.get(
+@suite_versions_router.get(
     "/evaluation-v2/suite-versions",
     response_model=list[SuiteVersionResponse],
 )
@@ -1022,7 +1083,7 @@ def list_suites(
         _raise(error)
 
 
-@router.get(
+@suite_versions_router.get(
     "/evaluation-v2/suite-versions/{suite_version_id}",
     response_model=SuiteVersionResponse,
 )
@@ -1043,7 +1104,7 @@ def get_suite(
     return result
 
 
-@router.post(
+@suite_versions_router.post(
     "/evaluation-v2/suite-versions/{suite_version_id}/activate",
     response_model=SuiteVersionResponse,
 )
@@ -1068,7 +1129,7 @@ def activate_suite(
         _raise(error)
 
 
-@router.post(
+@plans_router.post(
     "/systems/{system_id}/evaluation-v2/plans",
     status_code=201,
     response_model=EvaluationPlanV2Response,
@@ -1095,7 +1156,7 @@ async def create_plan(
         _raise(error)
 
 
-@router.get(
+@plans_router.get(
     "/systems/{system_id}/evaluation-v2/plans",
     response_model=list[EvaluationPlanV2Response],
 )
@@ -1116,7 +1177,7 @@ def list_plans(
     return result
 
 
-@router.get(
+@plans_router.get(
     "/systems/{system_id}/evaluation-v2/plans/{plan_id}",
     response_model=EvaluationPlanV2Response,
 )
@@ -1139,7 +1200,7 @@ def get_plan(
     return result
 
 
-@router.post(
+@plans_router.post(
     "/systems/{system_id}/evaluation-v2/plans/{plan_id}/activate",
     response_model=EvaluationPlanV2Response,
 )
@@ -1166,7 +1227,7 @@ def activate_plan(
         _raise(error)
 
 
-@router.get(
+@plans_router.get(
     "/systems/{system_id}/evaluation-v2/plans/{plan_id}/preflight",
     response_model=EvaluationPreflightResponse,
 )
@@ -1191,7 +1252,7 @@ def preflight(
     return result
 
 
-@router.post(
+@runs_router.post(
     "/systems/{system_id}/evaluation-v2/plans/{plan_id}/runs",
     status_code=201,
     response_model=EvaluationRunV2Response,
@@ -1220,7 +1281,7 @@ async def create_run(
         _raise(error)
 
 
-@router.get(
+@runs_router.get(
     "/systems/{system_id}/evaluation-v2/runs",
     response_model=list[EvaluationRunV2Response],
 )
@@ -1241,7 +1302,7 @@ def list_runs(
     return result
 
 
-@router.get(
+@runs_router.get(
     "/systems/{system_id}/evaluation-v2/runs/{run_id}",
     response_model=EvaluationRunV2Response,
 )
@@ -1262,6 +1323,15 @@ def get_run(
     if result is None:
         _missing("run")
     return result
+
+
+for capability_router in (
+    target_versions_router,
+    suite_versions_router,
+    plans_router,
+    runs_router,
+):
+    router.include_router(capability_router)
 
 
 @verified_evidence_router.post(
