@@ -1,16 +1,19 @@
 """Fail-closed permission vocabulary for Assurance V2 HTTP boundaries.
 
 Only permissions in ``LIVE_HUMAN_PERMISSION_ERRORS`` authorize current human
-API routes. Worker and separation override remain reserved; trust admin is live
+API routes. Worker authority has a separate, unmounted, tenant-bound service
+principal predicate; separation override remains reserved. Trust admin is live
 only at the independently gated trust-administration route.
 """
 
 from __future__ import annotations
 
+import re
 from typing import Final
 
 from fastapi import HTTPException
 
+from config.auth import PrincipalKind, TokenData, TokenType
 from config.settings import settings
 from src.application.services.governance_assurance_service import OrgMembership
 
@@ -28,6 +31,11 @@ EVALUATION_TRUST_ADMIN_PERMISSION: Final = "evaluation:trust:admin"
 # Reserved vocabulary. These constants do not authorize a current human route.
 EVALUATION_SEPARATION_OVERRIDE_PERMISSION: Final = "evaluation:separation:override"
 EVALUATION_WORKER_PERMISSION: Final = "evaluation:worker"  # Service principals only.
+_MAX_SERVICE_PERMISSIONS: Final = 64
+_MAX_SERVICE_PERMISSION_LENGTH: Final = 128
+_SERVICE_PERMISSION_PATTERN: Final = re.compile(
+    r"^[a-z][a-z0-9_-]*(?::[a-z][a-z0-9_-]*)*$"
+)
 
 LIVE_HUMAN_PERMISSION_ERRORS: Final[dict[str, tuple[str, str]]] = {
     EVALUATION_PLAN_WRITE_PERMISSION: (
@@ -71,6 +79,51 @@ LIVE_HUMAN_PERMISSION_ERRORS: Final[dict[str, tuple[str, str]]] = {
         "The evaluation:trust:admin permission is required.",
     ),
 }
+
+
+def require_evaluation_worker_principal(
+    principal: TokenData,
+    *,
+    expected_org_id: str,
+) -> TokenData:
+    """Authorize only one tenant-bound service principal for future worker use.
+
+    ``expected_org_id`` must come from a persisted run or execution envelope,
+    never from untrusted request input. This predicate intentionally mounts no
+    worker route and provides no credential issuer or runtime implementation.
+    """
+
+    permissions = tuple(principal.permissions)
+    permissions_are_canonical = (
+        0 < len(permissions) <= _MAX_SERVICE_PERMISSIONS
+        and len(permissions) == len(set(permissions))
+        and all(
+            isinstance(permission, str)
+            and 0 < len(permission) <= _MAX_SERVICE_PERMISSION_LENGTH
+            and _SERVICE_PERMISSION_PATTERN.fullmatch(permission) is not None
+            for permission in permissions
+        )
+    )
+    authorized = (
+        principal.principal_kind is PrincipalKind.SERVICE
+        and principal.token_type is TokenType.ACCESS
+        and isinstance(expected_org_id, str)
+        and bool(expected_org_id)
+        and expected_org_id == expected_org_id.strip()
+        and principal.organization_id == expected_org_id
+        and permissions_are_canonical
+        and "*" not in permissions
+        and EVALUATION_WORKER_PERMISSION in permissions
+    )
+    if not authorized:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "evaluation_worker_forbidden",
+                "message": "A tenant-bound FairMind worker principal is required.",
+            },
+        )
+    return principal
 
 
 def require_assurance_v2_enabled() -> None:
