@@ -1,23 +1,15 @@
 """Default-deny capability gates for legacy evaluation mutations.
 
 The v1 workflow intentionally remains readable for compatibility, but these
-capabilities must not become active merely because an older client sends their
-shape.  Each flag requires the literal string ``true`` so accidental truthy
-configuration values cannot enable a higher-risk mutation path.
+capabilities cannot be activated through production environment values. The
+field remains injectable only so tests can exercise the historical contract
+while every composed API request stays denied.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-import os
 from typing import Mapping
-
-
-EVIDENCE_LINKING_FLAG = "FAIRMIND_ASSURANCE_LEGACY_EVIDENCE_LINKING_ENABLED"
-
-
-def _explicitly_enabled(environment: Mapping[str, str], name: str) -> bool:
-    return environment.get(name) == "true"
 
 
 @dataclass(frozen=True)
@@ -31,7 +23,5 @@ class LegacyEvaluationFeatureGates:
         cls,
         environment: Mapping[str, str] | None = None,
     ) -> "LegacyEvaluationFeatureGates":
-        values = os.environ if environment is None else environment
-        return cls(
-            evidence_linking_enabled=_explicitly_enabled(values, EVIDENCE_LINKING_FLAG),
-        )
+        del environment
+        return cls()
