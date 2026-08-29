@@ -14,7 +14,7 @@ const raleway = Raleway({
 
 export const metadata: Metadata = {
   title: "FairMind - Build Fair & Trustworthy AI",
-  description: "Next-generation AI governance, bias detection, and ethical AI compliance platform. Detect bias in ML models, LLMs, and multimodal systems.",
+  description: "Evidence-grade AI governance and assurance control plane for scoped evaluation planning, evidence review, and human decisions.",
   keywords: ["AI governance", "bias detection", "ethical AI", "AI compliance", "fairness", "MLOps"],
   authors: [{ name: "FairMind Team" }],
   viewport: {
@@ -34,7 +34,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: "FairMind - Build Fair & Trustworthy AI",
-    description: "Detect, analyze, and remediate AI bias with confidence. Comprehensive bias testing for ML, LLMs, and multimodal systems.",
+    description: "Plan AI evaluations and review scoped evidence without unsupported execution or compliance claims.",
     type: "website",
     images: [
       {
@@ -48,7 +48,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "FairMind - Build Fair & Trustworthy AI",
-    description: "AI Bias Detection & Remediation Platform",
+    description: "Evidence-grade AI assurance control plane",
     images: ["/logo.png"],
   },
 }

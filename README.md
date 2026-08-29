@@ -252,12 +252,12 @@ FairMind is intended to gather and organize evidence for governance frameworks. 
 **Backend services (legacy and active modules)**
 - **Core Governance**: Authentication, Authorization, Policy Management
 - **Assurance foundation**: Target and suite identity, execution envelopes, Passport v2 binding, trust checks, and evidence-state contracts
-- **Legacy evaluation routes**: Predictive, LLM, and multimodal endpoints retained for compatibility; they are not current release claims
+- **Legacy evaluation routes**: Unsupported LLM-judge, modern-bias, and multimodal execution endpoints are unmounted pending independently validated packs
 - **Governance mapping surfaces**: Framework references and evidence organization; not automatic compliance decisions
 - **MLOps integrations**: Optional compatibility adapters for W&B and MLflow
 
 **Frontend application**
-- Existing dashboards and legacy evaluation pages remain under active redesign
+- Unsupported LLM-judge, LLM-testing, modern-bias, multimodal, and explainability pages render explicit inert availability states
 - Evidence-admission, signer, freshness, review, and governance axes are being added to the product UI
 - The original high-contrast neobrutalist visual language remains the design constraint
 
@@ -358,10 +358,7 @@ Full interactive API documentation with request/response examples:
 **Bias Detection**
 - `POST /api/v1/bias/detect` - Classic ML bias detection
 - `POST /api/v1/bias-v2/detect` - Production-ready bias detection
-- `POST /api/v1/modern-bias/detect` - LLM bias detection (WEAT, SEAT)
-- `POST /api/v1/multimodal-bias/image-detection` - Image generation bias
-- `POST /api/v1/multimodal-bias/audio-detection` - Audio generation bias
-- `POST /api/v1/multimodal-bias/video-detection` - Video content bias
+- LLM-judge, modern-bias, and multimodal execution families are intentionally unmounted until independently calibrated packs pass their release gates
 
 **Remediation**
 - `POST /api/v1/bias/remediate` - Generate remediation code
@@ -392,7 +389,7 @@ Full interactive API documentation with request/response examples:
 - `GET /health` - Health check endpoint
 - `GET /api/v1/system/info` - System information
 
-The API catalog includes legacy endpoints. Endpoint presence does not imply that the route is bound to the v2 evidence contract or independently validated. The legacy `/api/v1/ai-bom` HTTP surface is intentionally unmounted and also fails closed if mounted directly. It remains quarantined until it has authenticated membership, exact action permissions, server-derived organization and actor identity, and tenant-scoped persistence.
+The API catalog includes legacy endpoints. Endpoint presence does not imply that the route is bound to the v2 evidence contract or independently validated. The legacy `/api/v1/ai-bom` HTTP surface and unsupported LLM-judge, modern-bias, and multimodal evaluator families are intentionally unmounted. They remain unavailable until their tenant, execution, calibration, evidence, and security gates are independently verified.
 
 For complete API reference, see [API Documentation](docs/API_ENDPOINTS.md)
 
@@ -406,8 +403,11 @@ For complete API reference, see [API Documentation](docs/API_ENDPOINTS.md)
 |------|-------|-------------|
 | **Dashboard** | `/dashboard` | System overview, health metrics, recent activity |
 | **Bias Detection** | `/bias` | Upload datasets, configure tests, view classic ML bias metrics |
-| **Modern Bias** | `/modern-bias` | LLM bias detection interface (WEAT, SEAT, Minimal Pairs) |
-| **Multimodal Bias** | `/multimodal-bias` | Image, audio, video bias analysis |
+| **LLM Judge** | `/llm-judge` | Explicit unavailable state; evaluator pack pending calibration and release gates |
+| **LLM Testing** | `/llm-testing` | Explicit unavailable state; no judge, red-team, or embedding evaluator is executed |
+| **Explainability Studio** | `/explainability-studio` | Explicit unavailable state; no attribution or causal-analysis evaluator is executed |
+| **Modern Bias** | `/modern-bias` | Explicit unavailable state; combined evaluator packs are not executed |
+| **Multimodal Bias** | `/multimodal-bias` | Explicit unavailable state; image, audio, video, and cross-modal packs are not executed |
 | **Test Results** | `/tests/[id]` | Detailed test analysis, W&B/MLflow links, JSON export |
 | **Remediation** | `/remediation` | Select strategies, generate Python code |
 | **Compliance Dashboard** | `/compliance-dashboard` | Policy management, report generation |
@@ -737,8 +737,8 @@ See [Security Policy](docs/SECURITY.md) for complete security policy.
 ### Current phase: 2027 assurance foundation
 
 The current branch is an internal trust-foundation alpha. The trustworthy
-control-plane checklist is 16/19 complete (84.2%), and the full roadmap is
-25/92 complete (27.2%). The P1 worker layer, real evaluation engines, modality
+control-plane checklist is 18/19 complete (94.7%), and the full roadmap is
+27/92 complete (29.3%). The P1 worker layer, real evaluation engines, modality
 packs, lifecycle workflows, and rollout gates remain open.
 
 **Implemented and verified for the current slice**

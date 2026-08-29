@@ -30,8 +30,8 @@
   - Checkpoint: migration 013j makes evidence review permanently non-overridable and binds decision-only canonical-owner exceptions to exact persisted authority, one immutable decision, completed idempotency, and the per-organization success-audit chain. The route is separately default-off and PostgreSQL-authoritative. See `docs/audits/2026-08-21-p0-owner-decision-override.md`.
 - [x] Add 30-day transactional idempotency and an append-only per-organization audit hash chain.
   - Checkpoint: migration 013h makes PostgreSQL the database-clock authority for exact 2,592,000-second idempotency generations, immutable completion bindings, expired-only atomic rollover, and non-deletable identity anchors. Every enabled Assurance V2 mutation reaches the shared transactional UoW, and successful plus expected/domain-rejected outcomes bind to the per-organization audit chain. This is a minimum anti-reexecution window, not bounded data retention or production-runtime proof. See `docs/audits/2026-08-13-p0-idempotency-audit-integrity.md`.
-- [ ] Feature-disable automatic enforcement, untrusted external linking, workers, and unsupported modality packs at both API and UI boundaries.
-  - Checkpoint: automatic enforcement is unconditionally unavailable for new legacy and Assurance V2 plans in this release slice. Legacy FairMind-worker delivery is also unconditionally unavailable at API and UI creation boundaries. Retired legacy environment switches cannot re-enable either capability, while historical records remain readable but blocked from activation and run preparation. Untrusted external linking and unsupported modality packs remain open, so this parent item stays incomplete.
+- [x] Feature-disable automatic enforcement, untrusted external linking, workers, and unsupported modality packs at both API and UI boundaries.
+  - Checkpoint: automatic enforcement and FairMind-worker delivery are unconditionally unavailable for new legacy and Assurance V2 plans, and retired switches cannot re-enable them. New generic Evidence Hub external URLs and direct entity links are default-off at API and UI boundaries; the explicit reviewed-linking lane does not restore legacy Passport linking. Unsupported LLM-judge, LLM-testing, modern-bias, multimodal, and explainability evaluator surfaces are represented by inert dashboard availability states with no evaluator hooks, forms, fake results, exports, or endpoint requests; their dedicated routers are unmounted and removed from development-public path families. Assurance V2 target-kind vocabulary, including `vision_model`, is preserved.
 - [x] Add forward migration 013 without rewriting migration 012; extend checksum-ledger drift detection.
 - [x] Mark existing plans/runs contract v1 without fabricating registry identities; keep them readable but prevent new execution until upgraded.
 
@@ -42,9 +42,9 @@ do not imply generally available evaluator execution, compliance,
 certification, automatic approval, worker execution, or runtime enforcement.
 The canonical-owner decision override is implemented but default-off;
 production provisioning, enablement, and rollout remain an independent gate.
-Worker execution identity, remaining feature switches, independently invocable
-submit/link surfaces, and public execution routes remain independent release
-gates. Imported reports are inspection material only and cannot enter formal
+Worker execution identity, independently invocable submit/link surfaces, and
+validated public execution routes remain independent release gates. Imported
+reports are inspection material only and cannot enter formal
 evidence review or governance decision authority.
 
 ## P0 — Frontend and design

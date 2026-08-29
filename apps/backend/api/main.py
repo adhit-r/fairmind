@@ -6,8 +6,7 @@ This service provides comprehensive AI governance capabilities including:
 - Model explainability and interpretability
 - Compliance scoring and regulatory reporting
 - Real-time monitoring and alerting
-- Modern LLM bias detection
-- Multimodal bias analysis
+- Versioned assurance planning and evidence review
 """
 
 from fastapi import FastAPI, Request, status
@@ -151,14 +150,6 @@ openapi_tags = [
         "description": "Comprehensive bias detection for text and image models",
     },
     {
-        "name": "modern-bias-detection",
-        "description": "Modern LLM bias detection using WEAT, SEAT, and Minimal Pairs",
-    },
-    {
-        "name": "multimodal-bias-detection",
-        "description": "Multimodal bias detection for image, audio, video, and cross-modal analysis",
-    },
-    {
         "name": "security",
         "description": "OWASP AI security testing and vulnerability scanning",
     },
@@ -209,8 +200,7 @@ app = FastAPI(
 ## Features
 
 - **Advanced Bias Detection**: Comprehensive bias detection for text and image models
-- **Modern LLM Bias Detection**: WEAT, SEAT, and Minimal Pairs testing
-- **Multimodal Bias Detection**: Image, audio, video, and cross-modal analysis
+- **Assurance Planning**: Versioned targets, suites, execution envelopes, and evidence review
 - **Security Testing**: OWASP AI security testing
 - **Real-time Monitoring**: Live monitoring and alerting
 - **Fairness Governance**: Policy management and compliance
@@ -510,11 +500,8 @@ _include_router("api.routes.compliance_check", tags=["compliance"], required=Fal
 _include_router("api.routes.compliance_reporting", tags=["compliance-reporting"], required=False)
 _include_router("api.routes.datasets", tags=["datasets"], required=False)
 _include_router("api.routes.india_compliance", prefix="/api/v1", tags=["india-compliance"], required=False)
-_include_router("api.routes.llm_judge", prefix="/api/v1", tags=["llm-judge"], required=False)
 _include_router("api.routes.mlops", prefix="/api/v1", tags=["mlops"], required=False)
-_include_router("api.routes.modern_bias_detection", prefix="/api/v1", tags=["modern-bias-detection"], required=False)
 _include_router("api.routes.monitoring", prefix="/api/v1", tags=["monitoring"], required=False)
-_include_router("api.routes.multimodal_bias_detection", prefix="/api/v1", tags=["multimodal-bias-detection"], required=False)
 _include_router("api.routes.provenance", prefix="/api/v1/provenance", tags=["provenance"], required=False)
 _include_router("api.routes.reports", tags=["reports"], required=False)
 _include_router("api.routes.compliance_automation", prefix="/api/v1", tags=["Compliance & Reporting"], required=False)
@@ -526,6 +513,10 @@ _include_router("api.routes.policies", tags=["policies"], required=False)
 # The legacy /api/approvals router writes the same approval tables without the
 # tenant and actor guarantees enforced by the primary governance API. Keep it
 # unmounted; clients must use /api/v1/ai-governance approval endpoints.
+# The legacy llm-judge, modern-bias, and multimodal-bias routers expose
+# uncalibrated evaluator implementations without the Assurance V2 execution,
+# isolation, or signed-evidence contract. Keep them unmounted until their
+# modality packs pass the independent P2/P3 release gates.
 
 logger.info("Explicit API router map registered")
 
