@@ -758,6 +758,10 @@ packs, lifecycle workflows, and rollout gates remain open.
 - Atomic evidence persistence and separate execution/evidence/review/governance states
 - Literal, database-backed permissions for every live human Assurance V2 mutation;
   direct-mounted v2 routers also enforce the master feature gate
+- A separate unmounted worker-authorization predicate intended to consume a
+  verified, tenant-bound service-principal projection and the literal
+  `evaluation:worker` permission; no composed caller, worker credential issuer,
+  route, queue, or runtime exists
 - Default-off, PostgreSQL-authoritative administration for evidence issuers,
   public Ed25519 verification keys, and immutable trust policies, with exact
   persisted trust-admin authorization and hardened legacy role delegation
@@ -767,7 +771,7 @@ packs, lifecycle workflows, and rollout gates remain open.
   against evaluator revocation
 - PostgreSQL-authoritative transactional idempotency with exact 2,592,000-second
   generations, immutable response/audit bindings, expired-only atomic rollover,
-  and one append-only per-organization audit chain across all 21 enabled
+  and one append-only per-organization audit chain across all 22 enabled
   Assurance V2 mutation routes
 - Tenant-bound environmental evidence routes, response admission, and migration 013e,
   verified on SQLite and a disposable local PostgreSQL 14 instance
@@ -778,8 +782,9 @@ packs, lifecycle workflows, and rollout gates remain open.
 
 - Split the remaining oversized SQL repository implementation without changing
   the shared transaction boundary
-- Implement service-worker authorization, an audited separation override, and
-  independently invocable submit/link surfaces
+- Provision separately authenticated service-worker identities, implement the
+  delegated separation override, and add independently invocable submit/link
+  surfaces
 - Close the feature-switch row and implement the evidence UI without weakening
   the default-off boundary
 - Add a separately authenticated least-privilege database runtime identity,

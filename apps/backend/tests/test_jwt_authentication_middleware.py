@@ -3,9 +3,31 @@
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from starlette.requests import Request
 
 from api.main import app as main_app
-from middleware.security import JWTAuthenticationMiddleware
+from config.auth import PrincipalKind, TokenType, UserRole, auth_manager
+from config.jwt_exceptions import InvalidTokenException
+from core.middleware.auth import NeonAuthMiddleware
+from middleware.security import (
+    JWTAuthenticationMiddleware,
+    get_current_user_from_request,
+)
+
+
+def _signed_service_token() -> str:
+    return auth_manager.jwt_manager.create_token(
+        {
+            "sub": "worker-a",
+            "user_id": "worker-a",
+            "email": "worker-a@example.test",
+            "roles": [UserRole.API_USER.value],
+            "permissions": ["evaluation:worker"],
+            "token_type": TokenType.ACCESS.value,
+            "principal_kind": PrincipalKind.SERVICE.value,
+            "organization_id": "org-a",
+        }
+    )
 
 
 def _client() -> TestClient:
@@ -67,6 +89,17 @@ def _client() -> TestClient:
     return TestClient(app)
 
 
+def _neon_client() -> TestClient:
+    app = FastAPI()
+    app.add_middleware(NeonAuthMiddleware)
+
+    @app.get("/api/v1/protected")
+    async def protected() -> dict[str, bool]:
+        return {"protected": True}
+
+    return TestClient(app)
+
+
 def test_root_path_remains_public_without_a_token() -> None:
     response = _client().get("/")
 
@@ -80,6 +113,58 @@ def test_non_root_path_does_not_inherit_the_root_public_exception() -> None:
     assert response.status_code == 401
     assert response.json()["error"] == "Authentication required"
     assert response.json()["detail"] == "Authentication required"
+
+
+def test_service_principal_cannot_cross_app_wide_human_middleware() -> None:
+    response = _client().get(
+        "/api/v1/protected",
+        headers={"Authorization": f"Bearer {_signed_service_token()}"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid token"
+
+
+def test_main_app_rejects_service_principal_before_legacy_governance_route() -> None:
+    with TestClient(main_app) as client:
+        response = client.get(
+            "/api/v1/ai-governance/status",
+            headers={"Authorization": f"Bearer {_signed_service_token()}"},
+        )
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid token"
+
+
+@pytest.mark.asyncio
+async def test_request_state_helper_rejects_service_principal() -> None:
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/api/v1/protected",
+            "headers": [],
+            "query_string": b"",
+            "scheme": "http",
+            "server": ("testserver", 80),
+            "client": ("testclient", 50000),
+        }
+    )
+    request.state.user = await auth_manager.verify_token(_signed_service_token())
+    request.state.authenticated = True
+
+    with pytest.raises(InvalidTokenException, match="Human principal required"):
+        await get_current_user_from_request(request)
+
+
+def test_neon_auth_middleware_rejects_service_principal() -> None:
+    response = _neon_client().get(
+        "/api/v1/protected",
+        headers={"Authorization": f"Bearer {_signed_service_token()}"},
+    )
+
+    assert response.status_code == 401
+    assert response.text == "Service principals require a dedicated route"
 
 
 def test_non_root_public_prefixes_keep_matching_descendant_paths() -> None:
