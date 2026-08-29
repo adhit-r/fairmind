@@ -39,7 +39,6 @@ from src.application.services.evaluation_runs_service import (
 )
 from src.application.services.legacy_evaluation_feature_gates import (
     EVIDENCE_LINKING_FLAG,
-    FAIRMIND_WORKER_FLAG,
     LegacyEvaluationFeatureGates,
 )
 
@@ -53,7 +52,9 @@ BASE = "/api/v1/ai-governance/organizations"
 RETIRED_LEGACY_AUTOMATIC_ENFORCEMENT_FLAG = (
     "FAIRMIND_ASSURANCE_LEGACY_AUTOMATIC_ENFORCEMENT_ENABLED"
 )
-LEGACY_FAIRMIND_WORKER_FLAG = FAIRMIND_WORKER_FLAG
+RETIRED_LEGACY_FAIRMIND_WORKER_FLAG = (
+    "FAIRMIND_ASSURANCE_LEGACY_FAIRMIND_WORKER_ENABLED"
+)
 LEGACY_EVIDENCE_LINKING_FLAG = EVIDENCE_LINKING_FLAG
 
 
@@ -285,7 +286,7 @@ def _workflow_detail(message: str, next_action: str) -> dict:
 def test_legacy_capability_flags_require_literal_true() -> None:
     gates = LegacyEvaluationFeatureGates.from_environment(
         {
-            LEGACY_FAIRMIND_WORKER_FLAG: "1",
+            RETIRED_LEGACY_FAIRMIND_WORKER_FLAG: "true",
             LEGACY_EVIDENCE_LINKING_FLAG: "yes",
         }
     )
@@ -299,7 +300,7 @@ def test_legacy_mutation_capabilities_default_deny_unsupported_paths(
 ) -> None:
     client, session_factory, _ = evaluation_client
     monkeypatch.delenv(RETIRED_LEGACY_AUTOMATIC_ENFORCEMENT_FLAG, raising=False)
-    monkeypatch.delenv(LEGACY_FAIRMIND_WORKER_FLAG, raising=False)
+    monkeypatch.delenv(RETIRED_LEGACY_FAIRMIND_WORKER_FLAG, raising=False)
     monkeypatch.delenv(LEGACY_EVIDENCE_LINKING_FLAG, raising=False)
 
     automatic = client.post(
@@ -449,12 +450,12 @@ def test_historical_automatic_plan_is_readable_but_cannot_activate_or_prepare_ru
         session.close()
 
 
-def test_explicit_legacy_worker_flag_permits_worker_plan_shape(
+def test_legacy_worker_delivery_cannot_be_enabled(
     evaluation_client,
     monkeypatch,
 ) -> None:
-    client, _, _ = evaluation_client
-    monkeypatch.setenv(LEGACY_FAIRMIND_WORKER_FLAG, "true")
+    client, session_factory, _ = evaluation_client
+    monkeypatch.setenv(RETIRED_LEGACY_FAIRMIND_WORKER_FLAG, "true")
 
     response = client.post(
         _plans_url(),
@@ -463,9 +464,19 @@ def test_explicit_legacy_worker_flag_permits_worker_plan_shape(
         ),
     )
 
-    assert response.status_code == 201, response.text
-    assert response.json()["enforcementMode"] == "human_approval"
-    assert response.json()["deliveryMode"] == "fairmind_worker"
+    assert response.status_code == 409
+    assert response.json()["detail"] == {
+        "code": "fairmind_worker_delivery_disabled",
+        "message": "FairMind worker delivery is disabled for legacy evaluation plans.",
+        "nextAction": "Use an external provider or imported report.",
+    }
+    session = session_factory()
+    try:
+        assert session.execute(
+            select(GovernanceEvaluationPlan.__table__.c.id)
+        ).all() == []
+    finally:
+        session.close()
 
 
 def test_v1_mutations_are_quarantined_when_assurance_v2_is_enabled(
@@ -1097,26 +1108,74 @@ def test_preflight_blocks_inactive_external_and_imported_plans(
     }
 
 
-def test_unavailable_worker_cannot_create_run(evaluation_client, monkeypatch) -> None:
+def test_historical_worker_plan_is_readable_but_cannot_activate_or_prepare_run(
+    evaluation_client,
+    monkeypatch,
+) -> None:
     client, session_factory, _ = evaluation_client
-    monkeypatch.setenv(LEGACY_FAIRMIND_WORKER_FLAG, "true")
-    plan = _create_plan(client, deliveryMode="fairmind_worker")
-    assert _activate(client, plan["id"]).status_code == 200
+    monkeypatch.setenv(RETIRED_LEGACY_FAIRMIND_WORKER_FLAG, "true")
+    plan = _create_plan(client)
+    session = session_factory()
+    try:
+        session.execute(
+            update(GovernanceEvaluationPlan.__table__)
+            .where(GovernanceEvaluationPlan.__table__.c.id == plan["id"])
+            .values(delivery_mode="fairmind_worker")
+        )
+        session.commit()
+    finally:
+        session.close()
 
+    activation = _activate(client, plan["id"])
+
+    assert activation.status_code == 409
+    assert activation.json()["detail"] == {
+        "code": "fairmind_worker_delivery_disabled",
+        "message": "FairMind worker delivery is disabled for legacy evaluation plans.",
+        "nextAction": "Use an external provider or imported report.",
+    }
+    session = session_factory()
+    try:
+        assert session.execute(
+            select(GovernanceEvaluationPlan.__table__.c.status).where(
+                GovernanceEvaluationPlan.__table__.c.id == plan["id"]
+            )
+        ).scalar_one() == "draft"
+        assert "evaluation_plan.activated" not in _audit_actions(session_factory)
+        session.execute(
+            update(GovernanceEvaluationPlan.__table__)
+            .where(GovernanceEvaluationPlan.__table__.c.id == plan["id"])
+            .values(status="active")
+        )
+        session.commit()
+    finally:
+        session.close()
+
+    plans = client.get(_plans_url())
     preflight = client.get(f"{_plans_url()}/{plan['id']}/preflight")
     response = _create_run(client, plan["id"])
 
+    assert plans.status_code == 200
+    assert plans.json()[0]["deliveryMode"] == "fairmind_worker"
     assert preflight.status_code == 200
-    assert preflight.json()["canPrepareRun"] is False
-    assert preflight.json()["fairmindExecutionAvailable"] is False
-    assert preflight.json()["code"] == "executor_unavailable"
-    assert preflight.json()["nextAction"]
+    assert preflight.json() == {
+        "planId": plan["id"],
+        "canPrepareRun": False,
+        "fairmindExecutionAvailable": False,
+        "code": "executor_unavailable",
+        "message": "No FairMind worker is installed for this plan.",
+        "nextAction": (
+            "Select an external provider or imported report, or install a compatible worker."
+        ),
+    }
     assert response.status_code == 409
     assert response.json() == {
         "detail": {
             "code": "executor_unavailable",
             "message": "No FairMind worker is installed for this plan.",
-            "nextAction": "Select an external provider or imported report, or install a compatible worker.",
+            "nextAction": (
+                "Select an external provider or imported report, or install a compatible worker."
+            ),
         }
     }
     session = session_factory()

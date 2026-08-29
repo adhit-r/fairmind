@@ -13,7 +13,6 @@ import os
 from typing import Mapping
 
 
-FAIRMIND_WORKER_FLAG = "FAIRMIND_ASSURANCE_LEGACY_FAIRMIND_WORKER_ENABLED"
 EVIDENCE_LINKING_FLAG = "FAIRMIND_ASSURANCE_LEGACY_EVIDENCE_LINKING_ENABLED"
 
 
@@ -25,7 +24,6 @@ def _explicitly_enabled(environment: Mapping[str, str], name: str) -> bool:
 class LegacyEvaluationFeatureGates:
     """Release controls for mutations not backed by the V2 assurance kernel."""
 
-    fairmind_worker_enabled: bool = False
     evidence_linking_enabled: bool = False
 
     @classmethod
@@ -35,6 +33,5 @@ class LegacyEvaluationFeatureGates:
     ) -> "LegacyEvaluationFeatureGates":
         values = os.environ if environment is None else environment
         return cls(
-            fairmind_worker_enabled=_explicitly_enabled(values, FAIRMIND_WORKER_FLAG),
             evidence_linking_enabled=_explicitly_enabled(values, EVIDENCE_LINKING_FLAG),
         )

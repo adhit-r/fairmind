@@ -85,7 +85,7 @@ const deliveryModeLabels: Record<DeliveryMode, string> = {
 }
 
 const enabledEnforcementModes = allowedLegacyEnforcementModes()
-const enabledDeliveryModes = allowedLegacyDeliveryModes(legacyEvaluationFeatureGates)
+const enabledDeliveryModes = allowedLegacyDeliveryModes()
 
 function sentenceLabel(value: string) {
   return value.replace(/_/g, ' ').replace(/^./, (character) => character.toUpperCase())
@@ -313,7 +313,7 @@ function EvaluationPlanForm({ onCreate, submitting }: PlanFormProps) {
         <p className="font-black">Unavailable capabilities in this legacy workflow.</p>
         <ul className="mt-2 list-disc space-y-1 pl-5">
           <li>Automatic enforcement is unavailable; use advisory or human approval.</li>
-          {!legacyEvaluationFeatureGates.fairmindWorkerDelivery && <li>FairMind worker delivery is unavailable; use an external provider or imported report.</li>}
+          <li>FairMind worker delivery is unavailable; use an external provider or imported report.</li>
           {!legacyEvaluationFeatureGates.legacyEvidenceLinking && <li>Legacy Passport linking is unavailable; use the Assurance V2 trusted-evidence workflow.</li>}
         </ul>
       </aside>

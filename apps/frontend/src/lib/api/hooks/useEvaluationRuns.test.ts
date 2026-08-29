@@ -806,6 +806,7 @@ describe('API workflow error decoding', () => {
   test('accepts only the documented structured workflow error codes', async () => {
     const codes = [
       'executor_unavailable',
+      'fairmind_worker_delivery_disabled',
       'plan_inactive',
       'plan_archived',
       'passport_link_conflict',

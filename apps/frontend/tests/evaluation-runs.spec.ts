@@ -438,14 +438,17 @@ test('creates a version-pinned plan from the compact empty-state form', async ({
   await expect(page.getByText('Draft', { exact: true })).toBeVisible()
 })
 
-test('never offers automatic enforcement in plan creation', async ({ page }) => {
+test('never offers automatic enforcement or FairMind worker delivery in plan creation', async ({ page }) => {
   const mocks = await mockEvaluationWorkbench(page)
   await page.goto('/tests')
 
   const form = page.getByRole('form', { name: 'Create evaluation plan' })
   const enforcement = form.getByLabel('Enforcement mode')
+  const delivery = form.getByLabel('Delivery mode')
   await expect(enforcement.locator('option[value="automatic"]')).toHaveCount(0)
+  await expect(delivery.locator('option[value="fairmind_worker"]')).toHaveCount(0)
   await expect(form.getByText('Automatic enforcement is unavailable')).toBeVisible()
+  await expect(form.getByText('FairMind worker delivery is unavailable')).toBeVisible()
 
   await form.getByLabel('Plan name').fill('Human review release gate')
   await form.getByLabel('Versioned suite references').fill('fairmind/agent-safety@2026.07')
@@ -453,7 +456,10 @@ test('never offers automatic enforcement in plan creation', async ({ page }) => 
 
   await expect(page.getByLabel('Selected plan')).toHaveValue('plan-1')
   expect(mocks.getCreatedPlanInputs()).toEqual([
-    expect.objectContaining({ enforcementMode: 'human_approval' }),
+    expect.objectContaining({
+      enforcementMode: 'human_approval',
+      deliveryMode: 'external_provider',
+    }),
   ])
 })
 
@@ -473,7 +479,7 @@ test('shows historical automatic plans as readable but blocked', async ({ page }
   await expect(preflight.getByRole('button', { name: 'Prepare evidence run' })).toBeDisabled()
 })
 
-test('blocks unavailable FairMind workers with an explicit next action', async ({ page }) => {
+test('keeps historical FairMind worker plans readable with an explicit unavailable state', async ({ page }) => {
   const workerPlan = { ...basePlan, id: 'plan-worker', deliveryMode: 'fairmind_worker' }
   await mockEvaluationWorkbench(page, { plans: [workerPlan] })
   await page.goto('/tests')
