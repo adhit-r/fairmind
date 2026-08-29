@@ -76,6 +76,9 @@ class Settings(BaseSettings):
     # Issuer, public-key, and trust-policy administration remains independently
     # hidden until PostgreSQL 013f and the literal trust-admin permission release.
     assurance_v2_trust_administration_enabled: bool = False
+    # Generic Evidence Hub URLs and direct entity links are untrusted until a
+    # reviewed deployment explicitly enables this compatibility capability.
+    untrusted_external_evidence_linking_enabled: bool = False
     assurance_migration_schema: Optional[str] = None
     
     # Neon Auth + Data API

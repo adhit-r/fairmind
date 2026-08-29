@@ -22,6 +22,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from config.auth import TokenData, UserRole, get_current_active_user
+from config.settings import settings
 from database.connection import get_db
 from src.application.services.governance_assurance_service import (
     GovernanceAssuranceService,
@@ -35,6 +36,39 @@ SYSTEM_APPROVAL_WORKFLOW_ID = "fairmind-system-release-v1"
 SYSTEM_APPROVAL_WORKFLOW_STEPS = [
     {"order": 1, "role": "organization_mutator", "permission": "model:write"}
 ]
+
+UNTRUSTED_EXTERNAL_EVIDENCE_LINKING_DISABLED_DETAIL = {
+    "code": "untrusted_external_evidence_linking_disabled",
+    "message": "Untrusted external evidence linking is disabled.",
+    "nextAction": (
+        "Remove the external URL or direct entity link, or use the Assurance V2 "
+        "evidence-admission workflow."
+    ),
+}
+
+
+def _require_untrusted_external_evidence_linking_enabled() -> None:
+    if not settings.untrusted_external_evidence_linking_enabled:
+        raise HTTPException(
+            status_code=409,
+            detail=UNTRUSTED_EXTERNAL_EVIDENCE_LINKING_DISABLED_DETAIL,
+        )
+
+
+def _has_nonblank_external_url(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _requests_external_url_artifact(
+    *,
+    artifact_kind: Any,
+    file_url: Any,
+    content: Dict[str, Any],
+) -> bool:
+    return _has_nonblank_external_url(file_url) or (
+        artifact_kind == "url"
+        and _has_nonblank_external_url(content.get("url"))
+    )
 
 
 FRAMEWORKS: List[Dict[str, Any]] = [
@@ -1399,6 +1433,7 @@ async def create_system_evidence(
         db, system_id, current_user, mutate=True
     )
     if request.control_id:
+        _require_untrusted_external_evidence_linking_enabled()
         _validate_control_link_scope(
             db, membership, system_id, "control", request.control_id
         )
@@ -2334,13 +2369,22 @@ async def update_evidence_item(
     _ensure_tables(db)
     _require_evidence_item_access(db, evidence_id, current_user, mutate=True)
     row = db.execute(
-        text("SELECT id, metadata_json FROM governance_evidence WHERE id = :id"),
+        text(
+            "SELECT id, metadata_json, content_json "
+            "FROM governance_evidence WHERE id = :id"
+        ),
         {"id": evidence_id},
     ).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Evidence not found")
 
     metadata = _load_json_value(row[1], {})
+    content = _load_json_value(row[2], {})
+    if _has_nonblank_external_url(request.file_url) or (
+        request.artifact_kind == "url"
+        and _has_nonblank_external_url(content.get("url"))
+    ):
+        _require_untrusted_external_evidence_linking_enabled()
     if request.tags is not None:
         metadata["tags"] = request.tags
     if request.folder is not None:
@@ -2383,6 +2427,7 @@ async def add_evidence_item_link(
     system_id, membership = _require_evidence_item_access(
         db, evidence_id, current_user, mutate=True
     )
+    _require_untrusted_external_evidence_linking_enabled()
     _validate_control_link_scope(
         db, membership, system_id, request.entity_type, request.entity_id
     )
@@ -2436,6 +2481,12 @@ async def collect_evidence_v2(
     membership = _require_evidence_system_access(
         db, request.system_id, current_user, mutate=True
     )
+    if _requests_external_url_artifact(
+        artifact_kind=request.artifact_kind,
+        file_url=request.file_url,
+        content=request.content,
+    ):
+        _require_untrusted_external_evidence_linking_enabled()
     evidence_id = str(uuid.uuid4())
     now = _utc_now_iso()
     metadata: Dict[str, Any] = {
@@ -2482,6 +2533,12 @@ async def collect_evidence(
     membership = _require_evidence_system_access(
         db, request.system_id, current_user, mutate=True
     )
+    if _requests_external_url_artifact(
+        artifact_kind=request.metadata.get("artifact_kind"),
+        file_url=request.metadata.get("file_url"),
+        content=request.content,
+    ):
+        _require_untrusted_external_evidence_linking_enabled()
     evidence_id = str(uuid.uuid4())
     now = _utc_now_iso()
     db.execute(
@@ -2542,6 +2599,7 @@ async def link_evidence_to_entity(
     system_id, membership = _require_evidence_item_access(
         db, request.evidence_id, current_user, mutate=True
     )
+    _require_untrusted_external_evidence_linking_enabled()
     _validate_control_link_scope(
         db, membership, system_id, request.entity_type, request.entity_id
     )

@@ -27,6 +27,7 @@ import { useToast } from '@/hooks/use-toast'
 import { useSystemContext } from '@/components/workflow/SystemContext'
 import { useOrg } from '@/context/OrgContext'
 import { useEvidence, type Evidence } from '@/lib/api/hooks/useEvidence'
+import { resolveEvidenceHubFeatureGates } from '@/lib/assurance/evidenceHubFeatureGates'
 import {
   useEvidenceMappingReview,
   useEvidenceRuns,
@@ -42,6 +43,10 @@ import { EvaluationRunList } from './components/EvaluationRunList'
 import { EvaluatorRegistrationCatalogSection } from '@/components/evaluations/EvaluatorRegistrationCatalogPanel'
 
 const EVALUATOR_CATALOG_UI_ENABLED = process.env.NEXT_PUBLIC_ASSURANCE_V2_EVALUATOR_CATALOG_UI_ENABLED === 'true'
+const EVIDENCE_HUB_FEATURE_GATES = resolveEvidenceHubFeatureGates({
+  untrustedExternalEvidenceLinking:
+    process.env.NEXT_PUBLIC_ASSURANCE_UNTRUSTED_EXTERNAL_EVIDENCE_LINKING_ENABLED,
+})
 
 function formatDate(ts: string) {
   if (!ts) return '—'
@@ -89,6 +94,9 @@ function EvidenceCard({
                 {evidence.linkedEntityCount} link{evidence.linkedEntityCount !== 1 ? 's' : ''}
               </Badge>
             )}
+            <Badge className="border-2 border-amber-700 bg-amber-50 px-2 py-0.5 text-[10px] font-black uppercase text-amber-900">
+              Trust unclassified
+            </Badge>
           </div>
 
           <p className="truncate text-sm font-bold">
@@ -528,7 +536,7 @@ export default function EvidencePage() {
               <IconFileText className="mx-auto h-12 w-12 opacity-50" />
               <h3 className="mt-4 text-xl font-black">No evidence yet</h3>
               <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-                Start by uploading a file, linking an external artifact, or writing a narrative for {selectedSystem.name}.
+                Start by uploading a file, recording an attestation, or writing a narrative for {selectedSystem.name}.
               </p>
               <Button
                 className="mt-5 border-2 border-black font-black uppercase"
@@ -587,6 +595,7 @@ export default function EvidencePage() {
             systemId={selectedSystem.id}
             onCollect={handleCollect}
             onClose={() => setUploaderOpen(false)}
+            externalUrlsEnabled={EVIDENCE_HUB_FEATURE_GATES.untrustedExternalEvidenceLinking}
           />
         </DialogContent>
       </Dialog>
@@ -621,6 +630,7 @@ export default function EvidencePage() {
         }}
         controlOptions={assessmentState.controls}
         canEdit={canReview}
+        canAddLink={canReview && EVIDENCE_HUB_FEATURE_GATES.untrustedExternalEvidenceLinking}
       />
     </div>
   )

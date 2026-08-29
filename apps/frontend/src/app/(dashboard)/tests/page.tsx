@@ -18,7 +18,6 @@ import { useOrg } from '@/context/OrgContext'
 import {
   allowedLegacyDeliveryModes,
   allowedLegacyEnforcementModes,
-  legacyEvaluationFeatureGates,
 } from '@/lib/assurance/legacyEvaluationFeatureGates'
 import {
   EvaluationApiRequestError,
@@ -139,7 +138,9 @@ function preflightPresentation(plan: EvaluationPlan, preflight: EvaluationPrefli
       ? 'Automatic enforcement unavailable'
       : preflight.code === 'executor_unavailable'
         ? 'Executor unavailable'
-        : 'Evidence link required',
+        : preflight.code === 'legacy_evidence_linking_disabled'
+          ? 'Legacy linking unavailable'
+          : 'Evidence link required',
     message: preflight.message,
     nextAction: preflight.nextAction,
   }
@@ -314,7 +315,7 @@ function EvaluationPlanForm({ onCreate, submitting }: PlanFormProps) {
         <ul className="mt-2 list-disc space-y-1 pl-5">
           <li>Automatic enforcement is unavailable; use advisory or human approval.</li>
           <li>FairMind worker delivery is unavailable; use an external provider or imported report.</li>
-          {!legacyEvaluationFeatureGates.legacyEvidenceLinking && <li>Legacy Passport linking is unavailable; use the Assurance V2 trusted-evidence workflow.</li>}
+          <li>Legacy Passport linking is unavailable; use the Assurance V2 trusted-evidence workflow.</li>
         </ul>
       </aside>
 

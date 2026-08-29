@@ -221,8 +221,7 @@ class EvaluationRunsService:
                     "trusted-evidence admission workflow."
                 ),
                 (
-                    "Use the Assurance V2 trusted-evidence workflow, or enable the "
-                    "reviewed legacy-link capability."
+                    "Use the Assurance V2 trusted-evidence workflow."
                 ),
                 409,
             )
@@ -611,11 +610,14 @@ class EvaluationRunsService:
             }
         return {
             "planId": plan_id,
-            "canPrepareRun": True,
+            "canPrepareRun": False,
             "fairmindExecutionAvailable": False,
-            "code": "evidence_link_required",
-            "message": "This plan requires evidence from its configured delivery source.",
-            "nextAction": "Prepare the run, then link an exact Evidence Passport revision.",
+            "code": "legacy_evidence_linking_disabled",
+            "message": (
+                "Legacy evidence linking is disabled because it bypasses the "
+                "trusted-evidence admission workflow."
+            ),
+            "nextAction": "Use the Assurance V2 trusted-evidence workflow.",
         }
 
     def create_run(
@@ -667,6 +669,7 @@ class EvaluationRunsService:
                     "Select an external provider or imported report, or install a compatible worker.",
                     409,
                 )
+            self._require_legacy_evidence_linking_enabled()
             run_id = str(uuid.uuid4())
             now = _now()
             self.db.execute(

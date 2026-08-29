@@ -21,7 +21,7 @@ test('retired automatic and worker environment flags cannot revive unsupported c
   const retiredEnvironment = {
     automaticEnforcement: 'true',
     fairmindWorkerDelivery: 'true',
-    legacyEvidenceLinking: '1',
+    legacyEvidenceLinking: 'true',
   }
   const gates = resolveLegacyEvaluationFeatureGates(retiredEnvironment)
 

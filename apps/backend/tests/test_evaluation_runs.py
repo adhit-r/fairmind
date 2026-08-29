@@ -38,7 +38,6 @@ from src.application.services.evaluation_runs_service import (
     EvaluationWorkflowError,
 )
 from src.application.services.legacy_evaluation_feature_gates import (
-    EVIDENCE_LINKING_FLAG,
     LegacyEvaluationFeatureGates,
 )
 
@@ -55,7 +54,9 @@ RETIRED_LEGACY_AUTOMATIC_ENFORCEMENT_FLAG = (
 RETIRED_LEGACY_FAIRMIND_WORKER_FLAG = (
     "FAIRMIND_ASSURANCE_LEGACY_FAIRMIND_WORKER_ENABLED"
 )
-LEGACY_EVIDENCE_LINKING_FLAG = EVIDENCE_LINKING_FLAG
+RETIRED_LEGACY_EVIDENCE_LINKING_FLAG = (
+    "FAIRMIND_ASSURANCE_LEGACY_EVIDENCE_LINKING_ENABLED"
+)
 
 
 def _token(user_id: str) -> TokenData:
@@ -221,10 +222,16 @@ def evaluation_client():
         engine.dispose()
 
 
-@pytest.fixture(autouse=True)
-def _enable_legacy_linking_for_existing_passport_contract_tests(monkeypatch):
-    """Keep the historical Passport-contract cases explicit about their capability."""
-    monkeypatch.setenv(LEGACY_EVIDENCE_LINKING_FLAG, "true")
+@pytest.fixture
+def legacy_linking_enabled(monkeypatch):
+    """Exercise the retired compatibility logic without a production env escape hatch."""
+    monkeypatch.setattr(
+        LegacyEvaluationFeatureGates,
+        "from_environment",
+        classmethod(
+            lambda cls, environment=None: cls(evidence_linking_enabled=True)
+        ),
+    )
 
 
 def _plan_payload(**overrides) -> dict:
@@ -287,7 +294,7 @@ def test_legacy_capability_flags_require_literal_true() -> None:
     gates = LegacyEvaluationFeatureGates.from_environment(
         {
             RETIRED_LEGACY_FAIRMIND_WORKER_FLAG: "true",
-            LEGACY_EVIDENCE_LINKING_FLAG: "yes",
+            RETIRED_LEGACY_EVIDENCE_LINKING_FLAG: "true",
         }
     )
 
@@ -301,7 +308,7 @@ def test_legacy_mutation_capabilities_default_deny_unsupported_paths(
     client, session_factory, _ = evaluation_client
     monkeypatch.delenv(RETIRED_LEGACY_AUTOMATIC_ENFORCEMENT_FLAG, raising=False)
     monkeypatch.delenv(RETIRED_LEGACY_FAIRMIND_WORKER_FLAG, raising=False)
-    monkeypatch.delenv(LEGACY_EVIDENCE_LINKING_FLAG, raising=False)
+    monkeypatch.delenv(RETIRED_LEGACY_EVIDENCE_LINKING_FLAG, raising=False)
 
     automatic = client.post(
         _plans_url(), json=_plan_payload(enforcementMode="automatic")
@@ -317,34 +324,27 @@ def test_legacy_mutation_capabilities_default_deny_unsupported_paths(
 
     safe_plan = _create_plan(client)
     assert _activate(client, safe_plan["id"]).status_code == 200
-    run = _create_run(client, safe_plan["id"]).json()
-    link = _link(client, run["id"], "untrusted-evidence", "untrusted-revision")
+    prepared = _create_run(client, safe_plan["id"])
 
-    assert link.status_code == 409
-    assert link.json()["detail"] == {
+    assert prepared.status_code == 409
+    assert prepared.json()["detail"] == {
         "code": "legacy_evidence_linking_disabled",
         "message": (
             "Legacy evidence linking is disabled because it bypasses the "
             "trusted-evidence admission workflow."
         ),
-        "nextAction": (
-            "Use the Assurance V2 trusted-evidence workflow, or enable the "
-            "reviewed legacy-link capability."
-        ),
+        "nextAction": "Use the Assurance V2 trusted-evidence workflow.",
     }
     session = session_factory()
     try:
         assert session.execute(select(GovernanceEvaluationPlan.__table__.c.id)).all() == [
             (safe_plan["id"],)
         ]
-        stored = session.execute(
-            select(GovernanceEvaluationRun.__table__).where(
-                GovernanceEvaluationRun.__table__.c.id == run["id"]
-            )
-        ).mappings().one()
-        assert stored["technical_status"] == "awaiting_evidence"
-        assert stored["linked_passport_revision_id"] is None
+        assert session.execute(
+            select(GovernanceEvaluationRun.__table__.c.id)
+        ).fetchall() == []
         assert "evaluation_run.passport_linked" not in _audit_actions(session_factory)
+        assert "evaluation_run.prepared" not in _audit_actions(session_factory)
     finally:
         session.close()
 
@@ -481,6 +481,7 @@ def test_legacy_worker_delivery_cannot_be_enabled(
 
 def test_v1_mutations_are_quarantined_when_assurance_v2_is_enabled(
     evaluation_client,
+    legacy_linking_enabled,
 ) -> None:
     client, session_factory, _ = evaluation_client
     plan = _create_plan(client)
@@ -1034,12 +1035,13 @@ def test_activation_rolls_back_when_response_read_fails(
 
 
 @pytest.mark.parametrize("delivery_mode", ["external_provider", "imported_report"])
-def test_preflight_and_run_preparation_are_honest_and_audited(
+def test_preflight_and_direct_run_preparation_block_retired_linking_without_mutation(
     evaluation_client, delivery_mode
 ) -> None:
     client, session_factory, _ = evaluation_client
     plan = _create_plan(client, deliveryMode=delivery_mode)
     assert _activate(client, plan["id"]).status_code == 200
+    audit_before = _audit_actions(session_factory)
 
     preflight = client.get(f"{_plans_url()}/{plan['id']}/preflight")
     created = _create_run(client, plan["id"], trigger="release_gate")
@@ -1047,19 +1049,34 @@ def test_preflight_and_run_preparation_are_honest_and_audited(
     assert preflight.status_code == 200
     assert preflight.json() == {
         "planId": plan["id"],
-        "canPrepareRun": True,
+        "canPrepareRun": False,
         "fairmindExecutionAvailable": False,
-        "code": "evidence_link_required",
-        "message": "This plan requires evidence from its configured delivery source.",
-        "nextAction": "Prepare the run, then link an exact Evidence Passport revision.",
+        "code": "legacy_evidence_linking_disabled",
+        "message": (
+            "Legacy evidence linking is disabled because it bypasses the "
+            "trusted-evidence admission workflow."
+        ),
+        "nextAction": "Use the Assurance V2 trusted-evidence workflow.",
     }
-    assert created.status_code == 201, created.text
-    run = created.json()
-    assert run["technicalStatus"] == "awaiting_evidence"
-    assert run["overallVerdict"] == "insufficient"
-    assert run["layerVerdicts"] == {}
-    assert run["trigger"] == "release_gate"
-    assert _audit_actions(session_factory)[-1] == "evaluation_run.prepared"
+    assert created.status_code == 409
+    assert created.json()["detail"] == {
+        "code": "legacy_evidence_linking_disabled",
+        "message": (
+            "Legacy evidence linking is disabled because it bypasses the "
+            "trusted-evidence admission workflow."
+        ),
+        "nextAction": "Use the Assurance V2 trusted-evidence workflow.",
+    }
+    session = session_factory()
+    try:
+        assert session.execute(
+            select(GovernanceEvaluationRun.__table__.c.id).where(
+                GovernanceEvaluationRun.__table__.c.plan_id == plan["id"]
+            )
+        ).fetchall() == []
+        assert _audit_actions(session_factory) == audit_before
+    finally:
+        session.close()
 
 
 @pytest.mark.parametrize("delivery_mode", ["external_provider", "imported_report"])
@@ -1185,7 +1202,10 @@ def test_historical_worker_plan_is_readable_but_cannot_activate_or_prepare_run(
         session.close()
 
 
-def test_inactive_plan_cannot_prepare_run_and_run_reads_do_not_leak(evaluation_client) -> None:
+def test_inactive_plan_cannot_prepare_run_and_run_reads_do_not_leak(
+    evaluation_client,
+    legacy_linking_enabled,
+) -> None:
     client, _, active_user = evaluation_client
     plan = _create_plan(client)
     inactive = _create_run(client, plan["id"])
@@ -1204,7 +1224,11 @@ def test_inactive_plan_cannot_prepare_run_and_run_reads_do_not_leak(evaluation_c
     assert listed.json() == [detail.json()]
 
 
-def test_run_preparation_rolls_back_when_audit_write_fails(evaluation_client, monkeypatch) -> None:
+def test_run_preparation_rolls_back_when_audit_write_fails(
+    evaluation_client,
+    legacy_linking_enabled,
+    monkeypatch,
+) -> None:
     client, session_factory, _ = evaluation_client
     plan = _create_plan(client)
     assert _activate(client, plan["id"]).status_code == 200
@@ -1224,7 +1248,9 @@ def test_run_preparation_rolls_back_when_audit_write_fails(evaluation_client, mo
 
 
 def test_run_preparation_rolls_back_when_response_read_fails(
-    evaluation_client, monkeypatch
+    evaluation_client,
+    legacy_linking_enabled,
+    monkeypatch,
 ) -> None:
     client, session_factory, _ = evaluation_client
     plan = _create_plan(client)
@@ -1284,7 +1310,68 @@ def test_passport_projection_includes_capability_result_and_diagnostics() -> Non
     }
 
 
-def test_exact_passport_link_succeeds_idempotently_and_preserves_revision(evaluation_client) -> None:
+def test_legacy_passport_link_cannot_be_reenabled_by_environment(
+    evaluation_client,
+    monkeypatch,
+) -> None:
+    client, session_factory, _ = evaluation_client
+    monkeypatch.setattr(
+        LegacyEvaluationFeatureGates,
+        "from_environment",
+        classmethod(
+            lambda cls, environment=None: cls(evidence_linking_enabled=True)
+        ),
+    )
+    _, run = _prepared_run(client)
+    monkeypatch.setattr(
+        LegacyEvaluationFeatureGates,
+        "from_environment",
+        classmethod(lambda cls, environment=None: cls()),
+    )
+    monkeypatch.setenv(RETIRED_LEGACY_EVIDENCE_LINKING_FLAG, "true")
+    _seed_passport(
+        session_factory,
+        evidence_run_id="evidence-retired",
+        revision_id="revision-retired",
+        snapshot=_passport_snapshot(),
+    )
+
+    response = _link(
+        client,
+        run["id"],
+        "evidence-retired",
+        "revision-retired",
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == {
+        "code": "legacy_evidence_linking_disabled",
+        "message": (
+            "Legacy evidence linking is disabled because it bypasses the "
+            "trusted-evidence admission workflow."
+        ),
+        "nextAction": "Use the Assurance V2 trusted-evidence workflow.",
+    }
+    session = session_factory()
+    try:
+        stored = session.execute(
+            select(GovernanceEvaluationRun.__table__).where(
+                GovernanceEvaluationRun.__table__.c.id == run["id"]
+            )
+        ).mappings().one()
+        assert stored["technical_status"] == "awaiting_evidence"
+        assert stored["overall_verdict"] == "insufficient"
+        assert stored["linked_evidence_run_id"] is None
+        assert stored["linked_passport_revision_id"] is None
+        assert "evaluation_run.passport_linked" not in _audit_actions(session_factory)
+    finally:
+        session.close()
+
+
+def test_exact_passport_link_succeeds_idempotently_and_preserves_revision(
+    evaluation_client,
+    legacy_linking_enabled,
+) -> None:
     client, session_factory, _ = evaluation_client
     _, run = _prepared_run(client)
     snapshot = _passport_snapshot()
@@ -1379,6 +1466,7 @@ def test_exact_passport_link_succeeds_idempotently_and_preserves_revision(evalua
 )
 def test_passport_link_maps_every_result_status_truthfully(
     evaluation_client,
+    legacy_linking_enabled,
     result_status,
     capability_state,
     technical_status,
@@ -1424,7 +1512,11 @@ def test_passport_link_maps_every_result_status_truthfully(
     ],
 )
 def test_passport_link_requires_exact_suite_and_verifiable_target(
-    evaluation_client, plan_overrides, snapshot_overrides, code
+    evaluation_client,
+    legacy_linking_enabled,
+    plan_overrides,
+    snapshot_overrides,
+    code,
 ) -> None:
     client, session_factory, _ = evaluation_client
     _, run = _prepared_run(client, **plan_overrides)
@@ -1457,7 +1549,9 @@ def test_passport_link_requires_exact_suite_and_verifiable_target(
     ],
 )
 def test_passport_link_uses_relational_scope_instead_of_snapshot_display_scope(
-    evaluation_client, snapshot_overrides
+    evaluation_client,
+    legacy_linking_enabled,
+    snapshot_overrides,
 ) -> None:
     client, session_factory, _ = evaluation_client
     _, run = _prepared_run(client)
@@ -1477,6 +1571,7 @@ def test_passport_link_uses_relational_scope_instead_of_snapshot_display_scope(
 
 def test_passport_link_rejects_wrong_evidence_revision_pair_and_conflicting_relink(
     evaluation_client,
+    legacy_linking_enabled,
 ) -> None:
     client, session_factory, _ = evaluation_client
     _, run = _prepared_run(client)
@@ -1502,7 +1597,11 @@ def test_passport_link_rejects_wrong_evidence_revision_pair_and_conflicting_reli
     assert conflict.json()["detail"]["code"] == "passport_link_conflict"
 
 
-def test_passport_link_rolls_back_when_audit_write_fails(evaluation_client, monkeypatch) -> None:
+def test_passport_link_rolls_back_when_audit_write_fails(
+    evaluation_client,
+    legacy_linking_enabled,
+    monkeypatch,
+) -> None:
     client, session_factory, _ = evaluation_client
     _, run = _prepared_run(client)
     _seed_passport(
@@ -1527,7 +1626,9 @@ def test_passport_link_rolls_back_when_audit_write_fails(evaluation_client, monk
 
 
 def test_passport_link_rolls_back_when_response_read_fails(
-    evaluation_client, monkeypatch
+    evaluation_client,
+    legacy_linking_enabled,
+    monkeypatch,
 ) -> None:
     client, session_factory, _ = evaluation_client
     _, run = _prepared_run(client)
@@ -1568,6 +1669,7 @@ def test_passport_link_rolls_back_when_response_read_fails(
 
 def test_passport_link_rejects_invalid_canonical_snapshot_without_mutating_run(
     evaluation_client,
+    legacy_linking_enabled,
 ) -> None:
     client, session_factory, _ = evaluation_client
     _, run = _prepared_run(client)
@@ -1592,6 +1694,7 @@ def test_passport_link_rejects_invalid_canonical_snapshot_without_mutating_run(
 
 def test_passport_link_rejects_unsupported_passport_contract_version_without_mutation(
     evaluation_client,
+    legacy_linking_enabled,
 ) -> None:
     client, session_factory, _ = evaluation_client
     _, run = _prepared_run(client)
@@ -1615,7 +1718,10 @@ def test_passport_link_rejects_unsupported_passport_contract_version_without_mut
     assert detail["linkedPassportRevisionId"] is None
 
 
-def test_two_sessions_atomically_link_only_one_distinct_passport_revision(tmp_path: Path) -> None:
+def test_two_sessions_atomically_link_only_one_distinct_passport_revision(
+    tmp_path: Path,
+    legacy_linking_enabled,
+) -> None:
     database_path = tmp_path / "evaluation-race.sqlite3"
     engine = create_engine(
         f"sqlite:///{database_path}",

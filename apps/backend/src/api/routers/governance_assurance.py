@@ -254,6 +254,7 @@ class EvaluationPreflightResponse(BaseModel):
         "contract_upgrade_required",
         "executor_unavailable",
         "evidence_link_required",
+        "legacy_evidence_linking_disabled",
     ]
     message: str
     next_action: str = Field(alias="nextAction")

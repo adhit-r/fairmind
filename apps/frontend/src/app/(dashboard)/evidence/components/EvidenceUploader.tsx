@@ -24,12 +24,18 @@ interface EvidenceUploaderProps {
   systemId: string
   onCollect: (params: CollectEvidenceInput) => Promise<void>
   onClose: () => void
+  externalUrlsEnabled?: boolean
 }
 
 const SUGGESTED_TAGS = ['eu-ai-act', 'bias-scan', 'monitoring', 'compliance', 'q1-2026', 'iso-42001', 'nist-rmf']
 const SUGGESTED_FOLDERS = ['EU AI Act', 'ISO 42001', 'NIST AI RMF', 'Bias Testing', 'Monitoring', 'Audits']
 
-export function EvidenceUploader({ systemId, onCollect, onClose }: EvidenceUploaderProps) {
+export function EvidenceUploader({
+  systemId,
+  onCollect,
+  onClose,
+  externalUrlsEnabled = false,
+}: EvidenceUploaderProps) {
   const [kind, setKind] = useState<ArtifactKind>('narrative')
   const [title, setTitle] = useState('')
   const [evidenceType, setEvidenceType] = useState('test_results')
@@ -99,11 +105,13 @@ export function EvidenceUploader({ systemId, onCollect, onClose }: EvidenceUploa
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {/* Artifact kind selector */}
-      <div className="grid grid-cols-4 gap-2">
+      <div className={`grid gap-2 ${externalUrlsEnabled ? 'grid-cols-4' : 'grid-cols-3'}`}>
         {([
           { kind: 'narrative' as ArtifactKind, icon: IconFileText, label: 'Narrative' },
           { kind: 'file' as ArtifactKind, icon: IconCloudUpload, label: 'File upload' },
-          { kind: 'url' as ArtifactKind, icon: IconLink, label: 'External URL' },
+          ...(externalUrlsEnabled
+            ? [{ kind: 'url' as ArtifactKind, icon: IconLink, label: 'External URL' }]
+            : []),
           { kind: 'attestation' as ArtifactKind, icon: IconShieldCheck, label: 'Attestation' },
         ] as const).map(({ kind: k, icon: Icon, label }) => (
           <button
