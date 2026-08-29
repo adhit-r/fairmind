@@ -203,18 +203,12 @@ class EvaluationRunsService:
                 409,
             )
 
-    def _require_fairmind_worker_enabled(self, delivery_mode: str) -> None:
-        if (
-            delivery_mode == "fairmind_worker"
-            and not self.feature_gates.fairmind_worker_enabled
-        ):
+    def _reject_fairmind_worker_delivery(self, delivery_mode: str) -> None:
+        if delivery_mode == "fairmind_worker":
             raise _error(
                 "fairmind_worker_delivery_disabled",
                 "FairMind worker delivery is disabled for legacy evaluation plans.",
-                (
-                    "Use an external provider or imported report, or enable the "
-                    "reviewed worker capability."
-                ),
+                "Use an external provider or imported report.",
                 409,
             )
 
@@ -382,7 +376,7 @@ class EvaluationRunsService:
         normalized = validate_plan_payload(payload)
         self._require_legacy_mutations_enabled()
         self._reject_automatic_enforcement(normalized["enforcementMode"])
-        self._require_fairmind_worker_enabled(normalized["deliveryMode"])
+        self._reject_fairmind_worker_delivery(normalized["deliveryMode"])
         try:
             scope = self._system_scope(org_id, system_id)
             if scope is None:
@@ -479,7 +473,7 @@ class EvaluationRunsService:
                 return None
             self._require_v1_mutation(row)
             self._reject_automatic_enforcement(row["enforcement_mode"])
-            self._require_fairmind_worker_enabled(row["delivery_mode"])
+            self._reject_fairmind_worker_delivery(row["delivery_mode"])
             if row["status"] == "archived":
                 raise _error(
                     "plan_archived",
@@ -659,7 +653,6 @@ class EvaluationRunsService:
                 )
             self._require_v1_mutation(plan)
             self._reject_automatic_enforcement(plan["enforcement_mode"])
-            self._require_fairmind_worker_enabled(plan["delivery_mode"])
             if plan["status"] != "active":
                 raise _error(
                     "plan_inactive",
@@ -674,7 +667,6 @@ class EvaluationRunsService:
                     "Select an external provider or imported report, or install a compatible worker.",
                     409,
                 )
-
             run_id = str(uuid.uuid4())
             now = _now()
             self.db.execute(
