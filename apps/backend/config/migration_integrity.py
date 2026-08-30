@@ -122,6 +122,11 @@ FROZEN_013K_OPERATOR_CHECKSUM = "8bdbf13e15452949b7a4e002fe152f0a90c7cb8c1c343a1
 FROZEN_SQLITE_013K_FIXTURE_CHECKSUM = (
     "3df7d16100299387392b78af38180bfaed01e90b6e992c2332014887818d34e5"
 )
+_FROZEN_013L_CHECKSUM = "2dd029773f4dbe7b79cbc8db69ebe2bcdf444d82d8c9316a7f23b900ceabc4f9"
+FROZEN_013L_OPERATOR_CHECKSUM = "b8942f7baf21bc21cfabea04f33ab020c1aa55f531be3effee571e1eb2a7eda1"
+FROZEN_SQLITE_013L_FIXTURE_CHECKSUM = (
+    "9ebab74a7ad353cfda888cb84969c42f57c59b7667d475fac093245b5ee7ffc4"
+)
 
 FROZEN_ASSURANCE_MIGRATIONS = (
     FrozenMigration(
@@ -184,6 +189,11 @@ FROZEN_ASSURANCE_MIGRATIONS = (
         _FROZEN_013K_CHECKSUM,
         _MIGRATIONS / "013k_verified_evidence_link_integrity.sql",
     ),
+    FrozenMigration(
+        "013k-to-013l-delegated-separation-override-grant-integrity-v1",
+        _FROZEN_013L_CHECKSUM,
+        _MIGRATIONS / "013l_delegated_separation_override_grant_integrity.sql",
+    ),
 )
 
 POSTGRESQL_ASSURANCE_RELATIONS = frozenset(
@@ -218,6 +228,7 @@ POSTGRESQL_ASSURANCE_RELATIONS = frozenset(
         "governance_idempotency_records",
         "governance_evaluation_audit_events",
         "governance_evaluation_audit_chain_heads",
+        "governance_separation_override_grants",
     }
 )
 
@@ -263,6 +274,12 @@ POSTGRESQL_ASSURANCE_FUNCTIONS = frozenset(
         "fairmind_validate_owner_override_audit_013j",
         "fairmind_verified_evidence_link_is_valid_013k",
         "fairmind_guard_verified_evidence_link_013k",
+        "fairmind_governance_decision_actor_authorized_013l",
+        "fairmind_separation_override_relationships_013l",
+        "fairmind_delegated_separation_override_authorized_013l",
+        "guard_governance_separation_override_grant_013l",
+        "fairmind_validate_separation_override_grant_audit_013l",
+        "fairmind_validate_delegated_decision_audit_013l",
         "fairmind_initial_layer_verdicts_v1_for_run",
         "fairmind_is_canonical_utc_timestamp",
         "fairmind_is_initial_layer_verdicts",
@@ -326,6 +343,11 @@ POSTGRESQL_ASSURANCE_REQUIRED_TRIGGERS = frozenset(
         "governance_evaluation_runs_v2_guard_update",
         "governance_evaluation_suite_evidence_links_guard_insert",
         "governance_evaluation_suite_evidence_links_verified_guard_013k",
+        "governance_separation_override_grants_guard_insert",
+        "governance_separation_override_grants_immutable_update",
+        "governance_separation_override_grants_immutable_delete",
+        "governance_separation_override_grants_audit_013l",
+        "governance_evaluation_decisions_delegated_override_audit_013l",
         "governance_evaluation_suite_evidence_links_no_delete",
         "governance_evaluation_suite_evidence_links_no_update",
         "governance_evaluation_suite_executions_guard_delete",
@@ -383,7 +405,7 @@ POSTGRESQL_ASSURANCE_CATALOG_SPEC = PostgreSQLCatalogSpec(
     required_triggers=POSTGRESQL_ASSURANCE_REQUIRED_TRIGGERS,
 )
 
-# Measured from two independent full operator-chain installations through 013k on
+# Measured from two independent full operator-chain installations through 013l on
 # PostgreSQL 14 and cross-checked against a direct-payload installation. The
 # PostgreSQL major is part of the canonical catalog payload because PostgreSQL
 # deparser output can change across major versions.
@@ -392,7 +414,7 @@ FROZEN_POSTGRESQL_ASSURANCE_CATALOGS: Mapping[int, FrozenPostgreSQLCatalog] = Ma
         14: FrozenPostgreSQLCatalog(
             spec=POSTGRESQL_ASSURANCE_CATALOG_SPEC,
             postgresql_major=14,
-            digest=("34e583be907321e156af9606f1a9115194a2b3d4a6c66e257b38f6a16b55d156"),
+            digest=("18acdb1569c601bf99c45b22d5de45fe3b749acaf4bb7bb5644a7eba265e2f3a"),
         )
     }
 )
@@ -425,6 +447,7 @@ SQLITE_ASSURANCE_TABLES = frozenset(
         "governance_idempotency_records",
         "governance_evaluation_audit_events",
         "governance_evaluation_audit_chain_heads",
+        "governance_separation_override_grants",
         "governance_evidence_admission_013b_replay_state",
         "governance_evidence_admission_013b_replay_anchor",
     }
@@ -465,6 +488,8 @@ SQLITE_ASSURANCE_INDEXES = frozenset(
         "idx_governance_evidence_nonce_claims_scope_admission",
         "idx_governance_evaluation_suite_evidence_links_scope",
         "idx_governance_evaluation_decisions_scope_version",
+        "idx_governance_separation_override_grants_scope",
+        "uq_governance_evaluation_decision_separation_override_grant",
     }
 )
 
@@ -551,6 +576,10 @@ SQLITE_ASSURANCE_TRIGGERS = frozenset(
         "governance_evidence_reviews_separation_guard_013j",
         "governance_evaluation_decisions_owner_override_unavailable_013j",
         "governance_evaluation_suite_evidence_links_verified_unavailable_013k",
+        "governance_separation_override_grants_unavailable_013l",
+        "governance_separation_override_grants_immutable_update_013l",
+        "governance_separation_override_grants_immutable_delete_013l",
+        "governance_evaluation_decisions_delegated_override_unavailable_013l",
         "governance_evidence_org_insert",
         "governance_evidence_org_update",
         "governance_evaluation_audit_events_no_update",
@@ -574,9 +603,9 @@ SQLITE_ASSURANCE_VIEWS = frozenset(
 # named above, sorted by object type and name.  Unlike a name-only inventory,
 # this freezes table columns/checks/FKs, explicit indexes, trigger bodies, and
 # security-critical view definitions.
-# Measured after the complete 013k SQLite fail-closed fixture was installed
+# Measured after the complete 013l SQLite fail-closed fixture was installed
 # twice and its source checksum was frozen.
-SQLITE_ASSURANCE_CATALOG_DIGEST = "8cc1d80142a8a463e3a379a1812a1dd86a4ff77f88b2111f9586738303662880"
+SQLITE_ASSURANCE_CATALOG_DIGEST = "bd40b1b6ae5aca9387eaed352fb87cb0c43310c09d5e158788c471b70e6288e5"
 
 _SQLITE_ASSURANCE_OBJECTS = {
     "table": SQLITE_ASSURANCE_TABLES,
@@ -1496,6 +1525,13 @@ def verify_sqlite_assurance_schema(connection) -> None:
             "013k",
             _MIGRATIONS / "fixtures" / "013k_verified_evidence_link_integrity.sqlite.sql",
             FROZEN_SQLITE_013K_FIXTURE_CHECKSUM,
+        ),
+        (
+            "013l",
+            _MIGRATIONS
+            / "fixtures"
+            / "013l_delegated_separation_override_grant_integrity.sqlite.sql",
+            FROZEN_SQLITE_013L_FIXTURE_CHECKSUM,
         ),
     )
     for version, fixture_path, frozen_checksum in fixtures:

@@ -385,6 +385,22 @@ def _owner_override_url(
     ) + "/owner-override"
 
 
+def _separation_override_grant_url(
+    *,
+    run_id: str,
+    grant_id: str | None = None,
+    workspace_id: str = "workspace-a",
+    system_id: str = "system-a",
+    org_id: str = ORG,
+) -> str:
+    url = (
+        f"/api/v1/ai-governance/organizations/{org_id}/workspaces/{workspace_id}"
+        f"/systems/{system_id}/evaluation-v2/runs/{run_id}"
+        "/separation-override-grants"
+    )
+    return url if grant_id is None else f"{url}/{grant_id}/decision"
+
+
 def _grant_evidence_submit_permission() -> None:
     _grant_role_permissions("admin", ["evaluation:evidence:submit"])
 
@@ -650,6 +666,29 @@ class _RecordingGovernanceDecisionService:
     def decide_owner_override(self, **kwargs):
         self.calls.append(kwargs)
         return self._result(kwargs, owner_override_applied=True)
+
+    def create_separation_override_grant(self, **kwargs):
+        self.calls.append(kwargs)
+        return MutationResult.create(
+            body={
+                "grantId": "22222222-2222-4222-8222-222222222222",
+                "runId": kwargs["scope"].run_id,
+                "expectedVerdictVersion": kwargs["expected_verdict_version"],
+                "grantedBy": kwargs["actor_id"],
+                "granteeActorId": kwargs["grantee_actor_id"],
+                "grantedAt": "2026-08-09T12:00:00+00:00",
+                "expiresAt": "2026-08-09T12:30:00+00:00",
+            },
+            status=201,
+        )
+
+    def decide_delegated_override(self, **kwargs):
+        self.calls.append(kwargs)
+        result = self._result(kwargs)
+        body = result.body
+        body["separationOverrideApplied"] = True
+        body["separationOverrideGrantId"] = kwargs["grant_id"]
+        return MutationResult.create(body=body, status=201)
 
     @staticmethod
     def _result(kwargs, *, owner_override_applied: bool = False):
@@ -1872,6 +1911,65 @@ def test_owner_decision_override_requires_normal_decision_permission(
     assert payload["ownerOverrideReason"] not in accepted.text
     assert len(recorder.calls) == 1
     assert recorder.calls[0]["owner_override_reason"] == payload["ownerOverrideReason"]
+
+
+def test_separation_override_grant_and_named_decision_share_the_strict_gate(
+    workbench_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _ = workbench_client
+    monkeypatch.setattr(settings, "assurance_v2_enabled", True)
+    monkeypatch.setattr(
+        settings, "assurance_v2_governance_decision_enabled", True, raising=False
+    )
+    monkeypatch.setattr(
+        settings, "assurance_v2_separation_override_enabled", True, raising=False
+    )
+    _plan, run = _create_active_v2_plan_and_run(client)
+    suite_execution_id = run["suiteExecutions"][0]["id"]
+    grant_id = "22222222-2222-4222-8222-222222222222"
+    recorder = _RecordingGovernanceDecisionService()
+    app.dependency_overrides[get_governance_decision_service] = lambda: recorder
+    try:
+        _grant_role_permissions("admin", ["evaluation:decision"])
+        grant = client.post(
+            _separation_override_grant_url(run_id=run["id"]),
+            headers=_headers("separation-grant-create"),
+            json={
+                "granteeActorId": USER,
+                "expectedVerdictVersion": 0,
+                "separationOverrideReason": (
+                    "No independent decision owner is available for this exact run."
+                ),
+            },
+        )
+        decision = client.post(
+            _separation_override_grant_url(run_id=run["id"], grant_id=grant_id),
+            headers=_headers("separation-grant-decision"),
+            json={
+                "expectedVerdictVersion": 0,
+                "overallVerdict": "conditional",
+                "layerVerdicts": {
+                    "suites": {suite_execution_id: "conditional"},
+                    "modalities": {},
+                    "components": {},
+                    "riskDimensions": {},
+                },
+                "rationale": "The exact reviewed evidence supports this decision.",
+            },
+        )
+    finally:
+        app.dependency_overrides.pop(get_governance_decision_service, None)
+
+    assert grant.status_code == 201, grant.text
+    assert grant.json()["grantId"] == grant_id
+    assert "No independent decision owner" not in grant.text
+    assert decision.status_code == 201, decision.text
+    assert decision.json()["separationOverrideApplied"] is True
+    assert decision.json()["separationOverrideGrantId"] == grant_id
+    assert recorder.calls[0]["grantee_actor_id"] == USER
+    assert recorder.calls[0]["reason"].startswith("No independent")
+    assert recorder.calls[1]["grant_id"] == grant_id
 
 
 def test_owner_decision_override_rejects_invalid_reason_before_service(

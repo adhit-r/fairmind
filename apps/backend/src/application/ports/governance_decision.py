@@ -104,6 +104,70 @@ class PersistGovernanceDecisionCommand:
     rationale: str
     owner_override_reason: str | None
     decided_at: datetime
+    separation_override_grant_id: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class SeparationOverrideGrantRecord:
+    """One named, exact-run decision-separation exception."""
+
+    grant_id: str
+    scope: GovernanceDecisionScope
+    run_contract_version: str
+    envelope_id: str
+    envelope_hash: str
+    evidence_set_hash: str
+    expected_verdict_version: int
+    granted_by: str
+    grantee_actor_id: str
+    reason: str
+    granted_at: datetime
+    expires_at: datetime
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        grant_id: str,
+        scope: GovernanceDecisionScope,
+        run_contract_version: str,
+        envelope_id: str,
+        envelope_hash: str,
+        evidence_set_hash: str,
+        expected_verdict_version: int,
+        granted_by: str,
+        grantee_actor_id: str,
+        reason: str,
+        granted_at: datetime,
+        expires_at: datetime,
+    ) -> "SeparationOverrideGrantRecord":
+        return cls(
+            grant_id=grant_id,
+            scope=scope,
+            run_contract_version=run_contract_version,
+            envelope_id=envelope_id,
+            envelope_hash=envelope_hash,
+            evidence_set_hash=evidence_set_hash,
+            expected_verdict_version=expected_verdict_version,
+            granted_by=granted_by,
+            grantee_actor_id=grantee_actor_id,
+            reason=reason,
+            granted_at=granted_at,
+            expires_at=expires_at,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class PersistSeparationOverrideGrantCommand:
+    grant_id: str
+    scope: GovernanceDecisionScope
+    authority: GovernanceDecisionAuthorityRecord
+    expected_verdict_version: int
+    granted_by: str
+    grantee_actor_id: str
+    reason: str
+    granted_at: datetime
+    expires_at: datetime
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,6 +187,7 @@ class GovernanceDecisionRecord:
     suite_execution_ids: tuple[str, ...]
     operational_freshness: tuple[EvidenceFreshnessClassification, ...]
     owner_override_reason: str | None = None
+    separation_override_grant_id: str | None = None
 
     @classmethod
     def create(
@@ -143,6 +208,7 @@ class GovernanceDecisionRecord:
         suite_execution_ids: tuple[str, ...],
         operational_freshness: tuple[EvidenceFreshnessClassification, ...],
         owner_override_reason: str | None = None,
+        separation_override_grant_id: str | None = None,
     ) -> "GovernanceDecisionRecord":
         return cls(
             decision_id=decision_id,
@@ -160,6 +226,7 @@ class GovernanceDecisionRecord:
             suite_execution_ids=tuple(suite_execution_ids),
             operational_freshness=tuple(operational_freshness),
             owner_override_reason=owner_override_reason,
+            separation_override_grant_id=separation_override_grant_id,
         )
 
 
@@ -174,11 +241,31 @@ class GovernanceDecisionRepository(Protocol):
     ) -> bool:
         raise NotImplementedError
 
+    def authorize_governance_decision_actor_for_update(
+        self,
+        *,
+        organization_id: str,
+        actor_id: str,
+    ) -> bool: ...
+
     def load_governance_decision_authority_for_update(
         self,
         *,
         scope: GovernanceDecisionScope,
     ) -> GovernanceDecisionAuthorityRecord | None: ...
+
+    def load_separation_override_grant_for_update(
+        self,
+        *,
+        scope: GovernanceDecisionScope,
+        grant_id: str,
+        actor_id: str,
+    ) -> SeparationOverrideGrantRecord | None: ...
+
+    def persist_separation_override_grant(
+        self,
+        command: PersistSeparationOverrideGrantCommand,
+    ) -> SeparationOverrideGrantRecord: ...
 
     def persist_governance_decision(
         self,
@@ -204,5 +291,7 @@ __all__ = [
     "GovernanceDecisionScope",
     "GovernanceDecisionUnitOfWork",
     "PersistGovernanceDecisionCommand",
+    "PersistSeparationOverrideGrantCommand",
+    "SeparationOverrideGrantRecord",
     "UuidFactory",
 ]

@@ -278,6 +278,22 @@ MUTATION_MANIFEST = (
         "workbench",
     ),
     MutationRoute(
+        _RUN + "/separation-override-grants",
+        "create_separation_override_grant",
+        GovernanceDecisionService,
+        "create_separation_override_grant",
+        "evaluation-v2.governance-decision.separation-override-grant.create",
+        "workbench",
+    ),
+    MutationRoute(
+        _RUN + "/separation-override-grants/{grant_id}/decision",
+        "create_delegated_separation_override_decision",
+        GovernanceDecisionService,
+        "decide_delegated_override",
+        "evaluation-v2.governance-decision.delegated-separation-override",
+        "workbench",
+    ),
+    MutationRoute(
         _TRUST + "/issuers",
         "create_issuer",
         TrustAdministrationService,
@@ -572,8 +588,8 @@ def test_assurance_v2_mutation_manifest_is_the_exact_enabled_post_surface() -> N
         ("POST", item.path, item.endpoint) for item in MUTATION_MANIFEST
     }
 
-    assert len(MUTATION_MANIFEST) == 23
-    assert len({item.operation for item in MUTATION_MANIFEST}) == 23
+    assert len(MUTATION_MANIFEST) == 25
+    assert len({item.operation for item in MUTATION_MANIFEST}) == 25
     assert actual == expected
 
 

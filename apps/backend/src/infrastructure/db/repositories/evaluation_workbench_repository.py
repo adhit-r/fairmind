@@ -23,6 +23,7 @@ from database.governance_models import (
     GovernanceEvaluationPlanSuite,
     GovernanceEvaluationRun,
     GovernanceEvaluationDecision,
+    GovernanceSeparationOverrideGrant,
     GovernanceEvaluationRunSuiteExecution,
     GovernanceEvaluationSuiteEvidenceLink,
     GovernanceEvaluationSuiteVersion,
@@ -93,6 +94,8 @@ from src.application.ports.governance_decision import (
     GovernanceDecisionRecord,
     GovernanceDecisionScope,
     PersistGovernanceDecisionCommand,
+    PersistSeparationOverrideGrantCommand,
+    SeparationOverrideGrantRecord,
 )
 from src.application.evaluator_catalog_contracts import evaluator_binding_hash
 from src.application import evidence_freshness as freshness
@@ -3222,6 +3225,22 @@ class SqlAlchemyEvaluationWorkbenchRepository:
         ).scalar_one()
         return value is True
 
+    def authorize_governance_decision_actor_for_update(
+        self,
+        *,
+        organization_id: str,
+        actor_id: str,
+    ) -> bool:
+        self._require_postgres_governance_decisions()
+        value = self.db.execute(
+            text(
+                "SELECT fairmind_governance_decision_actor_authorized_013l"
+                "(:organization_id, :actor_id)"
+            ),
+            {"organization_id": organization_id, "actor_id": actor_id},
+        ).scalar_one()
+        return value is True
+
     def load_governance_decision_authority_for_update(
         self,
         *,
@@ -3443,6 +3462,139 @@ class SqlAlchemyEvaluationWorkbenchRepository:
             operational_freshness=operational_freshness,
         )
 
+    def persist_separation_override_grant(
+        self,
+        command: PersistSeparationOverrideGrantCommand,
+    ) -> SeparationOverrideGrantRecord:
+        """Append one immutable exact-graph delegation grant."""
+
+        self._require_postgres_governance_decisions()
+        authority = command.authority
+        scope = command.scope
+        if (
+            authority.scope != scope
+            or authority.run_contract_version != CONTRACT_VERSION
+            or authority.current_verdict_version != command.expected_verdict_version
+            or authority.technical_status != "succeeded"
+            or command.granted_by == command.grantee_actor_id
+            or command.expires_at - command.granted_at != timedelta(minutes=30)
+        ):
+            raise self._error(
+                "governance_decision_integrity_conflict",
+                "The separation-override grant authority is inconsistent.",
+                409,
+            )
+        grants = GovernanceSeparationOverrideGrant.__table__
+        evidence_set_json = canonical_json(authority.evidence_set.to_dict())
+        if hashlib.sha256(evidence_set_json.encode("utf-8")).hexdigest() != (
+            authority.evidence_set_hash
+        ):
+            raise self._error(
+                "governance_decision_integrity_conflict",
+                "The separation-override grant authority is inconsistent.",
+                409,
+            )
+        try:
+            row = (
+                self.db.execute(
+                    insert(grants)
+                    .values(
+                        id=command.grant_id,
+                        org_id=scope.organization_id,
+                        workspace_id=scope.workspace_id,
+                        system_id=scope.system_id,
+                        run_id=scope.run_id,
+                        run_contract_version=authority.run_contract_version,
+                        envelope_id=authority.envelope_id,
+                        envelope_hash=authority.envelope_hash,
+                        evidence_set_json=evidence_set_json,
+                        evidence_set_hash=authority.evidence_set_hash,
+                        expected_verdict_version=command.expected_verdict_version,
+                        granted_by=command.granted_by,
+                        grantee_actor_id=command.grantee_actor_id,
+                        reason=command.reason,
+                        granted_at=_iso(command.granted_at),
+                        expires_at=_iso(command.expires_at),
+                    )
+                    .returning(*grants.c)
+                )
+                .mappings()
+                .one()
+            )
+        except DBAPIError as error:
+            mapped = self._governance_decision_database_error(error)
+            if mapped is not None:
+                raise mapped from error
+            raise
+        return self._separation_override_grant_record(row)
+
+    def load_separation_override_grant_for_update(
+        self,
+        *,
+        scope: GovernanceDecisionScope,
+        grant_id: str,
+        actor_id: str,
+    ) -> SeparationOverrideGrantRecord | None:
+        """Lock one currently authorized grant for its named actor at decision time."""
+
+        self._require_postgres_governance_decisions()
+        grants = GovernanceSeparationOverrideGrant.__table__
+        row = (
+            self.db.execute(
+                select(grants)
+                .where(
+                    grants.c.id == grant_id,
+                    grants.c.org_id == scope.organization_id,
+                    grants.c.workspace_id == scope.workspace_id,
+                    grants.c.system_id == scope.system_id,
+                    grants.c.run_id == scope.run_id,
+                )
+                .with_for_update()
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if row is None:
+            return None
+        authorized = self.db.execute(
+            text(
+                "SELECT fairmind_delegated_separation_override_authorized_013l"
+                "(:grant_id, :organization_id, :actor_id)"
+            ),
+            {
+                "grant_id": grant_id,
+                "organization_id": scope.organization_id,
+                "actor_id": actor_id,
+            },
+        ).scalar_one()
+        if authorized is not True:
+            return None
+        return self._separation_override_grant_record(row)
+
+    @staticmethod
+    def _separation_override_grant_record(
+        row: Mapping[str, Any],
+    ) -> SeparationOverrideGrantRecord:
+        return SeparationOverrideGrantRecord.create(
+            grant_id=row["id"],
+            scope=GovernanceDecisionScope(
+                organization_id=row["org_id"],
+                workspace_id=row["workspace_id"],
+                system_id=row["system_id"],
+                run_id=row["run_id"],
+            ),
+            run_contract_version=row["run_contract_version"],
+            envelope_id=row["envelope_id"],
+            envelope_hash=row["envelope_hash"],
+            evidence_set_hash=row["evidence_set_hash"],
+            expected_verdict_version=row["expected_verdict_version"],
+            granted_by=row["granted_by"],
+            grantee_actor_id=row["grantee_actor_id"],
+            reason=row["reason"],
+            granted_at=_parse_timestamp(row["granted_at"]).astimezone(timezone.utc),
+            expires_at=_parse_timestamp(row["expires_at"]).astimezone(timezone.utc),
+        )
+
     @staticmethod
     def _governance_decision_database_error(
         error: DBAPIError,
@@ -3487,6 +3639,51 @@ class SqlAlchemyEvaluationWorkbenchRepository:
         }
         if sqlstate == "23514" and first_line in owner_override_trigger_messages:
             code, message, status_code = owner_override_trigger_messages[first_line]
+            return EvaluationWorkbenchError(code, message, status_code=status_code)
+        separation_override_trigger_messages = {
+            "separation override grant authority failed": (
+                "evaluation_separation_override_forbidden",
+                "Separation-override grant authority is not available.",
+                403,
+            ),
+            "separation override grant exact run failed": (
+                "governance_decision_integrity_conflict",
+                "The evaluation run changed before the grant was recorded.",
+                409,
+            ),
+            "separation override grant evidence binding failed": (
+                "governance_decision_integrity_conflict",
+                "The reviewed evidence set changed before the grant was recorded.",
+                409,
+            ),
+            "separation override grant is not required": (
+                "governance_decision_override_not_required",
+                "The named grantee has no decision-separation conflict to override.",
+                409,
+            ),
+            "delegated separation override authority failed": (
+                "evaluation_separation_override_grant_forbidden",
+                "The delegated separation-override grant is not available.",
+                403,
+            ),
+            "delegated separation override exact grant failed": (
+                "evaluation_separation_override_grant_forbidden",
+                "The delegated separation-override grant is not available.",
+                403,
+            ),
+            "separation override grant audit binding failed": (
+                "governance_decision_integrity_conflict",
+                "The separation-override grant integrity binding failed.",
+                409,
+            ),
+            "delegated separation override audit binding failed": (
+                "governance_decision_integrity_conflict",
+                "The delegated governance-decision integrity binding failed.",
+                409,
+            ),
+        }
+        if sqlstate == "23514" and first_line in separation_override_trigger_messages:
+            code, message, status_code = separation_override_trigger_messages[first_line]
             return EvaluationWorkbenchError(code, message, status_code=status_code)
         if sqlstate in {"P0001", "23514"} and first_line in (
             _GOVERNANCE_DECISION_TRIGGER_MESSAGES
@@ -3562,6 +3759,9 @@ class SqlAlchemyEvaluationWorkbenchRepository:
                         rationale=command.rationale,
                         decided_by=command.actor_id,
                         owner_override_reason=command.owner_override_reason,
+                        separation_override_grant_id=(
+                            command.separation_override_grant_id
+                        ),
                         evidence_set_json=evidence_set_json,
                         evidence_set_hash=evidence_set_hash,
                         decided_at=decided_at,
@@ -3569,6 +3769,7 @@ class SqlAlchemyEvaluationWorkbenchRepository:
                     .returning(
                         decisions.c.decided_at,
                         decisions.c.owner_override_reason,
+                        decisions.c.separation_override_grant_id,
                     )
                 )
                 .mappings()
@@ -3669,6 +3870,9 @@ class SqlAlchemyEvaluationWorkbenchRepository:
             suite_execution_ids=authority.suite_execution_ids,
             operational_freshness=operational_freshness,
             owner_override_reason=persisted["owner_override_reason"],
+            separation_override_grant_id=persisted[
+                "separation_override_grant_id"
+            ],
         )
 
     # ------------------------------------------------------------------
