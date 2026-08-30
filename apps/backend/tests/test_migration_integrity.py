@@ -20,6 +20,7 @@ from config.migration_integrity import (
     FROZEN_013G_OPERATOR_CHECKSUM,
     FROZEN_013H_OPERATOR_CHECKSUM,
     FROZEN_013I_OPERATOR_CHECKSUM,
+    FROZEN_013K_OPERATOR_CHECKSUM,
     FROZEN_ASSURANCE_MIGRATIONS,
     FROZEN_POSTGRESQL_ASSURANCE_CATALOGS,
     POSTGRESQL_ASSURANCE_CATALOG_SPEC,
@@ -71,6 +72,12 @@ POSTGRES_013J_OPERATOR = (
 )
 POSTGRES_OPERATOR_CHAIN_THROUGH_013J = POSTGRES_OPERATOR_CHAIN + (
     POSTGRES_013J_OPERATOR,
+)
+POSTGRES_013K_OPERATOR = (
+    "upgrade_paths/013j_to_013k_verified_evidence_link_integrity.sql"
+)
+POSTGRES_OPERATOR_CHAIN_THROUGH_013K = POSTGRES_OPERATOR_CHAIN_THROUGH_013J + (
+    POSTGRES_013K_OPERATOR,
 )
 POSTGRESQL_013B_PREREQUISITE_CONSTRAINTS = frozenset(
     {
@@ -737,6 +744,27 @@ def test_013j_operator_direct_and_ledger_sources_are_frozen() -> None:
     assert frozen.checksum in operator_source
 
 
+def test_013k_operator_direct_and_ledger_sources_are_frozen() -> None:
+    import hashlib
+
+    direct = MIGRATIONS / "013k_verified_evidence_link_integrity.sql"
+    operator = MIGRATIONS / POSTGRES_013K_OPERATOR
+    frozen = next(
+        item
+        for item in FROZEN_ASSURANCE_MIGRATIONS
+        if item.ledger_key == "013j-to-013k-verified-evidence-link-integrity-v1"
+    )
+    operator_source = operator.read_text(encoding="utf-8")
+
+    assert hashlib.sha256(direct.read_bytes()).hexdigest() == frozen.checksum
+    assert hashlib.sha256(operator.read_bytes()).hexdigest() == (
+        FROZEN_013K_OPERATOR_CHECKSUM
+    )
+    assert operator_source.count("\\ir ../013k_verified_evidence_link_integrity.sql") == 1
+    assert frozen.ledger_key in operator_source
+    assert frozen.checksum in operator_source
+
+
 def test_013j_catalog_manifest_covers_owner_authority_and_guards() -> None:
     assert {"organizations", "org_members", "org_roles"} <= (
         POSTGRESQL_ASSURANCE_CATALOG_SPEC.relations
@@ -1254,7 +1282,7 @@ def test_native_production_catalog_freeze_matches_two_operator_installs_and_tamp
     try:
         for ordinal, schema_name in enumerate(schemas):
             _install_postgresql_base_through_012(POSTGRES_URL, schema_name)
-            for migration_name in POSTGRES_OPERATOR_CHAIN_THROUGH_013J:
+            for migration_name in POSTGRES_OPERATOR_CHAIN_THROUGH_013K:
                 result = _run_postgresql_operator_migration(
                     POSTGRES_URL,
                     schema_name,
@@ -1265,7 +1293,7 @@ def test_native_production_catalog_freeze_matches_two_operator_installs_and_tamp
                 replay = _run_postgresql_operator_migration(
                     POSTGRES_URL,
                     schema_name,
-                    POSTGRES_013J_OPERATOR,
+                    POSTGRES_013K_OPERATOR,
                 )
                 assert replay.returncode == 0, replay.stderr
 
@@ -1552,7 +1580,7 @@ def test_native_013j_startup_rejects_every_missing_or_disabled_guard() -> None:
     )
     try:
         _install_postgresql_base_through_012(POSTGRES_URL, schema_name)
-        for migration_name in POSTGRES_OPERATOR_CHAIN_THROUGH_013J:
+        for migration_name in POSTGRES_OPERATOR_CHAIN_THROUGH_013K:
             result = _run_postgresql_operator_migration(
                 POSTGRES_URL,
                 schema_name,
@@ -1635,7 +1663,7 @@ def test_native_013j_catalog_rejects_function_acl_relation_and_trigger_drift() -
     engine = None
     try:
         _install_postgresql_base_through_012(POSTGRES_URL, schema_name)
-        for migration_name in POSTGRES_OPERATOR_CHAIN_THROUGH_013J:
+        for migration_name in POSTGRES_OPERATOR_CHAIN_THROUGH_013K:
             result = _run_postgresql_operator_migration(
                 POSTGRES_URL,
                 schema_name,
@@ -1958,7 +1986,7 @@ def test_native_013i_startup_rejects_disabled_and_missing_trigger() -> None:
     engine = None
     try:
         _install_postgresql_base_through_012(POSTGRES_URL, schema_name)
-        for migration_name in POSTGRES_OPERATOR_CHAIN_THROUGH_013J:
+        for migration_name in POSTGRES_OPERATOR_CHAIN_THROUGH_013K:
             result = _run_postgresql_operator_migration(
                 POSTGRES_URL,
                 schema_name,

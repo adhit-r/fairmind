@@ -199,11 +199,14 @@ def _assert_authority(
             "The governance verdict version is stale.",
         )
     if require_independent_actor and (
-        actor_id == authority.requested_by or actor_id in authority.evidence_submitters
+        actor_id == authority.requested_by
+        or actor_id in authority.evidence_submitters
+        or actor_id in authority.evidence_linkers
     ):
         raise _error(
             "governance_decision_separation_required",
-            "The decider must be independent from the run requester and evidence submitters.",
+            "The decider must be independent from the run requester, evidence submitters, "
+            "and evidence linkers.",
         )
     layer_suites = layers.to_dict()["suites"]
     if not isinstance(layer_suites, dict) or set(layer_suites) != set(
@@ -229,7 +232,10 @@ def _waived_relationships(
     authority: GovernanceDecisionAuthorityRecord,
     actor_id: str,
 ) -> list[dict[str, object]]:
-    if len(authority.admission_ids) != len(authority.admission_submitters):
+    if (
+        len(authority.admission_ids) != len(authority.admission_submitters)
+        or len(authority.admission_ids) != len(authority.admission_linkers)
+    ):
         raise _error(
             "governance_decision_integrity_conflict",
             "The locked governance-decision authority is inconsistent.",
@@ -253,6 +259,26 @@ def _waived_relationships(
                 "actorId": actor_id,
                 "resourceType": "evidence_admission",
                 "resourceIds": admission_ids,
+            }
+        )
+    linked_admission_ids = sorted(
+        {
+            admission_id
+            for admission_id, linked_by in zip(
+                authority.admission_ids,
+                authority.admission_linkers,
+                strict=True,
+            )
+            if linked_by == actor_id
+        }
+    )
+    if linked_admission_ids:
+        relationships.append(
+            {
+                "relationshipType": "evidence_linker",
+                "actorId": actor_id,
+                "resourceType": "evidence_admission",
+                "resourceIds": linked_admission_ids,
             }
         )
     if authority.requested_by == actor_id:

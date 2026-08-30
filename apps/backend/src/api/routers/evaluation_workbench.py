@@ -17,6 +17,9 @@ from api.composition.governance_decision import build_governance_decision_servic
 from api.composition.verified_evidence_admission import (
     build_verified_evidence_admission_service,
 )
+from api.composition.verified_evidence_link import (
+    build_verified_evidence_link_service,
+)
 from api.composition.verified_evidence_review import (
     build_verified_evidence_review_service,
 )
@@ -37,6 +40,7 @@ from src.api.routers.governance_assurance import (
     organization_membership,
 )
 from src.application.ports.evidence_admission import EvidenceAdmissionScope
+from src.application.ports.evidence_link import EvidenceLinkScope
 from src.application.ports.evidence_review import EvidenceReviewScope
 from src.application.ports.governance_decision import GovernanceDecisionScope
 from src.application.services.evaluation_catalog_versions_service import (
@@ -53,6 +57,9 @@ from src.application.evaluation_workbench_contracts import (
 from src.application.services.verified_evidence_admission_service import (
     VerifiedEvidenceAdmissionService,
 )
+from src.application.services.verified_evidence_link_service import (
+    VerifiedEvidenceLinkService,
+)
 from src.application.services.verified_evidence_review_service import (
     VerifiedEvidenceReviewService,
 )
@@ -63,6 +70,10 @@ router = APIRouter(tags=["evaluation-workbench-v2"])
 verified_evidence_router = APIRouter(
     prefix="/organizations/{org_id}",
     tags=["evaluation-workbench-v2-evidence"],
+)
+verified_evidence_link_router = APIRouter(
+    prefix="/organizations/{org_id}",
+    tags=["evaluation-workbench-v2-evidence-link"],
 )
 verified_evidence_review_router = APIRouter(
     prefix="/organizations/{org_id}",
@@ -423,19 +434,36 @@ class EvaluationRunV2Response(StrictModel):
     updated_at: str = Field(alias="updatedAt")
 
 
-class EvidenceAdmissionResponse(StrictModel):
-    """Safe response projection for one suite-specific verified admission."""
+class EvidenceSubmissionResponse(StrictModel):
+    """Safe response for a verified admission that is not linked yet."""
 
     admission_id: str = Field(alias="admissionId")
     evidence_run_id: str = Field(alias="evidenceRunId")
     passport_revision_id: str = Field(alias="passportRevisionId")
     verification_receipt_id: str = Field(alias="verificationReceiptId")
     nonce_claim_id: str = Field(alias="nonceClaimId")
-    suite_evidence_link_id: str = Field(alias="suiteEvidenceLinkId")
     run_id: str = Field(alias="runId")
     suite_execution_id: str = Field(alias="suiteExecutionId")
     envelope_hash: str = Field(alias="envelopeHash", pattern="^[0-9a-f]{64}$")
     passport_content_hash: str = Field(alias="passportContentHash", pattern="^[0-9a-f]{64}$")
+    technical_status: TechnicalStatus = Field(alias="technicalStatus")
+    evidence_result_status: EvidenceResultStatus = Field(alias="evidenceResultStatus")
+    admission_status: AdmissionStatus = Field(alias="admissionStatus")
+    freshness_status: FreshnessStatus = Field(alias="freshnessStatus")
+    link_status: Literal["pending"] = Field(alias="linkStatus")
+    effective_expires_at: str = Field(alias="effectiveExpiresAt")
+    verified_at: str = Field(alias="verifiedAt")
+
+
+class EvidenceLinkResponse(StrictModel):
+    """Safe response projection for one independently persisted link."""
+
+    admission_id: str = Field(alias="admissionId")
+    evidence_run_id: str = Field(alias="evidenceRunId")
+    passport_revision_id: str = Field(alias="passportRevisionId")
+    suite_evidence_link_id: str = Field(alias="suiteEvidenceLinkId")
+    run_id: str = Field(alias="runId")
+    suite_execution_id: str = Field(alias="suiteExecutionId")
     technical_status: TechnicalStatus = Field(alias="technicalStatus")
     evidence_result_status: EvidenceResultStatus = Field(alias="evidenceResultStatus")
     admission_status: AdmissionStatus = Field(alias="admissionStatus")
@@ -445,8 +473,8 @@ class EvidenceAdmissionResponse(StrictModel):
     run_evidence_outcome: EvidenceResultStatus = Field(alias="runEvidenceOutcome")
     overall_verdict: GovernanceVerdict = Field(alias="overallVerdict")
     verdict_version: int = Field(alias="verdictVersion", ge=0)
-    effective_expires_at: str = Field(alias="effectiveExpiresAt")
-    verified_at: str = Field(alias="verifiedAt")
+    linked_by: str = Field(alias="linkedBy")
+    linked_at: str = Field(alias="linkedAt")
 
 
 class EvidenceReviewRequest(StrictModel):
@@ -627,6 +655,17 @@ async def _read_request_body(request: Request) -> bytes:
     return bytes(body)
 
 
+async def _require_empty_request_body(request: Request) -> None:
+    if await _read_request_body(request):
+        raise HTTPException(
+            422,
+            detail={
+                "code": "request_body_not_allowed",
+                "message": "This mutation does not accept a request body.",
+            },
+        )
+
+
 async def _payload(request: Request, model: type[StrictModel]) -> dict[str, Any]:
     media_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
     if media_type != "application/json" and not media_type.endswith("+json"):
@@ -688,6 +727,14 @@ def get_verified_evidence_admission_service(
     """Compose the admission service only at the gated HTTP boundary."""
 
     return build_verified_evidence_admission_service(db)
+
+
+def get_verified_evidence_link_service(
+    db: Session = Depends(get_db),
+) -> VerifiedEvidenceLinkService:
+    """Resolve independently scoped verified-evidence linking."""
+
+    return build_verified_evidence_link_service(db)
 
 
 def get_verified_evidence_review_service(
@@ -790,6 +837,15 @@ def _require_verified_evidence_submit_enabled() -> None:
     _require_assurance_v2_capability(
         settings.assurance_v2_evidence_submit_enabled,
         "Verified evidence submission is not enabled.",
+    )
+
+
+def _require_verified_evidence_link_enabled() -> None:
+    """Hide linking until its independent authority gate passes."""
+
+    _require_assurance_v2_capability(
+        settings.assurance_v2_evidence_link_enabled,
+        "Verified evidence linking is not enabled.",
     )
 
 
@@ -1338,7 +1394,7 @@ for capability_router in (
     "/workspaces/{workspace_id}/systems/{system_id}/evaluation-v2/runs/{run_id}"
     "/suite-executions/{suite_execution_id}/evidence",
     status_code=201,
-    response_model=EvidenceAdmissionResponse,
+    response_model=EvidenceSubmissionResponse,
     dependencies=[Depends(_require_verified_evidence_submit_enabled)],
     openapi_extra={
         "requestBody": {
@@ -1368,7 +1424,7 @@ async def submit_verified_evidence(
         get_verified_evidence_admission_service
     ),
 ):
-    """Admit one signed Passport to one exact suite execution.
+    """Verify one signed Passport without linking it to run projections.
 
     The submitted bytes remain opaque at this transport boundary. The
     admission service parses and authenticates them only after resolving the
@@ -1376,7 +1432,6 @@ async def submit_verified_evidence(
     """
 
     require_evaluation_permission(membership, EVALUATION_EVIDENCE_SUBMIT_PERMISSION)
-    require_evaluation_permission(membership, EVALUATION_EVIDENCE_LINK_PERMISSION)
     if membership.org_id != org_id:
         _missing("evidence_scope")
     _require_evidence_scope(
@@ -1398,7 +1453,7 @@ async def submit_verified_evidence(
         )
     raw_passport = await _read_request_body(request)
     try:
-        result = admission_service.admit_verified_passport_v2(
+        result = admission_service.submit_verified_passport_v2(
             scope=EvidenceAdmissionScope(
                 organization_id=membership.org_id,
                 system_id=system_id,
@@ -1409,7 +1464,63 @@ async def submit_verified_evidence(
             idempotency_key=idempotency_key,
             raw_passport=raw_passport,
         )
-        return _respond(result, EvidenceAdmissionResponse)
+        return _respond(result, EvidenceSubmissionResponse)
+    except EvaluationWorkbenchError as error:
+        _raise(error)
+
+
+@verified_evidence_link_router.post(
+    "/workspaces/{workspace_id}/systems/{system_id}/evaluation-v2/runs/{run_id}"
+    "/suite-executions/{suite_execution_id}/evidence-admissions/{admission_id}"
+    "/passport-revisions/{passport_revision_id}/link",
+    status_code=201,
+    response_model=EvidenceLinkResponse,
+    dependencies=[Depends(_require_verified_evidence_link_enabled)],
+)
+async def link_verified_evidence(
+    org_id: str,
+    workspace_id: str,
+    system_id: str,
+    run_id: str,
+    suite_execution_id: str,
+    admission_id: str,
+    passport_revision_id: str,
+    request: Request,
+    idempotency_key: str = Header(alias="Idempotency-Key"),
+    membership: OrgMembership = Depends(organization_membership),
+    db: Session = Depends(get_db),
+    link_service: VerifiedEvidenceLinkService = Depends(
+        get_verified_evidence_link_service
+    ),
+):
+    """Link one exact stored verified admission to its suite execution."""
+
+    require_evaluation_permission(membership, EVALUATION_EVIDENCE_LINK_PERMISSION)
+    if membership.org_id != org_id:
+        _missing("evidence_scope")
+    _require_evidence_scope(
+        db=db,
+        organization_id=membership.org_id,
+        workspace_id=workspace_id,
+        system_id=system_id,
+        run_id=run_id,
+        suite_execution_id=suite_execution_id,
+    )
+    await _require_empty_request_body(request)
+    try:
+        result = link_service.link_verified_evidence(
+            scope=EvidenceLinkScope(
+                organization_id=membership.org_id,
+                system_id=system_id,
+                run_id=run_id,
+                suite_execution_id=suite_execution_id,
+                admission_id=admission_id,
+                passport_revision_id=passport_revision_id,
+            ),
+            actor_id=membership.user_id,
+            idempotency_key=idempotency_key,
+        )
+        return _respond(result, EvidenceLinkResponse)
     except EvaluationWorkbenchError as error:
         _raise(error)
 
