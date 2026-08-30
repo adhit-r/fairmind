@@ -57,6 +57,9 @@ class Settings(BaseSettings):
     # Verified Evidence Passport admission remains independently disabled until
     # the route, trust catalog, and reviewer workflow pass their release gate.
     assurance_v2_evidence_submit_enabled: bool = False
+    # Linking a verified admission is a separate mutation and remains hidden
+    # until its PostgreSQL authority and separation controls pass release gates.
+    assurance_v2_evidence_link_enabled: bool = False
     # Unsigned reports are separately disabled by default. When enabled, they
     # remain explicitly unverified, human-review-only material.
     assurance_v2_evidence_import_enabled: bool = False

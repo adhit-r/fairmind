@@ -1570,3 +1570,43 @@ def test_native_postgresql_013i_rejects_reject_and_retired_policy(
         )
     with pytest.raises(DBAPIError):
         _insert_postgresql_unverified_import(postgresql_013i_engine, retired_graph)
+
+
+def test_native_postgresql_013k_preserves_exact_unverified_import_links(
+    postgresql_013i_engine: object,
+) -> None:
+    """013k must layer verified-link authority without replacing the 013b/013i path."""
+    from sqlalchemy import text
+
+    with postgresql_013i_engine.begin() as connection:
+        schema_name = str(connection.scalar(text("SELECT current_schema()")))
+        for migration_name in (
+            "013j_owner_decision_override_integrity.sql",
+            "013k_verified_evidence_link_integrity.sql",
+        ):
+            connection.execute(
+                text(
+                    "SELECT pg_catalog.set_config"
+                    "('fairmind.migration_schema', :schema_name, false)"
+                ),
+                {"schema_name": schema_name},
+            )
+            connection.execute(
+                text((MIGRATIONS / migration_name).read_text(encoding="utf-8"))
+            )
+
+    graph = _seed_postgresql_run(
+        postgresql_013i_engine,
+        delivery_mode="imported_report",
+    )
+    _insert_postgresql_unverified_import(postgresql_013i_engine, graph)
+    _project_postgresql_unverified_import(postgresql_013i_engine, graph)
+
+    with postgresql_013i_engine.connect() as connection:
+        assert connection.scalar(
+            text(
+                "SELECT count(*) FROM governance_evaluation_suite_evidence_links "
+                "WHERE suite_execution_id=:execution_id"
+            ),
+            graph,
+        ) == 1

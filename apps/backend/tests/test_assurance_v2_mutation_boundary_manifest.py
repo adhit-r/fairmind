@@ -31,6 +31,7 @@ from api.composition.trust_administration import build_trust_administration_serv
 from api.composition.verified_evidence_admission import (
     build_verified_evidence_admission_service,
 )
+from api.composition.verified_evidence_link import build_verified_evidence_link_service
 from api.composition.verified_evidence_review import build_verified_evidence_review_service
 from api.routes.evaluation_workbench import (
     governance_decision_router,
@@ -40,6 +41,7 @@ from api.routes.evaluation_workbench import (
     suite_versions_router,
     target_versions_router,
     verified_evidence_review_router,
+    verified_evidence_link_router,
     verified_evidence_router,
 )
 from api.routes.imported_evidence import imported_evidence_router
@@ -54,6 +56,7 @@ from src.application.services.evaluation_catalog_versions_service import (
 )
 from src.application.services.evaluation_plan_service import EvaluationPlanService
 from src.application.services.evaluation_run_service import EvaluationRunService
+from src.application.ports.evidence_admission import EvidenceAdmissionRepository
 from src.application.ports.evaluation_worker import EvaluationWorkerPort
 from src.application.services.evaluator_catalog_service import EvaluatorCatalogService
 from src.application.services.governance_decision_service import GovernanceDecisionService
@@ -62,10 +65,12 @@ from src.application.services.trust_administration_service import TrustAdministr
 from src.application.services.verified_evidence_admission_service import (
     VerifiedEvidenceAdmissionService,
 )
+from src.application.services.verified_evidence_link_service import VerifiedEvidenceLinkService
 from src.application.services.verified_evidence_review_service import (
     VerifiedEvidenceReviewService,
 )
 from src.infrastructure.db.repositories.evaluation_workbench_repository import (
+    SqlAlchemyEvaluationWorkbenchRepository,
     SqlAlchemyEvaluationWorkbenchUnitOfWork,
     SqlAlchemyEvaluatorCatalogUnitOfWork,
 )
@@ -222,9 +227,21 @@ MUTATION_MANIFEST = (
         _RUN + "/suite-executions/{suite_execution_id}/evidence",
         "submit_verified_evidence",
         VerifiedEvidenceAdmissionService,
-        "admit_verified_passport_v2",
-        "evaluation-v2.evidence.verified-admit",
+        "submit_verified_passport_v2",
+        "evaluation-v2.evidence.verified-submit",
         "workbench",
+        operation_helper="_mutate_verified_passport_v2",
+        mutation_helper="_mutate_verified_passport_v2",
+    ),
+    MutationRoute(
+        _RUN
+        + "/suite-executions/{suite_execution_id}/evidence-admissions/{admission_id}"
+        + "/passport-revisions/{passport_revision_id}/link",
+        "link_verified_evidence",
+        VerifiedEvidenceLinkService,
+        "link_verified_evidence",
+        "evaluation-v2.evidence.verified-link",
+        "link",
     ),
     MutationRoute(
         _RUN + "/suite-executions/{suite_execution_id}/evidence-imports",
@@ -329,6 +346,7 @@ def _mounted_mutation_routes() -> tuple[APIRoute, ...]:
         plans_router,
         runs_router,
         verified_evidence_router,
+        verified_evidence_link_router,
         imported_evidence_router,
         verified_evidence_review_router,
         governance_decision_router,
@@ -444,6 +462,8 @@ def _route_service_reference(item: MutationRoute) -> str:
         return "catalog_service"
     if item.service is VerifiedEvidenceAdmissionService:
         return "admission_service"
+    if item.service is VerifiedEvidenceLinkService:
+        return "link_service"
     if item.service is VerifiedEvidenceReviewService:
         return "review_service"
     if item.service is GovernanceDecisionService:
@@ -533,6 +553,14 @@ def test_worker_port_is_reserved_without_a_mounted_v2_execution_route() -> None:
     )
 
 
+def test_verified_evidence_has_no_legacy_atomic_admit_and_link_capability() -> None:
+    """Submission and linking must remain separately authorized capabilities."""
+
+    assert "admit_verified_passport_v2" not in VerifiedEvidenceAdmissionService.__dict__
+    assert "persist_verified_passport_v2" not in EvidenceAdmissionRepository.__dict__
+    assert "persist_verified_passport_v2" not in SqlAlchemyEvaluationWorkbenchRepository.__dict__
+
+
 def test_assurance_v2_mutation_manifest_is_the_exact_enabled_post_surface() -> None:
     """A new enabled V2 mutation cannot silently escape the central manifest."""
 
@@ -544,8 +572,8 @@ def test_assurance_v2_mutation_manifest_is_the_exact_enabled_post_surface() -> N
         ("POST", item.path, item.endpoint) for item in MUTATION_MANIFEST
     }
 
-    assert len(MUTATION_MANIFEST) == 22
-    assert len({item.operation for item in MUTATION_MANIFEST}) == 22
+    assert len(MUTATION_MANIFEST) == 23
+    assert len({item.operation for item in MUTATION_MANIFEST}) == 23
     assert actual == expected
 
 
@@ -652,6 +680,11 @@ def test_every_manifest_operation_reaches_a_shared_sqlalchemy_mutation_uow() -> 
                 "_unit_of_work",
                 SqlAlchemyEvaluationWorkbenchUnitOfWork,
             ),
+            "link": (
+                build_verified_evidence_link_service(session),
+                "_unit_of_work",
+                SqlAlchemyEvaluationWorkbenchUnitOfWork,
+            ),
             "review": (
                 build_verified_evidence_review_service(session),
                 "unit_of_work",
@@ -673,6 +706,7 @@ def test_every_manifest_operation_reaches_a_shared_sqlalchemy_mutation_uow() -> 
             "catalog",
             "trust",
             "import",
+            "link",
         }
         for service, attribute, expected_type in compositions.values():
             unit_of_work = getattr(service, attribute)

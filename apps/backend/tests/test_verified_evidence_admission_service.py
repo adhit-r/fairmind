@@ -24,7 +24,6 @@ from src.application.ports.evidence_admission import (
     ExpectedServerBinding,
     TrustedEvidenceAdmissionContext,
     TrustedSigningKey,
-    VerifiedPassportV2Record,
 )
 from src.application.services.evidence_authenticity_service import (
     AuthenticityCandidate,
@@ -364,10 +363,10 @@ class FakeRepository:
         self.catalog_resolution_calls.append(kwargs)
         return self.catalog_registration
 
-    def persist_verified_passport_v2(self, command):
-        self.events.append("persist")
+    def persist_verified_passport_v2_submission(self, command):
+        self.events.append("persist_submission")
         self.persisted.append(command)
-        return VerifiedPassportV2Record(
+        return SimpleNamespace(
             organization_id=command.scope.organization_id,
             workspace_id=command.authority.run.workspace_id,
             system_id=command.scope.system_id,
@@ -378,18 +377,12 @@ class FakeRepository:
             verification_receipt_id=command.verification_receipt_id,
             admission_id=command.admission_id,
             nonce_claim_id=command.nonce_claim_id,
-            suite_evidence_link_id=command.suite_evidence_link_id,
             envelope_hash=command.authority.run.envelope_hash,
             passport_content_hash=command.passport_content_hash,
             technical_status=command.technical_status,
             evidence_result_status=command.evidence_result_status,
             admission_status="verified",
-            review_status="pending",
             freshness_status="current",
-            run_technical_status=command.run_technical_status,
-            run_evidence_outcome=command.run_evidence_outcome,
-            overall_verdict=command.authority.run.overall_verdict,
-            verdict_version=command.authority.run.verdict_version,
             effective_expires_at=command.effective_expires_at,
             verified_at=command.verified_at,
         )
@@ -499,14 +492,14 @@ def _configured_service(
     return service, unit_of_work, repository, authenticity, resolver
 
 
-def test_verified_admission_persists_exact_graph_with_fresh_database_time() -> None:
+def test_verified_submission_persists_claim_without_link_or_run_projection() -> None:
     service, unit_of_work, repository, authenticity, resolver = _configured_service()
     raw = _passport_bytes()
 
-    result = service.admit_verified_passport_v2(
+    result = service.submit_verified_passport_v2(
         scope=SCOPE,
-        actor_id="reviewer-a",
-        idempotency_key="admit-key-a",
+        actor_id="submitter-a",
+        idempotency_key="submit-key-a",
         raw_passport=raw,
     )
 
@@ -517,7 +510,6 @@ def test_verified_admission_persists_exact_graph_with_fresh_database_time() -> N
         "passportRevisionId",
         "verificationReceiptId",
         "nonceClaimId",
-        "suiteEvidenceLinkId",
         "runId",
         "suiteExecutionId",
         "envelopeHash",
@@ -525,80 +517,25 @@ def test_verified_admission_persists_exact_graph_with_fresh_database_time() -> N
         "technicalStatus",
         "evidenceResultStatus",
         "admissionStatus",
-        "reviewStatus",
         "freshnessStatus",
-        "runTechnicalStatus",
-        "runEvidenceOutcome",
-        "overallVerdict",
-        "verdictVersion",
+        "linkStatus",
         "effectiveExpiresAt",
         "verifiedAt",
     }
+    assert result.body["linkStatus"] == "pending"
     assert len(resolver.calls) == 2
     assert authenticity.calls[0][3] == FIRST_DATABASE_NOW
-    assert repository.events == ["persist", "constraints"]
+    assert repository.events == ["persist_submission", "constraints"]
     command = repository.persisted[0]
-    graph_ids = {
-        command.evidence_run_id,
-        command.passport_revision_id,
-        command.verification_receipt_id,
-        command.admission_id,
-        command.nonce_claim_id,
-        command.suite_evidence_link_id,
-    }
-    assert len(graph_ids) == 6
-    assert all(str(UUID(value)) == value for value in graph_ids)
-    assert command.evidence_id is None
-    assert command.previous_revision_hash is None
+    assert not hasattr(command, "suite_evidence_link_id")
+    assert not hasattr(command, "run_technical_status")
+    assert not hasattr(command, "run_evidence_outcome")
     assert command.verified_at == VERIFIED_AT
-    assert command.evidence_created_at == VERIFIED_AT
-    assert command.revision_created_at == VERIFIED_AT
     assert command.effective_expires_at == CAPTURED_AT + timedelta(seconds=600)
-    assert command.run_technical_status == "succeeded"
-    assert command.run_evidence_outcome == "failed"
-    assert command.suite_started_at == VERIFIED_AT
-    assert command.suite_completed_at == VERIFIED_AT
-    assert command.run_started_at == VERIFIED_AT
-    assert command.run_completed_at == VERIFIED_AT
-    assert command.evaluator_projection.to_dict() == {
-        "issuerId": "issuer-protocol-a",
-        "evaluatorId": "evaluator-a",
-        "sourceType": "external_provider",
-        "adapterName": "inspect",
-        "adapterVersion": "0.3.0",
-        "resultContractVersion": "1.0.0",
-    }
-    assert command.evaluator_registration_id == "catalog-registration-a"
-    assert command.evaluator_registration_binding_hash == _approved_catalog_registration().binding_hash
-    assert len(repository.catalog_resolution_calls) == 1
-    resolution = repository.catalog_resolution_calls[0]
-    assert resolution["scope"] == SCOPE
-    assert resolution["evaluator_id"] == "evaluator-a"
-    assert resolution["issuer_id"] == "issuer-protocol-a"
-    assert resolution["signing_key_id"] == "key-protocol-a"
-    assert resolution["verified_at"] == VERIFIED_AT
-    expected_request_hash = canonical_sha256(
-        {
-            "method": "POST",
-            "operation": "evaluation-v2.evidence.verified-admit",
-            "scope": {
-                "organizationId": SCOPE.organization_id,
-                "systemId": SCOPE.system_id,
-                "runId": SCOPE.run_id,
-                "suiteExecutionId": SCOPE.suite_execution_id,
-            },
-            "body": {
-                "contractVersion": "2.0.0",
-                "rawPassport": {
-                    "sha256": hashlib.sha256(raw).hexdigest(),
-                    "byteLength": len(raw),
-                },
-            },
-        }
-    )
-    assert unit_of_work.command.request_hash == expected_request_hash
+    assert unit_of_work.command.operation == "evaluation-v2.evidence.verified-submit"
+    assert unit_of_work.outcome.audit_action == "evaluation_v2.evidence.verified_submitted"
     assert unit_of_work.outcome.audit_details.to_dict() == {
-        "schemaVersion": "evaluation-v2.verified-evidence-admission/v1",
+        "schemaVersion": "evaluation-v2.verified-evidence-submission/v1",
         "runId": SCOPE.run_id,
         "suiteExecutionId": SCOPE.suite_execution_id,
         "admissionId": command.admission_id,
@@ -606,19 +543,38 @@ def test_verified_admission_persists_exact_graph_with_fresh_database_time() -> N
         "passportRevisionId": command.passport_revision_id,
         "verificationReceiptId": command.verification_receipt_id,
         "nonceClaimId": command.nonce_claim_id,
-        "suiteEvidenceLinkId": command.suite_evidence_link_id,
         "envelopeHash": command.authority.run.envelope_hash,
         "passportContentHash": command.passport_content_hash,
         "technicalStatus": "succeeded",
         "evidenceResultStatus": "failed",
         "admissionStatus": "verified",
-        "reviewStatus": "pending",
         "freshnessStatus": "current",
-        "runTechnicalStatus": "succeeded",
-        "runEvidenceOutcome": "failed",
+        "linkStatus": "pending",
         "evaluatorRegistrationId": command.evaluator_registration_id,
         "evaluatorRegistrationBindingHash": command.evaluator_registration_binding_hash,
     }
+
+
+def test_verified_submission_does_not_apply_link_projection_eligibility() -> None:
+    authority = _authority(
+        run_technical_status="succeeded",
+        run_evidence_outcome="passed",
+    )
+    service, unit_of_work, repository, _authenticity, _resolver = _configured_service(
+        authority=authority,
+    )
+
+    result = service.submit_verified_passport_v2(
+        scope=SCOPE,
+        actor_id="submitter-a",
+        idempotency_key="submit-before-link-projection-check",
+        raw_passport=_passport_bytes(),
+    )
+
+    assert result.status == 201
+    assert result.body["linkStatus"] == "pending"
+    assert repository.events == ["persist_submission", "constraints"]
+    assert unit_of_work.rejections == []
 
 
 def test_signed_evaluator_must_have_an_approved_persistent_registration() -> None:
@@ -627,7 +583,7 @@ def test_signed_evaluator_must_have_an_approved_persistent_registration() -> Non
     )
 
     with pytest.raises(EvaluationWorkbenchError) as caught:
-        service.admit_verified_passport_v2(
+        service.submit_verified_passport_v2(
             scope=SCOPE,
             actor_id="reviewer-a",
             idempotency_key="unregistered-evaluator-a",
@@ -656,7 +612,7 @@ def test_signed_evaluator_must_exactly_match_locked_delivery_and_suite(
     service, unit_of_work, repository, _, _ = _configured_service()
 
     with pytest.raises(EvaluationWorkbenchError) as caught:
-        service.admit_verified_passport_v2(
+        service.submit_verified_passport_v2(
             scope=SCOPE,
             actor_id="reviewer-a",
             idempotency_key=f"mismatch-{field}",
@@ -673,7 +629,7 @@ def test_authority_must_remain_identical_across_authenticity_verification() -> N
     service, _, repository, _, _ = _configured_service(second_hash="8" * 64)
 
     with pytest.raises(EvaluationWorkbenchError) as caught:
-        service.admit_verified_passport_v2(
+        service.submit_verified_passport_v2(
             scope=SCOPE,
             actor_id="reviewer-a",
             idempotency_key="authority-race-a",
@@ -710,7 +666,7 @@ def test_parse_and_authenticity_rejections_are_bounded_inside_the_mutation(
     )
 
     with pytest.raises(EvaluationWorkbenchError) as caught:
-        service.admit_verified_passport_v2(
+        service.submit_verified_passport_v2(
             scope=SCOPE,
             actor_id="reviewer-a",
             idempotency_key=f"reject-{expected_code}",
@@ -753,7 +709,7 @@ def test_database_chronology_and_strict_effective_expiry_are_enforced(
     service, _, repository, _, _ = _configured_service(verified_at=verified_at)
 
     with pytest.raises(EvaluationWorkbenchError) as caught:
-        service.admit_verified_passport_v2(
+        service.submit_verified_passport_v2(
             scope=SCOPE,
             actor_id="reviewer-a",
             idempotency_key=f"chronology-{expected_code}",
@@ -765,99 +721,3 @@ def test_database_chronology_and_strict_effective_expiry_are_enforced(
 
     assert caught.value.code == expected_code
     assert repository.persisted == []
-
-
-def test_succeeded_cannot_skip_from_queued_state() -> None:
-    authority = _authority(executions=(_execution(technical_status="queued"),))
-    service, _, repository, _, _ = _configured_service(authority=authority)
-
-    with pytest.raises(EvaluationWorkbenchError) as caught:
-        service.admit_verified_passport_v2(
-            scope=SCOPE,
-            actor_id="reviewer-a",
-            idempotency_key="skip-running-a",
-            raw_passport=_passport_bytes(),
-        )
-
-    assert caught.value.code == "suite_execution_transition_invalid"
-    assert repository.persisted == []
-
-
-def test_terminal_parent_accepts_exact_terminal_but_unlinked_sibling() -> None:
-    completed = REQUESTED_AT + timedelta(seconds=30)
-    current = _execution(
-        technical_status="succeeded",
-        evidence_result_status="failed",
-        started_at=REQUESTED_AT + timedelta(seconds=10),
-        completed_at=completed,
-    )
-    sibling = _execution(
-        execution_id="suite-execution-b",
-        ordinal=1,
-        suite_version_id="suite-version-b",
-        technical_status="failed",
-        evidence_result_status="error",
-        completed_at=completed,
-    )
-    authority = _authority(
-        executions=(current, sibling),
-        run_technical_status="failed",
-        run_evidence_outcome="failed",
-        run_started_at=REQUESTED_AT + timedelta(seconds=10),
-        run_completed_at=completed,
-    )
-    service, _, repository, _, _ = _configured_service(authority=authority)
-
-    service.admit_verified_passport_v2(
-        scope=SCOPE,
-        actor_id="reviewer-a",
-        idempotency_key="terminal-unlinked-a",
-        raw_passport=_passport_bytes(),
-    )
-
-    command = repository.persisted[0]
-    assert command.run_technical_status == "failed"
-    assert command.run_evidence_outcome == "failed"
-    assert command.run_completed_at == completed
-    assert command.suite_started_at == REQUESTED_AT + timedelta(seconds=10)
-    assert command.suite_completed_at == completed
-
-
-def test_cancelled_suite_can_admit_pending_without_false_failure() -> None:
-    service, _, repository, _, _ = _configured_service()
-
-    service.admit_verified_passport_v2(
-        scope=SCOPE,
-        actor_id="reviewer-a",
-        idempotency_key="cancelled-pending-a",
-        raw_passport=_passport_bytes(
-            technical_status="cancelled",
-            evidence_result_status="pending",
-        ),
-    )
-
-    command = repository.persisted[0]
-    assert (command.technical_status, command.evidence_result_status) == (
-        "cancelled",
-        "pending",
-    )
-    assert (command.run_technical_status, command.run_evidence_outcome) == (
-        "cancelled",
-        "pending",
-    )
-
-
-def test_version_zero_review_verdict_is_preserved_as_governance_not_evidence() -> None:
-    authority = _authority(overall_verdict="review")
-    service, _, repository, _, _ = _configured_service(authority=authority)
-
-    result = service.admit_verified_passport_v2(
-        scope=SCOPE,
-        actor_id="reviewer-a",
-        idempotency_key="review-verdict-a",
-        raw_passport=_passport_bytes(),
-    )
-
-    assert result.body["overallVerdict"] == "review"
-    assert result.body["verdictVersion"] == 0
-    assert repository.persisted[0].evidence_result_status == "failed"

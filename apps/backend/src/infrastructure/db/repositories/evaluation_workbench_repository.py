@@ -66,8 +66,14 @@ from src.application.ports.evidence_admission import (
     ApprovedEvaluatorRegistration,
     EvidenceAdmissionAuthorityRecord,
     EvidenceAdmissionScope,
-    PersistVerifiedPassportV2Command,
-    VerifiedPassportV2Record,
+    PersistVerifiedPassportV2SubmissionCommand,
+    VerifiedPassportV2SubmissionRecord,
+)
+from src.application.ports.evidence_link import (
+    EvidenceLinkScope,
+    PersistVerifiedEvidenceLinkCommand,
+    VerifiedEvidenceLinkAuthorityRecord,
+    VerifiedEvidenceLinkRecord,
 )
 from src.application.ports.imported_evidence import (
     ImportedEvidenceAuthorityRecord,
@@ -117,6 +123,7 @@ from src.domain.assurance.evaluation_v2 import (
     reject_sensitive_keys,
     validate_public_safe_values,
 )
+from src.domain.assurance.evidence_passport_v2 import MAX_PASSPORT_BYTES
 from src.infrastructure.db.repositories.evaluation_audit_chain import (
     EvaluationAuditAppend,
     EvaluationAuditChainIntegrityError,
@@ -186,6 +193,7 @@ _EVIDENCE_P0001_INTEGRITY_MESSAGES = frozenset(
         "nonce claim timestamp is not causal",
         "evidence link requires an eligible claimed admission",
         "evidence link timestamp is not causal",
+        "verified evidence link requires an exact current authority chain",
         "verification receipt relational binding failed",
         "verified admission requires exact verification receipt",
         "verification receipt requires exact verified admission",
@@ -268,11 +276,18 @@ _GOVERNANCE_DECISION_TRIGGER_MESSAGES = {
     ),
     "decider must differ from requester": (
         "governance_decision_separation_required",
-        "The decider must be independent from the run requester and evidence submitters.",
+        "The decider must be independent from the run requester, evidence submitters, "
+        "and evidence linkers.",
     ),
     "decider must differ from submitter": (
         "governance_decision_separation_required",
-        "The decider must be independent from the run requester and evidence submitters.",
+        "The decider must be independent from the run requester, evidence submitters, "
+        "and evidence linkers.",
+    ),
+    "decider must differ from evidence linker": (
+        "governance_decision_separation_required",
+        "The decider must be independent from the run requester, evidence submitters, "
+        "and evidence linkers.",
     ),
     "owner override is not enabled": (
         "governance_decision_owner_override_unavailable",
@@ -1283,7 +1298,7 @@ class SqlAlchemyEvaluationWorkbenchRepository:
 
     def _verified_graph_is_occupied(
         self,
-        command: PersistVerifiedPassportV2Command,
+        command: PersistVerifiedPassportV2SubmissionCommand,
     ) -> bool:
         scope = command.scope
         authority = command.authority
@@ -1542,7 +1557,8 @@ class SqlAlchemyEvaluationWorkbenchRepository:
 
     def _exact_run_snapshot_predicates(
         self,
-        command: PersistVerifiedPassportV2Command | PersistUnverifiedImportedEvidenceCommand,
+        command: PersistUnverifiedImportedEvidenceCommand
+        | PersistVerifiedEvidenceLinkCommand,
     ) -> tuple[Any, ...]:
         run = command.authority.run
         table = GovernanceEvaluationRun.__table__
@@ -1574,11 +1590,11 @@ class SqlAlchemyEvaluationWorkbenchRepository:
             table.c.updated_at == run.updated_at,
         )
 
-    def persist_verified_passport_v2(
+    def persist_verified_passport_v2_submission(
         self,
-        command: PersistVerifiedPassportV2Command,
-    ) -> VerifiedPassportV2Record:
-        """Persist one signed Passport V2 graph and its projections atomically."""
+        command: PersistVerifiedPassportV2SubmissionCommand,
+    ) -> VerifiedPassportV2SubmissionRecord:
+        """Persist a verified, nonce-claimed graph without linking projections."""
 
         scope = command.scope
         authority = command.authority
@@ -1597,20 +1613,6 @@ class SqlAlchemyEvaluationWorkbenchRepository:
             raise self._error(
                 "evidence_admission_integrity_conflict",
                 _EVIDENCE_INTEGRITY_MESSAGE,
-                409,
-            )
-        selected = next(
-            (
-                execution
-                for execution in authority.run.suite_executions
-                if execution.id == scope.suite_execution_id
-            ),
-            None,
-        )
-        if selected is None:
-            raise self._error(
-                "suite_projection_conflict",
-                _SUITE_PROJECTION_CONFLICT_MESSAGE,
                 409,
             )
         if self._verified_graph_is_occupied(command):
@@ -1646,6 +1648,7 @@ class SqlAlchemyEvaluationWorkbenchRepository:
                 _EVIDENCE_INTEGRITY_MESSAGE,
                 409,
             )
+
         verified_at = self._timestamp_value(command.verified_at)
         captured_at = self._timestamp_value(command.captured_at)
         signed_at = self._timestamp_value(command.signed_at)
@@ -1676,8 +1679,12 @@ class SqlAlchemyEvaluationWorkbenchRepository:
                     assurance_source="evaluation",
                     result=command.evidence_result_status,
                     provenance_json=canonical_json({}),
-                    artifact_refs_json=canonical_json(_thaw_json_array(command.artifact_refs)),
-                    limitations_json=canonical_json(_thaw_json_array(command.limitations)),
+                    artifact_refs_json=canonical_json(
+                        _thaw_json_array(command.artifact_refs)
+                    ),
+                    limitations_json=canonical_json(
+                        _thaw_json_array(command.limitations)
+                    ),
                     captured_at=captured_at,
                     expires_at=effective_expires_at,
                     evidence_id=command.evidence_id,
@@ -1715,7 +1722,9 @@ class SqlAlchemyEvaluationWorkbenchRepository:
                     passport_snapshot_hash=command.passport_snapshot_hash,
                     signature_input_hash=command.signature_input_hash,
                     execution_binding_hash=command.execution_binding_hash,
-                    execution_binding_json=canonical_json(command.execution_binding.to_dict()),
+                    execution_binding_json=canonical_json(
+                        command.execution_binding.to_dict()
+                    ),
                     trust_policy_version_id=authority.plan_graph.trust_policy.id,
                     trust_policy_hash=authority.plan_graph.trust_policy.policy_hash,
                     issuer_id=authority.issuer_internal_id,
@@ -1795,6 +1804,467 @@ class SqlAlchemyEvaluationWorkbenchRepository:
                     claimed_at=verified_at,
                 )
             )
+        except DBAPIError as error:
+            self._raise_evidence_database_error(error)
+
+        return VerifiedPassportV2SubmissionRecord(
+            organization_id=scope.organization_id,
+            workspace_id=authority.run.workspace_id,
+            system_id=scope.system_id,
+            run_id=scope.run_id,
+            suite_execution_id=scope.suite_execution_id,
+            evidence_run_id=command.evidence_run_id,
+            passport_revision_id=command.passport_revision_id,
+            verification_receipt_id=command.verification_receipt_id,
+            admission_id=command.admission_id,
+            nonce_claim_id=command.nonce_claim_id,
+            envelope_hash=authority.run.envelope_hash,
+            passport_content_hash=command.passport_content_hash,
+            technical_status=command.technical_status,
+            evidence_result_status=command.evidence_result_status,
+            admission_status="verified",
+            freshness_status="current",
+            effective_expires_at=command.effective_expires_at,
+            verified_at=command.verified_at,
+        )
+
+    def load_verified_evidence_link_authority_for_update(
+        self,
+        *,
+        scope: EvidenceLinkScope,
+        freshness_as_of: datetime | None = None,
+    ) -> VerifiedEvidenceLinkAuthorityRecord | None:
+        """Lock and reconstruct one exact, still-live verified submission."""
+
+        scope_row = self._system_scope(
+            scope.organization_id,
+            scope.system_id,
+            lock=True,
+        )
+        if scope_row is None:
+            return None
+        workspace_id = scope_row["workspace_id"]
+        runs = GovernanceEvaluationRun.__table__
+        run_row = (
+            self.db.execute(
+                select(runs)
+                .where(
+                    runs.c.id == scope.run_id,
+                    runs.c.org_id == scope.organization_id,
+                    runs.c.workspace_id == workspace_id,
+                    runs.c.system_id == scope.system_id,
+                    runs.c.contract_version == CONTRACT_VERSION,
+                )
+                .with_for_update()
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if run_row is None:
+            return None
+
+        executions = GovernanceEvaluationRunSuiteExecution.__table__
+        execution_rows = (
+            self.db.execute(
+                select(executions)
+                .where(
+                    executions.c.run_id == scope.run_id,
+                    executions.c.org_id == scope.organization_id,
+                    executions.c.workspace_id == workspace_id,
+                    executions.c.system_id == scope.system_id,
+                )
+                .order_by(executions.c.ordinal, executions.c.id)
+                .with_for_update()
+            )
+            .mappings()
+            .all()
+        )
+        selected_rows = [
+            row for row in execution_rows if row["id"] == scope.suite_execution_id
+        ]
+        if len(selected_rows) != 1:
+            return None
+        selected_row = selected_rows[0]
+
+        admissions = GovernanceEvidenceAdmission.__table__
+        admission = (
+            self.db.execute(
+                select(admissions)
+                .where(
+                    admissions.c.id == scope.admission_id,
+                    admissions.c.org_id == scope.organization_id,
+                    admissions.c.workspace_id == workspace_id,
+                    admissions.c.system_id == scope.system_id,
+                    admissions.c.run_id == scope.run_id,
+                    admissions.c.suite_execution_id == scope.suite_execution_id,
+                    admissions.c.passport_revision_id == scope.passport_revision_id,
+                    admissions.c.contract_version == CONTRACT_VERSION,
+                )
+                .with_for_update()
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if admission is None:
+            return None
+
+        evidence_runs = GovernanceEvidenceRun.__table__
+        evidence_run = (
+            self.db.execute(
+                select(evidence_runs)
+                .where(
+                    evidence_runs.c.id == admission["evidence_run_id"],
+                    evidence_runs.c.org_id == scope.organization_id,
+                    evidence_runs.c.workspace_id == workspace_id,
+                    evidence_runs.c.system_id == scope.system_id,
+                )
+                .with_for_update()
+            )
+            .mappings()
+            .one_or_none()
+        )
+        revisions = GovernanceEvidencePassportRevision.__table__
+        revision = (
+            self.db.execute(
+                select(revisions)
+                .where(
+                    revisions.c.id == scope.passport_revision_id,
+                    revisions.c.org_id == scope.organization_id,
+                    revisions.c.system_id == scope.system_id,
+                    revisions.c.evidence_run_id == admission["evidence_run_id"],
+                )
+                .with_for_update()
+            )
+            .mappings()
+            .one_or_none()
+        )
+        receipts = GovernanceEvidenceVerificationReceipt.__table__
+        receipt = (
+            self.db.execute(
+                select(receipts)
+                .where(
+                    receipts.c.org_id == scope.organization_id,
+                    receipts.c.workspace_id == workspace_id,
+                    receipts.c.system_id == scope.system_id,
+                    receipts.c.run_id == scope.run_id,
+                    receipts.c.suite_execution_id == scope.suite_execution_id,
+                    receipts.c.admission_id == scope.admission_id,
+                    receipts.c.passport_revision_id == scope.passport_revision_id,
+                    receipts.c.evidence_run_id == admission["evidence_run_id"],
+                    receipts.c.admission_contract_version == CONTRACT_VERSION,
+                )
+                .with_for_update()
+            )
+            .mappings()
+            .one_or_none()
+        )
+        claims = GovernanceEvidenceNonceClaim.__table__
+        claim = (
+            self.db.execute(
+                select(claims)
+                .where(
+                    claims.c.org_id == scope.organization_id,
+                    claims.c.workspace_id == workspace_id,
+                    claims.c.system_id == scope.system_id,
+                    claims.c.run_id == scope.run_id,
+                    claims.c.suite_execution_id == scope.suite_execution_id,
+                    claims.c.admission_id == scope.admission_id,
+                    claims.c.passport_revision_id == scope.passport_revision_id,
+                    claims.c.evidence_run_id == admission["evidence_run_id"],
+                    claims.c.run_contract_version == CONTRACT_VERSION,
+                    claims.c.admission_contract_version == CONTRACT_VERSION,
+                )
+                .with_for_update()
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if any(row is None for row in (evidence_run, revision, receipt, claim)):
+            raise self._error(
+                "verified_evidence_link_integrity_conflict",
+                _EVIDENCE_INTEGRITY_MESSAGE,
+                409,
+            )
+        assert evidence_run is not None
+        assert revision is not None
+        assert receipt is not None
+        assert claim is not None
+
+        links = GovernanceEvaluationSuiteEvidenceLink.__table__
+        existing_link = self.db.execute(
+            select(links.c.id)
+            .where(
+                links.c.org_id == scope.organization_id,
+                links.c.workspace_id == workspace_id,
+                links.c.system_id == scope.system_id,
+                links.c.run_id == scope.run_id,
+                links.c.suite_execution_id == scope.suite_execution_id,
+            )
+            .with_for_update()
+        ).scalar_one_or_none()
+        if existing_link is not None:
+            raise self._error(
+                "verified_evidence_link_occupied",
+                "The suite execution already has an evidence link.",
+                409,
+            )
+
+        plan_row = self._plan_row(
+            org_id=scope.organization_id,
+            workspace_id=workspace_id,
+            system_id=scope.system_id,
+            plan_id=run_row["plan_id"],
+            lock=True,
+        )
+        trust_row = self._trust_row(
+            org_id=scope.organization_id,
+            trust_id=admission["trust_policy_version_id"],
+            lock=True,
+        )
+        suite_row = self._suite_row(
+            org_id=scope.organization_id,
+            suite_version_id=selected_row["suite_version_id"],
+            lock=True,
+        )
+        issuers = GovernanceEvidenceIssuer.__table__
+        issuer = (
+            self.db.execute(
+                select(issuers)
+                .where(
+                    issuers.c.id == admission["issuer_id"],
+                    issuers.c.org_id == scope.organization_id,
+                )
+                .with_for_update()
+            )
+            .mappings()
+            .one_or_none()
+        )
+        signing_keys = GovernanceEvidenceSigningKey.__table__
+        signing_key = (
+            self.db.execute(
+                select(signing_keys)
+                .where(
+                    signing_keys.c.id == admission["signing_key_id"],
+                    signing_keys.c.issuer_id == admission["issuer_id"],
+                    signing_keys.c.org_id == scope.organization_id,
+                )
+                .with_for_update()
+            )
+            .mappings()
+            .one_or_none()
+        )
+        registrations = GovernanceEvaluatorRegistration.__table__
+        registration_id = receipt["evaluator_registration_id"]
+        registration = (
+            None
+            if registration_id is None
+            else (
+                self.db.execute(
+                    select(registrations)
+                    .where(
+                        registrations.c.id == registration_id,
+                        registrations.c.org_id == scope.organization_id,
+                    )
+                    .with_for_update()
+                )
+                .mappings()
+                .one_or_none()
+            )
+        )
+        if any(
+            row is None
+            for row in (plan_row, trust_row, suite_row, issuer, signing_key, registration)
+        ):
+            raise self._error(
+                "verified_evidence_link_integrity_conflict",
+                _EVIDENCE_INTEGRITY_MESSAGE,
+                409,
+            )
+        assert plan_row is not None
+        assert trust_row is not None
+        assert suite_row is not None
+        assert issuer is not None
+        assert signing_key is not None
+        assert registration is not None
+
+        try:
+            verified_at = _parse_timestamp(receipt["verified_at"]).astimezone(timezone.utc)
+            effective_expires_at = _parse_timestamp(
+                admission["effective_expires_at"]
+            ).astimezone(timezone.utc)
+            key_valid_from = _parse_timestamp(signing_key["valid_from"]).astimezone(
+                timezone.utc
+            )
+            key_valid_until = _parse_timestamp(signing_key["valid_until"]).astimezone(
+                timezone.utc
+            )
+            passport_snapshot = self._stored_json_object(
+                revision["snapshot_json"],
+                maximum_bytes=MAX_PASSPORT_BYTES,
+            )
+            evaluator_projection = self._stored_json_object(
+                receipt["evaluator_projection_json"],
+                maximum_bytes=_MAX_BINDING_LIST_BYTES,
+            )
+            expected_registration_hash = evaluator_binding_hash(
+                EvaluatorIdentityBinding(
+                    evaluator_id=receipt["evaluator_id"],
+                    source_type=receipt["source_type"],
+                    adapter_name=receipt["adapter_name"],
+                    adapter_version=receipt["adapter_version"],
+                    result_contract_version=receipt["result_contract_version"],
+                    issuer_id=receipt["evaluator_issuer_id"],
+                    key_id=receipt["signer_key_id"],
+                )
+            )
+        except (AttributeError, TypeError, ValueError) as error:
+            raise self._error(
+                "verified_evidence_link_integrity_conflict",
+                _EVIDENCE_INTEGRITY_MESSAGE,
+                409,
+            ) from error
+
+        now = self.read_fresh_utc_now()
+        snapshot = passport_snapshot.to_dict()
+        result = snapshot.get("result")
+        evaluator = snapshot.get("evaluator")
+        if (
+            admission["admission_status"] != "verified"
+            or admission["freshness_status"] != "current"
+            or admission["submitted_by"] is None
+            or verified_at > now
+            or now >= effective_expires_at
+            or plan_row["status"] != "active"
+            or plan_row["trust_policy_version_id"] != trust_row["id"]
+            or trust_row["status"] != "active"
+            or receipt["trust_policy_version_id"] != trust_row["id"]
+            or receipt["trust_policy_hash"] != trust_row["policy_hash"]
+            or issuer["status"] != "active"
+            or issuer["revoked_at"] is not None
+            or receipt["issuer_id"] != issuer["id"]
+            or receipt["issuer_key"] != issuer["issuer_key"]
+            or signing_key["revoked_at"] is not None
+            or not (key_valid_from <= now < key_valid_until)
+            or receipt["signing_key_id"] != signing_key["id"]
+            or receipt["signer_key_id"] != signing_key["key_id"]
+            or registration["status"] != "approved"
+        ):
+            raise self._error(
+                "verified_evidence_link_ineligible",
+                "The verified evidence submission is not eligible for linking.",
+                409,
+            )
+        if (
+            evidence_run["content_hash"] != revision["canonical_content_hash"]
+            or receipt["passport_content_hash"] != revision["canonical_content_hash"]
+            or snapshot.get("contentHash") != revision["canonical_content_hash"]
+            or canonical_sha256(snapshot) != receipt["passport_snapshot_hash"]
+            or receipt["evaluator_projection_hash"]
+            != canonical_sha256(evaluator_projection.to_dict())
+            or evaluator_projection.to_dict() != evaluator
+            or not isinstance(result, dict)
+            or registration["binding_hash"] != receipt["evaluator_registration_binding_hash"]
+            or registration["binding_hash"] != expected_registration_hash
+            or registration["authority_issuer_id"] != issuer["id"]
+            or registration["authority_signing_key_id"] != signing_key["id"]
+            or registration["evaluator_id"] != receipt["evaluator_id"]
+            or registration["source_type"] != receipt["source_type"]
+            or registration["adapter_name"] != receipt["adapter_name"]
+            or registration["adapter_version"] != receipt["adapter_version"]
+            or registration["result_contract_version"]
+            != receipt["result_contract_version"]
+            or registration["issuer_id"] != receipt["evaluator_issuer_id"]
+            or registration["signing_key_id"] != receipt["signer_key_id"]
+            or suite_row["adapter_name"] != receipt["adapter_name"]
+            or suite_row["adapter_version"] != receipt["adapter_version"]
+            or suite_row["result_contract_version"] != receipt["result_contract_version"]
+            or claim["envelope_id"] != run_row["envelope_id"]
+            or claim["envelope_hash"] != run_row["envelope_hash"]
+            or claim["envelope_nonce"] != run_row["envelope_nonce"]
+            or admission["envelope_id"] != run_row["envelope_id"]
+            or admission["envelope_hash"] != run_row["envelope_hash"]
+            or admission["envelope_nonce"] != run_row["envelope_nonce"]
+        ):
+            raise self._error(
+                "verified_evidence_link_integrity_conflict",
+                _EVIDENCE_INTEGRITY_MESSAGE,
+                409,
+            )
+
+        return VerifiedEvidenceLinkAuthorityRecord(
+            scope=scope,
+            run=self._run_record_from_rows(
+                run_row,
+                execution_rows,
+                freshness_as_of=freshness_as_of,
+            ),
+            evidence_run_id=admission["evidence_run_id"],
+            verification_receipt_id=receipt["id"],
+            nonce_claim_id=claim["id"],
+            passport_content_hash=receipt["passport_content_hash"],
+            passport_snapshot=passport_snapshot,
+            admission_status=admission["admission_status"],
+            freshness_status=admission["freshness_status"],
+            submitted_by=admission["submitted_by"],
+            effective_expires_at=effective_expires_at,
+            verified_at=verified_at,
+            evaluator_registration_id=registration["id"],
+            evaluator_registration_binding_hash=registration["binding_hash"],
+        )
+
+    def persist_verified_evidence_link(
+        self,
+        command: PersistVerifiedEvidenceLinkCommand,
+    ) -> VerifiedEvidenceLinkRecord:
+        """Persist the exact link and suite/run projections in one transaction."""
+
+        scope = command.scope
+        authority = command.authority
+        freshness_as_of = freshness.require_common_evaluated_at(
+            execution.operational_freshness
+            for execution in authority.run.suite_executions
+            if execution.operational_freshness is not None
+        )
+        current_authority = self.load_verified_evidence_link_authority_for_update(
+            scope=scope,
+            freshness_as_of=freshness_as_of,
+        )
+        selected = next(
+            (
+                execution
+                for execution in authority.run.suite_executions
+                if execution.id == scope.suite_execution_id
+            ),
+            None,
+        )
+        passport = authority.passport_snapshot.to_dict()
+        result = passport.get("result")
+        limitations = passport.get("limitations")
+        if (
+            current_authority != authority
+            or authority.scope != scope
+            or authority.run.id != scope.run_id
+            or authority.run.organization_id != scope.organization_id
+            or authority.run.system_id != scope.system_id
+            or selected is None
+            or not isinstance(result, dict)
+            or result.get("technicalStatus") != command.technical_status
+            or result.get("evidenceResultStatus") != command.evidence_result_status
+            or result.get("summary") != command.result_summary.to_dict()
+            or limitations != _thaw_json_array(command.limitations)
+            or command.linked_at < authority.verified_at
+            or command.linked_at >= authority.effective_expires_at
+        ):
+            raise self._error(
+                "verified_evidence_link_integrity_conflict",
+                _EVIDENCE_INTEGRITY_MESSAGE,
+                409,
+            )
+        assert selected is not None
+        linked_at = self._timestamp_value(command.linked_at)
+        assert linked_at is not None
+
+        try:
             self.db.execute(
                 insert(GovernanceEvaluationSuiteEvidenceLink.__table__).values(
                     id=command.suite_evidence_link_id,
@@ -1803,13 +2273,13 @@ class SqlAlchemyEvaluationWorkbenchRepository:
                     system_id=scope.system_id,
                     run_id=scope.run_id,
                     suite_execution_id=scope.suite_execution_id,
-                    admission_id=command.admission_id,
+                    admission_id=scope.admission_id,
                     admission_contract_version=CONTRACT_VERSION,
-                    evidence_run_id=command.evidence_run_id,
-                    passport_revision_id=command.passport_revision_id,
-                    nonce_claim_id=command.nonce_claim_id,
+                    evidence_run_id=authority.evidence_run_id,
+                    passport_revision_id=scope.passport_revision_id,
+                    nonce_claim_id=authority.nonce_claim_id,
                     linked_by=command.actor_id,
-                    linked_at=verified_at,
+                    linked_at=linked_at,
                 )
             )
 
@@ -1849,20 +2319,20 @@ class SqlAlchemyEvaluationWorkbenchRepository:
                     admission_status="verified",
                     review_status="pending",
                     freshness_status="current",
-                    evidence_run_id=command.evidence_run_id,
-                    passport_revision_id=command.passport_revision_id,
+                    evidence_run_id=authority.evidence_run_id,
+                    passport_revision_id=scope.passport_revision_id,
                     linked_by=command.actor_id,
-                    linked_at=verified_at,
+                    linked_at=linked_at,
                     result_summary_json=canonical_json(command.result_summary.to_dict()),
                     limitations_json=canonical_json(_thaw_json_array(command.limitations)),
                     started_at=self._timestamp_value(command.suite_started_at),
                     completed_at=self._timestamp_value(command.suite_completed_at),
-                    updated_at=verified_at,
+                    updated_at=linked_at,
                 )
             )
             if suite_result.rowcount != 1:
                 raise self._error(
-                    "suite_projection_conflict",
+                    "verified_evidence_link_projection_conflict",
                     _SUITE_PROJECTION_CONFLICT_MESSAGE,
                     409,
                 )
@@ -1883,42 +2353,49 @@ class SqlAlchemyEvaluationWorkbenchRepository:
                         evidence_outcome=command.run_evidence_outcome,
                         started_at=self._timestamp_value(command.run_started_at),
                         completed_at=self._timestamp_value(command.run_completed_at),
-                        updated_at=verified_at,
+                        updated_at=linked_at,
                     )
                 )
                 if run_result.rowcount != 1:
                     raise self._error(
-                        "run_projection_conflict",
+                        "verified_evidence_link_projection_conflict",
                         _RUN_PROJECTION_CONFLICT_MESSAGE,
                         409,
                     )
-            else:
-                observed_run = self.db.execute(
-                    select(runs.c.id).where(*self._exact_run_snapshot_predicates(command))
-                ).scalar_one_or_none()
-                if observed_run is None:
-                    raise self._error(
-                        "run_projection_conflict",
-                        _RUN_PROJECTION_CONFLICT_MESSAGE,
-                        409,
-                    )
+            elif self.db.execute(
+                select(runs.c.id).where(*self._exact_run_snapshot_predicates(command))
+            ).scalar_one_or_none() is None:
+                raise self._error(
+                    "verified_evidence_link_projection_conflict",
+                    _RUN_PROJECTION_CONFLICT_MESSAGE,
+                    409,
+                )
         except DBAPIError as error:
-            self._raise_evidence_database_error(error)
+            kind = self._evidence_database_error_kind(error)
+            if kind == "occupied":
+                raise self._error(
+                    "verified_evidence_link_occupied",
+                    "The suite execution already has an evidence link.",
+                    409,
+                ) from error
+            if kind == "integrity":
+                raise self._error(
+                    "verified_evidence_link_integrity_conflict",
+                    _EVIDENCE_INTEGRITY_MESSAGE,
+                    409,
+                ) from error
+            raise
 
-        return VerifiedPassportV2Record(
+        return VerifiedEvidenceLinkRecord(
             organization_id=scope.organization_id,
             workspace_id=authority.run.workspace_id,
             system_id=scope.system_id,
             run_id=scope.run_id,
             suite_execution_id=scope.suite_execution_id,
-            evidence_run_id=command.evidence_run_id,
-            passport_revision_id=command.passport_revision_id,
-            verification_receipt_id=command.verification_receipt_id,
-            admission_id=command.admission_id,
-            nonce_claim_id=command.nonce_claim_id,
+            admission_id=scope.admission_id,
+            evidence_run_id=authority.evidence_run_id,
+            passport_revision_id=scope.passport_revision_id,
             suite_evidence_link_id=command.suite_evidence_link_id,
-            envelope_hash=authority.run.envelope_hash,
-            passport_content_hash=command.passport_content_hash,
             technical_status=command.technical_status,
             evidence_result_status=command.evidence_result_status,
             admission_status="verified",
@@ -1928,8 +2405,8 @@ class SqlAlchemyEvaluationWorkbenchRepository:
             run_evidence_outcome=command.run_evidence_outcome,
             overall_verdict=authority.run.overall_verdict,
             verdict_version=authority.run.verdict_version,
-            effective_expires_at=command.effective_expires_at,
-            verified_at=command.verified_at,
+            linked_by=command.actor_id,
+            linked_at=command.linked_at,
         )
 
     def persist_unverified_imported_evidence(
@@ -2814,6 +3291,7 @@ class SqlAlchemyEvaluationWorkbenchRepository:
                     executions.c.id.label("suite_execution_id"),
                     admissions.c.id.label("admission_id"),
                     admissions.c.submitted_by.label("submitted_by"),
+                    links.c.linked_by.label("linked_by"),
                     admissions.c.freshness_status.label("freshness_status"),
                 )
                 .select_from(
@@ -2890,6 +3368,8 @@ class SqlAlchemyEvaluationWorkbenchRepository:
                 or any(
                     not isinstance(row["submitted_by"], str)
                     or not row["submitted_by"]
+                    or not isinstance(row["linked_by"], str)
+                    or not row["linked_by"]
                     or not isinstance(row["admission_id"], str)
                     or not row["admission_id"]
                     or not isinstance(row["freshness_status"], str)
@@ -2949,9 +3429,13 @@ class SqlAlchemyEvaluationWorkbenchRepository:
             evidence_submitters=tuple(
                 dict.fromkeys(row["submitted_by"] for row in admission_rows)
             ),
+            evidence_linkers=tuple(
+                dict.fromkeys(row["linked_by"] for row in admission_rows)
+            ),
             admission_submitters=tuple(
                 row["submitted_by"] for row in admission_rows
             ),
+            admission_linkers=tuple(row["linked_by"] for row in admission_rows),
             suite_execution_ids=suite_execution_ids,
             admission_ids=tuple(row["admission_id"] for row in admission_rows),
             evidence_set=evidence_set.to_dict(),
@@ -3004,7 +3488,9 @@ class SqlAlchemyEvaluationWorkbenchRepository:
         if sqlstate == "23514" and first_line in owner_override_trigger_messages:
             code, message, status_code = owner_override_trigger_messages[first_line]
             return EvaluationWorkbenchError(code, message, status_code=status_code)
-        if sqlstate == "P0001" and first_line in _GOVERNANCE_DECISION_TRIGGER_MESSAGES:
+        if sqlstate in {"P0001", "23514"} and first_line in (
+            _GOVERNANCE_DECISION_TRIGGER_MESSAGES
+        ):
             code, message = _GOVERNANCE_DECISION_TRIGGER_MESSAGES[first_line]
             return EvaluationWorkbenchError(code, message, status_code=409)
         if sqlstate == "P0001" and first_line in {

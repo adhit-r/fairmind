@@ -37,12 +37,14 @@ class GovernanceDecisionAuthorityRecord:
     current_layer_verdicts: FrozenJsonObject
     requested_by: str
     evidence_submitters: tuple[str, ...]
+    evidence_linkers: tuple[str, ...]
     suite_execution_ids: tuple[str, ...]
     admission_ids: tuple[str, ...]
     evidence_set: FrozenJsonObject
     evidence_set_hash: str
     operational_freshness: tuple[EvidenceFreshnessClassification, ...]
     admission_submitters: tuple[str, ...] = ()
+    admission_linkers: tuple[str, ...] = ()
 
     @classmethod
     def create(
@@ -58,12 +60,14 @@ class GovernanceDecisionAuthorityRecord:
         current_layer_verdicts: Mapping[str, object],
         requested_by: str,
         evidence_submitters: tuple[str, ...],
+        evidence_linkers: tuple[str, ...],
         suite_execution_ids: tuple[str, ...],
         admission_ids: tuple[str, ...],
         evidence_set: Mapping[str, object],
         evidence_set_hash: str,
         operational_freshness: tuple[EvidenceFreshnessClassification, ...],
         admission_submitters: tuple[str, ...] = (),
+        admission_linkers: tuple[str, ...] = (),
     ) -> "GovernanceDecisionAuthorityRecord":
         return cls(
             scope=scope,
@@ -76,12 +80,14 @@ class GovernanceDecisionAuthorityRecord:
             current_layer_verdicts=FrozenJsonObject.from_mapping(current_layer_verdicts),
             requested_by=requested_by,
             evidence_submitters=tuple(evidence_submitters),
+            evidence_linkers=tuple(evidence_linkers),
             suite_execution_ids=tuple(suite_execution_ids),
             admission_ids=tuple(admission_ids),
             evidence_set=FrozenJsonObject.from_mapping(evidence_set),
             evidence_set_hash=evidence_set_hash,
             operational_freshness=tuple(operational_freshness),
             admission_submitters=tuple(admission_submitters),
+            admission_linkers=tuple(admission_linkers),
         )
 
 

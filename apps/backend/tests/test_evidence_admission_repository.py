@@ -1,4 +1,4 @@
-"""Repository integration tests for atomic verified Passport V2 admission."""
+"""Repository integration tests for verified Passport V2 submit/link boundaries."""
 
 from __future__ import annotations
 
@@ -35,7 +35,11 @@ from src.application.ports.evaluation_workbench import (
 from src.application.ports.evidence_admission import (
     EvidenceAdmissionAuthorityRecord,
     EvidenceAdmissionScope,
-    PersistVerifiedPassportV2Command,
+    PersistVerifiedPassportV2SubmissionCommand,
+)
+from src.application.ports.evidence_link import (
+    EvidenceLinkScope,
+    PersistVerifiedEvidenceLinkCommand,
 )
 from src.application.ports.evidence_freshness import EvidenceFreshnessClassification
 from src.application.services.trusted_evidence_admission_resolver import (
@@ -195,6 +199,7 @@ def test_database_error_classifier_propagates_unexpected_integrity_failures(
         "nonce claim timestamp is not causal",
         "evidence link requires an eligible claimed admission",
         "evidence link timestamp is not causal",
+        "verified evidence link requires an exact current authority chain",
         "verification receipt relational binding failed",
         "verified admission requires exact verification receipt",
         "verification receipt requires exact verified admission",
@@ -401,9 +406,7 @@ def _admission_command(
     execution_index: int = 0,
     technical_status: str = "succeeded",
     evidence_result_status: str = "failed",
-    run_technical_status: str | None = None,
-    run_evidence_outcome: str | None = None,
-) -> PersistVerifiedPassportV2Command:
+) -> PersistVerifiedPassportV2SubmissionCommand:
     repository = SqlAlchemyEvaluationWorkbenchRepository(session)
     suite_executions = run["suiteExecutions"]
     assert isinstance(suite_executions, list)
@@ -500,26 +503,7 @@ def _admission_command(
     evaluator_json = FrozenJsonObject.from_mapping(evaluator)
     result_json = FrozenJsonObject.from_mapping(result_summary)
 
-    if run_technical_status is None:
-        run_technical_status = (
-            technical_status if len(suite_executions) == 1 else authority.run.technical_status
-        )
-    if run_evidence_outcome is None:
-        run_evidence_outcome = (
-            evidence_result_status if len(suite_executions) == 1 else authority.run.evidence_outcome
-        )
-    suite_started_at = None if technical_status == "cancelled" else captured_at
-    if run_technical_status in {"awaiting_evidence", "queued", "leased"}:
-        run_started_at = None
-        run_completed_at = None
-    elif run_technical_status == "running":
-        run_started_at = captured_at
-        run_completed_at = None
-    else:
-        run_started_at = None if run_technical_status == "cancelled" else captured_at
-        run_completed_at = verified_at
-
-    return PersistVerifiedPassportV2Command(
+    return PersistVerifiedPassportV2SubmissionCommand(
         scope=scope,
         actor_id=USER,
         evidence_run_id=str(uuid.uuid4()),
@@ -527,7 +511,6 @@ def _admission_command(
         verification_receipt_id=str(uuid.uuid4()),
         admission_id=str(uuid.uuid4()),
         nonce_claim_id=str(uuid.uuid4()),
-        suite_evidence_link_id=str(uuid.uuid4()),
         authority=authority,
         initial_authority_hash="a" * 64,
         verified_authority_hash="a" * 64,
@@ -561,12 +544,6 @@ def _admission_command(
         previous_revision_hash=None,
         evidence_created_at=verified_at,
         revision_created_at=verified_at,
-        suite_started_at=suite_started_at,
-        suite_completed_at=verified_at,
-        run_technical_status=run_technical_status,
-        run_evidence_outcome=run_evidence_outcome,
-        run_started_at=run_started_at,
-        run_completed_at=run_completed_at,
     )
 
 
@@ -913,346 +890,97 @@ def test_real_foreign_tenant_catalog_restrictions_are_not_available_under_local_
     _assert_no_evidence_graph_in_either_tenant(session)
 
 
-def test_verified_passport_persistence_writes_one_atomic_receipt_bound_graph(
+def test_verified_submission_and_link_are_independent_authoritative_mutations(
     repository_fixture,
 ) -> None:
-    """Catches missing graph nodes, wrong signer FKs, and collapsed result axes."""
-
-    session, _factory = repository_fixture
-    _plan, run = _create_active_plan_and_run(_service(session))
-    issuer_internal_id, signing_key_internal_id = _seed_signing_authority(session)
-    command = _admission_command(session, run)
-    repository = SqlAlchemyEvaluationWorkbenchRepository(session)
-
-    result = repository.persist_verified_passport_v2(command)
-    repository.force_evidence_admission_constraints()
-    session.commit()
-
-    assert result.evidence_run_id == command.evidence_run_id
-    assert result.passport_revision_id == command.passport_revision_id
-    assert result.verification_receipt_id == command.verification_receipt_id
-    assert result.admission_id == command.admission_id
-    assert result.nonce_claim_id == command.nonce_claim_id
-    assert result.suite_evidence_link_id == command.suite_evidence_link_id
-    assert result.technical_status == "succeeded"
-    assert result.evidence_result_status == "failed"
-    assert result.admission_status == "verified"
-    assert result.review_status == "pending"
-    assert result.freshness_status == "current"
-    assert result.run_technical_status == "succeeded"
-    assert result.run_evidence_outcome == "failed"
-    assert result.overall_verdict == "insufficient"
-    assert result.verdict_version == 0
-
-    for table, identity in (
-        (GovernanceEvidenceRun.__table__, command.evidence_run_id),
-        (GovernanceEvidencePassportRevision.__table__, command.passport_revision_id),
-        (GovernanceEvidenceVerificationReceipt.__table__, command.verification_receipt_id),
-        (GovernanceEvidenceAdmission.__table__, command.admission_id),
-        (GovernanceEvidenceNonceClaim.__table__, command.nonce_claim_id),
-        (GovernanceEvaluationSuiteEvidenceLink.__table__, command.suite_evidence_link_id),
-    ):
-        assert (
-            session.scalar(select(func.count()).select_from(table).where(table.c.id == identity))
-            == 1
-        )
-
-    evidence = (
-        session.execute(
-            select(GovernanceEvidenceRun.__table__).where(
-                GovernanceEvidenceRun.id == command.evidence_run_id
-            )
-        )
-        .mappings()
-        .one()
-    )
-    revision = (
-        session.execute(
-            select(GovernanceEvidencePassportRevision.__table__).where(
-                GovernanceEvidencePassportRevision.id == command.passport_revision_id
-            )
-        )
-        .mappings()
-        .one()
-    )
-    receipt = (
-        session.execute(
-            select(GovernanceEvidenceVerificationReceipt.__table__).where(
-                GovernanceEvidenceVerificationReceipt.id == command.verification_receipt_id
-            )
-        )
-        .mappings()
-        .one()
-    )
-    assert evidence["artifact_refs_json"] == canonical_json(command.passport.to_dict()["artifacts"])
-    assert evidence["evidence_id"] is None
-    assert evidence["created_at"] == command.verified_at.isoformat()
-    assert revision["previous_revision_hash"] is None
-    assert revision["created_at"] == command.verified_at.isoformat()
-    assert receipt["issuer_id"] == issuer_internal_id
-    assert receipt["issuer_key"] == "issuer-protocol-key"
-    assert receipt["signing_key_id"] == signing_key_internal_id
-    assert receipt["signer_key_id"] == "signer-protocol-key"
-    assert (
-        session.scalar(
-            select(func.count())
-            .select_from(GovernanceEvidenceArtifact.__table__)
-            .where(GovernanceEvidenceArtifact.evidence_run_id == command.evidence_run_id)
-        )
-        == 0
-    )
-
-
-def test_partial_multisuite_admission_does_not_touch_an_unchanged_run_timestamp(
-    repository_fixture,
-) -> None:
-    """Catches issuing a forbidden no-op run UPDATE solely to advance updated_at."""
-
-    session, _factory = repository_fixture
-    _plan, run = _create_active_plan_and_run(_service(session), suites=2)
-    _seed_signing_authority(session)
-    command = _admission_command(session, run, execution_index=0)
-    before = (
-        session.execute(
-            select(GovernanceEvaluationRun.__table__).where(GovernanceEvaluationRun.id == run["id"])
-        )
-        .mappings()
-        .one()
-    )
-    repository = SqlAlchemyEvaluationWorkbenchRepository(session)
-
-    result = repository.persist_verified_passport_v2(command)
-    repository.force_evidence_admission_constraints()
-    session.commit()
-
-    after = (
-        session.execute(
-            select(GovernanceEvaluationRun.__table__).where(GovernanceEvaluationRun.id == run["id"])
-        )
-        .mappings()
-        .one()
-    )
-    assert result.run_technical_status == "awaiting_evidence"
-    assert result.run_evidence_outcome == "pending"
-    assert after["technical_status"] == before["technical_status"]
-    assert after["evidence_outcome"] == before["evidence_outcome"]
-    assert after["started_at"] == before["started_at"]
-    assert after["completed_at"] == before["completed_at"]
-    assert after["updated_at"] == before["updated_at"]
-
-
-def test_replaying_an_admitted_passport_is_an_occupied_conflict_not_idempotency(
-    repository_fixture,
-) -> None:
-    """Catches treating a unique evidence graph conflict as a successful replay."""
+    """Catches hidden projection writes during submit and caller-shaped link authority."""
 
     session, _factory = repository_fixture
     _plan, run = _create_active_plan_and_run(_service(session))
     _seed_signing_authority(session)
-    command = _admission_command(session, run)
-    repository = SqlAlchemyEvaluationWorkbenchRepository(session)
-    repository.persist_verified_passport_v2(command)
-    repository.force_evidence_admission_constraints()
-    session.commit()
-
-    with pytest.raises(EvaluationWorkbenchError) as caught:
-        repository.persist_verified_passport_v2(command)
-    session.rollback()
-
-    assert caught.value.code == "evidence_admission_occupied"
-    assert caught.value.status_code == 409
-    assert (
-        session.scalar(
-            select(func.count())
-            .select_from(GovernanceEvidenceAdmission.__table__)
-            .where(GovernanceEvidenceAdmission.org_id == ORG)
-        )
-        == 1
-    )
-
-
-def test_stale_suite_cas_rolls_back_every_inserted_graph_node(repository_fixture) -> None:
-    """Catches leaving orphan evidence when the suite projection changes concurrently."""
-
-    session, _factory = repository_fixture
-    _plan, run = _create_active_plan_and_run(_service(session))
-    _seed_signing_authority(session)
-    command = _admission_command(session, run)
-    session.execute(
-        update(GovernanceEvaluationRunSuiteExecution.__table__)
-        .where(GovernanceEvaluationRunSuiteExecution.id == command.scope.suite_execution_id)
-        .values(technical_status="queued")
-    )
-    session.commit()
+    submission = _admission_command(session, run)
     repository = SqlAlchemyEvaluationWorkbenchRepository(session)
 
-    with pytest.raises(EvaluationWorkbenchError) as caught:
-        repository.persist_verified_passport_v2(command)
-    session.rollback()
+    submitted = repository.persist_verified_passport_v2_submission(submission)
 
-    assert caught.value.code == "suite_projection_conflict"
-    for table in (
-        GovernanceEvidenceRun.__table__,
-        GovernanceEvidencePassportRevision.__table__,
-        GovernanceEvidenceVerificationReceipt.__table__,
-        GovernanceEvidenceAdmission.__table__,
-        GovernanceEvidenceNonceClaim.__table__,
-        GovernanceEvaluationSuiteEvidenceLink.__table__,
-    ):
-        assert session.scalar(select(func.count()).select_from(table)) == 0
-
-
-def test_cancelled_evaluator_keeps_pending_evidence_separate_from_technical_status(
-    repository_fixture,
-) -> None:
-    """Catches converting a cancelled evaluator into false passing or failed evidence."""
-
-    session, _factory = repository_fixture
-    _plan, run = _create_active_plan_and_run(_service(session))
-    _seed_signing_authority(session)
-    command = _admission_command(
-        session,
-        run,
-        technical_status="cancelled",
-        evidence_result_status="pending",
-    )
-    repository = SqlAlchemyEvaluationWorkbenchRepository(session)
-
-    result = repository.persist_verified_passport_v2(command)
-    repository.force_evidence_admission_constraints()
-    session.commit()
-
-    suite = (
+    suite_before = (
         session.execute(
             select(GovernanceEvaluationRunSuiteExecution.__table__).where(
-                GovernanceEvaluationRunSuiteExecution.id == command.scope.suite_execution_id
+                GovernanceEvaluationRunSuiteExecution.id == submission.scope.suite_execution_id
             )
         )
         .mappings()
         .one()
     )
-    assert result.technical_status == "cancelled"
-    assert result.evidence_result_status == "pending"
-    assert result.run_technical_status == "cancelled"
-    assert result.run_evidence_outcome == "pending"
-    assert suite["technical_status"] == "cancelled"
-    assert suite["evidence_result_status"] == "pending"
-    assert suite["admission_status"] == "verified"
-    assert suite["review_status"] == "pending"
+    assert submitted.admission_id == submission.admission_id
+    assert suite_before["admission_status"] == "pending"
+    assert suite_before["evidence_run_id"] is None
+    assert suite_before["passport_revision_id"] is None
+    assert suite_before["linked_by"] is None
+    assert session.scalar(
+        select(func.count()).select_from(GovernanceEvaluationSuiteEvidenceLink.__table__)
+    ) == 0
 
+    link_scope = EvidenceLinkScope(
+        organization_id=submission.scope.organization_id,
+        system_id=submission.scope.system_id,
+        run_id=submission.scope.run_id,
+        suite_execution_id=submission.scope.suite_execution_id,
+        admission_id=submission.admission_id,
+        passport_revision_id=submission.passport_revision_id,
+    )
+    authority = repository.load_verified_evidence_link_authority_for_update(scope=link_scope)
+    assert authority is not None
+    assert authority.evidence_run_id == submission.evidence_run_id
+    assert authority.verification_receipt_id == submission.verification_receipt_id
+    assert authority.nonce_claim_id == submission.nonce_claim_id
+    assert authority.passport_content_hash == submission.passport_content_hash
+    assert authority.passport_snapshot == submission.passport
+    assert authority.evaluator_registration_id == submission.evaluator_registration_id
+    assert (
+        authority.evaluator_registration_binding_hash
+        == submission.evaluator_registration_binding_hash
+    )
 
-def test_mixed_suite_axes_preserve_failed_execution_and_failed_model_evidence(
-    repository_fixture,
-    monkeypatch,
-) -> None:
-    """Catches collapsing evaluator execution failure into the model evidence axis."""
-
-    session, _factory = repository_fixture
-
-    def classify_synthetic_linked_evidence(
-        **values: object,
-    ) -> EvidenceFreshnessClassification:
-        as_of = values["as_of"]
-        recorded_status = values["recorded_freshness_status"]
-        assert isinstance(as_of, datetime)
-        assert recorded_status == "current"
-        return EvidenceFreshnessClassification(
-            classification_status="ok",
-            freshness_contract_version="1.0.0",
-            recorded_freshness_status=recorded_status,
-            effective_freshness_status="current",
-            evaluated_at=as_of,
-            effective_at=as_of - timedelta(seconds=1),
-            expiring_at=as_of + timedelta(days=1),
-            reason_codes=(),
-            decision_eligible=False,
+    linked_at = submission.verified_at + timedelta(seconds=1)
+    linked = repository.persist_verified_evidence_link(
+        PersistVerifiedEvidenceLinkCommand(
+            scope=link_scope,
+            actor_id="linker-a",
+            suite_evidence_link_id=str(uuid.uuid4()),
+            authority=authority,
+            technical_status=submission.technical_status,
+            evidence_result_status=submission.evidence_result_status,
+            result_summary=submission.result_summary,
+            limitations=submission.limitations,
+            suite_started_at=submission.captured_at,
+            suite_completed_at=linked_at,
+            run_technical_status=submission.technical_status,
+            run_evidence_outcome=submission.evidence_result_status,
+            run_started_at=submission.captured_at,
+            run_completed_at=linked_at,
+            linked_at=linked_at,
         )
-
-    monkeypatch.setattr(
-        SqlAlchemyEvaluationWorkbenchRepository,
-        "_acquire_operational_freshness_read_lock",
-        lambda self, *, organization_id: None,
     )
-    monkeypatch.setattr(
-        SqlAlchemyEvaluationWorkbenchRepository,
-        "_classify_evidence_freshness",
-        lambda self, **values: classify_synthetic_linked_evidence(**values),
-    )
-    _plan, run = _create_active_plan_and_run(_service(session), suites=2)
-    _seed_signing_authority(session)
-    repository = SqlAlchemyEvaluationWorkbenchRepository(session)
-    model_failure = _admission_command(session, run, execution_index=0)
-    repository.persist_verified_passport_v2(model_failure)
     repository.force_evidence_admission_constraints()
-    session.commit()
 
-    evaluator_failure = _admission_command(
-        session,
-        run,
-        execution_index=1,
-        technical_status="failed",
-        evidence_result_status="error",
-        run_technical_status="failed",
-        run_evidence_outcome="failed",
-    )
-    result = repository.persist_verified_passport_v2(evaluator_failure)
-    repository.force_evidence_admission_constraints()
-    session.commit()
-
-    stored_run = (
+    assert linked.admission_id == submission.admission_id
+    assert linked.suite_evidence_link_id
+    assert linked.linked_by == "linker-a"
+    assert linked.linked_at == linked_at
+    suite_after = (
         session.execute(
-            select(GovernanceEvaluationRun.__table__).where(GovernanceEvaluationRun.id == run["id"])
+            select(GovernanceEvaluationRunSuiteExecution.__table__).where(
+                GovernanceEvaluationRunSuiteExecution.id == submission.scope.suite_execution_id
+            )
         )
         .mappings()
         .one()
     )
-    suites = (
-        session.execute(
-            select(GovernanceEvaluationRunSuiteExecution.__table__)
-            .where(GovernanceEvaluationRunSuiteExecution.run_id == run["id"])
-            .order_by(GovernanceEvaluationRunSuiteExecution.ordinal)
-        )
-        .mappings()
-        .all()
-    )
-    assert result.run_technical_status == "failed"
-    assert result.run_evidence_outcome == "failed"
-    assert stored_run["technical_status"] == "failed"
-    assert stored_run["evidence_outcome"] == "failed"
-    assert [(item["technical_status"], item["evidence_result_status"]) for item in suites] == [
-        ("succeeded", "failed"),
-        ("failed", "error"),
-    ]
-
-
-def test_unchanged_run_path_still_rejects_a_stale_locked_snapshot(
-    repository_fixture,
-) -> None:
-    """Catches skipping run CAS verification when aggregate projections do not change."""
-
-    session, _factory = repository_fixture
-    _plan, run = _create_active_plan_and_run(_service(session), suites=2)
-    _seed_signing_authority(session)
-    command = _admission_command(session, run, execution_index=0)
-    stale_update = (command.verified_at + timedelta(microseconds=1)).isoformat()
-    session.execute(
-        update(GovernanceEvaluationRun.__table__)
-        .where(GovernanceEvaluationRun.id == run["id"])
-        .values(updated_at=stale_update)
-    )
-    session.commit()
-    repository = SqlAlchemyEvaluationWorkbenchRepository(session)
-
-    with pytest.raises(EvaluationWorkbenchError) as caught:
-        repository.persist_verified_passport_v2(command)
-    session.rollback()
-
-    assert caught.value.code == "run_projection_conflict"
-    assert (
-        session.scalar(
-            select(func.count())
-            .select_from(GovernanceEvidenceRun.__table__)
-            .where(GovernanceEvidenceRun.org_id == ORG)
-        )
-        == 0
-    )
+    assert suite_after["admission_status"] == "verified"
+    assert suite_after["evidence_run_id"] == submission.evidence_run_id
+    assert suite_after["passport_revision_id"] == submission.passport_revision_id
+    assert suite_after["linked_by"] == "linker-a"
+    assert session.scalar(
+        select(func.count()).select_from(GovernanceEvaluationSuiteEvidenceLink.__table__)
+    ) == 1

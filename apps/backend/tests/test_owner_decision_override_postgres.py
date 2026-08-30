@@ -65,6 +65,7 @@ def owner_override_session_factory():
             "013h_idempotency_retention_integrity.sql",
             "013i_imported_evidence_delivery_integrity.sql",
             "013j_owner_decision_override_integrity.sql",
+            "013k_verified_evidence_link_integrity.sql",
         ):
             session.execute(
                 text(
@@ -270,6 +271,12 @@ def test_owner_override_success_replay_and_conflict_use_one_audited_uow(
         domain = details["_fairmindEvaluationSuccessBinding"]["domainDetails"]
         relationships = [
             {
+                "relationshipType": "evidence_linker",
+                "actorId": graph.scenario.actor_id,
+                "resourceType": "evidence_admission",
+                "resourceIds": [graph.admission_id],
+            },
+            {
                 "relationshipType": "evidence_submitter",
                 "actorId": graph.scenario.actor_id,
                 "resourceType": "evidence_admission",
@@ -306,6 +313,44 @@ def test_owner_override_success_replay_and_conflict_use_one_audited_uow(
             )
         assert caught.value.code == "idempotency_conflict"
     finally:
+        session.close()
+
+
+def test_013k_rejects_a_duplicate_verified_suite_evidence_link(
+    owner_override_session_factory,
+) -> None:
+    """The additive 013k trigger still rejects malformed verified-link inserts."""
+    from sqlalchemy.exc import DBAPIError
+
+    factory = owner_override_session_factory
+    graph = _ready_owner_graph(factory)
+    session = factory()
+    try:
+        with pytest.raises(
+            DBAPIError,
+            match="verified evidence link requires an exact current authority chain",
+        ):
+            session.execute(
+                text(
+                    "INSERT INTO governance_evaluation_suite_evidence_links "
+                    "(id, org_id, workspace_id, system_id, run_id, "
+                    "suite_execution_id, admission_id, admission_contract_version, "
+                    "evidence_run_id, passport_revision_id, nonce_claim_id, linked_by, "
+                    "linked_at) "
+                    "SELECT :duplicate_id, org_id, workspace_id, system_id, run_id, "
+                    "suite_execution_id, admission_id, admission_contract_version, "
+                    "evidence_run_id, passport_revision_id, nonce_claim_id, linked_by, "
+                    "linked_at "
+                    "FROM governance_evaluation_suite_evidence_links "
+                    "WHERE suite_execution_id=:suite_execution_id"
+                ),
+                {
+                    "duplicate_id": str(uuid.uuid4()),
+                    "suite_execution_id": graph.scenario.suite_executions[0]["id"],
+                },
+            )
+    finally:
+        session.rollback()
         session.close()
 
 

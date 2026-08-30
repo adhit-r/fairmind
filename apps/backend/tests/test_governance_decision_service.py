@@ -81,8 +81,10 @@ def _authority() -> GovernanceDecisionAuthorityRecord:
         },
         requested_by="requester-a",
         evidence_submitters=("submitter-a",),
+        evidence_linkers=("linker-a",),
         suite_execution_ids=("suite-execution-a",),
         admission_ids=("admission-a",),
+        admission_linkers=("linker-a",),
         evidence_set=EVIDENCE_SET,
         evidence_set_hash=EVIDENCE_SET_HASH,
         operational_freshness=(
@@ -215,6 +217,27 @@ def test_decision_appends_server_bound_record_and_advances_expected_version() ->
     assert repository.owner_authorization_calls == []
 
 
+def test_decision_rejects_the_actor_who_linked_the_governing_evidence() -> None:
+    repository = _FakeRepository(_authority())
+    service = GovernanceDecisionService(
+        _FakeUnitOfWork(repository), uuid_factory=lambda: DECISION_ID
+    )
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        service.decide(
+            scope=SCOPE,
+            actor_id="linker-a",
+            idempotency_key="decision-linker-conflict",
+            expected_verdict_version=0,
+            overall_verdict="conditional",
+            layer_verdicts=LAYERS,
+            rationale="Linked evidence cannot be self-decided.",
+        )
+
+    assert caught.value.code == "governance_decision_separation_required"
+    assert repository.persisted == []
+
+
 def test_owner_override_records_exact_waived_relationships_without_raw_reason() -> None:
     repository = _FakeRepository(
         replace(
@@ -267,6 +290,42 @@ def test_owner_override_records_exact_waived_relationships_without_raw_reason() 
     assert repository.persisted[0].owner_override_reason == (
         "No independent decision owner is available."
     )
+
+
+def test_owner_linker_override_records_the_exact_linked_admissions() -> None:
+    repository = _FakeRepository(
+        replace(
+            _authority(),
+            evidence_linkers=("owner-a",),
+            admission_submitters=("submitter-a",),
+            admission_linkers=("owner-a",),
+        ),
+        owner_authorized=True,
+    )
+    unit_of_work = _FakeUnitOfWork(repository)
+    service = GovernanceDecisionService(unit_of_work, uuid_factory=lambda: DECISION_ID)
+
+    result = service.decide_owner_override(
+        scope=SCOPE,
+        actor_id="owner-a",
+        idempotency_key="owner-linker-override-key",
+        expected_verdict_version=0,
+        overall_verdict="conditional",
+        layer_verdicts=LAYERS,
+        rationale="Current evidence supports a conditional verdict.",
+        owner_override_reason="The canonical owner linked the evidence.",
+    )
+
+    assert result.status == 201
+    details = unit_of_work.outcome.audit_details.to_dict()
+    assert details["waivedRelationships"] == [
+        {
+            "relationshipType": "evidence_linker",
+            "actorId": "owner-a",
+            "resourceType": "evidence_admission",
+            "resourceIds": ["admission-a"],
+        }
+    ]
 
 
 @pytest.mark.parametrize(

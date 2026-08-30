@@ -156,6 +156,11 @@ def test_sqlite_repository_explicitly_rejects_owner_override_authorization(
             "governance_decision_override_not_required",
             409,
         ),
+        (
+            "decider must differ from evidence linker",
+            "governance_decision_separation_required",
+            409,
+        ),
     ),
 )
 def test_owner_override_trigger_errors_map_to_expected_rejections(
