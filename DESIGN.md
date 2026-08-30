@@ -196,19 +196,21 @@ Image failure is a designed state. Failed or already-broken portrait loads switc
 
 ### Evaluation State Semantics
 
-Evaluation runs always expose three independent axes. They are rendered as labelled rows or columns, never collapsed into one score or one traffic-light color:
+Assurance V2 runs expose three independent axes. They are rendered as labelled rows or columns, never collapsed into one score or one traffic-light color. Legacy V1 runs expose technical status and governance verdict only; the client must not invent an evaluator evidence result for a contract that does not return one.
 
 - **Execution status:** `queued`, `leased`, `running`, `awaiting_evidence`, `succeeded`, `failed`, `timed_out`, or `cancelled`. It describes whether the evaluator completed its work.
 - **Evaluator evidence result:** `pending`, `passed`, `passed_with_limitations`, `failed`, `informational`, `error`, `unavailable`, `insufficient_data`, or `unknown`. It describes what the evaluator found, including a failed model result from a successfully completed evaluator.
 - **Governance verdict:** `approved`, `conditional`, `review`, `blocked`, or `insufficient`. It describes the current human-governed decision supported by admitted evidence.
 
-`succeeded` never implies `passed`, and neither implies `approved`. `awaiting_evidence`, `unavailable`, `insufficient_data`, and `insufficient` remain neutral, explicit states rather than being presented as success or failure. `review` uses Action Orange to signal required human attention, not a passed result. Component-layer verdicts and risk-dimension verdicts remain separate labelled sections; an absent axis reads “Not assessed.”
+`succeeded` never implies `passed`, and neither implies `approved`. `awaiting_evidence`, `unavailable`, `insufficient_data`, and `insufficient` remain neutral, explicit states rather than being presented as success or failure. `review` uses Action Orange to signal required human attention, not a passed result.
+
+The V2 layer contract preserves separate suite, modality, component, and risk-dimension maps. Suite keys remain exact suite-execution identifiers; the other keys are readable domain labels. When a reviewer decides, `overallVerdict` is the single run-level reviewer verdict and never replaces or summarizes those maps. Current decision mutations require one suite verdict per exact suite execution and reject non-empty modality, component, or risk-dimension claims until registered capability-pack authority exists. Read surfaces preserve any contract-valid stored layer values they receive without treating them as proof that the corresponding evaluator is currently available. An empty map reads “Not assessed.”
 
 ### Evidence Admission And Trust Panel
 
 These are the v2 trust-panel and API contract rules. A legacy response that does not carry a field renders `Not returned by this response` or `Not assessed`; it is never upgraded into a stronger claim by the client.
 
-Every evidence detail view shows the exact scope before the result: organization, workspace, AI system, target version and digest, plan hash, suite version and digest, suite execution, lifecycle phase, execution depth, delivery source, evaluator identity and adapter version, and envelope/passport identifiers. Scope is part of the query key; when any scope identity changes, the prior panel clears before the next response is shown. Responses whose organization, system, plan, run, suite execution, target, or envelope does not match the requested scope are rejected and rendered as a bounded error.
+The V2 evidence detail shows the exact scope fields returned by its run contract before the result: organization, workspace, AI system, target version and digest, plan hash, suite version and digest, suite execution, lifecycle phase, execution depth, delivery source, evaluator identity and adapter version, and Execution Envelope identity. Scope is part of the query key; when any scope identity changes, the prior panel clears before the next response is shown. Responses whose organization, system, plan, run, suite execution, target, or envelope does not match the requested scope are rejected and rendered as a bounded error. The current run-read response does not return a Passport revision identifier, so the panel says “Not returned by this response” instead of inventing one.
 
 The v2 preview route is `/assurance/evaluations/:runId`. Its request boundary requires both frontend gates, `NEXT_PUBLIC_ASSURANCE_V2_UI_ENABLED` and `NEXT_PUBLIC_ASSURANCE_V2_RUN_UI_ENABLED`; when either frontend gate is off, the UI renders an explicit disabled state and makes no v2 run request. The API independently requires both backend gates, `assurance_v2_enabled` and `assurance_v2_runs_enabled`. The canonical app does not mount the run routes when either backend gate is off; direct or compatibility-router mounting also enforces a stable feature-disabled guard before endpoint authentication, request-body parsing, database access, or service composition. The client keeps any server rejection bounded as denied or unavailable, and no gate state falls back to v1 or fixture evidence.
 
@@ -217,21 +219,32 @@ The trust panel keeps these states visible beside the three result axes:
 - **Admission:** `pending`, `verified`, `unverified`, `expired`, `superseded`, `rejected`, or `trust_error`.
 - **Review:** `pending`, `accepted`, or `rejected`.
 - **Freshness:** `current`, `expiring`, `stale`, or `superseded`.
-- **Provenance:** signer, issuer, signing-key identifier, source (`fairmind_worker`, `external_provider`, or `imported_report`), verification time, expiry, and invalidation reason.
+- **Provenance:** signer, issuer, signing-key identifier, source (`fairmind_worker`, `external_provider`, or `imported_report`), effective expiry, bounded admission reasons, and bounded freshness/invalidation reason codes.
+
+Decision eligibility requires the exact admission to remain verified, accepted by review, operationally current, and bound to live issuer, key, evaluator-registration, and trust-policy authority. The UI may show only the bounded admission and freshness reason codes returned by the public contract; privileged free-text revocation or trust-administration rationale remains internal.
 
 Imported or unsigned reports remain visibly `unverified` and human-review-only. Linking a Passport can produce `review` or `insufficient`; it never directly produces `approved` or `blocked`. A reviewer outcome changes the review axis only. It must not rewrite technical status, evaluator evidence result, run outcome, or governance verdict.
 
-### Capability Truth Table
+### Binding Model
 
-The capability registry is the source for dashboard labels, documentation, website copy, and sales claims. A visible screen or an imported fixture is not evidence that an execution capability is available.
+Four bindings remain distinct:
+
+- **Request-state binding:** organization, workspace, system, plan, and run identify the frontend query and state key. A scope change synchronously masks prior data, and a mismatched response is rejected.
+- **Execution binding:** the immutable V2 Execution Envelope binds the run to exact target, suite executions, configuration, phase, depth, delivery, evaluator, nonce, budgets, and digests.
+- **Evidence binding:** the backend verifies a signed Passport revision against the exact envelope, suite execution, target, chronology, trust policy, issuer, and key before evidence can be admitted or linked. The UI presents only binding fields returned by the read contract; client-side scope checks are not cryptographic verification.
+- **Decision binding:** suite-layer keys must match the run's exact suite-execution identifiers. The evidence-set hash and verdict version bind an append-only governance decision, while the one run-level `overallVerdict` remains separate from every layer projection.
+
+### Current Evidence-Passport Capability Truth Table
+
+`capabilityState` is evidence-record vocabulary, not yet an authoritative product capability registry. P5 must still make one registry authoritative across the product, documentation, website, and sales claims. Until then, a visible screen, accepted import, or stored state is never proof that a FairMind execution capability is available.
 
 | Capability state | Runtime behavior | UI treatment | Permitted claim |
 | --- | --- | --- | --- |
-| `planned` | No route or worker is composed | Show roadmap or unavailable state | Planned only |
-| `experimental` | Explicitly allowlisted and independently benchmarked below a public gate | Show version, limitations, and experimental badge | Experimental evaluation support |
-| `advisory` | Runs may produce supporting evidence; no automatic action | Show evidence and reviewer-needed state | Advisory evidence collection |
-| `verified` | Adapter, benchmark, sandbox, red-team, and soak gates are current | Show executable capability with exact version and freshness | Named execution capability |
-| `retired` | New execution is rejected; historical evidence remains readable | Show retired and invalidation/freshness state | Historical evidence only |
+| `validated` | The evidence record claims a validated evaluator path and carries a result | Show the result beside source, trust, review, freshness, and limitations | The record's bounded result only; not product availability or certification |
+| `metadata_only` | Metadata is recorded without an executable evaluation result | Show metadata and an explicit non-evaluated state | Metadata recorded only |
+| `external_provider` | An external provider produced the evaluation material | Show provider provenance and independent trust/review state | External-provider evidence received |
+| `unavailable` | The requested evaluation capability was unavailable; result status must also be `unavailable` | Show unavailable without success styling | Capability unavailable for this record |
+| `insufficient_data` | Available inputs could not support the evaluation; result status must also be `insufficient_data` | Show the missing-data limitation and next action | Insufficient data for this record |
 
 The current product remains an internal, default-off evidence-integrity foundation. It may claim governance planning, evidence ingestion, and reviewer workflow only after their respective release gates; it must not claim certification, automatic compliance, automatic enforcement, or “FairMind Verified.”
 
@@ -241,7 +254,9 @@ FairMind-worker delivery values also remain part of the stored contract for hist
 
 ### Worker Security Envelope
 
-The UI may expose a worker attempt only through its server-generated Execution Envelope. The envelope contains immutable target and suite bindings, configuration and plan hashes, phase/depth/delivery, nonce, runner-image digest, budgets, input bindings, and trust-policy version. It excludes credentials, raw secrets, unrestricted model weights, private reasoning traces, and host paths. Artifact references are immutable SHA-256 content-addressed identifiers resolved through short-lived brokers. A worker result is not decision-grade until its signed Passport matches the envelope, suite execution, target digest, nonce, and current trust policy.
+P0 defines the immutable Execution Envelope and a tenant-bound service-principal authorization predicate, but it mounts no worker route, issues no worker credential, runs no queue or sandbox, and provides no artifact broker. The UI therefore presents FairMind-worker execution as unavailable.
+
+When P1 introduces the worker runtime, the UI may expose an attempt only through its server-generated Execution Envelope. That envelope must bind the exact target and suites, configuration and plan hashes, phase/depth/delivery, nonce, runner-image digest, budgets, input bindings, and trust-policy version while excluding credentials, raw secrets, unrestricted model weights, private reasoning traces, and host paths. P1 artifact references must use immutable SHA-256 identifiers resolved through short-lived brokers. A worker result cannot become decision-grade until its signed Passport matches the envelope, suite execution, target digest, nonce, and current trust policy.
 
 ### Evaluation Runs Workbench
 
@@ -249,7 +264,7 @@ Evaluation Runs is one dense, flat work surface inside the established dashboard
 
 The plan form keeps target kind, lifecycle phases, depth, enforcement, delivery, and immutable suite versions visible together. Preflight states state both whether a run can be prepared and whether FairMind execution is available. External and imported plans may prepare an `awaiting_evidence` run, but the interface continues to state that an exact Evidence Passport revision is required.
 
-The recent-runs table keeps technical status and overall verdict in separate columns. Run details show plan metadata, only the layer results supplied by the evidence, exact evidence-run and Passport-revision identifiers, and an “Awaiting evidence” state when no revision is linked. It never fabricates artifacts, scores, layer findings, or compliance claims.
+The recent-runs table keeps technical status and overall verdict in separate columns. Legacy run details show exact evidence-run and Passport-revision identifiers only when that contract returns them. The V2 trust preview shows its exact envelope and suite bindings but currently marks the Passport revision as not returned. Both surfaces render only layer results supplied by their scoped response and show an “Awaiting evidence” or “Not assessed” state when data is absent. They never fabricate artifacts, scores, layer findings, or compliance claims.
 
 ### Interaction Accessibility
 

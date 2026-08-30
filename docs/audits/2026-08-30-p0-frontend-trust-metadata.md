@@ -52,7 +52,7 @@ bunx playwright test tests/assurance-v2-run-child-gate.spec.ts \
   --project=chromium --workers=1 --timeout=60000 --reporter=line
 ```
 
-Result: one feature-on test passed and the feature-off-only test skipped.
+Result: two feature-on tests passed and the feature-off-only test skipped.
 
 ```bash
 NEXT_PUBLIC_ASSURANCE_UNTRUSTED_EXTERNAL_EVIDENCE_LINKING_ENABLED=true \
@@ -62,7 +62,7 @@ bunx playwright test tests/assurance-v2-run-child-gate.spec.ts \
   --project=chromium --workers=1 --timeout=60000 --reporter=line
 ```
 
-Result: one feature-off test passed and the feature-on-only test skipped.
+Result: one feature-off test passed and the two feature-on-only tests skipped.
 
 Frontend verification also passed:
 

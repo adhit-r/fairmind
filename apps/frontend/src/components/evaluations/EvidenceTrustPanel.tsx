@@ -161,26 +161,31 @@ export function EvidenceTrustPanel({ run }: { run: EvaluationRunV2 }) {
         <div className="p-3"><dt className="text-xs font-black uppercase text-[#59615D]">Completed</dt><dd className="mt-1 font-bold"><Timestamp value={run.completedAt} /></dd></div>
       </dl>
 
-      <div className="border-t-2 border-[#0F1412] p-4 sm:p-5">
-        <h3 className="text-base font-black">Layer verdicts</h3>
-        <p className="mt-1 max-w-[72ch] text-sm font-semibold text-[#59615D]">These governance projections remain distinct from the execution and evaluator evidence axes above.</p>
+      <section aria-labelledby="layered-governance-verdicts-heading" className="border-t-2 border-[#0F1412] p-4 sm:p-5">
+        <h3 id="layered-governance-verdicts-heading" className="text-base font-black">Layered governance verdicts</h3>
+        <p className="mt-1 max-w-[72ch] text-sm font-semibold text-[#59615D]">
+          Suite, modality, component, and risk-dimension projections remain distinct from the execution and evaluator evidence axes.{' '}
+          {run.verdictVersion > 0
+            ? 'The governance verdict above is the single overall reviewer verdict.'
+            : 'The governance verdict above is the current run-level value; no reviewer decision version is recorded.'}
+        </p>
         <div className="mt-3 grid gap-3 md:grid-cols-2">
           {[
-            { label: 'Suite verdicts', verdicts: run.layerVerdicts.suites },
+            { label: 'Suite verdicts', verdicts: run.layerVerdicts.suites, preserveKeys: true },
             { label: 'Modality verdicts', verdicts: run.layerVerdicts.modalities },
             { label: 'Component verdicts', verdicts: run.layerVerdicts.components },
             { label: 'Risk dimension verdicts', verdicts: run.layerVerdicts.riskDimensions },
-          ].map(({ label, verdicts }) => {
+          ].map(({ label, verdicts, preserveKeys }) => {
             const entries = Object.entries(verdicts)
             return (
               <section key={label} aria-label={label} className="border-2 border-[#0F1412] bg-[#F3F5F0]">
                 <h4 className="border-b-2 border-[#0F1412] bg-[#FCFDF8] px-3 py-2 text-sm font-black">{label}</h4>
-                {entries.length === 0 ? <p className="p-3 text-sm font-semibold text-[#59615D]">Not assessed</p> : <dl className="divide-y-2 divide-[#0F1412]">{entries.map(([name, verdict]) => <div key={name} className="flex items-center justify-between gap-3 px-3 py-2"><dt className="font-semibold">{sentenceLabel(name)}</dt><dd><span className={`inline-flex min-h-8 items-center border-2 px-2 py-1 text-xs font-black uppercase ${axisClass('Governance verdict', sentenceLabel(verdict))}`}>{sentenceLabel(verdict)}</span></dd></div>)}</dl>}
+                {entries.length === 0 ? <p className="p-3 text-sm font-semibold text-[#59615D]">Not assessed</p> : <dl className="divide-y-2 divide-[#0F1412]">{entries.map(([name, verdict]) => <div key={name} className="flex min-w-0 items-center justify-between gap-3 px-3 py-2"><dt className={preserveKeys ? 'min-w-0 break-all font-mono text-xs font-bold' : 'min-w-0 break-words font-semibold'}>{preserveKeys ? name : sentenceLabel(name)}</dt><dd className="shrink-0"><span className={`inline-flex min-h-8 items-center border-2 px-2 py-1 text-xs font-black uppercase ${axisClass('Governance verdict', sentenceLabel(verdict))}`}>{sentenceLabel(verdict)}</span></dd></div>)}</dl>}
               </section>
             )
           })}
         </div>
-      </div>
+      </section>
 
       <div className="border-t-2 border-[#0F1412] p-4 sm:p-5">
         <h3 className="text-base font-black">Suite evidence metadata</h3>
