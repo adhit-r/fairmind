@@ -39,8 +39,9 @@ The exact security review then exposed a pre-existing contract-fixture gap:
 backend plan/run serializers emit `contractVersion`, while the strict frontend
 schemas and mocks omitted it. A public-controller tracer test using a
 wire-shaped fixture failed before both schemas were pinned to `1.0.0`; a
-negative contract test prevents either schema from accepting another version,
-and the shared unit and Playwright fixtures mirror the canonical contract.
+negative contract test prevents either schema from accepting another or
+omitted version, and the shared unit and Playwright fixtures mirror the
+canonical contract.
 
 Final verification:
 
