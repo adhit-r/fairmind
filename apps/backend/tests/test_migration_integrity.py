@@ -12,6 +12,7 @@ from sqlalchemy import create_engine, text
 
 import config.migration_integrity as migration_integrity
 from config.migration_integrity import (
+    FROZEN_014_OPERATOR_CHECKSUM,
     FROZEN_013B_OPERATOR_V2_CHECKSUM,
     FROZEN_013C_OPERATOR_CHECKSUM,
     FROZEN_013D_OPERATOR_CHECKSUM,
@@ -85,6 +86,10 @@ POSTGRES_013L_OPERATOR = (
 )
 POSTGRES_OPERATOR_CHAIN_THROUGH_013L = POSTGRES_OPERATOR_CHAIN_THROUGH_013K + (
     POSTGRES_013L_OPERATOR,
+)
+POSTGRES_014_OPERATOR = "upgrade_paths/013l_to_014_worker_execution_foundation.sql"
+POSTGRES_OPERATOR_CHAIN_THROUGH_014 = POSTGRES_OPERATOR_CHAIN_THROUGH_013L + (
+    POSTGRES_014_OPERATOR,
 )
 POSTGRESQL_013B_PREREQUISITE_CONSTRAINTS = frozenset(
     {
@@ -796,6 +801,27 @@ def test_013l_operator_direct_and_ledger_sources_are_frozen() -> None:
     assert frozen.checksum in operator_source
 
 
+def test_014_operator_direct_and_ledger_sources_are_frozen() -> None:
+    import hashlib
+
+    direct = MIGRATIONS / "014_worker_execution_foundation.sql"
+    operator = MIGRATIONS / POSTGRES_014_OPERATOR
+    frozen = next(
+        item
+        for item in FROZEN_ASSURANCE_MIGRATIONS
+        if item.ledger_key == "013l-to-014-worker-execution-foundation-v1"
+    )
+    operator_source = operator.read_text(encoding="utf-8")
+
+    assert hashlib.sha256(direct.read_bytes()).hexdigest() == frozen.checksum
+    assert hashlib.sha256(operator.read_bytes()).hexdigest() == (
+        FROZEN_014_OPERATOR_CHECKSUM
+    )
+    assert operator_source.count("\\ir ../014_worker_execution_foundation.sql") == 1
+    assert frozen.ledger_key in operator_source
+    assert frozen.checksum in operator_source
+
+
 def test_013j_catalog_manifest_covers_owner_authority_and_guards() -> None:
     assert {"organizations", "org_members", "org_roles"} <= (
         POSTGRESQL_ASSURANCE_CATALOG_SPEC.relations
@@ -809,6 +835,29 @@ def test_013j_catalog_manifest_covers_owner_authority_and_guards() -> None:
         "governance_evidence_reviews_guard_insert",
         "governance_evaluation_decisions_guard_insert",
         "governance_evaluation_decisions_owner_override_audit_013j",
+    } <= POSTGRESQL_ASSURANCE_REQUIRED_TRIGGERS
+
+
+def test_014_catalog_manifest_covers_worker_execution_foundation() -> None:
+    assert {
+        "governance_evaluation_worker_identities",
+        "governance_evaluation_suite_attempts",
+        "governance_evaluation_artifacts",
+        "governance_evaluation_attempt_artifacts",
+        "governance_evaluation_cancellations",
+    } <= POSTGRESQL_ASSURANCE_CATALOG_SPEC.relations
+    assert {
+        "guard_governance_evaluation_suite_queue_metadata_014",
+        "guard_governance_evaluation_worker_identity_014",
+        "guard_governance_evaluation_suite_attempt_014",
+        "guard_governance_evaluation_artifact_014",
+    } <= POSTGRESQL_ASSURANCE_FUNCTIONS
+    assert {
+        "000_014_governance_evaluation_suite_queue_metadata_guard",
+        "governance_evaluation_worker_identities_guard_update_014",
+        "governance_evaluation_suite_attempts_guard_update_014",
+        "governance_evaluation_artifacts_guard_update_014",
+        "governance_evaluation_cancellations_no_update_014",
     } <= POSTGRESQL_ASSURANCE_REQUIRED_TRIGGERS
 
 
@@ -1313,7 +1362,7 @@ def test_native_production_catalog_freeze_matches_two_operator_installs_and_tamp
     try:
         for ordinal, schema_name in enumerate(schemas):
             _install_postgresql_base_through_012(POSTGRES_URL, schema_name)
-            for migration_name in POSTGRES_OPERATOR_CHAIN_THROUGH_013L:
+            for migration_name in POSTGRES_OPERATOR_CHAIN_THROUGH_014:
                 result = _run_postgresql_operator_migration(
                     POSTGRES_URL,
                     schema_name,
@@ -1324,18 +1373,13 @@ def test_native_production_catalog_freeze_matches_two_operator_installs_and_tamp
                 replay = _run_postgresql_operator_migration(
                     POSTGRES_URL,
                     schema_name,
-                    POSTGRES_013L_OPERATOR,
+                    POSTGRES_014_OPERATOR,
                 )
                 assert replay.returncode == 0, replay.stderr
 
             engine = create_engine(POSTGRES_URL)
             bind_postgresql_engine_search_path(engine, schema_name)
             engines.append(engine)
-            verify_assurance_migration_integrity(
-                engine,
-                enabled=True,
-                postgresql_schema=schema_name,
-            )
             with engine.connect() as connection:
                 digests.append(
                     postgresql_assurance_catalog_digest(
@@ -1347,6 +1391,12 @@ def test_native_production_catalog_freeze_matches_two_operator_installs_and_tamp
 
         frozen = FROZEN_POSTGRESQL_ASSURANCE_CATALOGS[14]
         assert digests == [frozen.digest, frozen.digest]
+        for schema_name, engine in zip(schemas, engines, strict=True):
+            verify_assurance_migration_integrity(
+                engine,
+                enabled=True,
+                postgresql_schema=schema_name,
+            )
 
         with engines[0].begin() as connection:
             connection.exec_driver_sql(
@@ -1378,6 +1428,114 @@ def test_native_production_catalog_freeze_matches_two_operator_installs_and_tamp
                             sql.Identifier(schema_name)
                         )
                     )
+        finally:
+            cleanup.close()
+
+
+@pytest.mark.skipif(
+    not POSTGRES_URL,
+    reason="requires FAIRMIND_TEST_POSTGRES_URL pointing to disposable PostgreSQL",
+)
+def test_native_014_worker_identity_and_artifact_transitions_fail_closed() -> None:
+    import psycopg2
+    from psycopg2 import sql
+    from sqlalchemy.exc import DBAPIError
+
+    assert POSTGRES_URL is not None
+    schema_name = f"fm_014_behavior_{uuid.uuid4().hex[:12]}"
+    engine = None
+    try:
+        _install_postgresql_base_through_012(POSTGRES_URL, schema_name)
+        for migration_name in POSTGRES_OPERATOR_CHAIN_THROUGH_014:
+            result = _run_postgresql_operator_migration(
+                POSTGRES_URL,
+                schema_name,
+                migration_name,
+            )
+            assert result.returncode == 0, result.stderr
+
+        engine = create_engine(POSTGRES_URL)
+        bind_postgresql_engine_search_path(engine, schema_name)
+        timestamp = "2026-01-01T00:00:00.000000+00:00"
+        later = "2026-01-01T00:00:01.000000+00:00"
+        with engine.begin() as connection:
+            connection.exec_driver_sql(
+                "INSERT INTO governance_evaluation_worker_identities ("
+                "id, org_id, principal_subject, worker_type, capabilities_json, "
+                "capabilities_hash, status, created_by, created_at) VALUES ("
+                "'worker-014', 'org-014', 'service:worker-014', 'evaluation', '{}', "
+                "fairmind_sha256_text_013f('{}'), 'active', 'operator-014', %s)",
+                (timestamp,),
+            )
+            connection.exec_driver_sql(
+                "INSERT INTO governance_evaluation_artifacts ("
+                "id, org_id, sha256, media_type, size_bytes, storage_key, state, created_at) "
+                "VALUES ('artifact-014', 'org-014', %s, 'application/json', 2, "
+                "'org-014/artifact-014.json', 'quarantined', %s)",
+                ("a" * 64, timestamp),
+            )
+
+        with pytest.raises(DBAPIError, match="worker identity binding is immutable"):
+            with engine.begin() as connection:
+                connection.exec_driver_sql(
+                    "UPDATE governance_evaluation_worker_identities "
+                    "SET principal_subject = 'service:attacker' WHERE id = 'worker-014'"
+                )
+
+        with engine.begin() as connection:
+            connection.exec_driver_sql(
+                "UPDATE governance_evaluation_worker_identities SET status = 'revoked', "
+                "revoked_by = 'operator-014', revoked_at = %s, "
+                "revocation_reason = 'retired' WHERE id = 'worker-014'",
+                (later,),
+            )
+            connection.exec_driver_sql(
+                "UPDATE governance_evaluation_artifacts SET state = 'available', "
+                "available_at = %s WHERE id = 'artifact-014'",
+                (later,),
+            )
+
+        with pytest.raises(DBAPIError, match="revoked worker identity is immutable"):
+            with engine.begin() as connection:
+                connection.exec_driver_sql(
+                    "UPDATE governance_evaluation_worker_identities SET status = 'active', "
+                    "revoked_by = NULL, revoked_at = NULL, revocation_reason = NULL "
+                    "WHERE id = 'worker-014'"
+                )
+        with pytest.raises(DBAPIError, match="artifact content identity is immutable"):
+            with engine.begin() as connection:
+                connection.exec_driver_sql(
+                    "UPDATE governance_evaluation_artifacts SET sha256 = %s "
+                    "WHERE id = 'artifact-014'",
+                    ("b" * 64,),
+                )
+        with pytest.raises(DBAPIError, match="append-only"):
+            with engine.begin() as connection:
+                connection.exec_driver_sql(
+                    "DELETE FROM governance_evaluation_worker_identities "
+                    "WHERE id = 'worker-014'"
+                )
+        with pytest.raises(DBAPIError):
+            with engine.begin() as connection:
+                connection.exec_driver_sql(
+                    "INSERT INTO governance_evaluation_artifacts ("
+                    "id, org_id, sha256, media_type, size_bytes, storage_key, state, created_at) "
+                    "VALUES ('artifact-bad-014', 'org-014', %s, 'application/json', 2, "
+                    "'../escape.json', 'quarantined', %s)",
+                    ("c" * 64, timestamp),
+                )
+    finally:
+        if engine is not None:
+            engine.dispose()
+        cleanup = psycopg2.connect(POSTGRES_URL)
+        cleanup.autocommit = True
+        try:
+            with cleanup.cursor() as cursor:
+                cursor.execute(
+                    sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(
+                        sql.Identifier(schema_name)
+                    )
+                )
         finally:
             cleanup.close()
 
@@ -1611,7 +1769,7 @@ def test_native_013j_startup_rejects_every_missing_or_disabled_guard() -> None:
     )
     try:
         _install_postgresql_base_through_012(POSTGRES_URL, schema_name)
-        for migration_name in POSTGRES_OPERATOR_CHAIN_THROUGH_013L:
+        for migration_name in POSTGRES_OPERATOR_CHAIN_THROUGH_014:
             result = _run_postgresql_operator_migration(
                 POSTGRES_URL,
                 schema_name,
@@ -1694,7 +1852,7 @@ def test_native_013j_catalog_rejects_function_acl_relation_and_trigger_drift() -
     engine = None
     try:
         _install_postgresql_base_through_012(POSTGRES_URL, schema_name)
-        for migration_name in POSTGRES_OPERATOR_CHAIN_THROUGH_013L:
+        for migration_name in POSTGRES_OPERATOR_CHAIN_THROUGH_014:
             result = _run_postgresql_operator_migration(
                 POSTGRES_URL,
                 schema_name,
@@ -2017,7 +2175,7 @@ def test_native_013i_startup_rejects_disabled_and_missing_trigger() -> None:
     engine = None
     try:
         _install_postgresql_base_through_012(POSTGRES_URL, schema_name)
-        for migration_name in POSTGRES_OPERATOR_CHAIN_THROUGH_013L:
+        for migration_name in POSTGRES_OPERATOR_CHAIN_THROUGH_014:
             result = _run_postgresql_operator_migration(
                 POSTGRES_URL,
                 schema_name,

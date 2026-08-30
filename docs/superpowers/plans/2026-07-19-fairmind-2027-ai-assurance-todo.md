@@ -64,7 +64,8 @@ cannot enter formal evidence review or governance decision authority.
 
 ## P1 — Isolated execution foundation
 
-- [ ] Add migration 014 for worker identities, leased jobs, suite attempts, artifacts, and cancellation.
+- [x] Add migration 014 for worker identities, leased jobs, suite attempts, artifacts, and cancellation.
+  - Checkpoint: migration 014 extends the existing suite-execution job rather than creating a competing state machine, and adds tenant-bound worker identities, lease-token-hash-only attempts, content-addressed artifact metadata, exact attempt-artifact links, and run/suite cancellation requests. PostgreSQL 14 is release authority with a frozen operator ledger/catalog and controlled or append-only mutations; SQLite installs exact fail-closed parity objects but rejects worker writes. This schema foundation does not claim queue, heartbeat, completion, object-storage, broker, sandbox, or worker-route behavior. See `docs/audits/2026-08-30-p1-worker-execution-foundation.md`.
 - [ ] Implement a PostgreSQL `FOR UPDATE SKIP LOCKED` queue with 60-second leases, 20-second heartbeats, expiry recovery, and manifest-controlled retries capped at three.
 - [ ] Implement `queued`, `leased`, `running`, `awaiting_evidence`, `succeeded`, `failed`, `timed_out`, and `cancelled` job states.
 - [ ] Require the live lease token and matching signed Passport v2 for completion; cancellation wins races.

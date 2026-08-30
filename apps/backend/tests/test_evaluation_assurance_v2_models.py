@@ -179,7 +179,8 @@ def test_all_new_models_have_exact_columns_unique_constraint_names_and_vocabular
             "admission_status", "review_status", "freshness_status", "evidence_run_id",
             "passport_revision_id", "linked_by", "linked_at", "result_summary_json",
             "limitations_json", "started_at", "completed_at", "failure_code",
-            "failure_message", "created_at", "updated_at",
+            "failure_message", "created_at", "updated_at", "available_at",
+            "max_attempts", "attempt_count",
         ),
         "GovernanceEvidenceIssuer": (
             "id", "org_id", "issuer_key", "name", "issuer_type",
