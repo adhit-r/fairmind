@@ -66,6 +66,7 @@ def owner_override_session_factory():
             "013i_imported_evidence_delivery_integrity.sql",
             "013j_owner_decision_override_integrity.sql",
             "013k_verified_evidence_link_integrity.sql",
+            "013l_delegated_separation_override_grant_integrity.sql",
         ):
             session.execute(
                 text(

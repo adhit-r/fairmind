@@ -1,9 +1,11 @@
 """Fail-closed permission vocabulary for Assurance V2 HTTP boundaries.
 
-Only permissions in ``LIVE_HUMAN_PERMISSION_ERRORS`` authorize current human
+Only permissions in ``LIVE_HUMAN_PERMISSION_ERRORS`` authorize ordinary human
 API routes. Worker authority has a separate, unmounted, tenant-bound service
-principal predicate; separation override remains reserved. Trust admin is live
-only at the independently gated trust-administration route.
+principal predicate. Separation override is reserved for the PostgreSQL-proven
+canonical owner and exact delegated grants rather than generic human role
+checks. Trust admin is live only at the independently gated administration
+route.
 """
 
 from __future__ import annotations
@@ -28,7 +30,7 @@ EVALUATION_DECISION_PERMISSION: Final = "evaluation:decision"
 EVALUATION_CATALOG_ADMIN_PERMISSION: Final = "evaluation:catalog:admin"
 
 EVALUATION_TRUST_ADMIN_PERMISSION: Final = "evaluation:trust:admin"
-# Reserved vocabulary. These constants do not authorize a current human route.
+# Reserved vocabulary. These constants do not authorize an ordinary human route.
 EVALUATION_SEPARATION_OVERRIDE_PERMISSION: Final = "evaluation:separation:override"
 EVALUATION_WORKER_PERMISSION: Final = "evaluation:worker"  # Service principals only.
 _MAX_SERVICE_PERMISSIONS: Final = 64

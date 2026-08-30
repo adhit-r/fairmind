@@ -60,6 +60,13 @@ GOVERNANCE_DECISION_PATH = (
     "/systems/{system_id}/evaluation-v2/runs/{run_id}/decisions"
 )
 OWNER_DECISION_OVERRIDE_PATH = GOVERNANCE_DECISION_PATH + "/owner-override"
+SEPARATION_OVERRIDE_GRANT_PATH = (
+    "/api/v1/ai-governance/organizations/{org_id}/workspaces/{workspace_id}"
+    "/systems/{system_id}/evaluation-v2/runs/{run_id}/separation-override-grants"
+)
+DELEGATED_SEPARATION_OVERRIDE_DECISION_PATH = (
+    SEPARATION_OVERRIDE_GRANT_PATH + "/{grant_id}/decision"
+)
 IMPORTED_EVIDENCE_PATH = (
     "/api/v1/ai-governance/organizations/{org_id}/workspaces/{workspace_id}"
     "/systems/{system_id}/evaluation-v2/runs/{run_id}"
@@ -164,6 +171,8 @@ def test_assurance_v2_routes_are_mounted_only_when_enabled() -> None:
         assert VERIFIED_EVIDENCE_LINK_PATH not in disabled_paths
         assert GOVERNANCE_DECISION_PATH not in disabled_paths
         assert OWNER_DECISION_OVERRIDE_PATH not in disabled_paths
+        assert SEPARATION_OVERRIDE_GRANT_PATH not in disabled_paths
+        assert DELEGATED_SEPARATION_OVERRIDE_DECISION_PATH not in disabled_paths
         assert IMPORTED_EVIDENCE_PATH not in disabled_paths
         assert EVALUATOR_CATALOG_PATH not in disabled_paths
         assert LEGACY_PLAN_PATH in disabled_paths
@@ -185,6 +194,8 @@ def test_assurance_v2_routes_are_mounted_only_when_enabled() -> None:
         assert VERIFIED_EVIDENCE_LINK_PATH not in enabled_paths_without_evidence_submit
         assert GOVERNANCE_DECISION_PATH not in enabled_paths_without_evidence_submit
         assert OWNER_DECISION_OVERRIDE_PATH not in enabled_paths_without_evidence_submit
+        assert SEPARATION_OVERRIDE_GRANT_PATH not in enabled_paths_without_evidence_submit
+        assert DELEGATED_SEPARATION_OVERRIDE_DECISION_PATH not in enabled_paths_without_evidence_submit
         assert IMPORTED_EVIDENCE_PATH not in enabled_paths_without_evidence_submit
         assert EVALUATOR_CATALOG_PATH not in enabled_paths_without_evidence_submit
         assert LEGACY_PLAN_PATH in enabled_paths_without_evidence_submit
@@ -245,12 +256,16 @@ def test_assurance_v2_routes_are_mounted_only_when_enabled() -> None:
         enabled_paths_without_override = _route_paths()
         assert GOVERNANCE_DECISION_PATH in enabled_paths_without_override
         assert OWNER_DECISION_OVERRIDE_PATH not in enabled_paths_without_override
+        assert SEPARATION_OVERRIDE_GRANT_PATH not in enabled_paths_without_override
+        assert DELEGATED_SEPARATION_OVERRIDE_DECISION_PATH not in enabled_paths_without_override
 
         settings.assurance_v2_separation_override_enabled = True
         importlib.reload(main_module)
         enabled_paths_with_decisions = _route_paths()
         assert GOVERNANCE_DECISION_PATH in enabled_paths_with_decisions
         assert OWNER_DECISION_OVERRIDE_PATH in enabled_paths_with_decisions
+        assert SEPARATION_OVERRIDE_GRANT_PATH in enabled_paths_with_decisions
+        assert DELEGATED_SEPARATION_OVERRIDE_DECISION_PATH in enabled_paths_with_decisions
         assert VERIFIED_EVIDENCE_PATH not in enabled_paths_with_decisions
         assert VERIFIED_EVIDENCE_REVIEW_PATH not in enabled_paths_with_decisions
         assert EVALUATOR_CATALOG_PATH not in enabled_paths_with_decisions

@@ -540,6 +540,25 @@ class OwnerDecisionOverrideRequest(GovernanceDecisionRequest):
         return value
 
 
+class SeparationOverrideGrantRequest(StrictModel):
+    grantee_actor_id: str = Field(
+        alias="granteeActorId", min_length=1, max_length=128
+    )
+    expected_verdict_version: int = Field(alias="expectedVerdictVersion", ge=0)
+    separation_override_reason: str = Field(
+        alias="separationOverrideReason", min_length=1, max_length=2000
+    )
+
+    @field_validator("separation_override_reason")
+    @classmethod
+    def _validate_separation_override_reason(cls, value: str) -> str:
+        try:
+            validate_owner_override_reason_input(value)
+        except EvaluationWorkbenchInputError as error:
+            raise ValueError("separation override reason is unsafe") from error
+        return value
+
+
 class GovernanceDecisionSuiteFreshnessResponse(StrictModel):
     suite_execution_id: str = Field(alias="suiteExecutionId")
     recorded_freshness_status: FreshnessStatus = Field(alias="recordedFreshnessStatus")
@@ -578,6 +597,21 @@ class GovernanceDecisionResponse(StrictModel):
 
 class OwnerDecisionOverrideResponse(GovernanceDecisionResponse):
     owner_override_applied: Literal[True] = Field(alias="ownerOverrideApplied")
+
+
+class SeparationOverrideGrantResponse(StrictModel):
+    grant_id: str = Field(alias="grantId")
+    run_id: str = Field(alias="runId")
+    expected_verdict_version: int = Field(alias="expectedVerdictVersion", ge=0)
+    granted_by: str = Field(alias="grantedBy")
+    grantee_actor_id: str = Field(alias="granteeActorId")
+    granted_at: str = Field(alias="grantedAt")
+    expires_at: str = Field(alias="expiresAt")
+
+
+class DelegatedSeparationOverrideDecisionResponse(GovernanceDecisionResponse):
+    separation_override_applied: Literal[True] = Field(alias="separationOverrideApplied")
+    separation_override_grant_id: str = Field(alias="separationOverrideGrantId")
 
 
 def _depth(value: Any, level: int = 0) -> int:
@@ -1636,6 +1670,111 @@ async def create_governance_decision(
             rationale=payload["rationale"],
         )
         return _respond(result, GovernanceDecisionResponse)
+    except EvaluationWorkbenchError as error:
+        _raise(error)
+
+
+@governance_decision_override_router.post(
+    "/workspaces/{workspace_id}/systems/{system_id}/evaluation-v2/runs/{run_id}"
+    "/separation-override-grants",
+    status_code=201,
+    response_model=SeparationOverrideGrantResponse,
+    dependencies=[Depends(_require_owner_decision_override_enabled)],
+    openapi_extra=_request_body_schema(SeparationOverrideGrantRequest),
+)
+async def create_separation_override_grant(
+    org_id: str,
+    workspace_id: str,
+    system_id: str,
+    run_id: str,
+    request: Request,
+    idempotency_key: str = Header(alias="Idempotency-Key"),
+    membership: OrgMembership = Depends(organization_membership),
+    db: Session = Depends(get_db),
+    decision_service: GovernanceDecisionService = Depends(get_governance_decision_service),
+):
+    """Create one immutable, named, exact-run decision exception grant."""
+
+    require_evaluation_permission(membership, EVALUATION_DECISION_PERMISSION)
+    if membership.org_id != org_id:
+        _missing("decision_scope")
+    _require_decision_scope(
+        db=db,
+        organization_id=membership.org_id,
+        workspace_id=workspace_id,
+        system_id=system_id,
+        run_id=run_id,
+    )
+    payload = await _payload(request, SeparationOverrideGrantRequest)
+    try:
+        result = decision_service.create_separation_override_grant(
+            scope=GovernanceDecisionScope(
+                organization_id=membership.org_id,
+                workspace_id=workspace_id,
+                system_id=system_id,
+                run_id=run_id,
+            ),
+            actor_id=membership.user_id,
+            idempotency_key=idempotency_key,
+            grantee_actor_id=payload["granteeActorId"],
+            expected_verdict_version=payload["expectedVerdictVersion"],
+            reason=payload["separationOverrideReason"],
+        )
+        return _respond(result, SeparationOverrideGrantResponse)
+    except EvaluationWorkbenchError as error:
+        _raise(error)
+
+
+@governance_decision_override_router.post(
+    "/workspaces/{workspace_id}/systems/{system_id}/evaluation-v2/runs/{run_id}"
+    "/separation-override-grants/{grant_id}/decision",
+    status_code=201,
+    response_model=DelegatedSeparationOverrideDecisionResponse,
+    dependencies=[Depends(_require_owner_decision_override_enabled)],
+    openapi_extra=_request_body_schema(GovernanceDecisionRequest),
+)
+async def create_delegated_separation_override_decision(
+    org_id: str,
+    workspace_id: str,
+    system_id: str,
+    run_id: str,
+    grant_id: str,
+    request: Request,
+    idempotency_key: str = Header(alias="Idempotency-Key"),
+    membership: OrgMembership = Depends(organization_membership),
+    db: Session = Depends(get_db),
+    decision_service: GovernanceDecisionService = Depends(get_governance_decision_service),
+):
+    """Consume one named grant by appending its immutable decision receipt."""
+
+    require_evaluation_permission(membership, EVALUATION_DECISION_PERMISSION)
+    if membership.org_id != org_id:
+        _missing("decision_scope")
+    _require_decision_scope(
+        db=db,
+        organization_id=membership.org_id,
+        workspace_id=workspace_id,
+        system_id=system_id,
+        run_id=run_id,
+    )
+    payload = await _payload(request, GovernanceDecisionRequest)
+    try:
+        result = decision_service.decide_delegated_override(
+            scope=GovernanceDecisionScope(
+                organization_id=membership.org_id,
+                workspace_id=workspace_id,
+                system_id=system_id,
+                run_id=run_id,
+            ),
+            actor_id=membership.user_id,
+            idempotency_key=idempotency_key,
+            grant_id=grant_id,
+            expected_verdict_version=payload["expectedVerdictVersion"],
+            overall_verdict=payload["overallVerdict"],
+            layer_verdicts=payload["layerVerdicts"],
+            rationale=payload["rationale"],
+        )
+        return _respond(result, DelegatedSeparationOverrideDecisionResponse)
     except EvaluationWorkbenchError as error:
         _raise(error)
 

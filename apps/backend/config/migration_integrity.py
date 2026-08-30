@@ -94,6 +94,8 @@ _FROZEN_013J_CHECKSUM = "bc5deb123981ee968061ec695821e8d00a8cc860d3c2169f9ca81ae
 FROZEN_013J_OPERATOR_CHECKSUM = "3a3cab3184178958bacd67c6573dedc9b624293b3b5cb773d899b20e02eb2f53"
 _FROZEN_013K_CHECKSUM = "f81a4b888d5b86a9e9675561b319c19e0470d61d2cb486442b8e4e6bf6022acf"
 FROZEN_013K_OPERATOR_CHECKSUM = "8bdbf13e15452949b7a4e002fe152f0a90c7cb8c1c343a126271f6a6b8d9d322"
+_FROZEN_013L_CHECKSUM = "2dd029773f4dbe7b79cbc8db69ebe2bcdf444d82d8c9316a7f23b900ceabc4f9"
+FROZEN_013L_OPERATOR_CHECKSUM = "b8942f7baf21bc21cfabea04f33ab020c1aa55f531be3effee571e1eb2a7eda1"
 
 FROZEN_ASSURANCE_MIGRATIONS = (
     FrozenMigration(
@@ -156,6 +158,11 @@ FROZEN_ASSURANCE_MIGRATIONS = (
         _FROZEN_013K_CHECKSUM,
         _MIGRATIONS / "013k_verified_evidence_link_integrity.sql",
     ),
+    FrozenMigration(
+        "013k-to-013l-delegated-separation-override-grant-integrity-v1",
+        _FROZEN_013L_CHECKSUM,
+        _MIGRATIONS / "013l_delegated_separation_override_grant_integrity.sql",
+    ),
 )
 
 POSTGRESQL_ASSURANCE_RELATIONS = frozenset(
@@ -190,6 +197,7 @@ POSTGRESQL_ASSURANCE_RELATIONS = frozenset(
         "governance_idempotency_records",
         "governance_evaluation_audit_events",
         "governance_evaluation_audit_chain_heads",
+        "governance_separation_override_grants",
     }
 )
 
@@ -235,6 +243,12 @@ POSTGRESQL_ASSURANCE_FUNCTIONS = frozenset(
         "fairmind_validate_owner_override_audit_013j",
         "fairmind_verified_evidence_link_is_valid_013k",
         "fairmind_guard_verified_evidence_link_013k",
+        "fairmind_governance_decision_actor_authorized_013l",
+        "fairmind_separation_override_relationships_013l",
+        "fairmind_delegated_separation_override_authorized_013l",
+        "guard_governance_separation_override_grant_013l",
+        "fairmind_validate_separation_override_grant_audit_013l",
+        "fairmind_validate_delegated_decision_audit_013l",
         "fairmind_initial_layer_verdicts_v1_for_run",
         "fairmind_is_canonical_utc_timestamp",
         "fairmind_is_initial_layer_verdicts",
@@ -298,6 +312,11 @@ POSTGRESQL_ASSURANCE_REQUIRED_TRIGGERS = frozenset(
         "governance_evaluation_runs_v2_guard_update",
         "governance_evaluation_suite_evidence_links_guard_insert",
         "governance_evaluation_suite_evidence_links_verified_guard_013k",
+        "governance_separation_override_grants_guard_insert",
+        "governance_separation_override_grants_immutable_update",
+        "governance_separation_override_grants_immutable_delete",
+        "governance_separation_override_grants_audit_013l",
+        "governance_evaluation_decisions_delegated_override_audit_013l",
         "governance_evaluation_suite_evidence_links_no_delete",
         "governance_evaluation_suite_evidence_links_no_update",
         "governance_evaluation_suite_executions_guard_delete",
@@ -355,7 +374,7 @@ POSTGRESQL_ASSURANCE_CATALOG_SPEC = PostgreSQLCatalogSpec(
     required_triggers=POSTGRESQL_ASSURANCE_REQUIRED_TRIGGERS,
 )
 
-# Measured from two independent full operator-chain installations through 013k on
+# Measured from two independent full operator-chain installations through 013l on
 # PostgreSQL 14 and cross-checked against a direct-payload installation. The
 # PostgreSQL major is part of the canonical catalog payload because PostgreSQL
 # deparser output can change across major versions.
