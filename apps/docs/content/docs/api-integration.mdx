@@ -18,10 +18,12 @@ The mounted base path is:
 /api/v1/ai-governance/organizations/{org_id}
 ```
 
-V2 mutation requests require `application/json` and an `Idempotency-Key`.
-Request models are strict: unknown fields, duplicate JSON keys, non-finite
-values, and out-of-contract structures are rejected. Use the OpenAPI document
-from the exact approved environment for generated client details.
+Every V2 mutation requires an `Idempotency-Key`. Mutations with a request body
+require the documented JSON contract; activation and evidence-link operations
+require no body. JSON request models are strict: unknown fields, duplicate JSON
+keys, non-finite values, and out-of-contract structures are rejected. Use the
+OpenAPI document from the exact approved environment for generated client
+details.
 
 ## Core records
 

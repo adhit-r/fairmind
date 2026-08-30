@@ -1,4 +1,8 @@
 {
+  "_meta": {
+    "source_git_sha": "8bdb2c5eca72fc8e5638973a50fbe0ca23f7b926",
+    "reviewed_at_utc": "2026-08-30T17:45:04Z"
+  },
   "audience": {
     "answer": "Mixed internal operators and technical integrators.",
     "source": "release request"
@@ -11,8 +15,37 @@
     "answer": "Publish an EU AI Act applicability and evidence-support crosswalk, not legal advice, certification, or conformity proof.",
     "source": "release request"
   },
+  "voice_and_tone": {
+    "answer": "Direct, technical, evidence-grounded, and explicit about unavailable or default-off capability.",
+    "source": "repository release boundary and project instructions"
+  },
   "visuals": {
     "answer": "A P0 walkthrough video is requested but requires separately approved capture and storyboard work.",
     "source": "release request"
+  },
+  "hosted_docs_url": {
+    "status": "deferred",
+    "answer": null,
+    "reason": "No canonical hosted URL has been deployment-verified."
+  },
+  "activation_guidance": {
+    "status": "deferred",
+    "answer": null,
+    "reason": "No approved public environment, migration state, or tenant bootstrap has been supplied."
+  },
+  "support_and_compatibility_policy": {
+    "status": "deferred",
+    "answer": null,
+    "reason": "Release support, compatibility, and deprecation policies remain owner decisions."
+  },
+  "video_capture_environment": {
+    "status": "deferred",
+    "answer": null,
+    "reason": "Phase 6 requires explicit approval of commands, ports, environment variables, and synthetic data."
+  },
+  "video_approval_path": {
+    "status": "deferred",
+    "answer": null,
+    "reason": "Storyboard and publication approvers have not been named."
   }
 }

@@ -13,6 +13,27 @@ service, a certification product, or an automatic enforcement system.
 Read the [release boundary](./release-boundary) before enabling any Assurance V2
 route in an approved internal environment.
 
+## Install dependencies
+
+After cloning the repository, install each app's dependencies before starting
+its development server:
+
+```bash
+cd apps/backend
+uv sync --extra test
+cp config/env.example .env
+```
+
+```bash
+cd apps/frontend
+npm ci
+```
+
+```bash
+cd apps/docs
+npm ci
+```
+
 ## Local development
 
 From the repository root, use the app-specific commands:
@@ -69,3 +90,9 @@ the backend capability is available in an environment.
 For integration details, see [API integration](./api-integration). For the
 limits that determine whether a result can be used, see
 [limitations and roadmap](./limitations-roadmap).
+
+## Related
+
+- [P0 release boundary](./release-boundary)
+- [Assurance workflow](./assurance-workflow)
+- [Operator runbook](./operator-runbook)

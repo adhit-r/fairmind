@@ -1,11 +1,13 @@
 {
   "doc_type": ["product", "engineering"],
   "audience": "mixed internal operators and technical integrators",
-  "framework": "existing Next.js documentation app with MDX content",
+  "framework": "existing custom Next.js 15 documentation app using React Markdown with .mdx source files",
   "output_dir": "apps/docs/content/docs",
   "existing_docs": "regenerate",
   "existing_docs_path": "apps/docs/content/docs",
   "version": "v2.1.0-alpha.1",
   "scope": "P0 trustworthy control-plane release documentation only",
-  "status": "source-content-and-site-validated-hosted-publication-open"
+  "source_scope": "Targeted P0 release corpus; unrelated applications and legacy surfaces are out of scope",
+  "latest_completed_phase": 7,
+  "status": "phase-7-source-validated-hosting-and-video-open"
 }

@@ -1,0 +1,18 @@
+{
+  "docs_forge_version": "local-skill-snapshot-2026-08-30",
+  "source_git_sha": "8bdb2c5eca72fc8e5638973a50fbe0ca23f7b926",
+  "resumed_at_utc": "2026-08-30T17:42:15Z",
+  "scope": "P0 trustworthy control-plane release documentation",
+  "phases": {
+    "1_scope": "complete",
+    "2_ingest": "complete_for_targeted_p0_corpus",
+    "3_gap_analysis": "complete",
+    "4_elicitation": "complete_with_deferred_owner_questions",
+    "5_generate": "complete",
+    "6_capture": "deferred_pending_explicit_consent",
+    "7_assemble": "complete_for_source_documentation"
+  },
+  "validated_at_utc": "2026-08-30T17:45:04Z",
+  "hosted_publication": "unverified",
+  "video": "not_captured"
+}

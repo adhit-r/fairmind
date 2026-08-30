@@ -23,7 +23,7 @@ export const DOC_ITEMS: DocItem[] = [
     slug: "getting-started",
     title: "Getting started",
     file: "getting-started.mdx",
-    summary: "Run the verified repository locally and open the gated assurance surfaces.",
+    summary: "Install and run the local apps while keeping Assurance V2 default-off.",
     section: "Start here",
   },
   {
@@ -58,7 +58,7 @@ export const DOC_ITEMS: DocItem[] = [
     slug: "operator-runbook",
     title: "Operator runbook",
     file: "operator-runbook.mdx",
-    summary: "Enable, validate, observe, and roll back the default-off P0 control plane.",
+    summary: "Check the bounded record sequence and stop conditions in an approved environment.",
     section: "Operate safely",
   },
   {
@@ -83,13 +83,17 @@ function stripFrontmatter(source: string): string {
   return end === -1 ? source : source.slice(end + 5).trimStart();
 }
 
+function stripLeadingHeading(source: string): string {
+  return source.replace(/^#\s+[^\n]+\n+/, "");
+}
+
 export async function readDocBySlug(slug: string): Promise<{ doc: DocItem; content: string } | null> {
   const doc = DOC_ITEMS.find((item) => item.slug === slug);
   if (!doc) return null;
 
   try {
     const source = await fs.readFile(path.join(DOCS_ROOT, doc.file), "utf8");
-    return { doc, content: stripFrontmatter(source) };
+    return { doc, content: stripLeadingHeading(stripFrontmatter(source)) };
   } catch {
     return null;
   }
