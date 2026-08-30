@@ -191,7 +191,7 @@ export function EvidenceTrustPanel({ run }: { run: EvaluationRunV2 }) {
           </div>
         ) : (
           <div className="mt-3 max-w-full overflow-x-auto border-2 border-[#0F1412]">
-            <table aria-label="Suite evidence trust metadata" className="w-full min-w-[2600px] border-collapse text-left text-sm">
+            <table aria-label="Suite evidence trust metadata" className="w-full min-w-[2780px] border-collapse text-left text-sm">
               <thead className="bg-[#0F1412] text-white">
                 <tr>
                   <th scope="col" className="px-3 py-3 font-black">Suite</th>
@@ -200,7 +200,8 @@ export function EvidenceTrustPanel({ run }: { run: EvaluationRunV2 }) {
                   <th scope="col" className="px-3 py-3 font-black">Evidence signer</th>
                   <th scope="col" className="px-3 py-3 font-black">Effective expiry</th>
                   <th scope="col" className="px-3 py-3 font-black">Reviewer</th>
-                  <th scope="col" className="px-3 py-3 font-black">Authority reasons</th>
+                  <th scope="col" className="px-3 py-3 font-black">Admission reasons</th>
+                  <th scope="col" className="px-3 py-3 font-black">Freshness / invalidation reasons</th>
                   <th scope="col" className="px-3 py-3 font-black">Freshness evaluated</th>
                   <th scope="col" className="px-3 py-3 font-black">Freshness effective</th>
                   <th scope="col" className="px-3 py-3 font-black">Result authority</th>
@@ -223,7 +224,8 @@ export function EvidenceTrustPanel({ run }: { run: EvaluationRunV2 }) {
                       <td className="min-w-0 break-words px-3 py-3 text-[#59615D]">{metadata.signer}</td>
                       <td className="px-3 py-3 text-xs font-semibold text-[#59615D]"><Timestamp value={metadata.effectiveExpiry === 'Not returned by this response' ? null : metadata.effectiveExpiry} /></td>
                       <td className="px-3 py-3 text-[#59615D]"><p className="font-mono text-xs font-bold">{metadata.reviewer}</p><p className="mt-1 text-xs">{metadata.reviewedAt}</p></td>
-                      <td className="px-3 py-3 text-xs font-semibold text-[#59615D]">{metadata.admissionReasons.length > 0 || metadata.freshnessReasonCodes.length > 0 ? <>{metadata.admissionReasons.length > 0 ? <ul className="list-disc space-y-1 pl-4">{metadata.admissionReasons.map((reason, index) => <li key={`${metadata.suiteExecutionId}-admission-reason-${index}`}>{reason}</li>)}</ul> : null}{metadata.freshnessReasonCodes.length > 0 ? <ul className={`${metadata.admissionReasons.length > 0 ? 'mt-2 ' : ''}list-disc space-y-1 pl-4`}>{metadata.freshnessReasonCodes.map((reason) => <li key={`${metadata.suiteExecutionId}-freshness-reason-${reason}`}>{sentenceLabel(reason)}</li>)}</ul> : null}</> : 'Not returned by this response'}</td>
+                      <td className="px-3 py-3 text-xs font-semibold text-[#59615D]">{metadata.admissionReasons.length > 0 ? <ul className="list-disc space-y-1 pl-4">{metadata.admissionReasons.map((reason, index) => <li key={`${metadata.suiteExecutionId}-admission-reason-${index}`}>{reason}</li>)}</ul> : 'Not returned by this response'}</td>
+                      <td className="px-3 py-3 text-xs font-semibold text-[#59615D]">{metadata.freshnessReasonCodes.length > 0 ? <ul className="list-disc space-y-1 pl-4">{metadata.freshnessReasonCodes.map((reason) => <li key={`${metadata.suiteExecutionId}-freshness-reason-${reason}`}>{sentenceLabel(reason)}</li>)}</ul> : 'Not returned by this response'}</td>
                       <td className="px-3 py-3 text-xs font-semibold text-[#59615D]"><Timestamp value={metadata.freshnessEvaluatedAt === 'Not returned by this response' ? null : metadata.freshnessEvaluatedAt} /></td>
                       <td className="px-3 py-3 text-xs font-semibold text-[#59615D]"><p><Timestamp value={metadata.freshnessEffectiveAt === 'Not returned by this response' ? null : metadata.freshnessEffectiveAt} /></p><p className="mt-1">Warning onset: <Timestamp value={metadata.expiringAt === 'Not returned by this response' ? null : metadata.expiringAt} /></p></td>
                       <td className="px-3 py-3"><span className={`inline-flex min-h-8 items-center border-2 px-2 py-1 text-xs font-black uppercase ${metadata.resultAuthority === 'Claimed' ? 'border-[#9A5B14] bg-[#FFF1D6] text-[#73420B]' : metadata.resultAuthority === 'Verified' ? 'border-[#155D46] bg-[#DFF4EA] text-[#155D46]' : 'border-[#59615D] bg-[#F3F5F0] text-[#303834]'}`}>{metadata.resultAuthority}</span></td>
