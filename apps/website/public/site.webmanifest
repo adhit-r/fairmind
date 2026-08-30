@@ -1,6 +1,6 @@
 {
   "name": "FairMind - Trustworthy Control Plane",
-  "short_name": "Fairmind",
+  "short_name": "FairMind",
   "description": "Open-source control plane for governed AI assurance workflows and evidence review",
   "start_url": "/",
   "display": "standalone",

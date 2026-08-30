@@ -6,8 +6,19 @@ import { ClientNavigation } from "@/components/layout/ClientNavigation"
 import { Toaster } from "@/components/ui/toaster"
 import { ErrorBoundary } from "@/components/ErrorBoundary"
 
+const configuredSiteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL ?? process.env.VERCEL_PROJECT_PRODUCTION_URL
+const metadataBase = configuredSiteUrl
+  ? new URL(
+      configuredSiteUrl.startsWith("http")
+        ? configuredSiteUrl
+        : `https://${configuredSiteUrl}`,
+    )
+  : undefined
+const socialImageUrl = metadataBase ? new URL("/logo.png", metadataBase) : undefined
+
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:1111"),
+  ...(metadataBase ? { metadataBase } : {}),
   title: "FairMind P0 Alpha | Evidence Before Assurance",
   description: "Evidence-grade AI governance and assurance control plane for scoped evaluation planning, evidence review, and human decisions.",
   keywords: ["AI governance", "assurance evidence", "evidence provenance", "human review", "model governance"],
@@ -25,20 +36,24 @@ export const metadata: Metadata = {
     title: "FairMind P0 Alpha | Evidence Before Assurance",
     description: "Plan AI evaluations and review scoped evidence without unsupported execution or compliance claims.",
     type: "website",
-    images: [
-      {
-        url: "/logo.png",
-        width: 512,
-        height: 512,
-        alt: "FairMind Logo",
-      },
-    ],
+    ...(socialImageUrl
+      ? {
+          images: [
+            {
+              url: socialImageUrl,
+              width: 512,
+              height: 512,
+              alt: "FairMind Logo",
+            },
+          ],
+        }
+      : {}),
   },
   twitter: {
     card: "summary_large_image",
     title: "FairMind P0 Alpha | Evidence Before Assurance",
     description: "Internal, default-off evidence-control-plane foundation",
-    images: ["/logo.png"],
+    ...(socialImageUrl ? { images: [socialImageUrl] } : {}),
   },
 }
 

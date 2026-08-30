@@ -27,7 +27,7 @@ cp .env.example .env
 # For local dev, most other defaults are fine
 
 uv sync
-uv run fastapi dev api/main.py
+uv run python -m uvicorn api.main:app --reload --port 8000
 ```
 
 Backend runs at `http://localhost:8000`. API docs at `http://localhost:8000/docs`.

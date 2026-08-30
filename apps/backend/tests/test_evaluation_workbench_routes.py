@@ -2460,6 +2460,13 @@ async def test_request_reader_stops_on_the_first_overflowing_chunk() -> None:
         ((b'{"targetKey":"a","manifest":' + b'{"x":' * 40 + b"0" + b"}" * 40 + b"}"), 422),
         (b'{"targetKey":"' + b"a" * (1024 * 1024) + b'"}', 413),
     ],
+    ids=(
+        "duplicate-top-level-key",
+        "duplicate-nested-key",
+        "nonfinite-number",
+        "excessive-nesting",
+        "oversized-body",
+    ),
 )
 def test_raw_http_strict_json_rejections(
     workbench_client, body: bytes, expected_status: int
