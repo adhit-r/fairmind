@@ -1,0 +1,11 @@
+{
+  "doc_type": ["product", "engineering"],
+  "audience": "mixed internal operators and technical integrators",
+  "framework": "existing Next.js documentation app with MDX content",
+  "output_dir": "apps/docs/content/docs",
+  "existing_docs": "regenerate",
+  "existing_docs_path": "apps/docs/content/docs",
+  "version": "v2.1.0-alpha.1",
+  "scope": "P0 trustworthy control-plane release documentation only",
+  "status": "source-content-and-site-validated-hosted-publication-open"
+}

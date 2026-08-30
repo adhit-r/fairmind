@@ -24,7 +24,7 @@
 - [ ] Dashboard loads with seeded model/dataset/activity
 - [ ] `/alerts` and `/settings` routes work
 - [ ] Docs available at `/docs` with navigation/search
-- [ ] Website/docs cross-links correct (`fairmind.xyz` ↔ `docs.fairmind.xyz`)
+- [ ] Documentation hosting and DNS are verified before replacing source links
 
 ## Operational
 - [ ] Pilot runbook shared with stakeholder team

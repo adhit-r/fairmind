@@ -270,7 +270,7 @@ export default function SettingsPage() {
                 <div>
                   <p className="font-semibold">Core workflow</p>
                   <p className="text-sm text-muted-foreground">
-                    Assess systems, review risk/compliance status, apply remediation, monitor continuously, and generate evidence-backed reports.
+                    Plan governed assurance runs, review trusted evidence and freshness, and record human governance decisions. Evaluation engines and continuous monitoring are not included in this alpha.
                   </p>
                 </div>
                 <div>
@@ -287,8 +287,8 @@ export default function SettingsPage() {
                 <Link href="https://fairmind.xyz" target="_blank">
                   <Button variant="neutral">Visit Website</Button>
                 </Link>
-                <Link href="https://docs.fairmind.xyz" target="_blank">
-                  <Button variant="neutral">Open Docs</Button>
+                <Link href="https://github.com/adhit-r/fairmind/tree/main/apps/docs/content/docs" target="_blank">
+                  <Button variant="neutral">Open Docs Source</Button>
                 </Link>
               </div>
             </Card>

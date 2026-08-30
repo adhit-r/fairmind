@@ -1,0 +1,63 @@
+---
+title: Evidence trust and review
+description: Understand signed Evidence Passport V2 admission, linking, four-eyes review, and freshness.
+---
+
+# Evidence trust and review
+
+An Evidence Passport V2 is an evidence payload with a closed contract and
+signature projection. P0 treats submitted metadata as a claim, not as
+authority. The server resolves authority from its own persisted evaluator,
+issuer, signing-key, policy, and run bindings.
+
+## Admission
+
+Verified admission checks the submitted Passport against the exact
+organization, system, run, suite execution, and execution-envelope binding. It
+also requires the approved evaluator registration and valid trust authority.
+The response returns identifiers, hashes, and state; it does not turn the
+Passport into a generic proof of correctness or regulatory compliance.
+
+The submission is intentionally separate from linking. A verified admission
+starts with `linkStatus: pending`, so a caller cannot imply that an admitted
+Passport already affects a run projection.
+
+## Link and review
+
+Linking connects one admitted Passport revision to one suite execution. A
+subsequent reviewer can accept or reject only pending, verified, current
+evidence with live authority.
+
+Review is permanently four-eyes. The reviewer cannot be the same person as the
+run requester, evidence submitter, or evidence linker. There is no review
+override.
+
+## Freshness and decision eligibility
+
+Freshness is derived from persisted facts at database time, including receipt
+state, evaluator registration, issuer, signing key, policy, review,
+expiration, and supersession. Relevant response fields include:
+
+- `freshnessStatus` and `freshnessReasonCodes`
+- `effectiveExpiresAt` and `freshnessEvaluatedAt`
+- `decisionEvidenceEligible`
+- the run-level `decisionEvidenceCurrentlyEligible`
+
+Freshness is not a score and does not guarantee that a model is safe or fair.
+It answers whether a specific evidence record remains eligible under the
+configured trust bindings at the time it is evaluated.
+
+## Evidence statuses
+
+| Status | Meaning |
+| --- | --- |
+| `verified` | The Passport passed admission against the server-owned authority graph. |
+| `unverified` | It did not establish verified admission; do not use it as verified evidence. |
+| `expired`, `superseded`, `rejected`, `trust_error` | The record is not a substitute for current accepted evidence. |
+| `accepted` review | A distinct reviewer accepted the verified evidence; it can still later become stale. |
+
+## Related
+
+- [Assurance workflow](./assurance-workflow)
+- [API integration](./api-integration)
+- [EU AI Act evidence-support crosswalk](./eu-ai-act-crosswalk)

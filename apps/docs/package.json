@@ -5,14 +5,16 @@
   "scripts": {
     "dev": "next dev -p 3333",
     "build": "next build",
-    "start": "next start -p 3333"
+    "start": "next start -p 3333",
+    "typecheck": "tsc --noEmit",
+    "validate": "node scripts/validate-docs.mjs"
   },
   "dependencies": {
     "next": "^15.5.19",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "fumadocs-ui": "^14.0.0",
-    "fumadocs-mdx": "^11.0.0"
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "typescript": "^5.5.3",

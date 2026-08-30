@@ -4,7 +4,8 @@
 - `apps/backend`: API and domain services.
 - `apps/frontend`: product dashboard frontend.
 - `apps/website`: Astro marketing site (`fairmind.xyz`).
-- `apps/docs`: Fumadocs documentation site (`docs.fairmind.xyz`).
+- `apps/docs`: documentation application and canonical P0 source; hosted URL
+  remains unverified for the alpha release.
 
 ## Backend Layers
 - `src/api`: transport layer (routers, schemas, middleware).

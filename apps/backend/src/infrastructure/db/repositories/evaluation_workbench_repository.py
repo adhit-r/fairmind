@@ -3739,38 +3739,44 @@ class SqlAlchemyEvaluationWorkbenchRepository:
 
         decisions = GovernanceEvaluationDecision.__table__
         runs = GovernanceEvaluationRun.__table__
+        decision_values: dict[str, object] = {
+            "id": command.decision_id,
+            "org_id": scope.organization_id,
+            "workspace_id": scope.workspace_id,
+            "system_id": scope.system_id,
+            "run_id": scope.run_id,
+            "run_contract_version": CONTRACT_VERSION,
+            "envelope_id": authority.envelope_id,
+            "envelope_hash": authority.envelope_hash,
+            "verdict_version": command.next_verdict_version,
+            "overall_verdict": command.overall_verdict,
+            "layer_verdicts_schema_version": LAYER_VERDICTS_SCHEMA_VERSION,
+            "layer_verdicts_json": layer_verdicts_json,
+            "rationale": command.rationale,
+            "decided_by": command.actor_id,
+            "owner_override_reason": command.owner_override_reason,
+            "evidence_set_json": evidence_set_json,
+            "evidence_set_hash": evidence_set_hash,
+            "decided_at": decided_at,
+        }
+        returning_columns = [
+            decisions.c.decided_at,
+            decisions.c.owner_override_reason,
+        ]
+        if command.separation_override_grant_id is not None:
+            # 013l adds this column. Ordinary decisions remain writable while a
+            # migration-only 013b-013k schema is under integrity verification;
+            # delegated decisions still require the complete 013l schema.
+            decision_values["separation_override_grant_id"] = (
+                command.separation_override_grant_id
+            )
+            returning_columns.append(decisions.c.separation_override_grant_id)
         try:
             persisted = (
                 self.db.execute(
                     insert(decisions)
-                    .values(
-                        id=command.decision_id,
-                        org_id=scope.organization_id,
-                        workspace_id=scope.workspace_id,
-                        system_id=scope.system_id,
-                        run_id=scope.run_id,
-                        run_contract_version=CONTRACT_VERSION,
-                        envelope_id=authority.envelope_id,
-                        envelope_hash=authority.envelope_hash,
-                        verdict_version=command.next_verdict_version,
-                        overall_verdict=command.overall_verdict,
-                        layer_verdicts_schema_version=LAYER_VERDICTS_SCHEMA_VERSION,
-                        layer_verdicts_json=layer_verdicts_json,
-                        rationale=command.rationale,
-                        decided_by=command.actor_id,
-                        owner_override_reason=command.owner_override_reason,
-                        separation_override_grant_id=(
-                            command.separation_override_grant_id
-                        ),
-                        evidence_set_json=evidence_set_json,
-                        evidence_set_hash=evidence_set_hash,
-                        decided_at=decided_at,
-                    )
-                    .returning(
-                        decisions.c.decided_at,
-                        decisions.c.owner_override_reason,
-                        decisions.c.separation_override_grant_id,
-                    )
+                    .values(**decision_values)
+                    .returning(*returning_columns)
                 )
                 .mappings()
                 .one()
@@ -3870,9 +3876,9 @@ class SqlAlchemyEvaluationWorkbenchRepository:
             suite_execution_ids=authority.suite_execution_ids,
             operational_freshness=operational_freshness,
             owner_override_reason=persisted["owner_override_reason"],
-            separation_override_grant_id=persisted[
+            separation_override_grant_id=persisted.get(
                 "separation_override_grant_id"
-            ],
+            ),
         )
 
     # ------------------------------------------------------------------

@@ -113,7 +113,7 @@ test = [
 [project.urls]
 Homepage = "https://fairmind.xyz"
 Repository = "https://github.com/adhit-r/fairmind"
-Documentation = "https://docs.fairmind.xyz"
+Documentation = "https://github.com/adhit-r/fairmind/tree/main/apps/docs/content/docs"
 "Bug Tracker" = "https://github.com/adhit-r/fairmind/issues"
 
 [tool.setuptools.packages.find]

@@ -1,0 +1,59 @@
+---
+title: Limitations and roadmap
+description: The boundaries, known gaps, and next delivery areas after the P0 control-plane foundation.
+---
+
+# Limitations and roadmap
+
+P0 completes the trustworthy-control-plane foundation, not the complete AI
+assurance platform. Its records are useful only when the surrounding deployment
+and operational controls are actually in place.
+
+## Current limitations
+
+- Assurance V2 and every child capability gate default to disabled.
+- There is no released worker execution, queue, sandbox, adapter runtime,
+  artifact broker, or real evaluation engine.
+- FairMind-worker delivery preflight is deliberately blocked; automatic
+  enforcement is deliberately rejected.
+- The dashboard evidence-trust view is an internal, read-only, default-off
+  preview. It is not a substitute for server-side authorization or evidence.
+- The P0 evidence foundation does not validate fairness, safety, performance,
+  robustness, security, emissions, or legal compliance for an AI system.
+- Results depend on the integrity, completeness, scope, and freshness of the
+  evidence an approved evaluator supplies.
+- Legal and regulatory mapping is an organizational activity. P0 can organize
+  supporting evidence, but does not certify compliance or conformity.
+
+## Delivery sequence after P0
+
+The roadmap proceeds through distinct, independently verifiable areas:
+
+1. **Isolated workers:** service-principal lifecycle, queue and lease controls,
+   execution isolation, cancellation, artifacts, and delivery integrity.
+2. **Real evaluation engines:** reproducible predictive-model, LLM, agent,
+   code, and other domain-specific evaluation implementations with benchmark
+   evidence.
+3. **Modality packs:** independently validated image, audio, video, vision, and
+   multimodal work rather than a shared label alone.
+4. **Lifecycle assurance:** pre-deployment, realtime, and post-deployment
+   workflows with explicit operating evidence.
+5. **Verification and rollout gates:** integration, security, runtime,
+   benchmark, usability, and release evidence before capability claims expand.
+
+Completion of one area does not automatically make another available. Each
+requires its own contracts, controls, tests, operational evidence, and release
+decision.
+
+## How to communicate the current state
+
+Say “internal, default-off assurance control plane” when referring to P0.
+State the exact evidence status and limitations alongside any decision record.
+Do not describe P0 as a live evaluator, continuous monitoring product,
+automated release gate, compliance tool, or certification service.
+
+## Related
+
+- [P0 release boundary](./release-boundary)
+- [Assurance workflow](./assurance-workflow)
+- [EU AI Act evidence-support crosswalk](./eu-ai-act-crosswalk)

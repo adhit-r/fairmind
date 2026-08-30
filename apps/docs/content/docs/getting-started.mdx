@@ -1,77 +1,71 @@
 ---
-title: Getting Started with Fairmind
-description: Get up and running with Fairmind in minutes. Learn the basics of bias detection and model governance.
+title: Getting started with the P0 control plane
+description: Run FairMind locally and understand the default-off Assurance V2 boundary.
 ---
 
-# Getting Started with Fairmind
+# Getting started with the P0 control plane
 
-Welcome to Fairmind, a comprehensive AI governance platform that helps you build trustworthy AI systems. This guide will walk you through the essential steps to get started.
+FairMind P0 is an internal, default-off assurance control plane. It records and
+checks the identity, scope, trust, review, freshness, and decision history of
+evaluation evidence. It is not a packaged evaluator, a production monitoring
+service, a certification product, or an automatic enforcement system.
 
-## Prerequisites
+Read the [release boundary](./release-boundary) before enabling any Assurance V2
+route in an approved internal environment.
 
-Before you begin, make sure you have the following installed:
+## Local development
 
-- **Python 3.9 or higher**
-- **Node.js 18 or higher**
-- **Basic understanding of machine learning concepts**
-
-## Quick Installation
-
-### 1. Clone the Repository
+From the repository root, use the app-specific commands:
 
 ```bash
-git clone https://github.com/your-org/fairmind-ethical-sandbox.git
-cd fairmind-ethical-sandbox
+cd apps/backend
+uv run python -m uvicorn api.main:app --reload --port 8000
 ```
-
-### 2. Install Dependencies
 
 ```bash
-bun install
-cd backend && pip install -r requirements.txt
+cd apps/frontend
+npm run dev
 ```
-
-### 3. Start the Development Servers
 
 ```bash
-bun run dev
+cd apps/docs
+npm run dev
 ```
 
-## Your First Bias Detection
+The backend listens on `http://localhost:8000`, the dashboard on
+`http://localhost:1111`, and this docs app on `http://localhost:3333`.
 
-Now that you have Fairmind running, let's perform your first bias detection analysis:
+## What is enabled by default
 
-1. **Navigate to the bias detection section**
-2. **Upload your dataset or select a sample dataset**
-3. **Configure your bias detection parameters**
-4. **Run the analysis and review the results**
+All Assurance V2 settings default to `false`, including the master setting
+`assurance_v2_enabled` and every child capability setting. A disabled capability
+is not a partial success: its router is not mounted by the main application.
 
-:::tip
-Start with the sample datasets to understand how bias detection works before using your own data.
-:::
+Do not enable these settings from this guide. Activation requires the approved
+environment, migrations, tenant data, trust-root administration, permissions,
+and release gates for the capability in question.
 
-## Understanding the Dashboard
+## First reading path
 
-The Fairmind dashboard provides several key sections:
+1. Read [the release boundary](./release-boundary) to see what this alpha does
+   and does not ship.
+2. Read [the assurance workflow](./assurance-workflow) for the immutable record
+   sequence.
+3. Read [evidence trust and review](./evidence-trust-review) before submitting
+   or assessing evidence.
+4. Use [the operator runbook](./operator-runbook) for an approved internal
+   exercise.
 
-- **Bias Detection**: Analyze your models for various types of bias
-- **Model Provenance**: Track model lineage and create audit trails
-- **Monitoring**: Set up real-time monitoring and alerts
-- **Explainability**: Generate transparent explanations for model decisions
+## Dashboard preview
 
-## Next Steps
+The dashboard has an Assurance V2 evidence-trust detail surface. It is
+read-only, scope-bound, and separately default-off. It shows only a validated
+V2 run response; unavailable or denied data is not replaced with a legacy
+record or fixture. The dashboard route is an internal preview, not proof that
+the backend capability is available in an environment.
 
-Now that you have the basics, explore these areas to deepen your understanding:
+## What to do next
 
-- [Bias Detection Guide](/docs/bias-detection) - Learn about different bias detection methods
-- [Model Provenance](/docs/model-provenance) - Track your model lineage and create audit trails
-- [Monitoring & Analytics](/docs/monitoring) - Set up real-time monitoring for your models
-- [API Reference](/docs/api) - Integrate Fairmind into your applications
-
-## Need Help?
-
-If you encounter any issues or have questions:
-
-- Check our [FAQ section](/docs/faq)
-- Join our [Discord community](https://discord.gg/fairmind)
-- Review our [troubleshooting guide](/docs/troubleshooting)
+For integration details, see [API integration](./api-integration). For the
+limits that determine whether a result can be used, see
+[limitations and roadmap](./limitations-roadmap).

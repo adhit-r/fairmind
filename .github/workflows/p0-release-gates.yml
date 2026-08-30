@@ -1,0 +1,231 @@
+name: P0 release gates
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: P0 backend contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: astral-sh/setup-uv@e4db8464a088ece1b920f60402e813ea4de65b8f # v4
+        with:
+          version: '0.9.20'
+      - name: Install backend test dependencies
+        working-directory: apps/backend
+        run: uv sync --frozen --extra test
+      - name: Run focused P0 contracts
+        working-directory: apps/backend
+        run: |
+          uv run pytest -q -p no:cacheprovider \
+          tests/test_api_main_assurance_v2_route_gate.py \
+          tests/test_api_main_default_off_lifespan.py \
+          tests/test_assurance_v2_mutation_boundary_manifest.py \
+          tests/test_ed25519_evidence_verifier.py \
+          tests/test_evaluation_assurance_trust_integrity_models.py \
+          tests/test_evaluation_assurance_v2_models.py \
+          tests/test_evaluation_binding_integrity_migration.py \
+          tests/test_evaluation_rejected_mutation_audit.py \
+          tests/test_evaluation_result_axis_semantics.py \
+          tests/test_evaluation_run_models.py \
+          tests/test_evaluation_runs.py \
+          tests/test_evaluation_workbench_freshness_repository.py \
+          tests/test_evaluation_workbench_repository.py \
+          tests/test_evaluation_worker_authorization.py \
+          tests/test_evaluation_workbench_routes.py \
+          tests/test_evaluation_workbench_service.py \
+          tests/test_evaluator_catalog_migration.py \
+          tests/test_evidence_admission_repository.py \
+          tests/test_evidence_authenticity_service.py \
+          tests/test_evidence_freshness_service.py \
+          tests/test_evidence_passport_schema.py \
+          tests/test_evidence_passport_v2_contract.py \
+          tests/test_evidence_review_repository.py \
+          tests/test_evidence_verification_receipt_migration.py \
+          tests/test_governance_decision_service.py \
+          tests/test_idempotency_retention_integrity_013h.py \
+          tests/test_imported_evidence_delivery_integrity_013i.py \
+          tests/test_imported_evidence_repository.py \
+          tests/test_imported_evidence_service.py \
+          tests/test_legacy_role_delegation_hardening.py \
+          tests/test_migration_integrity.py \
+          tests/test_operational_freshness_013g.py \
+          tests/test_owner_decision_override_integrity_013j.py \
+          tests/test_trust_administration_repository.py \
+          tests/test_trust_administration_routes.py \
+          tests/test_trust_administration_service.py \
+          tests/test_trust_authority_integrity_013f.py \
+          tests/test_trusted_evidence_admission_resolver.py \
+          tests/test_verified_evidence_admission_service.py \
+          tests/test_verified_evidence_link_integrity_013k.py \
+          tests/test_verified_evidence_link_service.py \
+          tests/test_verified_evidence_review_service.py
+      - name: Verify backend boundaries
+        run: tooling/check_backend_layer_boundaries.sh
+      - name: Verify archive import isolation
+        run: tooling/check_no_archive_imports.sh
+
+  frontend:
+    name: P0 frontend checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: apps/frontend/package-lock.json
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: '1.2.21'
+      - name: Install frontend dependencies
+        working-directory: apps/frontend
+        run: npm ci
+      - name: Audit frontend runtime dependencies
+        working-directory: apps/frontend
+        run: npm audit --omit=dev --audit-level=high
+      - name: Run frontend unit tests
+        working-directory: apps/frontend
+        run: bun test src
+      - name: Typecheck frontend
+        working-directory: apps/frontend
+        run: npm run typecheck
+      - name: Build frontend
+        working-directory: apps/frontend
+        run: npm run build
+      - name: Install Chromium
+        working-directory: apps/frontend
+        run: npx playwright install --with-deps chromium
+      - name: Verify P0 workbench and unavailable-pack boundaries
+        working-directory: apps/frontend
+        env:
+          CI: '1'
+        run: >-
+          npx playwright test
+          tests/session-shell.spec.ts
+          tests/evaluation-runs.spec.ts
+          tests/unsupported-evaluation-packs.spec.ts
+          --project=chromium --workers=1 --retries=0 --reporter=line
+      - name: Verify Assurance V2 preview fails closed
+        working-directory: apps/frontend
+        env:
+          CI: '1'
+          NEXT_PUBLIC_ASSURANCE_V2_UI_ENABLED: 'true'
+          NEXT_PUBLIC_ASSURANCE_V2_RUN_UI_ENABLED: 'false'
+        run: >-
+          npx playwright test tests/assurance-v2-run-child-gate.spec.ts
+          --project=chromium --workers=1 --retries=0 --reporter=line
+      - name: Verify Assurance V2 scoped contract preview
+        working-directory: apps/frontend
+        env:
+          CI: '1'
+          NEXT_PUBLIC_ASSURANCE_UNTRUSTED_EXTERNAL_EVIDENCE_LINKING_ENABLED: 'true'
+          NEXT_PUBLIC_ASSURANCE_V2_UI_ENABLED: 'true'
+          NEXT_PUBLIC_ASSURANCE_V2_RUN_UI_ENABLED: 'true'
+        run: >-
+          npx playwright test tests/assurance-v2-run-child-gate.spec.ts
+          --project=chromium --workers=1 --retries=0 --reporter=line
+
+  docs:
+    name: Documentation build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: apps/docs/package-lock.json
+      - name: Install documentation dependencies
+        working-directory: apps/docs
+        run: npm ci
+      - name: Validate documentation links and front matter
+        working-directory: apps/docs
+        run: npm run validate
+      - name: Audit documentation runtime dependencies
+        working-directory: apps/docs
+        run: npm audit --omit=dev --audit-level=high
+      - name: Typecheck documentation site
+        working-directory: apps/docs
+        run: npm run typecheck
+      - name: Build documentation site
+        working-directory: apps/docs
+        run: npm run build
+
+  website:
+    name: Public claim surface build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22.12.0
+          cache: npm
+          cache-dependency-path: apps/website/package-lock.json
+      - name: Install website dependencies
+        working-directory: apps/website
+        run: npm ci
+      - name: Audit website runtime dependencies
+        working-directory: apps/website
+        run: npm audit --omit=dev --audit-level=high
+      - name: Build public website
+        working-directory: apps/website
+        run: npm run build
+
+  postgresql:
+    name: Native PostgreSQL 14 P0 controls
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:14.18
+        env:
+          POSTGRES_DB: fairmind
+          POSTGRES_PASSWORD: "fairmind-${{ github.run_id }}-${{ github.run_attempt }}"
+          POSTGRES_USER: postgres
+        options: >-
+          --health-cmd "pg_isready -U postgres -d fairmind"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: astral-sh/setup-uv@e4db8464a088ece1b920f60402e813ea4de65b8f # v4
+        with:
+          version: '0.9.20'
+      - name: Install backend test dependencies
+        working-directory: apps/backend
+        run: uv sync --frozen --extra test
+      - name: Run native P0 PostgreSQL controls
+        working-directory: apps/backend
+        env:
+          FAIRMIND_TEST_POSTGRES_URL: "postgresql://postgres:fairmind-${{ github.run_id }}-${{ github.run_attempt }}@localhost:5432/fairmind"
+        run: |
+          uv run pytest -q -p no:cacheprovider \
+          tests/test_delegated_separation_override_postgres.py \
+          tests/test_evaluation_binding_integrity_postgres.py \
+          tests/test_evaluation_workbench_postgres.py \
+          tests/test_owner_decision_override_integrity_013j.py \
+          tests/test_owner_decision_override_postgres.py \
+          tests/test_evaluation_assurance_trust_integrity_postgres.py \
+          tests/test_evaluation_rejected_mutation_audit_postgres.py \
+          tests/test_evidence_verification_receipt_postgres.py \
+          tests/test_imported_evidence_postgres.py \
+          tests/test_operational_freshness_postgres.py \
+          tests/test_verified_evidence_admission_postgres.py \
+          tests/test_migration_integrity.py

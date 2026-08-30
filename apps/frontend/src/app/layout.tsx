@@ -1,5 +1,4 @@
-import type { Metadata } from "next"
-import { Raleway } from "next/font/google"
+import type { Metadata, Viewport } from "next"
 import { MantineProvider } from '@mantine/core';
 import "./globals.css"
 import "@mantine/core/styles.css";
@@ -7,22 +6,12 @@ import { ClientNavigation } from "@/components/layout/ClientNavigation"
 import { Toaster } from "@/components/ui/toaster"
 import { ErrorBoundary } from "@/components/ErrorBoundary"
 
-const raleway = Raleway({
-  subsets: ["latin"],
-  variable: "--font-raleway",
-})
-
 export const metadata: Metadata = {
-  title: "FairMind - Build Fair & Trustworthy AI",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:1111"),
+  title: "FairMind P0 Alpha | Evidence Before Assurance",
   description: "Evidence-grade AI governance and assurance control plane for scoped evaluation planning, evidence review, and human decisions.",
-  keywords: ["AI governance", "bias detection", "ethical AI", "AI compliance", "fairness", "MLOps"],
+  keywords: ["AI governance", "assurance evidence", "evidence provenance", "human review", "model governance"],
   authors: [{ name: "FairMind Team" }],
-  viewport: {
-    width: "device-width",
-    initialScale: 1,
-    maximumScale: 5,
-    userScalable: true,
-  },
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "32x32", type: "image/png" },
@@ -33,7 +22,7 @@ export const metadata: Metadata = {
     ],
   },
   openGraph: {
-    title: "FairMind - Build Fair & Trustworthy AI",
+    title: "FairMind P0 Alpha | Evidence Before Assurance",
     description: "Plan AI evaluations and review scoped evidence without unsupported execution or compliance claims.",
     type: "website",
     images: [
@@ -47,10 +36,17 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "FairMind - Build Fair & Trustworthy AI",
-    description: "Evidence-grade AI assurance control plane",
+    title: "FairMind P0 Alpha | Evidence Before Assurance",
+    description: "Internal, default-off evidence-control-plane foundation",
     images: ["/logo.png"],
   },
+}
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  userScalable: true,
 }
 
 export default function RootLayout({
@@ -59,8 +55,8 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
-      <body className={`${raleway.variable} font-sans`}>
+    <html lang="en" data-scroll-behavior="smooth">
+      <body className="font-sans">
         <MantineProvider>
           <ErrorBoundary>
             <ClientNavigation>{children}</ClientNavigation>

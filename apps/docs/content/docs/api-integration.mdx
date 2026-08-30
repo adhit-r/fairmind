@@ -1,0 +1,76 @@
+---
+title: Assurance V2 API integration
+description: Integrate with the default-off Assurance V2 HTTP boundary without overstating its capability.
+---
+
+# Assurance V2 API integration
+
+The Assurance V2 API is an internal alpha contract. Before using it, obtain an
+approved environment with the required gates, migrations, tenant scope,
+permissions, and trust-root data. This page documents the contract shape; it is
+not activation guidance or a promise of public API stability.
+
+## Base path and request rules
+
+The mounted base path is:
+
+```text
+/api/v1/ai-governance/organizations/{org_id}
+```
+
+V2 mutation requests require `application/json` and an `Idempotency-Key`.
+Request models are strict: unknown fields, duplicate JSON keys, non-finite
+values, and out-of-contract structures are rejected. Use the OpenAPI document
+from the exact approved environment for generated client details.
+
+## Core records
+
+| Purpose | Route suffix | Permission |
+| --- | --- | --- |
+| Create or list target versions | `/systems/{system_id}/evaluation-v2/target-versions` | `evaluation:catalog:admin` for create |
+| Create or list suite versions | `/evaluation-v2/suite-versions` | `evaluation:catalog:admin` for create |
+| Create or list plans | `/systems/{system_id}/evaluation-v2/plans` | `evaluation:plan:write` for create |
+| Activate a plan | `/systems/{system_id}/evaluation-v2/plans/{plan_id}/activate` | `evaluation:plan:activate` |
+| Preflight a plan | `/systems/{system_id}/evaluation-v2/plans/{plan_id}/preflight?lifecyclePhase=pre_deploy` | scoped read |
+| Create or list runs | `/systems/{system_id}/evaluation-v2/plans/{plan_id}/runs` and `/systems/{system_id}/evaluation-v2/runs` | `evaluation:run:create` for create |
+
+Each returned plan and run carries immutable IDs and hashes. Persist those
+response values rather than reconstructing identity from display names.
+
+## Evidence and decision routes
+
+The evidence and decision routes use an additional workspace segment:
+
+```text
+/api/v1/ai-governance/organizations/{org_id}/workspaces/{workspace_id}/systems/{system_id}/evaluation-v2/runs/{run_id}
+```
+
+From that scope, the internal alpha exposes separately gated routes for signed
+Passport submission, linking, review, and governance decisions. Submission,
+link, review, and decision are different operations with different permissions
+and idempotency keys. Do not combine them into a single client-side “approve”
+action.
+
+## Client handling
+
+1. Retain the organization, workspace, system, run, suite-execution, admission,
+   and Passport-revision identifiers from each response.
+2. Reuse an idempotency key only to retry the same logical mutation; generate a
+   new key for a new action.
+3. Render admission, review, freshness, and technical status independently.
+4. On a scope mismatch, denial, disabled route, or stale response, stop and
+   request a fresh scoped result. Do not fall back to legacy data or fixtures.
+5. Treat `worker_unavailable` and `automatic_enforcement_disabled` as explicit
+   product boundaries, not transient errors to retry.
+
+## Compatibility
+
+Contract V1 plans and runs remain readable historical records. They cannot be
+used to create, activate, prepare, or link new V2 assurance work. Clone or
+recreate the work as an exactly bound V2 plan before proceeding.
+
+## Related
+
+- [Assurance workflow](./assurance-workflow)
+- [Evidence trust and review](./evidence-trust-review)
+- [Permissions and separation](./permissions-and-separation)

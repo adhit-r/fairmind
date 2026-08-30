@@ -1,0 +1,18 @@
+{
+  "audience": {
+    "answer": "Mixed internal operators and technical integrators.",
+    "source": "release request"
+  },
+  "public_surface": {
+    "answer": "Assurance V2 is an internal default-off alpha; do not present it as a stable public API.",
+    "source": "release boundary and repository gates"
+  },
+  "legal_position": {
+    "answer": "Publish an EU AI Act applicability and evidence-support crosswalk, not legal advice, certification, or conformity proof.",
+    "source": "release request"
+  },
+  "visuals": {
+    "answer": "A P0 walkthrough video is requested but requires separately approved capture and storyboard work.",
+    "source": "release request"
+  }
+}

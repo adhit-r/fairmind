@@ -1,0 +1,65 @@
+---
+title: EU AI Act evidence-support crosswalk
+description: A non-legal guide to how P0 records may support an organization’s AI Act evidence work.
+---
+
+# EU AI Act evidence-support crosswalk
+
+This page is an evidence-support guide, not legal advice, a conformity
+assessment, a certification, or a determination that the EU AI Act applies to
+your system. The organization using or providing an AI system remains
+responsible for role, risk-category, and obligation analysis with qualified
+counsel or compliance specialists.
+
+Start with the European Commission’s [AI Act framework and timeline](https://digital-strategy.ec.europa.eu/en/policies/regulatory-framework-ai) and the official [AI Act text on EUR-Lex](https://eur-lex.europa.eu/eli/reg/2024/1689/oj?locale=en).
+The Commission’s [AI Act Compliance Checker](https://ai-act-service-desk.ec.europa.eu/en/eu-ai-act-compliance-checker)
+is an informational beta tool, not a Commission assessment of a specific case.
+
+## Start with applicability
+
+Before mapping any FairMind record, document at least:
+
+1. Your role: provider, deployer, importer, distributor, authorized
+   representative, or general-purpose AI provider.
+2. The system’s intended purpose, users, deployment context, geography, and
+   affected people.
+3. Whether a prohibition, high-risk classification, transparency obligation,
+   general-purpose AI obligation, or another EU-law obligation may apply.
+4. The owner of the legal analysis, the decision date, supporting sources, and
+   unresolved questions.
+
+P0 does not perform this classification.
+
+## What P0 can support
+
+| AI Act area | P0 evidence support | Important limit |
+| --- | --- | --- |
+| Risk-management process, Article 9 | Versioned plans, lifecycle labels, evidence states, and decision records can organize a risk-control workflow. | P0 does not establish a complete risk-management system or prove risk reduction. |
+| Technical documentation, Article 11 and Annex IV | Immutable target, suite, configuration, envelope, and evidence hashes can support traceability. | The organization must determine and create the required technical documentation. |
+| Record-keeping/logging, Article 12 | Append-only admissions, links, reviews, decisions, idempotency, and audit records can support an evidence trail. | Retention, export, accessibility, and legal record requirements are not proven by P0. |
+| Transparency and instructions, Article 13 | Status, limitations, provenance, freshness, and reviewer data can inform internal documentation. | P0 does not supply all user instructions or transparency content. |
+| Human oversight, Article 14 | Four-eyes evidence review and a separately gated, audited decision exception support separation and accountability. | P0 does not supply runtime override, stop, or operational oversight procedures. |
+| Accuracy, robustness, cybersecurity, Article 15 | Scope, signature, replay, and trust controls support evidence integrity. | P0 does not provide validated model-performance, robustness, adversarial, or cybersecurity evaluation results. |
+| Quality-management system, Article 17 | Controlled records may be inputs to a QMS. | P0 is not a complete QMS. |
+| Deployer obligations and FRIA, including Articles 26–27 | P0 can organize supporting evidence and decisions. | It does not determine deployer duties or complete a fundamental-rights impact assessment. |
+| GPAI provider obligations, including Articles 53 and 55 | Versioned evidence structures can support a provider’s own dossiers. | P0 does not produce the required GPAI technical documentation, training-content summary, systemic-risk evaluation, or incident reporting. |
+
+## Evidence quality questions
+
+For each claim in a compliance dossier, record the exact run, suite, target,
+evaluator identity, source artifacts, signer, review status, freshness state,
+limitations, and decision owner. If any is unavailable, say so; do not convert
+an incomplete record into a compliance conclusion.
+
+## Current legal guidance can change
+
+The Commission’s [AI Act FAQ](https://digital-strategy.ec.europa.eu/en/faqs/navigating-ai-act)
+and its [guidance for GPAI providers](https://digital-strategy.ec.europa.eu/en/policies/guidelines-gpai-providers)
+should be checked again when making an operational or legal decision. Dates,
+implementing rules, guidance, and applicability details may change.
+
+## Related
+
+- [Evidence trust and review](./evidence-trust-review)
+- [Operator runbook](./operator-runbook)
+- [Limitations and roadmap](./limitations-roadmap)
