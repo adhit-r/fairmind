@@ -23,6 +23,7 @@ const governedSystem = {
 
 const basePlan = {
   id: 'plan-external',
+  contractVersion: '1.0.0',
   orgId: 'org-1',
   workspaceId: 'workspace-1',
   systemId: 'system-1',
@@ -42,6 +43,7 @@ const basePlan = {
 
 const awaitingRun = {
   id: 'run-awaiting',
+  contractVersion: '1.0.0',
   orgId: 'org-1',
   workspaceId: 'workspace-1',
   systemId: 'system-1',
@@ -198,6 +200,7 @@ async function mockEvaluationWorkbench(page: Page, options: MockOptions = {}) {
         createdPlanInputs.push(input)
         const created = {
           id: `plan-${plans.length + 1}`,
+          contractVersion: '1.0.0',
           orgId: 'org-1',
           workspaceId: 'workspace-1',
           systemId: 'system-1',

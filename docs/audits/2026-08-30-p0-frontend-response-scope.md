@@ -9,6 +9,9 @@ necessary but insufficient. Every parsed plan or run is checked against the
 organization and system in the request before it can be returned or published.
 Initial list loads reject the entire affected segment; post-commit targeted
 refreshes keep the last known-good segment and expose the mismatch as an error.
+The strict plan and run schemas also require the backend's canonical
+`contractVersion: "1.0.0"`, so these guards operate on the real versioned wire
+contract rather than an incomplete mock-only shape.
 
 Direct responses additionally bind to the identifier named by the request:
 plan activation and preflight bind to the requested plan, run creation binds to
@@ -32,14 +35,21 @@ plans/runs were accepted, and mismatched Passport acknowledgements triggered a
 follow-up refresh. The new tests failed on those observable results before the
 shared scope and identifier guards were added.
 
+The exact security review then exposed a pre-existing contract-fixture gap:
+backend plan/run serializers emit `contractVersion`, while the strict frontend
+schemas and mocks omitted it. A public-controller tracer test using a
+wire-shaped fixture failed before both schemas were pinned to `1.0.0`; a
+negative contract test prevents either schema from accepting another version,
+and the shared unit and Playwright fixtures mirror the canonical contract.
+
 Final verification:
 
 ```text
 bun test src/lib/api/hooks/useEvaluationRuns.test.ts
-35 passed, 0 failed
+37 passed, 0 failed
 
 bun test src
-118 passed, 0 failed
+120 passed, 0 failed
 
 bun run typecheck
 passed
