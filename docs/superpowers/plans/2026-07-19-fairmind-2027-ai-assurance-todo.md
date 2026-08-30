@@ -60,7 +60,8 @@ cannot enter formal evidence review or governance decision authority.
   - Checkpoint: authenticated identity renders the repository-owned `/profile-portrait.svg`; focused browser proof observes no request to the retired third-party avatar host. See `docs/audits/2026-08-30-p0-frontend-session-shell.md`.
 - [x] Key state by organization/system/plan/run and mask prior-scope state synchronously during route changes.
   - Checkpoint: the Evaluation Runs workbench remounts page-owned selection, form, action, and controller state on exact organization/system changes; preflight state additionally binds to the selected plan. Legacy and V2 detail payload/loading/error state binds to exact organization/workspace/system/run keys, including the V2 retry path. Focused browser proof demonstrates that a completed old-system action cannot reappear after the next system becomes active. See `docs/audits/2026-08-30-p0-frontend-scope-state.md`.
-- [ ] Reject parsed responses whose scope differs from the request and remove `selected_org_id` as secondary path authority.
+- [x] Reject parsed responses whose scope differs from the request and remove `selected_org_id` as secondary path authority.
+  - Checkpoint: the legacy Evaluation Runs controller rejects schema-valid plan/run records outside the requested organization/system and binds direct responses to the requested plan/run before publishing or returning them. Exact Passport-link acknowledgements must match the submitted evidence run and revision. `selected_org_id` remains a server-validated UI preference only and is never injected into API paths or query strings. See `docs/audits/2026-08-30-p0-frontend-response-scope.md`.
 - [ ] Render execution status, evaluator evidence result, and governance verdict as separate axes.
 - [ ] Show signer, source, admission, freshness, review, expiry, limitations, and invalidation reason.
 - [ ] Preserve layered suite/modality verdicts plus one overall reviewer verdict.

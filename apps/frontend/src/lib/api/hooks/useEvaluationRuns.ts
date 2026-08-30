@@ -246,6 +246,23 @@ function sameScope(left: EvaluationScope | null, right: EvaluationScope | null) 
   return left?.orgId === right?.orgId && left?.systemId === right?.systemId
 }
 
+function requireResponseScope<T extends EvaluationScope>(value: T, scope: EvaluationScope): T {
+  if (!sameScope(value, scope)) {
+    throw new EvaluationApiRequestError('Evaluation response scope does not match the request.')
+  }
+  return value
+}
+
+function requireResponseId(
+  actual: string | null,
+  expected: string,
+  kind: 'plan' | 'run' | 'evidence run' | 'passport revision',
+) {
+  if (actual !== expected) {
+    throw new EvaluationApiRequestError(`Evaluation response ${kind} does not match the request.`)
+  }
+}
+
 class DefaultEvaluationRunsController implements EvaluationRunsController {
   private snapshot = emptySnapshot()
   private scope: EvaluationScope | null = null
@@ -333,6 +350,7 @@ class DefaultEvaluationRunsController implements EvaluationRunsController {
       try {
         if (plansResult.status === 'rejected') throw plansResult.reason
         const plans = responseData(plansResult.value, evaluationPlanListSchema)
+          .map((plan) => requireResponseScope(plan, scope))
         nextSnapshot = { ...nextSnapshot, plans, plansLoaded: true }
       } catch (reason) {
         nextSnapshot = { ...nextSnapshot, plans: [], plansLoaded: false }
@@ -343,6 +361,7 @@ class DefaultEvaluationRunsController implements EvaluationRunsController {
       try {
         if (runsResult.status === 'rejected') throw runsResult.reason
         const runs = responseData(runsResult.value, evaluationRunListSchema)
+          .map((run) => requireResponseScope(run, scope))
         nextSnapshot = { ...nextSnapshot, runs }
       } catch (reason) {
         nextSnapshot = { ...nextSnapshot, runs: [] }
@@ -359,6 +378,7 @@ class DefaultEvaluationRunsController implements EvaluationRunsController {
         API_ENDPOINTS.aiGovernance.evaluationPlans(scope.orgId, scope.systemId),
       )
       const plans = responseData(response, evaluationPlanListSchema)
+        .map((plan) => requireResponseScope(plan, scope))
       if (!this.scopeIsCurrent(scope, scopeGeneration) || generation !== this.planGeneration) {
         throw new StaleEvaluationResultError()
       }
@@ -380,6 +400,7 @@ class DefaultEvaluationRunsController implements EvaluationRunsController {
         API_ENDPOINTS.aiGovernance.evaluationRuns(scope.orgId, scope.systemId),
       )
       const runs = responseData(response, evaluationRunListSchema)
+        .map((run) => requireResponseScope(run, scope))
       if (!this.scopeIsCurrent(scope, scopeGeneration) || generation !== this.runGeneration) {
         throw new StaleEvaluationResultError()
       }
@@ -413,6 +434,7 @@ class DefaultEvaluationRunsController implements EvaluationRunsController {
     )
     const created = responseData(response, evaluationPlanSchema)
     if (!this.scopeIsCurrent(scope, scopeGeneration)) throw new StaleEvaluationResultError()
+    requireResponseScope(created, scope)
     await this.settlePostCommitRefresh(this.refreshPlans(scope, scopeGeneration))
     return created
   }
@@ -425,6 +447,8 @@ class DefaultEvaluationRunsController implements EvaluationRunsController {
     )
     const activated = responseData(response, evaluationPlanSchema)
     if (!this.scopeIsCurrent(scope, scopeGeneration)) throw new StaleEvaluationResultError()
+    requireResponseScope(activated, scope)
+    requireResponseId(activated.id, planId, 'plan')
     await this.settlePostCommitRefresh(this.refreshPlans(scope, scopeGeneration))
     return activated
   }
@@ -437,6 +461,7 @@ class DefaultEvaluationRunsController implements EvaluationRunsController {
     )
     const result = responseData(response, evaluationPreflightSchema)
     if (!this.scopeIsCurrent(scope, scopeGeneration)) throw new StaleEvaluationResultError()
+    requireResponseId(result.planId, planId, 'plan')
     return result
   }
 
@@ -451,6 +476,8 @@ class DefaultEvaluationRunsController implements EvaluationRunsController {
     )
     const created = responseData(response, evaluationRunSchema)
     if (!this.scopeIsCurrent(scope, scopeGeneration)) throw new StaleEvaluationResultError()
+    requireResponseScope(created, scope)
+    requireResponseId(created.planId, planId, 'plan')
     await this.settlePostCommitRefresh(this.refreshRuns(scope, scopeGeneration))
     return created
   }
@@ -479,7 +506,9 @@ class DefaultEvaluationRunsController implements EvaluationRunsController {
     ) {
       throw new StaleEvaluationResultError()
     }
-    return responseData(response, evaluationRunSchema)
+    const result = requireResponseScope(responseData(response, evaluationRunSchema), scope)
+    requireResponseId(result.id, runId, 'run')
+    return result
   }
 
   async linkPassportRevision(runId: string, input: PassportRevisionLinkInput): Promise<EvaluationRun> {
@@ -492,6 +521,10 @@ class DefaultEvaluationRunsController implements EvaluationRunsController {
     )
     const linked = responseData(response, evaluationRunSchema)
     if (!this.scopeIsCurrent(scope, scopeGeneration)) throw new StaleEvaluationResultError()
+    requireResponseScope(linked, scope)
+    requireResponseId(linked.id, runId, 'run')
+    requireResponseId(linked.linkedEvidenceRunId, payload.evidenceRunId, 'evidence run')
+    requireResponseId(linked.linkedPassportRevisionId, payload.passportRevisionId, 'passport revision')
     await this.settlePostCommitRefresh(this.refreshRuns(scope, scopeGeneration))
     return linked
   }
