@@ -984,7 +984,7 @@ def test_normal_decision_and_override_share_one_verdict_cas(
             )
             return GovernanceDecisionService(unit_of_work).decide(
                 scope=graph.decision_scope,
-                actor_id=f"independent-decider-{uuid.uuid4()}",
+                actor_id=str(uuid.uuid4()),
                 idempotency_key=f"normal-cas-{uuid.uuid4()}",
                 expected_verdict_version=0,
                 overall_verdict="conditional",

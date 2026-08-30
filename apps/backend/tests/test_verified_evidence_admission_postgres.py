@@ -1141,7 +1141,7 @@ def test_link_revalidates_live_authority_after_verified_submission(
                 scenario,
                 submission=submission,
                 idempotency_key=f"link-after-{resource}-{uuid.uuid4()}",
-                actor_id=f"linker-{uuid.uuid4()}",
+                actor_id=str(uuid.uuid4()),
             )
         assert caught.value.code == "verified_evidence_link_ineligible"
     finally:
