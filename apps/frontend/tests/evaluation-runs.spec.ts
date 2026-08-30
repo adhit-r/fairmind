@@ -92,6 +92,11 @@ type MockOptions = {
   listError?: boolean
   createRunError?: boolean
   portraitFailure?: boolean
+  preflightResponses?: Record<string, {
+    response: Record<string, unknown>
+    waitFor?: Promise<void>
+    onRequest?: () => void
+  }>
   secondaryScope?: {
     systemId: string
     plans: Array<Record<string, unknown>>
@@ -233,6 +238,12 @@ async function mockEvaluationWorkbench(page: Page, options: MockOptions = {}) {
 
     const preflightMatch = path.match(/\/evaluation-plans\/([^/]+)\/preflight$/)
     if (preflightMatch && request.method() === 'GET') {
+      const preflightOverride = options.preflightResponses?.[preflightMatch[1]]
+      if (preflightOverride) {
+        preflightOverride.onRequest?.()
+        if (preflightOverride.waitFor) await preflightOverride.waitFor
+        return fulfillJson(route, preflightOverride.response)
+      }
       const plan = plans.find((candidate) => candidate.id === preflightMatch[1])
       const isWorker = plan?.deliveryMode === 'fairmind_worker'
       const isAutomatic = plan?.enforcementMode === 'automatic'
@@ -417,6 +428,97 @@ test('masks old-system plans and actions before delayed new-system evaluation li
   await expect(page.getByRole('button', { name: 'Prepare evidence run' })).toHaveCount(0, { timeout: 400 })
   expect(mocks.getEvaluationMutationPaths().filter((path) => path.includes('/systems/system-1/'))).toEqual([])
   await expect(page.getByLabel('Selected plan')).toContainText(secondPlan.name)
+})
+
+test('clears prior-system action state when the next system becomes active', async ({ page }) => {
+  const secondSystem = {
+    ...governedSystem,
+    id: 'system-2',
+    name: 'Claims Review Agent',
+    workspaceId: 'workspace-2',
+  }
+  const secondPlan = {
+    ...basePlan,
+    id: 'plan-system-2',
+    systemId: 'system-2',
+    workspaceId: 'workspace-2',
+    name: 'Claims release assurance',
+  }
+  await mockEvaluationWorkbench(page, {
+    systems: [governedSystem, secondSystem],
+    plans: [basePlan],
+    secondaryScope: {
+      systemId: 'system-2',
+      plans: [secondPlan],
+    },
+  })
+  await page.goto('/tests')
+  await page.getByRole('button', { name: 'Prepare evidence run' }).click()
+  await expect(page.getByText('Run prepared. Evidence is still required before governance review.')).toBeVisible()
+
+  await page.getByRole('combobox', { name: 'System scope' }).click()
+  await page.getByRole('option', { name: secondSystem.name }).click()
+
+  await expect(page.getByLabel('Selected plan')).toContainText(secondPlan.name)
+  await expect(page.getByText('Run prepared. Evidence is still required before governance review.')).toHaveCount(0)
+})
+
+test('does not bind a delayed prior-plan preflight to the next selected plan', async ({ page }) => {
+  let releaseOldPreflight = () => {}
+  const oldPreflightGate = new Promise<void>((resolve) => {
+    releaseOldPreflight = resolve
+  })
+  let observeOldRequest = () => {}
+  const oldRequestObserved = new Promise<void>((resolve) => {
+    observeOldRequest = resolve
+  })
+  const oldPlan = {
+    ...basePlan,
+    id: 'plan-old',
+    name: 'Old automatic plan',
+    enforcementMode: 'automatic',
+  }
+  const nextPlan = {
+    ...basePlan,
+    id: 'plan-next',
+    name: 'Current human-review plan',
+  }
+  await mockEvaluationWorkbench(page, {
+    plans: [oldPlan, nextPlan],
+    preflightResponses: {
+      'plan-old': {
+        onRequest: observeOldRequest,
+        waitFor: oldPreflightGate,
+        response: {
+          planId: 'plan-old',
+          canPrepareRun: false,
+          fairmindExecutionAvailable: false,
+          code: 'automatic_enforcement_disabled',
+          message: 'Old automatic preflight must remain hidden.',
+          nextAction: 'Use human approval.',
+        },
+      },
+      'plan-next': {
+        response: {
+          planId: 'plan-next',
+          canPrepareRun: true,
+          fairmindExecutionAvailable: false,
+          code: 'evidence_link_required',
+          message: 'Current plan preflight is ready.',
+          nextAction: 'Link exact evidence after execution.',
+        },
+      },
+    },
+  })
+  await page.goto('/tests')
+  await oldRequestObserved
+
+  await page.getByLabel('Selected plan').selectOption(nextPlan.id)
+  await expect(page.getByText('Current plan preflight is ready.')).toBeVisible()
+  releaseOldPreflight()
+
+  await expect(page.getByText('Old automatic preflight must remain hidden.')).toHaveCount(0)
+  await expect(page.getByText('Current plan preflight is ready.')).toBeVisible()
 })
 
 test('requires an organization before rendering the scoped workbench', async ({ page }) => {

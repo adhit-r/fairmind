@@ -13,8 +13,8 @@ import {
 
 import { Button } from '@/components/ui/button'
 import { FramedIcon } from '@/components/ui/FramedIcon'
-import { useSystemContext } from '@/components/workflow/SystemContext'
-import { useOrg } from '@/context/OrgContext'
+import { useSystemContext, type AISystemSummary } from '@/components/workflow/SystemContext'
+import { useOrg, type Organization } from '@/context/OrgContext'
 import {
   allowedLegacyDeliveryModes,
   allowedLegacyEnforcementModes,
@@ -34,6 +34,11 @@ import {
   type LifecyclePhase,
   type TechnicalStatus,
 } from '@/lib/api/hooks/useEvaluationRuns'
+import {
+  evaluationScopeKey,
+  readEvaluationScopeState,
+  type EvaluationScopeState,
+} from '@/lib/evaluation-scope-state'
 
 const fieldClass = 'min-h-11 w-full rounded-none border-2 border-[#0F1412] bg-[#FCFDF8] px-3 py-2 text-sm font-semibold text-[#0F1412] outline outline-0 outline-offset-2 focus:outline-2 focus:outline-[#0F1412] disabled:cursor-not-allowed disabled:bg-[#E5E9E3]'
 const suitePattern = /^[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9._-]*$/
@@ -386,22 +391,52 @@ function RunsTable({ runs, plans }: { runs: EvaluationRun[]; plans: EvaluationPl
   )
 }
 
-export default function EvaluationRunsPage() {
-  const { selectedOrg, isLoading: orgLoading } = useOrg()
-  const { selectedSystem, loading: systemLoading } = useSystemContext()
-  const realSystem = selectedSystem.metadata?.source === 'fallback' ? undefined : selectedSystem
+type EvaluationRunsScopeProps = {
+  selectedOrg: Organization | null
+  orgLoading: boolean
+  realSystem?: AISystemSummary
+  systemLoading: boolean
+}
+
+type PreflightState = {
+  preflight: EvaluationPreflight | null
+  loading: boolean
+  error: Error | null
+}
+
+function ScopedEvaluationRunsPage({
+  selectedOrg,
+  orgLoading,
+  realSystem,
+  systemLoading,
+}: EvaluationRunsScopeProps) {
   const evaluations = useEvaluationRuns(selectedOrg?.id, realSystem?.id)
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null)
   const [showCreatePlan, setShowCreatePlan] = useState(false)
-  const [preflight, setPreflight] = useState<EvaluationPreflight | null>(null)
-  const [preflightLoading, setPreflightLoading] = useState(false)
-  const [preflightError, setPreflightError] = useState<Error | null>(null)
   const [actionError, setActionError] = useState<Error | null>(null)
   const [actionMessage, setActionMessage] = useState<string | null>(null)
   const [actionBusy, setActionBusy] = useState(false)
   const actionAlertRef = useRef<HTMLDivElement>(null)
 
   const selectedPlan = evaluations.plans.find((plan) => plan.id === selectedPlanId) ?? null
+  const preflightScopeKey = evaluationScopeKey({
+    organizationId: selectedOrg?.id,
+    systemId: realSystem?.id,
+    planId: selectedPlan?.id,
+  })
+  const [preflightState, setPreflightState] = useState<EvaluationScopeState<PreflightState>>({
+    scopeKey: preflightScopeKey,
+    value: { preflight: null, loading: false, error: null },
+  })
+  const {
+    preflight,
+    loading: preflightLoading,
+    error: preflightError,
+  } = readEvaluationScopeState(preflightState, preflightScopeKey, {
+    preflight: null,
+    loading: Boolean(selectedPlan),
+    error: null,
+  })
   const planListUnconfirmed = evaluations.plans.length === 0 && !evaluations.plansLoaded
   const selectedPreflight = selectedPlan && preflight
     ? preflightPresentation(selectedPlan, preflight)
@@ -418,22 +453,34 @@ export default function EvaluationRunsPage() {
 
   useEffect(() => {
     let current = true
-    setPreflight(null)
-    setPreflightError(null)
+    setPreflightState({
+      scopeKey: preflightScopeKey,
+      value: { preflight: null, loading: Boolean(selectedPlan), error: null },
+    })
     if (!selectedPlan) return () => { current = false }
-    setPreflightLoading(true)
     void evaluations.loadPreflight(selectedPlan.id)
       .then((result) => {
-        if (current) setPreflight(result)
+        if (current) {
+          setPreflightState({
+            scopeKey: preflightScopeKey,
+            value: { preflight: result, loading: false, error: null },
+          })
+        }
       })
       .catch((reason) => {
-        if (current) setPreflightError(reason instanceof Error ? reason : new Error('Unable to load preflight.'))
-      })
-      .finally(() => {
-        if (current) setPreflightLoading(false)
+        if (current) {
+          setPreflightState({
+            scopeKey: preflightScopeKey,
+            value: {
+              preflight: null,
+              loading: false,
+              error: reason instanceof Error ? reason : new Error('Unable to load preflight.'),
+            },
+          })
+        }
       })
     return () => { current = false }
-  }, [evaluations.loadPreflight, selectedPlan?.id, selectedPlan?.status, selectedPlan?.updatedAt])
+  }, [evaluations.loadPreflight, preflightScopeKey, selectedPlan?.id, selectedPlan?.status, selectedPlan?.updatedAt])
 
   const focusActionError = () => {
     window.requestAnimationFrame(() => actionAlertRef.current?.focus())
@@ -648,5 +695,25 @@ export default function EvaluationRunsPage() {
         </section>
       )}
     </div>
+  )
+}
+
+export default function EvaluationRunsPage() {
+  const { selectedOrg, isLoading: orgLoading } = useOrg()
+  const { selectedSystem, loading: systemLoading } = useSystemContext()
+  const realSystem = selectedSystem.metadata?.source === 'fallback' ? undefined : selectedSystem
+  const scopeKey = evaluationScopeKey({
+    organizationId: selectedOrg?.id,
+    systemId: realSystem?.id,
+  })
+
+  return (
+    <ScopedEvaluationRunsPage
+      key={scopeKey}
+      selectedOrg={selectedOrg}
+      orgLoading={orgLoading}
+      realSystem={realSystem}
+      systemLoading={systemLoading}
+    />
   )
 }
