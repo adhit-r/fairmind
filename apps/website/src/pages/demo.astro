@@ -3,81 +3,81 @@ import Layout from '../layouts/Layout.astro';
 
 const dashboardFeatures = [
   {
-    title: 'BIAS DETECTION DASHBOARD',
-    description: 'COMPREHENSIVE BIAS ANALYSIS WITH SHAP AND LIME INTEGRATION FOR MODEL INTERPRETABILITY',
+    title: 'EVALUATION RUNS WORKBENCH',
+    description: 'VERSIONED PLANNING AND PREFLIGHT FOR AN EVIDENCE-AWAITING RUN',
     image: '/screenshots/Bias Detection.png',
-    features: ['SHAP ANALYSIS', 'LIME EXPLANATIONS', 'BIAS METRICS', 'PROTECTED GROUPS']
+    features: ['TARGET IDENTITY', 'SUITE VERSION', 'EXECUTION ENVELOPE', 'PREFLIGHT STATE']
   },
   {
-    title: 'SIMULATION RESULTS',
-    description: 'DETAILED SIMULATION OUTCOMES WITH PERFORMANCE METRICS AND FAIRNESS ANALYSIS',
+    title: 'ASSURANCE RUN PREVIEW',
+    description: 'READ-ONLY, DEFAULT-OFF VIEW OF EXECUTION, EVIDENCE, AND GOVERNANCE STATE',
     image: '/screenshots/simulation-result.png',
-    features: ['PERFORMANCE METRICS', 'FAIRNESS ANALYSIS', 'CONFUSION MATRIX', 'RESULTS VISUALIZATION']
+    features: ['EXECUTION BOUNDARY', 'EVIDENCE STATE', 'REVIEW STATE', 'GOVERNANCE STATE']
   },
   {
-    title: 'RISK ASSESSMENT MATRIX',
-    description: 'COMPREHENSIVE RISK EVALUATION WITH PERFORMANCE MATRIX AND RISK SCORING',
+    title: 'EVIDENCE TRUST STATE',
+    description: 'SOURCE, SIGNER, ADMISSION, FRESHNESS, REVIEW, AND LIMITATION RECORDS',
     image: '/screenshots/performance-matrix_RMF_Risk_assesment_matrix.png',
-    features: ['RISK SCORING', 'PERFORMANCE MATRIX', 'RISK CATEGORIES', 'MITIGATION STRATEGIES']
+    features: ['SOURCE', 'SIGNER', 'ADMISSION', 'FRESHNESS']
   },
   {
-    title: 'MODEL PREDICTION ANALYSIS',
-    description: 'CONFUSION MATRIX AND PREDICTION DISTRIBUTION ANALYSIS FOR MODEL EVALUATION',
+    title: 'HUMAN REVIEW RECORD',
+    description: 'ATTRIBUTABLE REVIEW WITHOUT AUTOMATIC APPROVAL OR CERTIFICATION',
     image: '/screenshots/confusion-matrix_prediction-distribution.png',
-    features: ['CONFUSION MATRIX', 'PREDICTION DISTRIBUTION', 'MODEL ACCURACY', 'ERROR ANALYSIS']
+    features: ['REVIEWER', 'VERDICT', 'LIMITATIONS', 'TIMESTAMP']
   },
   {
-    title: 'RISK REGISTRY',
-    description: 'CENTRALIZED RISK MANAGEMENT AND TRACKING SYSTEM FOR AI MODELS',
+    title: 'GOVERNANCE DECISION RECORD',
+    description: 'A SEPARATE HUMAN DECISION STATE LINKED TO REVIEWED EVIDENCE',
     image: '/screenshots/Risk_Registry.png',
-    features: ['RISK REGISTRY', 'RISK TRACKING', 'RISK CATEGORIES', 'RISK MITIGATION']
+    features: ['DECISION STATE', 'ATTRIBUTION', 'EVIDENCE LINK', 'AUDIT EVENT']
   },
   {
-    title: 'SIMULATION INTERFACE',
-    description: 'INTERACTIVE SIMULATION INTERFACE FOR MODEL TESTING AND VALIDATION',
+    title: 'CAPABILITY UNAVAILABLE',
+    description: 'UNSUPPORTED EVALUATOR SURFACES REMAIN INERT AND RETURN NO RESULTS',
     image: '/screenshots/run-simulation-1.png',
-    features: ['MODEL UPLOAD', 'DATASET SELECTION', 'PARAMETER CONFIGURATION', 'SIMULATION EXECUTION']
+    features: ['NO WORKER', 'NO PACK RESULT', 'NO AUTO ACTION', 'FAIL CLOSED']
   }
 ];
 
 const dashboardCategories = [
   {
-    title: 'ANALYZE',
-    description: 'BIAS DETECTION AND MODEL ANALYSIS',
-    dashboards: ['BIAS DETECTION', 'MODEL EXPLAINABILITY', 'PERFORMANCE ANALYSIS']
+    title: 'PLAN',
+    description: 'VERSIONED ASSURANCE SCOPE',
+    dashboards: ['TARGET IDENTITY', 'SUITE VERSION', 'EXECUTION ENVELOPE']
   },
   {
-    title: 'MONITOR',
-    description: 'REAL-TIME MONITORING AND ALERTS',
-    dashboards: ['REAL-TIME MONITORING', 'DRIFT DETECTION', 'SYSTEM HEALTH']
+    title: 'ADMIT',
+    description: 'DEFAULT-OFF EVIDENCE CONTROLS',
+    dashboards: ['SOURCE STATE', 'SIGNATURE STATE', 'ADMISSION STATE']
   },
   {
-    title: 'EXPLAIN',
-    description: 'MODEL INTERPRETABILITY AND TRANSPARENCY',
-    dashboards: ['SHAP ANALYSIS', 'LIME EXPLANATIONS', 'FEATURE IMPORTANCE']
+    title: 'REVIEW',
+    description: 'HUMAN TRUST ASSESSMENT',
+    dashboards: ['FRESHNESS', 'LIMITATIONS', 'REVIEW VERDICT']
   },
   {
     title: 'GOVERN',
-    description: 'COMPLIANCE AND RISK MANAGEMENT',
-    dashboards: ['RISK ASSESSMENT', 'COMPLIANCE TRACKING', 'AUDIT LOGS']
+    description: 'HUMAN GOVERNANCE DECISIONS',
+    dashboards: ['DECISION STATE', 'ATTRIBUTION', 'AUDIT LOG']
   },
   {
-    title: 'SIMULATE',
-    description: 'MODEL TESTING AND VALIDATION',
-    dashboards: ['SIMULATION INTERFACE', 'MODEL TESTING', 'VALIDATION RESULTS']
+    title: 'WITHHOLD',
+    description: 'UNSUPPORTED CAPABILITY',
+    dashboards: ['NO WORKER EXECUTION', 'NO PUBLIC PACKS', 'NO AUTO ENFORCEMENT']
   },
   {
-    title: 'MANAGE',
-    description: 'MODEL AND DATA MANAGEMENT',
-    dashboards: ['MODEL REGISTRY', 'DATA MANAGEMENT', 'VERSION CONTROL']
+    title: 'TRACE',
+    description: 'BOUNDED AUDIT STATE',
+    dashboards: ['REQUEST ID', 'IDEMPOTENCY', 'LIFECYCLE EVENTS']
   }
 ];
 
 const structuredData = {
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
-  "name": "Fairmind AI Governance Platform Demo",
-  "description": "Live demo of comprehensive AI governance platform with 22 specialized dashboards for bias detection, compliance tracking, and model management",
+  "name": "FairMind P0 Capability Preview",
+  "description": "Source-grounded preview of FairMind's internal, default-off evidence-control-plane foundation.",
   "applicationCategory": "BusinessApplication",
   "operatingSystem": "Web",
   "url": "https://fairmind.xyz/demo"
@@ -85,29 +85,29 @@ const structuredData = {
 ---
 
 <Layout 
-  title="Live Demo - Fairmind AI Governance Platform | 22 Specialized Dashboards"
-  description="Experience the most comprehensive AI governance platform with 22 specialized dashboards for bias detection, compliance tracking, and model management. Live demo with SHAP, LIME, and advanced bias detection capabilities."
+  title="P0 Capability Preview - FairMind v2.1.0-alpha.1"
+  description="Source-grounded preview of FairMind's internal, default-off evidence-control-plane foundation. No live evaluator execution is offered."
   structuredData={structuredData}
 >
   <!-- Hero Section -->
   <section class="bg-black text-yellow-400 py-24 border-b-2 border-yellow-400">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
       <h1 class="text-5xl md:text-6xl font-black mb-6">
-        <span class="block">LIVE DASHBOARD DEMO</span>
-        <span class="text-yellow-400 bg-black px-4 py-2 transform rotate-1 inline-block shadow-[6px_6px_0px_0px_rgba(255,255,0,1)]">22 SPECIALIZED TOOLS</span>
+        <span class="block">P0 CAPABILITY PREVIEW</span>
+        <span class="text-yellow-400 bg-black px-4 py-2 transform rotate-1 inline-block shadow-[6px_6px_0px_0px_rgba(255,255,0,1)]">INTERNAL ALPHA</span>
         </h1>
         
       <p class="text-xl md:text-2xl text-yellow-400 max-w-4xl mx-auto font-bold mb-8">
-        OPEN-SOURCE AI GOVERNANCE PLATFORM WITH SHAP, LIME, AND ADVANCED BIAS DETECTION CAPABILITIES. EXPLORE SPECIALIZED DASHBOARDS FOR COMPREHENSIVE MODEL ANALYSIS AND COMPLIANCE TRACKING.
+        SOURCE-GROUNDED WALKTHROUGH OF VERSIONED PLANNING, EVIDENCE TRUST STATE, AND HUMAN REVIEW. EVALUATOR EXECUTION AND AUTOMATIC ENFORCEMENT ARE UNAVAILABLE.
       </p>
       
       <div class="flex flex-col sm:flex-row gap-6 justify-center">
-        <a href="https://app-demo.fairmind.xyz" target="_blank" class="inline-flex items-center px-8 py-4 bg-yellow-400 text-black font-black rounded-none border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transform hover:-translate-y-2 transition-all">
+        <a href="https://github.com/adhit-r/fairmind/tree/main/apps/docs/content/docs" target="_blank" rel="noopener noreferrer" class="inline-flex items-center px-8 py-4 bg-yellow-400 text-black font-black rounded-none border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transform hover:-translate-y-2 transition-all">
           <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
           </svg>
-          LAUNCH LIVE DEMO
+          READ REPOSITORY DOCS
         </a>
         <a href="/features" class="inline-flex items-center px-8 py-4 border-2 border-yellow-400 text-yellow-400 font-black rounded-none hover:bg-yellow-400 hover:text-black transition-all shadow-[4px_4px_0px_0px_rgba(255,255,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(255,255,0,1)]">
           <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -122,25 +122,25 @@ const structuredData = {
           <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
           </svg>
-          SHAP + LIME
+          VERSIONED PLANNING
         </span>
         <span class="inline-flex items-center px-4 py-2 bg-yellow-400 text-black font-black rounded-none border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
           <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
           </svg>
-          BIAS DETECTION
+          EVIDENCE TRUST
         </span>
         <span class="inline-flex items-center px-4 py-2 bg-yellow-400 text-black font-black rounded-none border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
           <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
           </svg>
-          OPEN SOURCE
+          HUMAN REVIEW
         </span>
         <span class="inline-flex items-center px-4 py-2 bg-yellow-400 text-black font-black rounded-none border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
           <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
           </svg>
-          REAL-TIME MONITORING
+          DEFAULT-OFF
         </span>
       </div>
     </div>
@@ -150,9 +150,9 @@ const structuredData = {
   <section class="py-20 bg-black">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="text-center mb-16">
-        <h2 class="text-4xl md:text-5xl font-black text-yellow-400 mb-6">DASHBOARD ORGANIZATION</h2>
+        <h2 class="text-4xl md:text-5xl font-black text-yellow-400 mb-6">CONTROL-PLANE STATES</h2>
         <p class="text-xl text-yellow-400 max-w-3xl mx-auto font-bold">
-          MODULAR ORGANIZATION FOR FOCUSED AI GOVERNANCE WORKFLOWS
+          A BOUNDED VIEW OF CURRENT INTERNAL WORKFLOWS
         </p>
       </div>
       
@@ -181,9 +181,9 @@ const structuredData = {
   <section class="py-20 bg-black border-t-2 border-yellow-400">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="text-center mb-16">
-        <h2 class="text-4xl md:text-5xl font-black text-yellow-400 mb-6">AI GOVERNANCE TOOLS</h2>
+        <h2 class="text-4xl md:text-5xl font-black text-yellow-400 mb-6">SOURCE-GROUNDED SURFACES</h2>
         <p class="text-xl text-yellow-400 max-w-3xl mx-auto font-bold">
-          EXPLORE THE SPECIALIZED DASHBOARDS AND THEIR CAPABILITIES
+          INTERFACE STATES ARE NOT PROOF OF EVALUATOR EXECUTION OR MODEL RESULTS
         </p>
       </div>
       
@@ -204,12 +204,12 @@ const structuredData = {
               ))}
             </div>
             
-            <a href="https://app-demo.fairmind.xyz" target="_blank" class="inline-flex items-center px-6 py-3 bg-yellow-400 text-black font-black rounded-none border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transform hover:-translate-y-1 transition-all">
+            <a href="https://github.com/adhit-r/fairmind/tree/main/apps/docs/content/docs" target="_blank" rel="noopener noreferrer" class="inline-flex items-center px-6 py-3 bg-yellow-400 text-black font-black rounded-none border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transform hover:-translate-y-1 transition-all">
               <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
               </svg>
-              TRY {feature.title.split(' ')[0]} DASHBOARD
+              REVIEW RELEASE BOUNDARY
             </a>
           </div>
         ))}
@@ -220,45 +220,45 @@ const structuredData = {
   <!-- Experience Section -->
   <section class="py-20 bg-black border-t-2 border-yellow-400">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-      <h2 class="text-4xl font-black text-yellow-400 mb-6">EXPERIENCE THE PLATFORM</h2>
+      <h2 class="text-4xl font-black text-yellow-400 mb-6">UNDERSTAND THE BOUNDARY</h2>
       <p class="text-xl text-yellow-400 mb-8 max-w-3xl mx-auto font-bold">
-        LAUNCH THE LIVE DEMO TO EXPLORE SPECIALIZED DASHBOARDS AND AI GOVERNANCE FEATURES
+        THIS PAGE IS A CAPABILITY PREVIEW, NOT A LIVE SERVICE OR EXECUTION DEMO
       </p>
       
       <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
         <div class="bg-black p-6 rounded-none border-2 border-yellow-400 shadow-[4px_4px_0px_0px_rgba(255,255,0,1)]">
-          <h3 class="text-xl font-black text-yellow-400 mb-3">ADVANCED BIAS DETECTION</h3>
-          <p class="text-yellow-400 font-bold">SHAP, LIME, AND KNOWLEDGE GRAPH INTEGRATION</p>
+          <h3 class="text-xl font-black text-yellow-400 mb-3">AVAILABLE INTERNALLY</h3>
+          <p class="text-yellow-400 font-bold">VERSIONED PLANNING AND EVIDENCE-AWAITING RUN STATE</p>
             </div>
         <div class="bg-black p-6 rounded-none border-2 border-yellow-400 shadow-[4px_4px_0px_0px_rgba(255,255,0,1)]">
-          <h3 class="text-xl font-black text-yellow-400 mb-3">KNOWLEDGE GRAPH</h3>
-          <p class="text-yellow-400 font-bold">NEO4J-POWERED CAUSAL RELATIONSHIP ANALYSIS</p>
+          <h3 class="text-xl font-black text-yellow-400 mb-3">DEFAULT-OFF</h3>
+          <p class="text-yellow-400 font-bold">EVIDENCE TRUST, REVIEW, AND GOVERNANCE SURFACES</p>
           </div>
         <div class="bg-black p-6 rounded-none border-2 border-yellow-400 shadow-[4px_4px_0px_0px_rgba(255,255,0,1)]">
-          <h3 class="text-xl font-black text-yellow-400 mb-3">REAL-TIME MONITORING</h3>
-          <p class="text-yellow-400 font-bold">LIVE ALERTS AND COMPLIANCE TRACKING</p>
+          <h3 class="text-xl font-black text-yellow-400 mb-3">UNAVAILABLE</h3>
+          <p class="text-yellow-400 font-bold">WORKER EXECUTION, PUBLIC PACKS, AND AUTOMATIC ENFORCEMENT</p>
           </div>
         </div>
         
       <div class="flex flex-col sm:flex-row gap-6 justify-center">
-        <a href="https://app-demo.fairmind.xyz" target="_blank" class="inline-flex items-center px-8 py-4 bg-yellow-400 text-black font-black rounded-none border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transform hover:-translate-y-2 transition-all">
+        <a href="https://github.com/adhit-r/fairmind/blob/main/docs/superpowers/plans/2026-07-19-fairmind-2027-ai-assurance-todo.md" target="_blank" class="inline-flex items-center px-8 py-4 bg-yellow-400 text-black font-black rounded-none border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transform hover:-translate-y-2 transition-all">
           <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
           </svg>
-          LAUNCH LIVE DEMO
+          READ CAPABILITY ROADMAP
         </a>
         <a href="/contact" class="inline-flex items-center px-8 py-4 border-2 border-yellow-400 text-yellow-400 font-black rounded-none hover:bg-yellow-400 hover:text-black transition-all shadow-[4px_4px_0px_0px_rgba(255,255,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(255,255,0,1)]">
           <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
           </svg>
-          SCHEDULE DEMO
+          ASK ABOUT ALPHA ACCESS
           </a>
         </div>
         
       <div class="mt-12 p-6 bg-black border-2 border-yellow-400 shadow-[4px_4px_0px_0px_rgba(255,255,0,1)]">
         <p class="text-yellow-400 font-bold">
-          DEMO INCLUDES ALL 22 SPECIALIZED DASHBOARDS • NO REGISTRATION REQUIRED • FULL FEATURE ACCESS
+          NO LIVE DEMO IS CLAIMED. AVAILABILITY AND FEATURE COVERAGE REQUIRE RELEASE-SPECIFIC VALIDATION.
         </p>
       </div>
     </div>
@@ -270,26 +270,26 @@ const structuredData = {
       <div class="text-center mb-16">
         <h2 class="text-4xl font-black text-yellow-400 mb-6">PLATFORM ARCHITECTURE</h2>
         <p class="text-xl text-yellow-400 max-w-3xl mx-auto font-bold">
-          BUILT WITH MODERN TECHNOLOGIES FOR ENTERPRISE-GRADE PERFORMANCE
+          CURRENT REPOSITORY SHAPE AND EVIDENCE BOUNDARY
         </p>
       </div>
       
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
         <div class="bg-black p-6 rounded-none border-2 border-yellow-400 shadow-[4px_4px_0px_0px_rgba(255,255,0,1)]">
           <h3 class="text-xl font-black text-yellow-400 mb-3">FRONTEND</h3>
-          <p class="text-yellow-400 font-bold">NEXT.JS 14, REACT, TYPESCRIPT, TAILWIND CSS</p>
+          <p class="text-yellow-400 font-bold">ASTRO MARKETING SITE AND NEXT.JS PRODUCT DASHBOARD</p>
         </div>
         <div class="bg-black p-6 rounded-none border-2 border-yellow-400 shadow-[4px_4px_0px_0px_rgba(255,255,0,1)]">
           <h3 class="text-xl font-black text-yellow-400 mb-3">BACKEND</h3>
-          <p class="text-yellow-400 font-bold">PYTHON, FASTAPI, POSTGRESQL, NEON</p>
+          <p class="text-yellow-400 font-bold">FASTAPI API AND POSTGRESQL AUTHORITY</p>
         </div>
         <div class="bg-black p-6 rounded-none border-2 border-yellow-400 shadow-[4px_4px_0px_0px_rgba(255,255,0,1)]">
-          <h3 class="text-xl font-black text-yellow-400 mb-3">KNOWLEDGE GRAPH</h3>
-          <p class="text-yellow-400 font-bold">NEO4J, CYPHER QUERIES, GRAPH ALGORITHMS</p>
+          <h3 class="text-xl font-black text-yellow-400 mb-3">EVIDENCE</h3>
+          <p class="text-yellow-400 font-bold">EXACT BINDINGS AND BOUNDED TRUST STATES</p>
         </div>
         <div class="bg-black p-6 rounded-none border-2 border-yellow-400 shadow-[4px_4px_0px_0px_rgba(255,255,0,1)]">
-          <h3 class="text-xl font-black text-yellow-400 mb-3">ML/AI</h3>
-          <p class="text-yellow-400 font-bold">SHAP, LIME, SCIKIT-LEARN, TENSORFLOW</p>
+          <h3 class="text-xl font-black text-yellow-400 mb-3">STATUS</h3>
+          <p class="text-yellow-400 font-bold">INTERNAL ALPHA AND DEFAULT-OFF</p>
         </div>
       </div>
     </div>

@@ -14,10 +14,22 @@ import {
   type EvaluationRun,
   type GovernanceVerdict,
 } from '@/lib/api/hooks/useEvaluationRuns'
+import {
+  evaluationScopeKey,
+  readEvaluationScopeState,
+  type EvaluationScopeState,
+} from '@/lib/evaluation-scope-state'
 
 interface PageProps {
   params: Promise<{ testId: string }>
 }
+
+type RunDetailState = {
+  run: EvaluationRun | null
+  loading: boolean
+  error: Error | null
+}
+
 const verdictLabels: Record<GovernanceVerdict, string> = {
   approved: 'Approved',
   conditional: 'Conditional',
@@ -112,35 +124,59 @@ export default function EvaluationRunDetailPage({ params }: PageProps) {
   const { selectedSystem, loading: systemLoading } = useSystemContext()
   const realSystem = selectedSystem.metadata?.source === 'fallback' ? undefined : selectedSystem
   const evaluations = useEvaluationRuns(selectedOrg?.id, realSystem?.id)
-  const scopeKey = [selectedOrg?.id ?? '', realSystem?.id ?? '', testId].join(':')
-  const [runState, setRunState] = useState<{ scopeKey: string; run: EvaluationRun | null }>({
-    scopeKey,
-    run: null,
+  const scopeKey = evaluationScopeKey({
+    organizationId: selectedOrg?.id,
+    systemId: realSystem?.id,
+    runId: testId,
   })
-  const [detailLoading, setDetailLoading] = useState(false)
-  const [detailError, setDetailError] = useState<Error | null>(null)
+  const [detailState, setDetailState] = useState<EvaluationScopeState<RunDetailState>>({
+    scopeKey,
+    value: { run: null, loading: false, error: null },
+  })
 
-  // Mask a previous organization's/system's run synchronously on route or
-  // scope changes; the fetch effect below cannot provide that guarantee.
-  const run = runState.scopeKey === scopeKey ? runState.run : null
+  // Mask all prior-scope detail state synchronously. Effects run after paint,
+  // so clearing only inside the loader can briefly expose old data or errors.
+  const {
+    run,
+    loading: detailLoading,
+    error: detailError,
+  } = readEvaluationScopeState(detailState, scopeKey, {
+    run: null,
+    loading: Boolean(selectedOrg?.id && realSystem?.id),
+    error: null,
+  })
 
   useEffect(() => {
     let current = true
-    setRunState({ scopeKey, run: null })
-    setDetailError(null)
+    setDetailState({
+      scopeKey,
+      value: {
+        run: null,
+        loading: Boolean(selectedOrg?.id && realSystem?.id),
+        error: null,
+      },
+    })
     if (!selectedOrg?.id || !realSystem?.id) return () => { current = false }
 
-    setDetailLoading(true)
     void evaluations.getRun(testId)
       .then((result) => {
-        if (current) setRunState({ scopeKey, run: result })
+        if (current) {
+          setDetailState({
+            scopeKey,
+            value: { run: result, loading: false, error: null },
+          })
+        }
       })
       .catch((reason) => {
         if (!current || reason instanceof StaleEvaluationResultError) return
-        setDetailError(reason instanceof Error ? reason : new Error('Unable to load evaluation run.'))
-      })
-      .finally(() => {
-        if (current) setDetailLoading(false)
+        setDetailState({
+          scopeKey,
+          value: {
+            run: null,
+            loading: false,
+            error: reason instanceof Error ? reason : new Error('Unable to load evaluation run.'),
+          },
+        })
       })
     return () => { current = false }
   }, [evaluations.getRun, realSystem?.id, scopeKey, selectedOrg?.id, testId])

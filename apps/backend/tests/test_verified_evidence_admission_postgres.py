@@ -19,7 +19,7 @@ from copy import deepcopy
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from threading import Barrier, Event
+from threading import Barrier
 from typing import Any
 
 import pytest
@@ -31,6 +31,7 @@ from sqlalchemy.orm import sessionmaker
 
 from src.application.ports.evaluation_workbench import EvaluationWorkbenchError
 from src.application.ports.evidence_admission import EvidenceAdmissionScope
+from src.application.ports.evidence_link import EvidenceLinkScope
 from src.application.services.evaluation_workbench_service import (
     EvaluationWorkbenchService,
 )
@@ -73,8 +74,8 @@ MIGRATION_CHAIN = (
     "013f_trust_authority_integrity.sql",
     "013g_operational_evidence_freshness.sql",
 )
-ADMISSION_OPERATION = "evaluation-v2.evidence.verified-admit"
-ADMISSION_SUCCESS_ACTION = "evaluation_v2.evidence.verified_admitted"
+ADMISSION_OPERATION = "evaluation-v2.evidence.verified-submit"
+ADMISSION_SUCCESS_ACTION = "evaluation_v2.evidence.verified_submitted"
 MIGRATION_OCCUPANCY_CONSTRAINTS = (
     ("governance_evidence_runs", "uq_governance_evidence_run"),
     (
@@ -226,6 +227,35 @@ def postgres_session_factory():
                 )
         finally:
             cleanup_connection.close()
+
+
+@pytest.fixture(scope="module")
+def postgres_013k_session_factory(postgres_session_factory):
+    """Extend the application harness through the current verified-link guard."""
+
+    factory = postgres_session_factory
+    session = factory()
+    try:
+        schema = session.scalar(text("SELECT current_schema()"))
+        assert isinstance(schema, str) and schema
+        for migration_name in (
+            "013h_idempotency_retention_integrity.sql",
+            "013i_imported_evidence_delivery_integrity.sql",
+            "013j_owner_decision_override_integrity.sql",
+            "013k_verified_evidence_link_integrity.sql",
+        ):
+            session.execute(
+                text(
+                    "SELECT pg_catalog.set_config"
+                    "('fairmind.migration_schema', :schema, false)"
+                ),
+                {"schema": schema},
+            )
+            session.execute(text((MIGRATIONS / migration_name).read_text(encoding="utf-8")))
+        session.commit()
+    finally:
+        session.close()
+    return factory
 
 
 def _workbench_service(session) -> EvaluationWorkbenchService:
@@ -862,15 +892,66 @@ def _admit(
     verifier: object | None = None,
     repository: SqlAlchemyEvaluationWorkbenchRepository | None = None,
 ):
-    return _verified_service(
+    submission = _verified_service(
         session,
         verifier=verifier,
         repository=repository,
-    ).admit_verified_passport_v2(
+    ).submit_verified_passport_v2(
         scope=scope or _scope(scenario),
         actor_id=actor_id or scenario.actor_id,
         idempotency_key=idempotency_key,
         raw_passport=raw,
+    )
+    return _link(
+        session,
+        scenario,
+        submission=submission,
+        idempotency_key=f"link-{idempotency_key}",
+        actor_id=actor_id or scenario.actor_id,
+    )
+
+
+def _submit(
+    session,
+    scenario: AdmissionScenario,
+    *,
+    raw: bytes,
+    idempotency_key: str,
+    actor_id: str | None = None,
+):
+    return _verified_service(session).submit_verified_passport_v2(
+        scope=_scope(scenario),
+        actor_id=actor_id or scenario.actor_id,
+        idempotency_key=idempotency_key,
+        raw_passport=raw,
+    )
+
+
+def _link(
+    session,
+    scenario: AdmissionScenario,
+    *,
+    submission,
+    idempotency_key: str,
+    actor_id: str,
+):
+    from src.application.services.verified_evidence_link_service import (
+        VerifiedEvidenceLinkService,
+    )
+
+    return VerifiedEvidenceLinkService(
+        SqlAlchemyEvaluationWorkbenchUnitOfWork(session)
+    ).link_verified_evidence(
+        scope=EvidenceLinkScope(
+            organization_id=scenario.org_id,
+            system_id=scenario.system_id,
+            run_id=scenario.run_id,
+            suite_execution_id=str(submission.body["suiteExecutionId"]),
+            admission_id=str(submission.body["admissionId"]),
+            passport_revision_id=str(submission.body["passportRevisionId"]),
+        ),
+        actor_id=actor_id,
+        idempotency_key=idempotency_key,
     )
 
 
@@ -972,6 +1053,108 @@ def _assert_one_graph(factory: sessionmaker, scenario: AdmissionScenario) -> Non
         session.close()
     assert receipt["evaluator_registration_id"]
     assert receipt["evaluator_registration_binding_hash"] == receipt["binding_hash"]
+
+
+def test_verified_submit_and_link_are_two_independent_postgresql_mutations(
+    postgres_013k_session_factory,
+) -> None:
+    factory = postgres_013k_session_factory
+    scenario = _seed_scenario(factory)
+    _payload, raw = _signed_passport(scenario)
+
+    submit_session = factory()
+    try:
+        submission = _submit(
+            submit_session,
+            scenario,
+            raw=raw,
+            idempotency_key=f"submit-{uuid.uuid4()}",
+        )
+    finally:
+        submit_session.close()
+
+    assert submission.status == 201
+    assert submission.body["linkStatus"] == "pending"
+    assert _graph_counts(factory, scenario) == {
+        "evidence_runs": 1,
+        "revisions": 1,
+        "receipts": 1,
+        "admissions": 1,
+        "nonce_claims": 1,
+        "suite_links": 0,
+    }
+    assert _scalar(
+        factory,
+        "SELECT admission_status FROM governance_evaluation_run_suite_executions "
+        "WHERE id = :suite_execution_id AND org_id = :org_id",
+        suite_execution_id=scenario.suite_executions[0]["id"],
+        org_id=scenario.org_id,
+    ) == "pending"
+
+    link_session = factory()
+    try:
+        linked = _link(
+            link_session,
+            scenario,
+            submission=submission,
+            idempotency_key=f"link-{uuid.uuid4()}",
+            actor_id=str(uuid.uuid4()),
+        )
+    finally:
+        link_session.close()
+
+    assert linked.status == 201
+    assert linked.body["admissionStatus"] == "verified"
+    assert linked.body["suiteEvidenceLinkId"]
+    _assert_one_graph(factory, scenario)
+
+
+@pytest.mark.parametrize("resource", ("policy", "issuer", "key", "registration"))
+def test_link_revalidates_live_authority_after_verified_submission(
+    postgres_013k_session_factory,
+    resource: str,
+) -> None:
+    factory = postgres_013k_session_factory
+    scenario = _seed_scenario(factory)
+    _payload, raw = _signed_passport(scenario)
+    submit_session = factory()
+    try:
+        submission = _submit(
+            submit_session,
+            scenario,
+            raw=raw,
+            idempotency_key=f"submit-before-{resource}-{uuid.uuid4()}",
+        )
+    finally:
+        submit_session.close()
+    revoke_session = factory()
+    try:
+        _revoke_authority(revoke_session, scenario, resource)
+    finally:
+        revoke_session.close()
+
+    link_session = factory()
+    try:
+        with pytest.raises(EvaluationWorkbenchError) as caught:
+            _link(
+                link_session,
+                scenario,
+                submission=submission,
+                idempotency_key=f"link-after-{resource}-{uuid.uuid4()}",
+                actor_id=str(uuid.uuid4()),
+            )
+        assert caught.value.code == "verified_evidence_link_ineligible"
+    finally:
+        link_session.close()
+
+    assert _graph_counts(factory, scenario) == {
+        "evidence_runs": 1,
+        "revisions": 1,
+        "receipts": 1,
+        "admissions": 1,
+        "nonce_claims": 1,
+        "suite_links": 0,
+    }
 
 
 def test_fixture_uses_uuid_identity_and_preserves_requested_at_precision(
@@ -2080,150 +2263,13 @@ def test_revocation_committed_before_admission_rejects_without_a_graph(
     _assert_empty_graph(factory, scenario)
 
 
-class _BlockingRealVerifier:
-    def __init__(self) -> None:
-        self.entered = Event()
-        self.release = Event()
-        self._inner = Ed25519EvidenceVerifier()
-
-    def __call__(self, **kwargs: object) -> bool:
-        self.entered.set()
-        if not self.release.wait(timeout=30):
-            raise RuntimeError("blocking verifier timed out")
-        return self._inner(**kwargs)
-
-
-@pytest.mark.parametrize("resource", ("policy", "issuer", "key"))
-def test_admission_lock_wins_then_revocation_commits_after_the_verified_graph(
-    postgres_session_factory,
-    resource: str,
-) -> None:
-    """The second authority check and write must serialize against revocation."""
-    factory = postgres_session_factory
-    scenario = _seed_scenario(factory)
-    _payload, raw = _signed_passport(scenario)
-    verifier = _BlockingRealVerifier()
-    revoke_attempted = Event()
-
-    def admit_in_thread():
-        session = factory()
-        try:
-            return _admit(
-                session,
-                scenario,
-                raw=raw,
-                idempotency_key=f"admit-race-{resource}-{uuid.uuid4()}",
-                verifier=verifier,
-            )
-        finally:
-            session.close()
-
-    def revoke_in_thread():
-        session = factory()
-        try:
-            revoke_attempted.set()
-            _revoke_authority(session, scenario, resource)
-        finally:
-            session.close()
-
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        admission_future = executor.submit(admit_in_thread)
-        assert verifier.entered.wait(timeout=30)
-        revocation_future = executor.submit(revoke_in_thread)
-        assert revoke_attempted.wait(timeout=30)
-        verifier.release.set()
-        admission_result = admission_future.result(timeout=30)
-        revocation_future.result(timeout=30)
-
-    assert admission_result.status == 201
-    _assert_one_graph(factory, scenario)
-
-
-class _BlockingRegistrationRepository(SqlAlchemyEvaluationWorkbenchRepository):
-    """Expose the native registration row lock without weakening the real query."""
-
-    def __init__(self, session, *, locked: Event, release: Event) -> None:
-        super().__init__(session)
-        self._locked = locked
-        self._release = release
-
-    def load_approved_evaluator_registration_for_update(self, **kwargs):
-        registration = super().load_approved_evaluator_registration_for_update(**kwargs)
-        self._locked.set()
-        if not self._release.wait(timeout=30):
-            raise RuntimeError("registration-lock test release timed out")
-        return registration
-
-
-def test_registration_lock_orders_revocation_after_a_durable_receipt(
-    postgres_session_factory,
-) -> None:
-    """A real second PostgreSQL session cannot revoke the locked registration early."""
-
-    factory = postgres_session_factory
-    scenario = _seed_scenario(factory)
-    _payload, raw = _signed_passport(scenario)
-    registration_locked = Event()
-    release_admission = Event()
-    revocation_started = Event()
-    revocation_committed = Event()
-
-    def admit_in_thread():
-        session = factory()
-        try:
-            repository = _BlockingRegistrationRepository(
-                session,
-                locked=registration_locked,
-                release=release_admission,
-            )
-            return _admit(
-                session,
-                scenario,
-                raw=raw,
-                idempotency_key=f"registration-lock-{uuid.uuid4()}",
-                repository=repository,
-            )
-        finally:
-            session.close()
-
-    def revoke_in_thread():
-        session = factory()
-        try:
-            revocation_started.set()
-            _revoke_authority(session, scenario, "registration")
-            revocation_committed.set()
-        finally:
-            session.close()
-
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        admission_future = executor.submit(admit_in_thread)
-        assert registration_locked.wait(timeout=30)
-        revocation_future = executor.submit(revoke_in_thread)
-        assert revocation_started.wait(timeout=30)
-        assert not revocation_committed.wait(timeout=0.25)
-        release_admission.set()
-        admission_result = admission_future.result(timeout=30)
-        revocation_future.result(timeout=30)
-
-    assert admission_result.status == 201
-    assert revocation_committed.is_set()
-    _assert_one_graph(factory, scenario)
-    assert _scalar(
-        factory,
-        "SELECT status FROM governance_evaluator_registrations "
-        "WHERE id = :id AND org_id = :org_id",
-        id=scenario.evaluator_registration_id,
-        org_id=scenario.org_id,
-    ) == "revoked"
-
-
 class _CorruptDeferredReceiptRepository(SqlAlchemyEvaluationWorkbenchRepository):
     failure_class: str | None = None
     driver_failure_class: str | None = None
     sqlstate: str | None = None
 
-    def persist_verified_passport_v2(self, command):
-        return super().persist_verified_passport_v2(
+    def persist_verified_passport_v2_submission(self, command):
+        return super().persist_verified_passport_v2_submission(
             replace(command, execution_binding_hash="0" * 64)
         )
 
@@ -2282,8 +2328,8 @@ def test_deferred_receipt_corruption_is_one_durable_rejection_and_exact_replay(
 
 
 class _RaiseAfterGraphRepository(SqlAlchemyEvaluationWorkbenchRepository):
-    def persist_verified_passport_v2(self, command):
-        super().persist_verified_passport_v2(command)
+    def persist_verified_passport_v2_submission(self, command):
+        super().persist_verified_passport_v2_submission(command)
         raise RuntimeError("injected-operational-persistence-failure")
 
 
@@ -2323,8 +2369,8 @@ class _RaiseUnrelatedConstraintAfterGraphRepository(SqlAlchemyEvaluationWorkbenc
         self.sqlstate: str | None = None
         self.constraint_name: str | None = None
 
-    def persist_verified_passport_v2(self, command):
-        super().persist_verified_passport_v2(command)
+    def persist_verified_passport_v2_submission(self, command):
+        super().persist_verified_passport_v2_submission(command)
         try:
             self.db.execute(text(self._failure_statement))
         except DBAPIError as error:

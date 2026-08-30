@@ -1,86 +1,60 @@
-const DOC_PAGES: Array<{ slug: string; title: string }> = [
-  { slug: "getting-started", title: "Getting Started" },
-  { slug: "bias-detection", title: "Bias Detection" },
-  { slug: "simulation", title: "Simulation" },
-  { slug: "monitoring", title: "Monitoring" },
-  { slug: "model-provenance", title: "Model Provenance" },
-  { slug: "explainability", title: "Explainability" },
-  { slug: "security-compliance", title: "Security & Compliance" },
-];
+import Link from "next/link";
+import { DOC_ITEMS } from "../lib/docs";
 
-export default async function DocsHome() {
+const sections = ["Start here", "Assurance foundation", "Operate safely", "Regulatory context"] as const;
+
+export default function DocsHome() {
   return (
-    <main style={{ maxWidth: 1100, margin: "32px auto", fontFamily: "sans-serif", padding: "0 16px" }}>
-      <h1>FairMind Documentation</h1>
-      <p>Product workflow guide for AI governance, risk management, and audit readiness.</p>
-      <p>
-        Main website: <a href="https://fairmind.xyz">fairmind.xyz</a> | App: <a href="https://app.fairmind.xyz">app.fairmind.xyz</a>
-      </p>
-      <p>
-        Browse full docs: <a href="/docs">/docs</a>
-      </p>
-
-      <section style={{ border: "1px solid #ddd", borderRadius: 8, padding: 16, marginTop: 20 }}>
-        <h2 style={{ marginTop: 0 }}>How Teams Use FairMind</h2>
-        <ol>
-          <li>Select AI system scope and owners.</li>
-          <li>Run bias, explainability, and security/compliance checks.</li>
-          <li>Review blockers and recommended remediations.</li>
-          <li>Track runtime monitoring and alerts.</li>
-          <li>Generate audit-ready evidence and reports.</li>
-        </ol>
+    <main id="main-content" className="page-shell home-shell">
+      <section className="home-intro" aria-labelledby="home-title">
+        <div>
+          <h1 id="home-title">Evidence you can trace.<br />Claims you can defend.</h1>
+          <p className="lede">
+            The P0 release establishes FairMind&apos;s internal assurance control-plane foundation: exact scope,
+            signed evidence admission, operational freshness, review separation, and append-only decisions.
+          </p>
+          <div className="home-actions">
+            <Link className="button button-primary" href="/docs/getting-started">Start locally</Link>
+            <Link className="button button-secondary" href="/docs/release-boundary">Read the release boundary</Link>
+          </div>
+        </div>
+        <aside className="truth-panel" aria-label="Release truth">
+          <h2>What this alpha is</h2>
+          <dl>
+            <div><dt>Control plane</dt><dd>P0 complete</dd></div>
+            <div><dt>Exposure</dt><dd>Internal, gated</dd></div>
+            <div><dt>Evaluator workers</dt><dd>Unavailable</dd></div>
+            <div><dt>Compliance verdict</dt><dd>Not provided</dd></div>
+          </dl>
+        </aside>
       </section>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 20 }}>
-        <section style={{ border: "1px solid #ddd", borderRadius: 8, padding: 16 }}>
-          <h3 style={{ marginTop: 0 }}>Core Features</h3>
-          <ul>
-            <li>Bias and fairness analysis across model lifecycles.</li>
-            <li>Compliance tracking and evidence workflows.</li>
-            <li>Monitoring, alerts, and operational governance.</li>
-            <li>Model provenance and explainability artifacts.</li>
-          </ul>
-        </section>
-        <section style={{ border: "1px solid #ddd", borderRadius: 8, padding: 16 }}>
-          <h3 style={{ marginTop: 0 }}>What Makes FairMind Novel</h3>
-          <ul>
-            <li>Decision-first governance flows, not only metrics dashboards.</li>
-            <li>Unified view for engineering, compliance, and operations teams.</li>
-            <li>Evidence-backed readiness for audits and release gates.</li>
-          </ul>
-        </section>
-      </div>
+      <section className="boundary-callout" aria-labelledby="boundary-title">
+        <h2 id="boundary-title">The boundary is part of the product</h2>
+        <p>
+          A prepared run is not an executed evaluation. A verified artifact is not an approved governance
+          decision. A framework crosswalk is not legal advice or conformity evidence.
+        </p>
+      </section>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 16 }}>
-        <section style={{ border: "1px solid #ddd", borderRadius: 8, padding: 16 }}>
-          <h3 style={{ marginTop: 0 }}>Use Cases</h3>
-          <ul>
-            <li>Pre-release AI risk review and sign-off.</li>
-            <li>Continuous model compliance monitoring in production.</li>
-            <li>Regulatory and internal audit preparation.</li>
-            <li>Cross-country fairness and localization checks.</li>
-          </ul>
-        </section>
-        <section style={{ border: "1px solid #ddd", borderRadius: 8, padding: 16 }}>
-          <h3 style={{ marginTop: 0 }}>Roadmap (Product)</h3>
-          <ul>
-            <li>Workflow-centric orchestration and next-best-actions.</li>
-            <li>Role-based workspaces for compliance, ML, and leadership.</li>
-            <li>Expanded incident management and remediation SLAs.</li>
-            <li>Stronger enterprise assurance and audit pack automation.</li>
-          </ul>
-        </section>
-      </div>
-
-      <section style={{ border: "1px solid #ddd", borderRadius: 8, padding: 16, marginTop: 20 }}>
-        <h3 style={{ marginTop: 0 }}>Documentation Sections</h3>
-        <ul style={{ columns: 2 }}>
-          {DOC_PAGES.map((p) => (
-            <li key={p.slug}>
-              <a href={`/docs/${p.slug}`}>{p.title}</a>
-            </li>
-          ))}
-        </ul>
+      <section className="guide-index" aria-labelledby="guide-title">
+        <div className="section-heading">
+          <h2 id="guide-title">P0 operating manual</h2>
+          <Link href="/docs">Search all guides</Link>
+        </div>
+        {sections.map((section) => (
+          <div className="guide-group" key={section}>
+            <h3>{section}</h3>
+            <div className="guide-rows">
+              {DOC_ITEMS.filter((item) => item.section === section).map((item) => (
+                <Link className="guide-row" href={`/docs/${item.slug}`} key={item.slug}>
+                  <span><strong>{item.title}</strong><small>{item.summary}</small></span>
+                  <span aria-hidden="true" className="row-arrow">View</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        ))}
       </section>
     </main>
   );

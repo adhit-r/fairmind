@@ -4,53 +4,45 @@ import Layout from '../layouts/Layout.astro';
 // Roadmap data
 const roadmap = [
   {
-    phase: 'PHASE 1: CORE PLATFORM',
-    status: 'COMPLETED',
+    phase: 'P0: EVIDENCE CONTROL PLANE',
+    status: 'INTERNAL ALPHA',
     items: [
-      'BIAS DETECTION WITH DEMOGRAPHIC PARITY METRICS',
-      'SHAP AND LIME EXPLAINABILITY INTEGRATION',
-      'BASIC MODEL MONITORING AND DRIFT DETECTION',
-      'NEON POSTGRESQL FOUNDATIONAL ARCHITECTURE',
-      '22 SPECIALIZED DASHBOARD FRAMEWORK'
+      'VERSIONED ORGANIZATION, SYSTEM, TARGET, AND SUITE IDENTITIES',
+      'EXECUTION-ENVELOPE AND PASSPORT BINDINGS',
+      'DEFAULT-OFF EVIDENCE TRUST, ADMISSION, AND REVIEW CONTROLS',
+      'EXPLICIT UNAVAILABLE STATES FOR UNSUPPORTED CAPABILITIES',
+      'SEPARATE HUMAN REVIEW AND GOVERNANCE DECISION RECORDS'
     ]
   },
   {
-    phase: 'PHASE 2: ADVANCED ANALYTICS',
+    phase: 'P1: EXECUTION FOUNDATION',
     status: 'IN PROGRESS',
     items: [
-      'NEO4J KNOWLEDGE GRAPH INTEGRATION',
-      'CAUSAL RELATIONSHIP ANALYSIS',
-      'MODEL LINEAGE TRACKING',
-      'ADVANCED FAIRNESS METRICS (EQUAL OPPORTUNITY, DISPARATE IMPACT)',
-      'REAL-TIME BIAS MONITORING ALERTS'
+      'QUEUE AND LEASE FOUNDATIONS',
+      'SIGNED COMPLETION RECORDS',
+      'SANDBOX AND STORAGE BOUNDARIES',
+      'NO PUBLIC WORKER ROUTE UNTIL RELEASE GATES PASS',
+      'NO GENERAL EVALUATOR EXECUTION CLAIM'
     ]
   },
   {
-    phase: 'PHASE 3: SECURITY & GUARDRAILS',
+    phase: 'P2: REAL EVALUATOR VALIDATION',
     status: 'PLANNED',
     items: [
-      'GRYPE CONTAINER VULNERABILITY SCANNING',
-      'GARAK LLM SECURITY TESTING FRAMEWORK',
-      'NEMO AI SAFETY GUARDRAILS INTEGRATION',
-      'ADVERSARIAL ROBUSTNESS TESTING',
-      'AI SYSTEM VULNERABILITY ASSESSMENT',
-      'SECURITY COMPLIANCE SCORING (OWASP AI)',
-      'THREAT MODELING FOR AI SYSTEMS',
-      'SECURE MODEL DEPLOYMENT PIPELINES'
+      'PREDICTIVE, LANGUAGE-MODEL, AGENT, AND MULTIMODAL METHODS',
+      'INDEPENDENT CALIBRATION AND CORPUS EVIDENCE',
+      'METHOD-SPECIFIC LIMITATIONS AND REPRODUCIBILITY',
+      'NO PUBLIC EVALUATOR PACKS BEFORE VALIDATION'
     ]
   },
   {
-    phase: 'PHASE 4: ENTERPRISE FEATURES',
+    phase: 'P3: ROLLOUT GATES',
     status: 'PLANNED',
     items: [
-      'ADVANCED MODEL SIMULATION TOOLS',
-      'SYNTHETIC DATA GENERATION WITH SDV',
-      'GEOGRAPHIC BIAS DETECTION',
-      'CUSTOM FAIRNESS METRIC DEFINITIONS',
-      'INTEGRATION WITH ML PLATFORMS (MLFLOW, KUBEFLOW)',
-      'MULTI-TENANT ARCHITECTURE',
-      'ENTERPRISE SSO INTEGRATION',
-      'ADVANCED AUDIT LOGGING AND COMPLIANCE'
+      'SECURITY AND SANDBOX REVIEW',
+      'RED-TEAM AND ABUSE-CASE VALIDATION',
+      'SOAK AND RECOVERY EVIDENCE',
+      'CAPABILITY-SCOPED PUBLIC CLAIMS ONLY'
     ]
   }
 ];
@@ -58,15 +50,15 @@ const roadmap = [
 const structuredData = {
   "@context": "https://schema.org",
   "@type": "WebPage",
-  "name": "Technical Roadmap - Fairmind AI Governance Platform",
-  "description": "Open-source development roadmap for the Fairmind AI governance platform. Track our progress and upcoming features.",
+  "name": "FairMind Release-Scoped Roadmap",
+  "description": "Roadmap for the evidence control plane, evaluator validation, and rollout gates.",
   "url": "https://fairmind.xyz/roadmap"
 };
 ---
 
 <Layout 
-  title="Technical Roadmap - Fairmind AI Governance Platform | Development Timeline"
-  description="Open-source development roadmap for the Fairmind AI governance platform. Track our progress and upcoming features for bias detection, compliance tracking, and model management."
+  title="Release-Scoped Roadmap - FairMind"
+  description="Release-scoped roadmap for FairMind's evidence-control-plane foundation, evaluator validation, and rollout gates."
   structuredData={structuredData}
 >
   <!-- Hero Section -->
@@ -78,7 +70,7 @@ const structuredData = {
       </h1>
       
       <p class="text-xl md:text-2xl text-yellow-400 max-w-4xl mx-auto font-bold">
-        OPEN-SOURCE DEVELOPMENT ROADMAP FOR THE FAIRMIND AI GOVERNANCE PLATFORM. TRACK OUR PROGRESS AND UPCOMING FEATURES.
+        RELEASE-SCOPED ROADMAP. IMPLEMENTATION STATUS DOES NOT IMPLY PUBLIC AVAILABILITY, EVALUATOR EXECUTION, OR PRODUCTION READINESS.
       </p>
     </div>
   </section>
@@ -130,17 +122,17 @@ const structuredData = {
   <!-- CTA Section -->
   <section class="py-20 bg-black border-t-2 border-yellow-400">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-      <h2 class="text-4xl font-black text-yellow-400 mb-6">READY TO JOIN THE JOURNEY?</h2>
+      <h2 class="text-4xl font-black text-yellow-400 mb-6">REVIEW THE CANONICAL ROADMAP</h2>
       <p class="text-xl text-yellow-400 mb-8 font-bold">
-        BE PART OF BUILDING THE MOST COMPREHENSIVE AI GOVERNANCE PLATFORM FOR RESPONSIBLE AI DEVELOPMENT.
+        USE THE REPOSITORY ROADMAP AS THE SOURCE FOR RELEASE-SCOPED CAPABILITY STATUS.
       </p>
       
       <div class="flex flex-col sm:flex-row gap-6 justify-center">
-        <a href="/demo" class="inline-flex items-center px-8 py-4 bg-yellow-400 text-black font-black rounded-none border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transform hover:-translate-y-2 transition-all">
+        <a href="https://github.com/adhit-r/fairmind/blob/main/docs/superpowers/plans/2026-07-19-fairmind-2027-ai-assurance-todo.md" target="_blank" class="inline-flex items-center px-8 py-4 bg-yellow-400 text-black font-black rounded-none border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transform hover:-translate-y-2 transition-all">
           <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
           </svg>
-          TRY DEMO
+          READ REPOSITORY ROADMAP
         </a>
         <a href="/contact" class="inline-flex items-center px-8 py-4 border-2 border-yellow-400 text-yellow-400 font-black rounded-none hover:bg-yellow-400 hover:text-black transition-all shadow-[4px_4px_0px_0px_rgba(255,255,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(255,255,0,1)]">
           <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">

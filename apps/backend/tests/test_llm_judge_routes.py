@@ -1,68 +1,98 @@
-"""Tests for LLM-as-Judge API routes."""
+"""Canonical quarantine contract for unsupported evaluation packs."""
 
+from __future__ import annotations
+
+from datetime import datetime, timezone
+
+import pytest
 from fastapi.testclient import TestClient
 
 from api.main import app
+from config.auth import User as AuthUser, UserRole, auth_manager
+from middleware.security import _DEVELOPMENT_PUBLIC_PATH_PREFIXES
+from src.domain.assurance.evaluation_v2 import TARGET_KINDS
 
 
 client = TestClient(app)
-
-
-def test_llm_judge_models_endpoint():
-    response = client.get("/api/v1/bias/llm-judge/models")
-    assert response.status_code == 200
-    data = response.json()
-    assert "models" in data
-    assert "categories" in data
-    assert len(data["models"]) > 0
-    assert "gender" in data["categories"]
-
-
-def test_llm_judge_batch_evaluate_endpoint():
-    response = client.post(
-        "/api/v1/bias/llm-judge/evaluate-batch",
-        json={
-            "text": "The engineer solved the issue quickly while the nurse was caring.",
-            "judge_model": "gpt-4-turbo",
-            "bias_categories": ["gender", "professional"],
-            "target_model": "test-model",
-        },
+client.headers["Authorization"] = "Bearer " + auth_manager.create_access_token(
+    AuthUser(
+        id="unsupported-pack-test-user",
+        email="unsupported-pack@example.test",
+        username="unsupported-pack-test-user",
+        role=UserRole.ANALYST,
+        created_at=datetime.now(timezone.utc),
+        permissions=[],
     )
-    assert response.status_code == 200
-    data = response.json()
-    assert "batch_id" in data
-    assert "results" in data
-    assert "gender" in data["results"]
+)
+
+UNSUPPORTED_PACK_PREFIXES = (
+    "/api/v1/bias/llm-judge",
+    "/api/v1/modern-bias",
+    "/api/v1/multimodal-bias",
+)
 
 
-def test_llm_judge_single_evaluate_endpoint():
-    response = client.post(
-        "/api/v1/bias/llm-judge/evaluate",
-        json={
-            "text": "He is a decisive leader and she is a caring helper.",
-            "judge_model": "gpt-4-turbo",
-            "bias_categories": ["gender"],
-            "target_model": "test-model",
-        },
-    )
-    assert response.status_code == 200
-    data = response.json()
-    assert data["bias_category"] == "gender"
-    assert "bias_score" in data
-    assert "reasoning" in data
+def test_unsupported_evaluation_pack_routes_are_not_mounted() -> None:
+    mounted_paths = {route.path for route in app.routes}
+
+    for prefix in UNSUPPORTED_PACK_PREFIXES:
+        assert not any(path.startswith(prefix) for path in mounted_paths)
 
 
-def test_llm_judge_multi_judge_json_body_endpoint():
-    response = client.post(
-        "/api/v1/bias/llm-judge/evaluate-with-multiple-judges",
-        json={
-            "text": "The leader made a strong decision and the assistant supported him.",
-            "judge_models": ["gpt-4-turbo", "claude-3-opus"],
-            "bias_categories": ["gender", "race"],
-        },
-    )
-    assert response.status_code == 200
-    data = response.json()
-    assert "results" in data
-    assert "judges_used" in data
-    assert len(data["judges_used"]) >= 1
+def test_unsupported_evaluation_pack_families_are_not_development_public() -> None:
+    for family in ("llm-judge", "modern-bias", "multimodal-bias"):
+        assert not any(family in prefix for prefix in _DEVELOPMENT_PUBLIC_PATH_PREFIXES)
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "payload"),
+    (
+        ("get", "/api/v1/bias/llm-judge/models", None),
+        (
+            "post",
+            "/api/v1/bias/llm-judge/evaluate",
+            {
+                "text": "Evaluate this response.",
+                "judge_model": "gpt-4-turbo",
+                "bias_categories": ["gender"],
+                "target_model": "test-model",
+            },
+        ),
+        (
+            "post",
+            "/api/v1/modern-bias/comprehensive-evaluation",
+            {"model_description": "test", "model_type": "llm", "selected_tests": ["weat"]},
+        ),
+        (
+            "post",
+            "/api/v1/multimodal-bias/image-detection",
+            {"model_outputs": []},
+        ),
+    ),
+)
+def test_unsupported_evaluation_pack_requests_fail_closed_behind_global_preflight(
+    method: str,
+    path: str,
+    payload: dict[str, object] | None,
+) -> None:
+    response = client.request(method, path, json=payload)
+
+    # The application-wide OPTIONS catch-all is the only matching route, so
+    # Starlette reports non-preflight methods as unavailable with Allow: OPTIONS.
+    assert response.status_code == 405
+    assert response.headers["allow"] == "OPTIONS"
+    assert response.json() == {"detail": "Method Not Allowed"}
+
+
+def test_quarantine_preserves_assurance_v2_target_kind_vocabulary() -> None:
+    assert TARGET_KINDS == {
+        "predictive_model",
+        "llm_application",
+        "agent",
+        "code_generator",
+        "image_generator",
+        "audio_model",
+        "video_model",
+        "multimodal_system",
+        "vision_model",
+    }

@@ -70,7 +70,7 @@ const config: Config = {
 				sm: 'calc(var(--radius) - 4px)'
 			},
 			fontFamily: {
-				sans: ['var(--font-raleway)', 'sans-serif'],
+				sans: ['Arial', 'Helvetica Neue', 'sans-serif'],
 			},
 			boxShadow: {
 				brutal: 'var(--shadow)',
@@ -106,4 +106,3 @@ const config: Config = {
 }
 
 export default config
-

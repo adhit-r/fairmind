@@ -605,12 +605,13 @@ Example: Your system has "DataOwner" role → Create custom FairMind role with e
 
 **For questions not answered here:**
 
-**Email:** support@fairmind.io
-**Documentation:** https://docs.fairmind.io
-**Status Page:** https://status.fairmind.io
-**GitHub Issues:** https://github.com/fairmind/fairmind/issues
+**Documentation source:** https://github.com/adhit-r/fairmind/tree/main/apps/docs/content/docs
+**GitHub Issues:** https://github.com/adhit-r/fairmind/issues
+
+No hosted documentation, support-email, or status-page availability is claimed
+for the P0 alpha.
 
 ---
 
-**Last Updated:** March 2026
-**Document Version:** 1.0
+**Last Updated:** August 2026
+**Document Version:** 1.1

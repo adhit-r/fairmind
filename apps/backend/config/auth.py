@@ -53,6 +53,13 @@ class TokenType(str, Enum):
     API_KEY = "api_key"
 
 
+class PrincipalKind(str, Enum):
+    """Security boundary between interactive users and service identities."""
+
+    HUMAN = "human"
+    SERVICE = "service"
+
+
 class User(BaseModel):
     """User model."""
     id: str
@@ -71,6 +78,8 @@ class TokenData(BaseModel):
     email: str
     role: UserRole
     token_type: TokenType
+    principal_kind: PrincipalKind = PrincipalKind.HUMAN
+    organization_id: Optional[str] = None
     exp: datetime
     iat: datetime
     permissions: List[str] = []
@@ -114,6 +123,7 @@ class AuthManager:
             "roles": [user.role.value],
             "permissions": user.permissions,
             "token_type": TokenType.ACCESS.value,
+            "principal_kind": PrincipalKind.HUMAN.value,
         }
         
         return self.jwt_manager.create_token(payload, expires_delta)
@@ -128,6 +138,7 @@ class AuthManager:
             "email": user.email,
             "roles": [user.role.value],
             "token_type": TokenType.REFRESH.value,
+            "principal_kind": PrincipalKind.HUMAN.value,
         }
         
         return self.jwt_manager.create_token(payload, expires_delta)
@@ -143,6 +154,7 @@ class AuthManager:
             "roles": [user.role.value],
             "permissions": user.permissions,
             "token_type": TokenType.API_KEY.value,
+            "principal_kind": PrincipalKind.HUMAN.value,
             "key_name": name,
         }
         
@@ -168,6 +180,8 @@ class AuthManager:
             email = payload.get("email")
             roles = payload.get("roles", [])
             token_type = payload.get("token_type", TokenType.ACCESS.value)
+            principal_kind = payload.get("principal_kind", PrincipalKind.HUMAN.value)
+            organization_id = payload.get("organization_id")
             exp = payload.get("exp")
             iat = payload.get("iat")
             permissions = payload.get("permissions", [])
@@ -176,6 +190,16 @@ class AuthManager:
                 raise InvalidTokenException("Invalid token payload")
             if not str(user_id).strip() or str(subject) != str(user_id):
                 raise InvalidTokenException("Token subject does not match user identity")
+            try:
+                parsed_principal_kind = PrincipalKind(principal_kind)
+            except (TypeError, ValueError) as error:
+                raise InvalidTokenException("Invalid principal kind") from error
+            if parsed_principal_kind is PrincipalKind.SERVICE and (
+                not isinstance(organization_id, str)
+                or not organization_id.strip()
+                or organization_id != organization_id.strip()
+            ):
+                raise InvalidTokenException("Service principal organization is invalid")
             
             # Convert timestamps if they're datetime objects
             if isinstance(exp, datetime):
@@ -196,6 +220,8 @@ class AuthManager:
                 email=email,
                 role=UserRole(primary_role),
                 token_type=TokenType(token_type),
+                principal_kind=parsed_principal_kind,
+                organization_id=organization_id,
                 exp=exp_dt,
                 iat=iat_dt,
                 permissions=permissions,
@@ -214,6 +240,8 @@ class AuthManager:
             
             if token_data.token_type != TokenType.REFRESH:
                 raise InvalidTokenException("Invalid token type for refresh")
+            if token_data.principal_kind is not PrincipalKind.HUMAN:
+                raise InvalidTokenException("Human refresh token required")
             
             # Get user data (in production, this would come from database)
             user = await self.get_user_by_id(token_data.user_id)
@@ -280,10 +308,10 @@ auth_manager = AuthManager()
 
 
 # FastAPI Dependencies
-async def get_current_user(
+async def get_verified_principal(
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ) -> TokenData:
-    """Get current authenticated user using new JWT infrastructure."""
+    """Project one signature-verified bearer without assuming its purpose."""
     if not credentials:
         raise TokenMissingException("Authentication credentials required")
     
@@ -300,12 +328,26 @@ async def get_current_user(
         raise InvalidTokenException("Authentication failed")
 
 
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+) -> TokenData:
+    """Return a verified human principal for legacy user-facing dependencies."""
+
+    current_principal = await get_verified_principal(credentials)
+    if current_principal.principal_kind is not PrincipalKind.HUMAN:
+        raise InvalidTokenException("Human principal required")
+    return current_principal
+
+
 async def get_current_active_user(
     current_user: TokenData = Depends(get_current_user)
 ) -> TokenData:
     """Return a human session authenticated with an access token."""
-    if current_user.token_type != TokenType.ACCESS:
-        raise InvalidTokenException("Access token required")
+    if (
+        current_user.token_type != TokenType.ACCESS
+        or current_user.principal_kind is not PrincipalKind.HUMAN
+    ):
+        raise InvalidTokenException("Human access token required")
     # In production, you might want to check if user is still active in database
     return current_user
 

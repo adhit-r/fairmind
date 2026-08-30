@@ -3,5 +3,4 @@
   publish = ".next"
 
 [build.environment]
-  NODE_VERSION = "18"
-  SITE_URL = "https://docs.fairmind.xyz"
+  NODE_VERSION = "20"

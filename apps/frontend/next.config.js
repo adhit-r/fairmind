@@ -42,6 +42,7 @@ const nextConfig = {
 
   // Turbopack configuration (Next.js 16 default bundler)
   turbopack: {
+    root: __dirname,
     // jspdf's package.json resolves the `node` export condition during SSR
     // analysis, which loads `jspdf.node.min.js` and pulls in fflate's node
     // worker code that Turbopack cannot statically resolve. Force the browser

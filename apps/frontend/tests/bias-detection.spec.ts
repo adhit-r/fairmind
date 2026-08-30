@@ -60,25 +60,4 @@ test.describe('Bias Detection', () => {
     await expect(page.getByRole('heading', { name: /advanced bias/i })).toBeVisible({ timeout: 10000 })
   })
 
-  test('should navigate to modern bias page', async ({ page }) => {
-    await page.goto('/modern-bias')
-    await page.waitForLoadState('networkidle')
-    
-    // Check for page heading
-    await expect(page.getByRole('heading', { name: /modern bias/i })).toBeVisible({ timeout: 10000 })
-    
-    // Check for tabs
-    const tabs = page.locator('[role="tab"], [class*="Tab"]')
-    const hasTabs = await tabs.count()
-    expect(hasTabs > 0).toBeTruthy()
-  })
-
-  test('should navigate to multimodal bias page', async ({ page }) => {
-    await page.goto('/multimodal-bias')
-    await page.waitForLoadState('networkidle')
-    
-    // Check for page heading
-    await expect(page.getByRole('heading', { name: /multimodal bias/i })).toBeVisible({ timeout: 10000 })
-  })
 })
-

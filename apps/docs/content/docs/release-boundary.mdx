@@ -1,0 +1,60 @@
+---
+title: P0 release boundary
+description: The exact capability boundary for the FairMind v2.1.0-alpha.1 control-plane release.
+---
+
+# P0 release boundary
+
+`v2.1.0-alpha.1` is an internal, default-off trust-foundation release. It
+ships evidence-control primitives and route gates; it does not ship an
+end-to-end evaluation product for general use.
+
+## Included in this release
+
+- Immutable V2 target, suite, plan, and run identity records.
+- Execution-envelope and content-hash binding for scoped run records.
+- Signed Evidence Passport V2 admission with server-owned evaluator, issuer,
+  key, policy, replay, chronology, and scope checks.
+- An independently persisted link from a verified admission to its exact suite
+  execution.
+- Four-eyes evidence review: the reviewer cannot be the run requester,
+  evidence submitter, or evidence linker.
+- Freshness and decision-eligibility projections derived from persisted trust,
+  review, expiry, and supersession state.
+- Immutable governance-decision records, with a separately gated, auditable
+  separation exception path.
+- Fail-closed human permissions and a reserved service-principal vocabulary.
+
+Each capability is behind the master `assurance_v2_enabled` setting and its
+own child setting. They all default to disabled. Route absence or a `404` is
+therefore an expected default state, not an application fault.
+
+## Explicit exclusions
+
+- No FairMind worker, queue, lease, sandbox, artifact broker, or executor is
+  released. Preflight reports `worker_unavailable` for FairMind-worker delivery.
+- Automatic enforcement is rejected with
+  `automatic_enforcement_disabled` in this release slice.
+- No predictive, LLM, agent, code, image, audio, video, vision, or multimodal
+  evaluation pack is independently validated by P0.
+- No pre-deployment, realtime, or post-deployment assurance operation is
+  released merely because those lifecycle labels exist in the contract.
+- No compliance certification, conformity assessment, legal conclusion, or
+  “FairMind Verified” designation is produced.
+- Legacy surfaces in the repository are compatibility code, not a claim that a
+  capability is ready, enabled, or validated.
+
+## Safe claims
+
+The safe claim for P0 is: **FairMind provides an internal, default-off
+evidence-control foundation that can support an organization’s evaluation and
+governance process when its own deployment and control prerequisites are met.**
+
+That is intentionally narrower than “FairMind evaluates models,” “FairMind is
+AI Act compliant,” or “FairMind automatically approves releases.”
+
+## Related
+
+- [Assurance workflow](./assurance-workflow)
+- [Limitations and roadmap](./limitations-roadmap)
+- [EU AI Act evidence-support crosswalk](./eu-ai-act-crosswalk)

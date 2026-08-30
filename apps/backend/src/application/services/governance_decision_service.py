@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Mapping
 
 from src.application.ports.evaluation_workbench import (
@@ -20,6 +20,8 @@ from src.application.ports.governance_decision import (
     GovernanceDecisionScope,
     GovernanceDecisionUnitOfWork,
     PersistGovernanceDecisionCommand,
+    PersistSeparationOverrideGrantCommand,
+    SeparationOverrideGrantRecord,
     UuidFactory,
 )
 from src.application.evaluation_workbench_contracts import assurance_request_hash
@@ -34,10 +36,23 @@ from src.domain.assurance.evaluation_v2 import (
 
 _OPERATION = "evaluation-v2.governance-decision.create"
 _OWNER_OVERRIDE_OPERATION = "evaluation-v2.governance-decision.owner-override"
+_DELEGATED_OVERRIDE_OPERATION = (
+    "evaluation-v2.governance-decision.delegated-separation-override"
+)
+_SEPARATION_OVERRIDE_GRANT_OPERATION = (
+    "evaluation-v2.governance-decision.separation-override-grant.create"
+)
 _AUDIT_SCHEMA = "evaluation-v2.governance-decision/v2"
 _OWNER_OVERRIDE_AUDIT_ACTION = (
     "evaluation_v2.governance_decision.owner_override_created"
 )
+_DELEGATED_OVERRIDE_AUDIT_ACTION = (
+    "evaluation_v2.governance_decision.delegated_separation_override_created"
+)
+_SEPARATION_OVERRIDE_GRANT_AUDIT_ACTION = (
+    "evaluation_v2.governance_decision.separation_override_grant_created"
+)
+_SEPARATION_OVERRIDE_GRANT_LIFETIME = timedelta(minutes=30)
 _CONTRACT_VERSION = "2.0.0"
 _LAYER_SCHEMA_VERSION = "1.0.0"
 _LAYER_AXES = frozenset({"suites", "modalities", "components", "riskDimensions"})
@@ -199,11 +214,14 @@ def _assert_authority(
             "The governance verdict version is stale.",
         )
     if require_independent_actor and (
-        actor_id == authority.requested_by or actor_id in authority.evidence_submitters
+        actor_id == authority.requested_by
+        or actor_id in authority.evidence_submitters
+        or actor_id in authority.evidence_linkers
     ):
         raise _error(
             "governance_decision_separation_required",
-            "The decider must be independent from the run requester and evidence submitters.",
+            "The decider must be independent from the run requester, evidence submitters, "
+            "and evidence linkers.",
         )
     layer_suites = layers.to_dict()["suites"]
     if not isinstance(layer_suites, dict) or set(layer_suites) != set(
@@ -229,7 +247,10 @@ def _waived_relationships(
     authority: GovernanceDecisionAuthorityRecord,
     actor_id: str,
 ) -> list[dict[str, object]]:
-    if len(authority.admission_ids) != len(authority.admission_submitters):
+    if (
+        len(authority.admission_ids) != len(authority.admission_submitters)
+        or len(authority.admission_ids) != len(authority.admission_linkers)
+    ):
         raise _error(
             "governance_decision_integrity_conflict",
             "The locked governance-decision authority is inconsistent.",
@@ -255,6 +276,26 @@ def _waived_relationships(
                 "resourceIds": admission_ids,
             }
         )
+    linked_admission_ids = sorted(
+        {
+            admission_id
+            for admission_id, linked_by in zip(
+                authority.admission_ids,
+                authority.admission_linkers,
+                strict=True,
+            )
+            if linked_by == actor_id
+        }
+    )
+    if linked_admission_ids:
+        relationships.append(
+            {
+                "relationshipType": "evidence_linker",
+                "actorId": actor_id,
+                "resourceType": "evidence_admission",
+                "resourceIds": linked_admission_ids,
+            }
+        )
     if authority.requested_by == actor_id:
         relationships.append(
             {
@@ -268,6 +309,39 @@ def _waived_relationships(
         relationships,
         key=lambda item: (str(item["relationshipType"]), str(item["actorId"])),
     )
+
+
+def _assert_delegated_grant(
+    grant: SeparationOverrideGrantRecord,
+    *,
+    authority: GovernanceDecisionAuthorityRecord,
+    scope: GovernanceDecisionScope,
+    actor_id: str,
+    expected_verdict_version: int,
+    now: datetime,
+) -> None:
+    if (
+        grant.scope != scope
+        or grant.run_contract_version != authority.run_contract_version
+        or grant.envelope_id != authority.envelope_id
+        or grant.envelope_hash != authority.envelope_hash
+        or grant.evidence_set_hash != authority.evidence_set_hash
+        or grant.grantee_actor_id != actor_id
+        or grant.expected_verdict_version != expected_verdict_version
+    ):
+        raise _error(
+            "evaluation_separation_override_grant_forbidden",
+            "The delegated separation-override grant is not available.",
+            status_code=403,
+        )
+    if (
+        _utc(now) < _utc(grant.granted_at)
+        or _utc(now) >= _utc(grant.expires_at)
+    ):
+        raise _error(
+            "evaluation_separation_override_grant_unavailable",
+            "The delegated separation-override grant is no longer available.",
+        )
 
 
 def _suite_freshness(record: GovernanceDecisionRecord) -> list[dict[str, object]]:
@@ -341,6 +415,7 @@ def _assert_record(
         command.actor_id,
         command.authority.evidence_set_hash,
         command.owner_override_reason,
+        command.separation_override_grant_id,
         command.authority.suite_execution_ids,
     )
     actual = (
@@ -356,6 +431,7 @@ def _assert_record(
         record.decided_by,
         record.evidence_set_hash,
         record.owner_override_reason,
+        record.separation_override_grant_id,
         record.suite_execution_ids,
     )
     if actual != expected:
@@ -418,6 +494,7 @@ class GovernanceDecisionService:
             layer_verdicts=layer_verdicts,
             rationale=rationale,
             owner_override_reason=None,
+            separation_override_grant_id=None,
         )
 
     def decide_owner_override(
@@ -442,7 +519,233 @@ class GovernanceDecisionService:
             layer_verdicts=layer_verdicts,
             rationale=rationale,
             owner_override_reason=reason,
+            separation_override_grant_id=None,
         )
+
+    def decide_delegated_override(
+        self,
+        *,
+        scope: GovernanceDecisionScope,
+        actor_id: str,
+        idempotency_key: str,
+        grant_id: str,
+        expected_verdict_version: int,
+        overall_verdict: str,
+        layer_verdicts: Mapping[str, object],
+        rationale: str,
+    ) -> MutationResult:
+        grant = _safe_string(
+            grant_id,
+            code="governance_decision_request_invalid",
+            maximum=128,
+        )
+        return self._decide(
+            scope=scope,
+            actor_id=actor_id,
+            idempotency_key=idempotency_key,
+            expected_verdict_version=expected_verdict_version,
+            overall_verdict=overall_verdict,
+            layer_verdicts=layer_verdicts,
+            rationale=rationale,
+            owner_override_reason=None,
+            separation_override_grant_id=grant,
+        )
+
+    def create_separation_override_grant(
+        self,
+        *,
+        scope: GovernanceDecisionScope,
+        actor_id: str,
+        idempotency_key: str,
+        grantee_actor_id: str,
+        expected_verdict_version: int,
+        reason: str,
+    ) -> MutationResult:
+        _validate_scope(scope)
+        actor = _safe_string(
+            actor_id,
+            code="governance_decision_actor_invalid",
+            maximum=128,
+        )
+        grantee = _safe_string(
+            grantee_actor_id,
+            code="governance_decision_request_invalid",
+            maximum=128,
+        )
+        if (
+            actor == grantee
+            or isinstance(expected_verdict_version, bool)
+            or not isinstance(expected_verdict_version, int)
+            or expected_verdict_version < 0
+        ):
+            raise _error(
+                "governance_decision_request_invalid",
+                "The governance-decision request is invalid.",
+                status_code=422,
+            )
+        safe_reason = _safe_owner_override_reason(reason)
+        try:
+            key = validate_idempotency_key(idempotency_key)
+        except AssuranceContractValidationError as error:
+            raise _error(
+                "invalid_idempotency_key",
+                "The Idempotency-Key is invalid.",
+                status_code=422,
+            ) from error
+
+        request_body = {
+            "granteeActorId": grantee,
+            "expectedVerdictVersion": expected_verdict_version,
+            "separationOverrideReason": safe_reason,
+        }
+        mutation = MutationCommand(
+            organization_id=scope.organization_id,
+            actor_id=actor,
+            operation=_SEPARATION_OVERRIDE_GRANT_OPERATION,
+            idempotency_key=key,
+            request_hash=assurance_request_hash(
+                method="POST",
+                operation=_SEPARATION_OVERRIDE_GRANT_OPERATION,
+                scope={
+                    "organizationId": scope.organization_id,
+                    "workspaceId": scope.workspace_id,
+                    "systemId": scope.system_id,
+                    "runId": scope.run_id,
+                },
+                body=request_body,
+            ),
+        )
+
+        def persist(mutation_now: datetime) -> MutationOutcome:
+            authority = self.repository.load_governance_decision_authority_for_update(
+                scope=scope
+            )
+            if authority is None:
+                raise _error(
+                    "governance_decision_scope_not_found",
+                    "The evaluation run was not found in this scope.",
+                    status_code=404,
+                )
+            if not self.repository.authorize_owner_decision_override_for_update(
+                organization_id=scope.organization_id,
+                actor_id=actor,
+            ):
+                raise _error(
+                    "evaluation_separation_override_forbidden",
+                    "Separation-override grant authority is not available.",
+                    status_code=403,
+                )
+            if not self.repository.authorize_governance_decision_actor_for_update(
+                organization_id=scope.organization_id,
+                actor_id=grantee,
+            ):
+                raise _error(
+                    "evaluation_separation_override_grantee_forbidden",
+                    "The named grantee is not authorized to make governance decisions.",
+                    status_code=403,
+                )
+            _assert_authority(
+                authority=authority,
+                scope=scope,
+                actor_id=grantee,
+                expected_verdict_version=expected_verdict_version,
+                layers=authority.current_layer_verdicts,
+                require_independent_actor=False,
+            )
+            waived_relationships = _waived_relationships(authority, grantee)
+            if not waived_relationships:
+                raise _error(
+                    "governance_decision_override_not_required",
+                    "The named grantee has no decision-separation conflict to override.",
+                )
+            granted_at = _utc(mutation_now)
+            expires_at = granted_at + _SEPARATION_OVERRIDE_GRANT_LIFETIME
+            command = PersistSeparationOverrideGrantCommand(
+                grant_id=_safe_uuid(self._uuid_factory),
+                scope=scope,
+                authority=authority,
+                expected_verdict_version=expected_verdict_version,
+                granted_by=actor,
+                grantee_actor_id=grantee,
+                reason=safe_reason,
+                granted_at=granted_at,
+                expires_at=expires_at,
+            )
+            record = self.repository.persist_separation_override_grant(command)
+            expected = (
+                command.grant_id,
+                command.scope,
+                authority.run_contract_version,
+                authority.envelope_id,
+                authority.envelope_hash,
+                authority.evidence_set_hash,
+                command.expected_verdict_version,
+                command.granted_by,
+                command.grantee_actor_id,
+                command.reason,
+            )
+            actual = (
+                record.grant_id,
+                record.scope,
+                record.run_contract_version,
+                record.envelope_id,
+                record.envelope_hash,
+                record.evidence_set_hash,
+                record.expected_verdict_version,
+                record.granted_by,
+                record.grantee_actor_id,
+                record.reason,
+            )
+            granted_at = _utc(record.granted_at)
+            expires_at = _utc(record.expires_at)
+            if (
+                actual != expected
+                or granted_at < command.granted_at
+                or granted_at > command.granted_at + timedelta(minutes=5)
+                or expires_at - granted_at != _SEPARATION_OVERRIDE_GRANT_LIFETIME
+            ):
+                raise _error(
+                    "governance_decision_integrity_conflict",
+                    "The persisted separation-override grant is inconsistent.",
+                )
+            body = {
+                "grantId": record.grant_id,
+                "runId": scope.run_id,
+                "expectedVerdictVersion": record.expected_verdict_version,
+                "grantedBy": record.granted_by,
+                "granteeActorId": record.grantee_actor_id,
+                "grantedAt": granted_at.isoformat(),
+                "expiresAt": expires_at.isoformat(),
+            }
+            audit_details = {
+                "schemaVersion": "evaluation-v2.separation-override-grant/v1",
+                "grantId": record.grant_id,
+                "runId": scope.run_id,
+                "workspaceId": scope.workspace_id,
+                "systemId": scope.system_id,
+                "contractVersion": record.run_contract_version,
+                "envelopeId": record.envelope_id,
+                "expectedVerdictVersion": record.expected_verdict_version,
+                "envelopeHash": record.envelope_hash,
+                "evidenceSetHash": record.evidence_set_hash,
+                "grantorActorId": record.granted_by,
+                "granteeActorId": record.grantee_actor_id,
+                "grantedAt": body["grantedAt"],
+                "expiresAt": body["expiresAt"],
+                "reasonHash": canonical_sha256({"reason": safe_reason}),
+                "waivedRelationships": waived_relationships,
+                "waivedRelationshipsHash": canonical_sha256(waived_relationships),
+            }
+            return MutationOutcome(
+                body=FrozenJsonObject.from_mapping(body),
+                status=201,
+                resource_type="evaluation_separation_override_grant",
+                resource_id=record.grant_id,
+                audit_action=_SEPARATION_OVERRIDE_GRANT_AUDIT_ACTION,
+                audit_details=FrozenJsonObject.from_mapping(audit_details),
+            )
+
+        return self.unit_of_work.mutate(mutation, persist)
 
     def _decide(
         self,
@@ -455,6 +758,7 @@ class GovernanceDecisionService:
         layer_verdicts: Mapping[str, object],
         rationale: str,
         owner_override_reason: str | None,
+        separation_override_grant_id: str | None,
     ) -> MutationResult:
         _validate_scope(scope)
         actor = _safe_string(actor_id, code="governance_decision_actor_invalid", maximum=128)
@@ -484,11 +788,11 @@ class GovernanceDecisionService:
                 status_code=422,
             ) from error
 
-        operation = (
-            _OWNER_OVERRIDE_OPERATION
-            if owner_override_reason is not None
-            else _OPERATION
-        )
+        operation = _OPERATION
+        if owner_override_reason is not None:
+            operation = _OWNER_OVERRIDE_OPERATION
+        elif separation_override_grant_id is not None:
+            operation = _DELEGATED_OVERRIDE_OPERATION
         request_body: dict[str, object] = {
             "expectedVerdictVersion": expected_verdict_version,
             "overallVerdict": overall_verdict,
@@ -497,6 +801,8 @@ class GovernanceDecisionService:
         }
         if owner_override_reason is not None:
             request_body["ownerOverrideReason"] = owner_override_reason
+        if separation_override_grant_id is not None:
+            request_body["separationOverrideGrantId"] = separation_override_grant_id
 
         mutation = MutationCommand(
             organization_id=scope.organization_id,
@@ -516,7 +822,14 @@ class GovernanceDecisionService:
             ),
         )
 
-        def persist(_mutation_now: datetime) -> MutationOutcome:
+        def persist(mutation_now: datetime) -> MutationOutcome:
+            authority = self.repository.load_governance_decision_authority_for_update(scope=scope)
+            if authority is None:
+                raise _error(
+                    "governance_decision_scope_not_found",
+                    "The evaluation run was not found in this scope.",
+                    status_code=404,
+                )
             if owner_override_reason is not None and not (
                 self.repository.authorize_owner_decision_override_for_update(
                     organization_id=scope.organization_id,
@@ -528,12 +841,26 @@ class GovernanceDecisionService:
                     "Owner decision override authority is not available.",
                     status_code=403,
                 )
-            authority = self.repository.load_governance_decision_authority_for_update(scope=scope)
-            if authority is None:
-                raise _error(
-                    "governance_decision_scope_not_found",
-                    "The evaluation run was not found in this scope.",
-                    status_code=404,
+            delegated_grant = None
+            if separation_override_grant_id is not None:
+                delegated_grant = self.repository.load_separation_override_grant_for_update(
+                    scope=scope,
+                    grant_id=separation_override_grant_id,
+                    actor_id=actor,
+                )
+                if delegated_grant is None:
+                    raise _error(
+                        "evaluation_separation_override_grant_forbidden",
+                        "The delegated separation-override grant is not available.",
+                        status_code=403,
+                    )
+                _assert_delegated_grant(
+                    delegated_grant,
+                    authority=authority,
+                    scope=scope,
+                    actor_id=actor,
+                    expected_verdict_version=expected_verdict_version,
+                    now=mutation_now,
                 )
             _assert_authority(
                 authority=authority,
@@ -541,17 +868,26 @@ class GovernanceDecisionService:
                 actor_id=actor,
                 expected_verdict_version=expected_verdict_version,
                 layers=layers,
-                require_independent_actor=owner_override_reason is None,
+                require_independent_actor=(
+                    owner_override_reason is None
+                    and separation_override_grant_id is None
+                ),
             )
             waived_relationships = (
                 _waived_relationships(authority, actor)
-                if owner_override_reason is not None
+                if (
+                    owner_override_reason is not None
+                    or separation_override_grant_id is not None
+                )
                 else []
             )
-            if owner_override_reason is not None and not waived_relationships:
+            if (
+                owner_override_reason is not None
+                or separation_override_grant_id is not None
+            ) and not waived_relationships:
                 raise _error(
                     "governance_decision_override_not_required",
-                    "The canonical owner has no decision-separation conflict to override.",
+                    "The decision actor has no decision-separation conflict to override.",
                 )
             advisory_evaluated_at = freshness.require_common_evaluated_at(
                 authority.operational_freshness
@@ -573,12 +909,20 @@ class GovernanceDecisionService:
                 rationale=safe_rationale,
                 owner_override_reason=owner_override_reason,
                 decided_at=advisory_evaluated_at,
+                separation_override_grant_id=separation_override_grant_id,
             )
             record = self.repository.persist_governance_decision(command)
             _assert_record(record, command)
             body = _body(record)
             if owner_override_reason is not None:
                 body["ownerOverrideApplied"] = True
+            if separation_override_grant_id is not None:
+                body.update(
+                    {
+                        "separationOverrideApplied": True,
+                        "separationOverrideGrantId": separation_override_grant_id,
+                    }
+                )
             audit_details: dict[str, object] = {
                 "schemaVersion": _AUDIT_SCHEMA,
                 "runId": scope.run_id,
@@ -611,6 +955,22 @@ class GovernanceDecisionService:
                         ),
                     }
                 )
+            if delegated_grant is not None:
+                audit_details.update(
+                    {
+                        "separationOverrideGrantId": delegated_grant.grant_id,
+                        "contractVersion": delegated_grant.run_contract_version,
+                        "envelopeId": delegated_grant.envelope_id,
+                        "envelopeHash": delegated_grant.envelope_hash,
+                        "grantorActorId": delegated_grant.granted_by,
+                        "granteeActorId": delegated_grant.grantee_actor_id,
+                        "waivedRelationships": waived_relationships,
+                        "waivedRelationshipsHash": canonical_sha256(waived_relationships),
+                        "grantReasonHash": canonical_sha256(
+                            {"reason": delegated_grant.reason}
+                        ),
+                    }
+                )
             return MutationOutcome(
                 body=FrozenJsonObject.from_mapping(body),
                 status=201,
@@ -619,7 +979,11 @@ class GovernanceDecisionService:
                 audit_action=(
                     _OWNER_OVERRIDE_AUDIT_ACTION
                     if owner_override_reason is not None
-                    else "evaluation_v2.governance_decision.created"
+                    else (
+                        _DELEGATED_OVERRIDE_AUDIT_ACTION
+                        if separation_override_grant_id is not None
+                        else "evaluation_v2.governance_decision.created"
+                    )
                 ),
                 audit_details=FrozenJsonObject.from_mapping(audit_details),
             )

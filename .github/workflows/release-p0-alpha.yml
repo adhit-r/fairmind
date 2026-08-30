@@ -1,0 +1,44 @@
+name: Publish P0 alpha prerelease
+
+on:
+  push:
+    tags:
+      - 'v2.1.0-alpha.1'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    uses: ./.github/workflows/p0-release-gates.yml
+
+  publish:
+    name: Create GitHub prerelease
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Fetch protected main branch
+        run: git fetch --no-tags --prune origin main:refs/remotes/origin/main
+      - name: Verify immutable release inputs
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          test "$TAG" = "v2.1.0-alpha.1"
+          test -f "docs/releases/$TAG.md"
+          git cat-file -e "$GITHUB_SHA:docs/releases/$TAG.md"
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+      - name: Create prerelease from committed notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: >-
+          gh release create "$TAG"
+          --title "FairMind $TAG: P0 trustworthy control plane"
+          --notes-file "docs/releases/$TAG.md"
+          --prerelease
+          --target "$GITHUB_SHA"

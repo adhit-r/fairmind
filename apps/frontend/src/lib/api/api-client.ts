@@ -155,6 +155,7 @@ type ErrorPayload = {
 
 const workflowErrorCodeSchema = z.enum([
   'executor_unavailable',
+  'fairmind_worker_delivery_disabled',
   'plan_inactive',
   'plan_archived',
   'passport_link_conflict',

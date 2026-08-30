@@ -35,6 +35,7 @@ interface EvidenceDetailDrawerProps {
   onRemoveLink: (evidenceId: string, linkId: string) => Promise<void>
   controlOptions?: ControlAssessment[]
   canEdit?: boolean
+  canAddLink?: boolean
 }
 
 const STATUS_OPTIONS = [
@@ -66,6 +67,7 @@ export function EvidenceDetailDrawer({
   onRemoveLink,
   controlOptions = [],
   canEdit = false,
+  canAddLink = false,
 }: EvidenceDetailDrawerProps) {
   const { toast } = useToast()
   const [editMode, setEditMode] = useState(false)
@@ -288,6 +290,13 @@ export function EvidenceDetailDrawer({
                 </div>
               </section>
 
+              <div className="border-2 border-black bg-amber-50 p-3" role="note">
+                <p className="text-xs font-black uppercase">Trust: unclassified evidence</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  This artifact has not been admitted or verified for governance decisions.
+                </p>
+              </div>
+
               {/* Artifact */}
               {evidence.artifactKind === 'file' && evidence.fileName && (
                 <section className="space-y-2">
@@ -377,7 +386,7 @@ export function EvidenceDetailDrawer({
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">
                 Linked entities ({evidence.linkedEntityCount})
               </p>
-              {canEdit ? (
+              {canEdit && canAddLink ? (
                 <Button
                   size="sm"
                   variant="neutral"
@@ -387,8 +396,10 @@ export function EvidenceDetailDrawer({
                   <IconPlus className="mr-1 h-3 w-3" />
                   Link entity
                 </Button>
-              ) : (
+              ) : !canEdit ? (
                 <span className="text-[11px] font-bold uppercase text-muted-foreground">Read-only</span>
+              ) : (
+                <span className="text-[11px] font-bold uppercase text-muted-foreground">New links unavailable</span>
               )}
             </div>
 

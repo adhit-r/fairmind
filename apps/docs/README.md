@@ -1,6 +1,8 @@
 # FairMind Docs App
 
-This app hosts product and user documentation at `docs.fairmind.xyz`.
+This app builds the canonical P0 product and operator documentation. The
+`v2.1.0-alpha.1` release does not claim a hosted documentation URL; use the
+committed source until a deployment and domain are verified.
 
 ## Commands
 

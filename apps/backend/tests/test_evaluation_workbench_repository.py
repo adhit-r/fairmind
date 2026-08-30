@@ -156,6 +156,51 @@ def test_sqlite_repository_explicitly_rejects_owner_override_authorization(
             "governance_decision_override_not_required",
             409,
         ),
+        (
+            "decider must differ from evidence linker",
+            "governance_decision_separation_required",
+            409,
+        ),
+        (
+            "separation override grant authority failed",
+            "evaluation_separation_override_forbidden",
+            403,
+        ),
+        (
+            "separation override grant exact run failed",
+            "governance_decision_integrity_conflict",
+            409,
+        ),
+        (
+            "separation override grant evidence binding failed",
+            "governance_decision_integrity_conflict",
+            409,
+        ),
+        (
+            "separation override grant is not required",
+            "governance_decision_override_not_required",
+            409,
+        ),
+        (
+            "delegated separation override authority failed",
+            "evaluation_separation_override_grant_forbidden",
+            403,
+        ),
+        (
+            "delegated separation override exact grant failed",
+            "evaluation_separation_override_grant_forbidden",
+            403,
+        ),
+        (
+            "separation override grant audit binding failed",
+            "governance_decision_integrity_conflict",
+            409,
+        ),
+        (
+            "delegated separation override audit binding failed",
+            "governance_decision_integrity_conflict",
+            409,
+        ),
     ),
 )
 def test_owner_override_trigger_errors_map_to_expected_rejections(

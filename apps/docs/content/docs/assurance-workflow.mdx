@@ -1,0 +1,58 @@
+---
+title: Assurance workflow
+description: How P0 binds planning, evidence, review, freshness, and governance decisions.
+---
+
+# Assurance workflow
+
+P0 is a record-and-control workflow. It does not execute an evaluator itself.
+The purpose is to make a claimed result traceable to the exact target, suite,
+run, trust authority, review state, and decision record that relied on it.
+
+## The record sequence
+
+1. **Register versions.** A catalog administrator creates a target version and
+   a suite version. Each captures immutable identity and a manifest digest.
+2. **Create a plan.** A plan binds one target, selected suites and
+   configurations, lifecycle phases, a delivery mode, and a trust-policy
+   version. It receives a content hash.
+3. **Activate and preflight.** A separate permission activates the plan.
+   Preflight returns explicit blockers; it does not fabricate an execution.
+4. **Create a run.** A permitted user creates an immutable execution envelope
+   for a particular lifecycle phase and trigger.
+5. **Admit evidence.** A signed Evidence Passport V2 is verified against the
+   server-owned trust graph for that exact run and suite execution.
+6. **Link the admission.** A separate mutation connects the admitted Passport
+   revision to its exact suite execution.
+7. **Review evidence.** A different person accepts or rejects the verified,
+   current evidence. This is a review outcome, not a governance decision.
+8. **Make a governance decision.** A permitted actor can record a decision only
+   when the run and evidence meet the decision-time requirements. The record
+   includes a bounded rationale, an evidence-set hash, and freshness data.
+
+## Three different states
+
+Do not collapse these independent states into a single “pass” label:
+
+| State | Question it answers |
+| --- | --- |
+| Technical status | What happened to the recorded suite execution? |
+| Evidence result status | What did the supplied evidence claim? |
+| Admission, review, and freshness | Can the evidence be trusted and considered for a decision now? |
+
+A successful technical status does not establish evidence authenticity. A
+verified Passport is not automatically reviewed. Accepted evidence can become
+stale, superseded, revoked, or otherwise ineligible later.
+
+## Preflight is not execution
+
+Preflight checks plan state and blockers. In P0, selecting `fairmind_worker`
+returns a worker-unavailable blocker because no worker execution capability is
+shipped. Selecting automatic enforcement is rejected at plan creation. Treat
+those results as boundaries to resolve, not as a completed evaluation.
+
+## Related
+
+- [Evidence trust and review](./evidence-trust-review)
+- [Permissions and separation](./permissions-and-separation)
+- [Operator runbook](./operator-runbook)

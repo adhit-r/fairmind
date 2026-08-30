@@ -9,6 +9,8 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "playwright test",
+    "test:unit": "bun test src",
+    "test:reviewed-external-linking": "NEXT_PUBLIC_ASSURANCE_UNTRUSTED_EXTERNAL_EVIDENCE_LINKING_ENABLED=true playwright test tests/governance-assurance.spec.ts --grep 'offers the reviewed external URL'",
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed",
     "test:debug": "playwright test --debug"
@@ -74,8 +76,9 @@
     "typescript": "^5.5.3"
   },
   "overrides": {
-    "dompurify": "^3.4.8",
+    "dompurify": "^3.4.14",
     "lodash": "^4.18.1",
+    "nanoid": "^3.3.18",
     "picomatch": "^4.0.4",
     "postcss": "^8.5.25",
     "sharp": "^0.35.0"

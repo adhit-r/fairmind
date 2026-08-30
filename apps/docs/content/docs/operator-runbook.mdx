@@ -1,0 +1,66 @@
+---
+title: P0 operator runbook
+description: A bounded internal procedure for checking the P0 assurance-control workflow.
+---
+
+# P0 operator runbook
+
+Use this procedure only in an approved internal environment. It verifies the
+control-plane record sequence; it does not validate a model, establish
+production readiness, or authorize a release.
+
+## Prerequisites
+
+- An approved deployment change enables only the required Assurance V2 gates.
+- Database migrations are applied and the organization, workspace, system,
+  memberships, permissions, trust policy, issuer, signing key, and evaluator
+  registration are present for the test scope.
+- An eligible reviewer is distinct from the requester, submitter, and linker.
+  Use four distinct authorized human actors if your own operating policy also
+  separates each of those stages.
+- A signed, schema-valid Evidence Passport V2 has been prepared by an approved
+  evaluator for the exact execution envelope.
+
+## Procedure
+
+1. Capture the target and suite version IDs and manifest digests.
+2. Create the plan with an advisory or human-approval enforcement mode. Record
+   the returned plan content hash.
+3. Activate the plan and run preflight for the intended lifecycle phase.
+   Stop if preflight returns blockers.
+4. Create a run and record its execution-envelope ID and hash.
+5. Submit the signed Passport with a new idempotency key. Confirm that the
+   returned scope and envelope hash match the run.
+6. Link the exact admitted Passport revision to the exact suite execution with
+   a separate idempotency key.
+7. Have an eligible, independent reviewer accept or reject the evidence.
+   Confirm the reviewer was not the requester, submitter, or linker.
+8. Retrieve the run again and inspect technical, evidence-result, admission,
+   review, freshness, and decision-eligibility fields separately.
+9. If all decision prerequisites are met, an authorized independent actor may
+   record a governance decision. Retain the decision’s evidence-set hash and
+   freshness data with the change record.
+
+## Stop conditions
+
+Stop and investigate when any of these appear:
+
+- a route is absent or a gate is disabled;
+- a permission or exact tenant/workspace/system scope is denied;
+- a Passport is unverified, expired, superseded, rejected, or has a trust error;
+- the evidence is pending review, rejected, stale, or ineligible at decision time;
+- preflight reports `worker_unavailable` or any other blocker;
+- the returned scope, envelope hash, or identifiers do not match the intended record.
+
+## Evidence to retain
+
+Keep the approved change reference, route/gate configuration reference, IDs,
+hashes, idempotency keys, timestamps, reviewer identity, decision rationale,
+and response projections. Handle Passport payloads and any model artifacts
+under your organization’s retention, access, and redaction rules.
+
+## Related
+
+- [Evidence trust and review](./evidence-trust-review)
+- [Permissions and separation](./permissions-and-separation)
+- [EU AI Act evidence-support crosswalk](./eu-ai-act-crosswalk)

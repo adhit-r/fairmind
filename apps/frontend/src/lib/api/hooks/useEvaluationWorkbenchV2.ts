@@ -38,6 +38,18 @@ const admissionStatusSchema = z.enum([
 ])
 const reviewStatusSchema = z.enum(['pending', 'accepted', 'rejected'])
 const freshnessStatusSchema = z.enum(['current', 'expiring', 'stale', 'superseded'])
+const freshnessReasonCodeSchema = z.enum([
+  'recorded_superseded',
+  'trust_policy_superseded',
+  'recorded_stale',
+  'effective_expiry_reached',
+  'issuer_revoked',
+  'signing_key_revoked',
+  'signing_key_validity_ended',
+  'trust_policy_retired',
+  'evaluator_registration_revoked',
+  'evidence_expiring',
+])
 const governanceVerdictSchema = z.enum(['approved', 'conditional', 'review', 'blocked', 'insufficient'])
 const lifecyclePhaseSchema = z.enum(['pre_deploy', 'realtime', 'post_deploy'])
 const evaluationTargetKindSchema = z.enum([
@@ -112,7 +124,7 @@ const suiteExecutionSchema = z.strictObject({
   freshnessEvaluatedAt: z.string().nullable(),
   freshnessEffectiveAt: z.string().nullable(),
   expiringAt: z.string().nullable(),
-  freshnessReasonCodes: z.array(z.string()).nullable(),
+  freshnessReasonCodes: z.array(freshnessReasonCodeSchema).nullable(),
   decisionEvidenceEligible: z.boolean().nullable(),
   evidenceTrust: suiteEvidenceTrustSchema.nullable(),
   limitations: z.array(z.unknown()),

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import replace
+from datetime import timedelta
 
 import pytest
 from sqlalchemy import func, select
@@ -16,6 +18,10 @@ from database.governance_models import (
 )
 from src.application.ports.evaluation_workbench import EvaluationWorkbenchError
 from src.application.ports.evidence_review import EvidenceReviewScope
+from src.application.ports.evidence_link import (
+    EvidenceLinkScope,
+    PersistVerifiedEvidenceLinkCommand,
+)
 from src.application.services.verified_evidence_review_service import (
     VerifiedEvidenceReviewService,
 )
@@ -45,7 +51,39 @@ def _admitted_scope(
         _seed_signing_authority(session)
     admission = _admission_command(session, run)
     repository = SqlAlchemyEvaluationWorkbenchRepository(session)
-    repository.persist_verified_passport_v2(admission)
+    repository.persist_verified_passport_v2_submission(admission)
+    linked_at = admission.verified_at + timedelta(seconds=1)
+    link_scope = EvidenceLinkScope(
+        organization_id=admission.scope.organization_id,
+        system_id=admission.scope.system_id,
+        run_id=admission.scope.run_id,
+        suite_execution_id=admission.scope.suite_execution_id,
+        admission_id=admission.admission_id,
+        passport_revision_id=admission.passport_revision_id,
+    )
+    authority = repository.load_verified_evidence_link_authority_for_update(
+        scope=link_scope
+    )
+    assert authority is not None
+    repository.persist_verified_evidence_link(
+        PersistVerifiedEvidenceLinkCommand(
+            scope=link_scope,
+            actor_id="linker-a",
+            suite_evidence_link_id=str(uuid.uuid4()),
+            authority=authority,
+            technical_status=admission.technical_status,
+            evidence_result_status=admission.evidence_result_status,
+            result_summary=admission.result_summary,
+            limitations=admission.limitations,
+            suite_started_at=admission.captured_at,
+            suite_completed_at=linked_at,
+            run_technical_status=admission.technical_status,
+            run_evidence_outcome=admission.evidence_result_status,
+            run_started_at=admission.captured_at,
+            run_completed_at=linked_at,
+            linked_at=linked_at,
+        )
+    )
     repository.force_evidence_admission_constraints()
     session.commit()
     return EvidenceReviewScope(

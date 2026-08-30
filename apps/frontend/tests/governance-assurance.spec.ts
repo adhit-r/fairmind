@@ -1,5 +1,8 @@
 import { expect, test, type Page, type Route } from '@playwright/test'
 
+const reviewedExternalLinkingEnabled =
+  process.env.NEXT_PUBLIC_ASSURANCE_UNTRUSTED_EXTERNAL_EVIDENCE_LINKING_ENABLED === 'true'
+
 const organization = {
   id: 'org-1',
   name: 'Acme Assurance',
@@ -521,6 +524,9 @@ async function mockWorkbench(page: Page, options: MockOptions = {}) {
         createdAt: '2026-07-17T12:30:00Z',
       }, 201)
     }
+    if (path === '/api/v1/ai-governance/evidence-item/artifact-1/links/link-legacy' && request.method() === 'DELETE') {
+      return fulfillJson(route, { deleted: true, id: 'link-legacy' })
+    }
     if (path === '/api/v1/ai-governance/compliance/frameworks') {
       return fulfillJson(route, [])
     }
@@ -749,7 +755,7 @@ test('keeps the expanded trace inline in the mobile stacked record', async ({ pa
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 })
 
-test('reviews a provenance-rich evaluation mapping and links artifacts through a real control picker', async ({ page }) => {
+test('reviews a provenance-rich evaluation mapping while artifact linking stays default-off', async ({ page }) => {
   await mockWorkbench(page, {
     initiallyAssigned: true,
     evidenceRuns: [{
@@ -828,13 +834,69 @@ test('reviews a provenance-rich evaluation mapping and links artifacts through a
   await surface.getByRole('link', { name: 'Artifacts' }).click()
   await expect(page).toHaveURL(/view=artifacts/)
   await surface.getByRole('button', { name: /Model limitation register/i }).click()
-  await page.getByRole('button', { name: 'Link entity' }).click()
-  await expect(page.getByLabel('Entity ID')).toHaveCount(0)
-  await page.getByLabel('Search framework controls').fill('A006.1')
-  await page.getByRole('button', { name: /Select A006.1 Document model limitations/i }).click()
-  await page.getByRole('button', { name: 'Add link' }).click()
-  await expect(page.getByText('A006.1 — Document model limitations')).toBeVisible()
+  await expect(page.getByText('Trust: unclassified evidence')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Link entity' })).toHaveCount(0)
 })
+
+test('keeps historical external evidence visible while default-off linking controls stay unavailable', async ({ page }) => {
+  await mockWorkbench(page, {
+    initiallyAssigned: true,
+    artifactEvidence: [{
+      ...evidenceArtifact('artifact-1', 'system-1', 'Historical external report'),
+      artifactKind: 'url',
+      fileUrl: 'https://legacy.example.test/report',
+      linkedEntityCount: 1,
+      linkedEntities: [{
+        id: 'link-legacy',
+        entityType: 'policy',
+        entityId: 'policy-legacy',
+        createdAt: '2026-07-14T08:05:00Z',
+      }],
+      workflowState: 'linked',
+    }],
+  })
+
+  await page.goto('/evidence?view=artifacts')
+  await page.getByRole('button', { name: /Historical external report/i }).click()
+
+  await expect(page.getByText('https://legacy.example.test/report')).toBeVisible()
+  await expect(page.getByText('policy-legacy')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Remove link to policy' })).toBeVisible()
+  await expect(page.getByText('Trust: unclassified evidence')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Link entity' })).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'Remove link to policy' }).click()
+  await expect(page.getByText('policy-legacy')).toHaveCount(0)
+  await expect(page.getByText('Linked entities (0)')).toBeVisible()
+
+  await page.getByRole('dialog').getByRole('button', { name: 'Close' }).click()
+  await page.getByRole('button', { name: 'Add evidence' }).click()
+  await expect(page.getByRole('button', { name: 'Narrative' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'External URL' })).toHaveCount(0)
+})
+
+
+test('offers the reviewed external URL and entity-link controls only when enabled', async ({ page }) => {
+  test.skip(!reviewedExternalLinkingEnabled, 'Reviewed external linking is not enabled for this run.')
+  await mockWorkbench(page, {
+    initiallyAssigned: true,
+    multipleAssignments: true,
+    artifactEvidence: [evidenceArtifact('artifact-1', 'system-1', 'Reviewed external evidence')],
+  })
+
+  await page.goto('/evidence?view=artifacts')
+  await page.getByRole('button', { name: /Reviewed external evidence/i }).click()
+  await page.getByRole('button', { name: 'Link entity' }).click()
+  await page.getByLabel('Search framework controls').fill('A020.1')
+  await page.getByRole('button', { name: /Select A020.1 Review agent tool boundaries/i }).click()
+  await page.getByRole('button', { name: 'Add link' }).click()
+  await expect(page.getByText('A020.1 — Review agent tool boundaries')).toBeVisible()
+
+  await page.getByRole('dialog').getByRole('button', { name: 'Close' }).click()
+  await page.getByRole('button', { name: 'Add evidence' }).click()
+  await expect(page.getByRole('button', { name: 'External URL' })).toBeVisible()
+})
+
 
 test('aggregates controls from every framework assignment for evaluation mappings', async ({ page }) => {
   await mockWorkbench(page, {
@@ -850,9 +912,8 @@ test('aggregates controls from every framework assignment for evaluation mapping
 
   await page.getByRole('link', { name: 'Artifacts' }).click()
   await page.getByRole('button', { name: /Agent tool boundary register/i }).click()
-  await page.getByRole('button', { name: 'Link entity' }).click()
-  await page.getByLabel('Search framework controls').fill('A020.1')
-  await expect(page.getByRole('button', { name: /Select A020.1 Review agent tool boundaries/i })).toBeVisible()
+  await expect(page.getByText('Trust: unclassified evidence')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Link entity' })).toHaveCount(0)
 })
 
 test('clears evidence artifacts and stale drawer state when system scope changes', async ({ page }) => {

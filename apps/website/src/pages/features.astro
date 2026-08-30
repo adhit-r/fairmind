@@ -3,121 +3,68 @@ import Layout from '../layouts/Layout.astro';
 
 const features = [
   {
-    id: 'bias-detection',
-    title: 'Real-time Bias Detection',
-    description: 'Comprehensive bias analysis using statistical methods, custom rules, and LLM-powered insights to identify fairness issues across multiple protected attributes.',
-    highlights: [
-      'Multiple fairness metrics (WEAT, SEAT, BBQ)',
-      'Real-time stream processing',
-      'Automated audit trails',
-      'Slice-based analysis'
-    ]
+    title: 'Versioned Assurance Planning',
+    description: 'Create scoped planning records bound to exact organization, system, target, suite version, and execution-envelope identities.',
+    highlights: ['Exact target identity', 'Versioned suite identity', 'Explicit lifecycle state', 'Evidence-awaiting run state']
   },
   {
-    id: 'explainability',
-    title: 'Advanced Explainability',
-    description: 'Understand model decisions with SHAP, LIME, and integrated gradients. Interactive dashboards for both technical and non-technical users.',
-    highlights: [
-      'SHAP, LIME, and integrated gradients',
-      'Interactive what-if analysis',
-      'Visual and text-based reports',
-      'Model-agnostic architecture'
-    ]
+    title: 'Execution and Passport Binding',
+    description: 'Keep claimed execution context and evidence metadata linked without claiming that FairMind executed an evaluator.',
+    highlights: ['Execution-envelope binding', 'Passport identity', 'Source provenance', 'Recorded limitations']
   },
   {
-    id: 'monitoring',
-    title: 'Continuous Monitoring',
-    description: 'Track model performance, data drift, and concept drift in real-time. Proactive alerts for performance degradation and retraining needs.',
-    highlights: [
-      'Performance monitoring (accuracy, precision, recall)',
-      'Advanced drift detection (KS, PSI)',
-      'Customizable alert channels',
-      'Version comparison dashboards'
-    ]
+    title: 'Evidence Trust Controls',
+    description: 'Represent scope, signer, admission, freshness, replay, conflict, and revocation state for human review.',
+    highlights: ['Signature state', 'Admission state', 'Freshness state', 'Replay-aware provenance']
   },
   {
-    id: 'provenance',
-    title: 'Model Provenance & Lineage',
-    description: 'Track the complete lifecycle of your AI models from data source to deployment with digital signatures and audit trails.',
-    highlights: [
-      'Digital signatures for authenticity',
-      'Complete data lineage tracking',
-      'Automated model cards',
-      'Compliance-ready audit trails'
-    ]
+    title: 'Reviewer and Governance Separation',
+    description: 'Record evidence review and governance decisions as distinct, attributable human actions.',
+    highlights: ['Reviewer attribution', 'Governance decision state', 'Human approval boundary', 'No automatic certification']
   },
   {
-    id: 'security',
-    title: 'Security & Compliance',
-    description: 'Enterprise-grade security with OWASP AI/LLM protections, GDPR and AI Act compliance tools, and comprehensive audit logging.',
-    highlights: [
-      'OWASP AI/LLM security implementation',
-      'GDPR and AI Act compliance',
-      'Role-based access control',
-      'Comprehensive audit logging'
-    ]
+    title: 'Explicit Capability Gates',
+    description: 'Default-off and unsupported surfaces remain unavailable rather than displaying fabricated results.',
+    highlights: ['Fail-closed exposure', 'Exact permission checks', 'Unavailable-state UI', 'No automatic enforcement']
   },
   {
-    id: 'simulation',
-    title: 'Simulation & Testing',
-    description: 'Test AI models in virtual environments before deployment. Includes bias simulation, adversarial testing, and scenario modeling.',
-    highlights: [
-      'Bias simulation and adversarial testing',
-      'Stress testing capabilities',
-      'Virtual environment testing',
-      'Robustness validation'
-    ]
+    title: 'Evaluator Execution — Unavailable',
+    description: 'Worker execution, public evaluator packs, continuous monitoring, and automatic remediation are not provided in this alpha.',
+    highlights: ['No worker runtime', 'No public evaluator packs', 'No live monitoring claim', 'No compliance determination']
   }
 ];
 
 const structuredData = {
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
-  "name": "FairMind AI Governance Platform",
-  "description": "Comprehensive AI governance platform with bias detection, explainability, monitoring, and compliance features",
+  "name": "FairMind v2.1.0-alpha.1",
+  "description": "Internal, default-off evidence-control-plane foundation for versioned planning and human review.",
   "applicationCategory": "BusinessApplication",
   "operatingSystem": "Web",
   "url": "https://fairmind.xyz/features"
 };
 ---
 
-<Layout 
-  title="Features - FairMind AI Governance Platform"
-  description="Discover FairMind's comprehensive AI governance features including real-time bias detection, explainable AI, continuous monitoring, and compliance tools."
-  structuredData={structuredData}
->
-  <!-- Hero Section -->
+<Layout title="Alpha Capability Boundary - FairMind" description="Review the implemented, default-off, planned, and unavailable boundaries for FairMind v2.1.0-alpha.1." structuredData={structuredData}>
   <section class="bg-white py-16 border-b border-gray-200">
     <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-      <h1 class="text-4xl font-bold text-gray-900 mb-4">
-        Comprehensive AI Governance Features
-      </h1>
-      <p class="text-lg text-gray-600">
-        Everything you need to build, deploy, and monitor responsible AI systems with confidence.
-      </p>
+      <h1 class="text-4xl font-bold text-gray-900 mb-4">Alpha Capability Boundary</h1>
+      <p class="text-lg text-gray-600">FairMind P0 organizes scoped assurance evidence for human review. It does not execute evaluators, certify systems, or enforce compliance.</p>
     </div>
   </section>
 
-  <!-- Features Grid -->
   <section class="py-16 bg-white">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
         {features.map((feature) => (
           <div class="bg-white p-8 border border-gray-200 hover:border-gray-300 transition-colors">
             <h3 class="text-2xl font-bold text-gray-900 mb-4">{feature.title}</h3>
-            
-            <p class="text-gray-600 mb-6 leading-relaxed">
-              {feature.description}
-            </p>
-            
+            <p class="text-gray-600 mb-6 leading-relaxed">{feature.description}</p>
             <div class="space-y-2">
-              <h4 class="text-sm font-semibold text-gray-900 mb-3">Key Highlights:</h4>
+              <h4 class="text-sm font-semibold text-gray-900 mb-3">Release boundary:</h4>
               <ul class="space-y-2">
                 {feature.highlights.map((highlight) => (
-                  <li class="flex items-start text-sm text-gray-600">
-                    <span class="mr-2">•</span>
-                    <span>{highlight}</span>
-                  </li>
+                  <li class="flex items-start text-sm text-gray-600"><span class="mr-2">•</span><span>{highlight}</span></li>
                 ))}
               </ul>
             </div>
@@ -127,23 +74,13 @@ const structuredData = {
     </div>
   </section>
 
-  <!-- CTA Section -->
   <section class="py-16 bg-gray-50 border-t border-gray-200">
     <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-      <h2 class="text-3xl font-bold text-gray-900 mb-4">Ready to Experience These Features?</h2>
-      <p class="text-lg text-gray-600 mb-8">
-        Try our platform today and see how comprehensive AI governance can transform your organization.
-      </p>
+      <h2 class="text-3xl font-bold text-gray-900 mb-4">Review Before You Rely</h2>
+      <p class="text-lg text-gray-600 mb-8">Read the repository documentation and roadmap for release-scoped evidence.</p>
       <div class="flex flex-col sm:flex-row gap-4 justify-center">
-        <a href="https://github.com/adhit-r/fairmind" target="_blank" class="inline-flex items-center justify-center px-6 py-3 bg-gray-900 text-white font-medium hover:bg-gray-800 transition-colors">
-          <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-          </svg>
-          Get Started on GitHub
-        </a>
-        <a href="/contact" class="inline-flex items-center justify-center px-6 py-3 border border-gray-300 text-gray-700 font-medium hover:border-gray-400 hover:bg-gray-50 transition-colors">
-          Contact Us
-        </a>
+        <a href="https://github.com/adhit-r/fairmind/tree/main/apps/docs/content/docs" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center px-6 py-3 bg-gray-900 text-white font-medium hover:bg-gray-800 transition-colors">Repository Docs</a>
+        <a href="/contact" class="inline-flex items-center justify-center px-6 py-3 border border-gray-300 text-gray-700 font-medium hover:border-gray-400 hover:bg-gray-50 transition-colors">Contact Us</a>
       </div>
     </div>
   </section>

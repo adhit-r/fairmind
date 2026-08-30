@@ -1,131 +1,96 @@
-# FairMind Roadmap
+# FairMind assurance roadmap
 
-> Last updated: March 2026
+> Status at the P0-only `v2.1.0-alpha.1` release candidate. Checklist completion is not production readiness.
 
-## Vision
+FairMind is building an evidence-grade AI assurance control plane. Each public execution capability must pass its own contract, benchmark, sandbox, and rollout gates before it is described as available.
 
-FairMind is building the most advanced AI fairness and governance platform — with capabilities that don't exist anywhere else. We're focused on research-grade features that solve real problems no other tool addresses.
+## Current release boundary
 
----
+P0 establishes internal, default-off foundations for exact evaluation scope, evidence integrity, trust administration, operational freshness, reviewer separation, and append-only governance decisions.
 
-## Shipped
+P0 does **not** ship evaluator workers, automatic enforcement, validated modality packs, realtime assurance, certification, automatic compliance decisions, or a “FairMind Verified” designation.
 
-- Bias detection — text, image, audio, video, cross-modal (WEAT, SEAT, causal, counterfactual, adversarial, temporal)
-- India compliance automation — DPDP Act, NITI Aayog, MeitY, Digital India Act
-- International compliance — EU AI Act, GDPR, ISO 42001, NIST AI RMF, IEEE 7000
-- Remediation wizard — reweighting, resampling, threshold optimization with code generation
-- AI Bill of Materials (BOM) — component tracking, risk scoring, dependency mapping
-- Explainability studio — attribution, attention visualization, counterfactual analysis
-- LLM-as-Judge evaluation — multi-judge ensemble, batch evaluation
-- Real-time monitoring — WebSocket metrics, alert rules, drift detection
-- Report generation — PDF/DOCX exports, automated compliance reports with email distribution
-- Model marketplace — publish, version, review models
-- MLOps integrations — MLflow, Comet, DeepEval, Arize Phoenix, AWS Clarify
-- Authentik SSO — OAuth2 authentication with API key management
+| Roadmap area | Complete | Status |
+|---|---:|---:|
+| P0 trustworthy control plane | 19/19 | 100% |
+| P0 frontend/design corrections | 10/10 | 100% |
+| P1 isolated workers | 0/9 | 0% |
+| P2 real evaluation engines | 0/7 | 0% |
+| P3 modality packs | 0/9 | 0% |
+| P4 pre/realtime/post assurance | 0/7 | 0% |
+| P5 research and product assets | 0/8 | 0% |
+| Public contracts | 9/10 | 90% |
+| Verification and rollout gates | 0/13 | 0% |
+| **Total checklist** | **38/92** | **41.3%** |
 
----
+The P1 development lane contains separate, incomplete worker-foundation work. It is intentionally excluded from this release.
 
-## Q2 2026 — Next-Gen Fairness Engine
+## P0 trustworthy control plane
 
-### Causal Fairness Engine
-Build causal DAGs for AI systems and run counterfactual fairness tests. Answer: "would this decision change if the person belonged to a different group?" No tool implements this. Based on Plecko & Bareinboim (2024).
-- Risk taxonomy and causal graph builder
-- Counterfactual fairness testing
-- Integration with existing bias detection pipeline
+Complete in the release candidate:
 
-### Fairness Drift Monitor
-Treat fairness degradation over time as a first-class metric — separate from accuracy drift. EU AI Act mandates ongoing monitoring.
-- Temporal fairness tracking per model
-- Alert rules for fairness threshold violations
-- Historical fairness trend visualization
+- Immutable target and suite versions.
+- Versioned plans and one suite-execution record per selected suite.
+- RFC 8785-hashed Execution Envelope V2 bindings.
+- Evidence Passport V2 scope, chronology, and signature bindings.
+- Evidence issuer, Ed25519 key, and immutable trust-policy administration.
+- Separately gated evidence submission, linking, review, and governance decisions.
+- Database-time operational freshness and invalidation checks.
+- Four-eyes review plus audited, decision-only owner and delegated separation overrides.
+- Transactional idempotency and an append-only per-organization audit hash chain.
+- Literal permissions, including a service-principal-only worker permission.
+- Legacy V1 records remain readable but cannot be used to fabricate V2 authority.
+- Unsupported execution surfaces fail closed in both API and UI.
 
-### Agentic AI Fairness Analyzer
-Analyze bias propagation across multi-agent chains. When Agent A feeds Agent B feeds Agent C — does bias amplify? First tool to address this.
-- Agent chain mapping and visualization
-- Per-hop bias measurement
-- Amplification detection and alerting
+See the [P0 release boundary](apps/docs/content/docs/release-boundary.mdx) and [master engineering checklist](docs/superpowers/plans/2026-07-19-fairmind-2027-ai-assurance-todo.md).
 
----
+## Next engineering stages
 
-## Q3 2026 — India & Regulatory Moat
+### P1 — isolated workers
 
-### RBI FREE-AI + SEBI Compliance
-Complete Indian regulatory coverage. No competitor touches Indian financial sector AI compliance.
-- RBI Framework for Responsible AI mapping
-- SEBI AI disclosure requirement automation
-- Board-approved AI policy document generation
-- Independent algorithm validation reports
+- PostgreSQL-authoritative leased jobs and attempt state.
+- Signed completion bound to a live lease and exact Passport.
+- Cancellation arbitration and recovery.
+- Opaque target and artifact brokers.
+- Non-root, read-only, resource-bounded evaluator sandboxes.
+- Deny-default egress, kill switches, and operational security metrics.
 
-### Auto-Generated FRIA/DPIA
-One-click Fundamental Rights Impact Assessments (EU AI Act) and Data Protection Impact Assessments (India DPDP). Auto-populated from existing FairMind data.
-- EU AI Act FRIA generation
-- India DPDP Act DPIA generation
-- Auto-population from bias test results, model metadata, compliance scores
+P1 does not become available when queue rows exist. A real signed suite must complete end to end inside the sandbox and pass Gate B.
 
-### Regulatory Sandbox Simulator
-Simulate how a model would perform under different regulatory regimes before deploying. Select target jurisdictions, see pass/fail, get gap analysis.
-- Multi-jurisdiction rule engine
-- What-if analysis across EU, India, US frameworks
-- Gap analysis with remediation paths
+### P2 — real evaluation engines
 
-### Regulatory Change Impact Analysis
-When new regulations drop, automatically identify which deployed models are affected and what needs to change.
-- NLP-based regulatory text ingestion
-- Model registry cross-referencing
-- Automated gap analysis and remediation recommendations
+- Independently validate predictive fairness kernels.
+- Add a common LLM and agent evaluation harness.
+- Add security and CI/red-team adapters.
+- Quarantine fixed, simulated, mislabeled, and fail-open evaluators.
+- Preserve failing or unavailable evaluator outcomes without translating them into success.
+- Treat LLM judges as calibrated supporting signals, never sole verdicts.
 
----
+### P3 — modality packs
 
-## Q4 2026 — Research-Grade Capabilities
+Planned packs cover predictive models, LLM/text, agents, code generation, vision input, image generation, audio, video, and cross-modal systems. Each pack remains unavailable until its own frozen manifest, benchmark report, sandbox report, limitations, and release gate are complete.
 
-### Bias Supply Chain Tracker
-Trace which pretrained components (embeddings, layers, datasets) contribute what fraction of observed bias. Like git blame for bias.
-- Bias lineage graph across model components
-- Attribution scoring per component
-- Integration with AI BOM
+### P4 — lifecycle assurance
 
-### Multilingual & Cultural Fairness
-Test the same model across Hindi, Tamil, Bengali, Marathi, English and other languages for sentiment divergence and cultural bias. Based on Ray (2025) methodology.
-- Cross-language bias testing
-- Cultural context-aware evaluation
-- Indic language support (12+ languages)
+Planned work includes pre-deployment evaluation, synchronous deterministic realtime checks, queued deep checks, post-output and side-effect review, scheduled post-deployment evaluation, drift and incident replay, and hybrid human review. Enforcement remains advisory until separate safety gates pass.
 
-### Fairness-Performance Pareto Explorer
-Interactive visualization of the exact tradeoff between fairness and accuracy. Users pick their operating point on the Pareto curve.
-- Multi-objective optimization (NSGA-II)
-- Interactive Pareto frontier UI
-- Per-metric tradeoff analysis
+### P5 — evidence and product assets
 
-### Fairness Certification Passports
-Machine-readable, cryptographically signed fairness certificates embeddable in model cards and APIs. Based on W3C Verifiable Credentials.
-- JSON-LD fairness certificates
-- Cryptographic signing and verification
-- API-embeddable compliance badges
+Planned work includes evidence-laundering and realtime-latency research corpora, cross-modal provenance research, immutable manifests and calibration reports, one authoritative capability registry, and product media based only on validated screens and claims.
 
----
+## Public contract still open
 
-## 2027 — Frontier
+The remaining contract item is the public route family for target and suite catalogs, suite evidence links and reviews, cancellation, worker leases, and realtime pre/post evaluation. It will be completed incrementally and exposed only as each child capability passes its independent gate.
 
-### Privacy-Preserving Fairness Auditing
-Audit fairness without accessing protected attributes directly. Uses differential privacy and secure computation. Critical for DPDP/GDPR compliance.
+## Rollout gates
 
-### Fairness Under Missing Demographics
-Infer fairness bounds when protected attributes are incomplete. Uses proxy methods and Bayesian estimation.
+- **Gate A — private control-plane pilot:** two organizations, 100 workflows, 14 days, zero isolation or integrity failures, automatic enforcement off.
+- **Gate B — worker alpha:** one real signed sandboxed suite end to end with failure injection and human approval only.
+- **Gate C — modality beta:** every exposed capability independently passes benchmark and sandbox gates with visible limitations.
+- **Gate D — public execution:** GA adapter and reports, independent red team, 30-day soak, and zero unresolved integrity, isolation, Critical, or High defects.
 
-### Adaptive Context-Aware Fairness
-Auto-select appropriate fairness definitions based on domain (healthcare → equalized odds, lending → statistical parity, hiring → four-fifths rule).
-
-### Synthetic Data Fairness
-Generate provably fair synthetic datasets with formal guarantees on demographic parity or equalized odds.
-
-### Federated Fairness
-Fairness auditing in federated learning settings without centralizing data. Distributed fairness constraints.
-
-### Community Red-Team Module
-Structured bias bounty program integrated into the compliance pipeline. Invite external testers, aggregate findings into reports.
-
----
+No gate is complete in this release candidate.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions. Browse [good first issues](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) to get started.
+See [CONTRIBUTING.md](CONTRIBUTING.md) and the [master engineering checklist](docs/superpowers/plans/2026-07-19-fairmind-2027-ai-assurance-todo.md). Work should preserve capability gates, exact scope, evidence provenance, and explicit unavailable states.

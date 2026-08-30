@@ -6,9 +6,9 @@ This root `docs/` directory now contains engineering and operational documentati
 - `docs/operations/` - contributor/runbook guidance
 - `docs/adr/` - architecture decision records
 
-Product/user-facing documentation is hosted from the dedicated Fumadocs app at:
+Product/user-facing documentation is built from the dedicated docs app at:
 
-- `apps/docs` (deployment target: `docs.fairmind.xyz`)
+- `apps/docs` (canonical source; no hosted alpha URL is currently claimed)
 
 Marketing site remains:
 

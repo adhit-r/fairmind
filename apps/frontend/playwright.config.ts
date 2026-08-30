@@ -1,5 +1,10 @@
 import { defineConfig, devices } from '@playwright/test'
 
+const reviewedExternalLinkingEnabled =
+  process.env.NEXT_PUBLIC_ASSURANCE_UNTRUSTED_EXTERNAL_EVIDENCE_LINKING_ENABLED === 'true'
+const devPort = reviewedExternalLinkingEnabled ? 1112 : 1111
+const baseURL = `http://localhost:${devPort}`
+
 export default defineConfig({
   testDir: './tests',
   testMatch: /.*\.spec\.ts$/,
@@ -9,7 +14,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: 'html',
   use: {
-    baseURL: 'http://localhost:1111',
+    baseURL,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
@@ -22,10 +27,9 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: 'bun run dev',
-    url: 'http://localhost:1111',
-    reuseExistingServer: !process.env.CI,
+    command: reviewedExternalLinkingEnabled ? 'bunx next dev -p 1112' : 'bun run dev',
+    url: baseURL,
+    reuseExistingServer: reviewedExternalLinkingEnabled ? false : !process.env.CI,
     timeout: 120 * 1000,
   },
 })
-

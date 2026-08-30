@@ -1,0 +1,61 @@
+---
+title: Permissions and separation
+description: The fail-closed human permissions and audited separation rules for Assurance V2.
+---
+
+# Permissions and separation
+
+P0 uses literal, persisted permissions at its Assurance V2 HTTP boundaries.
+Permissions are scoped by the organization membership resolved for the request;
+they are not inferred from a client-supplied role name.
+
+## Human permissions
+
+| Activity | Permission |
+| --- | --- |
+| Create plans | `evaluation:plan:write` |
+| Activate plans | `evaluation:plan:activate` |
+| Create runs | `evaluation:run:create` |
+| Submit signed evidence | `evaluation:evidence:submit` |
+| Link verified evidence | `evaluation:evidence:link` |
+| Review evidence | `evaluation:evidence:review` |
+| Record a governance decision | `evaluation:decision` |
+| Manage target and suite versions | `evaluation:catalog:admin` |
+| Manage trust administration routes | `evaluation:trust:admin` |
+
+An absent permission produces a route-specific `403`; a disabled capability is
+not mounted. Do not treat either outcome as an authorization path to bypass.
+
+## Worker permission is reserved
+
+`evaluation:worker` is reserved for a tenant-bound service principal. It is
+not a human-route permission and P0 mounts no worker route or credential
+issuer. Human users and generic role assignment flows must not acquire it.
+
+## Separation of duties
+
+Evidence review is non-overridable four-eyes separation. A reviewer cannot be
+the requester, submitter, or linker for the evidence being reviewed.
+
+Governance decisions use the normal route for independent decision-makers. A
+separate, default-off exception path exists only for an actual separation
+conflict and creates an immutable, auditable decision receipt. It does not
+alter review separation, trust checks, evidence freshness, run scope, or the
+other normal decision invariants.
+
+## Owner and delegated exceptions
+
+The exception routes require the master Assurance V2 gate, the governance
+decision gate, and the separation-override gate. They are not ordinary role
+assignment features. PostgreSQL is the authoritative implementation for the
+owner-authorization proof; SQLite rejects non-null owner override reasons.
+
+Provisioning an exception authority is an approved per-organization deployment
+change, not an API tutorial step. Record the request, reason, approver, scope,
+and expiry according to your organization’s change controls.
+
+## Related
+
+- [Evidence trust and review](./evidence-trust-review)
+- [Operator runbook](./operator-runbook)
+- [Limitations and roadmap](./limitations-roadmap)

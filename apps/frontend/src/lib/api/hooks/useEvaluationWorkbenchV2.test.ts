@@ -204,6 +204,28 @@ describe('evaluation workbench v2 scope authority', () => {
     assert.deepEqual(controller.getSnapshot().runs, [])
   })
 
+  test('rejects an unbounded freshness reason instead of rendering server-supplied authority text', async () => {
+    const validRun = run()
+    const invalidRun = {
+      ...validRun,
+      suiteExecutions: validRun.suiteExecutions.map((suite) => ({
+        ...suite,
+        freshnessReasonCodes: ['operator supplied revocation explanation'],
+      })),
+    }
+    const { client } = fakeClient(async (endpoint) => {
+      if (endpoint.endsWith('/plans') || endpoint.endsWith('/runs')) {
+        return { success: true, data: [] }
+      }
+      return { success: true, data: invalidRun }
+    })
+    const controller = createEvaluationWorkbenchV2Controller(client)
+    await controller.setScope('org-1', 'workspace-1', 'system-1')
+
+    await assert.rejects(controller.getRun('run-1'))
+    assert.deepEqual(controller.getSnapshot().runs, [])
+  })
+
   test('rejects a plan detail whose response ID differs from the requested plan', async () => {
     const { client } = fakeClient(async (endpoint) => {
       if (endpoint.endsWith('/plans/plan-requested')) {

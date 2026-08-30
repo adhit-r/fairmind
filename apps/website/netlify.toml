@@ -5,17 +5,11 @@
 [build.environment]
   NODE_VERSION = "22.12.0"
 
-# Redirects for SPA routing
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
-
 # Redirects for old URLs
 [[redirects]]
   from = "/docs"
-  to = "https://docs.fairmind.xyz"
-  status = 301
+  to = "https://github.com/adhit-r/fairmind/tree/main/apps/docs/content/docs"
+  status = 302
   force = true
 
 [[redirects]]
@@ -32,7 +26,7 @@
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
     Permissions-Policy = "camera=(), microphone=(), geolocation=()"
-    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://www.googletagmanager.com https://static.hotjar.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://unpkg.com https://www.google-analytics.com; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self';"
 
 # Cache static assets
 [[headers]]
@@ -82,8 +76,8 @@
 
 [context.deploy-preview.environment]
   NODE_ENV = "preview"
-  SITE_URL = "https://deploy-preview-{id}--docs-fairmind.netlify.app"
+  SITE_URL = "https://deploy-preview-{id}--fairmind.netlify.app"
 
 [context.branch-deploy.environment]
   NODE_ENV = "development"
-  SITE_URL = "https://{branch}--docs-fairmind.netlify.app"
+  SITE_URL = "https://{branch}--fairmind.netlify.app"

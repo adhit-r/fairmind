@@ -21,6 +21,8 @@ from config.migration_integrity import (
     FROZEN_013G_OPERATOR_CHECKSUM,
     FROZEN_013H_OPERATOR_CHECKSUM,
     FROZEN_013I_OPERATOR_CHECKSUM,
+    FROZEN_013K_OPERATOR_CHECKSUM,
+    FROZEN_013L_OPERATOR_CHECKSUM,
     FROZEN_ASSURANCE_MIGRATIONS,
     FROZEN_POSTGRESQL_ASSURANCE_CATALOGS,
     FROZEN_SQLITE_013C_FIXTURE_CHECKSUM,
@@ -30,6 +32,8 @@ from config.migration_integrity import (
     FROZEN_SQLITE_013G_FIXTURE_CHECKSUM,
     FROZEN_SQLITE_013H_FIXTURE_CHECKSUM,
     FROZEN_SQLITE_013I_FIXTURE_CHECKSUM,
+    FROZEN_SQLITE_013K_FIXTURE_CHECKSUM,
+    FROZEN_SQLITE_013L_FIXTURE_CHECKSUM,
     POSTGRESQL_ASSURANCE_CATALOG_SPEC,
     POSTGRESQL_ASSURANCE_FUNCTIONS,
     POSTGRESQL_ASSURANCE_REQUIRED_TRIGGERS,
@@ -83,6 +87,18 @@ POSTGRES_013J_OPERATOR = (
 )
 POSTGRES_OPERATOR_CHAIN_THROUGH_013J = POSTGRES_OPERATOR_CHAIN + (
     POSTGRES_013J_OPERATOR,
+)
+POSTGRES_013K_OPERATOR = (
+    "upgrade_paths/013j_to_013k_verified_evidence_link_integrity.sql"
+)
+POSTGRES_OPERATOR_CHAIN_THROUGH_013K = POSTGRES_OPERATOR_CHAIN_THROUGH_013J + (
+    POSTGRES_013K_OPERATOR,
+)
+POSTGRES_013L_OPERATOR = (
+    "upgrade_paths/013k_to_013l_delegated_separation_override_grant_integrity.sql"
+)
+POSTGRES_OPERATOR_CHAIN_THROUGH_013L = POSTGRES_OPERATOR_CHAIN_THROUGH_013K + (
+    POSTGRES_013L_OPERATOR,
 )
 POSTGRESQL_013B_PREREQUISITE_CONSTRAINTS = frozenset(
     {
@@ -184,6 +200,12 @@ def _install_sqlite_assurance_chain(database_path: Path) -> None:
     from migrations.owner_decision_override_integrity_migration import (
         apply_sqlite as apply_013j,
     )
+    from migrations.verified_evidence_link_integrity_migration import (
+        apply_sqlite as apply_013k,
+    )
+    from migrations.delegated_separation_override_grant_integrity_migration import (
+        apply_sqlite as apply_013l,
+    )
 
     connection = sqlite3.connect(database_path)
     try:
@@ -208,6 +230,8 @@ def _install_sqlite_assurance_chain(database_path: Path) -> None:
         apply_013h(connection)
         apply_013i(connection)
         apply_013j(connection)
+        apply_013k(connection)
+        apply_013l(connection)
     finally:
         connection.close()
 
@@ -636,7 +660,7 @@ def test_production_postgresql_manifest_covers_audit_immutability() -> None:
     frozen = FROZEN_POSTGRESQL_ASSURANCE_CATALOGS[14]
     assert frozen.spec is POSTGRESQL_ASSURANCE_CATALOG_SPEC
     assert frozen.postgresql_major == 14
-    assert frozen.digest == "c181fd00d2c65009cd17a673c0462d92d557c73dc7976f800a4bcb83ae4c6fd2"
+    assert frozen.digest == "18acdb1569c601bf99c45b22d5de45fe3b749acaf4bb7bb5644a7eba265e2f3a"
     validate_frozen_postgresql_catalog(frozen)
 
 
@@ -875,6 +899,67 @@ def test_013j_operator_direct_ledger_and_fixture_sources_are_frozen() -> None:
     assert frozen.checksum in operator_source
 
 
+def test_013k_operator_direct_ledger_and_fixture_sources_are_frozen() -> None:
+    import hashlib
+
+    direct = MIGRATIONS / "013k_verified_evidence_link_integrity.sql"
+    operator = MIGRATIONS / POSTGRES_013K_OPERATOR
+    fixture = (
+        MIGRATIONS
+        / "fixtures"
+        / "013k_verified_evidence_link_integrity.sqlite.sql"
+    )
+    frozen = next(
+        item
+        for item in FROZEN_ASSURANCE_MIGRATIONS
+        if item.ledger_key == "013j-to-013k-verified-evidence-link-integrity-v1"
+    )
+    operator_source = operator.read_text(encoding="utf-8")
+
+    assert hashlib.sha256(direct.read_bytes()).hexdigest() == frozen.checksum
+    assert hashlib.sha256(operator.read_bytes()).hexdigest() == (
+        FROZEN_013K_OPERATOR_CHECKSUM
+    )
+    assert hashlib.sha256(fixture.read_bytes()).hexdigest() == (
+        FROZEN_SQLITE_013K_FIXTURE_CHECKSUM
+    )
+    assert operator_source.count("\\ir ../013k_verified_evidence_link_integrity.sql") == 1
+    assert frozen.ledger_key in operator_source
+    assert frozen.checksum in operator_source
+
+
+def test_013l_operator_direct_ledger_and_fixture_sources_are_frozen() -> None:
+    import hashlib
+
+    direct = MIGRATIONS / "013l_delegated_separation_override_grant_integrity.sql"
+    operator = MIGRATIONS / POSTGRES_013L_OPERATOR
+    fixture = (
+        MIGRATIONS
+        / "fixtures"
+        / "013l_delegated_separation_override_grant_integrity.sqlite.sql"
+    )
+    frozen = next(
+        item
+        for item in FROZEN_ASSURANCE_MIGRATIONS
+        if item.ledger_key
+        == "013k-to-013l-delegated-separation-override-grant-integrity-v1"
+    )
+    operator_source = operator.read_text(encoding="utf-8")
+
+    assert hashlib.sha256(direct.read_bytes()).hexdigest() == frozen.checksum
+    assert hashlib.sha256(operator.read_bytes()).hexdigest() == (
+        FROZEN_013L_OPERATOR_CHECKSUM
+    )
+    assert hashlib.sha256(fixture.read_bytes()).hexdigest() == (
+        FROZEN_SQLITE_013L_FIXTURE_CHECKSUM
+    )
+    assert operator_source.count(
+        "\\ir ../013l_delegated_separation_override_grant_integrity.sql"
+    ) == 1
+    assert frozen.ledger_key in operator_source
+    assert frozen.checksum in operator_source
+
+
 def test_013j_catalog_manifest_covers_owner_authority_and_guards() -> None:
     assert {"organizations", "org_members", "org_roles"} <= (
         POSTGRESQL_ASSURANCE_CATALOG_SPEC.relations
@@ -895,7 +980,57 @@ def test_013j_catalog_manifest_covers_owner_authority_and_guards() -> None:
     } <= SQLITE_ASSURANCE_TRIGGERS
 
 
-def test_sqlite_two_clean_full_chain_installs_match_the_frozen_013j_catalog(
+def test_013k_catalog_manifest_covers_verified_link_authority() -> None:
+    assert {
+        "fairmind_verified_evidence_link_is_valid_013k",
+        "fairmind_guard_verified_evidence_link_013k",
+    } <= POSTGRESQL_ASSURANCE_FUNCTIONS
+    assert "governance_evaluation_suite_evidence_links_guard_insert" in (
+        POSTGRESQL_ASSURANCE_REQUIRED_TRIGGERS
+    )
+    assert "governance_evaluation_suite_evidence_links_verified_guard_013k" in (
+        POSTGRESQL_ASSURANCE_REQUIRED_TRIGGERS
+    )
+    assert "governance_evaluation_suite_evidence_links_verified_unavailable_013k" in (
+        SQLITE_ASSURANCE_TRIGGERS
+    )
+
+
+def test_013l_catalog_manifest_covers_delegated_separation_override_authority() -> None:
+    assert "governance_separation_override_grants" in (
+        POSTGRESQL_ASSURANCE_CATALOG_SPEC.relations
+    )
+    assert {
+        "fairmind_governance_decision_actor_authorized_013l",
+        "fairmind_separation_override_relationships_013l",
+        "fairmind_delegated_separation_override_authorized_013l",
+        "guard_governance_separation_override_grant_013l",
+        "fairmind_validate_separation_override_grant_audit_013l",
+        "fairmind_validate_delegated_decision_audit_013l",
+    } <= POSTGRESQL_ASSURANCE_FUNCTIONS
+    assert {
+        "governance_separation_override_grants_guard_insert",
+        "governance_separation_override_grants_immutable_update",
+        "governance_separation_override_grants_immutable_delete",
+        "governance_separation_override_grants_audit_013l",
+        "governance_evaluation_decisions_delegated_override_audit_013l",
+    } <= POSTGRESQL_ASSURANCE_REQUIRED_TRIGGERS
+    assert {
+        "governance_separation_override_grants",
+    } <= SQLITE_ASSURANCE_TABLES
+    assert {
+        "idx_governance_separation_override_grants_scope",
+        "uq_governance_evaluation_decision_separation_override_grant",
+    } <= SQLITE_ASSURANCE_INDEXES
+    assert {
+        "governance_separation_override_grants_unavailable_013l",
+        "governance_separation_override_grants_immutable_update_013l",
+        "governance_separation_override_grants_immutable_delete_013l",
+        "governance_evaluation_decisions_delegated_override_unavailable_013l",
+    } <= SQLITE_ASSURANCE_TRIGGERS
+
+
+def test_sqlite_two_clean_full_chain_installs_match_the_frozen_013l_catalog(
     tmp_path: Path,
 ) -> None:
     database_paths = (
@@ -935,7 +1070,7 @@ def test_sqlite_two_clean_full_chain_installs_match_the_frozen_013j_catalog(
             connection.close()
 
 
-def test_sqlite_startup_check_accepts_the_frozen_013j_catalog(
+def test_sqlite_startup_check_accepts_the_frozen_013l_catalog(
     tmp_path: Path,
 ) -> None:
     database_path = tmp_path / "assurance.sqlite3"
@@ -1721,7 +1856,7 @@ def test_native_production_catalog_freeze_matches_two_operator_installs_and_tamp
     try:
         for ordinal, schema_name in enumerate(schemas):
             _install_postgresql_base_through_012(POSTGRES_URL, schema_name)
-            for migration_name in POSTGRES_OPERATOR_CHAIN_THROUGH_013J:
+            for migration_name in POSTGRES_OPERATOR_CHAIN_THROUGH_013L:
                 result = _run_postgresql_operator_migration(
                     POSTGRES_URL,
                     schema_name,
@@ -1732,7 +1867,7 @@ def test_native_production_catalog_freeze_matches_two_operator_installs_and_tamp
                 replay = _run_postgresql_operator_migration(
                     POSTGRES_URL,
                     schema_name,
-                    POSTGRES_013J_OPERATOR,
+                    POSTGRES_013L_OPERATOR,
                 )
                 assert replay.returncode == 0, replay.stderr
 
@@ -2019,7 +2154,7 @@ def test_native_013j_startup_rejects_every_missing_or_disabled_guard() -> None:
     )
     try:
         _install_postgresql_base_through_012(POSTGRES_URL, schema_name)
-        for migration_name in POSTGRES_OPERATOR_CHAIN_THROUGH_013J:
+        for migration_name in POSTGRES_OPERATOR_CHAIN_THROUGH_013L:
             result = _run_postgresql_operator_migration(
                 POSTGRES_URL,
                 schema_name,
@@ -2102,7 +2237,7 @@ def test_native_013j_catalog_rejects_function_acl_relation_and_trigger_drift() -
     engine = None
     try:
         _install_postgresql_base_through_012(POSTGRES_URL, schema_name)
-        for migration_name in POSTGRES_OPERATOR_CHAIN_THROUGH_013J:
+        for migration_name in POSTGRES_OPERATOR_CHAIN_THROUGH_013L:
             result = _run_postgresql_operator_migration(
                 POSTGRES_URL,
                 schema_name,
@@ -2425,7 +2560,7 @@ def test_native_013i_startup_rejects_disabled_and_missing_trigger() -> None:
     engine = None
     try:
         _install_postgresql_base_through_012(POSTGRES_URL, schema_name)
-        for migration_name in POSTGRES_OPERATOR_CHAIN_THROUGH_013J:
+        for migration_name in POSTGRES_OPERATOR_CHAIN_THROUGH_013L:
             result = _run_postgresql_operator_migration(
                 POSTGRES_URL,
                 schema_name,
