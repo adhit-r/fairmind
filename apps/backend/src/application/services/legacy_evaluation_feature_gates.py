@@ -1,9 +1,9 @@
 """Default-deny capability gates for legacy evaluation mutations.
 
-The v1 workflow intentionally remains readable for compatibility, but these
-capabilities cannot be activated through production environment values. The
-field remains injectable only so tests can exercise the historical contract
-while every composed API request stays denied.
+The v1 workflow remains readable for compatibility. Environment values cannot
+enable these capabilities: ``from_environment`` always returns the default
+disabled gates. Tests may explicitly construct or substitute a non-default
+gate to exercise retired compatibility paths.
 """
 
 from __future__ import annotations

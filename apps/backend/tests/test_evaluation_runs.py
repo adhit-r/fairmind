@@ -290,7 +290,7 @@ def _workflow_detail(message: str, next_action: str) -> dict:
     }
 
 
-def test_legacy_capability_flags_require_literal_true() -> None:
+def test_legacy_capability_flags_ignore_retired_environment_values() -> None:
     gates = LegacyEvaluationFeatureGates.from_environment(
         {
             RETIRED_LEGACY_FAIRMIND_WORKER_FLAG: "true",
