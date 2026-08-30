@@ -52,9 +52,12 @@ cannot enter formal evidence review or governance decision authority.
 
 ## P0 — Frontend and design
 
-- [ ] Add one shared session provider above the dashboard shell and bind identity to `/auth/me`.
-- [ ] Connect both logout controls; clear local tokens, authenticated caches, and cross-tab state even when revocation fails.
-- [ ] Self-host the profile portrait and eliminate authenticated third-party portrait requests.
+- [x] Add one shared session provider above the dashboard shell and bind identity to `/auth/me`.
+  - Checkpoint: the non-auth shell has exactly one `SessionProvider`; `AuthGuard`, Header, and Sidebar consume its single-flight `/auth/me` identity instead of independently loading or inventing a user. Browser proof observes one bearer-authenticated current-session request and the same returned identity in both shell surfaces. See `docs/audits/2026-08-30-p0-frontend-session-shell.md`.
+- [x] Connect both logout controls; clear local tokens, authenticated caches, and cross-tab state even when revocation fails.
+  - Checkpoint: Header and Sidebar use the same session-owned logout. Local access/refresh tokens, selected organization, PKCE state, API caches, and the LLM-judge cache clear before best-effort revocation settles; same-tab and sibling-tab listeners converge on unauthenticated navigation. See `docs/audits/2026-08-30-p0-frontend-session-shell.md`.
+- [x] Self-host the profile portrait and eliminate authenticated third-party portrait requests.
+  - Checkpoint: authenticated identity renders the repository-owned `/profile-portrait.svg`; focused browser proof observes no request to the retired third-party avatar host. See `docs/audits/2026-08-30-p0-frontend-session-shell.md`.
 - [ ] Key state by organization/system/plan/run and mask prior-scope state synchronously during route changes.
 - [ ] Reject parsed responses whose scope differs from the request and remove `selected_org_id` as secondary path authority.
 - [ ] Render execution status, evaluator evidence result, and governance verdict as separate axes.

@@ -110,6 +110,8 @@ async function mockEvaluationWorkbench(page: Page, options: MockOptions = {}) {
   const evaluationRequestPaths: string[] = []
   const evaluationMutationPaths: string[] = []
   const createdPlanInputs: Array<Record<string, unknown>> = []
+  let currentSessionRequestCount = 0
+  let thirdPartyPortraitRequestCount = 0
 
   await page.addInitScript(() => {
     window.localStorage.setItem('access_token', 'playwright-token')
@@ -118,7 +120,10 @@ async function mockEvaluationWorkbench(page: Page, options: MockOptions = {}) {
   })
 
   if (options.portraitFailure !== false) {
-    await page.route(/https:\/\/ui\.shadcn\.com\/avatars\/02\.png(?:\?.*)?$/, (route) => route.abort('failed'))
+    await page.route(/https:\/\/ui\.shadcn\.com\/avatars\/02\.png(?:\?.*)?$/, (route) => {
+      thirdPartyPortraitRequestCount += 1
+      return route.abort('failed')
+    })
   }
   await page.route('**/api/proxy/**', async (route) => {
     const request = route.request()
@@ -126,6 +131,7 @@ async function mockEvaluationWorkbench(page: Page, options: MockOptions = {}) {
     const path = url.pathname.replace('/api/proxy', '')
 
     if (path === '/api/v1/auth/me') {
+      currentSessionRequestCount += 1
       return fulfillJson(route, { id: 'user-1', username: 'reviewer', email: 'reviewer@acme.test' })
     }
     if (path === '/api/v1/organizations') {
@@ -291,11 +297,13 @@ async function mockEvaluationWorkbench(page: Page, options: MockOptions = {}) {
     getEvaluationRequestPaths: () => [...evaluationRequestPaths],
     getEvaluationMutationPaths: () => [...evaluationMutationPaths],
     getCreatedPlanInputs: () => structuredClone(createdPlanInputs),
+    getCurrentSessionRequestCount: () => currentSessionRequestCount,
+    getThirdPartyPortraitRequestCount: () => thirdPartyPortraitRequestCount,
   }
 }
 
 test('keeps Evaluation Runs inside the original shell with framed, labelled identity and controls', async ({ page }) => {
-  await mockEvaluationWorkbench(page)
+  const mocks = await mockEvaluationWorkbench(page)
   await page.goto('/tests')
 
   await expect(page.getByRole('banner')).toBeVisible()
@@ -320,7 +328,14 @@ test('keeps Evaluation Runs inside the original shell with framed, labelled iden
   await expect(search).toHaveCSS('outline-style', 'solid')
   await expect(search).toHaveCSS('outline-width', '2px')
 
-  await expect(page.getByLabel('User Name profile image unavailable; showing initials UN').first()).toBeVisible()
+  await expect(page.getByRole('button', { name: 'reviewer profile' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Open user menu for reviewer' })).toBeVisible()
+  await expect(page.getByRole('img', { name: 'reviewer illustrated profile' }).first()).toHaveAttribute(
+    'src',
+    '/profile-portrait.svg',
+  )
+  expect(mocks.getCurrentSessionRequestCount()).toBe(1)
+  expect(mocks.getThirdPartyPortraitRequestCount()).toBe(0)
   await expect(page.locator('[data-framed-icon="true"]').first()).toBeVisible()
   await expect(page.getByText('Test History', { exact: true })).toHaveCount(0)
   await expect(page.getByText('Total Tests', { exact: true })).toHaveCount(0)
@@ -334,7 +349,7 @@ test('keeps Evaluation Runs inside the original shell with framed, labelled iden
   const collapsedLinkBox = await collapsedRunLink.boundingBox()
   expect(collapsedLinkBox?.width).toBeGreaterThanOrEqual(44)
   expect(collapsedLinkBox?.height).toBeGreaterThanOrEqual(44)
-  await expect(page.getByRole('button', { name: 'User Name profile' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'reviewer profile' })).toBeVisible()
 })
 
 test('keeps the identity visible and the workbench usable in the mobile shell', async ({ page }) => {
@@ -343,7 +358,7 @@ test('keeps the identity visible and the workbench usable in the mobile shell', 
   await page.goto('/tests')
 
   await expect(page.getByRole('heading', { name: 'Evaluation Runs', level: 1 })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Open user menu for User Name' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Open user menu for reviewer' })).toBeVisible()
   const layout = await page.evaluate(() => ({
     innerWidth: window.innerWidth,
     documentScrollWidth: document.documentElement.scrollWidth,
@@ -354,7 +369,7 @@ test('keeps the identity visible and the workbench usable in the mobile shell', 
 
   await page.getByRole('button', { name: 'Toggle navigation' }).click()
   await expect(page.getByRole('link', { name: 'Evaluation Runs' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'User Name profile' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'reviewer profile' })).toBeVisible()
 })
 
 test('treats the synthetic fallback system as missing and makes no evaluation request', async ({ page }) => {
