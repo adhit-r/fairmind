@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from datetime import datetime, timedelta, timezone
@@ -323,7 +324,7 @@ def test_heartbeat_requires_principal_and_live_token_and_renews_lease(
     assert (receipt.next_heartbeat_at - receipt.heartbeat_at).total_seconds() == 20
 
 
-def _insert_expired_attempt(
+def _insert_attempt(
     factory,
     *,
     scenario,
@@ -331,12 +332,13 @@ def _insert_expired_attempt(
     suite_execution_id: str,
     attempt_number: int,
     max_attempts: int,
+    expires_in_seconds: float = -30,
 ) -> str:
     attempt_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
-    leased_at = now - timedelta(seconds=120)
-    heartbeat_at = now - timedelta(seconds=90)
-    expires_at = now - timedelta(seconds=30)
+    expires_at = now + timedelta(seconds=expires_in_seconds)
+    heartbeat_at = expires_at - timedelta(seconds=60)
+    leased_at = heartbeat_at - timedelta(seconds=30)
     session = factory()
     try:
         session.execute(
@@ -404,7 +406,7 @@ def test_expiry_recovery_honours_the_stored_three_attempt_cap(
         worker_type="external_provider",
     )
     suite_execution_id = str(scenario.suite_executions[0]["id"])
-    attempt_id = _insert_expired_attempt(
+    attempt_id = _insert_attempt(
         factory,
         scenario=scenario,
         worker_id=worker_id,
@@ -450,3 +452,66 @@ def test_expiry_recovery_honours_the_stored_three_attempt_cap(
         session.close()
     assert attempt_status == "timed_out"
     assert suite_status == expected_suite_status
+
+
+def test_heartbeat_rejects_lease_that_expires_while_waiting_for_lock(
+    worker_queue_session_factory,
+) -> None:
+    factory = worker_queue_session_factory
+    scenario = _queue_scenario(factory, suite_count=1)
+    subject = f"service:waiting:{uuid.uuid4()}"
+    worker_id = _register_worker(
+        factory, org_id=scenario.org_id, subject=subject,
+        worker_type="external_provider",
+    )
+    attempt_id = _insert_attempt(
+        factory, scenario=scenario, worker_id=worker_id,
+        suite_execution_id=str(scenario.suite_executions[0]["id"]),
+        attempt_number=1, max_attempts=3, expires_in_seconds=2,
+    )
+    statement = text(
+        "SELECT last_heartbeat_at, lease_expires_at, updated_at "
+        "FROM governance_evaluation_suite_attempts WHERE id=:attempt_id"
+    )
+    lock_session = factory()
+    heartbeat_connection = factory.kw["bind"].connect()
+    try:
+        heartbeat_pid = heartbeat_connection.scalar(text("SELECT pg_backend_pid()"))
+        heartbeat_connection.rollback()
+        before = lock_session.execute(statement, {"attempt_id": attempt_id}).one()
+        lock_session.execute(
+            text("SELECT id FROM governance_evaluation_suite_attempts "
+                 "WHERE id=:attempt_id FOR UPDATE"),
+            {"attempt_id": attempt_id},
+        )
+        queue = PostgresEvaluationWorkerQueue(lambda: factory(bind=heartbeat_connection))
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(
+                queue.heartbeat, _principal(scenario, subject),
+                LeaseCredential(attempt_id=attempt_id, raw_token="A" * 43),
+            )
+            try:
+                deadline = time.monotonic() + 5
+                while not lock_session.scalar(
+                    text("SELECT cardinality(pg_blocking_pids(:pid)) > 0"),
+                    {"pid": heartbeat_pid},
+                ):
+                    assert not future.done(), "heartbeat returned without waiting for the attempt lock"
+                    assert time.monotonic() < deadline, "heartbeat never reached the lock"
+                    time.sleep(0.01)
+                lock_session.execute(
+                    text("SELECT pg_sleep(GREATEST(0, EXTRACT(EPOCH FROM "
+                         "CAST(:expires AS TIMESTAMPTZ) - clock_timestamp())) + 0.03)"),
+                    {"expires": before.lease_expires_at},
+                )
+            finally:
+                lock_session.rollback()
+            with pytest.raises(WorkerQueueError) as caught:
+                future.result(timeout=5)
+            assert caught.value.code == "lease_lost"
+        after = lock_session.execute(statement, {"attempt_id": attempt_id}).one()
+        assert after == before
+    finally:
+        lock_session.rollback()
+        lock_session.close()
+        heartbeat_connection.close()

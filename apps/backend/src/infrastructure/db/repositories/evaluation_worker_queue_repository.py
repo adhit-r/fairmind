@@ -255,7 +255,6 @@ class PostgresEvaluationWorkerQueue:
         try:
             self._require_postgresql(session)
             with session.begin():
-                now = self._database_now(session)
                 row = session.execute(
                     text(
                         "SELECT attempt.id, attempt.technical_status, "
@@ -275,6 +274,7 @@ class PostgresEvaluationWorkerQueue:
                         "principal_subject": principal.principal_subject,
                     },
                 ).mappings().one_or_none()
+                now = self._database_now(session)
                 supplied_hash = _lease_token_hash(credential.raw_token)
                 if (
                     row is None
