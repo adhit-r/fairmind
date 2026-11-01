@@ -1,0 +1,93 @@
+---
+import LegalDocument from '../components/marketing/LegalDocument.astro';
+---
+
+<LegalDocument
+  title="Website Terms and Conditions"
+  description="The terms governing use of FairMind’s public website, research material, and product information."
+  updated="31 July 2026"
+  readingTime="7 minutes"
+>
+  <Fragment slot="exact">
+    <h2>1. Acceptance and scope</h2>
+    <p>
+      These terms apply to use of the public FairMind website and its published materials. Access
+      to a FairMind product workspace may be governed by a separate agreement. If you do not agree
+      to these terms, do not use the website.
+    </p>
+
+    <h2>2. Informational and research material</h2>
+    <p>
+      Website content describes product capabilities, implementation states, research methods, and
+      known limitations. Research-stage, metadata-only, external-provider, unavailable, and
+      validated paths are not interchangeable. Nothing on the website is a guarantee that an AI
+      system is safe, lawful, compliant, certified, or suitable for release.
+    </p>
+
+    <h2>3. Human decision boundary</h2>
+    <p>
+      Evaluation outputs, findings, evidence mappings, and readiness signals support review. They
+      do not replace professional judgment or an accountable decision-maker. You remain responsible
+      for deciding how to use outputs in your technical, legal, security, and governance context.
+    </p>
+
+    <h2>4. Acceptable use</h2>
+    <p>
+      Do not interfere with the website, attempt unauthorized access, abuse access-request forms,
+      introduce malicious code, scrape in a manner that degrades service, or use published material
+      to misrepresent a certification, endorsement, or regulatory conclusion.
+    </p>
+
+    <h2>5. Intellectual property and open source</h2>
+    <p>
+      Website design, copy, and branding are protected by applicable rights. Code and research
+      artifacts published in the FairMind repository are governed by the licenses and notices in
+      that repository. A public link does not remove those terms.
+    </p>
+
+    <h2>6. Availability and changes</h2>
+    <p>
+      FairMind may change or discontinue website content and may update these terms. The current
+      version and date appear on this page. We do not promise uninterrupted availability or that
+      every described capability is deployed in every environment.
+    </p>
+
+    <h2>7. Disclaimers</h2>
+    <p>
+      The public website and its content are provided on an “as available” basis to the extent
+      permitted by law. FairMind disclaims implied warranties that cannot be supported by the
+      evidence and scope described on the page.
+    </p>
+  </Fragment>
+
+  <Fragment slot="plain">
+    <h2>The short version</h2>
+    <p>
+      The website explains what FairMind is building and what the current evidence supports. It is
+      not a certificate generator, legal opinion, or automatic permission to ship an AI system.
+    </p>
+    <h2>Use the labels</h2>
+    <p>
+      “Validated path,” “active research,” “metadata only,” and “unavailable” describe materially
+      different capability states. Please do not flatten them into “FairMind verified this.”
+    </p>
+    <h2>Keep a person accountable</h2>
+    <p>
+      Use technical results as evidence. Review their limitations. Then let the responsible person
+      make and document the decision.
+    </p>
+  </Fragment>
+
+  <Fragment slot="path">
+    <h2>Responsibility path</h2>
+    <table>
+      <thead><tr><th>Stage</th><th>FairMind supplies</th><th>You remain responsible for</th></tr></thead>
+      <tbody>
+        <tr><td>Evaluation</td><td>Scoped result, provenance, and limitations</td><td>Correct system definition and appropriate test choice</td></tr>
+        <tr><td>Finding</td><td>Evidence-linked issue and suggested next work</td><td>Impact analysis and remediation decision</td></tr>
+        <tr><td>Retest</td><td>Linked current result with retained history</td><td>Confirming the change addresses the real risk</td></tr>
+        <tr><td>Governance</td><td>Review packet, open gaps, and rationale context</td><td>The final release or operating decision</td></tr>
+      </tbody>
+    </table>
+  </Fragment>
+</LegalDocument>

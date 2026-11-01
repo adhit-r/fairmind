@@ -1,0 +1,83 @@
+---
+interface Proof {
+  label: string;
+  value: string;
+  note: string;
+}
+
+interface Action {
+  label: string;
+  href: string;
+}
+
+interface Props {
+  signal: string;
+  title: string;
+  accent: string;
+  description: string;
+  proofs: Proof[];
+  primary?: Action;
+  secondary?: Action;
+  dark?: boolean;
+}
+
+const {
+  signal,
+  title,
+  accent,
+  description,
+  proofs,
+  primary,
+  secondary,
+  dark = false,
+} = Astro.props;
+---
+
+<section class:list={['route-hero', dark && 'route-hero-dark']} data-route-hero>
+  <div class="route-hero-copy">
+    <p class="route-signal">{signal}</p>
+    <h1>{title} <span>{accent}</span></h1>
+    <p class="route-hero-description">{description}</p>
+    {(primary || secondary) && (
+      <div class="route-actions">
+        {primary && <a class="button button-primary" href={primary.href}>{primary.label}</a>}
+        {secondary && <a class="button button-secondary" href={secondary.href}>{secondary.label}</a>}
+      </div>
+    )}
+  </div>
+
+  <div class="route-proof-world" aria-label="Page summary">
+    <div class="route-proof-stage" data-route-hero-stage>
+      {proofs.map((proof, index) => (
+        <article class:list={['route-proof', index === 0 && 'is-primary']}>
+          <span>{proof.label}</span>
+          <strong>{proof.value}</strong>
+          <p>{proof.note}</p>
+        </article>
+      ))}
+    </div>
+  </div>
+</section>
+
+<script>
+  document.querySelectorAll('[data-route-hero]').forEach((hero) => {
+    if (!(hero instanceof HTMLElement) || hero.dataset.enhanced === 'true') return;
+    hero.dataset.enhanced = 'true';
+    const stage = hero.querySelector('[data-route-hero-stage]');
+    if (!(stage instanceof HTMLElement) || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    hero.addEventListener('pointermove', (event) => {
+      if (!(event instanceof PointerEvent) || event.pointerType === 'touch') return;
+      const bounds = hero.getBoundingClientRect();
+      const x = (event.clientX - bounds.left) / bounds.width - 0.5;
+      const y = (event.clientY - bounds.top) / bounds.height - 0.5;
+      stage.style.setProperty('--route-rx', `${(-y * 5).toFixed(2)}deg`);
+      stage.style.setProperty('--route-ry', `${(x * 8).toFixed(2)}deg`);
+    });
+
+    hero.addEventListener('pointerleave', () => {
+      stage.style.setProperty('--route-rx', '0deg');
+      stage.style.setProperty('--route-ry', '0deg');
+    });
+  });
+</script>

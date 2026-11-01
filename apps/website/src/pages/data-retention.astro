@@ -1,0 +1,115 @@
+---
+import LegalDocument from '../components/marketing/LegalDocument.astro';
+---
+
+<LegalDocument
+  title="Data Retention Policy"
+  description="Maximum retention by website data category, with deletion, backup, and exception rules stated plainly."
+  updated="1 August 2026"
+  readingTime="7 minutes"
+>
+  <Fragment slot="exact">
+    <h2>1. Policy rule</h2>
+    <p>
+      FairMind keeps public-website information for the shortest period reasonably needed for the
+      stated purpose, subject to the maximums below. A maximum is not a promise to keep information
+      for the entire period. Data may be deleted or aggregated sooner.
+    </p>
+
+    <h2>2. Retention schedule</h2>
+    <table>
+      <thead><tr><th>Category</th><th>Maximum active retention</th><th>Start point</th><th>Reason</th></tr></thead>
+      <tbody>
+        <tr><td>Anonymous web and product analytics events</td><td>12 months</td><td>Event timestamp</td><td>Journey and content analysis across meaningful periods</td></tr>
+        <tr><td>Session replays</td><td>30 days</td><td>Recorded session end</td><td>Short-lived interaction and usability diagnosis</td></tr>
+        <tr><td>Web performance, heatmap, dead-click, rage-click, media, and client-error events</td><td>12 months</td><td>Event timestamp</td><td>Regression comparison and incident diagnosis</td></tr>
+        <tr><td>Contact and access-request submissions</td><td>24 months</td><td>Last substantive interaction</td><td>Reply, qualification, and relationship context</td></tr>
+        <tr><td>Hosting, delivery, and abuse-prevention logs under FairMind's control</td><td>90 days</td><td>Request or security event</td><td>Availability, investigation, and abuse prevention</td></tr>
+        <tr><td>Deletion-request and consent-response audit records received by FairMind</td><td>3 years</td><td>Request closure or superseded choice</td><td>Demonstrate that the request was handled</td></tr>
+      </tbody>
+    </table>
+
+    <h2>3. Consent-manager records</h2>
+    <p>
+      The external consent manager owns the durable preference record and its configured retention.
+      FairMind's website bridge receives only the current analytics decision, source, and policy
+      version in memory. When the manager is selected and configured, its published retention must
+      not exceed the period reasonably required to demonstrate consent and withdrawal.
+    </p>
+
+    <h2>4. Deletion and withdrawal</h2>
+    <p>
+      Analytics withdrawal stops future capture and session replay; it does not rewrite events that
+      were lawfully collected before withdrawal. A verified deletion request is removed from active
+      systems within 30 days unless an exception applies. Where a provider exposes separate deletion
+      queues, FairMind initiates the corresponding provider deletion as part of the same request.
+    </p>
+
+    <h2>5. Backups</h2>
+    <p>
+      Deleted information may remain in encrypted, access-restricted backups until the backup expires,
+      for no more than 90 additional days. Backups are not restored to avoid a completed deletion. If
+      restoration is required for disaster recovery, deletion records are reapplied before ordinary use.
+    </p>
+
+    <h2>6. Aggregation and de-identification</h2>
+    <p>
+      FairMind may retain statistical or aggregated information longer when it no longer identifies
+      or can reasonably be linked to an individual or device. Removing a direct field while keeping a
+      linkable identifier is not treated as de-identification.
+    </p>
+
+    <h2>7. Exceptions</h2>
+    <p>
+      FairMind may retain limited information beyond a scheduled period when required by law, a legal
+      hold, fraud or security investigation, dispute, contractual record duty, or a request from the
+      person to preserve it. Access is restricted to the exception purpose, and deletion resumes when
+      the exception ends.
+    </p>
+
+    <h2>8. Configuration accountability</h2>
+    <p>
+      Service settings, exports, and deletion jobs must match this schedule before a data category is
+      enabled. A policy page is not a retention control by itself. FairMind reviews the schedule when a
+      provider, purpose, or legal requirement changes and updates the version and date shown above.
+    </p>
+  </Fragment>
+
+  <Fragment slot="plain">
+    <h2>The short version</h2>
+    <p>
+      Most anonymous analytics lasts at most 12 months. Replay lasts 30 days. Website forms last at
+      most 24 months after the conversation ends. Routine logs under FairMind's control last 90 days.
+    </p>
+    <h2>Why the dates differ</h2>
+    <p>
+      A replay is useful for a short debugging window. A business conversation needs enough context
+      for a follow-up. A deletion record may need to outlive both so FairMind can prove the deletion
+      happened. Giving every table row “forever” would be simpler and indefensible.
+    </p>
+    <h2>What deletion means</h2>
+    <p>
+      Active copies are removed within 30 days after verification, provider queues are included, and
+      encrypted backups age out within 90 additional days. Legal holds and security investigations are
+      narrow exceptions, not a second retention policy hiding in a trench coat.
+    </p>
+  </Fragment>
+
+  <Fragment slot="path">
+    <h2>Retention lifecycle</h2>
+    <table>
+      <thead><tr><th>Stage</th><th>Control</th><th>Deadline</th><th>Evidence</th></tr></thead>
+      <tbody>
+        <tr><td>Collect</td><td>Purpose and consent gate</td><td>Before data enters a provider</td><td>Configured category and policy version</td></tr>
+        <tr><td>Use</td><td>Access restricted to the stated purpose</td><td>During active retention</td><td>Provider and access configuration</td></tr>
+        <tr><td>Expire</td><td>Provider retention or deletion job</td><td>Category maximum</td><td>Deletion setting, job, or provider record</td></tr>
+        <tr><td>Delete on request</td><td>Verify, remove active copies, queue providers</td><td>Within 30 days unless an exception applies</td><td>Request closure record</td></tr>
+        <tr><td>Age out backups</td><td>Restricted backup lifecycle</td><td>Within 90 additional days</td><td>Backup schedule</td></tr>
+      </tbody>
+    </table>
+    <p>
+      For questions or a verified deletion request, use the <a href="/contact">contact page</a> and
+      identify the relevant submission without sending credentials or production AI data.
+    </p>
+  </Fragment>
+</LegalDocument>

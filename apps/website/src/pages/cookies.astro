@@ -1,0 +1,103 @@
+---
+import LegalDocument from '../components/marketing/LegalDocument.astro';
+---
+
+<LegalDocument
+  title="Cookie Policy"
+  description="How FairMind uses cookies and consent controls, what PostHog may store, and how withdrawal reaches the SDK."
+  updated="1 August 2026"
+  readingTime="5 minutes"
+>
+  <Fragment slot="exact">
+    <h2>1. The consent manager owns the choice</h2>
+    <p>
+      FairMind does not render or store a separate cookie-banner preference. An external consent
+      management platform presents the choice, records it under its own controls, and passes the
+      current analytics decision to this website. The website keeps that decision in memory only
+      long enough to apply it to the analytics SDK.
+    </p>
+
+    <h2>2. Analytics is off before opt-in</h2>
+    <p>
+      PostHog analytics does not initialize unless the external consent manager explicitly passes
+      an analytics opt-in. The integration also requires a FairMind-specific PostHog project token
+      and regional ingestion host. Missing configuration, a denied choice, Global Privacy Control,
+      or supported Do Not Track signals keep analytics inactive.
+    </p>
+
+    <h2>3. Storage used after opt-in</h2>
+    <p>
+      After opt-in, PostHog may use first-party cookies and browser local storage to maintain an
+      anonymous visitor identifier, session state, attribution, and the SDK's capture preference.
+      PostHog storage keys commonly begin with <code>ph_</code> and include the FairMind project
+      identifier. Exact names may vary with SDK versions and project configuration.
+    </p>
+    <p>
+      FairMind does not identify marketing-site visitors to PostHog and does not send form values,
+      names, email addresses, messages, request bodies, response bodies, headers, or console logs.
+      Form controls are excluded from interaction autocapture, and session replay masks every input
+      plus the full form surface.
+    </p>
+
+    <h2>4. What analytics may measure</h2>
+    <ul>
+      <li>Page views, page exits, referring source, campaign attribution, and anonymous sessions.</li>
+      <li>Navigation, calls to action, section visibility, scroll depth, and named product interactions.</li>
+      <li>Form start, validation block, and submit events without field names or field contents.</li>
+      <li>Core Web Vitals, network timing, unhandled browser errors, heatmaps, dead clicks, and rage clicks.</li>
+      <li>Video or audio play, pause, progress, and completion without media contents being uploaded.</li>
+      <li>Consent-gated session replay with the masking rules described above.</li>
+    </ul>
+
+    <h2>5. Withdrawal</h2>
+    <p>
+      When the consent manager passes a denial or withdrawal, FairMind removes its analytics event
+      listeners, stops session recording, opts the PostHog SDK out of capture, and resets the active
+      anonymous analytics state. The external consent manager remains responsible for presenting
+      and retaining the preference record.
+    </p>
+
+    <h2>6. Consent-manager integration contract</h2>
+    <p>
+      The preferred handoff is
+      <code>window.fairmindConsent.setConsent(&#123; analytics, source, policyVersion &#125;)</code>.
+      A consent manager may instead dispatch <code>fairmind:cmp-consent</code> with the same fields in
+      the event detail. The <code>analytics</code> field must be a boolean. Neither interface receives
+      form data or a visitor identity.
+    </p>
+  </Fragment>
+
+  <Fragment slot="plain">
+    <h2>The short version</h2>
+    <p>
+      The website has no FairMind-made cookie banner. Your consent manager makes and remembers the
+      choice. FairMind only receives “analytics yes” or “analytics no,” plus the consent source and
+      policy version.
+    </p>
+    <h2>Before yes</h2>
+    <p>No PostHog analytics, replay, analytics cookie, or analytics local-storage record is created.</p>
+    <h2>After yes</h2>
+    <p>
+      We can understand which pages and product explanations work, where journeys break, and how
+      the site performs. We do not need the contents of your request form to learn that a form was
+      started or submitted. The form contents have a different job and a different data path.
+    </p>
+    <h2>After no</h2>
+    <p>Capture and replay stop. A cookie preference still cannot promote itself to model approver.</p>
+  </Fragment>
+
+  <Fragment slot="path">
+    <h2>Consent and analytics data path</h2>
+    <table>
+      <thead><tr><th>State</th><th>Website action</th><th>Browser storage</th><th>Network effect</th></tr></thead>
+      <tbody>
+        <tr><td>No CMP decision</td><td>Wait</td><td>No PostHog storage</td><td>No PostHog analytics</td></tr>
+        <tr><td>Analytics denied</td><td>Keep capture off</td><td>No new analytics storage</td><td>No analytics events or replay</td></tr>
+        <tr><td>Analytics allowed</td><td>Initialize and opt in PostHog</td><td>Anonymous SDK and session state may be stored</td><td>Privacy-filtered analytics may be sent</td></tr>
+        <tr><td>Consent withdrawn</td><td>Stop, opt out, reset</td><td>Active analytics state is reset</td><td>Future analytics stops</td></tr>
+        <tr><td>GPC or supported DNT</td><td>Block activation</td><td>No PostHog storage</td><td>No PostHog analytics</td></tr>
+      </tbody>
+    </table>
+    <p>Retention periods are published in the <a href="/data-retention">Data Retention Policy</a>.</p>
+  </Fragment>
+</LegalDocument>

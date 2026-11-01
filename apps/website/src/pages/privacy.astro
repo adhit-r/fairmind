@@ -1,0 +1,126 @@
+---
+import LegalDocument from '../components/marketing/LegalDocument.astro';
+---
+
+<LegalDocument
+  title="Privacy Policy"
+  description="How FairMind collects, uses, shares, retains, and protects information through this website."
+  updated="1 August 2026"
+  readingTime="8 minutes"
+>
+  <Fragment slot="exact">
+    <h2>1. Scope</h2>
+    <p>
+      This Privacy Policy applies to the public FairMind website, consent-gated website analytics, and the
+      information submitted through its contact and access-request forms. Product workspaces may
+      present additional notices when their processing differs from this website.
+    </p>
+
+    <h2>2. Information you provide</h2>
+    <p>
+      When you contact FairMind or request access, we process the fields you choose to submit,
+      which may include your name, business email, organization, role, selected use case, and
+      message. Do not submit model secrets, production prompts, regulated datasets, credentials,
+      or evaluation artifacts through the public website forms.
+    </p>
+
+    <h2>3. Consent-gated analytics</h2>
+    <p>
+      If you allow analytics through the external consent manager, FairMind uses PostHog to measure
+      anonymous page and session activity, attribution, navigation, calls to action, viewed sections,
+      scroll depth, product interactions, form-start and submit metadata, browser errors, performance,
+      heatmaps, dead and rage clicks, media engagement, and masked session replay. FairMind does not
+      call PostHog's identify API for public-site visitors.
+    </p>
+    <p>
+      Analytics excludes form values, field names, typed text, names, email addresses, messages,
+      request and response bodies, network headers, copied text, and browser console logs. URLs and
+      referrers are reduced to origin and path before capture. Personal-data query parameters are
+      masked. Session replay masks all inputs and the complete form surface.
+    </p>
+
+    <h2>4. Website operation data</h2>
+    <p>
+      Hosting and delivery infrastructure may process routine request information such as time,
+      requested path, response status, user agent, and network address for availability, security,
+      and abuse prevention. This infrastructure processing is separate from optional PostHog analytics.
+    </p>
+
+    <h2>5. Purposes</h2>
+    <ul>
+      <li>Respond to access requests and questions you initiate.</li>
+      <li>Understand which product explanations and evidence journeys are useful.</li>
+      <li>Find broken navigation, interaction friction, client errors, and performance regressions.</li>
+      <li>Operate, secure, diagnose, and improve the public website.</li>
+      <li>Keep records needed to manage a business relationship or meet legal obligations.</li>
+    </ul>
+
+    <h2>6. Providers and disclosure</h2>
+    <p>
+      Netlify hosts and delivers the website. Formspree receives contact and access-request form
+      submissions. PostHog receives optional analytics only after the external consent manager opts
+      analytics in. The consent manager itself processes the preference record under its configured
+      notice. FairMind does not sell website-submission or analytics data.
+    </p>
+    <p>
+      FairMind may disclose information when required by law, to protect the service, or as part of
+      a business transaction subject to appropriate safeguards. Provider locations may involve
+      international processing; FairMind uses the provider account region and contractual controls
+      selected for the service.
+    </p>
+
+    <h2>7. Retention and security</h2>
+    <p>
+      The <a href="/data-retention">Data Retention Policy</a> publishes category-specific maximums,
+      deletion timing, backup handling, and exceptions. No security method is absolute; FairMind
+      uses proportionate technical and organizational measures rather than claiming perfect security.
+    </p>
+
+    <h2>8. Your choices</h2>
+    <p>
+      Use the external consent manager to allow or withdraw analytics. Where applicable, you may ask
+      about, correct, or request deletion of information you submitted. Use the contact page and
+      describe the request precisely enough for FairMind to locate the relevant submission. FairMind
+      may retain limited records required for security, law, or an ongoing business relationship.
+    </p>
+  </Fragment>
+
+  <Fragment slot="plain">
+    <h2>The short version</h2>
+    <p>
+      We receive what you deliberately submit, routine hosting logs, and—only after analytics
+      consent—privacy-filtered PostHog events. We use the information to answer you, keep the site
+      working, and learn where the explanation or journey fails.
+    </p>
+    <h2>Two separate data paths</h2>
+    <p>
+      A form submission can include your contact details because you asked for a reply. Analytics
+      never receives those field values. It only learns that an anonymous visitor started or
+      submitted the form. Device-scoped analytics consent is not person-scoped permission to contact you.
+    </p>
+    <h2>What not to send</h2>
+    <p>
+      Passwords, API keys, confidential prompts, customer records, regulated datasets, or raw
+      evaluation evidence. The public website is not an evidence-ingestion channel.
+    </p>
+    <h2>Your control</h2>
+    <p>
+      Withdraw analytics through the external consent manager. Contact FairMind to ask about,
+      correct, or delete a website submission where applicable.
+    </p>
+  </Fragment>
+
+  <Fragment slot="path">
+    <h2>Website data path</h2>
+    <table>
+      <thead><tr><th>Input</th><th>Destination</th><th>Purpose</th><th>Boundary</th></tr></thead>
+      <tbody>
+        <tr><td>Access-request fields</td><td>Formspree, then FairMind request handling</td><td>Reply and qualification</td><td>Only fields you submit; not sent to PostHog</td></tr>
+        <tr><td>Contact message</td><td>Formspree, then FairMind communication workflow</td><td>Respond to your question</td><td>Not a product evidence channel; not sent to PostHog</td></tr>
+        <tr><td>Optional analytics</td><td>PostHog project region</td><td>Journey, interaction, reliability, and performance analysis</td><td>Consent-gated, anonymous, filtered, and masked</td></tr>
+        <tr><td>Request metadata</td><td>Netlify hosting and delivery logs</td><td>Availability and security</td><td>Infrastructure-level processing</td></tr>
+        <tr><td>Consent preference</td><td>External consent manager</td><td>Remember and prove your choice</td><td>FairMind's bridge keeps no separate durable copy</td></tr>
+      </tbody>
+    </table>
+  </Fragment>
+</LegalDocument>
