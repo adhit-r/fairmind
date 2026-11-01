@@ -3316,3 +3316,59 @@ class GovernanceAuditReport(Base):
 
     def __repr__(self) -> str:
         return f"<GovernanceAuditReport(id={self.id}, type={self.report_type})>"
+
+
+class PackInstall(Base):
+    """An agentic pack an organization has switched on."""
+
+    __tablename__ = "pack_installs"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    pack_id = Column(String, nullable=False)
+    installed_by = Column(String, nullable=True)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+    __table_args__ = (
+        Index("idx_pack_installs_org_pack", "org_id", "pack_id", unique=True),
+    )
+
+
+class WorkflowRun(Base):
+    """One execution of a pack workflow for an organization."""
+
+    __tablename__ = "workflow_runs"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    workflow_id = Column(String, nullable=False, index=True)
+    workflow_version = Column(String, nullable=False)
+    ai_system_id = Column(String, nullable=True)
+    status = Column(String, nullable=False, default="queued")  # queued | running | waiting | blocked | done | failed
+    current_step = Column(String, nullable=True)
+    approval_request_id = Column(String, nullable=True)
+    started_by = Column(String, nullable=True)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    finished_at = Column(String, nullable=True)
+
+
+class WorkflowRunEvent(Base):
+    """Append-only, hash-chained event of a workflow run."""
+
+    __tablename__ = "workflow_run_events"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    run_id = Column(String, nullable=False, index=True)
+    seq = Column(Integer, nullable=False)
+    kind = Column(String, nullable=False)
+    step_id = Column(String, nullable=True)
+    payload_json = Column(Text, nullable=False, default="{}")
+    canonical_json = Column(Text, nullable=False)
+    prev_hash = Column(String, nullable=False)
+    hash = Column(String, nullable=False)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+    __table_args__ = (
+        Index("idx_workflow_run_events_run_seq", "run_id", "seq", unique=True),
+    )
