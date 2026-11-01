@@ -77,6 +77,7 @@ jobs:
       working-directory: apps/backend
       run: |
         grep -v -E '"name": "(aiosqlite|databases)"' backend.log > backend.filtered.log || true
+        echo '::group::key lines'; grep -E 'Database identities|Database tables ready|Could not create table|Login error|table creation failed|Failed to initialize|ORM table creation' backend.log | head -n 60; echo '::endgroup::'
         echo '::group::startup'; head -n 200 backend.filtered.log; echo '::endgroup::'
         echo '::group::tail'; tail -n 300 backend.filtered.log; echo '::endgroup::'
 
@@ -160,6 +161,7 @@ jobs:
       working-directory: apps/backend
       run: |
         grep -v -E '"name": "(aiosqlite|databases)"' backend.log > backend.filtered.log || true
+        echo '::group::key lines'; grep -E 'Database identities|Database tables ready|Could not create table|Login error|table creation failed|Failed to initialize|ORM table creation' backend.log | head -n 60; echo '::endgroup::'
         echo '::group::startup'; head -n 200 backend.filtered.log; echo '::endgroup::'
         echo '::group::tail'; tail -n 300 backend.filtered.log; echo '::endgroup::'
 
