@@ -45,7 +45,7 @@ jobs:
     - name: Start backend server
       working-directory: apps/backend
       run: |
-        uv run uvicorn api.main:app --host 0.0.0.0 --port 8000 &
+        uv run uvicorn api.main:app --host 0.0.0.0 --port 8000 > backend.log 2>&1 &
         sleep 5
       env:
         APP_ENV: development
@@ -71,6 +71,12 @@ jobs:
         E2E_BASE_URL: http://localhost:1111
         E2E_API_URL: http://localhost:8000
         E2E_HEADLESS: "true"
+
+    - name: Backend log
+      if: always()
+      working-directory: apps/backend
+      run: tail -n 400 backend.log
+
     
     - name: Upload test artifacts
       if: always()
@@ -119,7 +125,7 @@ jobs:
     - name: Start backend server
       working-directory: apps/backend
       run: |
-        uv run uvicorn api.main:app --host 0.0.0.0 --port 8000 &
+        uv run uvicorn api.main:app --host 0.0.0.0 --port 8000 > backend.log 2>&1 &
         sleep 5
       env:
         APP_ENV: development
@@ -146,4 +152,8 @@ jobs:
         E2E_API_URL: http://localhost:8000
         E2E_HEADLESS: "true"
 
+    - name: Backend log
+      if: always()
+      working-directory: apps/backend
+      run: tail -n 400 backend.log
 
