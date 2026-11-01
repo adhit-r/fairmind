@@ -1,0 +1,1416 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fairmind.ai/schemas/evidence-passport/1.0.0.json",
+  "title": "FairMind Evidence Passport",
+  "description": "Portable, reviewable supporting evidence from one immutable evaluation run. A valid passport is not a compliance or certification determination.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "passportId",
+    "passportRevision",
+    "claimBoundary",
+    "organizationId",
+    "workspaceId",
+    "aiSystem",
+    "evaluation",
+    "artifacts",
+    "frameworkMappings",
+    "review",
+    "findings",
+    "remediation",
+    "freshness",
+    "lineage",
+    "createdAt",
+    "canonicalContentHash"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "passportId": {
+      "$ref": "#/$defs/stableId"
+    },
+    "passportRevision": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Monotonic snapshot revision. Review, mapping, remediation, freshness, or lineage changes create a new revision without changing the immutable run hash."
+    },
+    "previousRevisionHash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "claimBoundary": {
+      "const": "supporting_evidence_only",
+      "description": "Prevents a passport from being represented as an automatic compliance or certification decision."
+    },
+    "organizationId": {
+      "$ref": "#/$defs/stableId"
+    },
+    "workspaceId": {
+      "$ref": "#/$defs/stableId"
+    },
+    "aiSystem": {
+      "$ref": "#/$defs/aiSystem"
+    },
+    "evaluation": {
+      "$ref": "#/$defs/evaluation"
+    },
+    "artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 50,
+      "items": {
+        "$ref": "#/$defs/artifactReference"
+      }
+    },
+    "frameworkMappings": {
+      "type": "array",
+      "maxItems": 500,
+      "items": {
+        "$ref": "#/$defs/frameworkMapping"
+      }
+    },
+    "review": {
+      "$ref": "#/$defs/passportReview"
+    },
+    "findings": {
+      "type": "array",
+      "maxItems": 500,
+      "items": {
+        "$ref": "#/$defs/finding"
+      }
+    },
+    "remediation": {
+      "type": "array",
+      "maxItems": 500,
+      "items": {
+        "$ref": "#/$defs/remediation"
+      }
+    },
+    "freshness": {
+      "$ref": "#/$defs/freshness"
+    },
+    "lineage": {
+      "$ref": "#/$defs/lineage"
+    },
+    "signatures": {
+      "type": "array",
+      "maxItems": 10,
+      "items": {
+        "$ref": "#/$defs/signature"
+      }
+    },
+    "createdAt": {
+      "$ref": "#/$defs/dateTime"
+    },
+    "canonicalContentHash": {
+      "$ref": "#/$defs/sha256",
+      "description": "SHA-256 over the complete RFC 8785 canonical passport snapshot after omitting canonicalContentHash and signatures."
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "passportRevision": {
+            "type": "integer",
+            "minimum": 2
+          }
+        },
+        "required": [
+          "passportRevision"
+        ]
+      },
+      "then": {
+        "required": [
+          "previousRevisionHash"
+        ],
+        "properties": {
+          "previousRevisionHash": {
+            "$ref": "#/$defs/sha256"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "stableId": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "dateTime": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "nonEmptyText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 10000
+    },
+    "shortText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "aiSystem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "systemId",
+        "name",
+        "kind",
+        "version",
+        "identityHash"
+      ],
+      "properties": {
+        "systemId": {
+          "$ref": "#/$defs/stableId"
+        },
+        "name": {
+          "$ref": "#/$defs/shortText"
+        },
+        "kind": {
+          "enum": [
+            "model",
+            "agent",
+            "composite_application"
+          ]
+        },
+        "version": {
+          "$ref": "#/$defs/shortText"
+        },
+        "identityHash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "deploymentId": {
+          "$ref": "#/$defs/stableId"
+        },
+        "ownerId": {
+          "$ref": "#/$defs/stableId"
+        },
+        "intendedUse": {
+          "$ref": "#/$defs/nonEmptyText"
+        }
+      }
+    },
+    "evaluation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourceType",
+        "sourceIdentifier",
+        "runId",
+        "capabilityState",
+        "assuranceSource",
+        "evaluator",
+        "suite",
+        "subject",
+        "scope",
+        "configurationHash",
+        "thresholds",
+        "result",
+        "runContentHash",
+        "capturedAt",
+        "limitations"
+      ],
+      "properties": {
+        "sourceType": {
+          "enum": [
+            "fairmind_evaluation",
+            "external_tool_import",
+            "company_integration",
+            "manual_registration",
+            "third_party_assessment"
+          ]
+        },
+        "sourceIdentifier": {
+          "$ref": "#/$defs/shortText"
+        },
+        "runId": {
+          "$ref": "#/$defs/stableId"
+        },
+        "capabilityState": {
+          "enum": [
+            "validated",
+            "metadata_only",
+            "external_provider",
+            "unavailable",
+            "insufficient_data"
+          ]
+        },
+        "assuranceSource": {
+          "enum": [
+            "fairmind_internal",
+            "company_integration",
+            "manual",
+            "third_party"
+          ]
+        },
+        "thirdPartyAssessor": {
+          "$ref": "#/$defs/thirdPartyAssessor"
+        },
+        "evaluator": {
+          "$ref": "#/$defs/evaluator"
+        },
+        "suite": {
+          "$ref": "#/$defs/suite"
+        },
+        "subject": {
+          "$ref": "#/$defs/subject"
+        },
+        "scope": {
+          "$ref": "#/$defs/evaluationScope"
+        },
+        "configurationHash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "seed": {
+          "oneOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "$ref": "#/$defs/shortText"
+            }
+          ]
+        },
+        "thresholds": {
+          "type": "array",
+          "maxItems": 200,
+          "items": {
+            "$ref": "#/$defs/threshold"
+          }
+        },
+        "environment": {
+          "$ref": "#/$defs/environment"
+        },
+        "result": {
+          "$ref": "#/$defs/evaluationResult"
+        },
+        "runContentHash": {
+          "$ref": "#/$defs/sha256",
+          "description": "Server-calculated SHA-256 over the immutable canonical execution envelope and ordered artifact-reference set; mapping and review state are excluded."
+        },
+        "capturedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "expiresAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "limitations": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/nonEmptyText"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "assuranceSource": {
+                "const": "third_party"
+              }
+            },
+            "required": [
+              "assuranceSource"
+            ]
+          },
+          "then": {
+            "required": [
+              "thirdPartyAssessor"
+            ],
+            "properties": {
+              "thirdPartyAssessor": {
+                "$ref": "#/$defs/thirdPartyAssessor"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "sourceType": {
+                "const": "third_party_assessment"
+              }
+            },
+            "required": [
+              "sourceType"
+            ]
+          },
+          "then": {
+            "required": [
+              "thirdPartyAssessor"
+            ],
+            "properties": {
+              "assuranceSource": {
+                "const": "third_party"
+              },
+              "thirdPartyAssessor": {
+                "$ref": "#/$defs/thirdPartyAssessor"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "capabilityState": {
+                "const": "unavailable"
+              }
+            },
+            "required": [
+              "capabilityState"
+            ]
+          },
+          "then": {
+            "properties": {
+              "result": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "const": "unavailable"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "capabilityState": {
+                "const": "insufficient_data"
+              }
+            },
+            "required": [
+              "capabilityState"
+            ]
+          },
+          "then": {
+            "properties": {
+              "result": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "const": "insufficient_data"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "thirdPartyAssessor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "identity",
+        "independenceAssertion"
+      ],
+      "properties": {
+        "identity": {
+          "$ref": "#/$defs/shortText"
+        },
+        "qualifications": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "$ref": "#/$defs/shortText"
+          }
+        },
+        "independenceAssertion": {
+          "type": "boolean"
+        }
+      }
+    },
+    "evaluator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version",
+        "adapterName",
+        "adapterVersion",
+        "runnerVersion"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/shortText"
+        },
+        "version": {
+          "$ref": "#/$defs/shortText"
+        },
+        "adapterName": {
+          "$ref": "#/$defs/shortText"
+        },
+        "adapterVersion": {
+          "$ref": "#/$defs/shortText"
+        },
+        "runnerVersion": {
+          "$ref": "#/$defs/shortText"
+        },
+        "runnerDigest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "codeCommit": {
+          "type": "string",
+          "minLength": 7,
+          "maxLength": 64,
+          "pattern": "^[0-9a-f]+$"
+        }
+      }
+    },
+    "suite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/shortText"
+        },
+        "version": {
+          "$ref": "#/$defs/shortText"
+        },
+        "taxonomy": {
+          "$ref": "#/$defs/shortText"
+        },
+        "trigger": {
+          "enum": [
+            "manual",
+            "ci",
+            "scheduled",
+            "release_gate",
+            "incident",
+            "integration_sync"
+          ]
+        }
+      }
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "subjectId",
+        "name",
+        "version",
+        "digest"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "model",
+            "agent",
+            "composite_application",
+            "dataset",
+            "prompt_set",
+            "pipeline",
+            "deployment"
+          ]
+        },
+        "subjectId": {
+          "$ref": "#/$defs/stableId"
+        },
+        "name": {
+          "$ref": "#/$defs/shortText"
+        },
+        "version": {
+          "$ref": "#/$defs/shortText"
+        },
+        "digest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "provider": {
+          "$ref": "#/$defs/shortText"
+        },
+        "endpoint": {
+          "type": "string",
+          "format": "uri",
+          "maxLength": 2048
+        }
+      }
+    },
+    "evaluationScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "intendedUse",
+        "inputFingerprint",
+        "sampleCount",
+        "exclusions"
+      ],
+      "properties": {
+        "intendedUse": {
+          "$ref": "#/$defs/nonEmptyText"
+        },
+        "inputFingerprint": {
+          "$ref": "#/$defs/sha256"
+        },
+        "datasetName": {
+          "$ref": "#/$defs/shortText"
+        },
+        "datasetVersion": {
+          "$ref": "#/$defs/shortText"
+        },
+        "datasetHash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "sampleCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "protectedGroups": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/shortText"
+          }
+        },
+        "locales": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 35
+          }
+        },
+        "exclusions": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/nonEmptyText"
+          }
+        }
+      }
+    },
+    "threshold": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "metric",
+        "operator",
+        "value",
+        "rationale"
+      ],
+      "properties": {
+        "metric": {
+          "$ref": "#/$defs/shortText"
+        },
+        "operator": {
+          "enum": [
+            "lt",
+            "lte",
+            "eq",
+            "gte",
+            "gt",
+            "between",
+            "in"
+          ]
+        },
+        "value": {
+          "$ref": "#/$defs/jsonScalarOrArray"
+        },
+        "unit": {
+          "$ref": "#/$defs/shortText"
+        },
+        "preRegisteredAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "rationale": {
+          "$ref": "#/$defs/nonEmptyText"
+        }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "operatingSystem": {
+          "$ref": "#/$defs/shortText"
+        },
+        "architecture": {
+          "$ref": "#/$defs/shortText"
+        },
+        "runtime": {
+          "$ref": "#/$defs/shortText"
+        },
+        "containerDigest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "region": {
+          "$ref": "#/$defs/shortText"
+        },
+        "hardware": {
+          "$ref": "#/$defs/shortText"
+        }
+      }
+    },
+    "evaluationResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "summary",
+        "metrics",
+        "startedAt",
+        "endedAt"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "passed",
+            "passed_with_limitations",
+            "failed",
+            "informational",
+            "error",
+            "unavailable",
+            "insufficient_data",
+            "unknown"
+          ]
+        },
+        "summary": {
+          "$ref": "#/$defs/nonEmptyText"
+        },
+        "metrics": {
+          "type": "array",
+          "maxItems": 1000,
+          "items": {
+            "$ref": "#/$defs/metric"
+          }
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "startedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "endedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "errorCode": {
+          "$ref": "#/$defs/shortText"
+        },
+        "errorMessage": {
+          "$ref": "#/$defs/nonEmptyText"
+        }
+      }
+    },
+    "metric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "value"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/shortText"
+        },
+        "value": {
+          "$ref": "#/$defs/jsonScalarOrArray"
+        },
+        "unit": {
+          "$ref": "#/$defs/shortText"
+        },
+        "slice": {
+          "$ref": "#/$defs/shortText"
+        },
+        "thresholdMet": {
+          "type": "boolean"
+        },
+        "confidenceInterval": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "lower",
+            "upper",
+            "level"
+          ],
+          "properties": {
+            "lower": {
+              "type": "number"
+            },
+            "upper": {
+              "type": "number"
+            },
+            "level": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 1
+            }
+          }
+        }
+      }
+    },
+    "jsonScalarOrArray": {
+      "oneOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "maxItems": 1000,
+          "items": {
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "artifactReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifactId",
+        "role",
+        "uri",
+        "sha256",
+        "mediaType",
+        "containsSensitiveData"
+      ],
+      "properties": {
+        "artifactId": {
+          "$ref": "#/$defs/stableId"
+        },
+        "role": {
+          "enum": [
+            "raw_output",
+            "report",
+            "log",
+            "dataset_manifest",
+            "model_manifest",
+            "prompt_manifest",
+            "configuration",
+            "other"
+          ]
+        },
+        "uri": {
+          "type": "string",
+          "format": "uri",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "mediaType": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 255,
+          "pattern": "^[^/\\s]+/[^/\\s]+$"
+        },
+        "sizeBytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "containsSensitiveData": {
+          "type": "boolean"
+        },
+        "retentionPolicy": {
+          "$ref": "#/$defs/shortText"
+        },
+        "redactionNote": {
+          "$ref": "#/$defs/nonEmptyText"
+        }
+      }
+    },
+    "frameworkMapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mappingId",
+        "framework",
+        "control",
+        "state",
+        "relation",
+        "rationale",
+        "suggestedBy",
+        "createdAt"
+      ],
+      "properties": {
+        "mappingId": {
+          "$ref": "#/$defs/stableId"
+        },
+        "framework": {
+          "$ref": "#/$defs/frameworkReference"
+        },
+        "control": {
+          "$ref": "#/$defs/controlReference"
+        },
+        "state": {
+          "enum": [
+            "candidate",
+            "accepted",
+            "rejected"
+          ]
+        },
+        "relation": {
+          "enum": [
+            "supports",
+            "contradicts",
+            "limits",
+            "supersedes"
+          ]
+        },
+        "rationale": {
+          "$ref": "#/$defs/nonEmptyText"
+        },
+        "suggestedBy": {
+          "$ref": "#/$defs/actorReference"
+        },
+        "createdAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "review": {
+          "$ref": "#/$defs/mappingReview"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "accepted"
+              }
+            },
+            "required": [
+              "state"
+            ]
+          },
+          "then": {
+            "required": [
+              "review"
+            ],
+            "properties": {
+              "review": {
+                "type": "object",
+                "properties": {
+                  "decision": {
+                    "const": "accepted"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "rejected"
+              }
+            },
+            "required": [
+              "state"
+            ]
+          },
+          "then": {
+            "required": [
+              "review"
+            ],
+            "properties": {
+              "review": {
+                "type": "object",
+                "properties": {
+                  "decision": {
+                    "const": "rejected"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "frameworkReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "versionLabel",
+        "sourceHash"
+      ],
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/stableId"
+        },
+        "versionLabel": {
+          "$ref": "#/$defs/shortText"
+        },
+        "sourceHash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "sourceUri": {
+          "type": "string",
+          "format": "uri",
+          "maxLength": 2048
+        }
+      }
+    },
+    "controlReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "externalId",
+        "assessmentId"
+      ],
+      "properties": {
+        "externalId": {
+          "$ref": "#/$defs/stableId"
+        },
+        "assessmentId": {
+          "$ref": "#/$defs/stableId"
+        }
+      }
+    },
+    "actorReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "actorType",
+        "actorId"
+      ],
+      "properties": {
+        "actorType": {
+          "enum": [
+            "user",
+            "service",
+            "adapter",
+            "external_assessor"
+          ]
+        },
+        "actorId": {
+          "$ref": "#/$defs/stableId"
+        },
+        "displayName": {
+          "$ref": "#/$defs/shortText"
+        }
+      }
+    },
+    "mappingReview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "decision",
+        "reviewer",
+        "reviewedAt",
+        "rationale",
+        "reviewVersion"
+      ],
+      "properties": {
+        "decision": {
+          "enum": [
+            "accepted",
+            "rejected"
+          ]
+        },
+        "reviewer": {
+          "$ref": "#/$defs/actorReference"
+        },
+        "reviewedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "rationale": {
+          "$ref": "#/$defs/nonEmptyText"
+        },
+        "reviewVersion": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "passportReview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "reviewVersion"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "pending",
+            "accepted",
+            "rejected"
+          ]
+        },
+        "reviewVersion": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reviewer": {
+          "$ref": "#/$defs/actorReference"
+        },
+        "reviewedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "rationale": {
+          "$ref": "#/$defs/nonEmptyText"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "accepted",
+                  "rejected"
+                ]
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "reviewer",
+              "reviewedAt",
+              "rationale"
+            ],
+            "properties": {
+              "reviewer": {
+                "$ref": "#/$defs/actorReference"
+              },
+              "reviewedAt": {
+                "$ref": "#/$defs/dateTime"
+              },
+              "rationale": {
+                "$ref": "#/$defs/nonEmptyText"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "findingId",
+        "severity",
+        "status",
+        "title",
+        "description",
+        "artifactIds",
+        "createdAt"
+      ],
+      "properties": {
+        "findingId": {
+          "$ref": "#/$defs/stableId"
+        },
+        "severity": {
+          "enum": [
+            "informational",
+            "low",
+            "medium",
+            "high",
+            "critical"
+          ]
+        },
+        "status": {
+          "enum": [
+            "open",
+            "accepted_risk",
+            "in_remediation",
+            "resolved",
+            "false_positive"
+          ]
+        },
+        "title": {
+          "$ref": "#/$defs/shortText"
+        },
+        "description": {
+          "$ref": "#/$defs/nonEmptyText"
+        },
+        "artifactIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 50,
+          "items": {
+            "$ref": "#/$defs/stableId"
+          }
+        },
+        "createdAt": {
+          "$ref": "#/$defs/dateTime"
+        }
+      }
+    },
+    "remediation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "remediationId",
+        "findingIds",
+        "status",
+        "ownerId",
+        "action"
+      ],
+      "properties": {
+        "remediationId": {
+          "$ref": "#/$defs/stableId"
+        },
+        "findingIds": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/stableId"
+          }
+        },
+        "status": {
+          "enum": [
+            "planned",
+            "in_progress",
+            "blocked",
+            "completed",
+            "verified"
+          ]
+        },
+        "ownerId": {
+          "$ref": "#/$defs/stableId"
+        },
+        "action": {
+          "$ref": "#/$defs/nonEmptyText"
+        },
+        "dueAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "completedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "verificationPassportId": {
+          "$ref": "#/$defs/stableId"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "completed",
+                  "verified"
+                ]
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "completedAt"
+            ],
+            "properties": {
+              "completedAt": {
+                "$ref": "#/$defs/dateTime"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "verified"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "verificationPassportId"
+            ],
+            "properties": {
+              "verificationPassportId": {
+                "$ref": "#/$defs/stableId"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "freshness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "policy",
+        "assessedAt",
+        "staleReasons",
+        "invalidationKeys"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "current",
+            "expiring",
+            "stale",
+            "superseded"
+          ]
+        },
+        "policy": {
+          "$ref": "#/$defs/nonEmptyText"
+        },
+        "assessedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "expiresAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "staleReasons": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/nonEmptyText"
+          }
+        },
+        "invalidationKeys": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 100,
+          "items": {
+            "enum": [
+              "system_version",
+              "subject_digest",
+              "dataset_hash",
+              "input_fingerprint",
+              "prompt_hash",
+              "configuration_hash",
+              "thresholds",
+              "evaluator_version",
+              "suite_version",
+              "framework_version",
+              "scope",
+              "time"
+            ]
+          }
+        },
+        "supersededByPassportId": {
+          "$ref": "#/$defs/stableId"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "superseded"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "supersededByPassportId"
+            ],
+            "properties": {
+              "supersededByPassportId": {
+                "$ref": "#/$defs/stableId"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "lineage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "predecessorPassportIds",
+        "retestOfPassportIds"
+      ],
+      "properties": {
+        "predecessorPassportIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/stableId"
+          }
+        },
+        "retestOfPassportIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/stableId"
+          }
+        }
+      }
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm",
+        "keyId",
+        "signedAt",
+        "value"
+      ],
+      "properties": {
+        "algorithm": {
+          "enum": [
+            "Ed25519",
+            "ES256",
+            "RS256"
+          ]
+        },
+        "keyId": {
+          "$ref": "#/$defs/stableId"
+        },
+        "signedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "value": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 8192,
+          "contentEncoding": "base64"
+        }
+      }
+    }
+  }
+}

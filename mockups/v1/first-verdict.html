@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FairMind · First verdict</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="fm.css">
+</head>
+<body data-page="systems">
+<div class="app">
+<nav class="rail" aria-label="Main"></nav>
+<main>
+  <header class="top">
+    <div>
+      <div class="crumb"><a href="systems.html">Systems</a> / New</div>
+      <h1 class="s">Your first verdict <span class="mono">step 3 of 4 · 06:40 elapsed</span></h1>
+      <p class="sub">Point FairMind at a model, choose the rules it answers to, and get a go or no go with the evidence behind it. Most teams finish in under 15 minutes.</p>
+    </div>
+  </header>
+
+  <div class="grid even">
+    <section>
+      <ol class="steps">
+        <li><span class="no ok">1</span><div>
+          <h3>Connect <span class="mono ok">connected 10:21</span></h3>
+          <p>Predictions file with outcomes and features. <span class="mono">s3://risk-models/loan-scoring/v4/predictions.parquet</span> · 48,210 rows</p>
+        </div></li>
+        <li><span class="no ok">2</span><div>
+          <h3>Map who the model decides about <span class="mono ok">3 mapped</span></h3>
+          <p>Target <span class="mono">approved</span>. Protected <span class="mono">gender</span>, <span class="mono">state</span>, and <span class="mono">age_band</span> inferred from <span class="mono">dob</span>, which you confirm after the run.</p>
+        </div></li>
+        <li><span class="no now">3</span><div>
+          <h3>Choose the rules it answers to</h3>
+          <p style="margin-bottom:6px">Picked from the use you described: retail loan approval in India, customers in the EU.</p>
+          <div class="opt"><span><b>RBI FREE-AI</b></span><b>on</b><small>Fairness, accountability and board oversight sutras</small></div>
+          <div class="opt"><span><b>EU AI Act, Annex III 5(b)</b></span><b>on</b><small>Credit scoring is high risk from <span class="mono due">2 Dec 2027</span></small></div>
+          <div class="opt"><span><b>DPDP Act 2023</b></span><b>on</b><small>Purpose and consent basis, checked against Olai</small></div>
+          <div class="opt"><span><b>NITI Aayog Responsible AI</b></span><button class="tl">Turn on</button><small>Principles only, no pass or fail tests</small></div>
+          <div class="do" style="margin-top:14px"><button class="go">Run the checks</button><button class="tl">Back</button></div>
+        </div></li>
+        <li><span class="no">4</span><div>
+          <h3>Read the verdict</h3>
+          <p>Nine pins, one decision, and a list of what only you can settle.</p>
+        </div></li>
+      </ol>
+    </section>
+
+    <section>
+      <h2 class="h2">Or from your terminal <span>same run, same ledger</span></h2>
+      <pre class="code" style="margin-top:12px">pip install fairmind
+fairmind login
+fairmind verdict predictions.parquet \
+  --target approved \
+  --protected gender,state,dob:age_band \
+  --framework rbi-free-ai,eu-ai-act:annex-iii-5b,dpdp</pre>
+      <div class="do" style="margin-top:10px"><button class="tl">Copy</button><span class="mono dim" style="font-size:11.5px">exits 1 on no go, so CI can block a release</span></div>
+
+      <figure class="fig" style="margin:28px 0 0">
+        <span class="c c1">Fig. 5</span><span class="c c2">Pins seat as checks finish</span>
+        <svg id="gate" role="img" aria-label="Interlock for a new system. Data and consent pins seated green. The rest are open, waiting for the run."></svg>
+        <span class="c c3">A preview from steps 1 and 2</span><span class="c c4">2 sealed · 7 to run</span>
+      </figure>
+    </section>
+  </div>
+</main>
+</div>
+<script src="fm.js"></script>
+<script>
+interlock(document.getElementById('gate'), [
+  { name: 'Loan scoring v4 · first run', pins: gate('oxxxxxoxx') }
+], { laneDepth: 120 });
+</script>
+</body>
+</html>
