@@ -7,6 +7,12 @@ on:
     branches: [ main, dev ]
   workflow_dispatch:
 
+# The backend signs this account in without a users table (development only;
+# see config.auth._e2e_admin). The same values drive the Playwright login.
+env:
+  E2E_ADMIN_EMAIL: e2e-admin@fairmind.ai
+  E2E_ADMIN_PASSWORD: e2e-only-never-a-real-account
+
 jobs:
   e2e-tests:
     runs-on: ubuntu-latest

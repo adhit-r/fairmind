@@ -2,6 +2,8 @@
 E2E tests for login flow.
 """
 
+import os
+
 import pytest
 from playwright.sync_api import Page
 from tests.e2e.pages.login_page import LoginPage
@@ -26,8 +28,8 @@ def test_login_successful(page: Page, base_url: str):
     
     assert login_page.is_login_form_ready(), "Login form should be ready"
 
-    test_email = "admin@fairmind.ai"
-    test_password = "admin123"
+    test_email = os.getenv("E2E_ADMIN_EMAIL", "admin@fairmind.ai")
+    test_password = os.getenv("E2E_ADMIN_PASSWORD", "admin123")
     
     # Perform login
     login_page.login(test_email, test_password)

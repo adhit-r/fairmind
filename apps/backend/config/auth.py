@@ -9,6 +9,8 @@ from fastapi import HTTPException, status, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import bcrypt
 import logging
+import secrets
+import uuid
 from enum import Enum
 from pydantic import BaseModel
 
@@ -273,6 +275,8 @@ class AuthManager:
         """Load a user from the users table by id."""
         if not user_id:
             return None
+        if user_id == E2E_ADMIN_ID:
+            return _e2e_admin()
         row = await _fetch_user_row("u.id = :key", str(user_id))
         return _user_from_row(row) if row else None
 
@@ -280,11 +284,17 @@ class AuthManager:
         """Load a user from the users table by email (case-insensitive)."""
         if not email:
             return None
+        e2e = _e2e_admin()
+        if e2e and email.lower() == e2e.email.lower():
+            return e2e
         row = await _fetch_user_row("lower(u.email) = lower(:key)", email)
         return _user_from_row(row) if row else None
 
     async def authenticate(self, email: str, password: str) -> Optional[User]:
         """Verify email and password against the users table."""
+        e2e = _e2e_admin()
+        if e2e and email.lower() == e2e.email.lower():
+            return e2e if secrets.compare_digest(password, settings.e2e_admin_password or "") else None
         row = await _fetch_user_row("lower(u.email) = lower(:key)", email)
         if not row or not row["is_active"] or not row["password_hash"]:
             return None
@@ -323,6 +333,28 @@ async def _fetch_user_row(where: str, key: str):
     from .database import get_db_connection
     async with get_db_connection() as db:
         return await db.fetch_one(f"SELECT {_USER_COLUMNS} FROM users u WHERE {where}", {"key": key})
+
+
+E2E_ADMIN_ID = "e2e-admin"
+
+
+def _e2e_admin() -> Optional[User]:
+    """The CI end-to-end admin: development only, enabled by E2E_ADMIN_EMAIL and
+    E2E_ADMIN_PASSWORD, never written to any table. Replaces the hard-coded
+    admin login that used to live in the login route."""
+    email, password = settings.e2e_admin_email, settings.e2e_admin_password
+    if not (settings.is_development and email and password):
+        return None
+    return User(
+        id=E2E_ADMIN_ID,
+        email=email,
+        username="e2e-admin",
+        role=UserRole.ADMIN,
+        is_active=True,
+        created_at=datetime.now(timezone.utc),
+        permissions=["*"],
+        org_id=str(uuid.uuid5(uuid.NAMESPACE_URL, f"fairmind-e2e:{email.lower()}")),
+    )
 
 
 def _user_from_row(row) -> User:

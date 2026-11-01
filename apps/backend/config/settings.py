@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     # Local development only: JWTAuthenticationMiddleware signs loopback
     # requests without a token in as this existing user. Ignored outside development.
     fairmind_dev_login_email: Optional[str] = None
+    # CI end-to-end runs only: a sign-in that needs no users table. Honoured only
+    # when both values are set and the environment is development; never stored.
+    e2e_admin_email: Optional[str] = None
+    e2e_admin_password: Optional[str] = None
     debug: bool = False
     
     # API Configuration
