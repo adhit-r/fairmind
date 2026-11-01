@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FairMind · Loan scoring v4</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="fm.css">
+</head>
+<body data-page="systems">
+<div class="app">
+<nav class="rail" aria-label="Main"></nav>
+<main>
+  <header class="top">
+    <div>
+      <div class="crumb"><a href="systems.html">Systems</a> / Credit</div>
+      <h1 class="s">Loan scoring v4 <span class="mono">SYS-0007 · v4.2.0 · mlflow://credit/loan-scoring/4</span></h1>
+      <p class="sub">Retail loan approval. <b>Annex III 5(b)</b>, <b>RBI FREE-AI</b> and <b>DPDP</b>. Owner: Model Risk.</p>
+    </div>
+    <span class="find">Search, or ask FairMind <kbd>⌘K</kbd></span>
+  </header>
+
+  <nav class="tabs" aria-label="System">
+    <a href="#" aria-current="page">Overview</a><a href="#">Evidence<span class="c">14</span></a><a href="#">Tests<span class="c">6</span></a><a href="#">Controls<span class="c">31</span></a><a href="#">Findings<span class="c">2</span></a><a href="#">Decisions<span class="c">3</span></a><a href="#">Activity</a>
+  </nav>
+
+  <div class="grid">
+    <section>
+      <figure class="fig" style="margin:0">
+        <span class="c c1">Fig. 4</span><span class="c c2">The gate of Loan scoring v4</span>
+        <svg id="gate" role="img" aria-label="Interlock with nine pins. Data, DI ratio, consent and model card seated green. EO gap and oversight wait with cobalt lamps 1 and 2. Calibration and explainability half seated, attested only. Monitoring open. The bar is down."></svg>
+        <span class="c c3">The bar lifts when all nine pins seat</span><span class="c c4">4 sealed · 2 lamps · 2 attested · 1 open · conf 0.58</span>
+      </figure>
+
+      <h2 class="h2" style="margin-top:28px">Pins <span>9 checks · FairMind-E matrix</span></h2>
+      <div class="kv"><span class="mono">DATA</span><span><b class="ok">sealed 09:12</b> · lineage from Suvadu, 48,210 rows <span class="mono dim">· b3e1a0</span></span></div>
+      <div class="kv"><span class="mono">DI RATIO</span><span><b class="ok">sealed 10:12</b> · 0.86 <span class="mono">[0.82, 0.90]</span> measured <span class="mono dim">· Art. 10(2)(f)</span></span></div>
+      <div class="kv"><span class="mono">EO GAP</span><span><b class="need">waiting for you</b> · needs the age-band mapping confirmed <span class="mono dim">· FREE-AI S3</span></span></div>
+      <div class="kv"><span class="mono">CALIB</span><span><b>attested</b> · vendor report, no test data <span class="mono dim">· tool-estimated</span></span></div>
+      <div class="kv"><span class="mono">EXPLAIN</span><span><b>attested</b> · team statement on reason codes <span class="mono dim">· manual</span></span></div>
+      <div class="kv"><span class="mono">OVERSIGHT</span><span><b class="need">waiting for you</b> · no named reviewer for declines <span class="mono dim">· Art. 14</span></span></div>
+      <div class="kv"><span class="mono">CONSENT</span><span><b class="ok">sealed 09:40</b> · purpose basis confirmed in Olai <span class="mono dim">· DPDP s.7</span></span></div>
+      <div class="kv"><span class="mono">CARD</span><span><b class="ok">sealed 2 Jun</b> · model card v4.2 signed <span class="mono dim">· 7c22f1</span></span></div>
+      <div class="kv"><span class="mono">MONITOR</span><span><b>open</b> · no production feed connected <span class="mono dim">· unknown</span></span></div>
+    </section>
+
+    <section>
+      <div class="box co">
+        <h3><span class="need">Conditional go</span><span class="mono">conf 0.58 · medium impact</span></h3>
+        <p>Measured evidence passes where it exists. Two checks rest on attestations, and two wait for you. Once both lamps clear, you can approve with conditions.</p>
+      </div>
+
+      <h2 class="h2" style="margin-top:24px">Waiting for you <span>2</span></h2>
+      <ol class="wl">
+        <li><span class="no">1</span><div>
+          <h3>Confirm age band is a protected attribute.</h3>
+          <p>Inferred from <span class="mono">dob</span> as five bands. The EO gap test reruns as soon as you confirm.</p>
+          <div class="ctx">run R-2027-0412 · FREE-AI S3 · Art. 10(2)(f)</div>
+          <div class="do"><button class="go">Confirm</button><button class="tl">Change mapping</button></div>
+        </div></li>
+        <li><span class="no">2</span><div>
+          <h3>Name the human reviewer for declines.</h3>
+          <p>Pick a role that can override a decline within one working day.</p>
+          <div class="ctx">Art. 14 · due Fri 11 Jun</div>
+          <div class="do"><button class="go">Assign</button><button class="tl">Hold</button></div>
+        </div></li>
+      </ol>
+
+      <h2 class="h2">Then you decide <span>Head of Model Risk</span></h2>
+      <div class="kv"><span>Conditions</span><span>Weekly DI monitoring. Re-test on any retrain. Expires <span class="mono">2 Sep 2027</span>.</span></div>
+      <div class="kv"><span>Cites</span><span class="mono">Art. 10(2)(f) · Art. 14 · FREE-AI S3 · DPDP s.7</span></div>
+      <div class="kv"><span>Seals to</span><span>ledger, with the evidence hashes above</span></div>
+      <div class="do" style="margin-top:14px"><button class="go" disabled style="opacity:.45;cursor:not-allowed">Approve with conditions</button><button class="tl">Hold</button><button class="tl">Reject</button></div>
+      <p class="dim" style="font-size:12px;margin-top:8px">Approve opens when lamps 1 and 2 are clear.</p>
+    </section>
+  </div>
+</main>
+</div>
+<script src="fm.js"></script>
+<script>
+interlock(document.getElementById('gate'), [
+  { name: 'Loan scoring v4 · SYS-0007', pins: gate('oonaanoox', { 2: 1, 5: 2 }) }
+], { laneDepth: 120 });
+</script>
+</body>
+</html>
