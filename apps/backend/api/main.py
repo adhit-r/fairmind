@@ -255,12 +255,13 @@ See the request/response examples in each endpoint for code samples in Python, J
 # CORS must be before other middleware to handle preflight OPTIONS requests
 # In development, allow all localhost origins
 cors_origins = settings.get_allowed_origins()
-if settings.is_development:
-    cors_origins = ["http://localhost:1111", "http://localhost:3000", "http://127.0.0.1:1111", "http://127.0.0.1:3000"]
+# Development: any loopback origin, whatever port the dev server picked.
+cors_origin_regex = r"^https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$" if settings.is_development else None
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
+    allow_origin_regex=cors_origin_regex,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["*"],

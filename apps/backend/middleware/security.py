@@ -420,6 +420,11 @@ class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
         user = await self.auth_manager.get_user_by_email(self.dev_login_email)
         if not user or not user.is_active:
             return None
+        permissions = list(user.permissions)
+        if user.org_id and await self._org_role(user.id, user.org_id) in ("owner", "admin"):
+            # Org owners and admins may change governance records (see
+            # GovernanceAssuranceService.may_mutate); carry that in the token.
+            permissions.append("model:write")
         now = datetime.now(timezone.utc)
         return TokenData(
             user_id=user.id,
@@ -428,9 +433,20 @@ class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
             token_type=TokenType.ACCESS,
             exp=now + timedelta(hours=1),
             iat=now,
-            permissions=user.permissions,
+            permissions=permissions,
             org_id=user.org_id,
         )
+
+    @staticmethod
+    async def _org_role(user_id: str, org_id: str):
+        from config.database import get_db_connection
+
+        async with get_db_connection() as db:
+            row = await db.fetch_one(
+                "SELECT role FROM org_members WHERE user_id = :user_id AND org_id = :org_id AND status = 'active'",
+                {"user_id": user_id, "org_id": org_id},
+            )
+        return row["role"] if row else None
     
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         # Always allow OPTIONS requests (CORS preflight)
