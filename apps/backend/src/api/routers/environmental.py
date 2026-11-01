@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from config.auth import TokenData, UserRole, get_current_active_user
+from config.settings import settings
 from database.connection import get_db
 from src.api.schemas.environmental import (
     ApproveRequest,
@@ -49,6 +50,12 @@ def _require_system_membership(
 ) -> str:
     assurance = GovernanceAssuranceService(db)
     membership = assurance.membership(str(org_id), current_user.user_id)
+    if membership is None and settings.is_development and current_user.org_id and str(current_user.org_id) == str(org_id):
+        # Same allowance as ai_governance._require_system_access: local
+        # development keeps memberships outside the governance database.
+        from src.application.services.governance_assurance_service import OrgMembership
+
+        membership = OrgMembership(str(org_id), current_user.user_id, current_user.role.value, tuple(current_user.permissions))
     if membership is None:
         raise HTTPException(status_code=404, detail="AI system not found")
     if mutate and not assurance.may_mutate(membership):
