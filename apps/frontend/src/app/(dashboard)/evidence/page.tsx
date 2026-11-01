@@ -12,7 +12,6 @@ import {
   IconSearch,
   IconShieldCheck,
   IconShieldOff,
-  IconSparkles,
   IconX,
 } from '@tabler/icons-react'
 import Link from 'next/link'
@@ -31,9 +30,10 @@ import { EvidenceFolderTree } from './components/EvidenceFolderTree'
 import { EvidenceTagFilter } from './components/EvidenceTagFilter'
 import { EvidenceUploader } from './components/EvidenceUploader'
 import { EvidenceDetailDrawer } from './components/EvidenceDetailDrawer'
+import { EvidenceGeneratorWorkbench } from './components/EvidenceGeneratorWorkbench'
 
 function formatDate(ts: string) {
-  if (!ts) return '—'
+  if (!ts) return 'Not recorded'
   const d = new Date(ts)
   return Number.isNaN(d.getTime()) ? ts : d.toLocaleDateString()
 }
@@ -58,22 +58,22 @@ function EvidenceCard({
     <button
       type="button"
       onClick={onClick}
-      className="group w-full rounded-xl border-2 border-black bg-white p-4 text-left shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all hover:shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] hover:-translate-x-0.5 hover:-translate-y-0.5"
+      className="group w-full border-2 border-[#101614] bg-[#FBF8F1] p-4 text-left shadow-[3px_3px_0_#101614] transition-all hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[5px_5px_0_#101614] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#118A72] focus-visible:ring-offset-2"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1 space-y-1.5">
           <div className="flex flex-wrap items-center gap-1.5">
-            <Badge className="border-2 border-black bg-black px-2 py-0.5 text-[10px] font-black uppercase text-white">
+            <Badge className="rounded-none border-2 border-[#101614] bg-[#101614] px-2 py-0.5 text-[10px] font-black uppercase text-[#FBF8F1]">
               {evidence.type}
             </Badge>
             {evidence.stale && (
-              <Badge className="border-2 border-amber-400 bg-amber-50 px-2 py-0.5 text-[10px] font-black uppercase text-amber-800">
+              <Badge className="rounded-none border-2 border-amber-500 bg-amber-50 px-2 py-0.5 text-[10px] font-black uppercase text-amber-800">
                 <IconAlertTriangle className="mr-1 h-2.5 w-2.5" />
                 Stale
               </Badge>
             )}
             {evidence.linkedEntityCount > 0 && (
-              <Badge className="border-2 border-emerald-500 bg-emerald-50 px-2 py-0.5 text-[10px] font-black uppercase text-emerald-800">
+              <Badge className="rounded-none border-2 border-emerald-600 bg-emerald-50 px-2 py-0.5 text-[10px] font-black uppercase text-emerald-800">
                 <IconCircleCheck className="mr-1 h-2.5 w-2.5" />
                 {evidence.linkedEntityCount} link{evidence.linkedEntityCount !== 1 ? 's' : ''}
               </Badge>
@@ -89,7 +89,7 @@ function EvidenceCard({
               <Badge
                 key={tag}
                 variant="outline"
-                className="border border-black/30 bg-white px-1.5 py-0 text-[10px] font-bold"
+                className="rounded-none border border-[#101614]/30 bg-[#FBF8F1] px-1.5 py-0 text-[10px] font-bold"
               >
                 {tag}
               </Badge>
@@ -106,7 +106,8 @@ function EvidenceCard({
           <p className="text-[10px] font-bold uppercase text-muted-foreground">
             {getArtifactKindLabel(evidence.artifactKind)}
           </p>
-          <p className="mt-0.5 text-sm font-black">{Math.round(evidence.confidence * 100)}%</p>
+          <p className="mt-1 text-[10px] font-bold uppercase text-muted-foreground">Recorded confidence</p>
+          <p className="font-mono text-sm font-black">{Math.round(evidence.confidence * 100)}%</p>
           <p className="mt-0.5 text-[10px] text-muted-foreground">{formatDate(evidence.timestamp)}</p>
         </div>
       </div>
@@ -120,7 +121,6 @@ export default function EvidencePage() {
     data,
     summary,
     loading,
-    collecting,
     error,
     collectEvidence,
     updateEvidence,
@@ -201,58 +201,59 @@ export default function EvidencePage() {
   return (
     <div className="flex min-h-0 flex-col gap-6">
       {/* Header */}
-      <Card className="border-4 border-black bg-gradient-to-br from-[#fff4de] via-white to-[#e9f7f0] p-6 shadow-[10px_10px_0px_0px_rgba(0,0,0,1)]">
+      <Card className="rounded-none border-4 border-[#101614] bg-[#FBF8F1] p-6 shadow-[10px_10px_0_#101614]">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge className="border-2 border-black bg-black px-3 py-1 font-black uppercase text-white">
-                <IconSparkles className="mr-2 h-4 w-4" />
-                Evidence Hub V2
+              <Badge className="rounded-none border-2 border-[#101614] bg-[#101614] px-3 py-1 font-black uppercase text-[#FBF8F1]">
+                Evidence &amp; Controls
               </Badge>
-              <Badge variant="outline" className="border-2 border-black bg-white px-3 py-1 font-black uppercase">
+              <Badge variant="outline" className="rounded-none border-2 border-[#101614] bg-[#DCEFEA] px-3 py-1 font-black uppercase text-[#101614]">
                 {selectedSystem.name}
               </Badge>
             </div>
-            <h1 className="text-3xl font-black uppercase tracking-tight">
-              Evidence Hub
+            <h1 className="text-3xl font-black tracking-tight text-[#101614]">
+              Evidence Workbench
             </h1>
-            <p className="max-w-2xl text-sm text-muted-foreground">
-              Organize, tag, and link governance artifacts for {selectedSystem.name}. Upload files, link external sources, attest controls, and connect evidence to frameworks.
+            <p className="max-w-[70ch] text-sm font-medium text-[#5B665F]">
+              Record artifacts for {selectedSystem.name}, inspect which evaluators can produce defensible evidence, and route mappings to human review. Current records are mutable and are not yet immutable Evidence Passports.
             </p>
           </div>
 
           <Button
-            className="border-2 border-black font-black uppercase shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
+            className="rounded-none border-2 border-[#101614] bg-[#FF6B35] font-black uppercase text-[#101614] shadow-[4px_4px_0_#101614]"
             onClick={() => setUploaderOpen(true)}
           >
             <IconPlus className="mr-2 h-4 w-4" />
-            Add evidence
+            Record evidence
           </Button>
         </div>
       </Card>
 
-      {/* Stats row */}
-      <div className="grid gap-4 sm:grid-cols-4">
-        <Card className="border-2 border-black p-4 shadow-brutal">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Total artifacts</p>
-          <p className="mt-1 text-3xl font-black">{data.length}</p>
-        </Card>
-        <Card className="border-2 border-black p-4 shadow-brutal">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Linked to entities</p>
-          <p className="mt-1 text-3xl font-black text-emerald-700">{linkedCount}</p>
-        </Card>
-        <Card className="border-2 border-black p-4 shadow-brutal">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">High confidence</p>
-          <p className="mt-1 text-3xl font-black">{highConfidenceCount}</p>
-        </Card>
-        <Card className={`border-2 border-black p-4 shadow-brutal ${staleCount > 0 ? 'bg-amber-50' : ''}`}>
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Potentially stale</p>
-          <p className={`mt-1 text-3xl font-black ${staleCount > 0 ? 'text-amber-700' : ''}`}>{staleCount}</p>
-        </Card>
-      </div>
+      <EvidenceGeneratorWorkbench />
+
+      {/* Artifact ledger */}
+      <section aria-label="Evidence artifact ledger" className="grid border-2 border-[#101614] bg-[#FBF8F1] sm:grid-cols-4">
+        <div className="border-b-2 border-[#101614] p-4 sm:border-b-0 sm:border-r-2">
+          <p className="font-mono text-[10px] font-black uppercase tracking-[0.16em] text-[#5B665F]">Recorded artifacts</p>
+          <p className="mt-1 font-mono text-xl font-black text-[#101614]">{data.length}</p>
+        </div>
+        <div className="border-b-2 border-[#101614] p-4 sm:border-b-0 sm:border-r-2">
+          <p className="font-mono text-[10px] font-black uppercase tracking-[0.16em] text-[#5B665F]">Linked to entities</p>
+          <p className="mt-1 font-mono text-xl font-black text-[#17714F]">{linkedCount}</p>
+        </div>
+        <div className="border-b-2 border-[#101614] p-4 sm:border-b-0 sm:border-r-2">
+          <p className="font-mono text-[10px] font-black uppercase tracking-[0.16em] text-[#5B665F]">Confidence at least 80%</p>
+          <p className="mt-1 font-mono text-xl font-black text-[#101614]">{highConfidenceCount}</p>
+        </div>
+        <div className={staleCount > 0 ? 'bg-amber-50 p-4' : 'p-4'}>
+          <p className="font-mono text-[10px] font-black uppercase tracking-[0.16em] text-[#5B665F]">Potentially stale</p>
+          <p className={`mt-1 font-mono text-xl font-black ${staleCount > 0 ? 'text-amber-700' : 'text-[#101614]'}`}>{staleCount}</p>
+        </div>
+      </section>
 
       {/* Approval gate */}
-      <Card className={`border-4 p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] ${
+      <Card className={`rounded-none border-4 p-5 shadow-[6px_6px_0_#101614] ${
         completeness.gate === 'green' ? 'border-emerald-600 bg-emerald-50' :
         completeness.gate === 'yellow' ? 'border-amber-500 bg-amber-50' :
         'border-red-600 bg-red-50'
@@ -267,13 +268,16 @@ export default function EvidencePage() {
           )}
           <div className="flex-1">
             <p className="font-black uppercase">
-              {completeness.gate === 'green' ? 'Evidence complete — approval gate: ready' :
-               completeness.gate === 'yellow' ? 'Evidence gaps present — conditional' :
-               'Critical gaps — approval blocked'}
+              {completeness.gate === 'green' ? 'Current record is ready for human review' :
+               completeness.gate === 'yellow' ? 'Evidence gaps require reviewer attention' :
+               'Critical evidence gaps are recorded'}
             </p>
             {summary.recommendedNextStep && (
               <p className="text-xs text-muted-foreground">{summary.recommendedNextStep}</p>
             )}
+            <p className="mt-1 text-xs font-semibold text-[#5B665F]">
+              This readiness signal does not determine compliance, certification, or approval.
+            </p>
           </div>
           {completeness.totalRequired > 0 && (
             <div className="min-w-[120px] space-y-1">
@@ -281,7 +285,7 @@ export default function EvidencePage() {
                 <span>Coverage</span>
                 <span>{Math.round((completeness.linked / completeness.totalRequired) * 100)}%</span>
               </div>
-              <Progress value={Math.round((completeness.linked / completeness.totalRequired) * 100)} className="h-2 border border-black" />
+              <Progress value={Math.round((completeness.linked / completeness.totalRequired) * 100)} className="h-2 rounded-none border border-[#101614]" />
             </div>
           )}
         </div>
@@ -289,19 +293,19 @@ export default function EvidencePage() {
 
       {/* Evidence gaps */}
       {summary.missingSignals.length > 0 && (
-        <Card className="border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+        <Card className="rounded-none border-4 border-[#101614] bg-[#FBF8F1] p-5 shadow-[6px_6px_0_#101614]">
           <div className="mb-3 flex items-center gap-2">
             <IconX className="h-5 w-5 text-red-600" />
-            <h2 className="font-black uppercase">Evidence gaps blocking approval</h2>
-            <Badge className="border-2 border-red-600 bg-red-100 px-2 font-black uppercase text-red-800">
+            <h2 className="font-black uppercase">Evidence gaps requiring remediation</h2>
+            <Badge className="rounded-none border-2 border-red-600 bg-red-100 px-2 font-black uppercase text-red-800">
               {summary.missingSignals.length}
             </Badge>
           </div>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {summary.missingSignals.map((signal) => (
-              <div key={signal} className="flex flex-col gap-2 rounded-xl border-2 border-black bg-red-50 p-3 shadow-[3px_3px_0px_0px_#000]">
+              <div key={signal} className="flex flex-col gap-2 border-2 border-[#101614] bg-red-50 p-3 shadow-[3px_3px_0_#101614]">
                 <p className="text-sm font-bold uppercase">{signal}</p>
-                <Button asChild size="sm" variant="default" className="mt-auto border-2 border-black font-black uppercase">
+                <Button asChild size="sm" variant="default" className="mt-auto rounded-none border-2 border-[#101614] font-black uppercase">
                   <Link
                     href={{
                       pathname: '/remediation',
@@ -334,7 +338,7 @@ export default function EvidencePage() {
               activeFolder={activeFolder}
               onFolderChange={setActiveFolder}
             />
-            <div className="border-t-2 border-black/10 pt-4">
+            <div className="border-t-2 border-[#101614]/10 pt-4">
               <EvidenceTagFilter
                 evidence={data}
                 activeTags={activeTags}
@@ -354,13 +358,13 @@ export default function EvidencePage() {
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="border-2 border-black pl-9 font-medium"
+                className="rounded-none border-2 border-[#101614] bg-[#FBF8F1] pl-9 font-medium"
                 placeholder="Search evidence by title, type, or tag..."
               />
             </div>
             <Button
               variant="neutral"
-              className="border-2 border-black font-bold"
+              className="rounded-none border-2 border-[#101614] font-bold"
               onClick={() => void refreshEvidence()}
               disabled={loading}
             >
@@ -374,25 +378,40 @@ export default function EvidencePage() {
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-bold uppercase text-muted-foreground">Filters:</span>
               {activeFolder !== null && (
-                <Badge className="border-2 border-black bg-black px-2 py-0.5 text-[11px] font-bold text-white">
+                <Badge className="rounded-none border-2 border-[#101614] bg-[#101614] px-2 py-0.5 text-[11px] font-bold text-[#FBF8F1]">
                   Folder: {activeFolder === '__uncategorized__' ? 'Uncategorized' : activeFolder}
-                  <button type="button" onClick={() => setActiveFolder(null)} className="ml-1.5">
+                  <button
+                    type="button"
+                    aria-label="Clear folder filter"
+                    onClick={() => setActiveFolder(null)}
+                    className="ml-1.5"
+                  >
                     <IconX className="h-2.5 w-2.5" />
                   </button>
                 </Badge>
               )}
               {activeTags.map((tag) => (
-                <Badge key={tag} className="border-2 border-black bg-black px-2 py-0.5 text-[11px] font-bold text-white">
+                <Badge key={tag} className="rounded-none border-2 border-[#101614] bg-[#101614] px-2 py-0.5 text-[11px] font-bold text-[#FBF8F1]">
                   #{tag}
-                  <button type="button" onClick={() => handleTagToggle(tag)} className="ml-1.5">
+                  <button
+                    type="button"
+                    aria-label={`Clear ${tag} tag filter`}
+                    onClick={() => handleTagToggle(tag)}
+                    className="ml-1.5"
+                  >
                     <IconX className="h-2.5 w-2.5" />
                   </button>
                 </Badge>
               ))}
               {search && (
-                <Badge className="border-2 border-black bg-black px-2 py-0.5 text-[11px] font-bold text-white">
+                <Badge className="rounded-none border-2 border-[#101614] bg-[#101614] px-2 py-0.5 text-[11px] font-bold text-[#FBF8F1]">
                   Search: {search}
-                  <button type="button" onClick={() => setSearch('')} className="ml-1.5">
+                  <button
+                    type="button"
+                    aria-label="Clear evidence search"
+                    onClick={() => setSearch('')}
+                    className="ml-1.5"
+                  >
                     <IconX className="h-2.5 w-2.5" />
                   </button>
                 </Badge>
@@ -401,14 +420,14 @@ export default function EvidencePage() {
           )}
 
           {loading && (
-            <div className="flex flex-col items-center justify-center gap-3 rounded-3xl border-2 border-dashed border-black bg-slate-50 px-6 py-16 text-center">
+            <div className="flex flex-col items-center justify-center gap-3 border-2 border-dashed border-[#101614] bg-[#F0EEE7] px-6 py-16 text-center">
               <IconLoader2 className="h-8 w-8 animate-spin" />
               <p className="font-bold">Loading evidence for {selectedSystem.name}</p>
             </div>
           )}
 
           {!loading && error && (
-            <div className="rounded-3xl border-2 border-red-600 bg-red-50 p-6">
+            <div className="border-2 border-red-600 bg-red-50 p-6">
               <div className="flex items-start gap-3">
                 <IconAlertTriangle className="mt-0.5 h-5 w-5 text-red-700" />
                 <div className="space-y-2">
@@ -416,7 +435,7 @@ export default function EvidencePage() {
                   <p className="text-sm text-red-700">{error.message}</p>
                   <Button
                     variant="neutral"
-                    className="border-2 border-red-700 font-bold text-red-700"
+                    className="rounded-none border-2 border-red-700 font-bold text-red-700"
                     onClick={() => void refreshEvidence()}
                   >
                     Retry
@@ -427,29 +446,29 @@ export default function EvidencePage() {
           )}
 
           {!loading && !error && data.length === 0 && (
-            <div className="rounded-3xl border-2 border-dashed border-black bg-slate-50 px-6 py-16 text-center">
+            <div className="border-2 border-dashed border-[#101614] bg-[#F0EEE7] px-6 py-16 text-center">
               <IconFileText className="mx-auto h-12 w-12 opacity-50" />
               <h3 className="mt-4 text-xl font-black">No evidence yet</h3>
               <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-                Start by uploading a file, linking an external artifact, or writing a narrative for {selectedSystem.name}.
+                Start by recording a file payload, linking an external artifact, or writing a narrative for {selectedSystem.name}.
               </p>
               <Button
-                className="mt-5 border-2 border-black font-black uppercase"
+                className="mt-5 rounded-none border-2 border-[#101614] font-black uppercase"
                 onClick={() => setUploaderOpen(true)}
               >
                 <IconPlus className="mr-2 h-4 w-4" />
-                Add first evidence
+                Record first evidence
               </Button>
             </div>
           )}
 
           {!loading && !error && data.length > 0 && filteredData.length === 0 && (
-            <div className="rounded-3xl border-2 border-dashed border-black bg-slate-50 px-6 py-10 text-center">
+            <div className="border-2 border-dashed border-[#101614] bg-[#F0EEE7] px-6 py-10 text-center">
               <p className="font-bold text-muted-foreground">No evidence matches your filters.</p>
               <Button
                 variant="neutral"
                 size="sm"
-                className="mt-3 border-2 border-black font-bold"
+                className="mt-3 rounded-none border-2 border-[#101614] font-bold"
                 onClick={() => { setActiveFolder(null); setActiveTags([]); setSearch('') }}
               >
                 Clear filters
@@ -477,9 +496,9 @@ export default function EvidencePage() {
 
       {/* Add evidence dialog */}
       <Dialog open={uploaderOpen} onOpenChange={setUploaderOpen}>
-        <DialogContent className="max-w-lg border-4 border-black">
+        <DialogContent className="max-w-lg rounded-none border-4 border-[#101614] bg-[#FBF8F1]">
           <DialogHeader>
-            <DialogTitle className="font-black uppercase">Add evidence</DialogTitle>
+            <DialogTitle className="font-black uppercase">Record evidence</DialogTitle>
           </DialogHeader>
           <EvidenceUploader
             systemId={selectedSystem.id}

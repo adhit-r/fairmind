@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -24,7 +24,55 @@ from sqlalchemy.orm import Session
 from database.connection import get_db
 
 
-router = APIRouter(tags=["ai-governance"])
+def _caller_org(request: Request) -> str:
+    org_id = getattr(request.state, "org_id", None)
+    if not org_id:
+        raise HTTPException(status_code=403, detail="Your account is not assigned to an organization")
+    return org_id
+
+
+_SCOPED_IDS = {
+    "system_id": "governance_ai_systems",
+    "systemId": "governance_ai_systems",
+    "workspace_id": "governance_workspaces",
+    "workspaceId": "governance_workspaces",
+}
+
+
+async def _enforce_org_scope(request: Request, db: Session = Depends(get_db)) -> None:
+    """Every system or workspace id a request names must belong to the caller's org.
+
+    Checked once here for path, query and JSON body ids, so individual routes
+    cannot forget it. A foreign id answers 404, never 403, to avoid confirming
+    that it exists.
+    """
+    org_id = _caller_org(request)
+    sources = [request.path_params, request.query_params]
+    if request.method in ("POST", "PUT", "PATCH") and "json" in request.headers.get("content-type", ""):
+        try:
+            body = await request.json()
+        except ValueError:
+            body = None
+        if isinstance(body, dict):
+            sources.append(body)
+    for source in sources:
+        for key, table in _SCOPED_IDS.items():
+            value = source.get(key)
+            if not value:
+                continue
+            _ensure_tables(db)
+            owned = db.execute(
+                text(f"SELECT 1 FROM {table} WHERE id = :id AND org_id = :org_id"),
+                {"id": str(value), "org_id": org_id},
+            ).fetchone()
+            if not owned:
+                raise HTTPException(status_code=404, detail="Not found")
+
+
+# ponytail: policies, approval workflows/requests, evidence items, remediation
+# and reports addressed by their own ids are not org-scoped yet; their tables
+# carry no org_id. Add the column and extend _SCOPED_IDS when they do.
+router = APIRouter(tags=["ai-governance"], dependencies=[Depends(_enforce_org_scope)])
 
 
 FRAMEWORKS: List[Dict[str, Any]] = [
@@ -202,33 +250,30 @@ def _ensure_tables(db: Session) -> None:
     _tables_ready = True
 
 
-def _ensure_model_link_column(db: Session) -> None:
-    """Add governance_ai_systems.model_id to databases created before it existed.
+# Columns added after the tables first shipped. create_all() does not alter
+# existing tables, so this runtime patch keeps already-provisioned dev and test
+# databases usable without running the SQL migrations by hand. Production
+# applies migrations/011_governance_system_model_link.sql (which also adds the
+# foreign key and the uniqueness guarantee) and the org-scoping migration.
+_LATE_COLUMNS = (
+    ("governance_ai_systems", "model_id"),
+    ("governance_ai_systems", "org_id"),
+    ("governance_workspaces", "org_id"),
+)
 
-    create_all() does not alter existing tables, so a runtime patch keeps
-    already-provisioned dev and test databases usable without running the SQL
-    migration by hand. Production applies migrations/011_governance_system_model_link.sql,
-    which also adds the foreign key and the uniqueness guarantee.
-    """
+
+def _ensure_model_link_column(db: Session) -> None:
+    """Add late columns (see _LATE_COLUMNS) to databases created before them."""
     dialect = db.bind.dialect.name if db.bind is not None else "sqlite"
     try:
-        if dialect == "sqlite":
-            existing = {
-                row[1]
-                for row in db.execute(text("PRAGMA table_info(governance_ai_systems)")).fetchall()
-            }
-            if "model_id" not in existing:
-                db.execute(text("ALTER TABLE governance_ai_systems ADD COLUMN model_id TEXT"))
-        else:
-            db.execute(
-                text("ALTER TABLE governance_ai_systems ADD COLUMN IF NOT EXISTS model_id VARCHAR(255)")
-            )
-        db.execute(
-            text(
-                "CREATE INDEX IF NOT EXISTS idx_governance_ai_systems_model_id "
-                "ON governance_ai_systems (model_id)"
-            )
-        )
+        for table, column in _LATE_COLUMNS:
+            if dialect == "sqlite":
+                existing = {row[1] for row in db.execute(text(f"PRAGMA table_info({table})")).fetchall()}
+                if column not in existing:
+                    db.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} TEXT"))
+            else:
+                db.execute(text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} VARCHAR(255)"))
+            db.execute(text(f"CREATE INDEX IF NOT EXISTS idx_{table}_{column} ON {table} ({column})"))
         db.commit()
     except Exception:  # pragma: no cover - never block startup on a patch attempt
         db.rollback()
@@ -888,17 +933,19 @@ async def governance_status(db: Session = Depends(get_db)):
 
 
 @router.post("/workspaces")
-async def create_workspace(request: WorkspaceCreateRequest, db: Session = Depends(get_db)):
+async def create_workspace(request: WorkspaceCreateRequest, http: Request, db: Session = Depends(get_db)):
     _ensure_tables(db)
+    org_id = _caller_org(http)
     workspace_id = str(uuid.uuid4())
     now = _utc_now_iso()
     db.execute(
         text(
-            "INSERT INTO governance_workspaces (id, name, owner, created_at, updated_at) "
-            "VALUES (:id, :name, :owner, :created_at, :updated_at)"
+            "INSERT INTO governance_workspaces (id, org_id, name, owner, created_at, updated_at) "
+            "VALUES (:id, :org_id, :name, :owner, :created_at, :updated_at)"
         ),
         {
             "id": workspace_id,
+            "org_id": org_id,
             "name": request.name,
             "owner": request.owner,
             "created_at": now,
@@ -916,19 +963,20 @@ async def create_workspace(request: WorkspaceCreateRequest, db: Session = Depend
 
 
 @router.get("/workspaces")
-async def list_workspaces(db: Session = Depends(get_db)):
+async def list_workspaces(http: Request, db: Session = Depends(get_db)):
     _ensure_tables(db)
     rows = db.execute(
         text(
             "SELECT id, name, owner, created_at, updated_at "
-            "FROM governance_workspaces ORDER BY created_at DESC"
-        )
+            "FROM governance_workspaces WHERE org_id = :org_id ORDER BY created_at DESC"
+        ),
+        {"org_id": _caller_org(http)},
     ).fetchall()
     return [_serialize_workspace_row(row) for row in rows]
 
 
 @router.post("/systems")
-async def create_ai_system(request: AISystemCreateRequest, db: Session = Depends(get_db)):
+async def create_ai_system(request: AISystemCreateRequest, http: Request, db: Session = Depends(get_db)):
     _ensure_tables(db)
     workspace = db.execute(
         text("SELECT id FROM governance_workspaces WHERE id = :id"),
@@ -955,11 +1003,12 @@ async def create_ai_system(request: AISystemCreateRequest, db: Session = Depends
     now = _utc_now_iso()
     db.execute(
         text(
-            "INSERT INTO governance_ai_systems (id, workspace_id, model_id, name, owner, risk_tier, lifecycle_stage, metadata_json, created_at, updated_at) "
-            "VALUES (:id, :workspace_id, :model_id, :name, :owner, :risk_tier, :lifecycle_stage, :metadata_json, :created_at, :updated_at)"
+            "INSERT INTO governance_ai_systems (id, org_id, workspace_id, model_id, name, owner, risk_tier, lifecycle_stage, metadata_json, created_at, updated_at) "
+            "VALUES (:id, :org_id, :workspace_id, :model_id, :name, :owner, :risk_tier, :lifecycle_stage, :metadata_json, :created_at, :updated_at)"
         ),
         {
             "id": system_id,
+            "org_id": _caller_org(http),
             "workspace_id": request.workspace_id,
             "model_id": request.model_id,
             "name": request.name,
@@ -988,30 +1037,33 @@ async def create_ai_system(request: AISystemCreateRequest, db: Session = Depends
 
 @router.get("/systems")
 async def list_ai_systems(
+    http: Request,
     workspace_id: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
 ):
     _ensure_tables(db)
+    org_id = _caller_org(http)
     if workspace_id:
         rows = db.execute(
             text(
                 "SELECT id, workspace_id, name, owner, risk_tier, lifecycle_stage, metadata_json, created_at, updated_at "
-                "FROM governance_ai_systems WHERE workspace_id = :workspace_id ORDER BY created_at DESC"
+                "FROM governance_ai_systems WHERE workspace_id = :workspace_id AND org_id = :org_id ORDER BY created_at DESC"
             ),
-            {"workspace_id": workspace_id},
+            {"workspace_id": workspace_id, "org_id": org_id},
         ).fetchall()
     else:
         rows = db.execute(
             text(
                 "SELECT id, workspace_id, name, owner, risk_tier, lifecycle_stage, metadata_json, created_at, updated_at "
-                "FROM governance_ai_systems ORDER BY created_at DESC"
-            )
+                "FROM governance_ai_systems WHERE org_id = :org_id ORDER BY created_at DESC"
+            ),
+            {"org_id": org_id},
         ).fetchall()
     return [_build_ai_system_payload(db, row) for row in rows]
 
 
 @router.get("/models/{model_id}/system")
-async def get_system_for_model(model_id: str, db: Session = Depends(get_db)):
+async def get_system_for_model(model_id: str, http: Request, db: Session = Depends(get_db)):
     """Resolve the governed system for a registered model.
 
     The model evaluation flow calls this to find where a model's governance
@@ -1024,9 +1076,9 @@ async def get_system_for_model(model_id: str, db: Session = Depends(get_db)):
     row = db.execute(
         text(
             "SELECT id, workspace_id, name, owner, risk_tier, lifecycle_stage, metadata_json, created_at, updated_at "
-            "FROM governance_ai_systems WHERE model_id = :model_id"
+            "FROM governance_ai_systems WHERE model_id = :model_id AND org_id = :org_id"
         ),
-        {"model_id": model_id},
+        {"model_id": model_id, "org_id": _caller_org(http)},
     ).fetchone()
     if not row:
         return {"governed": False, "modelId": model_id, "system": None}

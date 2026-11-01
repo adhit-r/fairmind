@@ -130,6 +130,7 @@ class GovernanceWorkspace(Base):
     __tablename__ = "governance_workspaces"
 
     id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=True, index=True)
     name = Column(String, nullable=False)
     owner = Column(String, nullable=True)
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
@@ -149,6 +150,7 @@ class GovernanceAISystem(Base):
 
     id = Column(String, primary_key=True, default=_new_id)
     workspace_id = Column(String, ForeignKey("governance_workspaces.id"), nullable=False, index=True)
+    org_id = Column(String, nullable=True, index=True)
     # Links a governed system to the registered model it governs, so the model
     # evaluation flow can reach this system's governance record (and its
     # environmental assessments) directly. Nullable: a governed system may
@@ -571,3 +573,45 @@ class GovernanceAuditReport(Base):
 
     def __repr__(self) -> str:
         return f"<GovernanceAuditReport(id={self.id}, type={self.report_type})>"
+
+
+class GovernanceIntegration(Base):
+    """A connected inventory source (MLflow registry, GitHub org) that discovers AI systems."""
+
+    __tablename__ = "governance_integrations"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    kind = Column(String, nullable=False)  # mlflow | github
+    name = Column(String, nullable=False)
+    config_json = Column(Text, nullable=False, default="{}")
+    # ponytail: token stored at rest as-is in the local store; encrypt with an app key before production
+    token = Column(Text, nullable=True)
+    last_synced_at = Column(String, nullable=True)
+    last_sync_summary = Column(Text, nullable=True)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+
+class GovernanceDiscoveredAsset(Base):
+    """Something an integration found that may become a governed system."""
+
+    __tablename__ = "governance_discovered_assets"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    integration_id = Column(String, ForeignKey("governance_integrations.id"), nullable=False, index=True)
+    source = Column(String, nullable=False)  # mlflow | github
+    external_id = Column(String, nullable=False)
+    name = Column(String, nullable=False)
+    kind = Column(String, nullable=False)  # ml_model | llm_app | ai_assisted_dev
+    metadata_json = Column(Text, nullable=False, default="{}")
+    suggested_tier = Column(String, nullable=False, default="medium")
+    suggested_stage = Column(String, nullable=False, default="onboard")
+    status = Column(String, nullable=False, default="new")  # new | promoted | ignored
+    system_id = Column(String, nullable=True)
+    discovered_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+    __table_args__ = (
+        Index("idx_governance_discovered_assets_ext", "integration_id", "external_id", unique=True),
+    )

@@ -111,18 +111,18 @@ interface SelectedSystemStatus {
   activeRemediation: number
 }
 
-const FALLBACK_SYSTEMS: AISystemSummary[] = [
-  {
-    id: "acme-pricing-lab",
-    name: "Acme Pricing Lab",
-    owner: "ml-platform@acme.ai",
-    riskTier: "medium",
-    readiness: 18,
-    stage: "onboard",
-    workspaceId: "fallback-workspace",
-    metadata: { source: "fallback" },
-  },
-]
+// Empty state, not a system: shown until the org registers its first AI system.
+// Consumers detect it through metadata.source === "fallback".
+const NO_SYSTEM: AISystemSummary = {
+  id: "",
+  name: "No system registered",
+  owner: "unassigned",
+  riskTier: "low",
+  readiness: 0,
+  stage: "onboard",
+  workspaceId: "",
+  metadata: { source: "fallback" },
+}
 
 type SystemContextValue = {
   systems: AISystemSummary[]
@@ -140,6 +140,7 @@ type SystemContextValue = {
     stage: AISystemSummary["stage"]
     systemType?: string
     systemVersion?: string
+    businessLine?: string
     complianceFrameworks?: string[]
   }) => Promise<AISystemSummary>
 }
@@ -293,11 +294,11 @@ function normalizeSystem(record: AISystemRecord): AISystemSummary {
 }
 
 export function SystemContextProvider({ children }: { children: React.ReactNode }) {
-  const [systems, setSystems] = useState<AISystemSummary[]>(FALLBACK_SYSTEMS)
-  const [selectedSystemId, setSelectedSystemId] = useState<string>(FALLBACK_SYSTEMS[0].id)
+  const [systems, setSystems] = useState<AISystemSummary[]>([])
+  const [selectedSystemId, setSelectedSystemId] = useState<string>("")
   const [loading, setLoading] = useState(true)
   const [selectedSystemStatus, setSelectedSystemStatus] = useState<SelectedSystemStatus>(
-    emptyDerivedStatus(FALLBACK_SYSTEMS[0])
+    emptyDerivedStatus(NO_SYSTEM)
   )
 
   const refreshSystems = async () => {
@@ -314,12 +315,12 @@ export function SystemContextProvider({ children }: { children: React.ReactNode 
           return exists ? preferredId : nextSystems[0].id
         })
       } else {
-        setSystems(FALLBACK_SYSTEMS)
-        setSelectedSystemId(getStoredSystemId(FALLBACK_SYSTEMS[0].id))
+        setSystems([])
+        setSelectedSystemId("")
       }
     } catch {
-      setSystems(FALLBACK_SYSTEMS)
-      setSelectedSystemId(getStoredSystemId(FALLBACK_SYSTEMS[0].id))
+      setSystems([])
+      setSelectedSystemId("")
     } finally {
       setLoading(false)
     }
@@ -345,6 +346,7 @@ export function SystemContextProvider({ children }: { children: React.ReactNode 
     stage: AISystemSummary["stage"]
     systemType?: string
     systemVersion?: string
+    businessLine?: string
     complianceFrameworks?: string[]
   }) => {
     const workspaceResponse: ApiResponse<WorkspaceRecord> = await apiClient.post(
@@ -372,6 +374,7 @@ export function SystemContextProvider({ children }: { children: React.ReactNode 
           workspace_name: params.workspaceName,
           ...(params.systemType && { system_type: params.systemType }),
           ...(params.systemVersion && { system_version: params.systemVersion }),
+          ...(params.businessLine && { business_line: params.businessLine }),
           ...(params.complianceFrameworks && { compliance_frameworks: params.complianceFrameworks }),
         },
       }
@@ -391,12 +394,12 @@ export function SystemContextProvider({ children }: { children: React.ReactNode 
   }
 
   const selectedSystem = useMemo(() => {
-    return systems.find((system) => system.id === selectedSystemId) || systems[0] || FALLBACK_SYSTEMS[0]
+    return systems.find((system) => system.id === selectedSystemId) || systems[0] || NO_SYSTEM
   }, [selectedSystemId, systems])
 
   useEffect(() => {
     if (!selectedSystem || selectedSystem.metadata?.source === "fallback") {
-      setSelectedSystemStatus(emptyDerivedStatus(selectedSystem || FALLBACK_SYSTEMS[0]))
+      setSelectedSystemStatus(emptyDerivedStatus(selectedSystem || NO_SYSTEM))
       return
     }
 
