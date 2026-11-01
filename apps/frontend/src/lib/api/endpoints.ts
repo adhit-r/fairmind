@@ -326,6 +326,19 @@ export const API_ENDPOINTS = {
     reviews: (modelId: string) => `/api/v1/marketplace/models/${modelId}/reviews`,
   },
 
+  // Agentic packs
+  packs: {
+    list: '/api/v1/packs',
+    install: (packId: string) => `/api/v1/packs/${packId}/install`,
+    journey: (packId: string) => `/api/v1/packs/journeys/${packId}`,
+    workflow: (workflowId: string) => `/api/v1/packs/workflows/${workflowId}`,
+    startRun: (workflowId: string) => `/api/v1/packs/workflows/${workflowId}/runs`,
+    runs: '/api/v1/packs/runs',
+    run: (runId: string) => `/api/v1/packs/runs/${runId}`,
+    runEvents: (runId: string) => `/api/v1/packs/runs/${runId}/events`,
+    decision: (runId: string) => `/api/v1/packs/runs/${runId}/decision`,
+  },
+
   // Organizations (Multi-org support)
   organizations: {
     list: '/api/v1/organizations',
