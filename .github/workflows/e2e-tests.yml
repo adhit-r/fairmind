@@ -79,6 +79,19 @@ jobs:
       working-directory: apps/backend
       run: |
         grep -v -E '"name": "(aiosqlite|databases)"' backend.log > backend.filtered.log || true
+        echo '::group::key lines'; grep -E 'Database identities|Database tables ready|Could not create table|Login error|table creation failed|Failed to initialize|ORM table creation' backend.log | head -n 60; echo '::endgroup::'
+        echo '::group::database files'; find . -maxdepth 2 -name '*.db*' -newer pyproject.toml -exec ls -la {} \; ; uv run --no-sync python - <<'PY'
+        import sqlite3, glob
+        print("sqlite", sqlite3.sqlite_version)
+        for path in sorted(glob.glob("*.db")):
+            con = sqlite3.connect(path)
+            try:
+                names = sorted(r[0] for r in con.execute("select name from sqlite_master where type='table'"))
+                print(path, len(names), "tables; users:", "users" in names, "; governance_ai_systems:", "governance_ai_systems" in names)
+            except Exception as e:
+                print(path, "ERROR", e)
+        PY
+        echo '::endgroup::'
         echo '::group::startup'; head -n 200 backend.filtered.log; echo '::endgroup::'
         echo '::group::tail'; tail -n 300 backend.filtered.log; echo '::endgroup::'
 
@@ -164,6 +177,19 @@ jobs:
       working-directory: apps/backend
       run: |
         grep -v -E '"name": "(aiosqlite|databases)"' backend.log > backend.filtered.log || true
+        echo '::group::key lines'; grep -E 'Database identities|Database tables ready|Could not create table|Login error|table creation failed|Failed to initialize|ORM table creation' backend.log | head -n 60; echo '::endgroup::'
+        echo '::group::database files'; find . -maxdepth 2 -name '*.db*' -newer pyproject.toml -exec ls -la {} \; ; uv run --no-sync python - <<'PY'
+        import sqlite3, glob
+        print("sqlite", sqlite3.sqlite_version)
+        for path in sorted(glob.glob("*.db")):
+            con = sqlite3.connect(path)
+            try:
+                names = sorted(r[0] for r in con.execute("select name from sqlite_master where type='table'"))
+                print(path, len(names), "tables; users:", "users" in names, "; governance_ai_systems:", "governance_ai_systems" in names)
+            except Exception as e:
+                print(path, "ERROR", e)
+        PY
+        echo '::endgroup::'
         echo '::group::startup'; head -n 200 backend.filtered.log; echo '::endgroup::'
         echo '::group::tail'; tail -n 300 backend.filtered.log; echo '::endgroup::'
 
