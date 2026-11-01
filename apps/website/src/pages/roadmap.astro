@@ -1,154 +1,142 @@
 ---
 import Layout from '../layouts/Layout.astro';
+import PageHero from '../components/marketing/PageHero.astro';
+import '../styles/pages.css';
 
-// Roadmap data
-const roadmap = [
+const phases = [
   {
-    phase: 'PHASE 1: CORE PLATFORM',
-    status: 'COMPLETED',
+    category: 'current',
+    state: 'Observed checkpoint',
+    title: 'Useful evidence paths exist, but the assurance spine is incomplete.',
     items: [
-      'BIAS DETECTION WITH DEMOGRAPHIC PARITY METRICS',
-      'SHAP AND LIME EXPLAINABILITY INTEGRATION',
-      'BASIC MODEL MONITORING AND DRIFT DETECTION',
-      'NEON POSTGRESQL FOUNDATIONAL ARCHITECTURE',
-      '22 SPECIALIZED DASHBOARD FRAMEWORK'
-    ]
+      'Environmental governance is the strongest bounded vertical slice.',
+      'Governance records, approvals, risks, remediation, and evidence exist across overlapping models.',
+      'The LLM judge depends on a named external provider; AI BOM is a metadata transformation.',
+      'Workbench evidence records are still mutable and are not yet immutable Evidence Passports.',
+    ],
   },
   {
-    phase: 'PHASE 2: ADVANCED ANALYTICS',
-    status: 'IN PROGRESS',
+    category: 'p0',
+    state: 'P0 · claim safety',
+    title: 'Make every visible result tell the truth about its evidence.',
     items: [
-      'NEO4J KNOWLEDGE GRAPH INTEGRATION',
-      'CAUSAL RELATIONSHIP ANALYSIS',
-      'MODEL LINEAGE TRACKING',
-      'ADVANCED FAIRNESS METRICS (EQUAL OPPORTUNITY, DISPARATE IMPACT)',
-      'REAL-TIME BIAS MONITORING ALERTS'
-    ]
+      'Enforce organization scope across systems, evidence, mappings, approvals, and reports.',
+      'Add immutable framework versions, source hashes, evidence-run identities, and reviewed mappings.',
+      'Remove mock-pass and browser-generated results; unavailable means unavailable.',
+      'Make artifacts integrity-aware and produce reports from a pinned canonical manifest.',
+    ],
   },
   {
-    phase: 'PHASE 3: SECURITY & GUARDRAILS',
-    status: 'PLANNED',
+    category: 'p1',
+    state: 'P1 · reliable foundation',
+    title: 'Close one complete evaluation-to-decision loop.',
     items: [
-      'GRYPE CONTAINER VULNERABILITY SCANNING',
-      'GARAK LLM SECURITY TESTING FRAMEWORK',
-      'NEMO AI SAFETY GUARDRAILS INTEGRATION',
-      'ADVERSARIAL ROBUSTNESS TESTING',
-      'AI SYSTEM VULNERABILITY ASSESSMENT',
-      'SECURITY COMPLIANCE SCORING (OWASP AI)',
-      'THREAT MODELING FOR AI SYSTEMS',
-      'SECURE MODEL DEPLOYMENT PIPELINES'
-    ]
+      'Make the assurance router required and consolidate the active governance data path.',
+      'Connect environmental evidence and one real tabular or LLM adapter to a canonical ingestion port.',
+      'Derive readiness from applicability, accepted mappings, freshness, findings, policies, and approvals.',
+      'Preserve compatibility gates until the replacement path proves closure.',
+    ],
   },
   {
-    phase: 'PHASE 4: ENTERPRISE FEATURES',
-    status: 'PLANNED',
+    category: 'p2',
+    state: 'P2 · coherence',
+    title: 'Reduce surface area and widen the adapter ecosystem.',
     items: [
-      'ADVANCED MODEL SIMULATION TOOLS',
-      'SYNTHETIC DATA GENERATION WITH SDV',
-      'GEOGRAPHIC BIAS DETECTION',
-      'CUSTOM FAIRNESS METRIC DEFINITIONS',
-      'INTEGRATION WITH ML PLATFORMS (MLFLOW, KUBEFLOW)',
-      'MULTI-TENANT ARCHITECTURE',
-      'ENTERPRISE SSO INTEGRATION',
-      'ADVANCED AUDIT LOGGING AND COMPLIANCE'
-    ]
-  }
+      'Consolidate the dashboard into six assurance tasks with tested redirects.',
+      'Add artifact adapters for Giskard, MLflow, Fairlearn/AIF360, ModelScan, and garak/PyRIT.',
+      'Connect AI BOM and environmental exports to the same canonical manifest.',
+      'Retire mock provenance, duplicate endpoint families, and placeholder services after closure tests.',
+    ],
+  },
 ];
-
-const structuredData = {
-  "@context": "https://schema.org",
-  "@type": "WebPage",
-  "name": "Technical Roadmap - Fairmind AI Governance Platform",
-  "description": "Open-source development roadmap for the Fairmind AI governance platform. Track our progress and upcoming features.",
-  "url": "https://fairmind.xyz/roadmap"
-};
 ---
 
-<Layout 
-  title="Technical Roadmap - Fairmind AI Governance Platform | Development Timeline"
-  description="Open-source development roadmap for the Fairmind AI governance platform. Track our progress and upcoming features for bias detection, compliance tracking, and model management."
-  structuredData={structuredData}
+<Layout
+  title="FairMind recovery roadmap | Evidence before claims"
+  description="The FairMind recovery sequence: truthful capability states, immutable evidence, human-reviewed mappings, findings, retests, and reproducible assurance packages."
 >
-  <!-- Hero Section -->
-  <section class="bg-black text-yellow-400 py-24 border-b-2 border-yellow-400">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-      <h1 class="text-5xl md:text-6xl font-black mb-6">
-        <span class="block">TECHNICAL ROADMAP</span>
-        <span class="text-yellow-400 bg-black px-4 py-2 transform rotate-1 inline-block shadow-[6px_6px_0px_0px_rgba(255,255,0,1)]">DEVELOPMENT TIMELINE</span>
-      </h1>
-      
-      <p class="text-xl md:text-2xl text-yellow-400 max-w-4xl mx-auto font-bold">
-        OPEN-SOURCE DEVELOPMENT ROADMAP FOR THE FAIRMIND AI GOVERNANCE PLATFORM. TRACK OUR PROGRESS AND UPCOMING FEATURES.
-      </p>
-    </div>
-  </section>
+  <div class="route-page">
+    <PageHero
+      signal="Public recovery sequence · evidence before claims"
+      title="A roadmap with"
+      accent="acceptance criteria."
+      description="This is not a feature wish list. It is the sequence for turning the current FairMind workbench into a defensible assurance system without allowing mock, missing, or insufficient evidence to look complete."
+      proofs={[
+        { label: 'Observed today', value: 'Bounded evidence paths', note: 'Environmental evidence is the strongest implemented vertical slice.' },
+        { label: 'Recovery contract', value: 'Immutable Evidence Passport', note: 'Subject, threshold, artifact, limitation, reviewer, remediation, and rerun.' },
+        { label: 'Exit condition', value: 'Same input. Same manifest.', note: 'Changed content under the same run identity must be rejected.' },
+      ]}
+      primary={{ label: 'Inspect the recovery sequence', href: '#recovery-sequence' }}
+      secondary={{ label: 'Read capability truth', href: '/#capabilities' }}
+    />
 
-  <!-- Roadmap Section -->
-  <section class="py-20 bg-black">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="space-y-16">
-        {roadmap.map((phase, index) => (
-          <div class="relative">
-            <!-- Phase Header -->
-            <div class="flex items-center mb-8">
-              <div class={`w-16 h-16 rounded-none border-2 border-black flex items-center justify-center text-black font-black text-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] ${
-                phase.status === 'COMPLETED' ? 'bg-green-400' :
-                phase.status === 'IN PROGRESS' ? 'bg-yellow-400' : 'bg-gray-400'
-              }`}>
-                {index + 1}
-              </div>
-              <div class="ml-6">
-                <h3 class="text-2xl font-black text-yellow-400 mb-2">{phase.phase}</h3>
-                <div class={`inline-flex items-center px-4 py-2 rounded-none text-sm font-black border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] ${
-                  phase.status === 'COMPLETED' ? 'bg-green-400 text-black' :
-                  phase.status === 'IN PROGRESS' ? 'bg-yellow-400 text-black' : 'bg-gray-400 text-black'
-                }`}>
-                  {phase.status}
-                </div>
-              </div>
-            </div>
-            
-            <!-- Phase Items -->
-            <div class="ml-22">
-              <ul class="space-y-4">
-                {phase.items.map((item) => (
-                  <li class="flex items-start space-x-3">
-                    <svg class="w-5 h-5 text-yellow-400 mt-1 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
-                    </svg>
-                    <span class="text-yellow-400 font-bold">{item}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
+    <section class="route-section" id="recovery-sequence" aria-labelledby="roadmap-title">
+      <header class="route-section-heading">
+        <h2 id="roadmap-title">Current state and recovery priority are different things.</h2>
+        <p>The labels below describe the July 2026 recovery decision record. They do not silently promote a planned capability into a shipped one.</p>
+      </header>
+
+      <div class="roadmap-controls" role="group" aria-label="Filter recovery roadmap">
+        <button type="button" class="is-active" data-roadmap-filter="all" aria-pressed="true">Entire sequence</button>
+        <button type="button" data-roadmap-filter="current" aria-pressed="false">Observed checkpoint</button>
+        <button type="button" data-roadmap-filter="p0" aria-pressed="false">P0 · claim safety</button>
+        <button type="button" data-roadmap-filter="p1" aria-pressed="false">P1 · foundation</button>
+        <button type="button" data-roadmap-filter="p2" aria-pressed="false">P2 · coherence</button>
+      </div>
+
+      <div data-roadmap-list>
+        {phases.map((phase) => (
+          <article class="roadmap-phase" data-roadmap-category={phase.category}>
+            <span class:list={['route-state', phase.category === 'p0' && 'route-state-orange', phase.category === 'current' && 'route-state-dark']}>{phase.state}</span>
+            <h2>{phase.title}</h2>
+            <ul>
+              {phase.items.map((item) => <li>{item}</li>)}
+            </ul>
+          </article>
         ))}
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- CTA Section -->
-  <section class="py-20 bg-black border-t-2 border-yellow-400">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-      <h2 class="text-4xl font-black text-yellow-400 mb-6">READY TO JOIN THE JOURNEY?</h2>
-      <p class="text-xl text-yellow-400 mb-8 font-bold">
-        BE PART OF BUILDING THE MOST COMPREHENSIVE AI GOVERNANCE PLATFORM FOR RESPONSIBLE AI DEVELOPMENT.
-      </p>
-      
-      <div class="flex flex-col sm:flex-row gap-6 justify-center">
-        <a href="/demo" class="inline-flex items-center px-8 py-4 bg-yellow-400 text-black font-black rounded-none border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transform hover:-translate-y-2 transition-all">
-          <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-          </svg>
-          TRY DEMO
-        </a>
-        <a href="/contact" class="inline-flex items-center px-8 py-4 border-2 border-yellow-400 text-yellow-400 font-black rounded-none hover:bg-yellow-400 hover:text-black transition-all shadow-[4px_4px_0px_0px_rgba(255,255,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(255,255,0,1)]">
-          <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
-          </svg>
-          CONTACT US
-        </a>
+    <section class="route-section route-section-dark" aria-labelledby="acceptance-title">
+      <div class="route-split">
+        <div class="route-split-copy">
+          <h2 id="acceptance-title">The recovery is credible when one real run closes the loop.</h2>
+          <p>Run or import a real evaluation, preserve its identity and artifacts, expose the limitation, route the mapping to an independent reviewer, retain the failure, link remediation and a clean retest, then reproduce the same framework-pinned manifest at the same evidence cutoff.</p>
+        </div>
+        <div class="route-quote">
+          <blockquote>Missing evidence never becomes a pass.</blockquote>
+        </div>
       </div>
-    </div>
-  </section>
+    </section>
+
+    <section class="route-closing" aria-labelledby="roadmap-closing-title">
+      <div>
+        <p>Bring the evaluation output you already have</p>
+        <h2 id="roadmap-closing-title">Help close a real evidence path.</h2>
+      </div>
+      <div class="route-actions">
+        <a class="button button-primary" href="/request-access">Request access</a>
+        <a class="button button-secondary" href="https://github.com/adhit-r/fairmind">Inspect the source</a>
+      </div>
+    </section>
+  </div>
 </Layout>
+
+<script>
+  document.querySelectorAll('[data-roadmap-filter]').forEach((filter) => {
+    filter.addEventListener('click', () => {
+      if (!(filter instanceof HTMLButtonElement)) return;
+      const selected = filter.dataset.roadmapFilter || 'all';
+      document.querySelectorAll('[data-roadmap-filter]').forEach((item) => {
+        if (!(item instanceof HTMLButtonElement)) return;
+        const active = item === filter;
+        item.classList.toggle('is-active', active);
+        item.setAttribute('aria-pressed', String(active));
+      });
+      document.querySelectorAll('[data-roadmap-category]').forEach((phase) => {
+        if (!(phase instanceof HTMLElement)) return;
+        phase.hidden = selected !== 'all' && phase.dataset.roadmapCategory !== selected;
+      });
+    });
+  });
+</script>

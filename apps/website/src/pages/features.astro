@@ -1,150 +1,99 @@
 ---
 import Layout from '../layouts/Layout.astro';
+import PageHero from '../components/marketing/PageHero.astro';
+import '../styles/pages.css';
 
-const features = [
-  {
-    id: 'bias-detection',
-    title: 'Real-time Bias Detection',
-    description: 'Comprehensive bias analysis using statistical methods, custom rules, and LLM-powered insights to identify fairness issues across multiple protected attributes.',
-    highlights: [
-      'Multiple fairness metrics (WEAT, SEAT, BBQ)',
-      'Real-time stream processing',
-      'Automated audit trails',
-      'Slice-based analysis'
-    ]
-  },
-  {
-    id: 'explainability',
-    title: 'Advanced Explainability',
-    description: 'Understand model decisions with SHAP, LIME, and integrated gradients. Interactive dashboards for both technical and non-technical users.',
-    highlights: [
-      'SHAP, LIME, and integrated gradients',
-      'Interactive what-if analysis',
-      'Visual and text-based reports',
-      'Model-agnostic architecture'
-    ]
-  },
-  {
-    id: 'monitoring',
-    title: 'Continuous Monitoring',
-    description: 'Track model performance, data drift, and concept drift in real-time. Proactive alerts for performance degradation and retraining needs.',
-    highlights: [
-      'Performance monitoring (accuracy, precision, recall)',
-      'Advanced drift detection (KS, PSI)',
-      'Customizable alert channels',
-      'Version comparison dashboards'
-    ]
-  },
-  {
-    id: 'provenance',
-    title: 'Model Provenance & Lineage',
-    description: 'Track the complete lifecycle of your AI models from data source to deployment with digital signatures and audit trails.',
-    highlights: [
-      'Digital signatures for authenticity',
-      'Complete data lineage tracking',
-      'Automated model cards',
-      'Compliance-ready audit trails'
-    ]
-  },
-  {
-    id: 'security',
-    title: 'Security & Compliance',
-    description: 'Enterprise-grade security with OWASP AI/LLM protections, GDPR and AI Act compliance tools, and comprehensive audit logging.',
-    highlights: [
-      'OWASP AI/LLM security implementation',
-      'GDPR and AI Act compliance',
-      'Role-based access control',
-      'Comprehensive audit logging'
-    ]
-  },
-  {
-    id: 'simulation',
-    title: 'Simulation & Testing',
-    description: 'Test AI models in virtual environments before deployment. Includes bias simulation, adversarial testing, and scenario modeling.',
-    highlights: [
-      'Bias simulation and adversarial testing',
-      'Stress testing capabilities',
-      'Virtual environment testing',
-      'Robustness validation'
-    ]
-  }
+const workflow = [
+  ['System boundary', 'Define what is actually under review.', 'Organization, workspace, AI system, version, owner, deployment, intended use, and applicable frameworks.'],
+  ['Evaluation run', 'Run or ingest a bounded test.', 'Record evaluator identity, metric version, prompt or dataset scope, threshold, result, and capability state.'],
+  ['Evidence record', 'Preserve the artifact and its limits.', 'Bind provenance, integrity information, raw output, limitations, and the exact subject that produced it.'],
+  ['Reviewer decision', 'Keep technical output separate from governance acceptance.', 'Candidate mappings require an accountable person to accept, reject, or narrow them with rationale.'],
+  ['Finding and retest', 'Retain failure history after remediation.', 'Link finding, risk, owner, remediation, exception, and clean rerun without erasing the earlier failure.'],
+  ['Assurance package', 'Compile decision-ready evidence.', 'Export a framework-pinned index for a stated evidence cutoff—decision support, never certification.'],
 ];
 
-const structuredData = {
-  "@context": "https://schema.org",
-  "@type": "SoftwareApplication",
-  "name": "FairMind AI Governance Platform",
-  "description": "Comprehensive AI governance platform with bias detection, explainability, monitoring, and compliance features",
-  "applicationCategory": "BusinessApplication",
-  "operatingSystem": "Web",
-  "url": "https://fairmind.xyz/features"
-};
+const capabilities = [
+  ['Environmental evidence', 'validated', 'Energy, carbon, water, uncertainty, mitigation, exception, and reviewer records.', 'Real hardware evidence is still required before paper claims are treated as observed.'],
+  ['Provider-backed LLM judge', 'external_provider', 'Bounded assessment with provider identity and rubric version.', 'Requires a configured provider and preserves that dependency as a limitation.'],
+  ['AI BOM fairness profile', 'metadata_only', 'Transforms inventory, bias, remediation, and unknown metadata.', 'It structures supplied metadata; it does not independently evaluate the system.'],
+  ['Multimodal group analysis', 'metadata_only', 'Distribution analysis over caller-supplied labels.', 'Media content itself is not evaluated.'],
+  ['Tabular bias', 'unavailable', 'No evidence-grade active route.', 'Unavailable must remain unavailable until a real contract closes.'],
+  ['Modern LLM bias', 'unavailable', 'Mock output cannot enter assurance packages.', 'Browser-generated results and pass fallbacks are excluded.'],
+];
 ---
 
-<Layout 
-  title="Features - FairMind AI Governance Platform"
-  description="Discover FairMind's comprehensive AI governance features including real-time bias detection, explainable AI, continuous monitoring, and compliance tools."
-  structuredData={structuredData}
+<Layout
+  title="FairMind features | The AI assurance evidence layer"
+  description="Define AI systems, ingest evaluation results, preserve evidence boundaries, route human review, retain remediation and retests, and compile assurance packages."
 >
-  <!-- Hero Section -->
-  <section class="bg-white py-16 border-b border-gray-200">
-    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-      <h1 class="text-4xl font-bold text-gray-900 mb-4">
-        Comprehensive AI Governance Features
-      </h1>
-      <p class="text-lg text-gray-600">
-        Everything you need to build, deploy, and monitor responsible AI systems with confidence.
-      </p>
-    </div>
-  </section>
+  <div class="route-page">
+    <PageHero
+      signal="AI evaluation · AI safety · AI governance"
+      title="The feature is the"
+      accent="evidence chain."
+      description="FairMind sits between evaluator tools and governance decisions. It gives every result a subject, threshold, artifact, limitation, review state, finding, remediation, and rerun—so a test can become evidence without pretending to become compliance."
+      proofs={[
+        { label: 'Input', value: 'Evaluator output', note: 'Run a supported path or ingest a result from a tool your team already trusts.' },
+        { label: 'FairMind adds', value: 'Chain of custody', note: 'Identity, threshold, artifacts, limitations, review, findings, and retests.' },
+        { label: 'Output', value: 'Decision-ready package', note: 'Framework-pinned evidence for a stated cutoff and accountable reviewer.' },
+      ]}
+      primary={{ label: 'Follow the workflow', href: '#workflow' }}
+      secondary={{ label: 'Check capability truth', href: '#capability-register' }}
+    />
 
-  <!-- Features Grid -->
-  <section class="py-16 bg-white">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-        {features.map((feature) => (
-          <div class="bg-white p-8 border border-gray-200 hover:border-gray-300 transition-colors">
-            <h3 class="text-2xl font-bold text-gray-900 mb-4">{feature.title}</h3>
-            
-            <p class="text-gray-600 mb-6 leading-relaxed">
-              {feature.description}
-            </p>
-            
-            <div class="space-y-2">
-              <h4 class="text-sm font-semibold text-gray-900 mb-3">Key Highlights:</h4>
-              <ul class="space-y-2">
-                {feature.highlights.map((highlight) => (
-                  <li class="flex items-start text-sm text-gray-600">
-                    <span class="mr-2">•</span>
-                    <span>{highlight}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
+    <section class="route-section" id="workflow" aria-labelledby="workflow-title">
+      <header class="route-section-heading">
+        <h2 id="workflow-title">Six jobs, one durable record.</h2>
+        <p>The product is organized around the work required to defend a decision—not a collection of unrelated dashboards.</p>
+      </header>
+      <div class="route-ledger">
+        {workflow.map((item, index) => (
+          <article class="route-ledger-row">
+            <span>{String(index + 1).padStart(2, '0')} / {item[0]}</span>
+            <h3>{item[1]}</h3>
+            <p>{item[2]}</p>
+          </article>
         ))}
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- CTA Section -->
-  <section class="py-16 bg-gray-50 border-t border-gray-200">
-    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-      <h2 class="text-3xl font-bold text-gray-900 mb-4">Ready to Experience These Features?</h2>
-      <p class="text-lg text-gray-600 mb-8">
-        Try our platform today and see how comprehensive AI governance can transform your organization.
-      </p>
-      <div class="flex flex-col sm:flex-row gap-4 justify-center">
-        <a href="https://github.com/adhit-r/fairmind" target="_blank" class="inline-flex items-center justify-center px-6 py-3 bg-gray-900 text-white font-medium hover:bg-gray-800 transition-colors">
-          <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-          </svg>
-          Get Started on GitHub
-        </a>
-        <a href="/contact" class="inline-flex items-center justify-center px-6 py-3 border border-gray-300 text-gray-700 font-medium hover:border-gray-400 hover:bg-gray-50 transition-colors">
-          Contact Us
-        </a>
+    <section class="route-section route-section-dark" aria-labelledby="passport-title">
+      <div class="route-split">
+        <div class="route-split-copy">
+          <h2 id="passport-title">The Evidence Passport is the target exchange contract.</h2>
+          <p>FairMind’s novelty is not another universal trust score. It is a portable, reviewable unit that binds technical evidence to the human decisions and later changes that give it governance meaning.</p>
+        </div>
+        <div class="route-checklist">
+          {['Exact subject and version', 'Evaluator and metric identity', 'Pre-registered threshold', 'Artifact integrity and raw output', 'Limitations and capability state', 'Reviewer decision and rationale', 'Finding, remediation, and exception', 'Superseding rerun without erased history'].map((item, index) => (
+            <div><span>{String(index + 1).padStart(2, '0')}</span><strong>{item}</strong></div>
+          ))}
+        </div>
       </div>
-    </div>
-  </section>
+    </section>
+
+    <section class="route-section" id="capability-register" aria-labelledby="capability-title">
+      <header class="route-section-heading">
+        <h2 id="capability-title">Capability state travels with the evidence.</h2>
+        <p>These are implementation boundaries, not maturity grades. A route can be useful and still be bounded.</p>
+      </header>
+      <div class="route-table-wrap">
+        <table class="route-table">
+          <thead><tr><th>Evaluator path</th><th>State</th><th>What it can produce</th><th>Boundary</th></tr></thead>
+          <tbody>
+            {capabilities.map((row) => (
+              <tr><td><strong>{row[0]}</strong></td><td><span class="route-state">{row[1]}</span></td><td>{row[2]}</td><td>{row[3]}</td></tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="route-closing" aria-labelledby="features-closing-title">
+      <div><p>Start with one real evaluator output</p><h2 id="features-closing-title">Make the evidence boundary visible.</h2></div>
+      <div class="route-actions">
+        <a class="button button-primary" href="/request-access">Request access</a>
+        <a class="button button-secondary" href="/roadmap">Read the recovery roadmap</a>
+      </div>
+    </section>
+  </div>
 </Layout>
