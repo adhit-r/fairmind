@@ -1,184 +1,112 @@
 ---
 import Layout from '../layouts/Layout.astro';
-
-const pageTitle = "Request Access - Fairmind AI Governance Platform";
-const pageDescription = "Request enterprise access to Fairmind's comprehensive AI governance and bias detection platform.";
-const pageKeywords = ["request access", "enterprise", "AI governance", "bias detection", "Fairmind"];
+import PageHero from '../components/marketing/PageHero.astro';
+import '../styles/pages.css';
 ---
 
 <Layout
-  title={pageTitle}
-  description={pageDescription}
-  keywords={pageKeywords}
-  image="/images/request-access.png"
+  title="Request FairMind access | Start with a real evidence path"
+  description="Talk to FairMind about evaluation evidence, AI safety review, framework mapping, remediation, retests, and assurance-package workflows."
 >
-  <!-- Hero Section -->
-  <section class="relative min-h-screen flex items-center justify-center overflow-hidden bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
-    <div class="absolute inset-0">
-      <div class="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg width="60" height="60" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg"%3E%3Cg fill="none" fill-rule="evenodd"%3E%3Cg fill="%239C92AC" fill-opacity="0.05"%3E%3Ccircle cx="30" cy="30" r="2"/%3E%3C/g%3E%3C/g%3E%3C/svg%3E')] opacity-20"></div>
-      <div class="absolute top-0 left-0 w-96 h-96 bg-purple-500/20 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-float"></div>
-      <div class="absolute top-0 right-0 w-96 h-96 bg-indigo-500/20 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-float" style="animation-delay: 2s;"></div>
-      <div class="absolute bottom-0 left-1/2 w-96 h-96 bg-pink-500/20 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-float" style="animation-delay: 4s;"></div>
-    </div>
-    
-    <div class="container relative z-10">
-      <div class="max-w-4xl mx-auto text-center">
-        <h1 class="text-4xl md:text-6xl font-bold mb-6 text-white">
-          <span class="block">Request Enterprise</span>
-          <span class="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">Access</span>
-        </h1>
-        <p class="text-xl text-gray-300 mb-8 max-w-2xl mx-auto">
-          Join leading organizations using Fairmind for comprehensive AI governance and bias detection
-        </p>
-      </div>
-    </div>
-  </section>
+  <div class="route-page">
+    <PageHero
+      signal="A working session, not a generic sales funnel"
+      title="Show us the"
+      accent="evidence problem."
+      description="Start with the evaluator output, review bottleneck, or governance decision your team cannot defend cleanly today. We will determine whether a current FairMind path fits—and say so plainly when it does not."
+      proofs={[
+        { label: 'Bring', value: 'A real test output', note: 'Model, data, LLM, agent, security, provenance, or environmental.' },
+        { label: 'Trace', value: 'The decision boundary', note: 'Who reviews it, what threshold applies, and what happens after failure.' },
+        { label: 'Leave with', value: 'A bounded next step', note: 'Pilot path, adapter target, research collaboration, or a clear not-yet.' },
+      ]}
+      primary={{ label: 'Describe your evidence path', href: '#access-form' }}
+      secondary={{ label: 'Check current capability', href: '/#capabilities' }}
+      dark={true}
+    />
 
-  <!-- Request Access Form Section -->
-  <section class="py-20 bg-gradient-to-br from-slate-50 to-white">
-    <div class="container">
-      <div class="max-w-3xl mx-auto">
-        <div class="bg-white rounded-2xl shadow-2xl p-8 md:p-12">
-          <div class="text-center mb-8">
-            <h2 class="text-3xl md:text-4xl font-bold mb-4 text-gray-900">
-              Get Started with Fairmind
-            </h2>
-            <p class="text-lg text-gray-600">
-              Fill out the form below and our team will get back to you within 24 hours
-            </p>
+    <section class="route-section" id="access-form" aria-labelledby="access-title">
+      <header class="route-section-heading">
+        <h2 id="access-title">Tell us where the chain breaks.</h2>
+        <p>No inflated maturity questionnaire. A few precise fields are enough to route the conversation to evaluation, review, governance, or research.</p>
+      </header>
+
+      <div class="route-form-grid">
+        <form class="route-form" action="https://formspree.io/f/xayzqjqw" method="POST">
+          <input type="hidden" name="_subject" value="New FairMind evidence-path request" />
+          <div class="route-field">
+            <label for="firstName">First name</label>
+            <input id="firstName" name="firstName" type="text" autocomplete="given-name" required />
           </div>
-          
-          <form 
-            action="https://formspree.io/f/xayzqjqw" 
-            method="POST"
-            class="space-y-6"
-          >
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label for="firstName" class="block text-gray-700 font-semibold mb-2">First Name *</label>
-                <input 
-                  type="text" 
-                  id="firstName" 
-                  name="firstName" 
-                  required
-                  class="w-full px-4 py-3 rounded-lg border border-gray-300 text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
-                  placeholder="Enter your first name"
-                />
-              </div>
-              <div>
-                <label for="lastName" class="block text-gray-700 font-semibold mb-2">Last Name *</label>
-                <input 
-                  type="text" 
-                  id="lastName" 
-                  name="lastName" 
-                  required
-                  class="w-full px-4 py-3 rounded-lg border border-gray-300 text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
-                  placeholder="Enter your last name"
-                />
-              </div>
-            </div>
-            
+          <div class="route-field">
+            <label for="lastName">Last name</label>
+            <input id="lastName" name="lastName" type="text" autocomplete="family-name" required />
+          </div>
+          <div class="route-field">
+            <label for="email">Work email</label>
+            <input id="email" name="email" type="email" autocomplete="email" placeholder="you@organization.com" required />
+          </div>
+          <div class="route-field">
+            <label for="company">Organization</label>
+            <input id="company" name="company" type="text" autocomplete="organization" required />
+          </div>
+          <div class="route-field">
+            <label for="jobTitle">Role</label>
+            <input id="jobTitle" name="jobTitle" type="text" autocomplete="organization-title" placeholder="Assurance lead, ML engineer, reviewer…" />
+          </div>
+          <div class="route-field">
+            <label for="teamSize">Team size</label>
+            <select id="teamSize" name="teamSize">
+              <option value="">Select if useful</option>
+              <option value="individual">Individual</option>
+              <option value="2-10">2–10</option>
+              <option value="11-50">11–50</option>
+              <option value="51-plus">51+</option>
+            </select>
+          </div>
+          <div class="route-field route-field-wide">
+            <label for="useCase">Where does the evidence need to go?</label>
+            <select id="useCase" name="useCase" required>
+              <option value="">Choose the closest path</option>
+              <option value="evaluation-evidence">Evaluation output to evidence record</option>
+              <option value="safety-review">AI safety finding to human review</option>
+              <option value="framework-mapping">Evidence to framework mapping</option>
+              <option value="remediation-retest">Finding, remediation, and retest</option>
+              <option value="environmental-research">Environmental evidence or research</option>
+              <option value="adapter">Evaluator adapter or integration</option>
+              <option value="other">Something else</option>
+            </select>
+          </div>
+          <div class="route-field route-field-wide">
+            <label for="message">Describe the test, artifact, or decision</label>
+            <textarea id="message" name="message" placeholder="What produces the result today? Who reviews it? What must the final evidence support?" required></textarea>
+          </div>
+          <div class="route-form-footer">
+            <p>By submitting, you agree that we may use these details to respond. Read the <a href="/privacy">Privacy Policy</a>.</p>
+            <button class="button button-primary" type="submit">Send evidence-path request</button>
+          </div>
+        </form>
+
+        <aside aria-label="What happens next">
+          <div class="route-aside-ledger">
             <div>
-              <label for="email" class="block text-gray-700 font-semibold mb-2">Email Address *</label>
-              <input 
-                type="email" 
-                id="email" 
-                name="email" 
-                required
-                class="w-full px-4 py-3 rounded-lg border border-gray-300 text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
-                placeholder="your.email@company.com"
-              />
+              <span>01 · Triage</span>
+              <strong>We identify the current capability state.</strong>
+              <p>Validated, metadata-only, external-provider, unavailable, or insufficient data.</p>
             </div>
-            
             <div>
-              <label for="company" class="block text-gray-700 font-semibold mb-2">Company *</label>
-              <input 
-                type="text" 
-                id="company" 
-                name="company" 
-                required
-                class="w-full px-4 py-3 rounded-lg border border-gray-300 text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
-                placeholder="Your company name"
-              />
+              <span>02 · Boundary</span>
+              <strong>We separate what exists from what would need building.</strong>
+              <p>No roadmap feature is presented as a shipped integration.</p>
             </div>
-            
             <div>
-              <label for="jobTitle" class="block text-gray-700 font-semibold mb-2">Job Title</label>
-              <input 
-                type="text" 
-                id="jobTitle" 
-                name="jobTitle"
-                class="w-full px-4 py-3 rounded-lg border border-gray-300 text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
-                placeholder="e.g., AI Engineer, Data Scientist, CTO"
-              />
+              <span>03 · Next step</span>
+              <strong>We propose a bounded pilot or close the loop honestly.</strong>
+              <p>FairMind is decision support. It does not certify AI systems or provide legal advice.</p>
             </div>
-            
-            <div>
-              <label for="useCase" class="block text-gray-700 font-semibold mb-2">Primary Use Case</label>
-              <select 
-                id="useCase" 
-                name="useCase"
-                class="w-full px-4 py-3 rounded-lg border border-gray-300 text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
-              >
-                <option value="">Select your primary use case</option>
-                <option value="bias-detection">AI Bias Detection</option>
-                <option value="compliance">Regulatory Compliance</option>
-                <option value="model-monitoring">Model Monitoring</option>
-                <option value="audit-trails">Audit Trails</option>
-                <option value="knowledge-graph">Knowledge Graph Analysis</option>
-                <option value="geographic-bias">Geographic Bias Analysis</option>
-                <option value="model-dna">Model DNA Signatures</option>
-                <option value="cultural-factors">Cultural Factors Analysis</option>
-                <option value="aibom">AIBOM Management</option>
-                <option value="other">Other</option>
-              </select>
-            </div>
-            
-            <div>
-              <label for="teamSize" class="block text-gray-700 font-semibold mb-2">Team Size</label>
-              <select 
-                id="teamSize" 
-                name="teamSize"
-                class="w-full px-4 py-3 rounded-lg border border-gray-300 text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
-              >
-                <option value="">Select team size</option>
-                <option value="1-5">1-5 people</option>
-                <option value="6-25">6-25 people</option>
-                <option value="26-100">26-100 people</option>
-                <option value="101-500">101-500 people</option>
-                <option value="Coming Soon">Coming Soon</option>
-              </select>
-            </div>
-            
-            <div>
-              <label for="message" class="block text-gray-700 font-semibold mb-2">Additional Information</label>
-              <textarea 
-                id="message" 
-                name="message" 
-                rows="4"
-                class="w-full px-4 py-3 rounded-lg border border-gray-300 text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
-                placeholder="Tell us about your AI governance needs, specific requirements, or any questions you have..."
-              ></textarea>
-            </div>
-            
-            <div class="text-center pt-6">
-              <button 
-                type="submit"
-                class="btn bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white border-0 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-300 btn-lg font-semibold px-8 py-4"
-              >
-                Request Access
-                <svg class="w-5 h-5 ml-2 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                </svg>
-              </button>
-            </div>
-            
-            <p class="text-sm text-gray-500 text-center mt-4">
-              We'll get back to you within 24 hours with access details and next steps
-            </p>
-          </form>
-        </div>
+          </div>
+          <p class="route-meta">Prefer email? <a href="mailto:support@fairmind.xyz">support@fairmind.xyz</a></p>
+        </aside>
       </div>
-    </div>
-  </section>
+    </section>
+  </div>
 </Layout>

@@ -1,0 +1,96 @@
+---
+import Layout from '../../layouts/Layout.astro';
+
+interface Props {
+  title: string;
+  description: string;
+  updated: string;
+  readingTime: string;
+}
+
+const { title, description, updated, readingTime } = Astro.props;
+---
+
+<Layout title={`${title} · FairMind`} description={description}>
+  <article class="legal-document" data-legal-document>
+    <header class="legal-header">
+      <a href="/" class="legal-back">Back to FairMind</a>
+      <div class="legal-heading-row">
+        <div>
+        <p class="legal-kind">FairMind Legal Information</p>
+          <h1>{title}</h1>
+        </div>
+        <dl class="legal-meta">
+          <div>
+            <dt>Last updated</dt>
+            <dd>{updated}</dd>
+          </div>
+          <div>
+            <dt>Reading time</dt>
+            <dd>{readingTime}</dd>
+          </div>
+          <div>
+            <dt>Version</dt>
+            <dd class="mono">1.0</dd>
+          </div>
+        </dl>
+      </div>
+      <p class="legal-description">{description}</p>
+    </header>
+
+    <nav class="legal-tabs" aria-label="Document view">
+      <button type="button" class="is-active" data-legal-tab="exact" aria-pressed="true">
+        Legal text
+      </button>
+      <button type="button" data-legal-tab="plain" aria-pressed="false">
+        Plain-language summary
+      </button>
+      <button type="button" data-legal-tab="path" aria-pressed="false">
+        Data processing details
+      </button>
+    </nav>
+
+    <div class="legal-panel is-active" data-legal-panel="exact">
+      <slot name="exact" />
+    </div>
+    <div class="legal-panel" data-legal-panel="plain" hidden>
+      <slot name="plain" />
+    </div>
+    <div class="legal-panel" data-legal-panel="path" hidden>
+      <slot name="path" />
+    </div>
+
+    <footer class="legal-document-footer">
+      <p>The legal text governs. Summaries provide context and do not replace it.</p>
+      <a href="/contact">Ask a precise question</a>
+    </footer>
+  </article>
+</Layout>
+
+<script>
+  document.querySelectorAll('[data-legal-document]').forEach((documentRoot) => {
+    const tabs = documentRoot.querySelectorAll('[data-legal-tab]');
+    const panels = documentRoot.querySelectorAll('[data-legal-panel]');
+
+    tabs.forEach((tab) => {
+      tab.addEventListener('click', () => {
+        if (!(tab instanceof HTMLButtonElement)) return;
+        const selected = tab.dataset.legalTab;
+
+        tabs.forEach((item) => {
+          if (!(item instanceof HTMLButtonElement)) return;
+          const active = item === tab;
+          item.classList.toggle('is-active', active);
+          item.setAttribute('aria-pressed', String(active));
+        });
+
+        panels.forEach((panel) => {
+          if (!(panel instanceof HTMLElement)) return;
+          const active = panel.dataset.legalPanel === selected;
+          panel.hidden = !active;
+          panel.classList.toggle('is-active', active);
+        });
+      });
+    });
+  });
+</script>

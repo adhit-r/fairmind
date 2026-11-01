@@ -1,20 +1,64 @@
 ---
 import Layout from '../layouts/Layout.astro';
-import Comparison from '../components/Comparison.astro';
+import PageHero from '../components/marketing/PageHero.astro';
+import '../styles/pages.css';
 
-const structuredData = {
-  "@context": "https://schema.org",
-  "@type": "WebPage",
-  "name": "FairMind Comparison",
-  "description": "See how FairMind compares to other AI fairness and monitoring platforms",
-  "url": "https://fairmind.xyz/comparison"
-};
+const rows = [
+  ['Primary job', 'Run a technical evaluation', 'Manage program, policy, or inventory', 'Preserve evaluator output through review and decision'],
+  ['System identity', 'Often local to the run', 'Usually an inventory record', 'Bound to the evidence subject, version, owner, and deployment'],
+  ['Threshold', 'Metric or suite configuration', 'May live in policy text', 'Pre-registered and stored beside the result'],
+  ['Raw artifact', 'Native output', 'Often linked or summarized', 'Indexed with provenance and integrity information'],
+  ['Framework mapping', 'Usually outside scope', 'Often manual or workflow-specific', 'Candidate mapping with independent reviewer decision'],
+  ['Failure history', 'Reruns may replace the working view', 'Tracked as issue or action', 'Finding, remediation, exception, and superseding retest stay linked'],
+  ['Final claim', 'Technical result', 'Governance program state', 'Decision support; never automatic compliance or certification'],
+];
 ---
 
-<Layout 
-  title="Comparison - FairMind AI Governance Platform"
-  description="See how FairMind compares to other AI fairness and monitoring platforms including IBM AIF360, AWS Clarify, and Arize AI."
-  structuredData={structuredData}
+<Layout
+  title="Compare FairMind | Evaluators, governance suites, and the evidence layer"
+  description="FairMind complements evaluator tools and governance platforms by preserving the chain from technical result to human-reviewed assurance evidence."
 >
-  <Comparison />
+  <div class="route-page">
+    <PageHero
+      signal="Compare the job, not the logo wall"
+      title="Evaluators test. Governance manages."
+      accent="FairMind binds evidence."
+      description="FairMind is most useful between the tools that produce technical results and the processes that need defensible, reviewable evidence. It complements both categories instead of pretending to replace them."
+      proofs={[
+        { label: 'Evaluator', value: 'Produces a result', note: 'Metrics, suites, scans, artifacts, and reruns.' },
+        { label: 'FairMind', value: 'Preserves meaning', note: 'Subject, threshold, limitation, review, finding, and retest.' },
+        { label: 'Governance', value: 'Owns the decision', note: 'Frameworks, policies, approvals, reports, and accountability.' },
+      ]}
+      primary={{ label: 'Compare the handoffs', href: '#comparison-table' }}
+      secondary={{ label: 'See adapter targets', href: '/roadmap' }}
+    />
+
+    <section class="route-section" id="comparison-table" aria-labelledby="comparison-title">
+      <header class="route-section-heading">
+        <h2 id="comparison-title">The missing layer is evidence continuity.</h2>
+        <p>This category comparison is deliberately vendor-neutral. Products vary; the handoff failure is consistent.</p>
+      </header>
+      <div class="route-table-wrap">
+        <table class="route-table">
+          <thead><tr><th>Concern</th><th>Evaluator tools</th><th>Governance platforms</th><th>FairMind evidence layer</th></tr></thead>
+          <tbody>{rows.map((row) => <tr>{row.map((cell, index) => <td><strong>{index === 0 ? cell : ''}</strong>{index === 0 ? '' : cell}</td>)}</tr>)}</tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="route-section route-section-dark" aria-labelledby="adapter-title">
+      <div class="route-split">
+        <div class="route-split-copy">
+          <h2 id="adapter-title">Bring the evaluator you already trust.</h2>
+          <p>The roadmap prioritizes artifact adapters for Giskard, MLflow, Fairlearn/AIF360, ModelScan, and garak/PyRIT before adding more evaluator engines. Those are adapter targets, not claimed live integrations.</p>
+        </div>
+        <div class="route-quote"><blockquote>The evaluator is not the governance decision.</blockquote></div>
+      </div>
+    </section>
+
+    <section class="route-closing" aria-labelledby="comparison-closing-title">
+      <div><p>Keep your current test stack</p><h2 id="comparison-closing-title">Add the evidence chain it is missing.</h2></div>
+      <div class="route-actions"><a class="button button-primary" href="/request-access">Discuss an adapter path</a><a class="button button-secondary" href="/features">Inspect FairMind</a></div>
+    </section>
+  </div>
 </Layout>

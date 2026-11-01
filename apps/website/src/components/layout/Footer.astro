@@ -2,12 +2,86 @@
 const currentYear = new Date().getFullYear();
 ---
 
-<footer class="bg-transparent">
-  <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
-    <div class="mt-8 pt-8 border-t border-gray-700">
-      <p class="text-base text-gray-400 text-center">
-        &copy; {currentYear} Fairmind. All rights reserved.
-      </p>
+<footer class="site-footer site-footer-v3" data-site-footer>
+  <section class="footer-assurance" aria-labelledby="footer-assurance-title">
+    <div class="footer-assurance-copy">
+      <p>AI evaluation · safety · governance</p>
+      <h2 id="footer-assurance-title">Turn test results into evidence a decision can survive.</h2>
+      <span>
+        Bind the exact subject, evaluator, threshold, artifact, limitation, finding, remediation,
+        retest, and human review in one defensible chain.
+      </span>
     </div>
+    <div class="footer-assurance-action">
+      <strong>Start with a real evidence path.</strong>
+      <p>No inflated readiness score. No automatic compliance claim. We begin with what was actually tested.</p>
+      <a class="button button-primary" href="/request-access" data-footer-primary>Request access</a>
+      <a href="https://docs.fairmind.xyz">Read the evidence model</a>
+    </div>
+  </section>
+
+  <div class="footer-spine" aria-label="FairMind assurance workflow">
+    <span>Evaluate</span>
+    <span>Preserve</span>
+    <span>Review</span>
+    <span>Remediate</span>
+    <span>Re-test</span>
+    <span>Govern</span>
+  </div>
+
+  <div class="footer-directory">
+    <div class="footer-statement">
+      <a class="brand" href="/" aria-label="FairMind home">
+        <img src="/logo.png" alt="" width="44" height="44" />
+        <span>FAIRMIND</span>
+      </a>
+      <p>AI assurance evidence, not another compliance theatre dashboard.</p>
+      <span>Vendor-neutral evaluation, safety, and governance infrastructure.</span>
+    </div>
+
+    <nav aria-label="FairMind product">
+      <h2>Product</h2>
+      <a href="/#what-fairmind-does">What FairMind does</a>
+      <a href="/features">Evaluation and assurance features</a>
+      <a href="/use-cases">Use cases</a>
+      <a href="/demo">Evidence-chain walkthrough</a>
+      <a href="/comparison">Why it is different</a>
+    </nav>
+
+    <nav aria-label="FairMind evidence and research">
+      <h2>Evidence</h2>
+      <a href="/#evidence-graph">Assurance graph</a>
+      <a href="/#capabilities">Capability truth</a>
+      <a href="/#research">Research and limitations</a>
+      <a href="/roadmap">Recovery roadmap</a>
+      <a href="https://docs.fairmind.xyz">Documentation</a>
+      <a href="https://github.com/adhit-r/fairmind">Source repository</a>
+    </nav>
+
+    <nav aria-label="FairMind company">
+      <h2>Company</h2>
+      <a href="/about">About FairMind</a>
+      <a href="/blog/">Research notes</a>
+      <a href="/contact">Ask a precise question</a>
+      <a href="/request-access">Request access</a>
+    </nav>
+
+    <nav aria-label="FairMind legal">
+      <h2>Legal information</h2>
+      <a href="/privacy">Privacy Policy</a>
+      <a href="/cookies">Cookie Policy</a>
+      <a href="/data-retention">Data Retention Policy</a>
+      <a href="/terms">Website Terms and Conditions</a>
+      <a href="/cookies">Consent Preferences</a>
+    </nav>
+  </div>
+
+  <div class="footer-truth">
+    <p>
+      <strong>Product truth:</strong> missing evidence never becomes a pass, a mapping never accepts
+      itself, and FairMind does not certify AI systems.
+    </p>
+    <p>© {currentYear} FairMind</p>
   </div>
 </footer>
+

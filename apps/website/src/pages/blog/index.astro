@@ -1,333 +1,87 @@
 ---
 import Layout from '../../layouts/Layout.astro';
+import PageHero from '../../components/marketing/PageHero.astro';
+import '../../styles/pages.css';
 
-// AI Governance and Responsible AI References
-const references = [
+const notes = [
   {
-    id: 1,
-    title: "AI FAIRNESS 360: AN EXTENSIBLE TOOLKIT FOR DETECTING, UNDERSTANDING, AND MITIGATING UNWANTED ALGORITHMIC BIAS",
-    authors: "Rachel K. E. Bellamy, Kuntal Dey, Michael Hind, Samuel C. Hoffman, Stephanie Houde, Kalapriya Kannan, Pranay Lohia, Jacquelyn Martino, Sameep Mehta, Aleksandra Mojsilović, Seema Nagar, Karthikeyan Natesan Ramamurthy, John Richards, Diptikalyan Saha, Prasanna Sattigeri, Moninder Singh, Kush R. Varshney, Yunfeng Zhang",
-    journal: "IBM Journal of Research and Development",
-    year: 2019,
-    doi: "10.1147/JRD.2019.2942287",
-    url: "https://arxiv.org/abs/1810.01943",
-    category: "Bias Detection",
-    featured: true,
-    description: "Comprehensive toolkit for detecting and mitigating algorithmic bias in machine learning models.",
-    impact: "High Impact"
+    type: 'Research program',
+    title: 'FairMind-E environmental evidence',
+    description: 'A measurement and governance path for energy, carbon, water, uncertainty, mitigation, exceptions, review, and export. The path is validated; real hardware evidence is still required for publication claims.',
+    state: 'Measurement path validated',
+    href: '/roadmap',
+    link: 'Read the bounded status',
   },
   {
-    id: 2,
-    title: "FAIRNESS IN MACHINE LEARNING: A SURVEY",
-    authors: "Solon Barocas, Moritz Hardt, Arvind Narayanan",
-    journal: "ACM Computing Surveys",
-    year: 2019,
-    doi: "10.1145/3236386.3242940",
-    url: "https://arxiv.org/abs/1810.01943",
-    category: "AI Governance",
-    featured: true,
-    description: "Comprehensive survey of fairness definitions, metrics, and mitigation strategies in machine learning.",
-    impact: "High Impact"
+    type: 'Evidence profile',
+    title: 'AI BOM fairness evidence',
+    description: 'A reviewer-facing transformation of supplied inventory, bias, remediation, evidence, and unknown metadata. It is a metadata profile, not an independent evaluation.',
+    state: 'metadata_only',
+    href: 'https://github.com/adhit-r/fairmind',
+    link: 'Inspect the source',
   },
   {
-    id: 3,
-    title: "EXPLAINABLE AI: FROM BLACK BOX TO GLASS BOX",
-    authors: "Cynthia Rudin",
-    journal: "Journal of the Royal Statistical Society: Series A",
-    year: 2019,
-    doi: "10.1111/rssa.12386",
-    url: "https://doi.org/10.1111/rssa.12386",
-    category: "Explainability",
-    featured: false,
-    description: "Critical analysis of explainable AI methods and their importance for trustworthy AI systems.",
-    impact: "High Impact"
+    type: 'Product contract',
+    title: 'Evidence Passport',
+    description: 'The target portable unit for subject identity, evaluator and metric versions, threshold, raw artifact integrity, result, limitation, reviewer decision, remediation, and superseding rerun.',
+    state: 'Recovery target',
+    href: '/features',
+    link: 'Inspect the contract',
   },
   {
-    id: 4,
-    title: "A SURVEY ON BIAS AND FAIRNESS IN MACHINE LEARNING",
-    authors: "Ninareh Mehrabi, Fred Morstatter, Nripsuta Saxena, Kristina Lerman, Aram Galstyan",
-    journal: "ACM Computing Surveys",
-    year: 2021,
-    doi: "10.1145/3457607",
-    url: "https://arxiv.org/abs/1908.09635",
-    category: "Bias Detection",
-    featured: false,
-    description: "Comprehensive survey of bias types, detection methods, and fairness metrics in machine learning.",
-    impact: "High Impact"
+    type: 'Assurance architecture',
+    title: 'Human-reviewed framework reuse',
+    description: 'Accepted evidence may support several versioned frameworks. A technical result never accepts its own control mapping or determines conformity.',
+    state: 'Design principle',
+    href: '/comparison',
+    link: 'Compare the roles',
   },
-  {
-    id: 5,
-    title: "THE MYTHOS OF MODEL INTERPRETABILITY",
-    authors: "Zachary C. Lipton",
-    journal: "Communications of the ACM",
-    year: 2018,
-    doi: "10.1145/3233231",
-    url: "https://arxiv.org/abs/1606.03490",
-    category: "Explainability",
-    featured: false,
-    description: "Critical examination of model interpretability and its role in building trustworthy AI systems.",
-    impact: "Medium Impact"
-  },
-  {
-    id: 6,
-    title: "TOWARDS TRUSTWORTHY AI DEVELOPMENT: MECHANISMS FOR SUPPORTING VERIFIABLE CLAIMS",
-    authors: "Miles Brundage, Shahar Avin, Jasmine Wang, Haydn Belfield, Gretchen Krueger, Gillian Hadfield, Heidy Khlaaf, Jingying Yang, Helen Toner, Ruth Fong, Tegan Maharaj, Pang Wei Koh, Sara Hooker, Jade Leung, Andrew Trask, Emma Bluemke, Jonathan Lebensold, Catherine O'Keefe, Mark Koren, Théo Ryffel, JB Rubinovitz, Tamay Besiroglu, Federica Carugati, Jack Clark, Peter Eckersley, Sarah de Haas, Maritza Johnson, Ben Laurie, Alex Ingerman, Igor Krawczuk, Askell Love, Nenad Tomašev, Sören Mindermann, Mrinank Sharma, Divya Siddarth, Shahar Avin, William Isaac, John Aslanides, Gabriel Goh, Iason Gabriel, Helen Toner, Clark Barrett, Avital Balwit, Paul Christiano, Allan Dafoe, Owain Evans, Michael Page, Cotton Seed, Yannick Schroecker, Flaminia Tamè, Carrick Flynn, Thomas Krendl Gilbert, Lisa Dyer, Saif Khan, Yoshua Bengio, Markus Anderljung",
-    journal: "arXiv preprint",
-    year: 2020,
-    doi: "10.48550/arXiv.2004.07213",
-    url: "https://arxiv.org/abs/2004.07213",
-    category: "AI Governance",
-    featured: true,
-    description: "Comprehensive framework for developing trustworthy AI systems with verifiable claims.",
-    impact: "High Impact"
-  },
-  {
-    id: 7,
-    title: "MODEL CARDS FOR MODEL REPORTING",
-    authors: "Margaret Mitchell, Simone Wu, Andrew Zaldivar, Parker Barnes, Lucy Vasserman, Ben Hutchinson, Elena Spitzer, Inioluwa Deborah Raji, Timnit Gebru",
-    journal: "Proceedings of the Conference on Fairness, Accountability, and Transparency",
-    year: 2019,
-    doi: "10.1145/3287560.3287596",
-    url: "https://arxiv.org/abs/1810.03993",
-    category: "Model Provenance",
-    featured: false,
-    description: "Standardized framework for documenting machine learning models with transparency and accountability.",
-    impact: "High Impact"
-  },
-  {
-    id: 8,
-    title: "DATASHEETS FOR DATASETS",
-    authors: "Timnit Gebru, Jamie Morgenstern, Briana Vecchione, Jennifer Wortman Vaughan, Hanna Wallach, Hal Daumé III, Kate Crawford",
-    journal: "Communications of the ACM",
-    year: 2021,
-    doi: "10.1145/3458723",
-    url: "https://arxiv.org/abs/1803.09010",
-    category: "Data Governance",
-    featured: false,
-    description: "Standardized documentation framework for datasets to improve transparency and accountability.",
-    impact: "High Impact"
-  },
-  {
-    id: 9,
-    title: "A UNIFIED APPROACH TO INTERPRETING MODEL PREDICTIONS",
-    authors: "Scott M. Lundberg, Su-In Lee",
-    journal: "Advances in Neural Information Processing Systems",
-    year: 2017,
-    doi: "10.48550/arXiv.1705.07874",
-    url: "https://arxiv.org/abs/1705.07874",
-    category: "Explainability",
-    featured: false,
-    description: "Introduction of SHAP (SHapley Additive exPlanations) for model interpretability.",
-    impact: "High Impact"
-  },
-  {
-    id: 10,
-    title: "WHY SHOULD I TRUST YOU? EXPLAINING THE PREDICTIONS OF ANY CLASSIFIER",
-    authors: "Marco Tulio Ribeiro, Sameer Singh, Carlos Guestrin",
-    journal: "Proceedings of the 22nd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining",
-    year: 2016,
-    doi: "10.1145/2939672.2939778",
-    url: "https://arxiv.org/abs/1602.04938",
-    category: "Explainability",
-    featured: false,
-    description: "Introduction of LIME (Local Interpretable Model-agnostic Explanations) for model interpretability.",
-    impact: "High Impact"
-  },
-  {
-    id: 11,
-    title: "THE AI ACT: A GUIDE TO THE EU'S ARTIFICIAL INTELLIGENCE REGULATION",
-    authors: "European Commission",
-    journal: "Official Journal of the European Union",
-    year: 2024,
-    doi: "10.2870/123456",
-    url: "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX%3A32021R0856",
-    category: "Regulation",
-    featured: true,
-    description: "Comprehensive regulation framework for AI systems in the European Union.",
-    impact: "High Impact"
-  },
-  {
-    id: 12,
-    title: "RESPONSIBLE AI: A FRAMEWORK FOR GOVERNING MACHINE LEARNING SYSTEMS",
-    authors: "Google AI",
-    journal: "Google AI Blog",
-    year: 2021,
-    doi: "10.1038/s41586-021-03819-4",
-    url: "https://ai.google/responsibility/",
-    category: "AI Governance",
-    featured: false,
-    description: "Google's framework for developing responsible AI systems with fairness, safety, and privacy.",
-    impact: "Medium Impact"
-  }
 ];
-
-const categories = ['All', 'AI Governance', 'Bias Detection', 'Explainability', 'Model Provenance', 'Data Governance', 'Regulation'];
-
-const structuredData = {
-  "@context": "https://schema.org",
-  "@type": "CollectionPage",
-  "name": "AI Governance References - Fairmind",
-  "description": "Comprehensive collection of academic papers, industry reports, and regulatory documents on trustworthy AI and responsible AI development",
-  "url": "https://fairmind.xyz/blog"
-};
 ---
 
-<Layout 
-  title="AI Governance References - Fairmind | Academic Papers & Industry Reports"
-  description="Comprehensive collection of academic papers, industry reports, and regulatory documents on trustworthy AI and responsible AI development. Research-backed approaches for building fair, transparent, and accountable AI systems."
-  structuredData={structuredData}
+<Layout
+  title="FairMind research and field notes | Methods with limitations attached"
+  description="Research programs, evidence contracts, architecture notes, and bounded findings from the FairMind AI assurance workbench."
 >
-  <!-- Hero Section -->
-  <section class="bg-black text-yellow-400 py-24 border-b-2 border-yellow-400">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-      <h1 class="text-5xl md:text-6xl font-black mb-6">
-        AI GOVERNANCE REFERENCES
-      </h1>
-      <p class="text-xl md:text-2xl text-yellow-400 max-w-4xl mx-auto font-bold">
-        COMPREHENSIVE COLLECTION OF ACADEMIC PAPERS, INDUSTRY REPORTS, AND REGULATORY DOCUMENTS ON TRUSTWORTHY AI AND RESPONSIBLE AI DEVELOPMENT.
-      </p>
-    </div>
-  </section>
+  <div class="route-page">
+    <PageHero
+      signal="Research and field notes"
+      title="Methods, artifacts,"
+      accent="limitations attached."
+      description="This is the working record around FairMind’s research and product thesis—not a pile of generic responsible-AI links. Each item states what kind of evidence exists and what remains unproven."
+      proofs={[
+        { label: 'Research rule', value: 'Observed is not fixture-only', note: 'Smoke runs and ablations prove paths, not real-world claims.' },
+        { label: 'Product rule', value: 'Metadata is not measurement', note: 'A useful transformation keeps the limitation visible.' },
+        { label: 'Governance rule', value: 'Evidence is not conformity', note: 'Framework relationships require accountable human review.' },
+      ]}
+      primary={{ label: 'Read the current notes', href: '#research-notes' }}
+      secondary={{ label: 'Inspect the source', href: 'https://github.com/adhit-r/fairmind' }}
+      dark={true}
+    />
 
-  <!-- Filter Section -->
-  <section class="py-12 bg-black border-b-2 border-yellow-400">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex flex-wrap justify-center gap-4">
-        {categories.map((category) => (
-          <button class="px-6 py-3 bg-yellow-400 text-black font-black rounded-none border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] transform hover:-translate-y-1 transition-all">
-            {category}
-          </button>
+    <section class="route-section" id="research-notes" aria-labelledby="notes-title">
+      <header class="route-section-heading"><h2 id="notes-title">Current programs and contracts.</h2><p>These are bounded descriptions of active work. They are not publication, certification, or production-readiness claims.</p></header>
+      <div class="route-ledger">
+        {notes.map((note) => (
+          <article class="route-ledger-row">
+            <span>{note.type}<br /><span class="route-state">{note.state}</span></span>
+            <h3>{note.title}</h3>
+            <p>{note.description}<br /><a href={note.href}>{note.link}</a></p>
+          </article>
         ))}
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- References Section -->
-  <section class="py-20 bg-black">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="text-center mb-16">
-        <h2 class="text-4xl font-black text-yellow-400 mb-6">ALL REFERENCES</h2>
-        <p class="text-xl text-yellow-400 font-bold">{references.length} REFERENCES FOUND</p>
+    <section class="route-section route-section-orange" aria-labelledby="research-standard-title">
+      <div class="route-split">
+        <div class="route-split-copy"><h2 id="research-standard-title">A negative result is still useful evidence.</h2><p>FairMind research should preserve missing measurements, failed hypotheses, incompatible comparisons, provider dependencies, and insufficient data. Deleting those boundaries makes the result less scientific and the product less trustworthy.</p></div>
+        <div class="route-quote"><blockquote>Claim strength follows evidence strength.</blockquote></div>
       </div>
-      
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {references.map((reference) => (
-          <div class="bg-black p-8 rounded-none border-2 border-yellow-400 shadow-[6px_6px_0px_0px_rgba(255,255,0,1)] hover:shadow-[8px_8px_0px_0px_rgba(255,255,0,1)] transform hover:-translate-y-2 transition-all">
-            {reference.featured && (
-              <div class="inline-flex items-center px-3 py-1 bg-yellow-400 text-black font-black rounded-none border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] mb-4">
-                <span class="w-2 h-2 bg-black mr-2"></span>
-                FEATURED
-              </div>
-            )}
-            
-            <h3 class="text-xl font-black text-yellow-400 mb-4">{reference.title}</h3>
-            <p class="text-yellow-400 mb-4 font-bold">{reference.description}</p>
-            
-            <div class="space-y-2 mb-4">
-              <div class="flex items-center space-x-2">
-                <span class="text-yellow-400 font-bold">AUTHORS:</span>
-                <span class="text-yellow-400">{reference.authors}</span>
-              </div>
-              <div class="flex items-center space-x-2">
-                <span class="text-yellow-400 font-bold">JOURNAL:</span>
-                <span class="text-yellow-400">{reference.journal}</span>
-              </div>
-              <div class="flex items-center space-x-2">
-                <span class="text-yellow-400 font-bold">YEAR:</span>
-                <span class="text-yellow-400">{reference.year}</span>
-              </div>
-              <div class="flex items-center space-x-2">
-                <span class="text-yellow-400 font-bold">DOI:</span>
-                <span class="text-yellow-400">{reference.doi}</span>
-              </div>
-            </div>
-            
-            <div class="flex items-center justify-between mb-4">
-              <div class="flex items-center space-x-2">
-                <span class="text-yellow-400 font-bold">{reference.impact}</span>
-                <span class="text-yellow-400">•</span>
-                <span class="text-yellow-400 font-bold">{reference.category}</span>
-              </div>
-            </div>
-            
-            <a href={reference.url} target="_blank" class="inline-flex items-center px-6 py-3 bg-yellow-400 text-black font-black rounded-none border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transform hover:-translate-y-1 transition-all">
-              <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
-              </svg>
-              READ PAPER
-            </a>
-          </div>
-        ))}
-      </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- Additional Resources -->
-  <section class="py-20 bg-black border-t-2 border-yellow-400">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="text-center mb-16">
-        <h2 class="text-4xl font-black text-yellow-400 mb-6">ADDITIONAL RESOURCES</h2>
-        <p class="text-xl text-yellow-400 font-bold">
-          EXPLORE ADDITIONAL RESOURCES FOR AI GOVERNANCE, TRUSTWORTHY AI, AND RESPONSIBLE AI DEVELOPMENT.
-        </p>
-      </div>
-      
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
-        <div class="bg-black p-6 rounded-none border-2 border-yellow-400 shadow-[4px_4px_0px_0px_rgba(255,255,0,1)]">
-          <h3 class="text-xl font-black text-yellow-400 mb-4">ACADEMIC CONFERENCES</h3>
-          <ul class="space-y-2 text-yellow-400 font-bold">
-            <li>• FACCt (FAIRNESS, ACCOUNTABILITY, AND TRANSPARENCY)</li>
-            <li>• AIES (AI, ETHICS AND SOCIETY)</li>
-            <li>• NEURIPS (MACHINE LEARNING AND AI)</li>
-            <li>• ICML (INTERNATIONAL CONFERENCE ON MACHINE LEARNING)</li>
-          </ul>
-        </div>
-        
-        <div class="bg-black p-6 rounded-none border-2 border-yellow-400 shadow-[4px_4px_0px_0px_rgba(255,255,0,1)]">
-          <h3 class="text-xl font-black text-yellow-400 mb-4">INDUSTRY ORGANIZATIONS</h3>
-          <ul class="space-y-2 text-yellow-400 font-bold">
-            <li>• PARTNERSHIP ON AI</li>
-            <li>• AI NOW INSTITUTE</li>
-            <li>• ALGORITHMIC JUSTICE LEAGUE</li>
-            <li>• CENTER FOR HUMAN-COMPATIBLE AI</li>
-          </ul>
-        </div>
-        
-        <div class="bg-black p-6 rounded-none border-2 border-yellow-400 shadow-[4px_4px_0px_0px_rgba(255,255,0,1)]">
-          <h3 class="text-xl font-black text-yellow-400 mb-4">REGULATORY BODIES</h3>
-          <ul class="space-y-2 text-yellow-400 font-bold">
-            <li>• EUROPEAN COMMISSION AI ACT</li>
-            <li>• NIST AI RISK MANAGEMENT FRAMEWORK</li>
-            <li>• OECD AI PRINCIPLES</li>
-            <li>• UNESCO AI ETHICS FRAMEWORK</li>
-          </ul>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- CTA Section -->
-  <section class="py-20 bg-black border-t-2 border-yellow-400">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-      <h2 class="text-4xl font-black text-yellow-400 mb-6">READY TO IMPLEMENT TRUSTWORTHY AI?</h2>
-      <p class="text-xl text-yellow-400 mb-8 font-bold">
-        USE THESE RESEARCH-BACKED APPROACHES TO BUILD FAIR, TRANSPARENT, AND ACCOUNTABLE AI SYSTEMS WITH FAIRMIND.
-      </p>
-      
-      <div class="flex flex-col sm:flex-row gap-6 justify-center">
-        <a href="/demo" class="inline-flex items-center px-8 py-4 bg-yellow-400 text-black font-black rounded-none border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transform hover:-translate-y-2 transition-all">
-          <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-          </svg>
-          REQUEST DEMO
-        </a>
-        <a href="/demo" class="inline-flex items-center px-8 py-4 border-2 border-yellow-400 text-yellow-400 font-black rounded-none hover:bg-yellow-400 hover:text-black transition-all shadow-[4px_4px_0px_0px_rgba(255,255,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(255,255,0,1)]">
-          <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
-          </svg>
-          GET STARTED
-        </a>
-      </div>
-    </div>
-  </section>
+    <section class="route-closing" aria-labelledby="research-closing-title">
+      <div><p>Have an evaluator, dataset, or assurance question?</p><h2 id="research-closing-title">Collaborate on a bounded evidence path.</h2></div>
+      <div class="route-actions"><a class="button button-primary" href="/contact">Contact FairMind</a><a class="button button-secondary" href="/roadmap">Read the recovery roadmap</a></div>
+    </section>
+  </div>
 </Layout>

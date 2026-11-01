@@ -1,297 +1,63 @@
 ---
 import Layout from '../layouts/Layout.astro';
+import PageHero from '../components/marketing/PageHero.astro';
+import '../styles/pages.css';
 
-const dashboardFeatures = [
-  {
-    title: 'BIAS DETECTION DASHBOARD',
-    description: 'COMPREHENSIVE BIAS ANALYSIS WITH SHAP AND LIME INTEGRATION FOR MODEL INTERPRETABILITY',
-    image: '/screenshots/Bias Detection.png',
-    features: ['SHAP ANALYSIS', 'LIME EXPLANATIONS', 'BIAS METRICS', 'PROTECTED GROUPS']
-  },
-  {
-    title: 'SIMULATION RESULTS',
-    description: 'DETAILED SIMULATION OUTCOMES WITH PERFORMANCE METRICS AND FAIRNESS ANALYSIS',
-    image: '/screenshots/simulation-result.png',
-    features: ['PERFORMANCE METRICS', 'FAIRNESS ANALYSIS', 'CONFUSION MATRIX', 'RESULTS VISUALIZATION']
-  },
-  {
-    title: 'RISK ASSESSMENT MATRIX',
-    description: 'COMPREHENSIVE RISK EVALUATION WITH PERFORMANCE MATRIX AND RISK SCORING',
-    image: '/screenshots/performance-matrix_RMF_Risk_assesment_matrix.png',
-    features: ['RISK SCORING', 'PERFORMANCE MATRIX', 'RISK CATEGORIES', 'MITIGATION STRATEGIES']
-  },
-  {
-    title: 'MODEL PREDICTION ANALYSIS',
-    description: 'CONFUSION MATRIX AND PREDICTION DISTRIBUTION ANALYSIS FOR MODEL EVALUATION',
-    image: '/screenshots/confusion-matrix_prediction-distribution.png',
-    features: ['CONFUSION MATRIX', 'PREDICTION DISTRIBUTION', 'MODEL ACCURACY', 'ERROR ANALYSIS']
-  },
-  {
-    title: 'RISK REGISTRY',
-    description: 'CENTRALIZED RISK MANAGEMENT AND TRACKING SYSTEM FOR AI MODELS',
-    image: '/screenshots/Risk_Registry.png',
-    features: ['RISK REGISTRY', 'RISK TRACKING', 'RISK CATEGORIES', 'RISK MITIGATION']
-  },
-  {
-    title: 'SIMULATION INTERFACE',
-    description: 'INTERACTIVE SIMULATION INTERFACE FOR MODEL TESTING AND VALIDATION',
-    image: '/screenshots/run-simulation-1.png',
-    features: ['MODEL UPLOAD', 'DATASET SELECTION', 'PARAMETER CONFIGURATION', 'SIMULATION EXECUTION']
-  }
+const chapters = [
+  ['01 · Define the subject', 'Start with the exact AI system, model or agent version, deployment, owner, and intended use. Evaluation without a subject boundary is not reusable evidence.', ['System identity', 'Framework assignment', 'Owner and deployment context']],
+  ['02 · Ingest the run', 'Run a supported evaluator or import a bounded output. Preserve the evaluator identity, threshold, artifacts, limitations, and capability state.', ['Evaluation identity', 'Metric and threshold', 'Raw artifact and limitation']],
+  ['03 · Review the mapping', 'A technical result can create a candidate relationship to a control. A reviewer accepts, rejects, or narrows it with recorded rationale.', ['Candidate mapping', 'Reviewer decision', 'Rationale and review state']],
+  ['04 · Close the loop', 'Turn failures into findings, assign remediation, and link a clean retest without erasing the history. Compile the package at a stated evidence cutoff.', ['Finding and risk', 'Remediation and retest', 'Framework-pinned manifest']],
 ];
-
-const dashboardCategories = [
-  {
-    title: 'ANALYZE',
-    description: 'BIAS DETECTION AND MODEL ANALYSIS',
-    dashboards: ['BIAS DETECTION', 'MODEL EXPLAINABILITY', 'PERFORMANCE ANALYSIS']
-  },
-  {
-    title: 'MONITOR',
-    description: 'REAL-TIME MONITORING AND ALERTS',
-    dashboards: ['REAL-TIME MONITORING', 'DRIFT DETECTION', 'SYSTEM HEALTH']
-  },
-  {
-    title: 'EXPLAIN',
-    description: 'MODEL INTERPRETABILITY AND TRANSPARENCY',
-    dashboards: ['SHAP ANALYSIS', 'LIME EXPLANATIONS', 'FEATURE IMPORTANCE']
-  },
-  {
-    title: 'GOVERN',
-    description: 'COMPLIANCE AND RISK MANAGEMENT',
-    dashboards: ['RISK ASSESSMENT', 'COMPLIANCE TRACKING', 'AUDIT LOGS']
-  },
-  {
-    title: 'SIMULATE',
-    description: 'MODEL TESTING AND VALIDATION',
-    dashboards: ['SIMULATION INTERFACE', 'MODEL TESTING', 'VALIDATION RESULTS']
-  },
-  {
-    title: 'MANAGE',
-    description: 'MODEL AND DATA MANAGEMENT',
-    dashboards: ['MODEL REGISTRY', 'DATA MANAGEMENT', 'VERSION CONTROL']
-  }
-];
-
-const structuredData = {
-  "@context": "https://schema.org",
-  "@type": "SoftwareApplication",
-  "name": "Fairmind AI Governance Platform Demo",
-  "description": "Live demo of comprehensive AI governance platform with 22 specialized dashboards for bias detection, compliance tracking, and model management",
-  "applicationCategory": "BusinessApplication",
-  "operatingSystem": "Web",
-  "url": "https://fairmind.xyz/demo"
-};
 ---
 
-<Layout 
-  title="Live Demo - Fairmind AI Governance Platform | 22 Specialized Dashboards"
-  description="Experience the most comprehensive AI governance platform with 22 specialized dashboards for bias detection, compliance tracking, and model management. Live demo with SHAP, LIME, and advanced bias detection capabilities."
-  structuredData={structuredData}
+<Layout
+  title="FairMind product walkthrough | Follow the evidence chain"
+  description="Walk through FairMind from AI-system definition and evaluator output to human-reviewed mappings, findings, remediation, retests, and assurance packages."
 >
-  <!-- Hero Section -->
-  <section class="bg-black text-yellow-400 py-24 border-b-2 border-yellow-400">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-      <h1 class="text-5xl md:text-6xl font-black mb-6">
-        <span class="block">LIVE DASHBOARD DEMO</span>
-        <span class="text-yellow-400 bg-black px-4 py-2 transform rotate-1 inline-block shadow-[6px_6px_0px_0px_rgba(255,255,0,1)]">22 SPECIALIZED TOOLS</span>
-        </h1>
-        
-      <p class="text-xl md:text-2xl text-yellow-400 max-w-4xl mx-auto font-bold mb-8">
-        OPEN-SOURCE AI GOVERNANCE PLATFORM WITH SHAP, LIME, AND ADVANCED BIAS DETECTION CAPABILITIES. EXPLORE SPECIALIZED DASHBOARDS FOR COMPREHENSIVE MODEL ANALYSIS AND COMPLIANCE TRACKING.
-      </p>
-      
-      <div class="flex flex-col sm:flex-row gap-6 justify-center">
-        <a href="https://app-demo.fairmind.xyz" target="_blank" class="inline-flex items-center px-8 py-4 bg-yellow-400 text-black font-black rounded-none border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transform hover:-translate-y-2 transition-all">
-          <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-          </svg>
-          LAUNCH LIVE DEMO
-        </a>
-        <a href="/features" class="inline-flex items-center px-8 py-4 border-2 border-yellow-400 text-yellow-400 font-black rounded-none hover:bg-yellow-400 hover:text-black transition-all shadow-[4px_4px_0px_0px_rgba(255,255,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(255,255,0,1)]">
-          <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-          </svg>
-          VIEW FEATURES
-          </a>
-        </div>
-        
-      <div class="flex flex-wrap justify-center gap-4 mt-12">
-        <span class="inline-flex items-center px-4 py-2 bg-yellow-400 text-black font-black rounded-none border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
-          <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-          </svg>
-          SHAP + LIME
-        </span>
-        <span class="inline-flex items-center px-4 py-2 bg-yellow-400 text-black font-black rounded-none border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
-          <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-          </svg>
-          BIAS DETECTION
-        </span>
-        <span class="inline-flex items-center px-4 py-2 bg-yellow-400 text-black font-black rounded-none border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
-          <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-          </svg>
-          OPEN SOURCE
-        </span>
-        <span class="inline-flex items-center px-4 py-2 bg-yellow-400 text-black font-black rounded-none border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
-          <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-          </svg>
-          REAL-TIME MONITORING
-        </span>
-      </div>
-    </div>
-  </section>
+  <div class="route-page">
+    <PageHero
+      signal="Product walkthrough · no canned pass screen"
+      title="Watch evidence move"
+      accent="without losing meaning."
+      description="The useful demonstration is not a dashboard tour. It is whether the same evaluation can keep its identity, limits, review state, failure history, and framework context from test run to accountable decision."
+      proofs={[
+        { label: 'Chapter one', value: 'Define the subject', note: 'No result is interpreted before the exact AI system boundary exists.' },
+        { label: 'Chapter two', value: 'Preserve the run', note: 'Evaluator, threshold, artifact, limitation, and capability state travel together.' },
+        { label: 'Chapter three', value: 'Route the decision', note: 'Human review, finding, remediation, retest, and package remain linked.' },
+      ]}
+      primary={{ label: 'Start the walkthrough', href: '#walkthrough' }}
+      secondary={{ label: 'Request a working session', href: '/request-access' }}
+      dark={true}
+    />
 
-  <!-- Dashboard Organization -->
-  <section class="py-20 bg-black">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="text-center mb-16">
-        <h2 class="text-4xl md:text-5xl font-black text-yellow-400 mb-6">DASHBOARD ORGANIZATION</h2>
-        <p class="text-xl text-yellow-400 max-w-3xl mx-auto font-bold">
-          MODULAR ORGANIZATION FOR FOCUSED AI GOVERNANCE WORKFLOWS
-        </p>
-      </div>
-      
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-        {dashboardCategories.map((category) => (
-          <div class="bg-black p-6 rounded-none border-2 border-yellow-400 shadow-[4px_4px_0px_0px_rgba(255,255,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(255,255,0,1)] transform hover:-translate-y-2 transition-all">
-            <h3 class="text-2xl font-black text-yellow-400 mb-4">{category.title}</h3>
-            <p class="text-yellow-400 mb-4 font-bold">{category.description}</p>
-            <ul class="space-y-2">
-              {category.dashboards.map((dashboard) => (
-                <li class="flex items-center space-x-2">
-                  <svg class="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
-                  </svg>
-                  <span class="text-yellow-400 font-bold">{dashboard}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
+    <section class="route-section" id="walkthrough" aria-labelledby="walkthrough-title">
+      <header class="route-section-heading"><h2 id="walkthrough-title">Four chapters. One chain.</h2><p>Open each chapter to inspect the evidence the next accountable person should receive.</p></header>
+      <div class="route-disclosure">
+        {chapters.map((chapter, index) => (
+          <details open={index === 0}>
+            <summary>{chapter[0]}</summary>
+            <div><p>{chapter[1]}</p><ul>{chapter[2].map((item) => <li>{item}</li>)}</ul></div>
+          </details>
         ))}
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- Dashboard Features -->
-  <section class="py-20 bg-black border-t-2 border-yellow-400">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="text-center mb-16">
-        <h2 class="text-4xl md:text-5xl font-black text-yellow-400 mb-6">AI GOVERNANCE TOOLS</h2>
-        <p class="text-xl text-yellow-400 max-w-3xl mx-auto font-bold">
-          EXPLORE THE SPECIALIZED DASHBOARDS AND THEIR CAPABILITIES
-        </p>
+    <section class="route-section route-section-orange" aria-labelledby="demo-boundary-title">
+      <div class="route-split">
+        <div class="route-split-copy"><h2 id="demo-boundary-title">What this walkthrough will not fake.</h2><p>No “22 dashboards,” invented pass rate, live integration logo wall, or automatic compliance result. Current capability states and recovery boundaries stay visible.</p></div>
+        <div class="route-checklist">
+          <div><span>Live</span><strong>Environmental evidence path</strong></div>
+          <div><span>Bounded</span><strong>External-provider LLM review</strong></div>
+          <div><span>Bounded</span><strong>AI BOM metadata transformation</strong></div>
+          <div><span>Target</span><strong>Immutable Evidence Passport contract</strong></div>
+        </div>
       </div>
-      
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-12">
-        {dashboardFeatures.map((feature) => (
-          <div class="bg-black p-8 rounded-none border-2 border-yellow-400 shadow-[6px_6px_0px_0px_rgba(255,255,0,1)] hover:shadow-[8px_8px_0px_0px_rgba(255,255,0,1)] transform hover:-translate-y-2 transition-all">
-            <h3 class="text-2xl font-black text-yellow-400 mb-4">{feature.title}</h3>
-            <p class="text-yellow-400 mb-6 font-bold">{feature.description}</p>
-            
-            <div class="grid grid-cols-2 gap-4 mb-6">
-                {feature.features.map((item) => (
-                <div class="flex items-center space-x-2">
-                  <svg class="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
-                  </svg>
-                  <span class="text-yellow-400 font-bold text-sm">{item}</span>
-              </div>
-              ))}
-            </div>
-            
-            <a href="https://app-demo.fairmind.xyz" target="_blank" class="inline-flex items-center px-6 py-3 bg-yellow-400 text-black font-black rounded-none border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transform hover:-translate-y-1 transition-all">
-              <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-              </svg>
-              TRY {feature.title.split(' ')[0]} DASHBOARD
-            </a>
-          </div>
-        ))}
-      </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- Experience Section -->
-  <section class="py-20 bg-black border-t-2 border-yellow-400">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-      <h2 class="text-4xl font-black text-yellow-400 mb-6">EXPERIENCE THE PLATFORM</h2>
-      <p class="text-xl text-yellow-400 mb-8 max-w-3xl mx-auto font-bold">
-        LAUNCH THE LIVE DEMO TO EXPLORE SPECIALIZED DASHBOARDS AND AI GOVERNANCE FEATURES
-      </p>
-      
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
-        <div class="bg-black p-6 rounded-none border-2 border-yellow-400 shadow-[4px_4px_0px_0px_rgba(255,255,0,1)]">
-          <h3 class="text-xl font-black text-yellow-400 mb-3">ADVANCED BIAS DETECTION</h3>
-          <p class="text-yellow-400 font-bold">SHAP, LIME, AND KNOWLEDGE GRAPH INTEGRATION</p>
-            </div>
-        <div class="bg-black p-6 rounded-none border-2 border-yellow-400 shadow-[4px_4px_0px_0px_rgba(255,255,0,1)]">
-          <h3 class="text-xl font-black text-yellow-400 mb-3">KNOWLEDGE GRAPH</h3>
-          <p class="text-yellow-400 font-bold">NEO4J-POWERED CAUSAL RELATIONSHIP ANALYSIS</p>
-          </div>
-        <div class="bg-black p-6 rounded-none border-2 border-yellow-400 shadow-[4px_4px_0px_0px_rgba(255,255,0,1)]">
-          <h3 class="text-xl font-black text-yellow-400 mb-3">REAL-TIME MONITORING</h3>
-          <p class="text-yellow-400 font-bold">LIVE ALERTS AND COMPLIANCE TRACKING</p>
-          </div>
-        </div>
-        
-      <div class="flex flex-col sm:flex-row gap-6 justify-center">
-        <a href="https://app-demo.fairmind.xyz" target="_blank" class="inline-flex items-center px-8 py-4 bg-yellow-400 text-black font-black rounded-none border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transform hover:-translate-y-2 transition-all">
-          <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-          </svg>
-          LAUNCH LIVE DEMO
-        </a>
-        <a href="/contact" class="inline-flex items-center px-8 py-4 border-2 border-yellow-400 text-yellow-400 font-black rounded-none hover:bg-yellow-400 hover:text-black transition-all shadow-[4px_4px_0px_0px_rgba(255,255,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(255,255,0,1)]">
-          <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-          </svg>
-          SCHEDULE DEMO
-          </a>
-        </div>
-        
-      <div class="mt-12 p-6 bg-black border-2 border-yellow-400 shadow-[4px_4px_0px_0px_rgba(255,255,0,1)]">
-        <p class="text-yellow-400 font-bold">
-          DEMO INCLUDES ALL 22 SPECIALIZED DASHBOARDS • NO REGISTRATION REQUIRED • FULL FEATURE ACCESS
-        </p>
-      </div>
-    </div>
-  </section>
-
-  <!-- Technical Specs -->
-  <section class="py-20 bg-black border-t-2 border-yellow-400">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="text-center mb-16">
-        <h2 class="text-4xl font-black text-yellow-400 mb-6">PLATFORM ARCHITECTURE</h2>
-        <p class="text-xl text-yellow-400 max-w-3xl mx-auto font-bold">
-          BUILT WITH MODERN TECHNOLOGIES FOR ENTERPRISE-GRADE PERFORMANCE
-        </p>
-      </div>
-      
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-        <div class="bg-black p-6 rounded-none border-2 border-yellow-400 shadow-[4px_4px_0px_0px_rgba(255,255,0,1)]">
-          <h3 class="text-xl font-black text-yellow-400 mb-3">FRONTEND</h3>
-          <p class="text-yellow-400 font-bold">NEXT.JS 14, REACT, TYPESCRIPT, TAILWIND CSS</p>
-        </div>
-        <div class="bg-black p-6 rounded-none border-2 border-yellow-400 shadow-[4px_4px_0px_0px_rgba(255,255,0,1)]">
-          <h3 class="text-xl font-black text-yellow-400 mb-3">BACKEND</h3>
-          <p class="text-yellow-400 font-bold">PYTHON, FASTAPI, POSTGRESQL, NEON</p>
-        </div>
-        <div class="bg-black p-6 rounded-none border-2 border-yellow-400 shadow-[4px_4px_0px_0px_rgba(255,255,0,1)]">
-          <h3 class="text-xl font-black text-yellow-400 mb-3">KNOWLEDGE GRAPH</h3>
-          <p class="text-yellow-400 font-bold">NEO4J, CYPHER QUERIES, GRAPH ALGORITHMS</p>
-        </div>
-        <div class="bg-black p-6 rounded-none border-2 border-yellow-400 shadow-[4px_4px_0px_0px_rgba(255,255,0,1)]">
-          <h3 class="text-xl font-black text-yellow-400 mb-3">ML/AI</h3>
-          <p class="text-yellow-400 font-bold">SHAP, LIME, SCIKIT-LEARN, TENSORFLOW</p>
-        </div>
-      </div>
-    </div>
-  </section>
+    <section class="route-closing" aria-labelledby="demo-closing-title">
+      <div><p>Use your own evaluator output</p><h2 id="demo-closing-title">Make the walkthrough real.</h2></div>
+      <div class="route-actions"><a class="button button-primary" href="/request-access">Request a working session</a><a class="button button-secondary" href="/features">Inspect the product</a></div>
+    </section>
+  </div>
 </Layout>
