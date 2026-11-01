@@ -1,0 +1,49 @@
+---
+title: Introduction
+description: Understand FairMind's evidence-first model for AI assurance and governance.
+---
+
+FairMind is an AI assurance evidence workbench. It keeps an AI system, its tests, evidence, risks, remediation, approvals, and reports in one reviewable context.
+
+The product is built around a simple rule: an evaluator result is evidence for a decision, not the decision itself.
+
+## What FairMind helps you do
+
+1. Register an AI system and define its governance scope.
+2. Run a supported evaluator or bring an external result.
+3. Record artifacts with provenance, limitations, and review state.
+4. Link evidence to risks and governance controls.
+5. Assign remediation, run a retest, and preserve the history.
+6. Create a point-in-time assurance snapshot for review.
+
+## The core lifecycle
+
+| Stage | Question | Primary workspace |
+| --- | --- | --- |
+| Onboard | What system are we governing? | System registration |
+| Assess | What was tested, with which method and threshold? | Test Lab |
+| Govern | What evidence and risks affect the decision? | Evidence & Controls |
+| Remediate | What must change, who owns it, and was it retested? | Remediation |
+| Operate | What changed after release? | Monitoring and reports |
+
+## Evidence, not automatic compliance
+
+<Callout type="warn" title="Human review is required">
+FairMind records technical results and governance decisions. It does not turn an evaluation, a control mapping, or a readiness score into certification, legal compliance, or approval.
+</Callout>
+
+The product makes capability state visible because different surfaces prove different things. Environmental evaluation is the strongest evidence-producing vertical in the current release. Other evaluators may be external-provider dependent, metadata-only, interface-only, unavailable, or research-only.
+
+Continue with [Capability truth](/docs/concepts/capability-truth) before selecting an evaluator.
+
+## Who uses FairMind
+
+- Assurance and compliance leads review gaps, mappings, approvals, and snapshots.
+- ML engineers and evaluators register subjects, run supported tests, and attach artifacts.
+- Risk and system owners manage remediation, exceptions, and release blockers.
+- Auditors and reviewers inspect evidence, decisions, and audit history.
+- Organization administrators manage membership and access.
+
+## Evidence basis
+
+This page follows the active product navigation and system-scoped lifecycle in `apps/frontend/src/lib/constants/navigation.ts`, `apps/frontend/src/app/(dashboard)/dashboard/page.tsx`, and `apps/frontend/src/app/(dashboard)/onboard/page.tsx`. Capability boundaries are summarized in `.docs-forge/kb/engineer-brief.md`.

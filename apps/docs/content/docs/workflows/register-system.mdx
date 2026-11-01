@@ -1,0 +1,36 @@
+---
+title: Register a system
+description: Create the system context that anchors evaluations, risks, evidence, and decisions.
+---
+
+Use system registration before running an assessment or recording evidence.
+
+<figure className="product-capture">
+  <img src="/media/product/v1/model-registry-registration.png" alt="FairMind model registration form filled with the synthetic Claims Triage Model fixture" />
+  <figcaption>Fixture-only capture: register a governed system before attaching evaluations or evidence.</figcaption>
+</figure>
+
+## Before you begin
+
+Prepare the system name, accountable owner, intended use, risk tier, and the governance frameworks relevant to the review.
+
+## Register the system
+
+1. Open **Systems > Register System**.
+2. Record the system and workspace identity.
+3. Select a risk tier based on the impact of incorrect or harmful behavior.
+4. Select the governance frameworks that will organize requirements and evidence mappings.
+5. Review the requirements shown by the workflow.
+6. Confirm the record and enter the lifecycle.
+
+## Choose the next step
+
+The onboarding interface can offer a tabular bias scan. Skip that branch in the current release because the active evaluator endpoint is unavailable. Continue to the system dashboard or use the validated environmental path.
+
+## What registration proves
+
+Registration proves that a governance record exists. It does not prove that the underlying model, dataset, or deployment has been independently verified.
+
+## Evidence basis
+
+The five-step flow is defined in `apps/frontend/src/app/(dashboard)/onboard/page.tsx`; workspace and system creation are implemented in `apps/frontend/src/components/workflow/SystemContext.tsx` and the AI-governance router.

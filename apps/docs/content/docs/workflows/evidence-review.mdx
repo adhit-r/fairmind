@@ -1,0 +1,40 @@
+---
+title: Review and link evidence
+description: Record an artifact, state its limits, and connect it to risks, controls, and remediation.
+---
+
+Use the Evidence Workbench to turn a test output or external artifact into a reviewable governance record.
+
+<figure className="product-capture">
+  <img src="/media/product/v1/evidence-capability-register.png" alt="FairMind Evidence Workbench showing synthetic evidence records and capability boundaries" />
+  <figcaption>Fixture-only capture: evidence records expose provenance, confidence, workflow state, and missing signals.</figcaption>
+</figure>
+
+## Record the artifact
+
+1. Select the correct organization and system.
+2. Open **Evidence & Controls > Evidence Workbench**.
+3. Add a concise title and evidence type.
+4. Identify the source or evaluator and the subject version.
+5. Attach a file reference, URL, or structured content.
+6. Record confidence only when its meaning is defined.
+7. Add limitations, tags, folder, and uploader context.
+
+## Review before mapping
+
+Check the artifact against four questions:
+
+- Does it identify the governed subject?
+- Is the evaluator or source traceable?
+- Are the method, threshold, and scope clear?
+- Are limitations and missing data explicit?
+
+If any answer is no, keep the record in review and do not use it as release evidence.
+
+## Link, do not overclaim
+
+Link the evidence to the relevant risk, control, remediation task, or evaluation. A link records relevance. It does not automatically satisfy the control.
+
+## Evidence basis
+
+Evidence list, collection, update, and link operations are defined in `apps/frontend/src/lib/api/hooks/useEvidence.ts` and persisted by `apps/backend/src/api/routers/ai_governance.py`.
