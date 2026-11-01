@@ -5,7 +5,7 @@
  * Maintains backward compatibility while enabling OAuth2 transitions.
  */
 
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { apiClient, type ApiResponse } from '../api-client'
 import { API_ENDPOINTS } from '../endpoints'
 import type { LoginRequest, LoginResponse, User } from '../types'
@@ -57,17 +57,23 @@ export function useAuth() {
     }
   }
 
-  const register = async (data: any) => {
+  const register = async (data: { name: string; email: string; org_name: string; password: string }) => {
     try {
       setLoading(true)
       setError(null)
 
-      const response: ApiResponse<User> = await apiClient.post(
+      const response: ApiResponse<LoginResponse> = await apiClient.post(
         API_ENDPOINTS.auth.register,
         data
       )
 
       if (response.success && response.data) {
+        apiClient.setAccessToken(response.data.access_token)
+        apiClient.setRefreshToken(response.data.refresh_token)
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('access_token', response.data.access_token)
+          localStorage.setItem('refresh_token', response.data.refresh_token)
+        }
         return response.data
       } else {
         throw new Error(response.error || 'Registration failed')
@@ -168,7 +174,7 @@ export function useAuth() {
     }
   }
 
-  const getCurrentUser = async () => {
+  const getCurrentUser = useCallback(async () => {
     try {
       setLoading(true)
       const response: ApiResponse<User> = await apiClient.get(API_ENDPOINTS.auth.me)
@@ -185,7 +191,7 @@ export function useAuth() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   return {
     user,

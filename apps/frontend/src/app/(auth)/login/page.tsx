@@ -140,7 +140,7 @@ export default function LoginPage() {
         <div className="mt-6 text-center">
           <p className="text-sm text-muted-foreground mb-3">Don't have an account?</p>
           <a href="/register" className="inline-block px-4 py-2 border-2 border-black font-medium hover:shadow-brutal text-sm">
-            Request Access
+            Create an account
           </a>
         </div>
       </Card>

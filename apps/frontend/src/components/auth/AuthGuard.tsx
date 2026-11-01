@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/api/hooks/useAuth'
+import { apiClient } from '@/lib/api/api-client'
 import { Skeleton } from '@/components/ui/skeleton'
 
 interface AuthGuardProps {
@@ -17,15 +18,13 @@ export function AuthGuard({ children }: AuthGuardProps) {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null
-        if (!token) {
-          router.push('/login')
-          return
-        }
-
+        // The backend decides whether this session is signed in (a stored token,
+        // or the local-development sign-in); a 401 sends us to /login.
         await getCurrentUser()
         setIsChecking(false)
       } catch {
+        // Whatever token we held is not accepted; drop it so the next load starts clean.
+        apiClient.clearSession()
         router.push('/login')
       }
     }

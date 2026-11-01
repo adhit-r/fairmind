@@ -5,9 +5,21 @@ import uuid
 from fastapi.testclient import TestClient
 
 from api.main import app
+from tests.auth_helpers import auth_headers
 
 
-client = TestClient(app)
+client = TestClient(app, headers=auth_headers())
+
+
+def _registered_system() -> str:
+    """Org-scoped routes only accept ids of systems the caller's org owns."""
+    workspace = client.post(
+        "/api/v1/ai-governance/workspaces", json={"name": "Test workspace", "owner": "owner"}
+    ).json()
+    return client.post(
+        "/api/v1/ai-governance/systems",
+        json={"workspace_id": workspace["id"], "name": "Test system", "owner": "owner", "risk_tier": "high", "lifecycle_stage": "onboard"},
+    ).json()["id"]
 
 
 def test_ai_governance_frameworks_endpoint():
@@ -270,7 +282,14 @@ def test_ai_governance_workflow_and_request_decision():
 
 
 def test_ai_governance_system_approval_request_flow():
-    system_id = f"acme-approval-{uuid.uuid4().hex[:8]}"
+    system_id = _registered_system()
+    # A registered system cannot be approved without environmental evidence.
+    from tests.test_environmental_governance import _assessment
+    assessed = client.post(
+        "/api/v1/ai-governance/environment/assess",
+        json={"system_id": system_id, "assessment": _assessment()},
+    )
+    assert assessed.status_code == 200
 
     initial_resp = client.get(f"/api/v1/ai-governance/approval/system/{system_id}")
     assert initial_resp.status_code == 200
@@ -316,7 +335,7 @@ def test_ai_governance_system_approval_request_flow():
 
 
 def test_ai_governance_evidence_collect_and_list():
-    system_id = f"model-abc-{uuid.uuid4().hex[:8]}"
+    system_id = _registered_system()
     collect_resp = client.post(
         "/api/v1/ai-governance/evidence/collect",
         json={
@@ -366,7 +385,8 @@ def test_ai_governance_evidence_collect_and_list():
 
 
 def test_ai_governance_risk_dashboard_and_assessment():
-    dashboard_resp = client.get("/api/v1/ai-governance/dashboard/risk?system_id=acme-credit")
+    risk_system = _registered_system()
+    dashboard_resp = client.get(f"/api/v1/ai-governance/dashboard/risk?system_id={risk_system}")
     assert dashboard_resp.status_code == 200
     dashboard = dashboard_resp.json()
     assert "risks" in dashboard
@@ -376,7 +396,7 @@ def test_ai_governance_risk_dashboard_and_assessment():
     create_resp = client.post(
         "/api/v1/ai-governance/risks/assess",
         json={
-            "systemId": "acme-credit",
+            "systemId": risk_system,
             "riskType": "bias",
             "severity": "high",
             "description": "Approval disparity detected for older applicants.",
@@ -384,19 +404,19 @@ def test_ai_governance_risk_dashboard_and_assessment():
     )
     assert create_resp.status_code == 200
     created = create_resp.json()
-    assert created["systemId"] == "acme-credit"
+    assert created["systemId"] == risk_system
     assert created["severity"] == "high"
     assert created["source"] == "manual_assessment"
     assert len(created["automation"]["recommendedRisks"]) >= 1
 
-    refreshed_resp = client.get("/api/v1/ai-governance/dashboard/risk?system_id=acme-credit")
+    refreshed_resp = client.get(f"/api/v1/ai-governance/dashboard/risk?system_id={risk_system}")
     assert refreshed_resp.status_code == 200
     refreshed = refreshed_resp.json()
     assert any(risk["id"] == created["id"] for risk in refreshed["risks"])
 
 
 def test_ai_governance_remediation_task_loop():
-    system_id = f"acme-remediation-{uuid.uuid4().hex[:8]}"
+    system_id = _registered_system()
     create_resp = client.post(
         "/api/v1/ai-governance/remediation",
         json={

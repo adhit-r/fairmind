@@ -212,6 +212,37 @@ async def _count_org_admins(org_id: str, db):
 
 # ── Endpoints ────────────────────────────────────────────────────────────────
 
+@router.get("")
+async def list_my_organizations(current_user: TokenData = Depends(get_current_active_user)):
+    """Organizations the caller belongs to, with their role in each.
+
+    The frontend OrgProvider reads this to populate the org switcher.
+    """
+    async with get_db_connection() as db:
+        rows = await db.fetch_all(
+            """
+            SELECT o.id, o.name, o.slug, o.created_at, om.role
+            FROM org_members om
+            JOIN organizations o ON o.id = om.org_id
+            WHERE om.user_id = :user_id AND om.status = 'active'
+            ORDER BY om.joined_at
+            """,
+            {"user_id": current_user.user_id},
+        )
+    return {
+        "organizations": [
+            {
+                "id": str(r["id"]),
+                "name": r["name"],
+                "slug": r["slug"],
+                "role": r["role"],
+                "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+            }
+            for r in rows
+        ]
+    }
+
+
 @router.get("/{org_id}/members", response_model=MembersListResponse)
 async def list_org_members(
     org_id: str,

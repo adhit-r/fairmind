@@ -84,7 +84,7 @@ function AuthCallbackContent() {
           </h1>
           <p className="mb-6 text-gray-700">{error}</p>
           <button
-            onClick={() => router.push("/auth/login")}
+            onClick={() => router.push("/login")}
             className="w-full rounded-lg bg-black px-4 py-2 font-bold text-white transition-all hover:shadow-brutal-lg"
           >
             Back to Login

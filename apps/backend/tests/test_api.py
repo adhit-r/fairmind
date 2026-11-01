@@ -3,8 +3,9 @@
 import pytest
 from fastapi.testclient import TestClient
 from api.main import app
+from tests.auth_helpers import auth_headers
 
-client = TestClient(app)
+client = TestClient(app, headers=auth_headers())
 
 
 class TestHealthEndpoint:
@@ -65,11 +66,10 @@ class TestDatasetsEndpoints:
     """Test dataset-related endpoints."""
 
     def test_get_datasets(self):
-        """Datasets are exposed under /api/v1/core/datasets in current API."""
-        response = client.get("/api/v1/datasets")
-        if response.status_code == 405:
-            response = client.get("/api/v1/core/datasets")
-        assert response.status_code in (200, 401, 403)
+        """The dataset list route answers honestly while storage is unbuilt."""
+        response = client.get("/api/v1/datasets/")
+        # Dataset storage is not built yet; the route must say so, not return fake rows.
+        assert response.status_code in (200, 401, 403, 501)
         data = response.json()
         assert isinstance(data, dict)
 

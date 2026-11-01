@@ -13,6 +13,19 @@ from datetime import datetime, timedelta
 from api.main import app
 from config.auth import auth_manager
 from config.jwt_config import init_jwt_manager
+from tests.auth_helpers import fake_fetch_user_row, make_user_store, new_password
+
+ADMIN_PW = new_password()
+ANALYST_PW = new_password()
+_USERS = make_user_store(
+    ("admin@fairmind.ai", ADMIN_PW, "admin"),
+    ("analyst@fairmind.ai", ANALYST_PW, "analyst"),
+)
+
+
+@pytest.fixture(autouse=True)
+def _users_table(monkeypatch):
+    monkeypatch.setattr("config.auth._fetch_user_row", fake_fetch_user_row(_USERS))
 
 
 class TestAuthenticationIntegration:
@@ -32,7 +45,7 @@ class TestAuthenticationIntegration:
         """Test successful admin login."""
         login_data = {
             "email": "admin@fairmind.ai",
-            "password": "admin123"
+            "password": ADMIN_PW
         }
         
         response = client.post("/api/v1/auth/login", json=login_data)
@@ -60,7 +73,7 @@ class TestAuthenticationIntegration:
         """Test successful analyst login."""
         login_data = {
             "email": "analyst@fairmind.ai",
-            "password": "analyst123"
+            "password": ANALYST_PW
         }
         
         response = client.post("/api/v1/auth/login", json=login_data)
@@ -106,7 +119,7 @@ class TestAuthenticationIntegration:
         # First login to get token
         login_data = {
             "email": "admin@fairmind.ai",
-            "password": "admin123"
+            "password": ADMIN_PW
         }
         
         login_response = client.post("/api/v1/auth/login", json=login_data)
@@ -156,7 +169,7 @@ class TestAuthenticationIntegration:
         # First login to get refresh token
         login_data = {
             "email": "admin@fairmind.ai",
-            "password": "admin123"
+            "password": ADMIN_PW
         }
         
         login_response = client.post("/api/v1/auth/login", json=login_data)
@@ -188,7 +201,7 @@ class TestAuthenticationIntegration:
         # First login
         login_data = {
             "email": "admin@fairmind.ai",
-            "password": "admin123"
+            "password": ADMIN_PW
         }
         
         login_response = client.post("/api/v1/auth/login", json=login_data)
@@ -220,7 +233,7 @@ class TestAuthenticationIntegration:
         # Login
         login_data = {
             "email": "admin@fairmind.ai",
-            "password": "admin123"
+            "password": ADMIN_PW
         }
         
         login_response = client.post("/api/v1/auth/login", json=login_data)
@@ -278,7 +291,7 @@ class TestAuthenticationMiddleware:
         # Login to get token
         login_data = {
             "email": "admin@fairmind.ai",
-            "password": "admin123"
+            "password": ADMIN_PW
         }
         
         login_response = client.post("/api/v1/auth/login", json=login_data)
@@ -334,7 +347,7 @@ class TestAuthenticationSecurity:
         # Login to get valid token
         login_data = {
             "email": "admin@fairmind.ai",
-            "password": "admin123"
+            "password": ADMIN_PW
         }
         
         login_response = client.post("/api/v1/auth/login", json=login_data)
@@ -359,7 +372,7 @@ class TestAuthenticationSecurity:
     def test_sql_injection_in_login(self, client, setup_jwt):
         """Test SQL injection attempts in login."""
         sql_injection_attempts = [
-            {"email": "admin@fairmind.ai'; DROP TABLE users; --", "password": "admin123"},
+            {"email": "admin@fairmind.ai'; DROP TABLE users; --", "password": ADMIN_PW},
             {"email": "admin@fairmind.ai", "password": "' OR '1'='1"},
             {"email": "' UNION SELECT * FROM users --", "password": "password"},
         ]
@@ -405,7 +418,7 @@ class TestAuthenticationPerformance:
         def login_request():
             login_data = {
                 "email": "admin@fairmind.ai",
-                "password": "admin123"
+                "password": ADMIN_PW
             }
             return client.post("/api/v1/auth/login", json=login_data)
         
@@ -423,7 +436,7 @@ class TestAuthenticationPerformance:
         # Login to get token
         login_data = {
             "email": "admin@fairmind.ai",
-            "password": "admin123"
+            "password": ADMIN_PW
         }
         
         login_response = client.post("/api/v1/auth/login", json=login_data)
