@@ -81,15 +81,6 @@ async def lifespan(app: FastAPI):
     try:
         from database.connection import db_manager as orm_db_manager
 
-        import os as _os
-        from config.database import db_manager as users_db_manager
-        logger.info(
-            "Database identities: cwd=%s env=%s settings=%s orm_engine=%s users_engine=%s users_async=%s",
-            _os.getcwd(), _os.getenv("DATABASE_URL"), settings.database_url,
-            getattr(getattr(orm_db_manager, "engine", None), "url", None),
-            getattr(getattr(users_db_manager, "engine", None), "url", None),
-            getattr(getattr(users_db_manager, "database", None), "url", None),
-        )
         orm_db_manager.create_tables()
     except Exception as e:
         logger.warning(f"ORM table creation incomplete: {e}")

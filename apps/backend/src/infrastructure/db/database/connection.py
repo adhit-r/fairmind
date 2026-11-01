@@ -97,14 +97,6 @@ class DatabaseManager:
             # once under each name, each with its own Base. Create tables from
             # every metadata the model modules actually registered against.
             metadatas = {id(m): m for m in (Base.metadata, user_models.Base.metadata, governance_models.Base.metadata)}
-            import sys as _sys
-            logger.info(
-                "Table registries: %s; user models from %s (users registered: %s); loaded copies: %s",
-                [f"{m.__class__.__module__}#{id(m)}:{len(m.tables)}" for m in metadatas.values()],
-                user_models.__name__,
-                sorted(name for m in metadatas.values() for name in m.tables if name in ("users", "organizations", "org_members")),
-                sorted(name for name in _sys.modules if name.endswith("database.connection") or name.endswith("database.models")),
-            )
             created, failed = 0, []
             for metadata in metadatas.values():
                 # Table by table: one definition the local SQLite build cannot

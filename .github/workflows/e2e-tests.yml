@@ -49,7 +49,9 @@ jobs:
         sleep 5
       env:
         APP_ENV: development
-        DATABASE_URL: sqlite:///./test.db
+        # Not test.db: tests/conftest.py deletes that file after every test, and the
+        # e2e suite runs under that conftest while this server is still using it.
+        DATABASE_URL: sqlite:///./e2e-backend.db
         RATE_LIMIT_REQUESTS: "10000"
 
     - name: Start frontend server
@@ -145,7 +147,9 @@ jobs:
         sleep 5
       env:
         APP_ENV: development
-        DATABASE_URL: sqlite:///./test.db
+        # Not test.db: tests/conftest.py deletes that file after every test, and the
+        # e2e suite runs under that conftest while this server is still using it.
+        DATABASE_URL: sqlite:///./e2e-backend.db
         RATE_LIMIT_REQUESTS: "10000"
 
     - name: Start frontend server
