@@ -3355,6 +3355,7 @@ class GovernanceDiscoveredAsset(Base):
 
     __table_args__ = (
         Index("idx_governance_discovered_assets_ext", "integration_id", "external_id", unique=True),
+    )
 
 
 class PackInstall(Base):
