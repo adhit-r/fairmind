@@ -76,6 +76,15 @@ async def lifespan(app: FastAPI):
         logger.error(f"Failed to initialize database: {e}")
         raise
 
+    # ORM-managed tables (users, organisations, governance). Table by table,
+    # so one definition the local SQLite cannot parse does not block the rest.
+    try:
+        from database.connection import db_manager as orm_db_manager
+
+        orm_db_manager.create_tables()
+    except Exception as e:
+        logger.warning(f"ORM table creation incomplete: {e}")
+
     # Initialize cache connections
     try:
         await init_cache()

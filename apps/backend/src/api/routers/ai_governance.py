@@ -11,6 +11,7 @@ Provides practical governance primitives:
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -23,6 +24,8 @@ from sqlalchemy.orm import Session
 
 from config.auth import TokenData, UserRole, get_current_active_user
 from config.settings import settings
+
+logger = logging.getLogger(__name__)
 from database.connection import get_db
 from database.models import OrganizationMember
 from src.application.services.governance_assurance_service import (
@@ -293,8 +296,8 @@ def _ensure_tables(db: Session) -> None:
     for table in Base.metadata.sorted_tables:
         try:
             table.create(bind=db_manager.engine, checkfirst=True)
-        except Exception:  # one unparseable definition must not block the rest (see connection.create_tables)
-            continue
+        except Exception as table_error:  # one unparseable definition must not block the rest
+            logger.warning(f"Could not create table {table.name}: {table_error}")
     _ensure_model_link_column(db)
     _tables_ready = True
 
