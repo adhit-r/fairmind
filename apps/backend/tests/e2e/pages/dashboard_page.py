@@ -38,6 +38,7 @@ class DashboardPage(BasePage):
             True if dashboard is loaded, False otherwise
         """
         markers = [
+            "under governance",
             "release readiness",
             "register your first ai system",
             "dashboard",

@@ -1,0 +1,44 @@
+---
+title: Configuration
+description: Configure the database, API routing, identity, cache, storage, email, and integrations.
+---
+
+Backend settings load from `.env`. Unknown keys are ignored, so spelling errors can silently leave a default active.
+
+## Core settings
+
+| Purpose | Variables |
+| --- | --- |
+| Environment | `NODE_ENV`, `ENVIRONMENT`, API title/version, CORS origins |
+| Database | `DATABASE_URL` and pool settings |
+| Cache | `REDIS_URL` |
+| Identity | JWT, Neon, and Authentik settings |
+| Files | upload, dataset, and model-cache directories and limits |
+| Storage | S3 endpoint, bucket, region, and credentials |
+| Email | SMTP, SendGrid, SES, or Resend configuration |
+| Observability | logging, audit retention, and Sentry |
+| Evaluators | provider model, timeouts, concurrency, and compliance encryption |
+
+Use `apps/backend/.env.example` as the inventory. Never copy development placeholders into production.
+
+## Frontend API routing
+
+Direct browser calls:
+
+```bash
+NEXT_PUBLIC_API_URL=http://localhost:8000 npm run dev
+```
+
+Same-origin Next.js proxy:
+
+```bash
+BACKEND_INTERNAL_URL=http://localhost:8000 npm run dev
+```
+
+## Production mode
+
+Production mode depends on `NODE_ENV=production`. Setting only `ENVIRONMENT=production` is not equivalent. Production validation rejects short secrets and known development placeholder values.
+
+## Evidence basis
+
+Settings are defined in `apps/backend/config/settings.py` and inventoried in `apps/backend/.env.example`. Frontend proxy selection is implemented in `apps/frontend/src/app/api/proxy/[...path]/route.ts`.

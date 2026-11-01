@@ -295,7 +295,7 @@ export default function InvitationPage() {
           </Alert>
           <div className="space-y-3">
             <Button
-              onClick={() => router.push('/auth/login')}
+              onClick={() => router.push('/login')}
               className="w-full font-bold"
             >
               Back to Login

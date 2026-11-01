@@ -351,3 +351,6 @@ apps/frontend-archive/.next/
 apps/frontend-archive/out/
 apps/frontend-archive/build/
 apps/frontend-archive/dist/
+
+# graft's local graph cache: regenerable, not committed (run `graft build`).
+/graft/

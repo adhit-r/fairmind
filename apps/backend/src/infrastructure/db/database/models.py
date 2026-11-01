@@ -160,6 +160,12 @@ class User(Base):
     groups = Column(JSON, default=list)  # Authentik groups
     permissions = Column(JSON, default=list)  # Computed permissions
 
+    # Password sign-in (config.auth reads these; the register route writes them).
+    # Present in the Postgres schema already; declared here so SQLite dev and
+    # test databases built from this model carry the same columns.
+    role = Column(String(50), nullable=True)
+    password_hash = Column(String(255), nullable=True)
+
     # Account status
     is_active = Column(Boolean, default=True)
     is_verified_email = Column(Boolean, default=False)

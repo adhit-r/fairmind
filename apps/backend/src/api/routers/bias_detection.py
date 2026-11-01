@@ -297,25 +297,37 @@ async def run_fairness_metrics(
             if isinstance(values, list):
                 sensitive_attrs_dict[attr] = np.array(values)
         
-        # Run fairness metrics
-        results = await bias_testing_library.run_fairness_metrics(
-            predictions=predictions,
-            true_labels=true_labels,
-            sensitive_attributes=sensitive_attrs_dict
+        from fairness_library.metrics import (
+            demographic_parity_diff,
+            equal_opportunity_diff,
+            equalized_odds_diff,
         )
-        
-        return {
-            "success": True,
-            "results": {
-                library.value: {
-                    "bias_score": result.bias_score,
-                    "confidence": result.confidence,
-                    "p_value": result.p_value,
-                    "effect_size": result.effect_size
-                } for library, result in results.items()
+
+        def _row(result):
+            low, high = result.confidence_interval
+            return {
+                "value": float(result.value),
+                "confidence_interval": [float(low), float(high)],
+                "p_value": float(result.p_value),
+                "is_fair": bool(result.is_fair),
+                "threshold": float(result.threshold),
             }
-        }
-        
+
+        results = {}
+        for attr, groups in sensitive_attrs_dict.items():
+            groups = np.asarray(groups)
+            if len(groups) != len(predictions) or len(true_labels) != len(predictions):
+                raise HTTPException(status_code=422, detail=f"'{attr}' must have one value per prediction")
+            results[attr] = {
+                "demographic_parity": _row(demographic_parity_diff(predictions, groups)),
+                "equalized_odds": _row(equalized_odds_diff(true_labels, predictions, groups)),
+                "equal_opportunity": _row(equal_opportunity_diff(true_labels, predictions, groups)),
+            }
+
+        return {"success": True, "results": results}
+
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error running fairness metrics: {e}")
         raise HTTPException(status_code=500, detail=f"Fairness metrics failed: {str(e)}")

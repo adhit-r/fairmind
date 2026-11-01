@@ -347,45 +347,8 @@ async def get_system_health():
 @router.get("/metrics")
 async def get_monitoring_metrics():
     """Get monitoring metrics for dashboard"""
-    try:
-        # Return mock monitoring metrics
-        metrics = {
-            "summary": {
-                "avg_accuracy": 87.5,
-                "avg_latency": 120,
-                "uptime": 99.8,
-                "throughput": 1500
-            },
-            "metrics": [
-                {
-                    "date": "2024-01-20",
-                    "accuracy": 85.2,
-                    "latency": 125,
-                    "throughput": 1450
-                },
-                {
-                    "date": "2024-01-21",
-                    "accuracy": 88.1,
-                    "latency": 118,
-                    "throughput": 1520
-                },
-                {
-                    "date": "2024-01-22",
-                    "accuracy": 89.3,
-                    "latency": 115,
-                    "throughput": 1580
-                }
-            ]
-        }
-        
-        return {
-            "success": True,
-            "metrics": metrics["metrics"],
-            "summary": metrics["summary"]
-        }
-    except Exception as e:
-        logger.error(f"Error getting monitoring metrics: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    raise HTTPException(status_code=501, detail="Fleet monitoring metrics are not collected yet. Use /metrics/{model_id} for recorded metrics.")
+
 
 # WebSocket Endpoints
 @router.websocket("/ws/{user_id}")

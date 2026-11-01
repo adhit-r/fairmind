@@ -1,15 +1,14 @@
 import type { Metadata } from "next"
-import { Raleway } from "next/font/google"
+import { Inter } from "next/font/google"
 import { MantineProvider } from '@mantine/core';
 import "./globals.css"
 import "@mantine/core/styles.css";
-import { ClientNavigation } from "@/components/layout/ClientNavigation"
 import { Toaster } from "@/components/ui/toaster"
 import { ErrorBoundary } from "@/components/ErrorBoundary"
 
-const raleway = Raleway({
+const inter = Inter({
   subsets: ["latin"],
-  variable: "--font-raleway",
+  variable: "--font-inter",
 })
 
 export const metadata: Metadata = {
@@ -60,10 +59,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={`${raleway.variable} font-sans`}>
+      <body className={`${inter.variable} font-sans`}>
         <MantineProvider>
           <ErrorBoundary>
-            <ClientNavigation>{children}</ClientNavigation>
+            {children}
             <Toaster />
           </ErrorBoundary>
         </MantineProvider>

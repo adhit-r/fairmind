@@ -76,6 +76,15 @@ async def lifespan(app: FastAPI):
         logger.error(f"Failed to initialize database: {e}")
         raise
 
+    # ORM-managed tables (users, organisations, governance). Table by table,
+    # so one definition the local SQLite cannot parse does not block the rest.
+    try:
+        from database.connection import db_manager as orm_db_manager
+
+        orm_db_manager.create_tables()
+    except Exception as e:
+        logger.warning(f"ORM table creation incomplete: {e}")
+
     # Initialize cache connections
     try:
         await init_cache()
@@ -483,6 +492,7 @@ _include_router("api.routes.datasets", tags=["datasets"], required=False)
 _include_router("api.routes.india_compliance", prefix="/api/v1", tags=["india-compliance"], required=False)
 _include_router("api.routes.llm_judge", prefix="/api/v1", tags=["llm-judge"], required=False)
 _include_router("api.routes.mlops", prefix="/api/v1", tags=["mlops"], required=False)
+_include_router("api.routes.integrations", prefix="/api/v1", tags=["integrations"], required=False)
 _include_router("api.routes.modern_bias_detection", prefix="/api/v1", tags=["modern-bias-detection"], required=False)
 _include_router("api.routes.monitoring", prefix="/api/v1", tags=["monitoring"], required=False)
 _include_router("api.routes.multimodal_bias_detection", prefix="/api/v1", tags=["multimodal-bias-detection"], required=False)
