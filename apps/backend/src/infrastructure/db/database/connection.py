@@ -93,7 +93,14 @@ class DatabaseManager:
             import database.governance_models  # noqa: F401
             import database.models  # noqa: F401  users, organizations, memberships
 
-            Base.metadata.create_all(bind=self.engine)
+            # Table by table: one definition the local SQLite build cannot parse
+            # (governance_evaluation_runs overflows the parser stack on older
+            # versions) must not roll back the users and organisation tables.
+            for table in Base.metadata.sorted_tables:
+                try:
+                    table.create(bind=self.engine, checkfirst=True)
+                except Exception as table_error:
+                    logger.warning(f"Could not create table {table.name}: {table_error}")
             logger.info("Database tables created successfully")
         except Exception as e:
             logger.error(f"Error creating tables: {e}")
