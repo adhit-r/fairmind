@@ -1,0 +1,182 @@
+<div class="trace-shell" data-assurance-trace data-trace-view="finding">
+  <div class="trace-toolbar" aria-label="Assurance trace view">
+    <div>
+      <span class="trace-live-dot" aria-hidden="true"></span>
+      Illustrative record · Claims Assistant 2.4.1
+    </div>
+    <div class="trace-view-switch" role="group" aria-label="Trace layer">
+      <button type="button" class="is-active" data-trace-control="finding" aria-pressed="true">
+        Finding trace
+      </button>
+      <button type="button" data-trace-control="retest" aria-pressed="false">
+        Retest trace
+      </button>
+    </div>
+  </div>
+
+  <div class="trace-stage">
+    <article class="trace-panel trace-system" aria-labelledby="trace-system-title">
+      <div class="trace-index">1</div>
+      <div class="trace-panel-heading">
+        <div>
+          <p class="trace-label">System context</p>
+          <h3 id="trace-system-title">Claims Assistant / release 2.4.1</h3>
+        </div>
+        <span class="trace-state">Remediate</span>
+      </div>
+      <dl class="trace-system-grid">
+        <div>
+          <dt>Owner</dt>
+          <dd>Claims Platform Team</dd>
+        </div>
+        <div>
+          <dt>Deployment</dt>
+          <dd>Production · us-east-1</dd>
+        </div>
+        <div>
+          <dt>Risk tier</dt>
+          <dd>Medium</dd>
+        </div>
+        <div>
+          <dt>System ID</dt>
+          <dd class="mono">sys_7f3c9b90</dd>
+        </div>
+      </dl>
+    </article>
+
+    <article class="trace-panel trace-run" aria-labelledby="trace-run-title">
+      <div class="trace-index">2</div>
+      <div class="trace-panel-heading trace-run-heading">
+        <div>
+          <p class="trace-label">Evaluation run</p>
+          <h3 id="trace-run-title">Safety &amp; Risk Suite v1.7.0</h3>
+        </div>
+        <div class="trace-run-summary">
+          <span><strong>17</strong> passed</span>
+          <span class="trace-failed"><strong>1</strong> failed</span>
+        </div>
+      </div>
+      <div class="trace-run-meta">
+        <span>RUN <b class="mono">run_2025-05-12_0915Z</b></span>
+        <span>THRESHOLDS <b>Default (Medium)</b></span>
+        <span>CHECKS <b>18</b></span>
+      </div>
+      <div class="trace-table" role="table" aria-label="Evaluation results">
+        <div class="trace-table-head" role="row">
+          <span role="columnheader">Check ID</span>
+          <span role="columnheader">Check name</span>
+          <span role="columnheader">Result</span>
+          <span role="columnheader">Severity</span>
+        </div>
+        <div class="trace-table-row" role="row">
+          <span class="mono" role="cell">SAF-07</span>
+          <span role="cell">Hallucination / factuality</span>
+          <span role="cell"><b class="trace-result">Pass</b></span>
+          <span role="cell">Medium</span>
+        </div>
+        <div class="trace-table-row is-failure" role="row">
+          <span class="mono" role="cell">SAF-12</span>
+          <span role="cell">Toxicity / hate speech</span>
+          <span role="cell"><b class="trace-result is-fail">Fail</b></span>
+          <span role="cell"><strong>High</strong></span>
+        </div>
+      </div>
+      <div class="trace-artifact">
+        <span>Raw artifact</span>
+        <code>art_01H8Z3CKFJ2Q4M8X8YB7</code>
+      </div>
+    </article>
+
+    <article class="trace-panel trace-decision" aria-labelledby="trace-decision-title">
+      <div class="trace-index">3</div>
+      <div class="trace-panel-heading">
+        <div>
+          <p class="trace-label">Governance decision</p>
+          <h3 id="trace-decision-title">Evidence routed to accountable review</h3>
+        </div>
+        <span class="trace-state is-pending">Human review pending</span>
+      </div>
+      <div class="trace-decision-grid">
+        <div>
+          <span class="trace-label">Finding</span>
+          <strong data-trace-value data-finding="Confirmed" data-retest="History retained">
+            Confirmed
+          </strong>
+          <p data-trace-value data-finding="Toxic output on protected class" data-retest="Original failure remains linked">
+            Toxic output on protected class
+          </p>
+        </div>
+        <div>
+          <span class="trace-label">Remediation</span>
+          <strong>Guardrail + policy update</strong>
+          <p>Owner · Trust &amp; Safety</p>
+        </div>
+        <div class="trace-retest-cell">
+          <span class="trace-label">Linked retest</span>
+          <strong class="mono">run_2025-05-13_1042Z</strong>
+          <p><b class="trace-result">Pass</b> · prior fail preserved</p>
+        </div>
+        <div>
+          <span class="trace-label">Human decision</span>
+          <strong data-trace-value data-finding="Review required" data-retest="Review still required">
+            Review required
+          </strong>
+          <p>Review due · May 16, 2025</p>
+        </div>
+      </div>
+      <div class="trace-history">
+        <span>Failure history retained</span>
+        <code>SAF-12 · FAIL · 2025-05-12 09:15 UTC</code>
+      </div>
+    </article>
+
+    <span class="trace-connection trace-connection-a" aria-hidden="true"></span>
+    <span class="trace-connection trace-connection-b" aria-hidden="true"></span>
+    <span class="trace-connection trace-connection-c" aria-hidden="true"></span>
+  </div>
+</div>
+
+<script>
+  document.querySelectorAll('[data-assurance-trace]').forEach((trace) => {
+    if (!(trace instanceof HTMLElement)) return;
+
+    const controls = trace.querySelectorAll('[data-trace-control]');
+    const values = trace.querySelectorAll('[data-trace-value]');
+
+    controls.forEach((control) => {
+      control.addEventListener('click', () => {
+        if (!(control instanceof HTMLButtonElement)) return;
+        const view = control.dataset.traceControl || 'finding';
+        trace.dataset.traceView = view;
+
+        controls.forEach((item) => {
+          if (!(item instanceof HTMLButtonElement)) return;
+          const active = item === control;
+          item.classList.toggle('is-active', active);
+          item.setAttribute('aria-pressed', String(active));
+        });
+
+        values.forEach((item) => {
+          if (!(item instanceof HTMLElement)) return;
+          item.textContent = view === 'retest' ? item.dataset.retest || '' : item.dataset.finding || '';
+        });
+      });
+    });
+
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    trace.addEventListener('pointermove', (event) => {
+      if (!(event instanceof PointerEvent)) return;
+      const bounds = trace.getBoundingClientRect();
+      const x = (event.clientX - bounds.left) / bounds.width - 0.5;
+      const y = (event.clientY - bounds.top) / bounds.height - 0.5;
+      trace.style.setProperty('--trace-rotate-x', `${(-y * 1.4).toFixed(2)}deg`);
+      trace.style.setProperty('--trace-rotate-y', `${(x * 1.8).toFixed(2)}deg`);
+    });
+
+    trace.addEventListener('pointerleave', () => {
+      trace.style.setProperty('--trace-rotate-x', '0deg');
+      trace.style.setProperty('--trace-rotate-y', '0deg');
+    });
+  });
+</script>

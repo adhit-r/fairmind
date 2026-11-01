@@ -1,0 +1,586 @@
+<!--
+  Headless consent contract for an external CMP.
+
+  Preferred integration:
+    window.fairmindConsent.setConsent({
+      analytics: true,
+      source: 'your-cmp',
+      policyVersion: '2026-08-01',
+    })
+
+  Event integration:
+    window.dispatchEvent(new CustomEvent('fairmind:cmp-consent', {
+      detail: { analytics: true, source: 'your-cmp', policyVersion: '2026-08-01' },
+    }))
+
+  This component deliberately renders no banner or preference UI. The CMP owns that surface.
+-->
+
+<script is:inline>
+  (() => {
+    const normalizeConsent = (value) => {
+      const input = typeof value === 'boolean' ? { analytics: value } : value || {};
+      return {
+        analytics: input.analytics === true,
+        source: String(input.source || 'external-cmp').slice(0, 80),
+        policyVersion: String(input.policyVersion || 'unspecified').slice(0, 40),
+      };
+    };
+
+    const consentApi = window.fairmindConsent || {};
+
+    consentApi.setConsent = (value) => {
+      const detail = normalizeConsent(value);
+      window.__fairmindConsentState = detail;
+      window.dispatchEvent(new CustomEvent('fairmind:cmp-consent', { detail }));
+      return detail;
+    };
+
+    consentApi.getState = () => window.__fairmindConsentState || null;
+    window.fairmindConsent = consentApi;
+  })();
+</script>
+
+<script>
+  const projectKey = import.meta.env.PUBLIC_POSTHOG_KEY?.trim();
+  const apiHost = import.meta.env.PUBLIC_POSTHOG_HOST?.trim();
+  const analyticsConfigured = Boolean(projectKey && apiHost);
+  const postHogConsentStorageName = 'fairmind-posthog-consent';
+  const privacySignalEnabled =
+    navigator.doNotTrack === '1' ||
+    navigator.doNotTrack === 'yes' ||
+    // globalPrivacyControl is implemented by supporting browsers but is not in every TS DOM lib.
+    (navigator as Navigator & { globalPrivacyControl?: boolean }).globalPrivacyControl === true;
+
+  let posthogInstance: typeof import('posthog-js/dist/module.full.no-external').default | null = null;
+  let initialization: Promise<boolean> | null = null;
+  let active = false;
+  let cleanupInstrumentation: (() => void) | null = null;
+  let storageCleanupGeneration = 0;
+
+  const setState = (state: string) => {
+    document.documentElement.dataset.analyticsState = state;
+  };
+
+  const cleanUrl = (value: unknown) => {
+    if (typeof value !== 'string' || value.length === 0) return value;
+
+    try {
+      const url = new URL(value, window.location.origin);
+      return `${url.origin}${url.pathname}`;
+    } catch {
+      return value.split(/[?#]/, 1)[0];
+    }
+  };
+
+  const sanitizeEvent = (event: Record<string, any> | null) => {
+    if (!event?.properties) return event;
+
+    const properties = { ...event.properties };
+    const sensitiveProperty = /(^|[_$-])(email|e-mail|name|first.?name|last.?name|phone|message|company|organization|job.?title|field|form.?value|input.?value|search.?query)([_$-]|$)/i;
+
+    Object.keys(properties).forEach((key) => {
+      if (sensitiveProperty.test(key)) {
+        delete properties[key];
+        return;
+      }
+
+      if (/url|referrer/i.test(key)) {
+        properties[key] = cleanUrl(properties[key]);
+      }
+    });
+
+    return { ...event, properties };
+  };
+
+  const capture = (eventName: string, properties: Record<string, string | number | boolean | null> = {}) => {
+    if (!active || !posthogInstance) return false;
+
+    posthogInstance.capture(eventName, {
+      site_area: 'marketing',
+      page_path: window.location.pathname,
+      ...properties,
+    });
+    return true;
+  };
+
+  const getElementRegion = (element: Element) => {
+    if (element.closest('header')) return 'header';
+    if (element.closest('footer')) return 'footer';
+    return 'main';
+  };
+
+  const getSection = (element: Element) => element.closest<HTMLElement>('section[id]')?.id || 'page';
+
+  const getSafeDestination = (anchor: HTMLAnchorElement) => {
+    const href = anchor.getAttribute('href') || '';
+
+    if (href.startsWith('mailto:')) return { type: 'email', host: '', path: '' };
+    if (href.startsWith('tel:')) return { type: 'phone', host: '', path: '' };
+
+    try {
+      const destination = new URL(href, window.location.origin);
+      const external = destination.origin !== window.location.origin;
+      const type = anchor.hasAttribute('download') ? 'download' : external ? 'outbound' : href.startsWith('#') ? 'anchor' : 'internal';
+      return { type, host: external ? destination.hostname : '', path: destination.pathname };
+    } catch {
+      return { type: 'unknown', host: '', path: '' };
+    }
+  };
+
+  const installInstrumentation = () => {
+    if (cleanupInstrumentation) return;
+
+    const cleanups: Array<() => void> = [];
+    const listen = <K extends keyof DocumentEventMap>(
+      target: Document | Window,
+      type: K,
+      listener: EventListener,
+      options?: AddEventListenerOptions | boolean,
+    ) => {
+      target.addEventListener(type, listener, options);
+      cleanups.push(() => target.removeEventListener(type, listener, options));
+    };
+
+    const interactionMap: Array<[string, string, string]> = [
+      ['[data-role-tab]', 'website_role_selected', 'roleTab'],
+      ['[data-graph-node]', 'website_evidence_node_selected', 'graphNode'],
+      ['[data-capability-filter]', 'website_capability_filter_selected', 'capabilityFilter'],
+      ['[data-roadmap-filter]', 'website_roadmap_filter_selected', 'roadmapFilter'],
+      ['[data-exchange-source]', 'website_evidence_source_selected', 'exchangeSource'],
+      ['[data-exchange-replay]', 'website_evidence_exchange_replayed', ''],
+      ['[data-trace-control]', 'website_assurance_trace_selected', 'traceControl'],
+      ['[data-legal-tab]', 'website_legal_view_selected', 'legalTab'],
+    ];
+
+    listen(document, 'click', ((event: MouseEvent) => {
+      if (!(event.target instanceof Element)) return;
+
+      const anchor = event.target.closest<HTMLAnchorElement>('a[href]');
+      if (anchor) {
+        const destination = getSafeDestination(anchor);
+        capture('website_link_clicked', {
+          link_type: destination.type,
+          destination_host: destination.host,
+          destination_path: destination.path,
+          source_region: getElementRegion(anchor),
+          source_section: getSection(anchor),
+          is_cta: anchor.classList.contains('button'),
+        });
+
+        if (anchor.hasAttribute('data-footer-primary')) {
+          capture('website_footer_cta_selected', {
+            destination_path: destination.path,
+          });
+        }
+      }
+
+      const button = event.target.closest<HTMLButtonElement>('button');
+      if (button) {
+        capture('website_button_clicked', {
+          button_type: button.type || 'button',
+          source_region: getElementRegion(button),
+          source_section: getSection(button),
+          interaction_label: button.dataset.analyticsLabel || null,
+        });
+      }
+
+      for (const [selector, eventName, dataKey] of interactionMap) {
+        const control = event.target.closest<HTMLElement>(selector);
+        if (!control) continue;
+
+        const value = dataKey ? control.dataset[dataKey] || 'unspecified' : 'replay';
+        capture(eventName, {
+          selection: value,
+          source_section: getSection(control),
+        });
+        break;
+      }
+    }) as EventListener);
+
+    const startedForms = new WeakSet<HTMLFormElement>();
+    listen(document, 'focusin', ((event: FocusEvent) => {
+      if (!(event.target instanceof Element)) return;
+      const form = event.target.closest<HTMLFormElement>('form');
+      if (!form || startedForms.has(form)) return;
+
+      startedForms.add(form);
+      capture('website_form_started', {
+        form_path: window.location.pathname,
+      });
+    }) as EventListener);
+
+    listen(document, 'submit', ((event: SubmitEvent) => {
+      if (!(event.target instanceof HTMLFormElement)) return;
+
+      let destinationHost = '';
+      try {
+        destinationHost = new URL(event.target.action, window.location.origin).hostname;
+      } catch {
+        destinationHost = '';
+      }
+
+      capture('website_form_submitted', {
+        form_path: window.location.pathname,
+        destination_host: destinationHost,
+        method: event.target.method.toUpperCase() || 'GET',
+      });
+    }) as EventListener);
+
+    listen(document, 'invalid', ((event: Event) => {
+      if (!(event.target instanceof Element) || !event.target.closest('form')) return;
+      capture('website_form_validation_blocked', {
+        form_path: window.location.pathname,
+      });
+    }) as EventListener, true);
+
+    document.querySelectorAll<HTMLDetailsElement>('details').forEach((details, index) => {
+      const onToggle = () => {
+        capture('website_disclosure_toggled', {
+          disclosure_index: index + 1,
+          source_section: getSection(details),
+          open: details.open,
+        });
+      };
+      details.addEventListener('toggle', onToggle);
+      cleanups.push(() => details.removeEventListener('toggle', onToggle));
+    });
+
+    const mobileMenu = document.querySelector<HTMLDetailsElement>('[data-mobile-navigation]');
+    if (mobileMenu) {
+      const onMenuToggle = () => capture('website_mobile_navigation_toggled', { open: mobileMenu.open });
+      mobileMenu.addEventListener('toggle', onMenuToggle);
+      cleanups.push(() => mobileMenu.removeEventListener('toggle', onMenuToggle));
+    }
+
+    const seenSections = new Set<string>();
+    const sectionObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          const section = entry.target as HTMLElement;
+          if (!entry.isIntersecting || !section.id || seenSections.has(section.id)) return;
+          seenSections.add(section.id);
+          capture('website_section_viewed', { section_id: section.id });
+        });
+      },
+      { threshold: 0.35 },
+    );
+    document.querySelectorAll<HTMLElement>('main section[id]').forEach((section) => sectionObserver.observe(section));
+    cleanups.push(() => sectionObserver.disconnect());
+
+    const footer = document.querySelector<HTMLElement>('[data-site-footer]');
+    if (footer) {
+      let footerSeen = false;
+      const footerObserver = new IntersectionObserver(
+        ([entry]) => {
+          if (!entry?.isIntersecting || footerSeen) return;
+          footerSeen = true;
+          capture('website_footer_viewed');
+          footerObserver.disconnect();
+        },
+        { threshold: 0.2 },
+      );
+      footerObserver.observe(footer);
+      cleanups.push(() => footerObserver.disconnect());
+    }
+
+    document.querySelectorAll<HTMLMediaElement>('video, audio').forEach((media, index) => {
+      const mediaType = media instanceof HTMLVideoElement ? 'video' : 'audio';
+      const mediaPath = cleanUrl(media.currentSrc || media.getAttribute('src') || '');
+      const milestones = new Set<number>();
+      const onPlay = () => capture('website_media_played', { media_type: mediaType, media_path: String(mediaPath), media_index: index + 1 });
+      const onPause = () => {
+        if (!media.ended) capture('website_media_paused', { media_type: mediaType, media_path: String(mediaPath), media_index: index + 1 });
+      };
+      const onEnded = () => capture('website_media_completed', { media_type: mediaType, media_path: String(mediaPath), media_index: index + 1 });
+      const onTimeUpdate = () => {
+        if (!Number.isFinite(media.duration) || media.duration <= 0) return;
+        const progress = Math.round((media.currentTime / media.duration) * 100);
+        [25, 50, 75].forEach((milestone) => {
+          if (progress < milestone || milestones.has(milestone)) return;
+          milestones.add(milestone);
+          capture('website_media_progress', {
+            media_type: mediaType,
+            media_path: String(mediaPath),
+            media_index: index + 1,
+            progress_percent: milestone,
+          });
+        });
+      };
+
+      media.addEventListener('play', onPlay);
+      media.addEventListener('pause', onPause);
+      media.addEventListener('ended', onEnded);
+      media.addEventListener('timeupdate', onTimeUpdate);
+      cleanups.push(() => {
+        media.removeEventListener('play', onPlay);
+        media.removeEventListener('pause', onPause);
+        media.removeEventListener('ended', onEnded);
+        media.removeEventListener('timeupdate', onTimeUpdate);
+      });
+    });
+
+    const scrollDepths = [25, 50, 75, 90, 100];
+    const reachedDepths = new Set<number>();
+    const onScroll = () => {
+      const scrollable = document.documentElement.scrollHeight - window.innerHeight;
+      const depth = scrollable > 0 ? Math.round((window.scrollY / scrollable) * 100) : 100;
+
+      scrollDepths.forEach((milestone) => {
+        if (depth < milestone || reachedDepths.has(milestone)) return;
+        reachedDepths.add(milestone);
+        capture('website_scroll_depth_reached', { depth_percent: milestone });
+      });
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    cleanups.push(() => window.removeEventListener('scroll', onScroll));
+    onScroll();
+
+    let visibleSince = document.visibilityState === 'visible' ? performance.now() : null;
+    let visibleMilliseconds = 0;
+    let engagementSent = false;
+    const updateVisibleTime = () => {
+      if (visibleSince !== null) {
+        visibleMilliseconds += performance.now() - visibleSince;
+        visibleSince = null;
+      }
+      if (document.visibilityState === 'visible') visibleSince = performance.now();
+    };
+    const onVisibilityChange = () => updateVisibleTime();
+    const sendEngagement = () => {
+      if (engagementSent) return;
+      updateVisibleTime();
+      engagementSent = true;
+      capture('website_page_engagement', {
+        visible_seconds: Math.max(0, Math.round(visibleMilliseconds / 1000)),
+        maximum_scroll_percent: Math.max(0, ...reachedDepths),
+      });
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('pagehide', sendEngagement);
+    cleanups.push(() => document.removeEventListener('visibilitychange', onVisibilityChange));
+    cleanups.push(() => window.removeEventListener('pagehide', sendEngagement));
+
+    const onCopy = () => capture('website_content_copied', { source: 'page' });
+    document.addEventListener('copy', onCopy);
+    cleanups.push(() => document.removeEventListener('copy', onCopy));
+
+    cleanupInstrumentation = () => {
+      cleanups.forEach((cleanup) => cleanup());
+      cleanupInstrumentation = null;
+    };
+  };
+
+  const enableAnalytics = async (consent: { source?: string; policyVersion?: string } = {}) => {
+    if (privacySignalEnabled) {
+      setState('blocked-by-browser-privacy-signal');
+      return false;
+    }
+
+    if (!analyticsConfigured) {
+      setState('unconfigured');
+      return false;
+    }
+
+    if (active && posthogInstance) return true;
+    if (initialization) return initialization;
+
+    initialization = (async () => {
+      if (!posthogInstance) {
+        const module = await import('posthog-js/dist/module.full.no-external');
+        posthogInstance = module.default;
+
+        posthogInstance.init(projectKey, {
+          api_host: apiHost,
+          ui_host: apiHost.replace('.i.posthog.com', '.posthog.com'),
+          defaults: '2026-05-30',
+          autocapture: {
+            dom_event_allowlist: ['click', 'submit'],
+            element_allowlist: ['a', 'button', 'form'],
+            css_selector_ignorelist: ['.ph-no-autocapture', '[data-ph-no-autocapture]', '.route-form', '[data-sensitive]'],
+            element_attribute_ignorelist: ['aria-label', 'name', 'value', 'placeholder', 'title', 'data-sensitive'],
+            capture_copied_text: false,
+          },
+          rageclick: {
+            css_selector_ignorelist: ['.ph-no-capture', '.ph-no-rageclick', '.route-form', '[data-sensitive]'],
+            content_ignorelist: true,
+            ignore_text_selection: true,
+          },
+          capture_pageview: true,
+          capture_pageleave: true,
+          // A queued batch can leave after a visitor withdraws. Immediate sends make
+          // the revocation boundary observable: nothing remains buffered at opt-out.
+          request_batching: false,
+          capture_dead_clicks: true,
+          capture_heatmaps: true,
+          capture_performance: {
+            network_timing: true,
+            web_vitals: true,
+            web_vitals_allowed_metrics: ['LCP', 'CLS', 'FCP', 'INP'],
+          },
+          capture_exceptions: {
+            capture_unhandled_errors: true,
+            capture_unhandled_rejections: true,
+            capture_console_errors: false,
+          },
+          disable_session_recording: false,
+          session_recording: {
+            maskAllInputs: true,
+            maskTextSelector: '.route-form, [data-sensitive], [data-ph-no-capture]',
+            blockSelector: '[data-ph-block]',
+            recordCrossOriginIframes: false,
+            recordHeaders: false,
+            recordBody: false,
+            collectFonts: false,
+            slimDOMOptions: 'all',
+            maskCapturedNetworkRequestFn: (request) => {
+              if (request.name) request.name = String(cleanUrl(request.name));
+              request.requestBody = undefined;
+              request.responseBody = undefined;
+              return request;
+            },
+          },
+          enable_recording_console_log: false,
+          // Public marketing copy is useful in replay; all form controls and the complete form
+          // surface remain masked or blocked by the selectors above.
+          mask_all_text: false,
+          mask_all_element_attributes: false,
+          mask_personal_data_properties: true,
+          custom_personal_data_properties: ['email', 'name', 'first_name', 'last_name', 'phone', 'company', 'organization', 'message'],
+          property_denylist: [
+            '$element_text',
+            '$el_text',
+            'email',
+            'name',
+            'firstName',
+            'lastName',
+            'phone',
+            'message',
+            'company',
+            'organization',
+            'jobTitle',
+          ],
+          before_send: sanitizeEvent,
+          person_profiles: 'identified_only',
+          save_campaign_params: true,
+          save_referrer: true,
+          ip: false,
+          respect_dnt: true,
+          opt_out_capturing_by_default: true,
+          opt_out_persistence_by_default: true,
+          consent_persistence_name: postHogConsentStorageName,
+          secure_cookie: true,
+          cross_subdomain_cookie: false,
+          disable_surveys: true,
+          disable_surveys_automatic_display: true,
+          disable_product_tours: true,
+          disable_conversations: true,
+          // Every enabled analytics feature is configured locally. This prevents the SDK from
+          // fetching feature flags or token-specific remote config from a second asset host.
+          advanced_disable_flags: true,
+          debug: false,
+        });
+      }
+
+      storageCleanupGeneration += 1;
+      posthogInstance.set_config({ disable_persistence: false });
+      posthogInstance.opt_in_capturing();
+      posthogInstance.startSessionRecording();
+      active = true;
+      installInstrumentation();
+      setState('active');
+      capture('website_analytics_consent_applied', {
+        consent_source: String(consent.source || 'external-cmp').slice(0, 80),
+        policy_version: String(consent.policyVersion || 'unspecified').slice(0, 40),
+      });
+      capture('website_page_loaded', {
+        navigation_type: (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined)?.type || 'unknown',
+        viewport: window.innerWidth < 640 ? 'mobile' : window.innerWidth < 1024 ? 'tablet' : 'desktop',
+      });
+      return true;
+    })().finally(() => {
+      initialization = null;
+    });
+
+    return initialization;
+  };
+
+  const clearPostHogStorage = () => {
+    if (!projectKey) return;
+
+    const storagePrefix = `ph_${projectKey}_`;
+    const ownsKey = (key: string) => key === postHogConsentStorageName || key.startsWith(storagePrefix);
+
+    [window.localStorage, window.sessionStorage].forEach((storage) => {
+      try {
+        Object.keys(storage).forEach((key) => {
+          if (ownsKey(key)) storage.removeItem(key);
+        });
+      } catch {
+        // Storage may be unavailable in privacy-restricted browsing contexts.
+      }
+    });
+
+    document.cookie.split(';').forEach((part) => {
+      const name = part.trim().split('=', 1)[0];
+      if (!name || !ownsKey(name)) return;
+
+      const base = `${name}=; Max-Age=0; Path=/; SameSite=Lax`;
+      document.cookie = base;
+      document.cookie = `${base}; Domain=${window.location.hostname}`;
+      if (window.location.hostname.includes('.')) {
+        document.cookie = `${base}; Domain=.${window.location.hostname}`;
+      }
+    });
+  };
+
+  const schedulePostHogStorageCleanup = () => {
+    const generation = ++storageCleanupGeneration;
+    const cleanIfStillWithdrawn = () => {
+      if (generation !== storageCleanupGeneration || active) return;
+      clearPostHogStorage();
+    };
+
+    cleanIfStillWithdrawn();
+    [0, 50, 250, 1000].forEach((delay) => {
+      window.setTimeout(cleanIfStillWithdrawn, delay);
+    });
+  };
+
+  const disableAnalytics = () => {
+    active = false;
+    cleanupInstrumentation?.();
+
+    if (posthogInstance) {
+      posthogInstance.stopSessionRecording();
+      posthogInstance.reset();
+      posthogInstance.opt_out_capturing();
+      posthogInstance.set_config({ disable_persistence: true });
+      schedulePostHogStorageCleanup();
+    }
+
+    setState('denied');
+    return true;
+  };
+
+  const applyConsent = (detail: { analytics?: boolean; source?: string; policyVersion?: string } = {}) =>
+    detail.analytics === true ? enableAnalytics(detail) : Promise.resolve(disableAnalytics());
+
+  window.fairmindAnalytics = {
+    capture,
+    getState: () => ({ active, configured: analyticsConfigured, privacySignalEnabled }),
+  };
+
+  window.addEventListener('fairmind:cmp-consent', ((event: CustomEvent) => {
+    void applyConsent(event.detail || {});
+  }) as EventListener);
+
+  const queuedConsent = (window as Window & { __fairmindConsentState?: { analytics?: boolean; source?: string; policyVersion?: string } })
+    .__fairmindConsentState;
+
+  if (queuedConsent) {
+    void applyConsent(queuedConsent);
+  } else {
+    setState(analyticsConfigured ? 'awaiting-consent' : 'unconfigured');
+  }
+</script>
