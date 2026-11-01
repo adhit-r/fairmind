@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     
     # Environment
     environment: str = "development"
+    # Local development only: JWTAuthenticationMiddleware signs loopback
+    # requests without a token in as this existing user. Ignored outside development.
+    fairmind_dev_login_email: Optional[str] = None
     debug: bool = False
     
     # API Configuration

@@ -5,9 +5,9 @@ Updated to use the new secure JWT infrastructure.
 
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List
-from fastapi import HTTPException, status, Depends
+from fastapi import HTTPException, status, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from passlib.context import CryptContext
+import bcrypt
 import logging
 from enum import Enum
 from pydantic import BaseModel
@@ -32,7 +32,23 @@ from .jwt_models import (
 logger = logging.getLogger("fairmind.auth")
 
 # Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+class _Bcrypt:
+    """bcrypt hashing without passlib, whose 1.7.4 release breaks on bcrypt>=4.1."""
+
+    @staticmethod
+    def hash(password: str) -> str:
+        return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("ascii")
+
+    @staticmethod
+    def verify(password: str, hashed: str) -> bool:
+        # bcrypt reads at most 72 bytes; refuse longer input instead of truncating it.
+        secret = password.encode("utf-8")
+        if len(secret) > 72:
+            return False
+        return bcrypt.checkpw(secret, hashed.encode("ascii"))
+
+
+pwd_context = _Bcrypt()
 
 # JWT Security: disable auto-error so we normalize auth failures to 401 via our JWT exceptions.
 security = HTTPBearer(auto_error=False)
@@ -63,6 +79,7 @@ class User(BaseModel):
     created_at: datetime
     last_login: Optional[datetime] = None
     permissions: List[str] = []
+    org_id: Optional[str] = None
 
 
 class TokenData(BaseModel):
@@ -74,6 +91,7 @@ class TokenData(BaseModel):
     exp: datetime
     iat: datetime
     permissions: List[str] = []
+    org_id: Optional[str] = None
 
 
 class AuthManager:
@@ -110,6 +128,7 @@ class AuthManager:
         payload = {
             "sub": user.id,
             "user_id": user.id,
+            "org_id": user.org_id,
             "email": user.email,
             "roles": [user.role.value],
             "permissions": user.permissions,
@@ -125,6 +144,7 @@ class AuthManager:
         payload = {
             "sub": user.id,
             "user_id": user.id,
+            "org_id": user.org_id,
             "email": user.email,
             "roles": [user.role.value],
             "token_type": TokenType.REFRESH.value,
@@ -139,6 +159,7 @@ class AuthManager:
         payload = {
             "sub": user.id,
             "user_id": user.id,
+            "org_id": user.org_id,
             "email": user.email,
             "roles": [user.role.value],
             "permissions": user.permissions,
@@ -171,6 +192,7 @@ class AuthManager:
             exp = payload.get("exp")
             iat = payload.get("iat")
             permissions = payload.get("permissions", [])
+            org_id = payload.get("org_id")
             
             if user_id is None or subject is None or email is None:
                 raise InvalidTokenException("Invalid token payload")
@@ -199,6 +221,7 @@ class AuthManager:
                 exp=exp_dt,
                 iat=iat_dt,
                 permissions=permissions,
+                org_id=str(org_id) if org_id else None,
             )
             
         except (TokenExpiredException, InvalidTokenException):
@@ -247,20 +270,32 @@ class AuthManager:
             # Token is already invalid, no need to blacklist
     
     async def get_user_by_id(self, user_id: str) -> Optional[User]:
-        """Get user by ID (placeholder - implement with your user storage)."""
-        # Placeholder behavior for tests/local runs where token user IDs can be numeric/hash-based.
+        """Load a user from the users table by id."""
         if not user_id:
             return None
-        return User(
-            id=str(user_id),
-            email="admin@fairmind.ai",
-            username="admin",
-            role=UserRole.ADMIN,
-            is_active=True,
-            created_at=datetime.now(timezone.utc),
-            permissions=["*"],
-        )
-    
+        row = await _fetch_user_row("u.id = :key", str(user_id))
+        return _user_from_row(row) if row else None
+
+    async def get_user_by_email(self, email: str) -> Optional[User]:
+        """Load a user from the users table by email (case-insensitive)."""
+        if not email:
+            return None
+        row = await _fetch_user_row("lower(u.email) = lower(:key)", email)
+        return _user_from_row(row) if row else None
+
+    async def authenticate(self, email: str, password: str) -> Optional[User]:
+        """Verify email and password against the users table."""
+        row = await _fetch_user_row("lower(u.email) = lower(:key)", email)
+        if not row or not row["is_active"] or not row["password_hash"]:
+            return None
+        try:
+            if not pwd_context.verify(password, row["password_hash"]):
+                return None
+        except (ValueError, TypeError):
+            # Malformed or unknown hash scheme: never a match.
+            return None
+        return _user_from_row(row)
+
     def check_permission(self, user: TokenData, required_permission: str) -> bool:
         """Check if user has required permission."""
         # Admin has all permissions
@@ -275,15 +310,60 @@ class AuthManager:
         return user.role in required_roles
 
 
+_USER_COLUMNS = (
+    "u.id, u.email, u.username, u.role, u.is_active, u.created_at, u.last_login, "
+    "u.permissions, u.password_hash, "
+    "COALESCE(u.org_id, u.primary_org_id, "
+    "(SELECT m.org_id FROM org_members m WHERE m.user_id = u.id AND m.status = 'active' "
+    "ORDER BY m.joined_at LIMIT 1)) AS resolved_org_id"
+)
+
+
+async def _fetch_user_row(where: str, key: str):
+    from .database import get_db_connection
+    async with get_db_connection() as db:
+        return await db.fetch_one(f"SELECT {_USER_COLUMNS} FROM users u WHERE {where}", {"key": key})
+
+
+def _user_from_row(row) -> User:
+    try:
+        role = UserRole(row["role"])
+    except ValueError:
+        role = UserRole.VIEWER
+    permissions = row["permissions"] or []
+    if isinstance(permissions, str):
+        import json
+        permissions = json.loads(permissions)
+    if role == UserRole.ADMIN and "*" not in permissions:
+        permissions = [*permissions, "*"]
+    return User(
+        id=str(row["id"]),
+        email=row["email"],
+        username=row["username"],
+        role=role,
+        is_active=bool(row["is_active"]),
+        created_at=row["created_at"] or datetime.now(timezone.utc),
+        last_login=row["last_login"],
+        permissions=permissions,
+        org_id=str(row["resolved_org_id"]) if row["resolved_org_id"] else None,
+    )
+
+
 # Global auth manager instance
 auth_manager = AuthManager()
 
 
 # FastAPI Dependencies
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(HTTPBearer(auto_error=False)),
 ) -> TokenData:
     """Get current authenticated user using new JWT infrastructure."""
+    # JWTAuthenticationMiddleware already verified this request (or signed it in
+    # for local development); reuse its result instead of verifying twice.
+    state_user = getattr(request.state, "user", None)
+    if isinstance(state_user, TokenData) and getattr(request.state, "authenticated", False):
+        return state_user
     if not credentials:
         raise TokenMissingException("Authentication credentials required")
     

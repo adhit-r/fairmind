@@ -57,17 +57,23 @@ export function useAuth() {
     }
   }
 
-  const register = async (data: any) => {
+  const register = async (data: { name: string; email: string; org_name: string; password: string }) => {
     try {
       setLoading(true)
       setError(null)
 
-      const response: ApiResponse<User> = await apiClient.post(
+      const response: ApiResponse<LoginResponse> = await apiClient.post(
         API_ENDPOINTS.auth.register,
         data
       )
 
       if (response.success && response.data) {
+        apiClient.setAccessToken(response.data.access_token)
+        apiClient.setRefreshToken(response.data.refresh_token)
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('access_token', response.data.access_token)
+          localStorage.setItem('refresh_token', response.data.refresh_token)
+        }
         return response.data
       } else {
         throw new Error(response.error || 'Registration failed')
