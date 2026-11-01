@@ -6,9 +6,36 @@ single users-table lookup in config.auth.
 
 import secrets
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-from config.auth import User, UserRole, auth_manager, pwd_context
+from config.auth import TokenData, TokenType, User, UserRole, auth_manager, pwd_context
+
+
+def make_token_data(
+    user_id: str,
+    email: str,
+    *,
+    role: UserRole = UserRole.VIEWER,
+    org_id: str | None = None,
+    permissions: list[str] | None = None,
+    ttl: timedelta = timedelta(minutes=30),
+) -> TokenData:
+    """A valid access-token payload.
+
+    TokenData requires role, token_type, exp and iat as well as user_id and
+    email; building it with only the latter two raises ValidationError.
+    """
+    now = datetime.now(timezone.utc)
+    return TokenData(
+        user_id=user_id,
+        email=email,
+        role=role,
+        token_type=TokenType.ACCESS,
+        exp=now + ttl,
+        iat=now,
+        permissions=permissions or [],
+        org_id=org_id,
+    )
 
 
 def auth_headers(org_id: str | None = None, role: UserRole = UserRole.ADMIN) -> dict:

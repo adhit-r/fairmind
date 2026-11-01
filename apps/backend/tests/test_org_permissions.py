@@ -425,11 +425,13 @@ async def test_audit_org_action_success(
 
     # Verify audit log was written
     mock_db.execute.assert_called_once()
-    call_args = mock_db.execute.call_args
-    assert "org_audit_logs" in call_args[0][0]
-    assert call_args[1]["action"] == "invite_member"
-    assert call_args[1]["resource_type"] == "org_member"
-    assert call_args[1]["status"] == "success"
+    # execute(sql, params): the params are the second positional argument, and
+    # the status is a literal in the statement rather than a bound parameter.
+    sql, params = mock_db.execute.call_args[0]
+    assert "org_audit_logs" in sql
+    assert "'success'" in sql
+    assert params["action"] == "invite_member"
+    assert params["resource_type"] == "org_member"
 
 
 @pytest.mark.asyncio
@@ -454,9 +456,9 @@ async def test_audit_org_action_failure(
 
     # Verify failure was logged
     mock_db.execute.assert_called_once()
-    call_args = mock_db.execute.call_args
-    assert call_args[1]["status"] == "failure"
-    assert "error_message" in call_args[1]
+    sql, params = mock_db.execute.call_args[0]
+    assert "'failure'" in sql
+    assert params["error"]
 
 
 @pytest.mark.asyncio
@@ -479,8 +481,8 @@ async def test_audit_org_action_ip_extraction_forwarded(
     )
 
     # Verify correct IP was logged
-    call_args = mock_db.execute.call_args
-    assert call_args[1]["ip_address"] == "203.0.113.1"
+    _, params = mock_db.execute.call_args[0]
+    assert params["ip_address"] == "203.0.113.1"
 
 
 @pytest.mark.asyncio
@@ -503,8 +505,8 @@ async def test_audit_org_action_ip_extraction_real_ip(
     )
 
     # Verify correct IP was logged
-    call_args = mock_db.execute.call_args
-    assert call_args[1]["ip_address"] == "203.0.113.2"
+    _, params = mock_db.execute.call_args[0]
+    assert params["ip_address"] == "203.0.113.2"
 
 
 @pytest.mark.asyncio
@@ -527,8 +529,8 @@ async def test_audit_org_action_ip_extraction_client_host(
     )
 
     # Verify correct IP was logged
-    call_args = mock_db.execute.call_args
-    assert call_args[1]["ip_address"] == "203.0.113.3"
+    _, params = mock_db.execute.call_args[0]
+    assert params["ip_address"] == "203.0.113.3"
 
 
 # ── Decorator Stacking Tests ────────────────────────────────────────────

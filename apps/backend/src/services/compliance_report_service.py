@@ -60,6 +60,12 @@ class ComplianceReportGenerator:
         Raises:
             ValueError: If date range is invalid
         """
+        # Validate arguments before any query: an unsupported format used to be
+        # caught only after the audit logs had been fetched, so a bad format
+        # surfaced as whatever the database happened to raise first.
+        if format not in ('json', 'csv', 'pdf'):
+            raise ValueError(f"Unsupported format: {format}")
+
         # Validate date range
         if start_date >= end_date:
             raise ValueError("start_date must be before end_date")

@@ -181,7 +181,16 @@ class User(Base):
     # Relationships
     audit_logs = relationship("AuditLog", back_populates="user", cascade="all, delete-orphan")
     primary_organization = relationship("Organization", foreign_keys=[primary_org_id], back_populates="primary_users")
-    organizations = relationship("Organization", secondary="org_members", back_populates="users")
+    # org_members carries two foreign keys to users (user_id and invited_by), so
+    # the join has to be spelled out; without it configuring the mappers raises
+    # AmbiguousForeignKeysError as soon as any mapped class is instantiated.
+    organizations = relationship(
+        "Organization",
+        secondary="org_members",
+        primaryjoin="User.id == OrganizationMember.user_id",
+        secondaryjoin="Organization.id == OrganizationMember.org_id",
+        back_populates="users",
+    )
 
 
 class AuditLog(Base):
@@ -274,7 +283,13 @@ class Organization(Base):
     roles = relationship("OrganizationRole", back_populates="organization", cascade="all, delete-orphan")
     audit_logs = relationship("OrganizationAuditLog", back_populates="organization", cascade="all, delete-orphan")
     primary_users = relationship("User", foreign_keys="User.primary_org_id", back_populates="primary_organization")
-    users = relationship("User", secondary="org_members", back_populates="organizations")
+    users = relationship(
+        "User",
+        secondary="org_members",
+        primaryjoin="Organization.id == OrganizationMember.org_id",
+        secondaryjoin="User.id == OrganizationMember.user_id",
+        back_populates="organizations",
+    )
 
 
 class OrganizationMember(Base):
@@ -297,7 +312,7 @@ class OrganizationMember(Base):
 
     # Relationships
     organization = relationship("Organization", back_populates="members")
-    user = relationship("User")
+    user = relationship("User", foreign_keys=[user_id])
     inviter = relationship("User", foreign_keys=[invited_by])
 
 

@@ -305,16 +305,42 @@ async def test_format_validation():
 
 # ── Integration Tests: API Endpoints ──────────────────────────────────────
 
+@pytest.fixture
+def stub_db_connection():
+    """Stand in for the pool the route opens.
+
+    These tests exercise routing, auth and the membership guard, not storage.
+    Without this the route raises "Database not initialized" and returns 500,
+    since the pool is only built by the app's lifespan handler. The membership
+    lookup returns nothing, so the route answers 403 — one of the statuses
+    these tests accept.
+    """
+    from contextlib import asynccontextmanager
+    from unittest.mock import AsyncMock
+
+    db = AsyncMock()
+    db.fetch_one.return_value = None
+    db.fetch_all.return_value = []
+
+    @asynccontextmanager
+    async def _connection():
+        yield db
+
+    # GET and POST live in different routers, each with its own import of it.
+    with patch("api.routes.org_management.get_db_connection", _connection), \
+         patch("api.routes.compliance.get_db_connection", _connection):
+        yield db
+
+
 @pytest.mark.asyncio
-async def test_get_audit_report_json_format(client):
+async def test_get_audit_report_json_format(client, stub_db_connection):
     """Test GET /audit-report with JSON format."""
     # Setup: Mock database and auth
     start = datetime(2026, 3, 1).isoformat()
     end = datetime(2026, 3, 15).isoformat()
 
     response = client.get(
-        f"/api/v1/organizations/org-123/compliance/audit-report?start_date={start}&end_date={end}&format=json",
-        headers={"Authorization": "Bearer valid_token"}
+        f"/api/v1/organizations/org-123/compliance/audit-report?start_date={start}&end_date={end}&format=json"
     )
 
     # Should require admin access
@@ -322,7 +348,7 @@ async def test_get_audit_report_json_format(client):
 
 
 @pytest.mark.asyncio
-async def test_post_audit_report_json_format(client):
+async def test_post_audit_report_json_format(client, stub_db_connection):
     """Test POST /audit-report with JSON format."""
     payload = {
         "start_date": "2026-03-01",
@@ -332,8 +358,7 @@ async def test_post_audit_report_json_format(client):
 
     response = client.post(
         "/api/v1/organizations/org-123/compliance/audit-report",
-        json=payload,
-        headers={"Authorization": "Bearer valid_token"}
+        json=payload
     )
 
     # Should require admin access
@@ -361,8 +386,7 @@ async def test_csv_export_headers(client):
     end = datetime(2026, 3, 15).isoformat()
 
     response = client.get(
-        f"/api/v1/organizations/org-123/compliance/audit-report?start_date={start}&end_date={end}&format=csv",
-        headers={"Authorization": "Bearer valid_token"}
+        f"/api/v1/organizations/org-123/compliance/audit-report?start_date={start}&end_date={end}&format=csv"
     )
 
     # Should have proper content-type and disposition
@@ -378,8 +402,7 @@ async def test_pdf_export_content_type(client):
     end = datetime(2026, 3, 15).isoformat()
 
     response = client.get(
-        f"/api/v1/organizations/org-123/compliance/audit-report?start_date={start}&end_date={end}&format=pdf",
-        headers={"Authorization": "Bearer valid_token"}
+        f"/api/v1/organizations/org-123/compliance/audit-report?start_date={start}&end_date={end}&format=pdf"
     )
 
     # Should have PDF content-type
@@ -432,7 +455,8 @@ def client():
     try:
         from fastapi.testclient import TestClient
         from api.main import app
-        return TestClient(app)
+        from tests.auth_helpers import auth_headers
+        return TestClient(app, headers=auth_headers())
     except ImportError:
         return None
 

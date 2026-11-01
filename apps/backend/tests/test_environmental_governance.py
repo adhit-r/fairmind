@@ -5,10 +5,11 @@ import uuid
 from fastapi.testclient import TestClient
 
 from api.main import app
+from tests.auth_helpers import auth_headers
 from src.domain.environmental import run_assessment
 
 
-client = TestClient(app)
+client = TestClient(app, headers=auth_headers())
 
 
 def _create_system() -> str:

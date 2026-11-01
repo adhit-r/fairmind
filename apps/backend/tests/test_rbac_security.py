@@ -11,12 +11,13 @@ Comprehensive security testing:
 """
 
 import pytest
+import pytest_asyncio
 import uuid
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, patch
 from fastapi import HTTPException, status
 
-from config.auth import TokenData
+from tests.auth_helpers import make_token_data
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -24,14 +25,7 @@ from config.auth import TokenData
 @pytest.fixture
 def user_token():
     """Valid user token."""
-    return TokenData(
-        user_id="user-id",
-        email="user@example.com",
-        full_name="User",
-        org_id=None,
-        primary_org_id=None,
-        scopes=[]
-    )
+    return make_token_data("user-id", "user@example.com")
 
 
 @pytest.fixture
@@ -40,7 +34,7 @@ def org_id():
     return str(uuid.uuid4())
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def mock_db():
     """Mock database connection."""
     db = AsyncMock()
@@ -135,13 +129,22 @@ class TestCrossOrgAccessPrevention:
             None,  # Is NOT admin in org2
         ]
 
-        # Try to update member in org2 (should fail auth check)
-        is_admin = (await mock_db.fetch_one(
-            "SELECT id FROM org_members WHERE org_id = :org_id AND user_id = :user_id AND role IN ('admin', 'owner')",
-            {"org_id": org2_id, "user_id": "user-id"}
+        # Both lookups run, in the order the side effects above describe: the
+        # user is an admin in org1 and nothing in org2. Checking only org2 would
+        # have consumed the org1 side effect and asserted the wrong thing.
+        query = (
+            "SELECT id FROM org_members WHERE org_id = :org_id "
+            "AND user_id = :user_id AND role IN ('admin', 'owner')"
+        )
+        is_admin_org1 = (await mock_db.fetch_one(
+            query, {"org_id": org1_id, "user_id": "user-id"}
+        )) is not None
+        is_admin_org2 = (await mock_db.fetch_one(
+            query, {"org_id": org2_id, "user_id": "user-id"}
         )) is not None
 
-        assert is_admin is False
+        assert is_admin_org1 is True
+        assert is_admin_org2 is False
 
     @pytest.mark.asyncio
     async def test_user_cannot_delete_other_org_member(self, mock_db):

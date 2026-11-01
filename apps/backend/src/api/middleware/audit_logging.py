@@ -22,7 +22,8 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 import uuid
 
-from database.connection import Base
+from database.connection import Base  # noqa: F401  (kept: other code imports Base from here)
+from sqlalchemy.orm import declarative_base
 from config.settings import settings
 
 logger = logging.getLogger("fairmind.audit")
@@ -53,7 +54,16 @@ class AuditSeverity(str, Enum):
 # Audit Log Model
 # ============================================================================
 
-class AuditLog(Base):
+# Its own registry, not the shared Base. database/models.py already maps
+# audit_logs; declaring it here too with extend_existing merged the two, which
+# replaced user_id with an FK-less column and duplicated every index, so
+# create_all failed and User.audit_logs could no longer resolve its join.
+# Nothing instantiates or queries this class, so isolating it changes no
+# behaviour. It is a candidate for deletion.
+_AuditBase = declarative_base()
+
+
+class AuditLog(_AuditBase):
     """Model for audit logging"""
     __tablename__ = "audit_logs"
 
@@ -523,7 +533,7 @@ def audit_log(
 
             ip_address = None
             user_agent = None
-            if request:
+            if request is not None:
                 ip_address = request.client.host if request.client else None
                 user_agent = request.headers.get("User-Agent")
 
@@ -565,7 +575,7 @@ def audit_log(
 
             ip_address = None
             user_agent = None
-            if request:
+            if request is not None:
                 ip_address = request.client.host if request.client else None
                 user_agent = request.headers.get("User-Agent")
 

@@ -13,6 +13,25 @@ from pathlib import Path
 
 from api.main import app
 from config.settings import Settings
+from tests.auth_helpers import auth_headers
+
+
+@pytest.fixture(scope="session", autouse=True)
+def no_rate_limit():
+    """Rate limiting is per client IP, and every TestClient request reports the
+    same host, so one shared 100-per-minute budget covers the entire suite.
+    Whichever tests happen to run once it is spent get 429s, which is why
+    failures here moved around with collection order.
+    """
+    from middleware.security import RateLimitMiddleware
+
+    async def _allow(self, client_ip, current_time):
+        return False, self.requests_per_minute, current_time + self.window_size
+
+    original = RateLimitMiddleware.check_rate_limit
+    RateLimitMiddleware.check_rate_limit = _allow
+    yield
+    RateLimitMiddleware.check_rate_limit = original
 
 
 class TestSettings(Settings):
@@ -58,7 +77,10 @@ def client(test_settings: TestSettings, temp_dir: Path) -> Generator[TestClient,
     Path(test_settings.database_dir).mkdir(parents=True, exist_ok=True)
     Path(test_settings.model_cache_dir).mkdir(parents=True, exist_ok=True)
     
-    with TestClient(app) as client:
+    # Signed in by default: every endpoint outside the small public allowlist
+    # needs a token, so an anonymous client here only ever yields 401s. Tests
+    # that want an anonymous caller build their own client.
+    with TestClient(app, headers=auth_headers()) as client:
         yield client
     
     # Clean up

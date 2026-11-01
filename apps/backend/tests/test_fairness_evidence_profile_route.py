@@ -2,6 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from api.main import app
+from tests.auth_helpers import auth_headers
 from api.models.ai_bom import AIBOMComponent, AIBOMDocument
 from api.routes import real_ai_bom
 
@@ -78,7 +79,7 @@ def test_fairness_evidence_profile_endpoint_is_registered(monkeypatch):
     )
     monkeypatch.setattr(real_ai_bom, "ai_bom_service", StubAIBOMService(document))
 
-    client = TestClient(app)
+    client = TestClient(app, headers=auth_headers())
     response = client.get("/api/v1/ai-bom/documents/bom-route-001/fairness-evidence-profile")
 
     assert response.status_code == 200

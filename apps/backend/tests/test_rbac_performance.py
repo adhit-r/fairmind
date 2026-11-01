@@ -12,6 +12,7 @@ Uses pytest-benchmark or time.perf_counter() for measurements.
 """
 
 import pytest
+import pytest_asyncio
 import uuid
 import time
 from datetime import datetime, timedelta
@@ -19,7 +20,7 @@ from unittest.mock import AsyncMock, MagicMock
 import random
 import string
 
-from config.auth import TokenData
+from tests.auth_helpers import make_token_data
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -27,14 +28,7 @@ from config.auth import TokenData
 @pytest.fixture
 def user_token():
     """Valid user token."""
-    return TokenData(
-        user_id="user-id",
-        email="user@example.com",
-        full_name="User",
-        org_id=None,
-        primary_org_id=None,
-        scopes=[]
-    )
+    return make_token_data("user-id", "user@example.com")
 
 
 @pytest.fixture
@@ -43,7 +37,7 @@ def org_id():
     return str(uuid.uuid4())
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def mock_db():
     """Mock database connection."""
     db = AsyncMock()
@@ -95,18 +89,25 @@ class TestListMembersPerformance:
     """Benchmark member list retrieval."""
 
     @pytest.mark.asyncio
-    async def test_list_members_1000_under_50ms(self, user_token, org_id, mock_db, large_member_list, benchmark):
+    async def test_list_members_1000_under_50ms(self, user_token, org_id, mock_db, large_member_list):
         """Listing 1000 members should complete in < 50ms."""
         # Mock: 1000 members returned
         mock_db.fetch_all.return_value = large_member_list
         mock_db.fetch_one.return_value = {"count": 1000}
 
-        def run_test():
-            # Simulate the query
-            return len(large_member_list)
+        # time.perf_counter like every other test here; the pytest-benchmark
+        # fixture this once used is not among the project's dependencies.
+        start = time.perf_counter()
 
-        result = benchmark(run_test)
-        assert result == 1000
+        members = await mock_db.fetch_all(
+            "SELECT * FROM org_members WHERE org_id = :org_id ORDER BY created_at DESC",
+            {"org_id": org_id}
+        )
+
+        elapsed = (time.perf_counter() - start) * 1000  # Convert to ms
+
+        assert len(members) == 1000
+        assert elapsed < 50
 
     @pytest.mark.asyncio
     async def test_list_members_pagination(self, user_token, org_id, mock_db, large_member_list):
@@ -513,4 +514,4 @@ class TestConcurrentQueryPerformance:
 
 
 if __name__ == "__main__":
-    pytest.main([__file__, "-v", "--benchmark-only"])
+    pytest.main([__file__, "-v"])
