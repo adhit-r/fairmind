@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loan scoring 4.2.0 readiness - FairMind</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* Blueprint light palette */
+  --black:#111418; --dg1:#1c2127; --dg3:#2f343c; --g1:#5f6b7c; --g2:#738091; --g3:#8f99a8; --g4:#abb3bf; --g5:#c5cbd3;
+  --lg1:#d3d8de; --lg2:#dce0e5; --lg3:#e5e8eb; --lg4:#edeff2; --lg5:#f6f7f9; --white:#fff;
+  --blue:#2d72d2; --blue-l:#4c90f0; --blue-bg:#e8f0fc; --green:#238551; --green-bg:#e7f3ec; --orange:#c87619; --orange-bg:#fbefdf; --red:#cd4246; --red-bg:#fbe9ea;
+  --brand:#ff6b35;
+  --el1:0 0 0 1px rgba(17,20,24,.1),0 1px 1px rgba(17,20,24,.2);
+  --el0:0 0 0 1px rgba(17,20,24,.12);
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--lg5);color:var(--dg1);font:400 13px/1.45 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-feature-settings:"cv11","ss01";-webkit-font-smoothing:antialiased;display:grid;grid-template-rows:40px 1fr;grid-template-columns:minmax(0,1fr);height:100vh;overflow:hidden}
+button{font:inherit;color:inherit;cursor:pointer;background:none;border:0}
+a{color:var(--blue);text-decoration:none}
+.mono{font-family:var(--mono);font-size:11.5px}
+.muted{color:var(--g1)}
+svg.i{width:14px;height:14px;flex:none;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+
+/* top */
+.top{display:flex;align-items:center;gap:14px;padding:0 12px;background:#fff;border-bottom:1px solid var(--lg2)}
+.logo{display:flex;align-items:center;gap:8px;font-weight:700;font-size:13px;letter-spacing:.01em;padding-right:14px;border-right:1px solid var(--lg2)}
+.logo i{width:14px;height:14px;background:var(--brand);border-radius:2px}
+.crumb{display:flex;align-items:center;gap:6px;color:var(--g1);font-size:12.5px}
+.crumb b{color:var(--dg1);font-weight:600}
+.crumb svg{width:12px;height:12px}
+.search{margin-left:auto;display:flex;align-items:center;gap:8px;width:360px;height:28px;padding:0 10px;background:var(--lg5);border:1px solid var(--lg2);border-radius:3px;color:var(--g2);font-size:12.5px}
+.search kbd{margin-left:auto;font:500 10.5px/1 var(--mono);color:var(--g2);border:1px solid var(--lg1);border-radius:2px;padding:2px 4px;background:#fff}
+.top .btns{display:flex;gap:6px}
+.btn{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:2px;background:#fff;box-shadow:var(--el0);font-weight:500;font-size:12.5px;white-space:nowrap}
+.btn:hover{background:var(--lg5)}
+.btn.primary{background:var(--blue);color:#fff;box-shadow:none}
+.btn.primary:hover{background:#215db0}
+.btn.sm{height:24px;padding:0 8px;font-size:12px}
+.btn.minimal{box-shadow:none;background:transparent;color:var(--g1)}
+.btn.minimal:hover{background:var(--lg4);color:var(--dg1)}
+.avatar{width:26px;height:26px;border-radius:50%;background:var(--dg3);color:#fff;display:grid;place-items:center;font:600 11px/1 Inter}
+
+/* shell */
+.shell{display:grid;grid-template-columns:236px minmax(0,1fr) 336px;min-height:0}
+.side,.insp{background:#fff;border-right:1px solid var(--lg2);overflow:auto;min-height:0}
+.insp{border-right:0;border-left:1px solid var(--lg2)}
+.sec{padding:10px 10px 6px;font:600 10.5px/1 Inter;letter-spacing:.06em;text-transform:uppercase;color:var(--g2);display:flex;justify-content:space-between;align-items:center}
+.sec a{font:500 11px/1 Inter;letter-spacing:0;text-transform:none}
+.tree a{display:flex;align-items:center;gap:8px;height:28px;padding:0 10px;color:var(--dg1);font-size:12.5px;border-radius:0}
+.tree a:hover{background:var(--lg5)}
+.tree a.on{background:var(--blue-bg);color:var(--blue);font-weight:600}
+.tree a span{margin-left:auto;font:500 11px/1 var(--mono);color:var(--g2)}
+.tree a.on span{color:var(--blue)}
+.tree svg{color:var(--g2)}
+.tree a.on svg{color:var(--blue)}
+.inv{display:block;padding:7px 10px 7px 12px;border-left:2px solid transparent;color:var(--dg1)}
+.inv:hover{background:var(--lg5)}
+.inv.on{border-left-color:var(--brand);background:var(--lg5)}
+.inv b{display:block;font-weight:500;font-size:12.5px;line-height:1.35}
+.inv small{display:block;color:var(--g2);font-size:11px;margin-top:1px}
+.inv.on b{font-weight:600}
+.dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--green);margin-right:6px;vertical-align:middle}
+.dot.live{background:var(--brand);box-shadow:0 0 0 3px rgba(255,107,53,.18)}
+
+/* canvas */
+.canvas{display:grid;grid-template-rows:44px minmax(0,1fr) auto;grid-template-columns:minmax(0,1fr);min-height:0;min-width:0;background:var(--lg5)}
+.chead{display:flex;align-items:center;gap:10px;padding:0 20px;background:#fff;border-bottom:1px solid var(--lg2);min-width:0;overflow:hidden}
+.chead h1{font-size:14px;font-weight:600;white-space:nowrap}
+.pill{display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 7px;border-radius:2px;font-size:11px;font-weight:600;background:var(--lg4);color:var(--dg3);white-space:nowrap}
+.pill.red{background:var(--red-bg);color:var(--red)}.pill.green{background:var(--green-bg);color:var(--green)}.pill.orange{background:var(--orange-bg);color:var(--orange)}.pill.blue{background:var(--blue-bg);color:var(--blue)}
+.pill.outline{background:#fff;box-shadow:var(--el0);color:var(--g1);font-weight:500}
+.chead .right{margin-left:auto;display:flex;gap:6px;align-items:center;color:var(--g2);font-size:12px;white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.thread{overflow:auto;padding:18px 20px 8px;display:grid;gap:14px;align-content:start}
+.msg{display:grid;grid-template-columns:24px minmax(0,1fr);gap:10px;max-width:860px}
+.who{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font:600 10.5px/1 Inter}
+.who.me{background:var(--dg3);color:#fff}
+.who.ai{background:var(--brand);color:#fff;border-radius:3px}
+.msg .meta{display:flex;align-items:baseline;gap:8px;margin:4px 0 6px;font-size:12px;color:var(--g1)}
+.msg .meta b{color:var(--dg1);font-weight:600}
+.msg p.text{font-size:13.5px;line-height:1.5;max-width:720px}
+.card{background:#fff;border-radius:3px;box-shadow:var(--el1)}
+.card + .card{margin-top:10px}
+.card .ch{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--lg3);font-weight:600;font-size:12.5px}
+.card .ch .tool{font:500 11px/1 var(--mono);color:var(--g1);background:var(--lg5);padding:3px 6px;border-radius:2px}
+.card .ch .r{margin-left:auto;display:flex;gap:6px;align-items:center;font-weight:400;color:var(--g2);font-size:11.5px}
+.card .cb{padding:10px 12px;overflow-x:auto}
+.steps{list-style:none;display:grid;gap:0}
+.steps li{display:grid;grid-template-columns:16px minmax(0,1fr) auto;gap:10px;align-items:center;padding:6px 0;border-bottom:1px solid var(--lg4);font-size:12.5px}
+.steps li:last-child{border-bottom:0}
+.steps li .st{width:14px;height:14px;border-radius:50%;display:grid;place-items:center}
+.st.done{background:var(--green);color:#fff}.st.now{background:var(--blue);color:#fff;box-shadow:0 0 0 3px var(--blue-bg)}.st.todo{box-shadow:inset 0 0 0 1.5px var(--g4)}
+.steps li small{color:var(--g2);font-size:11.5px}
+.steps li.todo{color:var(--g2)}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{text-align:left;padding:6px 8px;font-weight:600;font-size:11px;color:var(--g1);border-bottom:1px solid var(--lg2);white-space:nowrap}
+td{padding:6px 8px;border-bottom:1px solid var(--lg4);vertical-align:middle}
+tr:last-child td{border-bottom:0}
+td.n{font-family:var(--mono);font-size:11.5px;white-space:nowrap}
+.iv{display:block;position:relative;height:6px;background:var(--lg3);border-radius:1px;min-width:120px}
+.iv i{position:absolute;top:0;height:6px;background:var(--g3);border-radius:1px}
+.iv b{position:absolute;top:-2px;width:2px;height:10px;background:var(--dg1)}
+.iv em{position:absolute;top:-3px;width:1px;height:12px;background:var(--red)}
+.obj{display:inline-flex;align-items:center;gap:4px;height:18px;padding:0 5px;border-radius:2px;background:var(--lg4);font:500 11px/1 var(--mono);color:var(--dg3);vertical-align:middle;white-space:nowrap}
+.obj.b{background:var(--blue-bg);color:var(--blue)}
+.obj svg{width:10px;height:10px}
+.note{display:flex;gap:8px;padding:8px 10px;margin-top:8px;background:var(--orange-bg);border-radius:2px;font-size:12.5px;color:#7a4a0f;line-height:1.45}
+.note svg{color:var(--orange);margin-top:2px}
+.verdict{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:start}
+.verdict .big{font-size:15px;font-weight:600;color:var(--red)}
+.verdict ul{list-style:none;display:grid;gap:5px;font-size:12.5px}
+.verdict li{position:relative;padding-left:14px;line-height:1.5}
+.verdict li::before{content:"";position:absolute;left:0;top:7px;width:6px;height:6px;border-radius:50%;background:var(--g4)}
+.verdict li.block::before{background:var(--red)}
+.action{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:start;padding:10px 12px;border-bottom:1px solid var(--lg3)}
+.action:last-child{border-bottom:0}
+.action .t{display:flex;align-items:center;gap:8px;font-weight:600;font-size:12.5px;flex-wrap:wrap}
+.action .d{margin-top:3px;font-size:12.5px;color:var(--g1);line-height:1.45}
+.action .d b{color:var(--dg1);font-weight:500}
+.action .bt{display:flex;gap:6px;align-items:center}
+.action.done{background:var(--lg5)}
+.action.done .t{font-weight:500}
+.kbd{font:500 10.5px/1 var(--mono);color:var(--g2);border:1px solid var(--lg1);border-radius:2px;padding:2px 4px;background:#fff}
+.composer{padding:10px 20px 14px;background:linear-gradient(to bottom,rgba(246,247,249,0),var(--lg5) 30%)}
+.sugg{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;max-width:860px}
+.sugg button{height:24px;padding:0 9px;border-radius:12px;background:#fff;box-shadow:var(--el0);font-size:12px;color:var(--dg3)}
+.sugg button:hover{background:var(--lg4)}
+.box{max-width:860px;background:#fff;border-radius:4px;box-shadow:var(--el1);display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;padding:8px 8px 8px 12px;gap:8px}
+.box textarea{border:0;outline:0;resize:none;font:inherit;font-size:13.5px;line-height:1.5;min-height:22px;max-height:120px;background:transparent;color:var(--dg1);width:100%}
+.box .ctl{display:flex;gap:6px;align-items:center}
+.box .mode{display:flex;align-items:center;gap:6px;height:26px;padding:0 8px;border-radius:2px;font-size:11.5px;color:var(--g1);background:var(--lg5)}
+.send{width:28px;height:28px;border-radius:3px;background:var(--blue);color:#fff;display:grid;place-items:center}
+.gate{margin-top:6px;font-size:11.5px;color:var(--g2);max-width:860px;display:flex;gap:14px;flex-wrap:wrap}
+
+/* inspector */
+.ih{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--lg2)}
+.ih .type{font:600 10.5px/1 Inter;letter-spacing:.06em;text-transform:uppercase;color:var(--g2)}
+.ih h2{font-size:13.5px;font-weight:600}
+.ih .r{margin-left:auto;display:flex;gap:4px}
+.props{padding:6px 12px 10px;display:grid;grid-template-columns:110px minmax(0,1fr);gap:5px 10px;font-size:12.5px}
+.props dt{color:var(--g1)}
+.props dd{color:var(--dg1);font-weight:500;min-width:0}
+.props dd.mono{font-weight:500}
+.links{padding:0 12px 10px;display:grid;gap:2px}
+.links a{display:flex;align-items:center;gap:8px;height:26px;color:var(--dg1);font-size:12.5px;border-radius:2px;padding:0 6px;margin:0 -6px}
+.links a:hover{background:var(--lg5)}
+.links a span{margin-left:auto;font:500 11px/1 var(--mono);color:var(--g2)}
+.links a em{font-style:normal;color:var(--red);font-weight:600;font-size:11px;margin-left:6px}
+.log{list-style:none}
+.log li{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:8px;align-items:start;padding:7px 12px;border-bottom:1px solid var(--lg4);font-size:12px}
+.log li:last-child{border-bottom:0}
+.log time{font:500 11px/1.6 var(--mono);color:var(--g2)}
+.log p{line-height:1.4}
+.log p b{font-weight:600}
+.log .s{font-size:11px;font-weight:600;white-space:nowrap}
+.log .s.wait{color:var(--orange)}.log .s.ok{color:var(--green)}
+.log button{font-size:11px;color:var(--blue);font-weight:500}
+.ins-foot{padding:10px 12px;font-size:11.5px;color:var(--g2);line-height:1.45;border-top:1px solid var(--lg2)}
+
+@media (max-width:1180px){.shell{grid-template-columns:minmax(0,1fr) 320px}.side{display:none}}
+@media (max-width:860px){
+  body{height:auto;overflow:auto;grid-template-rows:40px auto}
+  .shell{grid-template-columns:minmax(0,1fr)}.insp{display:none}
+  .search,.crumb span.hide{display:none}.top .btns{display:none}
+  .canvas{grid-template-rows:auto auto auto}
+  .thread{padding:14px 12px;overflow:visible}.composer{padding:8px 12px 14px}
+  .chead{padding:0 12px;height:auto;min-height:44px;flex-wrap:wrap;row-gap:4px;padding-block:8px}.chead h1{white-space:normal}.chead .right{margin-left:0;white-space:normal}.chead .pill{white-space:normal;height:auto;padding:2px 7px}.chead{overflow:visible}
+  .verdict{grid-template-columns:1fr}
+  .action{grid-template-columns:1fr}
+  .msg{grid-template-columns:minmax(0,1fr)}.msg>div{min-width:0}.msg .who{display:none}.card .ch{flex-wrap:wrap}.card .ch .r{margin-left:0;flex-basis:100%}
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <span class="logo"><i></i>FairMind</span>
+  <span class="crumb"><span class="hide">Retail Bank</span><svg class="i hide" viewBox="0 0 16 16"><path d="M6 4l4 4-4 4"/></svg><span class="hide">Investigations</span><svg class="i hide" viewBox="0 0 16 16"><path d="M6 4l4 4-4 4"/></svg><b>Loan scoring 4.2.0 readiness</b></span>
+  <label class="search"><svg class="i" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg>Search objects, runs, findings, policy text<kbd>⌘K</kbd></label>
+  <span class="btns"><button class="btn">Share</button><button class="btn">Export evidence pack</button></span>
+  <span class="avatar">MM</span>
+</header>
+
+<div class="shell">
+  <nav class="side" aria-label="Objects">
+    <div class="sec">Ontology</div>
+    <div class="tree">
+      <a href="#"><svg class="i" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2 7h12"/></svg>AI systems<span>214</span></a>
+      <a href="#"><svg class="i" viewBox="0 0 16 16"><ellipse cx="8" cy="4" rx="5" ry="2"/><path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4"/></svg>Datasets<span>61</span></a>
+      <a href="#"><svg class="i" viewBox="0 0 16 16"><path d="M4 3l9 5-9 5z"/></svg>Evaluation runs<span>1,183</span></a>
+      <a href="#"><svg class="i" viewBox="0 0 16 16"><path d="M4 2h6l3 3v9H4z"/><path d="M10 2v3h3"/></svg>Evidence<span>8,402</span></a>
+      <a href="#"><svg class="i" viewBox="0 0 16 16"><path d="M8 2l6 11H2z"/><path d="M8 7v3"/></svg>Findings<span>23</span></a>
+      <a href="#"><svg class="i" viewBox="0 0 16 16"><path d="M3 8h10M3 4h10M3 12h6"/></svg>Controls<span>412</span></a>
+      <a href="#"><svg class="i" viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7"/></svg>Decisions<span>96</span></a>
+      <a href="#"><svg class="i" viewBox="0 0 16 16"><circle cx="8" cy="5" r="2.5"/><path d="M3 14c0-2.8 2.2-5 5-5s5 2.2 5 5"/></svg>People and roles<span>318</span></a>
+    </div>
+    <div class="sec" style="margin-top:8px">Evaluators <a href="#">Manage</a></div>
+    <div class="tree">
+      <a href="#"><span class="dot"></span>Fairlearn<span>v0.13</span></a>
+      <a href="#"><span class="dot"></span>Giskard<span>v2.18</span></a>
+      <a href="#"><span class="dot"></span>garak<span>v0.12</span></a>
+      <a href="#"><span class="dot"></span>FairMind-E<span>v3</span></a>
+    </div>
+    <div class="sec" style="margin-top:8px">Investigations <a href="#">New</a></div>
+    <a class="inv on" href="#"><b><span class="dot live"></span>Loan scoring 4.2.0 readiness</b><small>Running · 3 actions await you</small></a>
+    <a class="inv" href="#"><b>Q2 fairness sweep, credit models</b><small>Done yesterday · 6 systems, 1 finding</small></a>
+    <a class="inv" href="#"><b>Why is Mule detection v2 held?</b><small>Done 29 May</small></a>
+    <a class="inv" href="#"><b>FREE-AI gap analysis, all high tier</b><small>Done 21 May · 14 systems</small></a>
+    <a class="inv" href="#"><b>Branch assistant: judge provenance</b><small>Blocked · waiting on K. Nair</small></a>
+  </nav>
+
+  <section class="canvas">
+    <div class="chead">
+      <h1>Loan scoring 4.2.0 readiness</h1>
+      <span class="pill red">Not ready · 2 blockers</span>
+      <span class="pill outline">MRM-POL-07 tier High · Annex III</span>
+      <span class="right"><span class="dot live"></span>Running · 2m 14s · 3 runs · 0 unapproved writes</span>
+    </div>
+
+    <div class="thread">
+      <div class="msg">
+        <span class="who me">MM</span>
+        <div>
+          <div class="meta"><b>M. Menon</b><span>09:38</span></div>
+          <p class="text">Is Loan scoring 4.2.0 ready for the 18 June release? Apply our high-tier policy and the EU Annex III obligations. Don't create anything without asking me.</p>
+        </div>
+      </div>
+
+      <div class="msg">
+        <span class="who ai">F</span>
+        <div>
+          <div class="meta"><b>FairMind</b><span>09:38</span><span class="pill outline">Plan</span></div>
+          <div class="card">
+            <div class="ch">Plan for this investigation<span class="r">6 steps · writes require your approval</span></div>
+            <div class="cb"><ol class="steps">
+              <li><span class="st done"><svg class="i" viewBox="0 0 16 16" style="width:9px;height:9px;stroke-width:2.5"><path d="M3 8.5l3 3 7-7"/></svg></span><span>Resolve scope: <span class="obj">MRM-POL-07</span> tier High gives 31 controls; <span class="obj">EU AI Act Annex III 5(b)</span> adds Art. 9 to 15</span><small>0.8s</small></li>
+              <li><span class="st done"><svg class="i" viewBox="0 0 16 16" style="width:9px;height:9px;stroke-width:2.5"><path d="M3 8.5l3 3 7-7"/></svg></span><span>Pull evidence already bound to <span class="obj">SYS-0142</span> version 4.2.0: 47 artifacts cover 19 of 31 controls</span><small>2.1s</small></li>
+              <li><span class="st done"><svg class="i" viewBox="0 0 16 16" style="width:9px;height:9px;stroke-width:2.5"><path d="M3 8.5l3 3 7-7"/></svg></span><span>Run the missing evaluations on holdout <span class="obj">DS-0419</span>: Fairlearn fairness suite, Giskard robustness, FairMind-E energy</span><small>1m 58s</small></li>
+              <li><span class="st now"></span><span>Interpret results against the thresholds fixed in <span class="obj">MRM-POL-07 Annex B</span> and record limitations</span><small>now</small></li>
+              <li class="todo"><span class="st todo"></span><span>Propose findings and requests for anything a human must settle</span><small>waiting</small></li>
+              <li class="todo"><span class="st todo"></span><span>Draft the release note and the Annex IV technical documentation delta</span><small>waiting</small></li>
+            </ol></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="msg">
+        <span class="who ai">F</span>
+        <div>
+          <div class="meta"><b>FairMind</b><span>09:40</span><span class="pill outline">Tool run</span></div>
+          <div class="card">
+            <div class="ch"><span class="tool">fairlearn.metric_frame</span>Fairness suite on holdout DS-0419<span class="r">48,210 rows · Jan to Mar 2027 · <span class="obj">R-2027-0412</span></span></div>
+            <div class="cb">
+              <table>
+                <thead><tr><th>Metric</th><th>Attribute</th><th>Groups</th><th>Value</th><th>Interval and floor</th><th>Result</th></tr></thead>
+                <tbody>
+                  <tr><td>Disparate impact</td><td>Gender</td><td class="muted">female vs male</td><td class="n">0.93</td><td><span class="iv"><em style="left:33%"></em><i style="left:66%;width:20%"></i><b style="left:76%"></b></span></td><td><span class="pill green">Passes</span></td></tr>
+                  <tr><td>Disparate impact</td><td>Age</td><td class="muted">60+ vs 30 to 45</td><td class="n">0.86</td><td><span class="iv"><em style="left:33%"></em><i style="left:40%;width:27%"></i><b style="left:53%"></b></span></td><td><span class="pill green">Passes</span></td></tr>
+                  <tr><td>Disparate impact</td><td>Region</td><td class="muted">lowest vs highest state</td><td class="n">0.88</td><td><span class="iv"><em style="left:33%"></em><i style="left:43%;width:33%"></i><b style="left:60%"></b></span></td><td><span class="pill green">Passes</span></td></tr>
+                  <tr><td>Equal-opportunity gap</td><td>Gender</td><td class="muted">female vs male</td><td class="n">0.031</td><td><span class="iv"><em style="left:62%"></em><i style="left:15%;width:47%"></i><b style="left:39%"></b></span></td><td><span class="pill green">Passes</span></td></tr>
+                  <tr><td>Equal-opportunity gap</td><td>Age</td><td class="muted">five bands</td><td class="n muted">not run</td><td><span class="iv"><em style="left:62%"></em></span></td><td><span class="pill orange">Blocked</span></td></tr>
+                  <tr><td>Calibration error</td><td>Gender, age</td><td class="muted">by group</td><td class="n">0.012 · 0.018</td><td><span class="iv"><em style="left:75%"></em><i style="left:20%;width:30%"></i><b style="left:30%"></b></span></td><td><span class="pill green">Passes</span></td></tr>
+                </tbody>
+              </table>
+              <div class="note"><svg class="i" viewBox="0 0 16 16"><path d="M8 2l6 11H2z"/><path d="M8 7v3M8 11.5v.5"/></svg><span>The age equal-opportunity test needs the five age bands as a column. <span class="obj">DS-0419</span> has date of birth only, and no approved band mapping is attached to <span class="obj">SYS-0142</span>. I did not infer one: the mapping changes the result and policy says a human sets it.</span></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="ch"><span class="tool">giskard.scan</span>Robustness and sensitivity<span class="r">88 perturbation tests · <span class="obj">R-2027-0413</span></span></div>
+            <div class="cb" style="display:flex;gap:18px;flex-wrap:wrap;align-items:center;font-size:12.5px">
+              <span><span class="pill green">88 of 88 pass</span></span>
+              <span><b style="font-weight:600">2 warnings</b> <span class="muted">· score moves more than 5 points when UPI velocity is perturbed by 10 percent. New feature in <span class="obj">CR-2271</span>. Within policy; recorded as a limitation.</span></span>
+            </div>
+          </div>
+          <div class="card">
+            <div class="ch"><span class="tool">fairmind_e.assess</span>Energy per million decisions<span class="r">inference boundary · <span class="obj">R-2027-0414</span></span></div>
+            <div class="cb" style="display:flex;gap:18px;align-items:center;font-size:12.5px"><span class="n" style="font-family:var(--mono)">41 kWh ±8%</span><span class="pill green">Low impact</span><span class="muted">measured on the serving cluster, not estimated</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="msg">
+        <span class="who ai">F</span>
+        <div>
+          <div class="meta"><b>FairMind</b><span>09:41</span><span class="pill outline">Interpretation</span></div>
+          <div class="card"><div class="cb verdict">
+            <span class="big">Not ready</span>
+            <ul>
+              <li>Every measured check passes its floor from <span class="obj">MRM-POL-07 Annex B</span>, with intervals that stay clear of it. Scope, data, performance, robustness and energy are covered: <b style="font-weight:600">27 of 31 controls</b> now have measured or documented evidence.</li>
+              <li class="block"><b style="font-weight:600">Blocker 1.</b> The age equal-opportunity test cannot run until someone approves the age-band mapping. This is a human decision under <span class="obj">FREE-AI fairness</span>; I can run the test within a minute of approval.</li>
+              <li class="block"><b style="font-weight:600">Blocker 2.</b> <span class="obj">EU AI Act Art. 14</span> needs a named role able to override a decline within one working day. 4.1.3 relied on branch managers; <span class="obj">CR-2271</span> withdraws that. No replacement is on file.</li>
+              <li>Neither blocker is a model problem. Both are decisions owned by people, so I have proposed the actions below rather than taking them.</li>
+            </ul>
+          </div></div>
+        </div>
+      </div>
+
+      <div class="msg">
+        <span class="who ai">F</span>
+        <div>
+          <div class="meta"><b>FairMind</b><span>09:41</span><span class="pill orange">3 actions await your approval</span></div>
+          <div class="card">
+            <div class="action done">
+              <div><div class="t"><svg class="i" viewBox="0 0 16 16" style="color:var(--green)"><path d="M3 8.5l3 3 7-7"/></svg>Bound 3 evaluation runs to controls C2, C3, C4, D1, D3, F1, I1<span class="pill outline">done · reversible</span></div><div class="d">Read-only on the system; evidence links only. Hashes recorded. <a href="#">Undo</a></div></div>
+              <div class="bt"><span class="muted" style="font-size:11.5px">09:40</span></div>
+            </div>
+            <div class="action">
+              <div><div class="t">Create finding <span class="obj">F-23</span><span class="pill red">High</span></div><div class="d"><b>Equal-opportunity gap for age not evaluable for 4.2.0.</b> Owner A. Rao, Retail ML · due 10 June · retest required. Linked to control D2 and dataset <span class="obj">DS-0419</span>.</div></div>
+              <div class="bt"><button class="btn sm">Edit</button><button class="btn sm minimal">Reject</button><button class="btn sm primary">Approve</button></div>
+            </div>
+            <div class="action">
+              <div><div class="t">Request from A. Rao: approve the age-band mapping</div><div class="d">Sends the proposed five KYC bands from the application form as a draft for sign-off, due 6 June. On approval I attach it to <span class="obj">DS-0419</span>, re-run the age test and update F-23.</div></div>
+              <div class="bt"><button class="btn sm">Edit</button><button class="btn sm minimal">Reject</button><button class="btn sm primary">Approve</button></div>
+            </div>
+            <div class="action">
+              <div><div class="t">Create finding <span class="obj">F-24</span><span class="pill orange">Medium</span></div><div class="d"><b>No named human reviewer for automated declines.</b> Owner V. Krishnan, Head of Retail Credit · due 10 June. References Art. 14 and the FREE-AI accountability sutra.</div></div>
+              <div class="bt"><button class="btn sm">Edit</button><button class="btn sm minimal">Reject</button><button class="btn sm primary">Approve</button></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="composer">
+      <div class="sugg">
+        <button>Approve all three and notify owners</button>
+        <button>Compare 4.2.0 with 4.1.3 in production</button>
+        <button>What changes if I use three age bands instead of five?</button>
+        <button>Draft the committee note</button>
+      </div>
+      <div class="box">
+        <textarea rows="1" placeholder="Ask about this system, or tell FairMind what to do next"></textarea>
+        <div class="ctl"><span class="mode">Writes: ask first</span><button class="send" aria-label="Send"><svg class="i" viewBox="0 0 16 16"><path d="M8 13V3M4 7l4-4 4 4"/></svg></button></div>
+      </div>
+      <div class="gate"><span>Every answer cites the objects it used.</span><span>Reads run freely; anything that creates, changes or sends waits for you.</span><span>All of it lands in the action log.</span></div>
+    </div>
+  </section>
+
+  <aside class="insp" aria-label="Inspector">
+    <div class="ih"><span><span class="type">AI system</span><h2>Loan scoring</h2></span><span class="r"><button class="btn sm minimal">Open</button></span></div>
+    <dl class="props">
+      <dt>ID</dt><dd class="mono">SYS-0142</dd>
+      <dt>Candidate</dt><dd>4.2.0 <span class="muted">· CR-2271</span></dd>
+      <dt>In production</dt><dd>4.1.3 <span class="muted">· approved 4 Apr 2027</span></dd>
+      <dt>Tier</dt><dd>High <span class="muted">· credit decision on individuals</span></dd>
+      <dt>Volume</dt><dd>~12,000 decisions a day</dd>
+      <dt>Owner</dt><dd>V. Krishnan <span class="muted">· Retail Credit</span></dd>
+      <dt>Developer</dt><dd>A. Rao <span class="muted">· Retail ML</span></dd>
+      <dt>Readiness</dt><dd><span class="pill red">Not ready · 2 blockers</span></dd>
+      <dt>Conditions</dt><dd>C1 weekly age re-test <span class="muted">· met 1 Jun</span></dd>
+    </dl>
+    <div class="sec">Linked objects</div>
+    <div class="links">
+      <a href="#">Datasets<span>3</span></a>
+      <a href="#">Evaluation runs<span>17</span></a>
+      <a href="#">Evidence<span>50</span></a>
+      <a href="#">Controls in scope<span>31</span></a>
+      <a href="#">Findings<em>2 proposed</em><span>1 closed</span></a>
+      <a href="#">Decisions<span>1</span></a>
+      <a href="#">Policy references<span>12</span></a>
+    </div>
+    <div class="sec">Action log <a href="#">All 212</a></div>
+    <ul class="log">
+      <li><time>09:41</time><p><b>Proposed</b> F-24 on A4</p><span class="s wait">Awaiting you</span></li>
+      <li><time>09:41</time><p><b>Proposed</b> request to A. Rao</p><span class="s wait">Awaiting you</span></li>
+      <li><time>09:41</time><p><b>Proposed</b> F-23 on D2</p><span class="s wait">Awaiting you</span></li>
+      <li><time>09:40</time><p><b>Linked</b> 3 runs to 7 controls</p><span class="s ok">Done <button>Undo</button></span></li>
+      <li><time>09:40</time><p><b>Ran</b> FairMind-E assess</p><span class="s ok">Done</span></li>
+      <li><time>09:39</time><p><b>Ran</b> Giskard scan, 88 tests</p><span class="s ok">Done</span></li>
+      <li><time>09:38</time><p><b>Ran</b> Fairlearn suite on DS-0419</p><span class="s ok">Done</span></li>
+      <li><time>09:38</time><p><b>Read</b> MRM-POL-07, Annex III scope</p><span class="s ok">Done</span></li>
+      <li><time>09:38</time><p><b>M. Menon</b> started the investigation</p><span class="s"></span></li>
+    </ul>
+    <div class="ins-foot">The log is the audit trail. It records reads, runs, proposals and approvals with who, when and the hash of what was used.</div>
+  </aside>
+</div>
+</body>
+</html>

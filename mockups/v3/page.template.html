@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loan scoring v4 · Decision · FairMind</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Raleway:wght@700;800&display=swap" rel="stylesheet">
+<style>
+/* FairMind on the suite base: Olai's grounds, type, spacing and shape; FairMind's ink and orange. */
+:root{
+  --ink-0:#ffffff;--ink-25:#fafaf8;--ink-50:#f4f4f1;--ink-100:#ebebe6;--ink-200:#dcdcd5;--ink-300:#c2c2b9;--ink-500:#75756b;--ink-600:#57574f;
+  --bg:var(--ink-25);--surface:var(--ink-0);--surface-2:var(--ink-50);--surface-3:var(--ink-100);--border:var(--ink-200);--border-strong:var(--ink-300);
+  --text:#101614;--muted:var(--ink-600);--subtle:var(--ink-500);
+  --primary:#ff6b35;--primary-hover:#f2571d;--primary-text:#101614;--primary-soft:#fff0e9;--primary-ink:#a3360c;--focus:#d94e18;
+  --measured-fg:#0c6444;--measured-bg:#d6f3e3;--attested-fg:#57574f;--attested-bg:#ebebe6;--waiting-fg:#a3360c;--waiting-bg:#ffe7dc;
+  --radius-panel:12px;--radius-control:8px;--radius-chip:6px;
+  --display:"Raleway",system-ui,sans-serif;--sans:"IBM Plex Sans",system-ui,sans-serif;--mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font:400 14px/1.5 var(--sans);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;display:grid;grid-template-columns:232px 1fr;min-height:100vh}
+::selection{background:var(--primary);color:var(--primary-text)}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+svg.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+svg.i.r{width:20px;height:20px}
+svg.i.s{width:12px;height:12px}
+.mono{font-family:var(--mono)}
+
+/* Rail */
+.rail-col{background:var(--surface);border-right:1px solid var(--border)}
+.rail{display:flex;flex-direction:column;padding:16px 12px;position:sticky;top:0;height:100vh}
+.brand{display:flex;align-items:center;gap:10px;padding:4px 8px 20px;text-decoration:none}
+.brand img{width:30px;height:30px;object-fit:cover;object-position:center}
+.brand b{font:800 18px/1 var(--display);letter-spacing:-.02em}
+.rail nav{display:flex;flex-direction:column;gap:2px}
+.rail nav a{display:flex;align-items:center;gap:12px;height:40px;padding:0 10px;border-radius:var(--radius-control);color:var(--muted);text-decoration:none;font-weight:500}
+.rail nav a:hover{background:var(--surface-2);color:var(--text)}
+.rail nav a[aria-current]{background:var(--surface-3);color:var(--text);font-weight:600}
+.rail nav a .count{margin-left:auto;font:500 12px/20px var(--mono);min-width:22px;text-align:center;border-radius:999px;background:var(--primary);color:var(--primary-text)}
+.rail .group{font-size:12px;font-weight:500;color:var(--subtle);padding:18px 10px 6px}
+.rail .foot{margin-top:auto;border-top:1px solid var(--border);padding:12px 6px 0;display:flex;align-items:center;gap:10px}
+.avatar{width:32px;height:32px;border-radius:50%;background:var(--text);color:#fff;display:grid;place-items:center;font:600 12px/1 var(--sans)}
+.foot small{display:block;color:var(--muted);font-size:12px;line-height:1.3}
+
+/* Top bar */
+.main{min-width:0}
+.top{height:56px;display:flex;align-items:center;gap:16px;padding:0 32px;border-bottom:1px solid var(--border);background:var(--surface);position:sticky;top:0;z-index:5}
+.org{display:flex;align-items:center;gap:8px;height:36px;padding:0 10px;border:1px solid var(--border);border-radius:var(--radius-control);font-weight:500;background:var(--surface)}
+.org .dot{width:8px;height:8px;border-radius:2px;background:var(--text)}
+.search{flex:1;max-width:480px;display:flex;align-items:center;gap:8px;height:36px;padding:0 12px;border:1px solid var(--border);border-radius:var(--radius-control);color:var(--subtle);background:var(--surface-2)}
+.search kbd{margin-left:auto;font:500 12px var(--mono);color:var(--muted);border:1px solid var(--border);border-radius:4px;padding:0 5px;background:var(--surface)}
+.menu-btn{display:none!important}
+.top .icon-btn{margin-left:auto;width:36px;height:36px;display:grid;place-items:center;border-radius:var(--radius-control);color:var(--muted);border:1px solid transparent;background:none}
+
+/* Page */
+.page{max-width:1200px;margin:0 auto;padding:24px 32px 48px}
+.crumb{font-size:13px;color:var(--muted);display:flex;gap:6px}
+.crumb a{text-decoration:none}
+.head{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;margin-top:8px}
+h1{font:800 32px/1.15 var(--display);letter-spacing:-.025em}
+.sentence{font-size:15px;color:var(--muted);margin-top:6px;max-width:72ch}
+.sentence b{font:500 14px var(--mono);color:var(--text)}
+.sentence .warn{color:var(--waiting-fg)}
+.meta{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:10px;font-size:13px;color:var(--muted)}
+.meta span{display:inline-flex;align-items:center;gap:6px}
+.head .actions{display:flex;gap:8px;flex:none;padding-top:6px}
+.tabs{display:flex;gap:24px;border-bottom:1px solid var(--border);margin-top:20px}
+.tabs a{display:flex;gap:6px;align-items:center;height:42px;text-decoration:none;color:var(--muted);font-weight:500;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs a[aria-current]{color:var(--text);font-weight:600;border-color:var(--text)}
+.tabs .n{font:500 12px var(--mono);color:var(--subtle)}
+
+/* Buttons and pills */
+.btn{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 14px;border-radius:var(--radius-control);font:500 14px var(--sans);border:1px solid var(--border-strong);background:var(--surface);color:var(--text);cursor:pointer;text-decoration:none;white-space:nowrap}
+.btn:hover{background:var(--surface-2)}
+.btn.primary{background:var(--primary);border-color:var(--primary);color:var(--primary-text);font-weight:600}
+.btn.primary:hover{background:var(--primary-hover);border-color:var(--primary-hover)}
+.btn.primary[disabled]{background:var(--surface-3);border-color:var(--surface-3);color:var(--muted);cursor:not-allowed}
+.btn.ghost{border-color:transparent;background:none}
+.btn.danger{color:#c02a3b}
+.pill{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:999px;font-size:12px;font-weight:500;white-space:nowrap}
+.pill.measured{background:var(--measured-bg);color:var(--measured-fg)}
+.pill.attested{background:var(--attested-bg);color:var(--attested-fg)}
+.pill.waiting{background:var(--waiting-bg);color:var(--waiting-fg)}
+.pill.proposed{background:var(--primary-soft);color:var(--primary-ink)}
+.chip{white-space:nowrap;display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 7px;border-radius:var(--radius-chip);background:var(--surface-2);border:1px solid var(--border);font:400 12px var(--mono);color:var(--muted)}
+
+/* Panels */
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 352px;gap:20px;margin-top:20px;align-items:start}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-panel)}
+.panel-h{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;border-bottom:1px solid var(--border)}
+.panel-h h2{font:600 15px/1.3 var(--sans)}
+.panel-h .sub{font-size:13px;color:var(--muted)}
+
+/* Figure */
+.figure{position:relative;overflow:hidden}
+.figure .stage{position:relative;padding:4px 10px 0}
+.figure .stage svg{display:block;width:100%;height:auto}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:10px;height:10px;border-radius:3px;border:1px solid}
+.sw.m{background:#fff;border-color:#101614}.sw.a{background:#e6e5de;border-color:#75756b}.sw.o{background:#ff6b35;border-color:#a3360c}
+.lockpin{position:absolute;transform:translate(-50%,-100%);display:flex;flex-direction:column;align-items:center;text-decoration:none}
+.lockpin b{display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--primary);color:var(--primary-text);font:600 12px/1 var(--mono);box-shadow:0 0 0 3px #fff}
+.lockpin i{display:block;width:1px;height:14px;background:var(--primary-ink)}
+.figure-foot{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:10px 18px 14px;font-size:13px;color:var(--muted);border-top:1px solid var(--border)}
+.figure-foot .read{font:500 12px var(--mono);color:var(--text);display:inline-flex;gap:6px;align-items:center}
+
+/* Needs you */
+.needs ol{list-style:none}
+.needs li{display:grid;grid-template-columns:28px 1fr;gap:4px 10px;padding:16px 18px;border-bottom:1px solid var(--border)}
+.needs li:last-child{border-bottom:0}
+.needs .num{width:22px;height:22px;border-radius:50%;background:var(--primary);color:var(--primary-text);font:600 12px/22px var(--mono);text-align:center;margin-top:1px}
+.needs h3{font:600 14px/1.4 var(--sans)}
+.needs p{color:var(--muted);font-size:13px}
+.needs .why{font:400 12px var(--mono);color:var(--subtle);margin-top:4px}
+.needs .row{display:flex;gap:8px;margin-top:10px;grid-column:2}
+
+/* Table */
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-size:12px;font-weight:500;color:var(--muted);background:var(--surface-2);height:36px;padding:0 12px;border-bottom:1px solid var(--border)}
+th:first-child,td:first-child{padding-left:18px}
+td{height:52px;padding:8px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
+tr:last-child td{border-bottom:0}
+tbody tr:hover{background:var(--surface-2)}
+tr.open td{background:#fffaf7}
+td .ch{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:6px;border:1px solid var(--border);font:500 12px var(--mono);color:var(--muted)}
+tr.open .ch{background:var(--primary);border-color:var(--primary);color:var(--primary-text)}
+td small{display:block;font-size:12px;color:var(--muted)}
+td .val{font:500 13px var(--mono);white-space:nowrap}
+td .val+.ci{display:block}
+td .ci{font:400 12px var(--mono);color:var(--muted);white-space:nowrap}
+td .word{color:var(--muted)}
+td.th{font:400 13px var(--mono);white-space:nowrap}
+.tbl-foot{padding:12px 18px;font-size:13px;color:var(--muted);border-top:1px solid var(--border)}
+
+.tbl{overflow-x:auto}
+/* Decision */
+.decision .body{padding:18px}
+.decision .label{font-size:12px;font-weight:500;color:var(--muted)}
+.decision .verdict{display:flex;align-items:baseline;gap:10px;margin:4px 0 6px;flex-wrap:wrap}
+.decision .verdict b{font:800 24px/1.2 var(--display);letter-spacing:-.02em}
+.decision p{color:var(--muted);font-size:13px}
+.conds{list-style:none;margin:14px 0 4px;border-top:1px solid var(--border)}
+.conds li{display:flex;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);font-size:13px}
+.conds li span{font:500 12px var(--mono);color:var(--subtle);min-width:22px}
+.sign{padding:16px 18px;border-top:1px solid var(--border);background:var(--surface-2);border-radius:0 0 var(--radius-panel) var(--radius-panel)}
+.sign .stack{display:flex;flex-direction:column;gap:8px}
+.sign .stack .btn{justify-content:center}
+.sign .reason{display:flex;gap:6px;font-size:12px;color:var(--muted);margin-top:10px}
+.trail{list-style:none;margin-top:16px}
+.trail li{display:grid;grid-template-columns:12px 1fr;gap:10px;padding-bottom:12px;position:relative;font-size:13px}
+.trail li::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--border-strong);margin-top:6px}
+.trail li small{display:block;color:var(--muted);font-size:12px}
+@media (max-width:1180px){.grid{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:820px){body{grid-template-columns:minmax(0,1fr)}.rail-col{display:none}.menu-btn{display:grid!important;margin-left:0!important}.search{display:none}.page{padding:20px 16px 40px}.top{padding:0 16px}.head{flex-direction:column}.legend{display:none}.figure-foot{flex-direction:column;align-items:flex-start}.tabs{overflow-x:auto}.tbl table{min-width:720px}h1{font-size:28px}}
+.foot-note{margin-top:24px;font-size:12px;color:var(--subtle);display:flex;justify-content:space-between}
+</style>
+</head>
+<body>
+<aside class="rail-col" aria-label="Main"><div class="rail">
+  <a class="brand" href="#"><img src="logo.png" alt=""><b>FairMind</b></a>
+  <nav>
+    <a href="#"><svg class="i r" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2m-7.07-14.07 1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>Today</a>
+    <a href="#"><svg class="i r" viewBox="0 0 24 24"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>Needs you<span class="count">2</span></a>
+    <a href="#" aria-current="page"><svg class="i r" viewBox="0 0 24 24"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg>Systems</a>
+    <div class="group">Assurance</div>
+    <a href="#"><svg class="i r" viewBox="0 0 24 24"><path d="M10 2v7.527a2 2 0 0 1-.211.896L4.72 20.55a1 1 0 0 0 .9 1.45h12.76a1 1 0 0 0 .9-1.45l-5.069-10.127A2 2 0 0 1 14 9.527V2"/><path d="M8.5 2h7"/><path d="M7 16h10"/></svg>Tests</a>
+    <a href="#"><svg class="i r" viewBox="0 0 24 24"><path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="M7 21h10"/><path d="M12 3v18"/><path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"/></svg>Frameworks</a>
+    <a href="#"><svg class="i r" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="m9 15 2 2 4-4"/></svg>Evidence</a>
+    <a href="#"><svg class="i r" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>Watch</a>
+  </nav>
+  <div class="foot">
+    <div class="avatar">MM</div>
+    <div>M. Menon<small>Head of Model Risk</small></div>
+  </div>
+</div></aside>
+<div class="main">
+  <header class="top">
+    <button class="icon-btn menu-btn" aria-label="Open navigation"><svg class="i" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+    <div class="org"><span class="dot"></span>Retail Bank<svg class="i s" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></div>
+    <div class="search"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>Search systems, checks or evidence<kbd>⌘K</kbd></div>
+    <button class="icon-btn" aria-label="Switch to dark theme"><svg class="i" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg></button>
+  </header>
+  <main class="page">
+    <div class="crumb"><a href="#">Systems</a><span>/</span><span>Retail credit</span></div>
+    <div class="head">
+      <div>
+        <h1>Loan scoring v4</h1>
+        <p class="sentence">Seven of nine checks hold, <b>5</b> on measured evidence and <b>2</b> on attestation. <b class="warn">2</b> wait for you before the release can be approved.</p>
+        <div class="meta">
+          <span>Model <span class="chip">4.2.0</span></span>
+          <span>Owner: Model Risk</span>
+          <span>RBI FREE-AI · EU AI Act Annex III 5(b) · DPDP s.7</span>
+          <span>Thresholds fixed 12 May 2027, before the run</span>
+        </div>
+      </div>
+      <div class="actions">
+        <a class="btn" href="#"><svg class="i" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>Export evidence pack</a>
+      </div>
+    </div>
+    <nav class="tabs" aria-label="System">
+      <a href="#" aria-current="page">Decision</a>
+      <a href="#">Evidence <span class="n">14</span></a>
+      <a href="#">Tests <span class="n">6</span></a>
+      <a href="#">Controls <span class="n">31</span></a>
+      <a href="#">Findings <span class="n">2</span></a>
+      <a href="#">Activity</a>
+    </nav>
+
+    <div class="grid">
+      <section class="panel figure" aria-labelledby="fig-title">
+        <div class="panel-h">
+          <h2 id="fig-title">Release lock</h2>
+          <div class="legend"><span><i class="sw m"></i>Measured</span><span><i class="sw a"></i>Attested</span><span><i class="sw o"></i>Blocking</span></div>
+        </div>
+        <div class="stage">
+          {{LOCK_SVG}}
+          {{LOCK_PINS}}
+        </div>
+        <div class="figure-foot">
+          <span>Each chamber is one check. The plug turns only when every pin meets the shear line.</span>
+          <span class="read"><svg class="i s" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Locked · chambers 4 and 7</span>
+        </div>
+      </section>
+
+      <section class="panel needs" aria-labelledby="needs-title">
+        <div class="panel-h"><h2 id="needs-title">Needs you</h2><span class="sub">2 open</span></div>
+        <ol>
+          <li><span class="num">1</span><div>
+            <h3>Confirm age band as a protected attribute</h3>
+            <p>Inferred from date of birth in five bands. The equal-opportunity test reruns as soon as you confirm.</p>
+            <div class="why">Chamber 4 · FREE-AI sutra 3</div></div>
+            <div class="row"><button class="btn primary">Confirm mapping</button><button class="btn ghost">Change bands</button></div>
+          </li>
+          <li><span class="num">2</span><div>
+            <h3>Name the reviewer for declined applications</h3>
+            <p>A role that can override a decline within one working day.</p>
+            <div class="why">Chamber 7 · EU AI Act Art. 14</div></div>
+            <div class="row"><button class="btn">Assign reviewer</button></div>
+          </li>
+        </ol>
+      </section>
+
+      <section class="panel" aria-labelledby="checks-title">
+        <div class="panel-h"><h2 id="checks-title">Checks</h2><span class="sub">Holdout of 48,210 applications · run <span class="mono">R-2027-0412</span></span></div>
+        <div class="tbl"><table>
+          <thead><tr><th style="width:56px">No.</th><th>Check</th><th>Result</th><th>Threshold</th><th>Evidence</th><th>Source</th></tr></thead>
+          <tbody>
+            <tr><td><span class="ch">1</span></td><td>Disparate impact by age<small>60+ against 30–45</small></td><td><span class="val">0.86</span> <span class="ci">0.82–0.90</span></td><td class="th">≥ 0.80</td><td><span class="pill measured"><svg class="i s" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>Measured</span></td><td><span class="chip">a91f0c</span></td></tr>
+            <tr><td><span class="ch">2</span></td><td>Disparate impact by gender</td><td><span class="val">0.93</span> <span class="ci">0.90–0.96</span></td><td class="th">≥ 0.80</td><td><span class="pill measured"><svg class="i s" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>Measured</span></td><td><span class="chip">a91f0c</span></td></tr>
+            <tr><td><span class="ch">3</span></td><td>Equal-opportunity gap by gender</td><td><span class="val">0.031</span> <span class="ci">0.012–0.050</span></td><td class="th">≤ 0.05</td><td><span class="pill measured"><svg class="i s" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>Measured</span></td><td><span class="chip">a91f0c</span></td></tr>
+            <tr class="open"><td><span class="ch">4</span></td><td>Equal-opportunity gap by age band<small>waits for the band mapping</small></td><td><span class="word">Not run</span></td><td class="th">≤ 0.05</td><td><span class="pill waiting"><svg class="i s" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Waiting for you</span></td><td><span class="ci">—</span></td></tr>
+            <tr><td><span class="ch">5</span></td><td>Calibration by group<small>vendor report, no test data</small></td><td><span class="val">0.018</span><span class="ci">no interval</span></td><td class="th">≤ 0.03</td><td><span class="pill attested"><svg class="i s" viewBox="0 0 24 24"><path d="M5 22h14"/><path d="M19.27 13.73A2.5 2.5 0 0 0 17.5 13h-11A2.5 2.5 0 0 0 4 15.5V17a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-1.5c0-.66-.26-1.3-.73-1.77Z"/><path d="M14 13V8.5C14 7 15 7 15 5a3 3 0 0 0-3-3c-1.69 0-3 1-3 3s1 2 1 3.5V13"/></svg>Attested</span></td><td><span class="chip">VC-118</span></td></tr>
+            <tr><td><span class="ch">6</span></td><td>Reason codes for declines<small>team statement</small></td><td><span class="word">Statement</span></td><td class="th">Art. 13</td><td><span class="pill attested"><svg class="i s" viewBox="0 0 24 24"><path d="M5 22h14"/><path d="M19.27 13.73A2.5 2.5 0 0 0 17.5 13h-11A2.5 2.5 0 0 0 4 15.5V17a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-1.5c0-.66-.26-1.3-.73-1.77Z"/><path d="M14 13V8.5C14 7 15 7 15 5a3 3 0 0 0-3-3c-1.69 0-3 1-3 3s1 2 1 3.5V13"/></svg>Attested</span></td><td><span class="chip">7c22f1</span></td></tr>
+            <tr class="open"><td><span class="ch">7</span></td><td>Human review of declines<small>no reviewer named</small></td><td><span class="word">Missing</span></td><td class="th">Art. 14</td><td><span class="pill waiting"><svg class="i s" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Waiting for you</span></td><td><span class="ci">—</span></td></tr>
+            <tr><td><span class="ch">8</span></td><td>Consent basis, three datasets</td><td><span class="word">Verified in Olai</span></td><td class="th">DPDP s.7</td><td><span class="pill measured"><svg class="i s" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>Measured</span></td><td><span class="chip">4be27d</span></td></tr>
+            <tr><td><span class="ch">9</span></td><td>Energy per million decisions</td><td><span class="val">41 kWh</span> <span class="ci">±8%</span></td><td class="th">Low impact</td><td><span class="pill measured"><svg class="i s" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>Measured</span></td><td><span class="chip">0c5a19</span></td></tr>
+          </tbody>
+        </table></div>
+        <div class="tbl-foot">Numbers match the chambers in the release lock. An attested check counts, but it is never shown as measured.</div>
+      </section>
+
+      <section class="panel decision" aria-labelledby="decision-title">
+        <div class="panel-h"><h2 id="decision-title">Decision</h2><span class="pill proposed">Proposed</span></div>
+        <div class="body">
+          <div class="label">FairMind proposes</div>
+          <div class="verdict"><b>Conditional go</b></div>
+          <p>The measured checks pass their pre-set thresholds. Approval is yours, and opens once the two items in Needs you are settled.</p>
+          <ul class="conds">
+            <li><span>C1</span>Re-test disparate impact by age every week in production.</li>
+            <li><span>C2</span>Re-run the full suite before any retrained model takes traffic.</li>
+            <li><span>C3</span>This approval lapses on 2 September 2027 unless renewed.</li>
+          </ul>
+          <ul class="trail">
+            <li><div>Put up for decision by A. Rao, ML lead<small>3 Jun 2027, 09:12</small></div></li>
+            <li><div>Consent basis verified by P. Iyer, DPO<small>3 Jun 2027, 09:40</small></div></li>
+          </ul>
+        </div>
+        <div class="sign">
+          <div class="stack">
+            <button class="btn primary" disabled>Approve with conditions</button>
+            <button class="btn">Return to ML lead</button>
+            <button class="btn ghost danger">Hold release</button>
+          </div>
+          <div class="reason"><svg class="i s" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Approval unlocks when chambers 4 and 7 are set.</div>
+        </div>
+      </section>
+    </div>
+    <div class="foot-note"><span>Illustrative data for design review.</span><span class="mono">FairMind · decision D-03</span></div>
+  </main>
+</div>
+</body>
+</html>

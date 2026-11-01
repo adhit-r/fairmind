@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FairMind</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f6f5f1; --ink:#17171c; --ink2:#5d5e68; --ink3:#9a9ba6; --line:rgba(23,23,28,.07);
+  --brand:#ff6b35; --coral:#ff8a5c; --peach:rgba(255,120,70,.22); --lilac:rgba(150,130,255,.20); --mint:rgba(90,200,160,.16);
+  --glass:rgba(255,255,255,.66); --glass2:rgba(255,255,255,.84); --edge:rgba(255,255,255,.85);
+  --sh:0 1px 2px rgba(20,20,30,.04),0 16px 40px -18px rgba(20,20,30,.18);
+  --g-ok:#1f7a45; --g-okbg:#e4f5ea; --g-warn:#c2520f; --g-warnbg:#ffeee4; --g-bad:#b4232c; --g-badbg:#fde9ea; --g-slate:#4a4f63; --g-slatebg:#eceef4;
+  --r:18px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{background:var(--bg)}
+body{color:var(--ink);font:400 14px/1.5 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-feature-settings:"cv11","ss01","tnum";-webkit-font-smoothing:antialiased;min-height:100vh;position:relative;overflow-x:hidden}
+button{font:inherit;color:inherit;cursor:pointer;background:none;border:0}
+a{color:inherit;text-decoration:none}
+.aurora{position:fixed;inset:0;z-index:-1;pointer-events:none;background:
+  radial-gradient(900px 520px at 78% -6%, var(--peach), transparent 62%),
+  radial-gradient(760px 520px at 8% 18%, var(--lilac), transparent 60%),
+  radial-gradient(700px 480px at 60% 92%, var(--mint), transparent 60%),
+  var(--bg)}
+.aurora::after{content:"";position:absolute;inset:0;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .05 0'/></filter><rect width='160' height='160' filter='url(%23n)'/></svg>");opacity:.5}
+
+/* nav */
+.nav{position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:16px;padding:14px 28px;background:linear-gradient(to bottom,rgba(246,245,241,.9),rgba(246,245,241,0));backdrop-filter:blur(10px)}
+.logo{display:flex;align-items:center;gap:9px;font-weight:700;font-size:15px;letter-spacing:-.01em}
+.logo i{width:22px;height:22px;border-radius:7px;background:linear-gradient(135deg,var(--brand),var(--coral));box-shadow:0 4px 12px -4px rgba(255,107,53,.6)}
+.tabs{margin:0 auto;display:flex;padding:4px;border-radius:999px;background:var(--glass);backdrop-filter:blur(16px);border:1px solid var(--edge);box-shadow:var(--sh)}
+.tabs a{display:flex;align-items:center;gap:7px;height:34px;padding:0 16px;border-radius:999px;font-weight:500;font-size:13.5px;color:var(--ink2)}
+.tabs a.on{background:var(--ink);color:#fff;box-shadow:0 6px 16px -8px rgba(0,0,0,.5)}
+.tabs a b{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--brand);color:#fff;font-size:11px;font-weight:600}
+.navr{display:flex;align-items:center;gap:8px}
+.icbtn{width:38px;height:38px;border-radius:999px;background:var(--glass);border:1px solid var(--edge);backdrop-filter:blur(16px);display:grid;place-items:center;box-shadow:var(--sh);color:var(--ink2)}
+.icbtn svg{width:16px;height:16px}
+.avatar{width:38px;height:38px;border-radius:999px;background:linear-gradient(135deg,#2b2d3a,#4a4f63);color:#fff;display:grid;place-items:center;font-size:12px;font-weight:600;box-shadow:var(--sh)}
+svg.i{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
+
+main{max-width:1280px;margin:0 auto;padding:22px 28px 64px}
+.hello{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap}
+h1{font-size:34px;font-weight:600;letter-spacing:-.03em;line-height:1.1}
+.hello p{margin-top:8px;color:var(--ink2);font-size:15px}
+.hello p b{color:var(--ink);font-weight:600}
+.quick{display:flex;gap:8px;flex-wrap:wrap}
+.pillb{display:inline-flex;align-items:center;gap:8px;height:38px;padding:0 14px 0 12px;border-radius:999px;background:var(--glass);border:1px solid var(--edge);backdrop-filter:blur(16px);box-shadow:var(--sh);font-weight:500;font-size:13.5px}
+.pillb svg{width:15px;height:15px;color:var(--ink2)}
+.pillb.dark{background:var(--ink);color:#fff;border-color:transparent}
+.pillb.dark svg{color:#fff}
+
+/* ask */
+.ask{margin-top:22px;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:12px;height:62px;padding:0 10px 0 18px;border-radius:999px;background:var(--glass2);border:1px solid var(--edge);backdrop-filter:blur(20px);box-shadow:0 1px 2px rgba(20,20,30,.04),0 24px 60px -24px rgba(255,107,53,.35)}
+.ask .spark{width:28px;height:28px;border-radius:999px;background:linear-gradient(135deg,var(--brand),var(--coral));display:grid;place-items:center;color:#fff}
+.ask .spark svg{width:14px;height:14px}
+.ask input{height:100%;border:0;outline:0;background:transparent;font:inherit;font-size:16px;color:var(--ink);min-width:0}
+.ask input::placeholder{color:var(--ink3)}
+.ask .r{display:flex;align-items:center;gap:6px}
+.ask kbd{font:500 11px/1 Inter;color:var(--ink3);border:1px solid var(--line);border-radius:6px;padding:5px 7px;background:#fff}
+.ask .go{height:42px;padding:0 18px;border-radius:999px;background:var(--ink);color:#fff;font-weight:600;font-size:13.5px}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 0 6px}
+.chips button{height:30px;padding:0 12px;border-radius:999px;background:rgba(255,255,255,.5);border:1px solid var(--edge);font-size:12.5px;color:var(--ink2);font-weight:500}
+.chips button:hover{background:#fff;color:var(--ink)}
+
+/* grid */
+.grid{display:grid;grid-template-columns:minmax(0,1.62fr) minmax(0,1fr);gap:18px;margin-top:22px}
+.card{background:var(--glass);border:1px solid var(--edge);backdrop-filter:blur(20px);border-radius:var(--r);box-shadow:var(--sh)}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 18px 0}
+.ch h2{font-size:15px;font-weight:600;letter-spacing:-.01em}
+.ch .sub{color:var(--ink3);font-size:12.5px;margin-top:2px}
+.ch .more{width:30px;height:30px;border-radius:999px;display:grid;place-items:center;color:var(--ink3)}
+.ch .more:hover{background:rgba(0,0,0,.05);color:var(--ink)}
+
+/* hero estate */
+.hero{position:relative;overflow:hidden;min-height:470px}
+.hero svg.scene{position:absolute;left:50%;top:57%;width:96%;transform:translate(-50%,-50%)}
+.floats{display:contents}
+.float{position:absolute;padding:12px 14px;border-radius:14px;background:var(--glass2);border:1px solid var(--edge);backdrop-filter:blur(18px);box-shadow:var(--sh);min-width:148px}
+.float .k{font-size:11.5px;color:var(--ink2);font-weight:500;display:flex;align-items:center;gap:6px}
+.float .v{margin-top:4px;font-size:22px;font-weight:600;letter-spacing:-.02em;line-height:1}
+.float .v small{font-size:12px;color:var(--ink3);font-weight:500;letter-spacing:0;margin-left:4px}
+.float .d{margin-top:6px;font-size:11.5px;color:var(--ink3)}
+.gauge{position:relative;width:96px;height:52px;margin-top:6px}
+.gauge svg{width:96px;height:52px;overflow:visible}
+.gauge b{position:absolute;left:0;right:0;bottom:-2px;text-align:center;font-size:18px;font-weight:600;letter-spacing:-.02em}
+.legend{position:absolute;left:18px;top:64px;display:flex;gap:14px;font-size:11.5px;color:var(--ink2)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:9px;height:9px;border-radius:3px}
+.hero .tag{position:absolute;padding:4px 8px;border-radius:999px;background:var(--ink);color:#fff;font-size:11px;font-weight:600;box-shadow:0 8px 18px -8px rgba(0,0,0,.5);white-space:nowrap}
+.hero .tag::after{content:"";position:absolute;left:50%;top:100%;width:1px;height:14px;background:var(--ink);transform:translateX(-50%)}
+
+/* needs */
+.needs .item{display:grid;grid-template-columns:40px minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 18px;border-top:1px solid var(--line)}
+.needs .item:first-of-type{border-top:0;margin-top:10px}
+.needs .ic{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:#fff;box-shadow:inset 0 0 0 1px var(--line)}
+.needs .ic.warn{background:var(--g-warnbg);color:var(--g-warn)}
+.needs .ic.bad{background:var(--g-badbg);color:var(--g-bad)}
+.needs .ic.slate{background:var(--g-slatebg);color:var(--g-slate)}
+.needs b{display:block;font-weight:600;font-size:13.5px;line-height:1.3}
+.needs small{display:block;color:var(--ink3);font-size:12px;margin-top:2px}
+.needs .go{height:30px;padding:0 12px;border-radius:999px;background:#fff;box-shadow:inset 0 0 0 1px var(--line);font-size:12.5px;font-weight:600;white-space:nowrap}
+.needs .go.primary{background:var(--ink);color:#fff;box-shadow:none}
+.needs .foot{padding:12px 18px 16px;font-size:12.5px;color:var(--ink2);border-top:1px solid var(--line);display:flex;gap:10px;align-items:center}
+.needs .foot .dot{width:18px;height:18px;border-radius:999px;background:linear-gradient(135deg,var(--brand),var(--coral));flex:none}
+
+/* kpis */
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px;margin-top:18px}
+.kpi{padding:16px 18px 14px}
+.kpi .k{font-size:12.5px;color:var(--ink2);font-weight:500;display:flex;justify-content:space-between;align-items:center}
+.kpi .v{margin-top:8px;font-size:28px;font-weight:600;letter-spacing:-.03em;line-height:1;display:flex;align-items:baseline;gap:10px}
+.delta{font-size:11.5px;font-weight:600;padding:2px 7px;border-radius:999px}
+.delta.up{background:var(--g-okbg);color:var(--g-ok)}.delta.down{background:var(--g-badbg);color:var(--g-bad)}.delta.flat{background:var(--g-slatebg);color:var(--g-slate)}
+.spark{display:flex;align-items:flex-end;gap:3px;height:34px;margin-top:14px}
+.spark i{flex:1;border-radius:2px;background:rgba(23,23,28,.14)}
+.spark i.hi{background:linear-gradient(to top,var(--brand),var(--coral))}
+.kpi .d{margin-top:8px;font-size:11.5px;color:var(--ink3)}
+
+/* bottom */
+.bottom{display:grid;grid-template-columns:minmax(0,1.62fr) minmax(0,1fr);gap:18px;margin-top:18px}
+table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+th{text-align:left;font-weight:500;font-size:11.5px;color:var(--ink3);padding:8px 18px;border-bottom:1px solid var(--line)}
+td{padding:11px 18px;border-bottom:1px solid var(--line);vertical-align:middle}
+tr:last-child td{border-bottom:0}
+td .n{font-weight:600}
+td .s{display:block;color:var(--ink3);font-size:12px}
+.st{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 9px;border-radius:999px;font-size:11.5px;font-weight:600}
+.st i{width:6px;height:6px;border-radius:999px;background:currentColor}
+.st.ok{background:var(--g-okbg);color:var(--g-ok)}.st.warn{background:var(--g-warnbg);color:var(--g-warn)}.st.bad{background:var(--g-badbg);color:var(--g-bad)}.st.slate{background:var(--g-slatebg);color:var(--g-slate)}
+.evs{display:inline-flex;align-items:center;gap:7px}
+.evs i{width:18px;height:18px;border-radius:6px;display:grid;place-items:center;font-size:9px;font-weight:700;color:#fff}
+.cov{padding:6px 18px 18px;display:grid;gap:14px}
+.cov .row{display:grid;grid-template-columns:minmax(0,1fr) 44px;gap:12px;align-items:center}
+.cov .l{display:flex;justify-content:space-between;font-size:13px;font-weight:500}
+.cov .l small{color:var(--ink3);font-weight:400}
+.cov .bar{height:8px;border-radius:999px;background:rgba(23,23,28,.08);margin-top:7px;overflow:hidden}
+.cov .bar i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--brand),var(--coral))}
+.cov .bar i.g{background:linear-gradient(90deg,#2aa15f,#5fcf8a)}
+.cov .pct{font-size:14px;font-weight:600;text-align:right}
+.cov .note{font-size:12px;color:var(--ink2);padding:10px 12px;border-radius:12px;background:rgba(255,255,255,.6);border:1px solid var(--edge);display:flex;gap:8px;align-items:flex-start}
+.cov .note .dot{width:16px;height:16px;border-radius:999px;background:linear-gradient(135deg,var(--brand),var(--coral));flex:none;margin-top:1px}
+
+.foot{max-width:1280px;margin:0 auto;padding:0 28px 28px;font-size:11.5px;color:var(--ink3)}
+
+@media (max-width:1100px){.grid,.bottom{grid-template-columns:minmax(0,1fr)}.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:760px){
+  .nav{padding:12px 16px}.tabs{display:none}
+  main{padding:14px 16px 48px}
+  h1{font-size:28px}
+  .ask{height:54px;padding:0 6px 0 14px}.ask .go{display:none}.ask kbd{display:none}.ask input{font-size:15px}
+  .hero{min-height:0;padding-bottom:14px}.hero svg.scene{position:static;width:100%;transform:none;display:block;margin:4px 0 0}
+  .floats{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 14px}.float{position:static!important;animation:none;min-width:0;padding:10px 12px}.float .v{font-size:18px}.float:first-child{grid-column:1/-1}
+  .legend{position:static;padding:10px 14px 0;flex-wrap:wrap}.hero .tag{display:none}
+  .kpis{grid-template-columns:1fr 1fr}
+  table{min-width:560px}.tblw{overflow-x:auto}
+  .foot{padding:0 16px 24px}
+}
+@media (prefers-reduced-motion:no-preference){
+  .float{animation:drift 7s ease-in-out infinite}
+  .float:nth-child(2){animation-delay:-2.3s}.float:nth-child(3){animation-delay:-4.1s}
+  @keyframes drift{50%{transform:translateY(-5px)}}
+}
+</style>
+</head>
+<body>
+<div class="aurora"></div>
+<header class="nav">
+  <span class="logo"><i></i>FairMind</span>
+  <nav class="tabs">
+    <a class="on" href="#">Home</a><a href="#">Systems</a><a href="#">Evidence</a><a href="#">Findings <b>6</b></a><a href="#">Frameworks</a><a href="#">Reports</a>
+  </nav>
+  <span class="navr">
+    <button class="icbtn" aria-label="Search"><svg class="i" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg></button>
+    <button class="icbtn" aria-label="Notifications"><svg class="i" viewBox="0 0 16 16"><path d="M4 11V7a4 4 0 0 1 8 0v4l1 1H3z"/><path d="M6.5 14h3"/></svg></button>
+    <span class="avatar">MM</span>
+  </span>
+</header>
+
+<main>
+  <div class="hello">
+    <div>
+      <h1>Good morning, Meera</h1>
+      <p><b>3 systems</b> need you before Thursday's committee. Evidence is up <b>18%</b> this week, and nothing is overdue.</p>
+    </div>
+    <div class="quick">
+      <button class="pillb dark"><svg class="i" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg>New investigation</button>
+      <button class="pillb"><svg class="i" viewBox="0 0 16 16"><path d="M3 8h10M9 4l4 4-4 4"/></svg>Review approvals</button>
+      <button class="pillb"><svg class="i" viewBox="0 0 16 16"><path d="M8 2v8M4.5 6.5L8 10l3.5-3.5M2.5 13.5h11"/></svg>Export pack</button>
+    </div>
+  </div>
+
+  <form class="ask" onsubmit="return false">
+    <span class="spark"><svg class="i" viewBox="0 0 16 16"><path d="M8 2l1.6 4.4L14 8l-4.4 1.6L8 14l-1.6-4.4L2 8l4.4-1.6z"/></svg></span>
+    <input placeholder="Ask about any system, finding or regulation. Try: is Loan scoring 4.2.0 ready for 18 June?">
+    <span class="r"><kbd>⌘K</kbd><button class="go">Ask</button></span>
+  </form>
+  <div class="chips">
+    <button>Why is Mule detection held?</button><button>What lapses in the next 30 days?</button><button>FREE-AI gaps across high-tier systems</button><button>Draft the committee note for Loan scoring</button>
+  </div>
+
+  <div class="grid">
+    <section class="card hero">
+      <div class="ch"><div><h2>Your model estate</h2><div class="sub">214 systems · Retail Bank · live</div></div><button class="more" aria-label="More"><svg class="i" viewBox="0 0 16 16"><circle cx="3.5" cy="8" r="1"/><circle cx="8" cy="8" r="1"/><circle cx="12.5" cy="8" r="1"/></svg></button></div>
+      <svg class="scene" id="scene"></svg>
+      <div class="floats"><div class="float" style="left:22px;bottom:52px"><div class="k">Needs you</div><div class="v">3 <small>systems</small></div><div class="d">Loan scoring · BNPL risk · Branch assistant</div></div>
+      <div class="float" style="right:22px;top:76px"><div class="k">Policy coverage</div><div class="gauge"><svg viewBox="0 0 96 52"><path d="M6 50A42 42 0 0 1 90 50" fill="none" stroke="rgba(23,23,28,.08)" stroke-width="9" stroke-linecap="round"/><path d="M6 50A42 42 0 0 1 90 50" fill="none" stroke="url(#gg)" stroke-width="9" stroke-linecap="round" stroke-dasharray="132" stroke-dashoffset="8"/><defs><linearGradient id="gg" x1="0" x2="1"><stop offset="0" stop-color="#ff6b35"/><stop offset="1" stop-color="#2aa15f"/></linearGradient></defs></svg><b>94%</b></div><div class="d">29 of 31 high-tier controls met</div></div>
+      <div class="float" style="right:26px;bottom:52px"><div class="k">Decisions today</div><div class="v">7.4<small>lakh</small></div><div class="d">across 19 live systems</div></div></div>
+      <div class="legend"><span><i style="background:#ffffff;box-shadow:inset 0 0 0 1px rgba(0,0,0,.12)"></i>Cleared</span><span><i style="background:linear-gradient(135deg,#ff6b35,#ff8a5c)"></i>Needs you</span><span><i style="background:#3b3f52"></i>Held</span><span><i style="background:#d9d6ea;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08)"></i>On attestation</span></div>
+    </section>
+
+    <section class="card needs">
+      <div class="ch"><div><h2>Needs you</h2><div class="sub">Before the Model Risk Committee, Thu 18 Jun</div></div><button class="more" aria-label="More"><svg class="i" viewBox="0 0 16 16"><circle cx="3.5" cy="8" r="1"/><circle cx="8" cy="8" r="1"/><circle cx="12.5" cy="8" r="1"/></svg></button></div>
+      <div class="item"><span class="ic warn"><svg class="i" viewBox="0 0 16 16"><path d="M8 2l6 11H2z"/><path d="M8 7v3M8 11.5v.5"/></svg></span><div><b>Loan scoring 4.2.0</b><small>Approve the age-band mapping, then the last fairness test runs</small></div><button class="go primary">Approve</button></div>
+      <div class="item"><span class="ic bad"><svg class="i" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5M8 11v.5"/></svg></span><div><b>BNPL risk v1</b><small>Threshold was changed after the run; result cannot count</small></div><button class="go">Review</button></div>
+      <div class="item"><span class="ic slate"><svg class="i" viewBox="0 0 16 16"><circle cx="8" cy="5" r="2.5"/><path d="M3 14c0-2.8 2.2-5 5-5s5 2.2 5 5"/></svg></span><div><b>Branch assistant</b><small>412 judge ratings arrived without a recorded provider</small></div><button class="go">Assign</button></div>
+      <div class="item"><span class="ic"><svg class="i" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.5 1.5"/></svg></span><div><b>Attrition risk v2</b><small>Approval lapses in 9 days</small></div><button class="go">Renew</button></div>
+      <div class="foot"><span class="dot"></span>FairMind drafted the committee note for Loan scoring. <a href="#" style="font-weight:600;color:var(--ink)">Review draft</a></div>
+    </section>
+  </div>
+
+  <div class="kpis">
+    <section class="card kpi"><div class="k">Evidence bound this week<span class="delta up">+18%</span></div><div class="v">1,183</div><div class="spark"><i style="height:40%"></i><i style="height:55%"></i><i style="height:48%"></i><i style="height:70%"></i><i style="height:62%"></i><i style="height:84%"></i><i class="hi" style="height:100%"></i></div><div class="d">Fairlearn 61% · Giskard 22% · FairMind-E 9% · uploads 8%</div></section>
+    <section class="card kpi"><div class="k">In validation<span class="delta flat">5%</span></div><div class="v">11 <small style="font-size:13px;color:var(--ink3);font-weight:500;letter-spacing:0">of 214</small></div><div class="spark"><i style="height:30%"></i><i style="height:36%"></i><i style="height:52%"></i><i style="height:46%"></i><i style="height:58%"></i><i style="height:64%"></i><i class="hi" style="height:62%"></i></div><div class="d">median time in validation 23 days</div></section>
+    <section class="card kpi"><div class="k">Findings past due<span class="delta down">6</span></div><div class="v">6</div><div class="spark"><i style="height:90%"></i><i style="height:82%"></i><i style="height:70%"></i><i style="height:64%"></i><i style="height:60%"></i><i style="height:50%"></i><i class="hi" style="height:42%"></i></div><div class="d">down from 11 a month ago</div></section>
+    <section class="card kpi"><div class="k">Approvals lapsing, 30 days<span class="delta flat">4</span></div><div class="v">4</div><div class="spark"><i style="height:20%"></i><i style="height:20%"></i><i style="height:35%"></i><i style="height:35%"></i><i style="height:50%"></i><i style="height:50%"></i><i class="hi" style="height:70%"></i></div><div class="d">renewals scheduled for 3 of 4</div></section>
+  </div>
+
+  <div class="bottom">
+    <section class="card">
+      <div class="ch"><div><h2>Evidence arriving</h2><div class="sub">Live from your pipelines and evaluators</div></div><span class="st ok"><i></i>Live</span></div>
+      <div class="tblw"><table>
+        <thead><tr><th>System</th><th>Evidence</th><th>Source</th><th>When</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td><span class="n">Card fraud v7</span><span class="s">Fraud &amp; AML</span></td><td>Energy per million decisions, 18 kWh</td><td><span class="evs"><i style="background:#2b8a5b">E</i>FairMind-E</span></td><td>09:36</td><td><span class="st ok"><i></i>Measured</span></td></tr>
+          <tr><td><span class="n">Loan scoring v4</span><span class="s">Retail credit</span></td><td>Fairness suite on 48,210 holdout rows</td><td><span class="evs"><i style="background:#4f6bed">F</i>Fairlearn</span></td><td>09:12</td><td><span class="st ok"><i></i>Measured</span></td></tr>
+          <tr><td><span class="n">Branch assistant</span><span class="s">Customer service</span></td><td>412 judge ratings, provider not recorded</td><td><span class="evs"><i style="background:#8a5cf5">J</i>LLM judge</span></td><td>Yesterday</td><td><span class="st bad"><i></i>Not evidence</span></td></tr>
+          <tr><td><span class="n">KYC document check v3</span><span class="s">Fraud &amp; AML</span></td><td>Vendor robustness report</td><td><span class="evs"><i style="background:#9a9ba6">U</i>Upload</span></td><td>Yesterday</td><td><span class="st slate"><i></i>Attested</span></td></tr>
+          <tr><td><span class="n">Mule detection v2</span><span class="s">Fraud &amp; AML</span></td><td>Drift still above its limit</td><td><span class="evs"><i style="background:#e0566c">G</i>Giskard</span></td><td>Yesterday</td><td><span class="st warn"><i></i>Held</span></td></tr>
+        </tbody>
+      </table></div>
+    </section>
+    <section class="card">
+      <div class="ch"><div><h2>Framework coverage</h2><div class="sub">Controls with evidence, high-tier systems</div></div></div>
+      <div class="cov">
+        <div class="row"><div><div class="l">RBI FREE-AI <small>7 sutras · 52 controls</small></div><div class="bar"><i style="width:94%"></i></div></div><div class="pct">94%</div></div>
+        <div class="row"><div><div class="l">DPDP Act 2023 <small>consent, purpose, rights</small></div><div class="bar"><i class="g" style="width:100%"></i></div></div><div class="pct">100%</div></div>
+        <div class="row"><div><div class="l">EU AI Act, Annex III <small>Art. 9 to 15, NRI book</small></div><div class="bar"><i style="width:81%"></i></div></div><div class="pct">81%</div></div>
+        <div class="row"><div><div class="l">Internal MRM-POL-07 <small>tier High scope</small></div><div class="bar"><i style="width:89%"></i></div></div><div class="pct">89%</div></div>
+        <div class="note"><span class="dot"></span><span>The Annex III gap is one control on three systems: a named human reviewer for automated declines. Assigning the role closes all three.</span></div>
+      </div>
+    </section>
+  </div>
+</main>
+<footer class="foot">Illustrative data for design review.</footer>
+
+<script>
+// soft isometric estate: the same system map as before, rendered as clay
+const DIST = [[0, 0], [26, 0], [0, 26], [26, 26]];
+const SYS = [
+  [0, 4, 1, 12000, "open"], [0, 0, 1, 8000, "ok"], [0, 2, 1, 20000, "att"], [0, 6, 0, 15000, "ok"], [0, 5, 1, 3000, "open"], [0, 7, 0, 2500, "ok"],
+  [1, 0, 0, 900000, "ok"], [1, 1, 0, 400000, "ok"], [1, 4, 0, 60000, "held"], [1, 3, 0, 30000, "att"], [1, 6, 0, 120000, "ok"], [1, 8, 0, 200000, "ok"],
+  [2, 4, 0, 18000, "open"], [2, 1, 0, 5000, "ok"], [2, 6, 0, 40000, "att"],
+  [3, 6, 1, 800, "held"], [3, 4, 0, 300, "ok"], [3, 2, 0, 1200, "ok"], [3, 0, 0, 50, "ok"],
+];
+const NS = "http://www.w3.org/2000/svg", C = Math.cos(Math.PI / 6), S = .5, SC = 9;
+const P = (x, y, z) => [(x - y) * C * SC, ((x + y) * S - z) * SC];
+const pts = a => a.map(p => P(...p).map(v => v.toFixed(1)).join(",")).join(" ");
+const el = (t, a, p) => { const e = document.createElementNS(NS, t); for (const k in a) e.setAttribute(k, a[k]); p && p.appendChild(e); return e; };
+const svg = document.getElementById("scene");
+const defs = el("defs", {}, svg);
+defs.innerHTML = `
+<filter id="soft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="6"/></filter>
+<filter id="softer" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="14"/></filter>
+<linearGradient id="top-ok" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#f1efff"/></linearGradient>
+<linearGradient id="l-ok" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ebe9f6"/><stop offset="1" stop-color="#dcd9ec"/></linearGradient>
+<linearGradient id="r-ok" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d9d6e9"/><stop offset="1" stop-color="#c9c5dd"/></linearGradient>
+<linearGradient id="top-open" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffa07a"/><stop offset="1" stop-color="#ff6b35"/></linearGradient>
+<linearGradient id="l-open" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff7f4d"/><stop offset="1" stop-color="#e85a24"/></linearGradient>
+<linearGradient id="r-open" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e85f2b"/><stop offset="1" stop-color="#c94a1a"/></linearGradient>
+<linearGradient id="top-held" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4a4f63"/><stop offset="1" stop-color="#2d3040"/></linearGradient>
+<linearGradient id="l-held" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b3f52"/><stop offset="1" stop-color="#262938"/></linearGradient>
+<linearGradient id="r-held" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2f3244"/><stop offset="1" stop-color="#1f2130"/></linearGradient>
+<linearGradient id="top-att" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ebe8f7"/><stop offset="1" stop-color="#d9d6ea"/></linearGradient>
+<linearGradient id="l-att" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d4d0e6"/><stop offset="1" stop-color="#c2bdd8"/></linearGradient>
+<linearGradient id="r-att" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c3bfd8"/><stop offset="1" stop-color="#b1acc9"/></linearGradient>
+<linearGradient id="plate" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff" stop-opacity=".95"/><stop offset="1" stop-color="#f3f1fa" stop-opacity=".95"/></linearGradient>
+<linearGradient id="plate-side" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e6e3f0"/><stop offset="1" stop-color="#d7d3e6"/></linearGradient>`;
+const gShadow = el("g", {}, svg), gBase = el("g", {}, svg), gBlocks = el("g", {}, svg);
+function face(points, fill, parent, op) { return el("polygon", { points, fill, opacity: op == null ? 1 : op }, parent); }
+function box(x, y, z, w, d, h, k, parent) {
+  const g = el("g", {}, parent);
+  face(pts([[x, y + d, z], [x + w, y + d, z], [x + w, y + d, z + h], [x, y + d, z + h]]), `url(#l-${k})`, g);
+  face(pts([[x + w, y, z], [x + w, y + d, z], [x + w, y + d, z + h], [x + w, y, z + h]]), `url(#r-${k})`, g);
+  face(pts([[x, y, z + h], [x + w, y, z + h], [x + w, y + d, z + h], [x, y + d, z + h]]), `url(#top-${k})`, g);
+  // soft top highlight edge
+  el("polyline", { points: pts([[x, y + d, z + h], [x, y, z + h], [x + w, y, z + h]]), fill: "none", stroke: "rgba(255,255,255,.7)", "stroke-width": 1 }, g);
+  return g;
+}
+// base plate with ambient shadow
+const B = { x0: -3, y0: -3, x1: 51, y1: 51 };
+face(pts([[B.x0 + 2, B.y0 + 2, -3], [B.x1 + 2, B.y0 + 2, -3], [B.x1 + 2, B.y1 + 2, -3], [B.x0 + 2, B.y1 + 2, -3]]), "rgba(60,50,90,.22)", gShadow).setAttribute("filter", "url(#softer)");
+face(pts([[B.x0, B.y1, -2.4], [B.x1, B.y1, -2.4], [B.x1, B.y1, 0], [B.x0, B.y1, 0]]), "url(#plate-side)", gBase);
+face(pts([[B.x1, B.y0, -2.4], [B.x1, B.y1, -2.4], [B.x1, B.y1, 0], [B.x1, B.y0, 0]]), "#cfcbe0", gBase);
+face(pts([[B.x0, B.y0, 0], [B.x1, B.y0, 0], [B.x1, B.y1, 0], [B.x0, B.y1, 0]]), "url(#plate)", gBase);
+// district tiles
+DIST.forEach(([x, y]) => {
+  face(pts([[x + .4, y + .4, 0.05], [x + 21.6, y + .4, 0.05], [x + 21.6, y + 21.6, 0.05], [x + .4, y + 21.6, 0.05]]), "rgba(120,110,170,.07)", gBase);
+  box(x + .8, y + .8, 0, 20.4, 20.4, .9, "ok", gBase);
+});
+// roads
+[[[24, -2, .95], [24, 50, .95]], [[-2, 24, .95], [50, 24, .95]]].forEach(a => el("polyline", { points: pts(a), fill: "none", stroke: "rgba(120,110,170,.18)", "stroke-width": 1.2, "stroke-dasharray": "3 5" }, gBase));
+// blocks, back to front
+const items = SYS.map(([d, c, hi, per, st]) => {
+  const w = hi ? 5.2 : 4.1, ci = c % 3, cj = Math.floor(c / 3);
+  return { x: DIST[d][0] + .9 + ci * 6.8 + (6.8 - w) / 2, y: DIST[d][1] + .9 + cj * 6.8 + (6.8 - w) / 2, w, h: 1 + 2.1 * Math.log10(per), st };
+}).sort((a, b) => (a.x + a.y) - (b.x + b.y));
+items.forEach(s => {
+  const sh = face(pts([[s.x - .6, s.y - .6, .9], [s.x + s.w + 1.2, s.y - .6, .9], [s.x + s.w + 1.2, s.y + s.w + 1.2, .9], [s.x - .6, s.y + s.w + 1.2, .9]]), "rgba(50,40,90,.28)", gShadow);
+  sh.setAttribute("filter", "url(#soft)");
+  box(s.x, s.y, .9, s.w, s.w, s.h, s.st, gBlocks);
+  s.top = P(s.x + s.w / 2, s.y + s.w / 2, .9 + s.h);
+});
+const bb = svg.getBBox();
+svg.setAttribute("viewBox", `${bb.x - 10} ${bb.y - 40} ${bb.width + 20} ${bb.height + 60}`);
+// name tags on the systems that need you
+const names = ["Loan scoring", null, null, null, "BNPL risk", null, null, null, null, null, null, null, "Branch assistant"];
+const hero = document.querySelector(".hero");
+function placeTags() {
+  hero.querySelectorAll(".tag").forEach(t => t.remove());
+  const r = svg.getBoundingClientRect(), hr = hero.getBoundingClientRect();
+  const vb = svg.viewBox.baseVal, sx = r.width / vb.width, sy = r.height / vb.height;
+  SYS.forEach((s, i) => {
+    if (!names[i]) return;
+    const it = items.find(o => Math.abs(o.x - (DIST[s[0]][0] + .9 + (s[1] % 3) * 6.8 + (6.8 - (s[2] ? 5.2 : 4.1)) / 2)) < .01 && Math.abs(o.y - (DIST[s[0]][1] + .9 + Math.floor(s[1] / 3) * 6.8 + (6.8 - (s[2] ? 5.2 : 4.1)) / 2)) < .01);
+    const [X, Y] = it.top;
+    const t = document.createElement("span"); t.className = "tag"; t.textContent = names[i];
+    t.style.left = (r.left - hr.left + (X - vb.x) * sx) + "px"; t.style.top = (r.top - hr.top + (Y - vb.y) * sy - 40) + "px"; t.style.transform = "translateX(-50%)";
+    hero.appendChild(t);
+  });
+}
+placeTags(); addEventListener("resize", placeTags);
+</script>
+</body>
+</html>
