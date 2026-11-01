@@ -291,7 +291,7 @@ def require_permission(permission: CompliancePermission):
         @wraps(func)
         async def async_wrapper(*args, **kwargs):
             request = kwargs.get("request")
-            if not request or not hasattr(request.state, "user"):
+            if request is None or not hasattr(request.state, "user"):
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Authentication required"
@@ -324,7 +324,7 @@ def require_permission(permission: CompliancePermission):
         @wraps(func)
         def sync_wrapper(*args, **kwargs):
             request = kwargs.get("request")
-            if not request or not hasattr(request.state, "user"):
+            if request is None or not hasattr(request.state, "user"):
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Authentication required"
@@ -377,7 +377,7 @@ def require_any_permission(*permissions: CompliancePermission):
         @wraps(func)
         async def async_wrapper(*args, **kwargs):
             request = kwargs.get("request")
-            if not request or not hasattr(request.state, "user"):
+            if request is None or not hasattr(request.state, "user"):
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Authentication required"
@@ -397,7 +397,7 @@ def require_any_permission(*permissions: CompliancePermission):
         @wraps(func)
         def sync_wrapper(*args, **kwargs):
             request = kwargs.get("request")
-            if not request or not hasattr(request.state, "user"):
+            if request is None or not hasattr(request.state, "user"):
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Authentication required"

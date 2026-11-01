@@ -5,7 +5,14 @@ try:
     from domain.compliance.services.compliance_automation_service import ComplianceAutomationService
 except ModuleNotFoundError as exc:
     pytest.skip(f"compliance automation dependencies unavailable: {exc}", allow_module_level=True)
-from database.models import ComplianceSchedule, Model
+from types import SimpleNamespace
+
+from database.models import ComplianceSchedule
+
+# There is no Model ORM class in database.models, and importing one broke
+# collection for the whole suite. The object below is only ever handed back by a
+# mocked session, so a plain stub with the attributes read is enough.
+Model = SimpleNamespace
 
 @pytest.fixture
 def mock_db_session():
@@ -44,11 +51,14 @@ async def test_generate_automated_report(service, mock_db_session):
         recipients=["test@example.com"]
     )
     
+    # Every attribute generate_automated_report reads. A missing one raises
+    # inside the method's try block, which swallows it and skips the report.
     model = Model(
         id="test-model-id",
         name="Test Model",
         version="1.0",
         model_type="classifier",
+        author="Test Author",
         fairness_score=0.9,
         bias_score=0.1
     )
