@@ -89,19 +89,27 @@ class DatabaseManager:
     def create_tables(self):
         """Create all database tables defined via ORM models."""
         try:
-            # Import all model modules so Base.metadata is populated
-            import database.governance_models  # noqa: F401
-            import database.models  # noqa: F401  users, organizations, memberships
+            import database.governance_models as governance_models
+            import database.models as user_models
 
-            # Table by table: one definition the local SQLite build cannot parse
-            # (governance_evaluation_runs overflows the parser stack on older
-            # versions) must not roll back the users and organisation tables.
-            for table in Base.metadata.sorted_tables:
-                try:
-                    table.create(bind=self.engine, checkfirst=True)
-                except Exception as table_error:
-                    logger.warning(f"Could not create table {table.name}: {table_error}")
-            logger.info("Database tables created successfully")
+            # The package is reachable as both "database" and
+            # "src.infrastructure.db.database", and Python may load this module
+            # once under each name, each with its own Base. Create tables from
+            # every metadata the model modules actually registered against.
+            metadatas = {id(m): m for m in (Base.metadata, user_models.Base.metadata, governance_models.Base.metadata)}
+            created, failed = 0, []
+            for metadata in metadatas.values():
+                # Table by table: one definition the local SQLite build cannot
+                # parse (governance_evaluation_runs overflows the parser stack on
+                # older versions) must not roll back the users table.
+                for table in metadata.sorted_tables:
+                    try:
+                        table.create(bind=self.engine, checkfirst=True)
+                        created += 1
+                    except Exception as table_error:
+                        failed.append(table.name)
+                        logger.warning(f"Could not create table {table.name}: {table_error}")
+            logger.info(f"Database tables ready: {created} checked, {len(failed)} failed{': ' + ', '.join(failed) if failed else ''}")
         except Exception as e:
             logger.error(f"Error creating tables: {e}")
             raise
