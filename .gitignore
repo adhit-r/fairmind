@@ -171,6 +171,7 @@ id_ecdsa*
 id_ed25519*
 *.env
 .env*
+!apps/website/.env.example
 secrets*
 config/secrets*
 credentials*
@@ -334,6 +335,7 @@ test-results/
 *.png
 !**/public/logo.png
 !**/logo.png
+!apps/website/public/og-image.png
 !docs/assets/issues/*.png
 !assets/logo/*.png
 !assets/diagrams/*.png
@@ -384,3 +386,6 @@ apps/frontend-archive/dist/
 # Re-exclude the vendored bias-bench clone, which carries its own .git and is
 # deliberately not tracked here.
 apps/backend/src/domain/bias/bias_bench_repo/
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/
