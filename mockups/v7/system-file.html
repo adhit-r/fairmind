@@ -1,0 +1,468 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SYS-0142 Loan scoring - FairMind</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Raleway:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#101614; --ink-72:rgba(16,22,20,.72); --ink-56:rgba(16,22,20,.56); --ink-32:rgba(16,22,20,.32); --ink-16:rgba(16,22,20,.16); --ink-06:rgba(16,22,20,.06);
+  --orange:#ff6b35; --orange-12:#fff0e9; --white:#fff; --paper:#faf9f6;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{background:var(--paper)}
+body{color:var(--ink);font:500 14px/1.5 Raleway,Arial,sans-serif;font-variant-numeric:lining-nums tabular-nums;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;cursor:pointer;background:none;border:0}
+a{color:inherit}
+textarea{font:inherit;color:inherit}
+.mono{font-family:var(--mono)}
+.label{font:800 10.5px/1.3 var(--mono);letter-spacing:.07em;text-transform:uppercase;color:var(--ink-56)}
+.eyebrow{font:800 11px/1.3 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--orange)}
+
+/* app bar */
+.top{background:var(--ink);color:#fff}
+.top-in{max-width:1440px;margin:0 auto;height:52px;display:flex;align-items:center;gap:28px;padding:0 28px}
+.brand{display:flex;align-items:center;gap:10px;font:900 15px/1 Raleway;letter-spacing:.01em}
+.brand img{width:20px;height:20px;background:#fff;border-radius:50%}
+.nav{display:flex;height:100%}
+.nav a{display:flex;align-items:center;gap:8px;padding:0 12px;color:rgba(255,255,255,.72);text-decoration:none;font-weight:700;font-size:13.5px;border-bottom:3px solid transparent}
+.nav a.on{color:#fff;border-color:var(--orange)}
+.count{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;background:var(--orange);color:var(--ink);font:800 10.5px/1 var(--mono)}
+.top-r{margin-left:auto;display:flex;align-items:center;gap:12px}
+.org{display:flex;align-items:center;gap:8px;height:32px;padding:0 10px;border:1.5px solid rgba(255,255,255,.4);font-weight:700;font-size:13px}
+.me{width:32px;height:32px;display:grid;place-items:center;background:var(--orange);color:var(--ink);font:800 11.5px/1 var(--mono)}
+
+main{max-width:1440px;margin:0 auto;padding:22px 28px 56px}
+
+/* file header */
+.crumb{display:flex;gap:8px;font:700 11px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-56)}
+.crumb a{text-decoration:none}
+.fh{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;margin-top:12px;flex-wrap:wrap}
+h1{font:900 34px/1.05 Raleway;letter-spacing:-.025em;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+h1 .id{font:800 13px/1 var(--mono);letter-spacing:.06em;color:var(--ink-56)}
+.status-line{margin-top:8px;font-size:14.5px;font-weight:600;color:var(--ink-72)}
+.status-line b{color:var(--ink);font-weight:800}
+.actions{display:flex;gap:10px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:8px;height:38px;padding:0 14px;border:2px solid var(--ink);background:#fff;font-weight:800;font-size:13.5px;white-space:nowrap}
+.btn.primary{background:var(--orange);box-shadow:3px 3px 0 var(--ink)}
+.btn.primary:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
+.btn svg{width:14px;height:14px}
+.btn[hidden]{display:none}
+
+/* role switch */
+.role{display:flex;align-items:center;gap:14px;margin-top:16px;padding:10px 14px;border:1.5px solid var(--ink);background:#fff;flex-wrap:wrap}
+.role .seg{display:inline-flex;border:1.5px solid var(--ink)}
+.role .seg button{height:28px;padding:0 10px;font:800 11px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;border-right:1.5px solid var(--ink)}
+.role .seg button:last-child{border-right:0}
+.role .seg button.on{background:var(--ink);color:#fff}
+.role p{font-size:13px;color:var(--ink-72);font-weight:600}
+.role p b{color:var(--ink);font-weight:800}
+
+/* record */
+.record{margin-top:16px;border:1.5px solid var(--ink);background:#fff;display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}
+.record > div{padding:12px 14px;border-right:1px solid var(--ink-16);border-bottom:1px solid var(--ink-16)}
+.record > div:nth-child(4n){border-right:0}
+.record > div:nth-last-child(-n+4){border-bottom:0}
+.record dt{font:800 10px/1.3 var(--mono);letter-spacing:.07em;text-transform:uppercase;color:var(--ink-56)}
+.record dd{margin-top:4px;font-weight:700;font-size:13.5px;line-height:1.4}
+.record dd small{display:block;font-weight:600;font-size:12px;color:var(--ink-56);margin-top:1px}
+.tier{display:inline-flex;align-items:center;gap:6px;padding:2px 7px;background:var(--ink);color:#fff;font:800 10.5px/1.4 var(--mono);letter-spacing:.06em}
+
+/* body */
+.body{display:grid;grid-template-columns:208px minmax(0,1fr) 312px;gap:22px;margin-top:22px;align-items:start}
+.fnav{position:sticky;top:16px;border:1.5px solid var(--ink);background:#fff}
+.fnav a{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid var(--ink-16);text-decoration:none;font-weight:700;font-size:13.5px}
+.fnav a:last-child{border-bottom:0}
+.fnav a.on{background:var(--ink);color:#fff}
+.fnav a span{font:700 11px/1 var(--mono);color:var(--ink-56)}
+.fnav a.on span{color:rgba(255,255,255,.7)}
+.fnav a em{font-style:normal;color:var(--orange);font-weight:800}
+
+.card{border:1.5px solid var(--ink);background:#fff}
+.card-h{padding:14px 16px;border-bottom:1.5px solid var(--ink)}
+.card-h h2{font:900 20px/1.15 Raleway;letter-spacing:-.02em}
+.card-h p{margin-top:4px;font-size:13px;color:var(--ink-72);font-weight:600}
+.scope{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:10px 16px;border-bottom:1.5px solid var(--ink);background:var(--paper)}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{height:28px;padding:0 10px;border:1.5px solid var(--ink);font:800 11px/1 var(--mono);letter-spacing:.04em;background:#fff}
+.chips button.on{background:var(--ink);color:#fff}
+.chips button i{font-style:normal;margin-left:6px;color:var(--ink-56)}
+.chips button.on i{color:rgba(255,255,255,.7)}
+.prog{display:flex;align-items:center;gap:10px;font:700 11px/1 var(--mono);color:var(--ink-56)}
+.bar{display:flex;width:180px;height:10px;border:1.5px solid var(--ink);overflow:hidden}
+.bar i{display:block;height:100%}
+.bar .a{background:var(--ink)}.bar .t{background:var(--orange)}.bar .r{background:repeating-linear-gradient(135deg,#fff 0 3px,var(--ink-32) 3px 4.5px)}
+
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{position:sticky;top:0;background:#fff;text-align:left;padding:9px 12px;font:800 10px/1.3 var(--mono);letter-spacing:.07em;text-transform:uppercase;color:var(--ink-56);border-bottom:1.5px solid var(--ink)}
+td{padding:11px 12px;border-bottom:1px solid var(--ink-16);vertical-align:top}
+tr.grp td{padding:8px 12px;background:var(--paper);font:800 11px/1.3 var(--mono);letter-spacing:.07em;text-transform:uppercase;border-bottom:1px solid var(--ink-16);border-top:1.5px solid var(--ink)}
+tr.grp:first-child td{border-top:0}
+tr.grp td span{color:var(--ink-56);margin-left:10px;letter-spacing:.04em;text-transform:none}
+td.cid{width:46px;font:800 12px/1.5 var(--mono);white-space:nowrap}
+td.ctl b{display:block;font-weight:800;font-size:13.5px;line-height:1.35}
+td.ctl .refs{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+.ref{padding:1px 5px;border:1px solid var(--ink-32);font:700 10px/1.5 var(--mono);color:var(--ink-72);white-space:nowrap}
+td.ev{width:270px}
+td.ev .src{display:block;margin-top:4px;font-size:12px;color:var(--ink-72);font-weight:600;line-height:1.4}
+td.ev .src .h{font:700 10.5px/1 var(--mono);color:var(--ink-56)}
+td.as{width:150px}
+td.as small{display:block;margin-top:4px;font-size:11.5px;color:var(--ink-56);font-weight:600;line-height:1.35}
+td.act{width:84px;text-align:right;white-space:nowrap}
+td.act button{font:800 12px/1 Raleway;text-decoration:underline;text-underline-offset:3px}
+tr.row:hover td{background:var(--orange-12)}
+tr.row.open td{background:var(--orange-12)}
+tr.detail td{padding:0;background:#fff;border-bottom:1.5px solid var(--ink)}
+tr[hidden]{display:none}
+
+.chip{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 7px;border:1.5px solid var(--ink);font:800 10px/1 var(--mono);letter-spacing:.05em;text-transform:uppercase;white-space:nowrap;background:#fff}
+.chip.m{background:var(--ink);color:#fff}
+.chip.att{background:repeating-linear-gradient(135deg,#fff 0 3px,var(--ink-32) 3px 4.5px)}
+.chip.att span{background:#fff;padding:0 3px}
+.chip.req{border-style:dashed;color:var(--ink)}
+.chip.miss{border-style:dashed;color:var(--orange);border-color:var(--orange)}
+.chip.na{border-color:var(--ink-32);color:var(--ink-56)}
+.chip.acc{background:var(--ink);color:#fff}
+.chip.todo{background:var(--orange)}
+.chip.find{background:#fff;border-width:2px;font-weight:900}
+.chip.cond{background:#fff;box-shadow:inset 0 0 0 1.5px #fff,inset 0 0 0 3.5px var(--ink)}
+
+/* detail */
+.det{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr)}
+.det > div{padding:14px 16px}
+.det > div:first-child{border-right:1.5px solid var(--ink)}
+.det h4{font:900 13px/1.3 Raleway;margin-bottom:10px}
+.evi{border:1.5px solid var(--ink);padding:10px 12px;margin-bottom:10px}
+.evi .t{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.evi .t b{font-size:13.5px;font-weight:800;line-height:1.3}
+.evi .meta{margin-top:4px;font:600 11.5px/1.5 var(--mono);color:var(--ink-56)}
+.mt{width:100%;margin-top:8px;font-size:12.5px}
+.mt th{position:static;padding:5px 10px 5px 0;border-bottom:1px solid var(--ink);font-size:9.5px;white-space:nowrap}
+.mt th:last-child,.mt td:last-child{padding-right:0;text-align:right}
+.mt td{padding:6px 10px 6px 0;border-bottom:1px solid var(--ink-16);font-family:var(--mono);font-weight:700;font-size:11.5px;white-space:nowrap}
+.mt td:first-child{font-family:Raleway;font-weight:700}
+.mt tr:last-child td{border-bottom:0}
+.lim{margin-top:8px;padding:8px 10px;background:var(--paper);border-left:3px solid var(--ink);font-size:12.5px;color:var(--ink-72);font-weight:600;line-height:1.5}
+.lim b{color:var(--ink)}
+.assess .opts{display:grid;gap:6px}
+.assess .opt{display:grid;grid-template-columns:18px 1fr;gap:10px;align-items:start;padding:9px 10px;border:1.5px solid var(--ink-32);cursor:pointer}
+.assess .opt.on{border-color:var(--ink);background:var(--paper)}
+.assess .opt i{width:16px;height:16px;margin-top:1px;border:2px solid var(--ink);background:#fff}
+.assess .opt.on i{background:var(--orange)}
+.assess .opt b{display:block;font-size:13px;font-weight:800}
+.assess .opt small{display:block;font-size:12px;color:var(--ink-56);font-weight:600;line-height:1.4}
+.assess textarea{width:100%;margin-top:10px;min-height:132px;padding:10px;border:1.5px solid var(--ink);resize:vertical;font-size:13px;line-height:1.5;background:#fff}
+.assess .foot{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap}
+.assess .foot small{font:600 11px/1.4 var(--mono);color:var(--ink-56)}
+.ro{display:none;padding:10px 12px;border:1.5px dashed var(--ink-32);font-size:12.5px;color:var(--ink-72);font-weight:600;line-height:1.5}
+body[data-role=developer] .assess .edit,body[data-role=auditor] .assess .edit{display:none}
+body[data-role=developer] .assess .ro,body[data-role=auditor] .assess .ro{display:block}
+body[data-role=developer] .vo,body[data-role=auditor] .vo{display:none!important}
+body[data-role=validator] .do,body[data-role=auditor] .do{display:none!important}
+
+/* right rail */
+.rail{display:grid;gap:16px;position:sticky;top:16px}
+.rail .card-h{padding:11px 14px}
+.rail .card-h h2{font-size:15px}
+.rail .card-h{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.kv{padding:10px 14px;display:grid;gap:8px}
+.kv div{display:grid;grid-template-columns:1fr auto;gap:10px;font-size:13px;font-weight:600;color:var(--ink-72)}
+.kv div b{color:var(--ink);font-weight:800;text-align:right}
+.kv div b.o{color:var(--orange)}
+.list{list-style:none}
+.list li{padding:10px 14px;border-bottom:1px solid var(--ink-16);font-size:13px}
+.list li:last-child{border-bottom:0}
+.list .l1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.list .l1 b{font-weight:800;line-height:1.35}
+.list .l2{margin-top:3px;font:600 11.5px/1.5 var(--mono);color:var(--ink-56)}
+.list .l2 .due{color:var(--ink)}
+.list .l2 .late{color:var(--orange);font-weight:800}
+.sev{flex:none;padding:1px 6px;border:1.5px solid var(--ink);font:800 10px/1.6 var(--mono);letter-spacing:.05em}
+.sev.h{background:var(--orange)}.sev.m{background:#fff}.sev.l{border-color:var(--ink-32);color:var(--ink-56)}
+.log li{display:grid;grid-template-columns:74px 1fr;gap:8px}
+.log time{font:700 10.5px/1.6 var(--mono);color:var(--ink-56)}
+.log p{font-size:12.5px;line-height:1.45;font-weight:600;color:var(--ink-72)}
+.log p b{color:var(--ink);font-weight:800}
+
+.foot{max-width:1440px;margin:0 auto;padding:0 28px 28px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font:700 11px/1.5 var(--mono);color:var(--ink-56)}
+
+@media (max-width:1240px){.body{grid-template-columns:184px minmax(0,1fr)}.rail{grid-column:1/-1;position:static;grid-template-columns:repeat(2,minmax(0,1fr))}.record{grid-template-columns:repeat(3,minmax(0,1fr))}.record>div:nth-child(4n){border-right:1px solid var(--ink-16)}.record>div:nth-child(3n){border-right:0}}
+@media (max-width:860px){
+  .nav,.org{display:none}.top-in{padding:0 16px}
+  main{padding:16px 16px 40px}
+  h1{font-size:26px}
+  .body{grid-template-columns:minmax(0,1fr)}
+  .fnav{position:static;display:flex;overflow-x:auto}.fnav a{border-bottom:0;border-right:1px solid var(--ink-16);white-space:nowrap;gap:8px}
+  .rail{grid-template-columns:minmax(0,1fr)}
+  .record{grid-template-columns:repeat(2,minmax(0,1fr))}.record>div{border-right:1px solid var(--ink-16)}.record>div:nth-child(2n){border-right:0}
+  .tbl{overflow-x:auto}table{min-width:820px}
+  .det{grid-template-columns:minmax(0,1fr)}.det>div:first-child{border-right:0;border-bottom:1.5px solid var(--ink)}
+  .foot{padding:0 16px 24px}
+}
+</style>
+</head>
+<body data-role="validator">
+<header class="top"><div class="top-in">
+  <span class="brand"><img src="../v4/logo.png" alt="">FAIRMIND</span>
+  <nav class="nav" aria-label="Primary">
+    <a href="#">My queue <span class="count">5</span></a>
+    <a class="on" href="#" aria-current="page">Registry</a>
+    <a href="#">Reviews</a><a href="#">Findings</a><a href="#">Frameworks</a><a href="#">Reports</a>
+  </nav>
+  <div class="top-r"><span class="org">Retail Bank</span><span class="me" title="R. Pillai, Model Risk">RP</span></div>
+</div></header>
+
+<main>
+  <div class="crumb"><a href="#">Registry</a><span>/</span><a href="#">Retail credit</a><span>/</span><span>SYS-0142</span></div>
+  <div class="fh">
+    <div>
+      <h1>Loan scoring <span class="id">SYS-0142</span></h1>
+      <p class="status-line"><b>Version 4.2.0 in validation</b> for the Model Risk Committee of 18 June 2027. <b>Version 4.1.3 in production</b> under two conditions, approved 4 April 2027, valid to 4 April 2028.</p>
+    </div>
+    <div class="actions">
+      <button class="btn vo">Request evidence</button>
+      <button class="btn vo">Raise finding</button>
+      <button class="btn do">Submit evidence</button>
+      <button class="btn primary vo">Generate committee pack</button>
+      <button class="btn">Export file <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6l4 4 4-4"/></svg></button>
+    </div>
+  </div>
+
+  <div class="role">
+    <span class="label">View as</span>
+    <span class="seg" id="roleSeg"><button class="on" data-role="validator">Validator</button><button data-role="developer">Developer</button><button data-role="auditor">Auditor</button></span>
+    <p id="roleNote"></p>
+  </div>
+
+  <dl class="record">
+    <div><dt>Business owner</dt><dd>V. Krishnan<small>Head of Retail Credit</small></dd></div>
+    <div><dt>Developer, first line</dt><dd>A. Rao<small>Retail ML</small></dd></div>
+    <div><dt>Validator, second line</dt><dd>R. Pillai<small>Model Risk, assigned 12 May 2027</small></dd></div>
+    <div><dt>Risk tier</dt><dd><span class="tier">HIGH</span><small>Credit decision on individuals · EU AI Act Annex III 5(b) · FREE-AI high impact</small></dd></div>
+    <div><dt>Intended use</dt><dd>Approve, decline or refer unsecured personal loan applications<small>Not approved for credit limit changes or collections</small></dd></div>
+    <div><dt>Decision volume</dt><dd>About 12,000 applications a day<small>Fully automated below INR 3 lakh; referred above</small></dd></div>
+    <div><dt>Frameworks applied</dt><dd>MRM-POL-07 · RBI FREE-AI · DPDP Act<small>EU AI Act Annex III, for the NRI book</small></dd></div>
+    <div><dt>Change under review</dt><dd>CR-2271: retrain to Mar 2027, new feature UPI velocity<small>Material change: full fairness re-review, MRM-POL-07 §4.3</small></dd></div>
+    <div><dt>Data</dt><dd>1.9M applications, Jan 2024 to Mar 2027<small>Core banking, CIBIL bureau · consent: loan terms v7, DPDP s.6</small></dd></div>
+    <div><dt>Components</dt><dd>Scorecard and GBM, in-house<small>No external model vendor</small></dd></div>
+    <div><dt>Last approval</dt><dd>MRC, 4 April 2027, with 2 conditions<small>Minutes MRC-2027-04 §3.2</small></dd></div>
+    <div><dt>Next revalidation</dt><dd>4 April 2028<small>or on any material change</small></dd></div>
+  </dl>
+
+  <div class="body">
+    <nav class="fnav" aria-label="File sections">
+      <a href="#">Overview</a>
+      <a class="on" href="#">Controls <span>31</span></a>
+      <a href="#">Evidence <span>47</span></a>
+      <a href="#">Findings <span><em>2</em> open</span></a>
+      <a href="#">Approvals and conditions <span>2</span></a>
+      <a href="#">Monitoring <span>4.1.3</span></a>
+      <a href="#">Changes <span>CR-2271</span></a>
+      <a href="#">History <span>212</span></a>
+    </nav>
+
+    <section class="card">
+      <div class="card-h">
+        <h2>Validation scope: 31 controls for tier High</h2>
+        <p>Set by MRM-POL-07 Annex A on 12 May 2027 by R. Pillai. Evidence is bound by the pipeline or uploaded by the first line; assessment is the validator's alone. Changes to scope are logged.</p>
+      </div>
+      <div class="scope">
+        <div class="chips" id="filters">
+          <button class="on" data-f="all">All<i>31</i></button>
+          <button data-f="todo">To assess<i>6</i></button>
+          <button data-f="req">Awaiting evidence<i>3</i></button>
+          <button data-f="find">With findings<i>2</i></button>
+          <button data-f="acc">Accepted<i>19</i></button>
+          <button data-f="na">Not applicable<i>1</i></button>
+        </div>
+        <div class="prog"><span class="bar"><i class="a" style="width:61%"></i><i class="t" style="width:19%"></i><i class="r" style="width:10%"></i></span>19 accepted · 6 to assess · 3 awaiting · 2 findings · 1 n/a</div>
+      </div>
+      <div class="tbl"><table>
+        <thead><tr><th>ID</th><th>Control and references</th><th>Evidence on file</th><th>Validator's assessment</th><th></th></tr></thead>
+        <tbody id="rows">
+          <tr class="grp"><td colspan="5">A · Governance and accountability <span>4 controls</span></td></tr>
+          <tr class="row" data-s="acc"><td class="cid">A1</td><td class="ctl"><b>Inventory record complete and business owner confirmed</b><div class="refs"><span class="ref">MRM-POL-07 §2.1</span><span class="ref">FREE-AI: AI inventory</span></div></td><td class="ev"><span class="chip m">System</span><span class="src">Registry record SYS-0142, confirmed by V. Krishnan, 14 May</span></td><td class="as"><span class="chip acc">Accepted</span><small>R. Pillai, 15 May</small></td><td class="act"><button>Open</button></td></tr>
+          <tr class="row" data-s="acc"><td class="cid">A2</td><td class="ctl"><b>Risk tier assigned by questionnaire and approved</b><div class="refs"><span class="ref">MRM-POL-07 §2.3</span><span class="ref">EU AI Act Art. 6</span></div></td><td class="ev"><span class="chip m">Document</span><span class="src">Tiering questionnaire TQ-0142 v2, approved by Head of Model Risk, 12 May <span class="h">· 3e9a1c</span></span></td><td class="as"><span class="chip acc">Accepted</span><small>R. Pillai, 15 May</small></td><td class="act"><button>Open</button></td></tr>
+          <tr class="row" data-s="acc"><td class="cid">A3</td><td class="ctl"><b>Intended use, exclusions and known limitations documented</b><div class="refs"><span class="ref">MRM-POL-07 §3.1</span><span class="ref">EU AI Act Art. 11</span></div></td><td class="ev"><span class="chip m">Document</span><span class="src">Model documentation 4.2.0 §1, A. Rao, 28 May <span class="h">· 77b2d0</span></span></td><td class="as"><span class="chip acc">Accepted</span><small>R. Pillai, 29 May</small></td><td class="act"><button>Open</button></td></tr>
+          <tr class="row" data-s="find"><td class="cid">A4</td><td class="ctl"><b>Human oversight: a named role can review and override an automated decline within one working day</b><div class="refs"><span class="ref">EU AI Act Art. 14</span><span class="ref">FREE-AI: accountability</span><span class="ref">RBI Fair Practices Code</span></div></td><td class="ev"><span class="chip miss">Missing</span><span class="src">No oversight procedure or named role on file for 4.2.0; 4.1.3 relied on branch managers, withdrawn in CR-2271</span></td><td class="as"><span class="chip find">Finding F-24</span><small>Medium · V. Krishnan · due 10 Jun</small></td><td class="act"><button>Open</button></td></tr>
+
+          <tr class="grp"><td colspan="5">B · Data <span>4 controls</span></td></tr>
+          <tr class="row" data-s="acc"><td class="cid">B1</td><td class="ctl"><b>Data lineage recorded and lawful basis for each source</b><div class="refs"><span class="ref">DPDP s.6, s.7</span><span class="ref">EU AI Act Art. 10</span></div></td><td class="ev"><span class="chip m">Measured</span><span class="src">Lineage export from data catalogue, 27 May; consent terms v7 mapped to 3 sources <span class="h">· 4be27d</span></span></td><td class="as"><span class="chip acc">Accepted</span><small>R. Pillai, 29 May</small></td><td class="act"><button>Open</button></td></tr>
+          <tr class="row" data-s="req"><td class="cid">B2</td><td class="ctl"><b>Protected attributes and their proxies identified, with the grouping used for testing</b><div class="refs"><span class="ref">MRM-POL-07 Annex B</span><span class="ref">FREE-AI: fairness</span></div></td><td class="ev"><span class="chip req">Requested</span><span class="src">REQ-311 to A. Rao, 30 May, due 6 Jun: confirm the five age bands and the region grouping; developer statement of 28 May does not state them</span></td><td class="as"><span class="chip todo">To assess</span><small>Held for REQ-311</small></td><td class="act"><button>Open</button></td></tr>
+          <tr class="row" data-s="acc"><td class="cid">B3</td><td class="ctl"><b>Data quality checks pass on the training and holdout sets</b><div class="refs"><span class="ref">MRM-POL-07 §3.4</span></div></td><td class="ev"><span class="chip m">Measured</span><span class="src">Great Expectations suite in CI, 29 May, 214 of 214 expectations met <span class="h">· 0c5a19</span></span></td><td class="as"><span class="chip acc">Accepted</span><small>R. Pillai, 30 May</small></td><td class="act"><button>Open</button></td></tr>
+          <tr class="row" data-s="todo"><td class="cid">B4</td><td class="ctl"><b>Training population is representative of the applicant population</b><div class="refs"><span class="ref">EU AI Act Art. 10(3)</span></div></td><td class="ev"><span class="chip m">Measured</span><span class="src">Representativeness notebook, A. Rao, 31 May; compares to 2026 applicant mix by state, age band, gender <span class="h">· 9c41e8</span></span></td><td class="as"><span class="chip todo">To assess</span></td><td class="act"><button>Open</button></td></tr>
+
+          <tr class="grp"><td colspan="5">C · Development and performance <span>5 controls</span></td></tr>
+          <tr class="row" data-s="acc"><td class="cid">C1</td><td class="ctl"><b>Methodology, features and training procedure documented</b><div class="refs"><span class="ref">MRM-POL-07 §3.2</span><span class="ref">EU AI Act Annex IV</span></div></td><td class="ev"><span class="chip m">Document</span><span class="src">Model documentation 4.2.0 §3 to §5 <span class="h">· 77b2d0</span></span></td><td class="as"><span class="chip acc">Accepted</span><small>R. Pillai, 29 May</small></td><td class="act"><button>Open</button></td></tr>
+          <tr class="row" data-s="acc"><td class="cid">C2</td><td class="ctl"><b>Discriminatory power on holdout meets the floor (Gini at least 0.55)</b><div class="refs"><span class="ref">MRM-POL-07 Annex B</span></div></td><td class="ev"><span class="chip m">Measured</span><span class="src">Run R-2027-0412, 3 Jun: Gini 0.61, KS 0.47 on 48,210 applications <span class="h">· a91f0c</span></span></td><td class="as"><span class="chip acc">Accepted</span><small>R. Pillai, 3 Jun</small></td><td class="act"><button>Open</button></td></tr>
+          <tr class="row" data-s="acc"><td class="cid">C3</td><td class="ctl"><b>Population stability within limit (PSI at most 0.10)</b><div class="refs"><span class="ref">MRM-POL-07 Annex B</span></div></td><td class="ev"><span class="chip m">Measured</span><span class="src">Run R-2027-0412: PSI 0.07 against Q1 2027 applicants <span class="h">· a91f0c</span></span></td><td class="as"><span class="chip acc">Accepted</span><small>R. Pillai, 3 Jun</small></td><td class="act"><button>Open</button></td></tr>
+          <tr class="row" data-s="acc"><td class="cid">C4</td><td class="ctl"><b>Calibration by score band and segment</b><div class="refs"><span class="ref">MRM-POL-07 Annex B</span></div></td><td class="ev"><span class="chip m">Measured</span><span class="src">Run R-2027-0412: expected calibration error 0.012 <span class="h">· a91f0c</span></span></td><td class="as"><span class="chip acc">Accepted</span><small>R. Pillai, 3 Jun</small></td><td class="act"><button>Open</button></td></tr>
+          <tr class="row" data-s="req"><td class="cid">C5</td><td class="ctl"><b>Benchmark against the champion in production (4.1.3) on the same holdout</b><div class="refs"><span class="ref">MRM-POL-07 §3.6</span></div></td><td class="ev"><span class="chip req">Requested</span><span class="src">REQ-314 to A. Rao, 2 Jun, due 9 Jun: champion scored on R-2027-0412 holdout</span></td><td class="as"><span class="chip todo">To assess</span><small>Held for REQ-314</small></td><td class="act"><button>Open</button></td></tr>
+
+          <tr class="grp"><td colspan="5">D · Fairness <span>5 controls</span></td></tr>
+          <tr class="row open" data-s="todo" id="d1"><td class="cid">D1</td><td class="ctl"><b>Disparate impact ratio by protected attribute at or above 0.80</b><div class="refs"><span class="ref">MRM-POL-07 Annex B</span><span class="ref">FREE-AI: fairness</span><span class="ref">EU AI Act Art. 10(2)(f)</span></div></td><td class="ev"><span class="chip m">Measured</span><span class="src">Fairlearn in CI, run R-2027-0412, 3 Jun: gender 0.93, age 0.86, region 0.88 <span class="h">· a91f0c</span></span></td><td class="as"><span class="chip todo">To assess</span><small>Draft saved 3 Jun 10:02</small></td><td class="act"><button>Close</button></td></tr>
+          <tr class="detail"><td colspan="5">
+            <div class="det">
+              <div>
+                <h4>Evidence bound to D1</h4>
+                <div class="evi">
+                  <div class="t"><b>Fairlearn MetricFrame, disparate impact ratio</b><span class="chip m">Measured</span></div>
+                  <div class="meta">Run R-2027-0412 · 3 Jun 2027 09:12 · GitHub Actions, retail-ml/loan-scoring@a91f0c · submitted by pipeline · sha256 a91f0c…e2b7</div>
+                  <table class="mt"><thead><tr><th>Attribute</th><th>Groups</th><th>Ratio</th><th>95% interval</th><th>Floor</th></tr></thead><tbody>
+                    <tr><td>Gender</td><td>female vs male</td><td>0.93</td><td>0.90 to 0.96</td><td>0.80</td></tr>
+                    <tr><td>Age</td><td>60+ vs 30 to 45</td><td>0.86</td><td>0.82 to 0.90</td><td>0.80</td></tr>
+                    <tr><td>Region</td><td>lowest vs highest</td><td>0.88</td><td>0.83 to 0.93</td><td>0.80</td></tr>
+                  </tbody></table>
+                  <div class="lim"><b>Limitations recorded with the result:</b> holdout of 48,210 applications, January to March 2027. Age is inferred from date of birth into five bands. Region is the state of the registered address. Floors were fixed in MRM-POL-07 Annex B before the run.</div>
+                </div>
+                <div class="evi">
+                  <div class="t"><b>Developer note on grouping</b><span class="chip att"><span>Attested</span></span></div>
+                  <div class="meta">A. Rao · 3 Jun 2027 09:40 · text</div>
+                  <p style="margin-top:6px;font-size:13px;color:var(--ink-72);font-weight:600;line-height:1.5">Age bands follow the KYC bands used in the application form. The mapping file is attached to REQ-311 on B2 for the validator's confirmation.</p>
+                </div>
+              </div>
+              <div class="assess">
+                <h4>Your assessment</h4>
+                <div class="edit">
+                  <div class="opts">
+                    <label class="opt"><i></i><div><b>Accept</b><small>Evidence meets the control as written.</small></div></label>
+                    <label class="opt on"><i></i><div><b>Accept with condition</b><small>Meets the control, provided a stated condition holds; the condition goes to the committee.</small></div></label>
+                    <label class="opt"><i></i><div><b>Raise finding</b><small>Does not meet the control. Opens a finding with severity, owner and due date.</small></div></label>
+                    <label class="opt"><i></i><div><b>Request more evidence</b><small>Cannot assess yet. Opens a request to the first line with a due date.</small></div></label>
+                  </div>
+                  <textarea>Measured and within the 0.80 floor for gender, age and region, with intervals that stay above the floor. Reliance on the age result is conditional on the five-band mapping being confirmed under REQ-311 (B2); if the bands change, D1 is to be re-run on the same holdout before the pack is issued.</textarea>
+                  <div class="foot"><small>Saved as draft 3 Jun 10:02. Final on save; edits after that are versioned.</small><button class="btn primary">Save assessment</button></div>
+                </div>
+                <div class="ro" id="roNote"></div>
+              </div>
+            </div>
+          </td></tr>
+          <tr class="row" data-s="find"><td class="cid">D2</td><td class="ctl"><b>Equal-opportunity gap by protected attribute at most 0.05</b><div class="refs"><span class="ref">MRM-POL-07 Annex B</span><span class="ref">FREE-AI: fairness</span></div></td><td class="ev"><span class="chip m">Measured</span><span class="src">Run R-2027-0412: gender 0.031 (0.012 to 0.050). <b>Age not run</b>: the test waits on the band mapping in REQ-311 <span class="h">· a91f0c</span></span></td><td class="as"><span class="chip find">Finding F-23</span><small>High · A. Rao · due 10 Jun</small></td><td class="act"><button>Open</button></td></tr>
+          <tr class="row" data-s="acc"><td class="cid">D3</td><td class="ctl"><b>Calibration error by protected group at most 0.03</b><div class="refs"><span class="ref">MRM-POL-07 Annex B</span></div></td><td class="ev"><span class="chip m">Measured</span><span class="src">Run R-2027-0412: gender 0.012, age 0.018 <span class="h">· a91f0c</span></span></td><td class="as"><span class="chip acc">Accepted</span><small>R. Pillai, 3 Jun</small></td><td class="act"><button>Open</button></td></tr>
+          <tr class="row" data-s="todo"><td class="cid">D4</td><td class="ctl"><b>Proxy features for protected attributes reviewed; UPI velocity assessed as a proxy for income and region</b><div class="refs"><span class="ref">MRM-POL-07 Annex B</span><span class="ref">CR-2271</span></div></td><td class="ev"><span class="chip m">Measured</span><span class="src">Correlation and SHAP analysis for UPI velocity, A. Rao, 1 Jun <span class="h">· 2f8d61</span></span></td><td class="as"><span class="chip todo">To assess</span></td><td class="act"><button>Open</button></td></tr>
+          <tr class="row" data-s="na"><td class="cid">D5</td><td class="ctl"><b>Remediation evidence where a fairness floor was breached</b><div class="refs"><span class="ref">MRM-POL-07 Annex B</span></div></td><td class="ev"><span class="chip na">Not applicable</span><span class="src">No floor breached in D1 or D3; D2 for age pending</span></td><td class="as"><span class="chip na">N/A, justified</span><small>R. Pillai, 3 Jun</small></td><td class="act"><button>Open</button></td></tr>
+
+          <tr class="grp"><td colspan="5">E · Transparency and explainability <span>3 controls</span></td></tr>
+          <tr class="row" data-s="acc"><td class="cid">E1</td><td class="ctl"><b>Specific reason codes given for every adverse decision</b><div class="refs"><span class="ref">RBI Fair Practices Code</span><span class="ref">EU AI Act Art. 13</span></div></td><td class="ev"><span class="chip m">Document</span><span class="src">Reason code specification v3 and 20 sample letters, 26 May <span class="h">· 7c22f1</span></span></td><td class="as"><span class="chip acc">Accepted</span><small>R. Pillai, 30 May · F-19 closed 2 Apr</small></td><td class="act"><button>Open</button></td></tr>
+          <tr class="row" data-s="acc"><td class="cid">E2</td><td class="ctl"><b>Global explanation of model behaviour in documentation</b><div class="refs"><span class="ref">FREE-AI: understandable by design</span></div></td><td class="ev"><span class="chip m">Document</span><span class="src">Model documentation 4.2.0 §6, global SHAP and partial dependence <span class="h">· 77b2d0</span></span></td><td class="as"><span class="chip acc">Accepted</span><small>R. Pillai, 29 May</small></td><td class="act"><button>Open</button></td></tr>
+          <tr class="row" data-s="acc"><td class="cid">E3</td><td class="ctl"><b>Applicants told that the decision is automated and how to contest it</b><div class="refs"><span class="ref">DPDP s.5</span><span class="ref">EU AI Act Art. 26(11)</span></div></td><td class="ev"><span class="chip m">Document</span><span class="src">Loan terms v7 §9 and application screen copy, Legal sign-off 20 May</span></td><td class="as"><span class="chip acc">Accepted</span><small>R. Pillai, 29 May</small></td><td class="act"><button>Open</button></td></tr>
+
+          <tr class="grp"><td colspan="5">F · Robustness and security <span>3 controls</span></td></tr>
+          <tr class="row" data-s="todo"><td class="cid">F1</td><td class="ctl"><b>Sensitivity and stress testing across input ranges and macro scenarios</b><div class="refs"><span class="ref">MRM-POL-07 §3.7</span><span class="ref">EU AI Act Art. 15</span></div></td><td class="ev"><span class="chip att"><span>Attested</span></span><span class="src">Team statement with summary tables, no raw outputs, A. Rao, 30 May</span></td><td class="as"><span class="chip todo">To assess</span></td><td class="act"><button>Open</button></td></tr>
+          <tr class="row" data-s="acc"><td class="cid">F2</td><td class="ctl"><b>Input validation and out-of-range handling tested</b><div class="refs"><span class="ref">MRM-POL-07 §3.7</span></div></td><td class="ev"><span class="chip m">Measured</span><span class="src">CI test suite, 29 May, 88 of 88 passed <span class="h">· 0c5a19</span></span></td><td class="as"><span class="chip acc">Accepted</span><small>R. Pillai, 30 May</small></td><td class="act"><button>Open</button></td></tr>
+          <tr class="row" data-s="acc"><td class="cid">F3</td><td class="ctl"><b>Model artifact scanned for unsafe serialisation</b><div class="refs"><span class="ref">Security standard SEC-ML-02</span></div></td><td class="ev"><span class="chip m">Measured</span><span class="src">ModelScan in CI, 29 May, no issues <span class="h">· 0c5a19</span></span></td><td class="as"><span class="chip acc">Accepted</span><small>R. Pillai, 30 May</small></td><td class="act"><button>Open</button></td></tr>
+
+          <tr class="grp"><td colspan="5">G · Implementation <span>3 controls</span></td></tr>
+          <tr class="row" data-s="acc"><td class="cid">G1</td><td class="ctl"><b>Deployed artifact pinned and reproducible from the recorded run</b><div class="refs"><span class="ref">MRM-POL-07 §5.1</span><span class="ref">EU AI Act Art. 12</span></div></td><td class="ev"><span class="chip m">Measured</span><span class="src">MLflow run 3c0f, artifact sha256 matches registry entry <span class="h">· 3c0f9a</span></span></td><td class="as"><span class="chip acc">Accepted</span><small>R. Pillai, 3 Jun</small></td><td class="act"><button>Open</button></td></tr>
+          <tr class="row" data-s="req"><td class="cid">G2</td><td class="ctl"><b>User acceptance sign-off by the business owner</b><div class="refs"><span class="ref">MRM-POL-07 §5.2</span></div></td><td class="ev"><span class="chip req">Requested</span><span class="src">REQ-315 to Retail Credit Operations, 2 Jun, due 10 Jun</span></td><td class="as"><span class="chip todo">To assess</span><small>Held for REQ-315</small></td><td class="act"><button>Open</button></td></tr>
+          <tr class="row" data-s="acc"><td class="cid">G3</td><td class="ctl"><b>Rollback to 4.1.3 documented and rehearsed</b><div class="refs"><span class="ref">MRM-POL-07 §5.3</span></div></td><td class="ev"><span class="chip m">Document</span><span class="src">Runbook v2, rehearsal log 24 May</span></td><td class="as"><span class="chip acc">Accepted</span><small>R. Pillai, 30 May</small></td><td class="act"><button>Open</button></td></tr>
+
+          <tr class="grp"><td colspan="5">H · Monitoring <span>3 controls</span></td></tr>
+          <tr class="row" data-s="todo"><td class="cid">H1</td><td class="ctl"><b>Monitoring plan with thresholds, owners and escalation</b><div class="refs"><span class="ref">MRM-POL-07 §6.1</span><span class="ref">EU AI Act Art. 72</span></div></td><td class="ev"><span class="chip m">Document</span><span class="src">Monitoring plan 4.2.0, draft, A. Rao, 1 Jun</span></td><td class="as"><span class="chip todo">To assess</span></td><td class="act"><button>Open</button></td></tr>
+          <tr class="row" data-s="todo"><td class="cid">H2</td><td class="ctl"><b>Drift and fairness alerts configured before go-live</b><div class="refs"><span class="ref">MRM-POL-07 §6.2</span></div></td><td class="ev"><span class="chip req">Pre-deployment</span><span class="src">Alert rules defined in the plan; configuration evidence due at deployment</span></td><td class="as"><span class="chip todo">To assess</span><small>Likely condition</small></td><td class="act"><button>Open</button></td></tr>
+          <tr class="row" data-s="acc"><td class="cid">H3</td><td class="ctl"><b>Periodic fairness re-test scheduled</b><div class="refs"><span class="ref">MRC condition C1, 4 Apr 2027</span></div></td><td class="ev"><span class="chip m">Measured</span><span class="src">Weekly job in CI; last run 1 Jun on 4.1.3, age ratio 0.84 <span class="h">· 5d17aa</span></span></td><td class="as"><span class="chip acc">Accepted</span><small>R. Pillai, 3 Jun</small></td><td class="act"><button>Open</button></td></tr>
+
+          <tr class="grp"><td colspan="5">I · Sustainability <span>1 control</span></td></tr>
+          <tr class="row" data-s="acc"><td class="cid">I1</td><td class="ctl"><b>Energy per million decisions measured, not estimated</b><div class="refs"><span class="ref">FREE-AI: sustainability</span><span class="ref">Group ESG standard</span></div></td><td class="ev"><span class="chip m">Measured</span><span class="src">FairMind-E assessment v3, inference boundary, 41 kWh ±8% per million <span class="h">· e11c40</span></span></td><td class="as"><span class="chip acc">Accepted</span><small>R. Pillai, 30 May</small></td><td class="act"><button>Open</button></td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <aside class="rail">
+      <section class="card">
+        <div class="card-h"><h2>This validation</h2><span class="label">4.2.0</span></div>
+        <div class="kv">
+          <div><span>Started</span><b>12 May 2027</b></div>
+          <div><span>Committee</span><b>MRC, 18 Jun 2027</b></div>
+          <div><span>Pack due</span><b class="o">11 Jun, 6 working days</b></div>
+          <div><span>Controls accepted</span><b>19 of 31</b></div>
+          <div><span>Open requests</span><b>3</b></div>
+          <div><span>Open findings</span><b>2, one High</b></div>
+        </div>
+      </section>
+      <section class="card">
+        <div class="card-h"><h2>Requests to first line</h2><span class="label">3 open</span></div>
+        <ul class="list">
+          <li><div class="l1"><b>REQ-311 · B2 Age bands and region grouping</b></div><div class="l2">A. Rao · <span class="due">due 6 Jun</span> · opened 30 May</div></li>
+          <li><div class="l1"><b>REQ-314 · C5 Champion scored on the holdout</b></div><div class="l2">A. Rao · <span class="due">due 9 Jun</span> · opened 2 Jun</div></li>
+          <li><div class="l1"><b>REQ-315 · G2 UAT sign-off</b></div><div class="l2">Retail Credit Operations · <span class="due">due 10 Jun</span> · opened 2 Jun</div></li>
+        </ul>
+      </section>
+      <section class="card">
+        <div class="card-h"><h2>Findings</h2><span class="label">2 open · 1 closed</span></div>
+        <ul class="list">
+          <li><div class="l1"><b>F-23 · Equal-opportunity test for age not run (D2)</b><span class="sev h">HIGH</span></div><div class="l2">A. Rao · <span class="due">due 10 Jun</span> · retest required</div></li>
+          <li><div class="l1"><b>F-24 · No named human reviewer for declines (A4)</b><span class="sev m">MED</span></div><div class="l2">V. Krishnan · <span class="due">due 10 Jun</span></div></li>
+          <li><div class="l1"><b>F-19 · Reason codes incomplete (E1)</b><span class="sev l">LOW</span></div><div class="l2">Closed 2 Apr 2027 · retest passed</div></li>
+        </ul>
+      </section>
+      <section class="card">
+        <div class="card-h"><h2>Conditions in force</h2><span class="label">4.1.3</span></div>
+        <ul class="list">
+          <li><div class="l1"><b>C1 · Weekly disparate-impact re-test by age</b><span class="chip cond">Met</span></div><div class="l2">Last run 1 Jun, ratio 0.84 · H3</div></li>
+          <li><div class="l1"><b>C2 · Full revalidation on any retrain</b><span class="chip cond">Triggered</span></div><div class="l2">CR-2271 opened this validation</div></li>
+        </ul>
+      </section>
+      <section class="card">
+        <div class="card-h"><h2>History</h2><a href="#" style="font:800 12px/1 Raleway">All 212</a></div>
+        <ul class="list log">
+          <li><time>3 Jun 10:02</time><p><b>R. Pillai</b> saved a draft assessment on D1</p></li>
+          <li><time>3 Jun 09:40</time><p><b>A. Rao</b> added a note on D1 grouping</p></li>
+          <li><time>3 Jun 09:12</time><p><b>Pipeline</b> bound run R-2027-0412 to C2, C3, C4, D1, D2, D3</p></li>
+          <li><time>2 Jun 17:48</time><p><b>R. Pillai</b> opened REQ-314 and REQ-315</p></li>
+          <li><time>2 Jun 11:05</time><p><b>R. Pillai</b> raised F-24 on A4, Medium, owner V. Krishnan</p></li>
+          <li><time>1 Jun 09:30</time><p><b>Pipeline</b> bound weekly re-test 5d17aa to H3</p></li>
+        </ul>
+      </section>
+    </aside>
+  </div>
+</main>
+<footer class="foot"><span>Illustrative data for design review. Control set, references and thresholds are examples, not legal advice.</span><span>FairMind · SYS-0142 · file version 212</span></footer>
+
+<script>
+const NOTES = {
+  validator: `You are <b>R. Pillai, second line</b>. You can assess controls, request evidence and raise findings. You cannot submit evidence for this system or approve it: approval is recorded by the Model Risk Committee.`,
+  developer: `You are <b>A. Rao, first line</b>. You can submit evidence and answer requests; the pipeline binds test results for you. You cannot assess controls or close findings. This file shows you what your submission is missing: <b>3 requests, 2 findings</b>.`,
+  auditor: `You are <b>Internal Audit, third line</b>, read only. You see every version of every assessment, who made it and when. Export produces the file with hashes for the audit working papers.`,
+};
+const RO = {
+  developer: `Assessment is the validator's. Your side of D1: the result is bound and measured; it is held only until REQ-311 on B2 is answered. Answer the request and this control clears without further action from you.`,
+  auditor: `Assessment by R. Pillai, draft of 3 Jun 2027 10:02, not yet final. Earlier versions: none. Evidence hashes verified against the pipeline record at export time.`,
+};
+const seg = document.getElementById("roleSeg");
+function setRole(r) {
+  document.body.dataset.role = r;
+  [...seg.children].forEach(b => b.classList.toggle("on", b.dataset.role === r));
+  document.getElementById("roleNote").innerHTML = NOTES[r];
+  document.getElementById("roNote").innerHTML = RO[r] || "";
+}
+seg.addEventListener("click", e => { const b = e.target.closest("button"); if (b) setRole(b.dataset.role); });
+setRole("validator");
+
+const filters = document.getElementById("filters"), rows = [...document.querySelectorAll("#rows tr")];
+filters.addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  [...filters.children].forEach(x => x.classList.toggle("on", x === b));
+  const f = b.dataset.f;
+  let lastGrp = null, grpHasRows = false;
+  rows.forEach(tr => {
+    if (tr.classList.contains("grp")) { if (lastGrp) lastGrp.hidden = !grpHasRows; lastGrp = tr; grpHasRows = false; return; }
+    if (tr.classList.contains("detail")) { tr.hidden = tr.previousElementSibling.hidden || !tr.previousElementSibling.classList.contains("open"); return; }
+    const show = f === "all" || tr.dataset.s === f; tr.hidden = !show; if (show) grpHasRows = true;
+  });
+  if (lastGrp) lastGrp.hidden = !grpHasRows;
+});
+document.getElementById("rows").addEventListener("click", e => {
+  const b = e.target.closest("td.act button"); if (!b) return;
+  const tr = b.closest("tr"), det = tr.nextElementSibling;
+  if (!det || !det.classList.contains("detail")) return;
+  const open = tr.classList.toggle("open"); det.hidden = !open; b.textContent = open ? "Close" : "Open";
+});
+document.querySelectorAll(".assess .opt").forEach(o => o.addEventListener("click", () => { o.parentNode.querySelectorAll(".opt").forEach(x => x.classList.remove("on")); o.classList.add("on"); }));
+</script>
+</body>
+</html>

@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FairMind · Systems</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="fm.css">
+</head>
+<body data-page="systems">
+<div class="app">
+<nav class="rail" aria-label="Main"></nav>
+<main>
+  <header class="top">
+    <div>
+      <h1>Systems <span class="mono">7 registered · 6 gated · 1 held</span></h1>
+      <p class="sub">Every AI system that makes or shapes a decision about a person, and whether it may ship today.</p>
+    </div>
+    <span class="find">Search, or ask FairMind <kbd>⌘K</kbd></span>
+  </header>
+
+  <nav class="tabs" aria-label="Filter">
+    <a href="#" aria-current="page">All<span class="c">7</span></a><a href="#">Can ship<span class="c">3</span></a><a href="#">Need you<span class="c">2</span></a><a href="#">Held<span class="c">1</span></a><a href="#">In scope for Annex III<span class="c">4</span></a>
+  </nav>
+
+  <div class="grid">
+    <section>
+      <figure class="fig" style="margin:0">
+        <span class="c c1">Fig. 3</span><span class="c c2">The gate rack</span>
+        <svg id="rack" role="img" aria-label="Gate rack with seven lanes, one per system. Three gates lifted with all pins seated. Loan scoring v4 and Collections voice bot v1 have cobalt lamps waiting. Resume screener v2 has a violet held pin. Support summariser has no gate."></svg>
+        <span class="c c3">One lane per system, back to front as listed</span><span class="c c4">3 lifted · 3 lamps · 1 held · 1 ungated</span>
+      </figure>
+    </section>
+    <section>
+      <h2 class="h2">Loan scoring v4 <span>SYS-0007</span></h2>
+      <div class="box co" style="margin-top:14px">
+        <h3><span class="need">Conditional go</span> <span class="mono">conf 0.58</span></h3>
+        <p>Seven of nine pins can seat today. Two wait for you: the age-band mapping and a named reviewer for declines.</p>
+        <div class="do"><a class="go" href="system-overview.html">Open the gate</a><a class="tl" href="needs-you.html">What it needs</a></div>
+      </div>
+      <div class="kv" style="margin-top:10px"><span>Use</span><span>Retail loan approval, India</span></div>
+      <div class="kv"><span>Frameworks</span><span class="mono">Annex III 5(b) · FREE-AI · DPDP</span></div>
+      <div class="kv"><span>Owner</span><span>Model Risk · Meera Iyer</span></div>
+      <div class="kv"><span>Source</span><span class="mono">mlflow://credit/loan-scoring/4</span></div>
+      <div class="kv"><span>Last evidence</span><span><span class="mono">10:12</span> fairness suite <span class="mono ok">R-2027-0412</span></span></div>
+    </section>
+  </div>
+
+  <div class="sys" style="margin-top:36px">
+    <div class="r hd"><span>System</span><span>Use and frameworks</span><span>Gate</span><span>Decision</span><span>Owner</span><span>Last evidence</span></div>
+    <div class="r"><div><b>Claims triage v7</b><span class="mono">SYS-0011</span></div><span>Motor claims routing <span class="mono">· Annex III 5(c) · DPDP</span></span><span class="pins"><i class="o"></i><i class="o"></i><i class="o"></i><i class="o"></i><i class="o"></i><i class="o"></i><i class="o"></i><i class="o"></i><i class="o"></i></span><span><span class="word ok">go</span> <span class="mono">0.91</span></span><span>Claims Ops</span><span class="mono"><span class="ok">10:12</span> a91f0c</span></div>
+    <div class="r"><div><b>Résumé screener v2</b><span class="mono">SYS-0003</span></div><span>Shortlisting <span class="mono">· Annex III 4(a) · DPDP</span></span><span class="pins"><i class="o"></i><i class="o"></i><i class="o"></i><i class="o"></i><i class="o"></i><i class="o"></i><i class="o"></i><i class="h"></i><i class="o"></i></span><span><span class="word hold">held by Legal</span> <span class="mono">0.84</span></span><span>People Analytics</span><span class="mono">08:05 0c5a19</span></div>
+    <div class="r sel"><div><b>Loan scoring v4</b><span class="mono">SYS-0007</span></div><span>Loan approval <span class="mono">· Annex III 5(b) · FREE-AI</span></span><span class="pins"><i class="o"></i><i class="o"></i><i class="n"></i><i class="a"></i><i class="a"></i><i class="n"></i><i class="o"></i><i class="o"></i><i></i></span><span><span class="word need">conditional, needs you</span> <span class="mono">0.58</span></span><span>Model Risk</span><span class="mono">10:12 R-2027-0412</span></div>
+    <div class="r"><div><b>Collections voice bot v1</b><span class="mono">SYS-0014</span></div><span>Repayment calls <span class="mono">· FREE-AI · DPDP</span></span><span class="pins"><i class="o"></i><i></i><i></i><i class="a"></i><i></i><i></i><i class="o"></i><i class="n"></i><i></i></span><span><span class="word">no go</span> <span class="mono">0.22</span></span><span>Collections</span><span class="mono">3 Jun VC-118</span></div>
+    <div class="r"><div><b>Credit line increase v1</b><span class="mono">SYS-0018</span></div><span>Card limits <span class="mono">· Annex III 5(b) · FREE-AI</span></span><span class="pins"><i class="o"></i><i class="o"></i><i class="o"></i><i class="o"></i><i class="o"></i><i class="o"></i><i class="o"></i><i class="o"></i><i class="o"></i></span><span><span class="word ok">go</span> <span class="mono">0.88</span></span><span>Model Risk</span><span class="mono">2 Jun 7e01b4</span></div>
+    <div class="r"><div><b>Fraud flags v3</b><span class="mono">SYS-0009</span></div><span>Payment holds <span class="mono">· FREE-AI</span></span><span class="pins"><i class="o"></i><i class="o"></i><i class="o"></i><i class="o"></i><i class="o"></i><i class="o"></i><i class="o"></i><i class="o"></i><i class="o"></i></span><span><span class="word ok">go</span> <span class="mono">0.86</span></span><span>Payments Risk</span><span class="mono">1 Jun 52d9ae</span></div>
+    <div class="r"><div><b>Support summariser v2</b><span class="mono">SYS-0016</span></div><span>Agent notes <span class="mono">· DPDP</span></span><span class="dim">no gate</span><span class="dim">watch only</span><span>Service</span><span class="mono dim">28 May</span></div>
+  </div>
+  <p class="do" style="margin-top:18px"><button class="go">Register a system</button><span class="mono dim">or: fairmind systems add mlflow://credit/loan-scoring</span></p>
+</main>
+</div>
+<script src="fm.js"></script>
+<script>
+interlock(document.getElementById('rack'), [
+  { name: 'Claims triage v7', go: true, pins: gate('ooooooooo') },
+  { name: 'Résumé screener v2', pins: gate('oooooooho') },
+  { name: 'Loan scoring v4', pins: gate('oonaanoox', { 2: 1, 5: 2 }) },
+  { name: 'Collections voice bot v1', pins: gate('oxxaxxonx', { 7: 3 }) },
+  { name: 'Credit line increase v1', go: true, pins: gate('ooooooooo') },
+  { name: 'Fraud flags v3', go: true, pins: gate('ooooooooo') },
+  { name: 'Support summariser v2 · no gate', pins: [] }
+], { laneDepth: 66, labels: false });
+</script>
+</body>
+</html>

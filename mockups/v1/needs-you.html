@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FairMind · Needs you</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="fm.css">
+</head>
+<body data-page="needs">
+<div class="app">
+<nav class="rail" aria-label="Main"></nav>
+<main>
+  <header class="top">
+    <div>
+      <h1>Needs you <span class="mono">4 open · 1 hold · 2 deadlines</span></h1>
+      <p class="sub">Only what a person must decide. Everything else FairMind measures, seals and files on its own.</p>
+    </div>
+    <span class="find">Search, or ask FairMind <kbd>⌘K</kbd></span>
+  </header>
+
+  <nav class="tabs" aria-label="Filter">
+    <a href="#" aria-current="page">All<span class="c">7</span></a><a href="#">Confirm<span class="c">2</span></a><a href="#">Sign off<span class="c">2</span></a><a href="#">Holds<span class="c">1</span></a><a href="#">Deadlines<span class="c">2</span></a>
+  </nav>
+
+  <div class="grid list">
+    <section>
+      <h2 class="h2" style="margin-top:22px">Waiting for you <span>numbers match the lamps</span></h2>
+      <ol class="wl">
+        <li class="sel"><span class="no">1</span><div><h3>Confirm age band is a protected attribute.</h3><div class="ctx" style="margin-bottom:0">Loan scoring v4 · R-2027-0412 · due Fri 11 Jun</div></div></li>
+        <li><span class="no">2</span><div><h3>Name the human reviewer for declines.</h3><div class="ctx" style="margin-bottom:0">Loan scoring v4 · Art. 14 · due Fri 11 Jun</div></div></li>
+        <li><span class="no">3</span><div><h3>Accept or reject the vendor model card.</h3><div class="ctx" style="margin-bottom:0">Collections voice bot v1 · VC-118</div></div></li>
+        <li><span class="no plain">4</span><div><h3>Approve Loan scoring v4 with conditions.</h3><div class="ctx" style="margin-bottom:0">opens after 1 and 2 · Head of Model Risk</div></div></li>
+      </ol>
+
+      <h2 class="h2">Holds <span>1</span></h2>
+      <div class="seal" style="grid-template-columns:minmax(0,1fr) auto"><span><b class="hold">Résumé screener v2, held by Legal</b><br><span class="dim">Candidate notice text under review. Release stays shut until Legal lifts it.</span></span><span class="mono dim">since 1 Jun</span></div>
+
+      <h2 class="h2">Deadlines <span>2</span></h2>
+      <div class="seal" style="grid-template-columns:minmax(0,1fr) auto"><span><b>EU AI Act Annex III applies</b><br><span class="dim">4 systems in scope. Each needs a sealed decision on file.</span></span><span class="mono due">2 Dec 2027 · 181 d</span></div>
+      <div class="seal" style="grid-template-columns:minmax(0,1fr) auto"><span><b>Board review of the AI policy (RBI FREE-AI)</b><br><span class="dim">Inspection pack for 6 gated systems, built from the ledger.</span></span><span class="mono due">Tue 29 Jun · 25 d</span></div>
+    </section>
+
+    <section>
+      <figure class="fig" style="margin:0">
+        <span class="c c1">Fig. 2</span><span class="c c2">Lamp 1 on Loan scoring v4</span>
+        <svg id="gate" role="img" aria-label="Interlock of Loan scoring v4 with lamp 1 on the EO gap pin and lamp 2 on the oversight pin."></svg>
+        <span class="c c3">The EO gap pin waits on your mapping</span><span class="c c4">2 lamps · conf 0.58</span>
+      </figure>
+      <div class="box co" style="margin-top:20px">
+        <h3>Confirm age band is a protected attribute.<span class="mono">1</span></h3>
+        <p>The agent built <span class="mono">age_band</span> from <span class="mono">dob</span> in five bands: 18 to 25, 26 to 35, 36 to 45, 46 to 60, over 60. FREE-AI asks lenders to test outcomes across age. Once you confirm, the EO gap test reruns and the pin seats if it passes.</p>
+        <div class="do"><button class="go">Confirm</button><button class="tl">Change bands</button><button class="tl">Not protected here</button></div>
+      </div>
+      <div class="kv" style="margin-top:10px"><span>Source</span><span class="mono">features.dob → age_band (5)</span></div>
+      <div class="kv"><span>Run</span><span class="mono">R-2027-0412 · 48,210 rows</span></div>
+      <div class="kv"><span>Cites</span><span class="mono">FREE-AI S3 · Art. 10(2)(f)</span></div>
+    </section>
+  </div>
+</main>
+</div>
+<script src="fm.js"></script>
+<script>
+interlock(document.getElementById('gate'), [
+  { name: 'Loan scoring v4', pins: gate('oonaanoox', { 2: 1, 5: 2 }) }
+], { laneDepth: 120 });
+</script>
+</body>
+</html>

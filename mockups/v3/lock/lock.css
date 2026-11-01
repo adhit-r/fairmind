@@ -1,0 +1,20 @@
+.iso[data-theme="light"]{--anatomy-page:#ffffff;--anatomy-card:#fafaf8;--anatomy-hi:#101614;--anatomy-mid:#75756b;--anatomy-lo:#b4b4ac;--anatomy-faint:#d6d6cf;--anatomy-dot:#26261f}
+.fm-cut{fill:#f1f1ec;stroke:none}
+.fm-cut-plug{fill:#f7f6f1}
+.fm-bore{fill:#e2e2dc;stroke:none}
+.fm-bore-shade{fill:#d3d3cb;stroke:none}
+.fm-key{fill:#ffffff;stroke:none}
+.fm-shear{fill:none;stroke:#101614;stroke-width:.9;stroke-dasharray:6 3}
+.fm-accent .iso-fill{fill:#ffd7c6}
+.fm-accent .iso-top{fill:#ffb08f}
+.fm-accent .iso-shade[data-shade="0"]{fill:#e4561f}
+.fm-accent .iso-shade[data-shade="1"]{fill:#f06a35}
+.fm-accent .iso-shade[data-shade="2"]{fill:#ff7c49}
+.fm-accent .iso-shade[data-shade="3"]{fill:#ff9468}
+.fm-accent .iso-solid>path[class*="edge"],.fm-accent .iso-line{stroke:#7a2a0c}
+.fm-attested .iso-fill{fill:#ecebe4}
+.fm-attested .iso-top{fill:#f4f3ec}
+.fm-attested .iso-shade[data-shade="0"]{fill:#c9c8bf}
+.fm-attested .iso-shade[data-shade="1"]{fill:#d4d3ca}
+.fm-attested .iso-shade[data-shade="2"]{fill:#deddd5}
+.fm-attested .iso-shade[data-shade="3"]{fill:#e6e5de}

@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loan scoring v4 - FairMind</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#101614; --ink-64:rgba(16,22,20,.64); --ink-40:rgba(16,22,20,.4); --ink-12:rgba(16,22,20,.12); --ink-06:rgba(16,22,20,.06);
+  --orange:#ff6b35; --orange-10:rgba(255,107,53,.1); --white:#fff;
+  --font-sans:'Raleway',Arial,Helvetica,sans-serif;
+  --font-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--white);color:var(--ink);font:500 15px/1.5 var(--font-sans);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+a{color:inherit}
+button{font:inherit;color:inherit;cursor:pointer}
+.mono{font-family:var(--font-mono)}
+.eyebrow{font:800 11px/1.3 var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--orange)}
+.label{font:800 10.5px/1.3 var(--font-mono);letter-spacing:.07em;text-transform:uppercase;color:var(--ink-64)}
+
+/* header */
+.top{position:sticky;top:0;z-index:20;background:var(--white);border-bottom:2px solid var(--ink)}
+.top-in{max-width:1376px;margin:0 auto;height:68px;display:flex;align-items:center;gap:36px;padding:0 32px}
+.brand{display:flex;align-items:center;gap:12px;font:900 18px/1 var(--font-sans);letter-spacing:-.01em;text-decoration:none}
+.brand img{width:24px;height:24px}
+.nav{display:flex;gap:4px;height:100%}
+.nav a{display:flex;align-items:center;gap:8px;padding:0 12px;text-decoration:none;font-weight:700;font-size:14.5px;border-bottom:4px solid transparent;margin-bottom:-2px}
+.nav a.on{border-color:var(--orange)}
+.count{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 5px;background:var(--orange);border:2px solid var(--ink);font:800 11px/1 var(--font-mono)}
+.top-r{margin-left:auto;display:flex;align-items:center;gap:14px}
+.org{display:flex;align-items:center;gap:10px;height:38px;padding:0 12px;border:2px solid var(--ink);background:var(--white);font-weight:800;font-size:14px}
+.org svg,.search svg{width:14px;height:14px}
+.search{display:flex;align-items:center;gap:10px;height:38px;padding:0 12px;border:2px solid var(--ink);width:240px;color:var(--ink-64);font-weight:600;font-size:14px}
+.search kbd{margin-left:auto;font:700 11px/1 var(--font-mono);border:1px solid var(--ink);padding:3px 5px;color:var(--ink)}
+.me{width:38px;height:38px;display:grid;place-items:center;background:var(--ink);color:var(--white);font:800 13px/1 var(--font-mono)}
+.menu{display:none}
+
+main{max-width:1376px;margin:0 auto;padding:44px 32px 64px}
+
+/* hero */
+.hero{display:grid;grid-template-columns:minmax(0,1fr) 600px;gap:56px;align-items:start}
+.crumb{display:flex;flex-wrap:wrap;gap:8px}
+.crumb a{text-decoration:none}
+h1{margin:22px 0 0;font:900 60px/.96 var(--font-sans);letter-spacing:-.035em}
+h1 .go{color:var(--orange);display:block}
+.lede{margin-top:24px;max-width:540px;font-size:18px;line-height:1.6;color:var(--ink);font-weight:500}
+.lede b{font-weight:800}
+.actions{display:flex;flex-wrap:wrap;gap:16px;margin-top:30px}
+.btn{display:inline-flex;align-items:center;gap:10px;height:48px;padding:0 20px;border:2px solid var(--ink);background:var(--white);font-weight:800;font-size:15px;box-shadow:5px 5px 0 var(--ink);transition:transform .12s,box-shadow .12s;text-decoration:none}
+.btn:hover{transform:translate(-1px,-1px);box-shadow:6px 6px 0 var(--ink)}
+.btn:active{transform:translate(4px,4px);box-shadow:1px 1px 0 var(--ink)}
+.btn.primary{background:var(--orange)}
+.btn svg{width:16px;height:16px}
+.facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px;margin-top:40px;padding-top:18px;border-top:2px solid var(--ink)}
+.facts dt{font:800 10.5px/1.3 var(--font-mono);letter-spacing:.07em;text-transform:uppercase;color:var(--orange)}
+.facts dd{margin-top:6px;font-weight:800;font-size:14px;line-height:1.4}
+
+/* evidence stack */
+.world-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.world-head .tag{display:flex;align-items:center;gap:10px;font:800 11px/1 var(--font-mono);letter-spacing:.07em;text-transform:uppercase}
+.world-head .tag i{width:12px;height:12px;background:var(--orange);border:2px solid var(--ink)}
+.world{position:relative;height:478px;border:2px solid var(--ink);background:var(--white);box-shadow:12px 12px 0 var(--ink);overflow:hidden;perspective:2600px;perspective-origin:50% 40%}
+.scene{position:absolute;left:50%;top:52%;width:300px;height:300px;margin:-150px 0 0 -150px;transform:translateY(40px) scale(.84) rotateX(57deg) rotateZ(-40deg);transform-style:preserve-3d}
+.plane{position:absolute;inset:0;transform-style:preserve-3d}
+.floor{inset:-58px;transform:translateZ(-36px);background:var(--orange-10);border:2px solid var(--ink)}
+.floor::after{content:"";position:absolute;inset:14px;border:1px dashed var(--ink-40)}
+.slab{background:var(--white);border:2px solid var(--ink);box-shadow:9px 9px 0 var(--ink)}
+.p-subject{transform:translateZ(0)}
+.p-checks{transform:translateZ(110px)}
+.p-decision{inset:auto;left:-10px;top:-10px;width:170px;height:118px;transform:translateZ(250px);background:var(--ink);color:var(--white);box-shadow:9px 9px 0 var(--orange)}
+.pl-cap{position:absolute;left:14px;top:12px;font:800 9.5px/1 var(--font-mono);letter-spacing:.08em;text-transform:uppercase}
+.p-subject .pl-body{position:absolute;left:14px;right:14px;bottom:14px}
+.p-subject strong{display:block;font:900 26px/1 var(--font-sans);letter-spacing:-.02em}
+.p-subject small{display:block;margin-top:6px;font:700 10px/1.3 var(--font-mono);color:var(--ink-64)}
+.grid9{position:absolute;inset:34px 18px 18px;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:10px;transform-style:preserve-3d}
+.tile{position:relative;display:grid;place-items:center;border:2px solid var(--ink);font:800 15px/1 var(--font-mono);transform-style:preserve-3d}
+.tile.m{background:var(--ink);color:var(--white)}
+.tile.a{background:repeating-linear-gradient(135deg,var(--white) 0 5px,var(--ink-40) 5px 6.5px);color:var(--ink)}
+.tile.a span{background:var(--white);padding:2px 4px}
+.tile.o{background:var(--white);border-style:dashed;color:transparent}
+.tile.o .pin{position:absolute;inset:-2px;display:grid;place-items:center;background:var(--orange);border:2px solid var(--ink);color:var(--ink);transform:translateZ(22px);box-shadow:4px 4px 0 var(--ink)}
+.p-decision .pl-body{position:absolute;left:14px;right:14px;bottom:14px}
+.p-decision strong{display:block;font:900 19px/1 var(--font-sans);letter-spacing:-.02em}
+.p-decision small{display:block;margin-top:7px;font:800 9.5px/1.3 var(--font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--orange)}
+.post{position:absolute;width:0;border-left:2px solid var(--ink);transform-origin:top center}
+.post.lo{height:110px}
+.post.hi{height:140px;border-left-style:dashed}
+.post.lo{transform:translateZ(110px) rotateX(-90deg)}
+.post.hi{transform:translateZ(250px) rotateX(-90deg)}
+.world-foot{position:absolute;left:0;right:0;bottom:0;padding:10px 16px;background:var(--white);border-top:2px solid var(--ink);display:flex;justify-content:space-between;gap:16px;font:700 10.5px/1.4 var(--font-mono);color:var(--ink-64)}
+.world-foot b{color:var(--ink)}
+.legend{display:flex;gap:16px;flex-wrap:wrap}
+.legend span{display:inline-flex;align-items:center;gap:7px;font:800 10.5px/1 var(--font-mono);letter-spacing:.05em;text-transform:uppercase}
+.legend i{width:13px;height:13px;border:2px solid var(--ink);display:inline-block}
+.legend .m{background:var(--ink)}
+.legend .a{background:repeating-linear-gradient(135deg,#fff 0 3px,var(--ink-40) 3px 4px)}
+.legend .o{background:var(--orange)}
+
+/* work area */
+.work{display:grid;grid-template-columns:minmax(0,1fr) 404px;gap:44px;margin-top:72px;align-items:start}
+.sec-title{display:flex;align-items:end;justify-content:space-between;gap:16px;margin-bottom:18px}
+.sec-title h2{font:900 30px/1 var(--font-sans);letter-spacing:-.025em}
+.box{border:2px solid var(--ink);background:var(--white);box-shadow:8px 8px 0 var(--ink)}
+.tabs{display:flex;border-bottom:2px solid var(--ink);overflow-x:auto}
+.tabs a{display:flex;align-items:center;gap:8px;height:46px;padding:0 18px;border-right:2px solid var(--ink);text-decoration:none;font:800 11px/1 var(--font-mono);letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
+.tabs a.on{background:var(--orange)}
+.tabs a em{font-style:normal;color:var(--ink-64)}
+.tabs a.on em{color:var(--ink)}
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:760px}
+th{text-align:left;padding:12px 16px;font:800 10.5px/1.2 var(--font-mono);letter-spacing:.07em;text-transform:uppercase;color:var(--ink-64);border-bottom:2px solid var(--ink);white-space:nowrap}
+td{padding:14px 16px;border-bottom:1px solid var(--ink-12);vertical-align:middle}
+tr:last-child td{border-bottom:0}
+td.no{width:56px;font:800 13px/1 var(--font-mono)}
+.chk b{display:block;font-weight:800;font-size:14.5px;line-height:1.3}
+.chk small{display:block;margin-top:3px;color:var(--ink-64);font-weight:600;font-size:12.5px}
+.num{font:700 14px/1.2 var(--font-mono);white-space:nowrap}
+.num small{display:block;margin-top:3px;font-size:11.5px;color:var(--ink-64);font-weight:600}
+.thr{font:700 13px/1 var(--font-mono);white-space:nowrap}
+.src{font:700 12px/1 var(--font-mono);color:var(--ink-64)}
+.chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px;border:2px solid var(--ink);font:800 10px/1 var(--font-mono);letter-spacing:.05em;text-transform:uppercase;white-space:nowrap}
+.chip.m{background:var(--ink);color:var(--white)}
+.chip.a{background:var(--white)}
+.chip.o{background:var(--orange)}
+tr.open td{background:var(--orange-10)}
+tr.open td.no{box-shadow:inset 6px 0 0 var(--orange)}
+.tbl-foot{padding:12px 16px;border-top:2px solid var(--ink);font:700 11.5px/1.5 var(--font-mono);color:var(--ink-64)}
+
+/* side */
+.side{display:grid;gap:36px}
+.needs{background:var(--ink);color:var(--white);border:2px solid var(--ink);box-shadow:8px 8px 0 var(--orange)}
+.needs-head{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:2px solid rgba(255,255,255,.18)}
+.needs-head h2{font:900 22px/1 var(--font-sans);letter-spacing:-.02em}
+.needs-head .label{color:rgba(255,255,255,.64)}
+.need{padding:20px;border-bottom:2px solid rgba(255,255,255,.18)}
+.need:last-child{border-bottom:0}
+.need .eyebrow{display:flex;gap:10px}
+.need h3{margin-top:10px;font:800 17px/1.3 var(--font-sans)}
+.need p{margin-top:6px;color:rgba(255,255,255,.72);font-size:14px;line-height:1.55}
+.need .acts{display:flex;align-items:center;gap:18px;margin-top:16px}
+.need .btn{height:42px;font-size:14px;border-color:var(--white);box-shadow:4px 4px 0 var(--white);color:var(--ink)}
+.need .btn.ghost{background:transparent;color:var(--white)}
+.need .link{font-weight:800;font-size:14px;text-underline-offset:4px}
+.decide{padding:22px 20px 20px}
+.decide .verdict{margin-top:8px;font:900 34px/1 var(--font-sans);letter-spacing:-.03em}
+.decide .why{margin-top:10px;color:var(--ink-64);font-size:14px;line-height:1.55}
+.conds{list-style:none;margin-top:18px;border-top:2px solid var(--ink)}
+.conds li{display:grid;grid-template-columns:36px 1fr;padding:11px 0;border-bottom:1px solid var(--ink-12);font-weight:600;font-size:14px;line-height:1.45}
+.conds li span{font:800 11px/1.8 var(--font-mono);color:var(--orange)}
+.trail{list-style:none;margin-top:18px;display:grid;gap:12px}
+.trail li{display:grid;grid-template-columns:16px 1fr;gap:8px;font-size:13.5px;font-weight:700;line-height:1.35}
+.trail li::before{content:"";width:9px;height:9px;margin-top:4px;background:var(--ink)}
+.trail li small{display:block;font:600 11.5px/1.4 var(--font-mono);color:var(--ink-64);margin-top:2px}
+.sign{margin-top:22px;padding-top:18px;border-top:2px solid var(--ink);display:grid;gap:12px}
+.btn.wide{width:100%;justify-content:center}
+.btn[disabled]{cursor:not-allowed;color:var(--ink-64);background:repeating-linear-gradient(135deg,#fff 0 6px,var(--ink-06) 6px 12px);box-shadow:none;border-color:var(--ink-40)}
+.btn[disabled]:hover,.btn[disabled]:active{transform:none;box-shadow:none}
+.lockline{display:flex;gap:8px;align-items:center;font:700 11.5px/1.4 var(--font-mono);color:var(--ink-64)}
+.lockline svg{width:13px;height:13px;flex:none}
+.hold{justify-self:center;font-weight:800;font-size:14px;color:var(--ink);text-underline-offset:4px;background:none;border:0;text-decoration:underline;margin-top:2px}
+
+.foot{max-width:1376px;margin:0 auto;padding:0 32px 32px;display:flex;justify-content:space-between;font:700 11px/1 var(--font-mono);color:var(--ink-64)}
+
+@media (max-width:1240px){
+  .hero{grid-template-columns:minmax(0,1fr)}
+  .world-wrap{max-width:640px}
+  .work{grid-template-columns:minmax(0,1fr)}
+  .search{display:none}
+}
+@media (max-width:860px){
+  .nav,.org{display:none}
+  .menu{display:grid;place-items:center;width:38px;height:38px;border:2px solid var(--ink);background:var(--white)}
+  .menu svg{width:16px;height:16px}
+  .top-in{padding:0 16px;gap:16px}
+  main{padding:28px 16px 48px}
+  h1{font-size:44px}
+  .lede{font-size:16px}
+  .facts{grid-template-columns:1fr;gap:14px}
+  .world{height:400px;box-shadow:8px 8px 0 var(--ink)}
+  .scene{transform:translateY(30px) scale(.64) rotateX(57deg) rotateZ(-40deg)}
+  .world-head{flex-direction:column;align-items:flex-start;gap:10px}
+  .world-foot{flex-direction:column;gap:4px}
+  .work{margin-top:52px}
+  .sec-title{flex-direction:column;align-items:flex-start}
+  .foot{padding:0 16px 24px;flex-direction:column;gap:8px}
+  .box,.needs{margin-right:8px}
+}
+</style>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <a class="brand" href="#"><img src="logo.png" alt="">FAIRMIND</a>
+  <nav class="nav" aria-label="Primary">
+    <a href="#">Today</a>
+    <a href="#">Needs you <span class="count">2</span></a>
+    <a class="on" href="#" aria-current="page">Systems</a>
+    <a href="#">Tests</a>
+    <a href="#">Frameworks</a>
+    <a href="#">Evidence</a>
+    <a href="#">Watch</a>
+  </nav>
+  <div class="top-r">
+    <label class="search"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="7" r="5"/><path d="M11 11l3.5 3.5"/></svg>Search<kbd>⌘K</kbd></label>
+    <button class="org">Retail Bank<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6l4 4 4-4"/></svg></button>
+    <span class="me" title="M. Menon, Head of Model Risk">MM</span>
+    <button class="menu" aria-label="Menu"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 4h12M2 8h12M2 12h12"/></svg></button>
+  </div>
+</div></header>
+
+<main>
+<section class="hero">
+  <div>
+    <div class="crumb eyebrow"><a href="#">Systems</a><span>/</span><a href="#">Retail credit</a><span>/</span><span>Loan scoring v4 · model 4.2.0</span></div>
+    <h1><span class="go">Conditional go.</span>Two checks need you.</h1>
+    <p class="lede">Seven of nine checks hold: <b>five on measured evidence</b>, two on attestation. Approval opens once <b>check 04</b> and <b>check 07</b> are settled.</p>
+    <div class="actions">
+      <a class="btn primary" href="#needs">Settle the two checks</a>
+      <a class="btn" href="#"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 2v8M4.5 6.5L8 10l3.5-3.5M2.5 13.5h11"/></svg>Export evidence pack</a>
+    </div>
+    <dl class="facts">
+      <div><dt>Frameworks</dt><dd>RBI FREE-AI · EU AI Act Annex III 5(b) · DPDP s.7</dd></div>
+      <div><dt>Thresholds</dt><dd>Fixed 12 May 2027, before the run</dd></div>
+      <div><dt>Owner</dt><dd>M. Menon, Model Risk</dd></div>
+    </dl>
+  </div>
+
+  <div class="world-wrap">
+    <div class="world-head">
+      <span class="tag"><i></i>Evidence stack · run R-2027-0412</span>
+      <div class="legend"><span><i class="m"></i>Measured</span><span><i class="a"></i>Attested</span><span><i class="o"></i>Open</span></div>
+    </div>
+    <div class="world" role="img" aria-label="Evidence stack: the subject at the base, nine checks above it with checks 4 and 7 raised as open, and the proposed decision floating above, not yet attached.">
+      <div class="scene">
+        <div class="plane floor"></div>
+        <div class="plane slab p-subject">
+          <span class="pl-cap">01 Subject</span>
+          <div class="pl-body"><strong>Loan scoring v4</strong><small>model 4.2.0 · 48,210 holdout rows</small></div>
+        </div>
+        <i class="post lo" style="left:-1px;top:0"></i><i class="post lo" style="left:299px;top:0"></i><i class="post lo" style="left:-1px;top:300px"></i><i class="post lo" style="left:299px;top:300px"></i>
+        <div class="plane slab p-checks">
+          <span class="pl-cap">02 Checks · 7 of 9 hold</span>
+          <div class="grid9">
+            <div class="tile m">01</div><div class="tile m">02</div><div class="tile m">03</div>
+            <div class="tile o">04<span class="pin">04</span></div><div class="tile a"><span>05</span></div><div class="tile a"><span>06</span></div>
+            <div class="tile o">07<span class="pin">07</span></div><div class="tile m">08</div><div class="tile m">09</div>
+          </div>
+        </div>
+        <i class="post hi" style="left:-11px;top:-10px"></i><i class="post hi" style="left:159px;top:-10px"></i><i class="post hi" style="left:-11px;top:108px"></i><i class="post hi" style="left:159px;top:108px"></i>
+        <div class="plane p-decision">
+          <span class="pl-cap">03 Decision</span>
+          <div class="pl-body"><strong>Conditional go</strong><small>Not attached</small></div>
+        </div>
+      </div>
+      <div class="world-foot"><span>The decision rests on the checks only when no check stands open.</span><span><b>Blocked by 04, 07</b></span></div>
+    </div>
+  </div>
+</section>
+
+<section class="work">
+  <div>
+    <div class="sec-title"><h2>Nine checks</h2><span class="label">Holdout of 48,210 applications · run R-2027-0412</span></div>
+    <div class="box">
+      <nav class="tabs" aria-label="System views">
+        <a class="on" href="#">Decision</a><a href="#">Evidence <em>14</em></a><a href="#">Tests <em>6</em></a><a href="#">Controls <em>31</em></a><a href="#">Findings <em>2</em></a><a href="#">Activity</a>
+      </nav>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>No.</th><th>Check</th><th>Result</th><th>Threshold</th><th>Basis</th><th>Source</th></tr></thead>
+        <tbody>
+          <tr><td class="no">01</td><td class="chk"><b>Disparate impact by age</b><small>60+ against 30–45</small></td><td class="num">0.86<small>0.82–0.90</small></td><td class="thr">≥ 0.80</td><td><span class="chip m">Measured</span></td><td class="src">a91f0c</td></tr>
+          <tr><td class="no">02</td><td class="chk"><b>Disparate impact by gender</b></td><td class="num">0.93<small>0.90–0.96</small></td><td class="thr">≥ 0.80</td><td><span class="chip m">Measured</span></td><td class="src">a91f0c</td></tr>
+          <tr><td class="no">03</td><td class="chk"><b>Equal-opportunity gap by gender</b></td><td class="num">0.031<small>0.012–0.050</small></td><td class="thr">≤ 0.05</td><td><span class="chip m">Measured</span></td><td class="src">a91f0c</td></tr>
+          <tr class="open"><td class="no">04</td><td class="chk"><b>Equal-opportunity gap by age band</b><small>waits for the band mapping</small></td><td class="num">Not run</td><td class="thr">≤ 0.05</td><td><span class="chip o">Needs you</span></td><td class="src">—</td></tr>
+          <tr><td class="no">05</td><td class="chk"><b>Calibration by group</b><small>vendor report, no test data</small></td><td class="num">0.018<small>no interval</small></td><td class="thr">≤ 0.03</td><td><span class="chip a">Attested</span></td><td class="src">VC-118</td></tr>
+          <tr><td class="no">06</td><td class="chk"><b>Reason codes for declines</b><small>team statement</small></td><td class="num">Statement</td><td class="thr">Art. 13</td><td><span class="chip a">Attested</span></td><td class="src">7c22f1</td></tr>
+          <tr class="open"><td class="no">07</td><td class="chk"><b>Human review of declines</b><small>no reviewer named</small></td><td class="num">Missing</td><td class="thr">Art. 14</td><td><span class="chip o">Needs you</span></td><td class="src">—</td></tr>
+          <tr><td class="no">08</td><td class="chk"><b>Consent basis, three datasets</b></td><td class="num">Verified</td><td class="thr">DPDP s.7</td><td><span class="chip m">Measured</span></td><td class="src">4be27d</td></tr>
+          <tr><td class="no">09</td><td class="chk"><b>Energy per million decisions</b></td><td class="num">41 kWh<small>±8%</small></td><td class="thr">Low impact</td><td><span class="chip m">Measured</span></td><td class="src">0c5a19</td></tr>
+        </tbody>
+      </table></div>
+      <div class="tbl-foot">An attested check counts toward the decision, but it is never shown as measured.</div>
+    </div>
+  </div>
+
+  <aside class="side">
+    <div class="needs" id="needs">
+      <div class="needs-head"><h2>Needs you</h2><span class="label">2 open</span></div>
+      <div class="need">
+        <div class="eyebrow"><span>Check 04</span><span>FREE-AI sutra 3</span></div>
+        <h3>Confirm age band as a protected attribute</h3>
+        <p>Inferred from date of birth in five bands. The equal-opportunity test reruns as soon as you confirm.</p>
+        <div class="acts"><button class="btn primary">Confirm mapping</button><a class="link" href="#">Change bands</a></div>
+      </div>
+      <div class="need">
+        <div class="eyebrow"><span>Check 07</span><span>EU AI Act Art. 14</span></div>
+        <h3>Name the reviewer for declined applications</h3>
+        <p>A role that can override a decline within one working day.</p>
+        <div class="acts"><button class="btn ghost">Assign reviewer</button></div>
+      </div>
+    </div>
+
+    <div class="box decide">
+      <span class="eyebrow">FairMind proposes</span>
+      <div class="verdict">Conditional go</div>
+      <p class="why">The measured checks clear thresholds fixed before the run. The approval is yours.</p>
+      <ul class="conds">
+        <li><span>C1</span>Re-test disparate impact by age every week in production.</li>
+        <li><span>C2</span>Re-run the full suite before any retrained model takes traffic.</li>
+        <li><span>C3</span>This approval lapses on 2 September 2027 unless renewed.</li>
+      </ul>
+      <ul class="trail">
+        <li><div>Put up for decision by A. Rao, ML lead<small>3 Jun 2027, 09:12</small></div></li>
+        <li><div>Consent basis verified by P. Iyer, DPO<small>3 Jun 2027, 09:40</small></div></li>
+      </ul>
+      <div class="sign">
+        <button class="btn wide" disabled>Approve with conditions</button>
+        <div class="lockline"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="7" width="10" height="7"/><path d="M5 7V5a3 3 0 0 1 6 0v2"/></svg>Opens when checks 04 and 07 are settled.</div>
+        <button class="btn wide">Return to ML lead</button>
+        <button class="hold">Hold release</button>
+      </div>
+    </div>
+  </aside>
+</section>
+</main>
+<footer class="foot"><span>Illustrative data for design review.</span><span>FairMind · decision D-03</span></footer>
+</body>
+</html>
