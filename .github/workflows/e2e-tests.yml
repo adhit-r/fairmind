@@ -75,7 +75,10 @@ jobs:
     - name: Backend log
       if: always()
       working-directory: apps/backend
-      run: tail -n 400 backend.log
+      run: |
+        grep -v -E '"name": "(aiosqlite|databases)"' backend.log > backend.filtered.log || true
+        echo '::group::startup'; head -n 200 backend.filtered.log; echo '::endgroup::'
+        echo '::group::tail'; tail -n 300 backend.filtered.log; echo '::endgroup::'
 
     
     - name: Upload test artifacts
@@ -155,5 +158,8 @@ jobs:
     - name: Backend log
       if: always()
       working-directory: apps/backend
-      run: tail -n 400 backend.log
+      run: |
+        grep -v -E '"name": "(aiosqlite|databases)"' backend.log > backend.filtered.log || true
+        echo '::group::startup'; head -n 200 backend.filtered.log; echo '::endgroup::'
+        echo '::group::tail'; tail -n 300 backend.filtered.log; echo '::endgroup::'
 
