@@ -1,0 +1,50 @@
+---
+title: Evidence model
+description: Learn how FairMind connects test outputs, review decisions, controls, risks, and reruns.
+---
+
+FairMind uses evidence as the durable link between technical testing and governance review.
+
+## The evidence chain
+
+```text
+AI system and version
+  -> evaluation scope and threshold
+  -> raw artifact or external reference
+  -> result, provenance, uncertainty, and limitations
+  -> reviewer decision
+  -> control mappings and risk links
+  -> remediation and superseding rerun
+```
+
+Each link answers a different assurance question. Keeping them separate makes it possible to reuse one artifact across frameworks without reusing an unsupported conclusion.
+
+## Current Evidence Workbench record
+
+The active product records evidence title, type, content, confidence, tags, folder, artifact kind, URL or file metadata, uploader, staleness, workflow state, and cross-entity links.
+
+<Callout type="warn" title="Current boundary">
+Evidence records are mutable governance records. They are not yet cryptographically sealed Evidence Passports, and a recorded confidence value is not automatically verified.
+</Callout>
+
+## Evidence and control mappings
+
+A technical artifact may support more than one governance requirement. The reviewer should accept each mapping against a named framework version and record why the evidence is relevant.
+
+FairMind does not infer conformity from the presence of a link. A mapping means “this evidence is relevant to this requirement,” not “this requirement is satisfied.”
+
+## Reruns preserve history
+
+When remediation changes a system, create or attach a new evaluation. Link it to the earlier record as a superseding rerun instead of overwriting the original result.
+
+The review history should show:
+
+- what failed or remained uncertain;
+- which remediation was assigned;
+- whether a retest was required;
+- the later result and reviewer decision;
+- why the release state changed.
+
+## Evidence basis
+
+The active evidence fields and link operations are implemented in `apps/frontend/src/lib/api/hooks/useEvidence.ts` and `apps/backend/src/api/routers/ai_governance.py`. Remediation and retest state is implemented in `apps/frontend/src/lib/api/hooks/useRemediation.ts`.

@@ -1,0 +1,47 @@
+---
+title: Capability truth
+description: Interpret FairMind evaluator states without overstating what a result can prove.
+---
+
+FairMind uses explicit states to describe how each evaluator produces evidence.
+
+## State definitions
+
+| State | Meaning | What you may claim |
+| --- | --- | --- |
+| Validated | An active evaluator and evidence path exist for the documented workflow. | Describe the measured result and its stated limitations. |
+| External provider | The workflow sends input to a configured third-party model or service. | Describe the returned result and provider dependency. |
+| Metadata-only | The service analyzes supplied metadata rather than independently examining the underlying subject. | Describe the metadata finding, not subject verification. |
+| Interface-only | A user interface exists but is not connected to a defensible evidence-producing contract. | Describe the planned workflow only. |
+| Unavailable | The current path calls a missing endpoint or cannot produce a real result. | Do not use it for evidence. |
+| Research-only | The implementation or result belongs to an experiment or paper. | Cite it as research, never as shipped product behavior. |
+
+## Current capability register
+
+| Capability | Current state | Boundary |
+| --- | --- | --- |
+| Environmental evaluation | Validated evidence path | Provisional benchmarks and declared provenance still require review. |
+| Evidence Workbench | Implemented with boundary | Mutable records and recorded confidence, not sealed passports. |
+| Remediation and retest | Implemented | Workflow state does not prove the remediation was technically effective. |
+| LLM judge | External provider | Text may leave the deployment boundary and requires provider credentials. |
+| Multimodal bias | Metadata-only | Insufficient fields return an insufficient-data state. |
+| AI BOM | Metadata-only | Inventory metadata is not an independent supply-chain verification. |
+| Tabular bias | Unavailable | The active interface calls a missing evaluator endpoint. |
+| Modern LLM bias | Mock-only | The current page constructs demonstration results. |
+| Explainability | Interface-only | Evidence integration is pending. |
+| Security testing | Interface-only | Evidence integration is pending. |
+| Model DNA | Static mock | Do not use as assurance evidence. |
+
+## How to write a bounded finding
+
+Prefer:
+
+> The submitted environmental assessment produced a conditional-go recommendation using the recorded inputs and provisional benchmark set. Reviewer sign-off remains blocked until the mitigation requirement is resolved.
+
+Avoid:
+
+> The system is environmentally compliant and approved for release.
+
+## Evidence basis
+
+Capability labels come from `apps/frontend/src/lib/constants/navigation.ts`, the active Evidence Workbench capability register, `apps/backend/src/api/routers/environmental.py`, and the current evaluator services summarized in `.docs-forge/kb/engineer-brief.md`.

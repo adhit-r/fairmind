@@ -1,0 +1,47 @@
+---
+title: HTTP API
+description: Understand FairMind's versioned API groups, health endpoints, and stability boundaries.
+---
+
+Most FairMind APIs use the `/api/v1` base path.
+
+## Development explorer
+
+Start the backend, then open:
+
+```text
+http://localhost:8000/docs
+```
+
+Swagger and ReDoc are enabled outside production and disabled in production.
+
+## Stable entrypoints
+
+| Surface | Path |
+| --- | --- |
+| Health | `/health` |
+| Readiness | `/health/ready` |
+| Liveness | `/health/live` |
+| Authentication | `/api/v1/auth/*` |
+| Core inventory | `/api/v1/core/*` |
+| AI governance | `/api/v1/ai-governance/*` |
+| Audit logs | `/api/v1/audit-logs` |
+
+## Capability families
+
+Optional routers add AI BOM, advanced bias, tabular bias, compliance, datasets, India compliance, LLM judge, MLOps, monitoring, multimodal bias, provenance, reports, registration, organization management, policies, and approvals.
+
+Because optional routers fail soft during startup, confirm the running OpenAPI document before integrating with one of these families.
+
+## Authenticated request
+
+```bash
+curl http://localhost:8000/api/v1/core/models \
+  -H "Authorization: Bearer $FAIRMIND_ACCESS_TOKEN"
+```
+
+Do not place access tokens in documentation, shell history, or committed configuration.
+
+## Evidence basis
+
+Router registration, middleware, health endpoints, and development OpenAPI behavior are defined in `apps/backend/api/main.py`.
