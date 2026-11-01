@@ -53,7 +53,7 @@ function Overview() {
   const router = useRouter()
   const openSystem = (id: string) => {
     setSelectedSystemId(id)
-    router.push('/lifecycle')
+    router.push(`/systems/${id}`)
   }
   const { requests: allRequests } = usePendingDecisions()
   const { frameworks } = useAIGovernance()

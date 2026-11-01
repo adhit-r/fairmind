@@ -72,7 +72,10 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       if (typeof window === 'undefined') return null
 
       apiClient.hydrateSession()
-      if (!window.localStorage.getItem('access_token')) {
+      // Without a stored token there is nothing to check, except in local
+      // development, where the backend may sign loopback requests in on its
+      // own (FAIRMIND_DEV_LOGIN_EMAIL); only /me can tell us that.
+      if (!window.localStorage.getItem('access_token') && process.env.NODE_ENV !== 'development') {
         clearLocalSession(false)
         return null
       }

@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useState, type FormEvent } from 'react'
 import { useIntegrations, type DiscoveredAsset, type IntegrationKind } from '@/lib/api/hooks/useIntegrations'
 import { useSystemContext } from '@/components/workflow/SystemContext'
@@ -153,7 +154,8 @@ function AssetRow({ a, onPromote, onIgnore }: { a: DiscoveredAsset; onPromote: (
 
 export default function IntegrationsPage() {
   const { integrations, discovered, loading, error, create, remove, sync, promote, ignore } = useIntegrations()
-  const { refreshSystems } = useSystemContext()
+  const { refreshSystems, setSelectedSystemId } = useSystemContext()
+  const router = useRouter()
   const [syncing, setSyncing] = useState<string | null>(null)
   const [syncErr, setSyncErr] = useState<string | null>(null)
 
@@ -231,8 +233,10 @@ export default function IntegrationsPage() {
                 key={a.id}
                 a={a}
                 onPromote={async (body) => {
-                  await promote(a.id, body)
+                  const out = await promote(a.id, body)
                   await refreshSystems()
+                  setSelectedSystemId(out.systemId)
+                  router.push(`/systems/${out.systemId}`)
                 }}
                 onIgnore={() => ignore(a.id)}
               />

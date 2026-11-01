@@ -2,16 +2,16 @@
 
 import { usePathname } from 'next/navigation'
 import { AuthGuard } from '@/components/auth/AuthGuard'
-import {
-  SystemContextBar,
-  SystemContextProvider,
-} from '@/components/workflow/SystemContext'
+import { SystemContextProvider } from '@/components/workflow/SystemContext'
 import { OrgProvider } from '@/context/OrgContext'
 import { SessionProvider } from '@/context/SessionContext'
 import { AppShell } from '@/components/layout/AppShell'
+import { SystemBreadcrumb } from '@/components/layout/SystemBreadcrumb'
 
-// Pages already rebuilt in the new shell; the legacy context bar stays on the rest until they are.
+// Pages rebuilt in the new shell carry their own context. Every other page is a
+// legacy tool page and gets a one-line breadcrumb back to the system file.
 const NEW_SHELL_PAGES = new Set(['/dashboard', '/onboard', '/integrations'])
+const inNewShell = (pathname: string) => NEW_SHELL_PAGES.has(pathname) || pathname.startsWith('/systems/')
 
 export default function DashboardLayout({
   children,
@@ -25,7 +25,7 @@ export default function DashboardLayout({
         <OrgProvider>
           <SystemContextProvider>
             <AppShell>
-              {!NEW_SHELL_PAGES.has(pathname ?? '') && <SystemContextBar />}
+              {!inNewShell(pathname ?? '') && <SystemBreadcrumb />}
               {children}
             </AppShell>
           </SystemContextProvider>
