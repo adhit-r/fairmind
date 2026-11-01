@@ -5,25 +5,22 @@ import json
 import uuid
 from typing import Any, Dict, List, Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from api.routes.ai_governance import (
-    ApprovalDecisionRequest,
-    _caller_org,
-    _enforce_org_scope,
-    _ensure_tables,
-    _utc_now_iso,
-    make_approval_decision,
-)
+from api.routes.ai_governance import _ensure_tables, _utc_now_iso
 from api.routes.pack_catalogue import PACKS, WORKFLOWS, Workflow
-from config.auth import TokenData, UserRole, require_role
+from config.auth import TokenData, UserRole, get_current_active_user, require_role
 from database.connection import get_db
+from src.application.services.governance_assurance_service import (
+    GovernanceAssuranceService,
+    OrgMembership,
+)
 
-router = APIRouter(dependencies=[Depends(_enforce_org_scope)])
+router = APIRouter()
 
 GENESIS_HASH = "0" * 64
 RUN_STATUSES = ("queued", "running", "waiting", "blocked", "done", "failed")
@@ -57,9 +54,23 @@ class DecisionBody(BaseModel):
     notes: str = ""
 
 
-def _user_id(request: Request) -> Optional[str]:
-    user = getattr(request.state, "user", None)
-    return getattr(user, "user_id", None)
+def _member(
+    org_id: str = Query(min_length=1),
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+) -> OrgMembership:
+    """The caller's membership in the requested organization; 404 when they are not a member."""
+    membership = GovernanceAssuranceService(db).membership(org_id, current_user.user_id)
+    if not membership:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    return membership
+
+
+def _manager(membership: OrgMembership = Depends(_member)) -> OrgMembership:
+    """Installing, removing, starting runs and deciding gates need owner or admin rights."""
+    if not GovernanceAssuranceService.may_mutate(membership):
+        raise HTTPException(status_code=403, detail="Organization mutation permission required")
+    return membership
 
 
 def _pack_json(pack_id: str, installed: bool) -> dict:
@@ -219,11 +230,11 @@ def _run_json(db: Session, run_id: str) -> dict:
     }
 
 
-def _run_or_404(db: Session, request: Request, run_id: str):
+def _run_or_404(db: Session, org_id: str, run_id: str):
     run = (
         db.execute(
             text("SELECT * FROM workflow_runs WHERE id = :id AND org_id = :org_id"),
-            {"id": run_id, "org_id": _caller_org(request)},
+            {"id": run_id, "org_id": org_id},
         )
         .mappings()
         .fetchone()
@@ -237,19 +248,19 @@ def _run_or_404(db: Session, request: Request, run_id: str):
 
 
 @router.get("")
-async def list_packs(request: Request, db: Session = Depends(get_db)):
+async def list_packs(m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     _ensure_tables(db)
-    rows = db.execute(text("SELECT pack_id FROM pack_installs WHERE org_id = :org_id"), {"org_id": _caller_org(request)})
+    rows = db.execute(text("SELECT pack_id FROM pack_installs WHERE org_id = :org_id"), {"org_id": m.org_id})
     installed = {r[0] for r in rows}
     return [_pack_json(pid, pid in installed) for pid in PACKS]
 
 
 @router.post("/{pack_id}/install")
-async def install_pack(pack_id: str, request: Request, db: Session = Depends(get_db)):
+async def install_pack(pack_id: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
     if pack_id not in PACKS:
         raise HTTPException(status_code=404, detail="Pack not found")
     _ensure_tables(db)
-    org_id = _caller_org(request)
+    org_id = m.org_id
     if not _is_installed(db, org_id, pack_id):
         try:
             db.execute(
@@ -261,7 +272,7 @@ async def install_pack(pack_id: str, request: Request, db: Session = Depends(get
                     "id": str(uuid.uuid4()),
                     "org_id": org_id,
                     "pack_id": pack_id,
-                    "installed_by": _user_id(request),
+                    "installed_by": m.user_id,
                     "created_at": _utc_now_iso(),
                 },
             )
@@ -272,25 +283,25 @@ async def install_pack(pack_id: str, request: Request, db: Session = Depends(get
 
 
 @router.delete("/{pack_id}/install")
-async def uninstall_pack(pack_id: str, request: Request, db: Session = Depends(get_db)):
+async def uninstall_pack(pack_id: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
     if pack_id not in PACKS:
         raise HTTPException(status_code=404, detail="Pack not found")
     _ensure_tables(db)
     db.execute(
         text("DELETE FROM pack_installs WHERE org_id = :org_id AND pack_id = :pack_id"),
-        {"org_id": _caller_org(request), "pack_id": pack_id},
+        {"org_id": m.org_id, "pack_id": pack_id},
     )
     db.commit()
     return _pack_json(pack_id, False)
 
 
 @router.get("/journeys/{pack_id}")
-async def get_journey(pack_id: str, request: Request, db: Session = Depends(get_db)):
+async def get_journey(pack_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     pack = PACKS.get(pack_id)
     if not pack or pack.journey is None:
         raise HTTPException(status_code=404, detail="Journey not found")
     _ensure_tables(db)
-    org_id = _caller_org(request)
+    org_id = m.org_id
     workflow_ids = [wid for c in pack.journey for wid in c.workflow_ids]
     latest = _latest_runs(db, org_id, workflow_ids)
     return {
@@ -324,10 +335,10 @@ def _workflow_or_404(workflow_id: str) -> Workflow:
 
 
 @router.get("/workflows/{workflow_id}")
-async def get_workflow(workflow_id: str, request: Request, db: Session = Depends(get_db)):
+async def get_workflow(workflow_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     wf = _workflow_or_404(workflow_id)
     _ensure_tables(db)
-    org_id = _caller_org(request)
+    org_id = m.org_id
     latest = _latest_runs(db, org_id, [wf.id]).get(wf.id)
     return {
         "id": wf.id,
@@ -359,15 +370,21 @@ async def get_workflow(workflow_id: str, request: Request, db: Session = Depends
 @router.post("/workflows/{workflow_id}/runs")
 async def start_run(
     workflow_id: str,
-    request: Request,
     body: StartRunBody = StartRunBody(),
+    m: OrgMembership = Depends(_manager),
     db: Session = Depends(get_db),
 ):
     wf = _workflow_or_404(workflow_id)
     _ensure_tables(db)
-    org_id = _caller_org(request)
+    org_id = m.org_id
     if not _is_installed(db, org_id, wf.pack_id):
         raise HTTPException(status_code=409, detail="Install the pack before starting a run")
+    if body.system_id:
+        system = db.execute(
+            text("SELECT org_id FROM governance_ai_systems WHERE id = :id"), {"id": body.system_id}
+        ).fetchone()
+        if not system or str(system[0]) != org_id:
+            raise HTTPException(status_code=404, detail="AI system not found")
     now = _utc_now_iso()
     run_id = str(uuid.uuid4())
     db.execute(
@@ -382,7 +399,7 @@ async def start_run(
             "workflow_id": wf.id,
             "workflow_version": wf.version,
             "ai_system_id": body.system_id,
-            "started_by": _user_id(request),
+            "started_by": m.user_id,
             "now": now,
         },
     )
@@ -393,8 +410,8 @@ async def start_run(
 
 @router.get("/runs")
 async def list_runs(
-    request: Request,
     status: Optional[str] = Query(default=None),
+    m: OrgMembership = Depends(_member),
     db: Session = Depends(get_db),
 ):
     if status is not None and status not in RUN_STATUSES:
@@ -406,7 +423,7 @@ async def list_runs(
                 "SELECT * FROM workflow_runs WHERE org_id = :org_id AND (:status IS NULL OR status = :status) "
                 "ORDER BY created_at DESC"
             ),
-            {"org_id": _caller_org(request), "status": status},
+            {"org_id": m.org_id, "status": status},
         )
         .mappings()
         .all()
@@ -415,9 +432,9 @@ async def list_runs(
 
 
 @router.get("/runs/{run_id}")
-async def get_run(run_id: str, request: Request, db: Session = Depends(get_db)):
+async def get_run(run_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     _ensure_tables(db)
-    _run_or_404(db, request, run_id)
+    _run_or_404(db, m.org_id, run_id)
     return _run_json(db, run_id)
 
 
@@ -480,13 +497,13 @@ def _open_gate(db: Session, run, requested_by: Optional[str]) -> str:
 async def append_event(
     run_id: str,
     body: EventBody,
-    request: Request,
+    m: OrgMembership = Depends(_member),
     db: Session = Depends(get_db),
     _admin: TokenData = Depends(require_role([UserRole.ADMIN])),
 ):
     """Hook for a future agent executor. Status, current step and finish time are derived here, never client-set."""
     _ensure_tables(db)
-    run = _run_or_404(db, request, run_id)
+    run = _run_or_404(db, m.org_id, run_id)
     steps = {s.id: s for s in WORKFLOWS[run["workflow_id"]].steps}
     if run["status"] in ("done", "failed"):
         raise HTTPException(status_code=409, detail="Run is finished")
@@ -507,7 +524,7 @@ async def append_event(
     if body.kind == "step.started":
         status, current_step = "running", body.step_id
     elif body.kind == "gate.opened":
-        approval_request_id = _open_gate(db, run, _user_id(request))
+        approval_request_id = _open_gate(db, run, m.user_id)
         payload["approvalRequestId"] = approval_request_id
         status, current_step = "waiting", body.step_id
     elif body.kind == "run.completed":
@@ -534,33 +551,50 @@ async def append_event(
 
 
 @router.post("/runs/{run_id}/decision")
-async def decide_run(run_id: str, body: DecisionBody, request: Request, db: Session = Depends(get_db)):
+async def decide_run(
+    run_id: str,
+    body: DecisionBody,
+    m: OrgMembership = Depends(_manager),
+    db: Session = Depends(get_db),
+):
     _ensure_tables(db)
-    run = _run_or_404(db, request, run_id)
+    run = _run_or_404(db, m.org_id, run_id)
     if run["status"] != "waiting" or not run["approval_request_id"]:
         raise HTTPException(status_code=409, detail="Run is not waiting for a decision")
     approved = body.decision == "approve"
-    # Claim the run first: a concurrent second decision updates zero rows and gets 409.
+    decision = "approved" if approved else "rejected"
+    now = _utc_now_iso()
+    # Claim the run and its request first: a concurrent second decision updates zero rows and gets 409.
     claimed = db.execute(
         text("UPDATE workflow_runs SET status = :status, updated_at = :now WHERE id = :id AND status = 'waiting'"),
-        {"status": "running" if approved else "blocked", "now": _utc_now_iso(), "id": run_id},
+        {"status": "running" if approved else "blocked", "now": now, "id": run_id},
     ).rowcount
-    if not claimed:
+    decided = db.execute(
+        text(
+            "UPDATE governance_approval_requests "
+            "SET status = :status, decision = :status, decision_notes = :notes, "
+            "decided_by = :decided_by, decided_at = :now, updated_at = :now "
+            "WHERE id = :id AND entity_type = 'workflow_run' AND status = 'pending'"
+        ),
+        {"status": decision, "notes": body.notes, "decided_by": m.user_id, "now": now, "id": run["approval_request_id"]},
+    ).rowcount
+    if not claimed or not decided:
         db.rollback()
         raise HTTPException(status_code=409, detail="Run is not waiting for a decision")
+    db.execute(
+        text(
+            "INSERT INTO governance_approval_decisions (id, request_id, decision, notes, decided_by, created_at) "
+            "VALUES (:id, :request_id, :decision, :notes, :decided_by, :created_at)"
+        ),
+        {
+            "id": str(uuid.uuid4()),
+            "request_id": run["approval_request_id"],
+            "decision": decision,
+            "notes": body.notes,
+            "decided_by": m.user_id,
+            "created_at": now,
+        },
+    )
     _append(db, run_id, "gate.decided", run["current_step"], {"decision": body.decision, "notes": body.notes})
-    try:
-        # Commits the run claim, the event and the approval decision together.
-        await make_approval_decision(
-            run["approval_request_id"],
-            ApprovalDecisionRequest(
-                decision="approved" if approved else "rejected",
-                notes=body.notes,
-                decided_by=_user_id(request),
-            ),
-            db,
-        )
-    except HTTPException:
-        db.rollback()
-        raise
+    db.commit()
     return _run_json(db, run_id)

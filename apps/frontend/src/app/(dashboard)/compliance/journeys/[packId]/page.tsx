@@ -79,7 +79,7 @@ export default function JourneyPage() {
         )}
       </Heading>
 
-      <section aria-label="Journey overview" className="fm-card flex flex-wrap items-stretch gap-[22px] p-[18px]">
+      <section aria-label="Journey overview" className="pk-card flex flex-wrap items-stretch gap-[22px] p-[18px]">
         <div className="min-w-0 flex-[999_1_560px]">
           <IsoFigure
             className="p-2.5"
@@ -120,7 +120,7 @@ export default function JourneyPage() {
         </div>
       </section>
 
-      <section aria-labelledby="by-clause" className="fm-card px-6 py-5">
+      <section aria-labelledby="by-clause" className="pk-card px-6 py-5">
         <div className="mb-1.5 flex flex-wrap items-baseline justify-between gap-2.5">
           <h2 id="by-clause" className="m-0 text-base font-semibold">Workflows by clause</h2>
           <span className={`text-[12.5px] ${MUTED}`}>Each runs in a lifecycle stage on the left</span>

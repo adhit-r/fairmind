@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { useMemo, useState } from 'react'
 import ReactFlow, { Background, Controls, Handle, MarkerType, Position, type Edge, type Node, type NodeProps } from 'reactflow'
 import 'reactflow/dist/style.css'
-import { startRun, useRun, useWorkflow, type Step, type StepKind } from '@/lib/api/hooks/usePacks'
+import { usePackActions, useRun, useWorkflow, type Step, type StepKind } from '@/lib/api/hooks/usePacks'
 import { BTN, BTN_P, Crumbs, ErrorNote, Heading, Loading, MUTED, Pill, StatusPill } from '@/components/packs/parts'
 
 type NodeState = 'done' | 'current' | 'waiting' | 'idle'
@@ -109,6 +109,7 @@ function layout(steps: Step[]): Map<string, { x: number; y: number }> {
 export default function WorkflowPage() {
   const { workflowId } = useParams<{ workflowId: string }>()
   const router = useRouter()
+  const { startRun } = usePackActions()
   const wf = useWorkflow(workflowId)
   const run = useRun(wf.data?.latestRun?.id)
   const [overlay, setOverlay] = useState(true)
@@ -216,7 +217,7 @@ export default function WorkflowPage() {
       </div>
       {failure && <ErrorNote message={failure} />}
 
-      <section aria-label="Workflow canvas" className="fm-card flex flex-col overflow-hidden">
+      <section aria-label="Workflow canvas" className="pk-card flex flex-col overflow-hidden">
         <div className="flex flex-wrap items-center gap-2.5 border-b border-[#15171a14] px-3.5 py-3">
           <b className="flex-grow text-sm font-semibold">Canvas</b>
           <label className="flex items-center gap-2 text-[13px] font-semibold">
@@ -259,7 +260,7 @@ export default function WorkflowPage() {
       </section>
 
       <div className="flex flex-wrap items-start gap-5">
-        <section aria-labelledby="ctl" className="fm-card min-w-0 flex-[1_1_360px] px-[22px] py-5">
+        <section aria-labelledby="ctl" className="pk-card min-w-0 flex-[1_1_360px] px-[22px] py-5">
           <h2 id="ctl" className="m-0 mb-1 text-base font-semibold">This run counts toward</h2>
           {controls.length === 0 ? (
             <p className={`m-0 text-[13px] ${MUTED}`}>No controls are mapped to this workflow.</p>
@@ -277,7 +278,7 @@ export default function WorkflowPage() {
             </>
           )}
         </section>
-        <section aria-labelledby="lastrun" className="fm-card min-w-0 flex-[1_1_320px] px-[22px] py-5">
+        <section aria-labelledby="lastrun" className="pk-card min-w-0 flex-[1_1_320px] px-[22px] py-5">
           <h2 id="lastrun" className="m-0 mb-2 text-base font-semibold">Latest run</h2>
           {last ? (
             <div className="flex flex-col gap-2 text-[13px]">

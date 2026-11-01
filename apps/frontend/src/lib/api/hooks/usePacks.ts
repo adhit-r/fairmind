@@ -1,6 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useOrg } from '@/context/OrgContext'
 import { apiClient, type ApiResponse } from '../api-client'
 import { API_ENDPOINTS } from '../endpoints'
 
@@ -128,16 +129,30 @@ function useResource<T>(path: string | null): Resource<T> {
   return { data, loading, error, reload }
 }
 
-export const usePacks = () => useResource<Pack[]>(API_ENDPOINTS.packs.list)
+const withOrg = (path: string, orgId: string) => `${path}${path.includes('?') ? '&' : '?'}org_id=${encodeURIComponent(orgId)}`
+
+/** A GET scoped to the organisation picked in the org switcher; waits while organisations load. */
+function useOrgResource<T>(path: string | null): Resource<T> {
+  const { selectedOrg, isLoading } = useOrg()
+  const res = useResource<T>(path && selectedOrg ? withOrg(path, selectedOrg.id) : null)
+  if (path && !selectedOrg) {
+    return isLoading
+      ? { ...res, loading: true }
+      : { ...res, loading: false, error: 'Select an organisation to see its packs.' }
+  }
+  return res
+}
+
+export const usePacks = () => useOrgResource<Pack[]>(API_ENDPOINTS.packs.list)
 export const useJourney = (packId: string | undefined) =>
-  useResource<Journey>(packId ? API_ENDPOINTS.packs.journey(packId) : null)
+  useOrgResource<Journey>(packId ? API_ENDPOINTS.packs.journey(packId) : null)
 export const useWorkflow = (workflowId: string | undefined) =>
-  useResource<Workflow>(workflowId ? API_ENDPOINTS.packs.workflow(workflowId) : null)
+  useOrgResource<Workflow>(workflowId ? API_ENDPOINTS.packs.workflow(workflowId) : null)
 export const useRun = (runId: string | undefined) =>
-  useResource<Run>(runId ? API_ENDPOINTS.packs.run(runId) : null)
+  useOrgResource<Run>(runId ? API_ENDPOINTS.packs.run(runId) : null)
 /** Every run of the organisation, newest first. */
-export const useRuns = () => useResource<RunSummary[]>(API_ENDPOINTS.packs.runs)
-export const useWaitingRuns = () => useResource<RunSummary[]>(`${API_ENDPOINTS.packs.runs}?status=waiting`)
+export const useRuns = () => useOrgResource<RunSummary[]>(API_ENDPOINTS.packs.runs)
+export const useWaitingRuns = () => useOrgResource<RunSummary[]>(`${API_ENDPOINTS.packs.runs}?status=waiting`)
 
 export interface MutationResult<T> {
   data: T | null
@@ -154,13 +169,20 @@ async function mutate<T>(call: () => Promise<ApiResponse<T>>): Promise<MutationR
   }
 }
 
-/** Mutations return the server's answer or its error; the caller then calls the page's reload. */
-export const installPack = (packId: string) => mutate<Pack>(() => apiClient.post(API_ENDPOINTS.packs.install(packId)))
-
-export const uninstallPack = (packId: string) => mutate<Pack>(() => apiClient.delete(API_ENDPOINTS.packs.install(packId)))
-
-export const startRun = (workflowId: string, systemId?: string) =>
-  mutate<Run>(() => apiClient.post(API_ENDPOINTS.packs.startRun(workflowId), systemId ? { system_id: systemId } : {}))
-
-export const decideRun = (runId: string, decision: 'approve' | 'reject', notes?: string) =>
-  mutate<Run>(() => apiClient.post(API_ENDPOINTS.packs.decision(runId), { decision, ...(notes ? { notes } : {}) }))
+/** Mutations for the selected organisation. Each returns the server's answer or its error; the caller then calls the page's reload. */
+export function usePackActions() {
+  const { selectedOrg } = useOrg()
+  const orgId = selectedOrg?.id
+  return useMemo(() => {
+    const send = <T,>(path: string, call: (scoped: string) => Promise<ApiResponse<T>>): Promise<MutationResult<T>> =>
+      orgId ? mutate<T>(() => call(withOrg(path, orgId))) : Promise.resolve({ data: null, error: 'Select an organisation first.' })
+    return {
+      installPack: (packId: string) => send<Pack>(API_ENDPOINTS.packs.install(packId), (p) => apiClient.post(p)),
+      uninstallPack: (packId: string) => send<Pack>(API_ENDPOINTS.packs.install(packId), (p) => apiClient.delete(p)),
+      startRun: (workflowId: string, systemId?: string) =>
+        send<Run>(API_ENDPOINTS.packs.startRun(workflowId), (p) => apiClient.post(p, systemId ? { system_id: systemId } : {})),
+      decideRun: (runId: string, decision: 'approve' | 'reject', notes?: string) =>
+        send<Run>(API_ENDPOINTS.packs.decision(runId), (p) => apiClient.post(p, { decision, ...(notes ? { notes } : {}) })),
+    }
+  }, [orgId])
+}

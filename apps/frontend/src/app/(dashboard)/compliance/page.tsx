@@ -11,7 +11,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Skeleton } from '@/components/ui/skeleton'
 import { IconShield, IconCheck, IconX, IconAlertTriangle } from '@tabler/icons-react'
 import { useCompliance } from '@/lib/api/hooks/useCompliance'
-import { installPack, uninstallPack, usePacks, useRuns, type Pack, type RunStatus, type RunSummary } from '@/lib/api/hooks/usePacks'
+import { usePackActions, usePacks, useRuns, type Pack, type RunStatus, type RunSummary } from '@/lib/api/hooks/usePacks'
 import { IsoFigure } from '@/components/packs/IsoFigure'
 import { packsFigure } from '@/components/packs/figures'
 import { BTN, BTN_P, Empty, ErrorNote, Loading, MUTED, Pill } from '@/components/packs/parts'
@@ -127,6 +127,7 @@ function packHref(p: Pack) {
 function PacksSection() {
   const packs = usePacks()
   const runs = useRuns()
+  const { installPack, uninstallPack } = usePackActions()
   const [busy, setBusy] = useState<string | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
 
@@ -174,7 +175,7 @@ function PacksSection() {
         </p>
       </div>
 
-      <section aria-label="Installed packs" className="fm-card flex flex-wrap items-stretch gap-[22px] p-[18px]">
+      <section aria-label="Installed packs" className="pk-card flex flex-wrap items-stretch gap-[22px] p-[18px]">
         <div className="min-w-0 flex-[999_1_560px]">
           <IsoFigure figure={figure} label={label} className="p-2.5" />
         </div>
@@ -220,7 +221,7 @@ function PacksSection() {
         ) : (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4">
             {available.map(({ pack }) => (
-              <article key={pack.id} className="fm-card flex flex-col gap-2 p-5">
+              <article key={pack.id} className="pk-card flex flex-col gap-2 p-5">
                 <b className="text-[15px] font-semibold">{pack.name}</b>
                 <p className={`m-0 flex-grow text-[13px] leading-normal ${MUTED}`}>{pack.description}</p>
                 <button type="button" className={`${BTN_P} self-start`} disabled={busy !== null} onClick={() => install(pack.id)}>

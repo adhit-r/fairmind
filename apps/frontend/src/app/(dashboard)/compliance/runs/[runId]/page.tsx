@@ -2,7 +2,7 @@
 
 import { useParams } from 'next/navigation'
 import { useMemo, useState } from 'react'
-import { decideRun, useRun, useWaitingRuns, useWorkflow } from '@/lib/api/hooks/usePacks'
+import { usePackActions, useRun, useWaitingRuns, useWorkflow } from '@/lib/api/hooks/usePacks'
 import { IsoFigure } from '@/components/packs/IsoFigure'
 import { runFigure } from '@/components/packs/figures'
 import { BTN, BTN_P, Crumbs, ErrorNote, Heading, Loading, MUTED, Num, Pill, StatusPill, when } from '@/components/packs/parts'
@@ -10,6 +10,7 @@ import { BTN, BTN_P, Crumbs, ErrorNote, Heading, Loading, MUTED, Num, Pill, Stat
 export default function RunPage() {
   const { runId } = useParams<{ runId: string }>()
   const run = useRun(runId)
+  const { decideRun } = usePackActions()
   const workflow = useWorkflow(run.data?.workflowId)
   const waiting = useWaitingRuns()
   const [notes, setNotes] = useState('')
@@ -84,7 +85,7 @@ export default function RunPage() {
       </div>
       {workflow.error && <ErrorNote message={`The workflow steps could not be loaded, so the picture is incomplete. ${workflow.error}`} onRetry={workflow.reload} />}
 
-      <section aria-label="Run overview" className="fm-card flex flex-wrap items-stretch gap-[22px] p-[18px]">
+      <section aria-label="Run overview" className="pk-card flex flex-wrap items-stretch gap-[22px] p-[18px]">
         <div className="min-w-0 flex-[999_1_560px]">
           <IsoFigure
             className="p-2.5"
@@ -137,7 +138,7 @@ export default function RunPage() {
         </div>
       </section>
 
-      <section aria-labelledby="ledger" className="fm-card px-6 py-5">
+      <section aria-labelledby="ledger" className="pk-card px-6 py-5">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2.5">
           <h2 id="ledger" className="m-0 text-base font-semibold">On the ledger</h2>
           {r.chainValid ? <Pill tone="done">Chain valid</Pill> : <Pill tone="block">Chain broken</Pill>}

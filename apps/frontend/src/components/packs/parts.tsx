@@ -1,13 +1,14 @@
 import Link from 'next/link'
+import './iso.css'
 import type { ReactNode } from 'react'
 import type { RunStatus } from '@/lib/api/hooks/usePacks'
 import { cn } from '@/lib/utils'
 
 /** Class strings shared by the pack screens; they follow the approved design (pill buttons, soft pills). */
 export const BTN =
-  'inline-flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-full border border-[#15171a24] bg-white px-[18px] text-[13px] font-semibold text-[var(--fm-ink)] hover:bg-[#f4f4f2] disabled:cursor-not-allowed disabled:opacity-50'
-export const BTN_P = cn(BTN, 'border-[var(--fm-ink)] bg-[var(--fm-ink)] text-white hover:bg-[#2b2e3a]')
-export const MUTED = 'text-[var(--fm-ink2)]'
+  'inline-flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-full border border-[#15171a24] bg-white px-[18px] text-[13px] font-semibold text-[var(--fm-ink,#15171a)] hover:bg-[#f4f4f2] disabled:cursor-not-allowed disabled:opacity-50'
+export const BTN_P = cn(BTN, 'border-[var(--fm-ink,#15171a)] bg-[var(--fm-ink,#15171a)] text-white hover:bg-[#2b2e3a]')
+export const MUTED = 'text-[var(--fm-ink2,#5a5f68)]'
 
 type Tone = 'plain' | 'you' | 'done' | 'run' | 'block'
 const TONE: Record<Tone, string> = {
@@ -44,7 +45,7 @@ export function StatusPill({ status }: { status: RunStatus | null | undefined })
 /** Orange numbered disc; the number matches the agent in the figure. */
 export function Num({ n }: { n: number }) {
   return (
-    <span className="inline-flex h-[22px] w-[22px] flex-none items-center justify-center rounded-full bg-[var(--fm-brand)] text-xs font-bold text-[var(--fm-ink)]">
+    <span className="inline-flex h-[22px] w-[22px] flex-none items-center justify-center rounded-full bg-[var(--fm-brand,#ff6b35)] text-xs font-bold text-[var(--fm-ink,#15171a)]">
       {n}
     </span>
   )
@@ -57,9 +58,9 @@ export function Crumbs({ items }: { items: Array<{ label: string; href?: string 
         <span key={c.label} className="flex gap-1.5">
           {i > 0 && <span aria-hidden>/</span>}
           {c.href ? (
-            <Link href={c.href} className="hover:text-[var(--fm-ink)]">{c.label}</Link>
+            <Link href={c.href} className="hover:text-[var(--fm-ink,#15171a)]">{c.label}</Link>
           ) : (
-            <span className="font-semibold text-[var(--fm-ink)]">{c.label}</span>
+            <span className="font-semibold text-[var(--fm-ink,#15171a)]">{c.label}</span>
           )}
         </span>
       ))}
