@@ -290,7 +290,11 @@ def _ensure_tables(db: Session) -> None:
     import database.governance_models  # noqa: F401
     from database.connection import Base, db_manager
 
-    Base.metadata.create_all(bind=db_manager.engine)
+    for table in Base.metadata.sorted_tables:
+        try:
+            table.create(bind=db_manager.engine, checkfirst=True)
+        except Exception:  # one unparseable definition must not block the rest (see connection.create_tables)
+            continue
     _ensure_model_link_column(db)
     _tables_ready = True
 
