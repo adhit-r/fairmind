@@ -1,0 +1,33 @@
+.fm-iso { background: #f7f6f3; border-radius: 12px; }
+.fm-iso svg { display: block; width: 100%; height: auto; }
+.fm-iso .e { stroke: rgba(21, 23, 26, 0.13); stroke-width: 0.6; stroke-linejoin: round; }
+.fm-iso .n { stroke: none; }
+.fm-iso .sh { opacity: 0.05; }
+.fm-iso .dash { stroke: #8a8f98; stroke-width: 0.85; stroke-dasharray: 3 3; }
+.fm-iso .gle { stroke: #fff; stroke-width: 1.4; }
+.fm-iso .rule { stroke: #a3a8b0; stroke-width: 1.3; stroke-linecap: round; }
+.fm-iso .chev, .fm-iso .plus { stroke: #8a8f98; stroke-width: 1.5; stroke-linecap: round; }
+.fm-iso .chk { stroke: #00704e; stroke-width: 1.8; stroke-linecap: round; }
+.fm-iso .pole { stroke: #15171a; stroke-width: 1.6; }
+.fm-iso .newest { stroke: #3ccf8e; stroke-width: 1.4; }
+.fm-iso .beam { stroke: #15171a; stroke-width: 1.1; stroke-dasharray: 3 4; opacity: 0.4; animation: fm-iso-flow 1.6s linear infinite; }
+.fm-iso .ringp { stroke: #ff6b35; stroke-width: 1.6; transform-box: fill-box; transform-origin: center; animation: fm-iso-pulse 2s ease-out infinite; }
+.fm-iso .bob { animation: fm-iso-bob 3.2s ease-in-out infinite; }
+.fm-iso .gl { animation: fm-iso-bob 3.2s ease-in-out infinite, fm-iso-glow 2.4s ease-in-out infinite; }
+.fm-iso .csh { opacity: 0.08; animation: fm-iso-breath 3.2s ease-in-out infinite; }
+.fm-iso .d2 { animation-delay: -1.1s; }
+.fm-iso .d3 { animation-delay: -2.2s; }
+.fm-iso .lbx { font: 600 9px Inter, system-ui, sans-serif; letter-spacing: 0.1em; fill: #5a5f68; }
+.fm-iso .lbt { font: 600 10px Inter, system-ui, sans-serif; fill: #15171a; }
+.fm-iso .lbm { font: 700 9.5px Inter, system-ui, sans-serif; fill: #15171a; }
+.fm-iso .lbn { font: 700 9px Inter, system-ui, sans-serif; fill: #15171a; }
+.fm-iso .lbc { font: 600 7.5px Inter, system-ui, sans-serif; letter-spacing: 0.06em; fill: #3d4048; text-anchor: middle; }
+.fm-iso .dn { font: 700 11px Inter, system-ui, sans-serif; fill: #15171a; text-anchor: middle; }
+@keyframes fm-iso-bob { 50% { transform: translateY(-4px); } }
+@keyframes fm-iso-glow { 50% { fill: #a7f3d0; } }
+@keyframes fm-iso-breath { 50% { opacity: 0.03; } }
+@keyframes fm-iso-flow { to { stroke-dashoffset: -14; } }
+@keyframes fm-iso-pulse { 0% { opacity: 0.9; transform: scale(1); } 100% { opacity: 0; transform: scale(1.6); } }
+@media (prefers-reduced-motion: reduce) { .fm-iso * { animation: none !important; } }
+/* Packs card; matches the shell's .fm-card so packs looks the same with or without it. */
+.pk-card { background: #fff; border-radius: 14px; box-shadow: 0 1px 2px rgba(20, 20, 30, 0.04), 0 18px 44px -20px rgba(20, 20, 30, 0.22), inset 0 0 0 1px rgba(255, 255, 255, 0.6); }
