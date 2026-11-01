@@ -91,6 +91,7 @@ class DatabaseManager:
         try:
             # Import all model modules so Base.metadata is populated
             import database.governance_models  # noqa: F401
+            import database.models  # noqa: F401  users, organizations, memberships
 
             Base.metadata.create_all(bind=self.engine)
             logger.info("Database tables created successfully")
