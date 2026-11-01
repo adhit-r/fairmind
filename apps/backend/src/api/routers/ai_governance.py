@@ -293,16 +293,8 @@ def _ensure_tables(db: Session) -> None:
     import database.governance_models  # noqa: F401
     from database.connection import Base, db_manager
 
-<<<<<<< HEAD
-    for table in Base.metadata.sorted_tables:
-        try:
-            table.create(bind=db_manager.engine, checkfirst=True)
-        except Exception as table_error:  # one unparseable definition must not block the rest
-            logger.warning(f"Could not create table {table.name}: {table_error}")
-    _ensure_model_link_column(db)
-=======
     db_manager.create_tables()  # every registry, table by table; see connection.create_tables
->>>>>>> 007f8c1 (db: create tables from every model registry, not just one copy of Base)
+    _ensure_model_link_column(db)
     _tables_ready = True
 
 
