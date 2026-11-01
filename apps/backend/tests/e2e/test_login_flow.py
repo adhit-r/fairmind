@@ -4,6 +4,7 @@ E2E tests for login flow.
 
 import os
 
+import httpx
 import pytest
 from playwright.sync_api import Page
 from tests.e2e.pages.login_page import LoginPage
@@ -43,13 +44,23 @@ def test_login_successful(page: Page, base_url: str):
 
 
 @pytest.mark.e2e
-def test_login_invalid_credentials(page: Page, base_url: str):
+def test_login_invalid_credentials(page: Page, base_url: str, api_url: str):
     """Test login with invalid credentials.
 
     Args:
         page: Playwright page instance
         base_url: Base URL of the application
+        api_url: Base URL of the backend API
     """
+    # The API contract first, so a backend regression is named instead of
+    # surfacing as a UI timeout with no message.
+    api = httpx.post(
+        f"{api_url}/api/v1/auth/login",
+        json={"email": "invalid@example.com", "password": "wrongpassword"},
+        timeout=20,
+    )
+    assert api.status_code == 401, f"expected 401 for unknown credentials, got {api.status_code}: {api.text[:300]}"
+
     login_page = LoginPage(page, base_url)
     
     # Navigate to login page
@@ -63,5 +74,6 @@ def test_login_invalid_credentials(page: Page, base_url: str):
     
     # Verify error message is displayed
     error_message = login_page.get_error_message()
-    assert error_message != "", "Error message should be displayed for invalid credentials"
+    page_text = page.locator("body").inner_text(timeout=2000)[:400]
+    assert error_message != "", f"Error message should be displayed for invalid credentials; page shows: {page_text!r}"
 
