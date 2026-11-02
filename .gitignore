@@ -180,6 +180,7 @@ credentials*
 !package-lock.json
 !research/aibom-fairness-evidence/**/*.json
 !apps/backend/src/domain/assurance/evidence-passport-v2.schema.json
+!apps/backend/src/api/routers/pack_catalogue_data/catalogue.json
 !tsconfig.json
 !next.config.js
 !tailwind.config.ts

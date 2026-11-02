@@ -35,6 +35,7 @@ _PUBLIC_ROUTES = frozenset(
         ("POST", "/api/v1/auth/oauth2/sync-user"),
         ("POST", "/api/v1/auth/oauth2/validate"),
         ("POST", "/api/v1/auth/refresh"),
+        ("POST", "/api/v1/auth/register"),
         ("POST", "/api/v1/register"),
     }
 )
