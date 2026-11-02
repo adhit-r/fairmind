@@ -309,14 +309,14 @@ export function AssuranceReportStudio({
   }
 
   return (
-    <section aria-label="Report builder and history" className="border-4 border-[#0F1412] bg-[#FCFDF8] shadow-[8px_8px_0_0_#0F1412]">
-      <div className="flex flex-col gap-3 border-b-4 border-[#0F1412] bg-[#F3F5F0] p-5 sm:flex-row sm:items-start sm:justify-between">
+    <section aria-label="Report builder and history" className="fm-card">
+      <div className="flex flex-col gap-3 border-b border-[var(--fm-line)] bg-[var(--fm-bg)] p-5 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-[#0B7659]">Saved operational reports</p>
-          <h2 className="mt-1 text-xl font-black uppercase">Assurance Report Studio</h2>
-          <p className="mt-1 max-w-[70ch] text-sm text-[#59615D]">Generate, preview, export, and revisit operational report snapshots for {system.name}. Framework assurance remains governed by the transparent summary above.</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#0B7659]">Saved operational reports</p>
+          <h2 className="mt-1 text-xl font-semibold">Assurance Report Studio</h2>
+          <p className="mt-1 max-w-[70ch] text-sm text-[var(--fm-ink2)]">Generate, preview, export, and revisit operational report snapshots for {system.name}. Framework assurance remains governed by the transparent summary above.</p>
         </div>
-        <Button type="button" variant="neutral" disabled={historyLoading} onClick={() => void loadHistory()} className="rounded-none border-2 border-[#0F1412] bg-[#FCFDF8] font-black uppercase">
+        <Button type="button" variant="neutral" disabled={historyLoading} onClick={() => void loadHistory()} className="border border-[var(--fm-line)] bg-white font-semibold">
           <IconRefresh aria-hidden="true" /> Refresh history
         </Button>
       </div>
@@ -324,24 +324,24 @@ export function AssuranceReportStudio({
       {error ? <p role="alert" className="m-5 border-2 border-[#D83A2E] bg-[#FFF0ED] p-3 text-sm font-bold">{error}</p> : null}
 
       {!readOnly ? (
-        <div className="grid gap-4 border-b-2 border-[#0F1412] p-5 lg:grid-cols-[1fr_auto] lg:items-end">
+        <div className="grid gap-4 border-b border-[var(--fm-line)] p-5 lg:grid-cols-[1fr_auto] lg:items-end">
           <div>
-            <p className="text-xs font-black uppercase text-[#59615D]">Pinned generator scope</p>
-            <p className="mt-1 font-black">{system.name} · {frameworkLabel}</p>
-            <p className="mt-1 text-sm text-[#59615D]">The generated legacy operational snapshot is stored in report history. It does not replace the evidence-hash assurance summary.</p>
+            <p className="text-xs font-semibold uppercase text-[var(--fm-ink2)]">Pinned generator scope</p>
+            <p className="mt-1 font-semibold">{system.name} · {frameworkLabel}</p>
+            <p className="mt-1 text-sm text-[var(--fm-ink2)]">The generated legacy operational snapshot is stored in report history. It does not replace the evidence-hash assurance summary.</p>
           </div>
-          <Button type="button" disabled={generating} onClick={() => void generate()} className="rounded-none border-2 border-[#0F1412] bg-[#E97522] font-black uppercase text-[#0F1412]">
+          <Button type="button" disabled={generating} onClick={() => void generate()} className="border border-[var(--fm-line)] bg-[#E97522] font-semibold text-[var(--fm-ink)]">
             {generating ? <IconLoader2 aria-hidden="true" className="animate-spin" /> : <IconFileAnalytics aria-hidden="true" />}
             {generating ? 'Generating report' : 'Generate report'}
           </Button>
         </div>
       ) : (
-        <p className="border-b-2 border-[#0F1412] bg-[#E5F4EF] p-4 text-sm font-bold">Auditor mode can preview and export saved reports but cannot generate a new snapshot.</p>
+        <p className="border-b border-[var(--fm-line)] bg-[#E5F4EF] p-4 text-sm font-bold">Auditor mode can preview and export saved reports but cannot generate a new snapshot.</p>
       )}
 
       {preview ? (
-        <div className="border-b-2 border-[#0F1412] p-5">
-          <p className="mb-3 text-xs font-black uppercase tracking-[0.12em] text-[#59615D]">Selected preview · {preview.title}</p>
+        <div className="border-b border-[var(--fm-line)] p-5">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fm-ink2)]">Selected preview · {preview.title}</p>
           <ReportPreview
             reportType={preview.reportType}
             system={preview.data.system}
@@ -353,7 +353,7 @@ export function AssuranceReportStudio({
       ) : null}
 
       <div className="p-5">
-        <h3 className="mb-3 font-black uppercase">Saved Report History</h3>
+        <h3 className="mb-3 font-semibold">Saved Report History</h3>
         <ReportHistoryTable
           reports={history}
           loading={historyLoading}

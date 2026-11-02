@@ -84,7 +84,7 @@ export default function MonitoringPage() {
   if (error && !metrics) {
     return (
       <div className="space-y-6">
-        <Alert className="border-2 border-red-500 shadow-brutal">
+        <Alert className="border-2 border-red-500">
           <IconAlertTriangle className="h-4 w-4" />
           <AlertTitle>Error Loading Monitoring Data</AlertTitle>
           <AlertDescription>
@@ -105,7 +105,7 @@ export default function MonitoringPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold">Monitoring</h1>
+          <h1 className="text-[30px] font-semibold tracking-[-.03em]">Monitoring</h1>
           <p className="text-muted-foreground mt-1">
             Real-time system and model monitoring
           </p>
@@ -166,7 +166,7 @@ export default function MonitoringPage() {
           type="line"
           dataKey="value"
         />
-        <Card className="p-6 border-2 border-black shadow-brutal">
+        <Card className="p-6 fm-card">
           <h3 className="text-lg font-bold mb-4">System Performance</h3>
           <div className="space-y-4">
             {performanceData.map((item) => (
@@ -175,7 +175,7 @@ export default function MonitoringPage() {
                   <Label className="font-medium">{item.name}</Label>
                   <span className="text-sm font-bold">{item.value}%</span>
                 </div>
-                <Progress value={item.value} className="h-3 border-2 border-black" />
+                <Progress value={item.value} className="h-3 border border-[var(--fm-line)]" />
               </div>
             ))}
           </div>
@@ -183,7 +183,7 @@ export default function MonitoringPage() {
       </div>
 
       {/* Alerts */}
-      <Card className="p-6 border-2 border-black shadow-brutal">
+      <Card className="p-6 fm-card">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-bold">Recent Alerts</h3>
           <Button variant="noShadow" size="sm">
@@ -198,10 +198,10 @@ export default function MonitoringPage() {
           ].map((alert, index) => (
             <div
               key={index}
-              className="p-3 border-2 border-black bg-white flex items-center justify-between"
+              className="p-3 border border-[var(--fm-line)] bg-white flex items-center justify-between"
             >
               <div className="flex items-center gap-3">
-                <div className={`p-2 border-2 border-black ${
+                <div className={`p-2 border border-[var(--fm-line)] ${
                   alert.type === 'warning' ? 'bg-yellow-400' :
                   alert.type === 'info' ? 'bg-blue-400' :
                   'bg-green-400'

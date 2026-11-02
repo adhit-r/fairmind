@@ -160,13 +160,13 @@ export default function RealtimeIntegrationPage() {
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-4xl font-bold">Real-time Integration</h1>
+                    <h1 className="text-[30px] font-semibold tracking-[-.03em]">Real-time Integration</h1>
                     <p className="text-muted-foreground mt-1">
                         Connect live models for instant bias detection and monitoring
                     </p>
                 </div>
                 {isConnected && (
-                    <Badge variant="default" className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 text-sm border-2 border-black">
+                    <Badge variant="default" className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 text-sm border border-[var(--fm-line)]">
                         <IconPlugConnected className="mr-2 h-4 w-4" />
                         Connected: {config.provider}/{config.model_name}
                     </Badge>
@@ -174,16 +174,16 @@ export default function RealtimeIntegrationPage() {
             </div>
 
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-                <TabsList className="border-2 border-black p-1 bg-muted">
-                    <TabsTrigger value="config" className="data-[state=active]:bg-white data-[state=active]:border-2 data-[state=active]:border-black">
+                <TabsList className="border border-[var(--fm-line)] p-1 bg-muted">
+                    <TabsTrigger value="config" className="data-[state=active]:bg-white data-[state=active]:border data-[state=active]:border-[var(--fm-line)]">
                         <IconSettings className="mr-2 h-4 w-4" />
                         Configuration
                     </TabsTrigger>
-                    <TabsTrigger value="interactive" disabled={!isConnected} className="data-[state=active]:bg-white data-[state=active]:border-2 data-[state=active]:border-black">
+                    <TabsTrigger value="interactive" disabled={!isConnected} className="data-[state=active]:bg-white data-[state=active]:border data-[state=active]:border-[var(--fm-line)]">
                         <IconPlayerPlay className="mr-2 h-4 w-4" />
                         Interactive Test
                     </TabsTrigger>
-                    <TabsTrigger value="analysis" disabled={!isConnected} className="data-[state=active]:bg-white data-[state=active]:border-2 data-[state=active]:border-black">
+                    <TabsTrigger value="analysis" disabled={!isConnected} className="data-[state=active]:bg-white data-[state=active]:border data-[state=active]:border-[var(--fm-line)]">
                         <IconChartBar className="mr-2 h-4 w-4" />
                         Comprehensive Analysis
                     </TabsTrigger>
@@ -192,7 +192,7 @@ export default function RealtimeIntegrationPage() {
                 {/* Configuration Tab */}
                 <TabsContent value="config">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <Card className="border-2 border-black shadow-brutal">
+                        <Card className="fm-card">
                             <CardHeader>
                                 <CardTitle>Model Settings</CardTitle>
                                 <CardDescription>Configure your model provider and parameters</CardDescription>
@@ -204,7 +204,7 @@ export default function RealtimeIntegrationPage() {
                                         value={config.provider}
                                         onValueChange={(val) => setConfig({ ...config, provider: val })}
                                     >
-                                        <SelectTrigger className="border-2 border-black">
+                                        <SelectTrigger className="border border-[var(--fm-line)]">
                                             <SelectValue placeholder="Select provider" />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -223,7 +223,7 @@ export default function RealtimeIntegrationPage() {
                                         value={config.model_name}
                                         onChange={(e) => setConfig({ ...config, model_name: e.target.value })}
                                         placeholder="e.g., gpt-4, claude-3-opus"
-                                        className="border-2 border-black"
+                                        className="border border-[var(--fm-line)]"
                                     />
                                 </div>
 
@@ -234,7 +234,7 @@ export default function RealtimeIntegrationPage() {
                                         value={config.api_key}
                                         onChange={(e) => setConfig({ ...config, api_key: e.target.value })}
                                         placeholder="sk-..."
-                                        className="border-2 border-black"
+                                        className="border border-[var(--fm-line)]"
                                     />
                                     <p className="text-xs text-muted-foreground">Keys are never stored permanently in the browser.</p>
                                 </div>
@@ -245,7 +245,7 @@ export default function RealtimeIntegrationPage() {
                                         value={config.base_url || ''}
                                         onChange={(e) => setConfig({ ...config, base_url: e.target.value })}
                                         placeholder="https://api.openai.com/v1"
-                                        className="border-2 border-black"
+                                        className="border border-[var(--fm-line)]"
                                     />
                                 </div>
                             </CardContent>
@@ -253,7 +253,7 @@ export default function RealtimeIntegrationPage() {
                                 <Button
                                     onClick={handleTestConnection}
                                     disabled={loading}
-                                    className="w-full border-2 border-black shadow-brutal hover:translate-y-1 hover:shadow-none transition-all"
+                                    className="w-full transition-all fm-card"
                                 >
                                     {loading ? <IconLoader className="animate-spin mr-2" /> : <IconPlugConnected className="mr-2 h-4 w-4" />}
                                     Test Connection
@@ -261,7 +261,7 @@ export default function RealtimeIntegrationPage() {
                             </CardFooter>
                         </Card>
 
-                        <Card className="border-2 border-black shadow-brutal">
+                        <Card className="fm-card">
                             <CardHeader>
                                 <CardTitle>Parameters</CardTitle>
                                 <CardDescription>Fine-tune generation settings</CardDescription>
@@ -317,7 +317,7 @@ export default function RealtimeIntegrationPage() {
                 <TabsContent value="interactive">
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         <div className="lg:col-span-1 space-y-6">
-                            <Card className="border-2 border-black shadow-brutal">
+                            <Card className="fm-card">
                                 <CardHeader>
                                     <CardTitle>Test Configuration</CardTitle>
                                 </CardHeader>
@@ -328,7 +328,7 @@ export default function RealtimeIntegrationPage() {
                                             value={selectedTestType}
                                             onValueChange={setSelectedTestType}
                                         >
-                                            <SelectTrigger className="border-2 border-black">
+                                            <SelectTrigger className="border border-[var(--fm-line)]">
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -347,14 +347,14 @@ export default function RealtimeIntegrationPage() {
                                             value={customPrompt}
                                             onChange={(e) => setCustomPrompt(e.target.value)}
                                             placeholder="Enter a specific prompt to test..."
-                                            className="border-2 border-black min-h-[100px]"
+                                            className="border border-[var(--fm-line)] min-h-[100px]"
                                         />
                                     </div>
 
                                     <Button
                                         onClick={handleRunTest}
                                         disabled={loading}
-                                        className="w-full border-2 border-black shadow-brutal"
+                                        className="w-full fm-card"
                                     >
                                         {loading ? 'Running...' : 'Run Bias Test'}
                                     </Button>
@@ -364,7 +364,7 @@ export default function RealtimeIntegrationPage() {
 
                         <div className="lg:col-span-2">
                             {testResult ? (
-                                <Card className="border-2 border-black shadow-brutal h-full">
+                                <Card className="h-full fm-card">
                                     <CardHeader>
                                         <div className="flex justify-between items-start">
                                             <div>
@@ -375,14 +375,14 @@ export default function RealtimeIntegrationPage() {
                                             </div>
                                             <div className="text-right">
                                                 <div className="text-sm text-muted-foreground">Bias Score</div>
-                                                <div className={`text-3xl font-bold ${getBiasScoreColor(testResult.bias_score)}`}>
+                                                <div className={`text-[24px] font-semibold tracking-tight ${getBiasScoreColor(testResult.bias_score)}`}>
                                                     {(testResult.bias_score * 100).toFixed(1)}%
                                                 </div>
                                             </div>
                                         </div>
                                     </CardHeader>
                                     <CardContent className="space-y-6">
-                                        <div className="bg-muted p-4 rounded-lg border-2 border-black/10">
+                                        <div className="bg-muted p-4 rounded-lg border border-[var(--fm-line)]">
                                             <Label className="text-xs uppercase text-muted-foreground">Model Response</Label>
                                             <p className="mt-1 font-mono text-sm whitespace-pre-wrap">
                                                 {testResult.model_response.response_text}
@@ -432,7 +432,7 @@ export default function RealtimeIntegrationPage() {
                 {/* Comprehensive Analysis Tab */}
                 <TabsContent value="analysis">
                     <div className="space-y-6">
-                        <Card className="border-2 border-black shadow-brutal">
+                        <Card className="fm-card">
                             <CardHeader>
                                 <CardTitle>Comprehensive Bias Analysis</CardTitle>
                                 <CardDescription>
@@ -447,7 +447,7 @@ export default function RealtimeIntegrationPage() {
                                             size="lg"
                                             onClick={handleRunAnalysis}
                                             disabled={loading}
-                                            className="border-2 border-black shadow-brutal text-lg px-8"
+                                            className="text-lg px-8 fm-card"
                                         >
                                             {loading ? <IconLoader className="animate-spin mr-2" /> : <IconBrain className="mr-2" />}
                                             Start Full Analysis
@@ -457,21 +457,21 @@ export default function RealtimeIntegrationPage() {
                                     <div className="space-y-8">
                                         {/* Summary Stats */}
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                            <div className="p-4 border-2 border-black rounded-lg bg-white">
+                                            <div className="p-4 border border-[var(--fm-line)] rounded-lg bg-white">
                                                 <div className="text-sm text-muted-foreground">Overall Bias Score</div>
-                                                <div className={`text-3xl font-bold ${getBiasScoreColor(analysisResult.overall_bias_score)}`}>
+                                                <div className={`text-[24px] font-semibold tracking-tight ${getBiasScoreColor(analysisResult.overall_bias_score)}`}>
                                                     {(analysisResult.overall_bias_score * 100).toFixed(1)}%
                                                 </div>
                                             </div>
-                                            <div className="p-4 border-2 border-black rounded-lg bg-white">
+                                            <div className="p-4 border border-[var(--fm-line)] rounded-lg bg-white">
                                                 <div className="text-sm text-muted-foreground">Tests Performed</div>
-                                                <div className="text-3xl font-bold">
+                                                <div className="text-[24px] font-semibold tracking-tight">
                                                     {analysisResult.tests_performed.length}
                                                 </div>
                                             </div>
-                                            <div className="p-4 border-2 border-black rounded-lg bg-white">
+                                            <div className="p-4 border border-[var(--fm-line)] rounded-lg bg-white">
                                                 <div className="text-sm text-muted-foreground">Risk Level</div>
-                                                <div className="text-3xl font-bold uppercase text-orange-600">
+                                                <div className="text-3xl font-semibold text-orange-600">
                                                     {analysisResult.risk_assessment?.level || 'Unknown'}
                                                 </div>
                                             </div>
@@ -480,9 +480,9 @@ export default function RealtimeIntegrationPage() {
                                         {/* Detailed Results Table */}
                                         <div>
                                             <h3 className="text-xl font-bold mb-4">Detailed Test Results</h3>
-                                            <div className="border-2 border-black rounded-lg overflow-hidden">
+                                            <div className="border border-[var(--fm-line)] rounded-lg overflow-hidden">
                                                 <table className="w-full text-sm">
-                                                    <thead className="bg-muted border-b-2 border-black">
+                                                    <thead className="bg-muted border-b border-[var(--fm-line)]">
                                                         <tr>
                                                             <th className="p-3 text-left">Test Type</th>
                                                             <th className="p-3 text-left">Bias Score</th>

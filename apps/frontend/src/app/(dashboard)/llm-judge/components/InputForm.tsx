@@ -123,7 +123,7 @@ export function InputForm({
   const characterPercentage = (characterCount / maxCharacters) * 100
 
   return (
-    <Card className="border-2 border-black shadow-brutal p-6 space-y-6">
+    <Card className="p-6 space-y-6 fm-card">
       <div>
         <h2 className="text-2xl font-bold mb-2">Evaluation Setup</h2>
         <p className="text-sm text-gray-600">
@@ -161,7 +161,7 @@ export function InputForm({
             setLocalError(null)
           }}
           disabled={loading}
-          className="h-[200px] border-2 border-black font-mono text-sm resize-none"
+          className="h-[200px] border border-[var(--fm-line)] font-mono text-sm resize-none"
         />
 
         {/* Character Count Progress */}
@@ -193,7 +193,7 @@ export function InputForm({
           size="sm"
           onClick={() => fileInputRef.current?.click()}
           disabled={loading}
-          className="border-2 border-black w-full justify-center"
+          className="border border-[var(--fm-line)] w-full justify-center"
         >
           <IconUpload className="w-4 h-4 mr-2" />
           Upload .txt File
@@ -206,7 +206,7 @@ export function InputForm({
           Judge Model *
         </Label>
         <Select value={selectedJudge} onValueChange={setSelectedJudge} disabled={loading}>
-          <SelectTrigger id="judge-model" className="border-2 border-black font-semibold">
+          <SelectTrigger id="judge-model" className="border border-[var(--fm-line)] font-semibold">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -248,7 +248,7 @@ export function InputForm({
                 checked={selectedCategories.includes(category)}
                 onCheckedChange={() => handleCategoryToggle(category)}
                 disabled={loading}
-                className="border-2 border-black"
+                className="border border-[var(--fm-line)]"
               />
               <Label
                 htmlFor={`category-${category}`}
@@ -277,7 +277,7 @@ export function InputForm({
           value={targetModel}
           onChange={(e) => setTargetModel(e.target.value)}
           disabled={loading}
-          className="w-full px-3 py-2 border-2 border-black rounded font-mono text-sm"
+          className="w-full px-3 py-2 border border-[var(--fm-line)] rounded font-mono text-sm"
         />
         <p className="text-xs text-gray-600">
           The model whose outputs you&#39;re evaluating (for reference in results)
@@ -289,7 +289,7 @@ export function InputForm({
         <Button
           onClick={handleEvaluate}
           disabled={loading || !text.trim() || selectedCategories.length === 0}
-          className="flex-1 border-2 border-black font-bold bg-black text-white hover:bg-gray-800"
+          className="flex-1 border border-[var(--fm-line)] font-bold bg-black text-white hover:bg-gray-800"
         >
           {loading ? (
             <>
@@ -305,7 +305,7 @@ export function InputForm({
           onClick={clearForm}
           disabled={loading}
           variant="neutral"
-          className="border-2 border-black font-bold"
+          className="border border-[var(--fm-line)] font-bold"
         >
           Clear
         </Button>

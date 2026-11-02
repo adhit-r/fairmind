@@ -129,14 +129,14 @@ export function AuditLogTable({
   };
 
   return (
-    <Card className="border-4 border-black shadow-brutal">
-      <CardHeader className="border-b-4 border-black">
+    <Card className="fm-card">
+      <CardHeader className="border-b border-[var(--fm-line)]">
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg font-bold tracking-tight">AUDIT LOG</CardTitle>
           <Button
             onClick={exportCSV}
             disabled={paginatedData.length === 0}
-            className="border-2 border-black bg-white text-black font-bold hover:bg-gray-100 shadow-brutal disabled:opacity-50"
+            className="text-black font-bold hover:bg-gray-100 disabled:opacity-50 fm-card"
           >
             <Download className="mr-2 h-4 w-4" />
             EXPORT CSV
@@ -154,40 +154,40 @@ export function AuditLogTable({
               setSearchQuery(e.target.value);
               setCurrentPage(1);
             }}
-            className="border-2 border-black pl-10 focus:ring-2 focus:ring-orange-500"
+            className="border border-[var(--fm-line)] pl-10 focus:ring-2 focus:ring-orange-500"
           />
         </div>
 
         {/* Table */}
-        <div className="overflow-x-auto border-2 border-black">
+        <div className="overflow-x-auto border border-[var(--fm-line)]">
           <Table>
-            <TableHeader className="bg-gray-50 border-b-2 border-black">
+            <TableHeader className="bg-gray-50 border-b border-[var(--fm-line)]">
               <TableRow className="border-0">
                 <TableHead
-                  className="cursor-pointer font-bold text-xs uppercase border-r-2 border-black hover:bg-gray-100"
+                  className="cursor-pointer font-semibold text-xs uppercase border-r border-[var(--fm-line)] hover:bg-gray-100"
                   onClick={() => handleSort('timestamp')}
                 >
                   TIMESTAMP <SortIcon column="timestamp" />
                 </TableHead>
                 <TableHead
-                  className="cursor-pointer font-bold text-xs uppercase border-r-2 border-black hover:bg-gray-100"
+                  className="cursor-pointer font-semibold text-xs uppercase border-r border-[var(--fm-line)] hover:bg-gray-100"
                   onClick={() => handleSort('user_email')}
                 >
                   USER <SortIcon column="user_email" />
                 </TableHead>
                 <TableHead
-                  className="cursor-pointer font-bold text-xs uppercase border-r-2 border-black hover:bg-gray-100"
+                  className="cursor-pointer font-semibold text-xs uppercase border-r border-[var(--fm-line)] hover:bg-gray-100"
                   onClick={() => handleSort('action')}
                 >
                   ACTION <SortIcon column="action" />
                 </TableHead>
-                <TableHead className="cursor-pointer font-bold text-xs uppercase border-r-2 border-black hover:bg-gray-100">
+                <TableHead className="cursor-pointer font-semibold text-xs uppercase border-r border-[var(--fm-line)] hover:bg-gray-100">
                   RESOURCE TYPE
                 </TableHead>
-                <TableHead className="cursor-pointer font-bold text-xs uppercase border-r-2 border-black hover:bg-gray-100">
+                <TableHead className="cursor-pointer font-semibold text-xs uppercase border-r border-[var(--fm-line)] hover:bg-gray-100">
                   RESOURCE ID
                 </TableHead>
-                <TableHead className="font-bold text-xs uppercase">IP ADDRESS</TableHead>
+                <TableHead className="font-semibold text-xs uppercase">IP ADDRESS</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -246,7 +246,7 @@ export function AuditLogTable({
                 onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
                 disabled={currentPage === 1}
                 variant="neutral"
-                className="border-2 border-black font-bold disabled:opacity-50"
+                className="border border-[var(--fm-line)] font-bold disabled:opacity-50"
               >
                 ← PREV
               </Button>
@@ -254,7 +254,7 @@ export function AuditLogTable({
                 onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
                 disabled={currentPage === totalPages}
                 variant="neutral"
-                className="border-2 border-black font-bold disabled:opacity-50"
+                className="border border-[var(--fm-line)] font-bold disabled:opacity-50"
               >
                 NEXT →
               </Button>

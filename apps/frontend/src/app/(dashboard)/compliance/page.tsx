@@ -24,11 +24,11 @@ function ComplianceFrameworks() {
 
   const getStatusBadge = (status: string) => {
     if (status === 'compliant') {
-      return <Badge variant="default" className="border-2 border-black bg-green-500">Compliant</Badge>
+      return <Badge variant="default" className="border border-[var(--fm-line)] bg-green-500">Compliant</Badge>
     } else if (status === 'partial') {
-      return <Badge variant="secondary" className="border-2 border-black bg-yellow-400">Partial</Badge>
+      return <Badge variant="secondary" className="border border-[var(--fm-line)] bg-yellow-400">Partial</Badge>
     } else {
-      return <Badge variant="destructive" className="border-2 border-black">Non-Compliant</Badge>
+      return <Badge variant="destructive" className="border border-[var(--fm-line)]">Non-Compliant</Badge>
     }
   }
 
@@ -48,7 +48,7 @@ function ComplianceFrameworks() {
   if (error && !data) {
     return (
       <div className="space-y-6">
-        <Alert className="border-2 border-red-500 shadow-brutal">
+        <Alert className="border-2 border-red-500">
           <IconAlertTriangle className="h-4 w-4" />
           <AlertTitle>Error Loading Compliance Data</AlertTitle>
           <AlertDescription>{error.message}</AlertDescription>
@@ -61,7 +61,7 @@ function ComplianceFrameworks() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-4xl font-bold">Compliance</h1>
+        <h1 className="text-[30px] font-semibold tracking-[-.03em]">Compliance</h1>
         <p className="text-muted-foreground mt-1">
           Monitor compliance with AI governance frameworks
         </p>
@@ -70,7 +70,7 @@ function ComplianceFrameworks() {
       {/* Framework Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {frameworks.map((framework) => (
-          <Card key={framework.name} className="p-6 border-2 border-black shadow-brutal">
+          <Card key={framework.name} className="p-6 fm-card">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-bold">{framework.name}</h3>
               {getStatusBadge(framework.status)}
@@ -80,20 +80,20 @@ function ComplianceFrameworks() {
                 <span className="text-sm text-muted-foreground">Compliance</span>
                 <span className="text-sm font-bold">{framework.compliance}%</span>
               </div>
-              <Progress value={framework.compliance} className="h-3 border-2 border-black" />
+              <Progress value={framework.compliance} className="h-3 border border-[var(--fm-line)]" />
             </div>
           </Card>
         ))}
       </div>
 
       {/* Controls */}
-      <Card className="p-6 border-2 border-black shadow-brutal">
+      <Card className="p-6 fm-card">
         <h2 className="text-2xl font-bold mb-4">Compliance Controls</h2>
         <div className="space-y-3">
           {controls.map((control) => (
             <div
               key={control.id}
-              className="p-4 border-2 border-black bg-white flex items-center justify-between"
+              className="p-4 border border-[var(--fm-line)] bg-white flex items-center justify-between"
             >
               <div className="flex items-center gap-3">
                 {control.status === 'compliant' ? (

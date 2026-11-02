@@ -9,7 +9,7 @@ interface DNAProfileProps {
 
 export default function DNAProfile({ dna }: DNAProfileProps) {
     return (
-        <Card className="border-2 border-black shadow-brutal h-full">
+        <Card className="h-full fm-card">
             <CardHeader>
                 <div className="flex justify-between items-start">
                     <CardTitle className="flex items-center gap-2">

@@ -26,7 +26,7 @@ interface RadarChartProps {
 
 export function RadarChart({ title, data, className }: RadarChartProps) {
   return (
-    <Card className={cn('p-6 border-2 border-black shadow-brutal', className)}>
+    <Card className={cn('p-6 fm-card', className)}>
       <h3 className="text-lg font-bold mb-4">{title}</h3>
       <ResponsiveContainer width="100%" height={300}>
         <RechartsRadarChart data={data}>

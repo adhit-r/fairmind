@@ -27,14 +27,14 @@ export default function ProvenancePage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-4xl font-bold">Model Provenance</h1>
+        <h1 className="text-[30px] font-semibold tracking-[-.03em]">Model Provenance</h1>
         <p className="text-muted-foreground mt-1">
           Track model lineage and provenance information
         </p>
       </div>
 
       {/* Search */}
-      <Card className="p-6 border-2 border-black shadow-brutal">
+      <Card className="p-6 fm-card">
         <div className="flex gap-4">
           <div className="flex-1 space-y-2">
             <Label htmlFor="modelId">Model ID</Label>
@@ -43,7 +43,7 @@ export default function ProvenancePage() {
               value={modelId}
               onChange={(e) => setModelId(e.target.value)}
               placeholder="Enter model ID to search"
-              className="border-2 border-black"
+              className="border border-[var(--fm-line)]"
               onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
             />
           </div>
@@ -64,18 +64,18 @@ export default function ProvenancePage() {
       )}
 
       {error && (
-        <Alert className="border-2 border-red-500 shadow-brutal">
+        <Alert className="border-2 border-red-500">
           <IconAlertTriangle className="h-4 w-4" />
           <AlertDescription>{error.message}</AlertDescription>
         </Alert>
       )}
 
       {!loading && !error && data.length > 0 && (
-        <Card className="p-6 border-2 border-black shadow-brutal">
+        <Card className="p-6 fm-card">
           <h2 className="text-2xl font-bold mb-4">Provenance Records</h2>
           <Table>
             <TableHeader>
-              <TableRow className="border-2 border-black">
+              <TableRow className="border border-[var(--fm-line)]">
                 <TableHead className="font-bold">Record ID</TableHead>
                 <TableHead className="font-bold">Model ID</TableHead>
                 <TableHead className="font-bold">Lineage Depth</TableHead>
@@ -85,11 +85,11 @@ export default function ProvenancePage() {
             </TableHeader>
             <TableBody>
               {data.map((record) => (
-                <TableRow key={record.id} className="border-b-2 border-black">
+                <TableRow key={record.id} className="border-b border-[var(--fm-line)]">
                   <TableCell className="font-mono text-sm">{record.id.slice(0, 8)}...</TableCell>
                   <TableCell className="font-mono text-sm">{record.modelId}</TableCell>
                   <TableCell>
-                    <Badge variant="default" className="border-2 border-black">
+                    <Badge variant="default" className="border border-[var(--fm-line)]">
                       {record.lineage.length} levels
                     </Badge>
                   </TableCell>
@@ -109,7 +109,7 @@ export default function ProvenancePage() {
       )}
 
       {!loading && !error && searchModelId && data.length === 0 && (
-        <Card className="p-12 border-2 border-black shadow-brutal text-center">
+        <Card className="p-12 text-center fm-card">
           <IconFileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
           <p className="text-lg font-medium mb-2">No provenance records found</p>
           <p className="text-muted-foreground">
@@ -119,7 +119,7 @@ export default function ProvenancePage() {
       )}
 
       {!searchModelId && (
-        <Card className="p-12 border-2 border-black shadow-brutal text-center">
+        <Card className="p-12 text-center fm-card">
           <IconFileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
           <p className="text-lg font-medium mb-2">Search for Model Provenance</p>
           <p className="text-muted-foreground">

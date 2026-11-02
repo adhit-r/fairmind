@@ -84,7 +84,7 @@ export function BiasScoreCard({ result }: BiasScoreCardProps) {
 
   return (
     <Card
-      className={`border-2 ${severityStyle.border} shadow-brutal p-6 space-y-6 ${severityStyle.bg}`}
+      className={`border-2 ${severityStyle.border} p-6 space-y-6 ${severityStyle.bg}`}
     >
       {/* Header */}
       <div className="flex items-start justify-between">
@@ -103,14 +103,14 @@ export function BiasScoreCard({ result }: BiasScoreCardProps) {
       </div>
 
       {/* Bias Score */}
-      <div className="space-y-3 bg-white/50 p-4 rounded border border-black/20">
+      <div className="space-y-3 bg-white/50 p-4 rounded border border-[var(--fm-line)]">
         <div className="flex justify-between items-center">
           <span className="font-semibold">Bias Score</span>
           <span className="text-2xl font-bold font-mono">{scoreValue}%</span>
         </div>
         <Progress
           value={scoreValue}
-          className={`h-3 border border-black ${getScoreColor(result.bias_score)}`}
+          className={`h-3 border border-[var(--fm-line)] ${getScoreColor(result.bias_score)}`}
         />
         <p className="text-xs text-gray-700">
           0% = No Bias | 50% = Moderate Bias | 100% = Extreme Bias
@@ -118,7 +118,7 @@ export function BiasScoreCard({ result }: BiasScoreCardProps) {
       </div>
 
       {/* Confidence Level */}
-      <div className="space-y-3 bg-white/50 p-4 rounded border border-black/20">
+      <div className="space-y-3 bg-white/50 p-4 rounded border border-[var(--fm-line)]">
         <div className="flex justify-between items-center">
           <span className="font-semibold">Judge Confidence</span>
           <span className="text-lg font-bold font-mono">{confidenceValue}%</span>
@@ -130,20 +130,20 @@ export function BiasScoreCard({ result }: BiasScoreCardProps) {
       </div>
 
       {/* Judge Info */}
-      <div className="grid grid-cols-2 gap-3 bg-white/50 p-4 rounded border border-black/20">
+      <div className="grid grid-cols-2 gap-3 bg-white/50 p-4 rounded border border-[var(--fm-line)]">
         <div>
-          <p className="text-xs text-gray-600 uppercase font-bold">Judge Model</p>
+          <p className="text-xs text-gray-600 uppercase font-semibold">Judge Model</p>
           <p className="font-mono font-semibold">{result.judge_model}</p>
         </div>
         <div>
-          <p className="text-xs text-gray-600 uppercase font-bold">Evaluation ID</p>
+          <p className="text-xs text-gray-600 uppercase font-semibold">Evaluation ID</p>
           <p className="font-mono text-xs truncate">{result.evaluation_id.substring(0, 8)}...</p>
         </div>
       </div>
 
       {/* Key Insights */}
       {result.detected_biases.length > 0 && (
-        <div className="space-y-2 bg-white/50 p-4 rounded border border-black/20">
+        <div className="space-y-2 bg-white/50 p-4 rounded border border-[var(--fm-line)]">
           <p className="text-sm font-semibold">Key Biases Detected</p>
           <div className="flex flex-wrap gap-2">
             {result.detected_biases.slice(0, 5).map((bias, i) => (
@@ -161,17 +161,17 @@ export function BiasScoreCard({ result }: BiasScoreCardProps) {
       )}
 
       {/* Quick Stats */}
-      <div className="grid grid-cols-3 gap-2 text-center bg-white/50 p-3 rounded border border-black/20">
+      <div className="grid grid-cols-3 gap-2 text-center bg-white/50 p-3 rounded border border-[var(--fm-line)]">
         <div>
-          <p className="text-xs font-bold uppercase text-gray-600">Detected Biases</p>
+          <p className="text-xs font-semibold uppercase text-gray-600">Detected Biases</p>
           <p className="text-2xl font-bold">{result.detected_biases.length}</p>
         </div>
         <div>
-          <p className="text-xs font-bold uppercase text-gray-600">Recommendations</p>
+          <p className="text-xs font-semibold uppercase text-gray-600">Recommendations</p>
           <p className="text-2xl font-bold">{result.recommendations.length}</p>
         </div>
         <div>
-          <p className="text-xs font-bold uppercase text-gray-600">Evidence</p>
+          <p className="text-xs font-semibold uppercase text-gray-600">Evidence</p>
           <p className="text-2xl font-bold">{result.evidence.length}</p>
         </div>
       </div>

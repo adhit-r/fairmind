@@ -92,11 +92,11 @@ export function BiasDetectionWidget() {
     : 'Never'
 
   return (
-    <Card className="border-2 border-black shadow-brutal">
-      <CardHeader className="border-b-2 border-black">
+    <Card className="fm-card">
+      <CardHeader className="border-b border-[var(--fm-line)]">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-purple-100 border-2 border-black">
+            <div className="p-2 bg-purple-100 border border-[var(--fm-line)]">
               <IconBrain className="h-5 w-5 text-purple-600" />
             </div>
             <div>
@@ -126,17 +126,17 @@ export function BiasDetectionWidget() {
           <>
             {/* Key Metrics */}
             <div className="grid grid-cols-3 gap-4">
-              <div className="border-2 border-black p-3 bg-gray-50">
+              <div className="border border-[var(--fm-line)] p-3 bg-gray-50">
                 <p className="text-xs text-muted-foreground font-bold">BIAS RATE</p>
                 <p className="text-2xl font-bold mt-1">{(biasData.biasRate * 100).toFixed(1)}%</p>
               </div>
-              <div className="border-2 border-black p-3 bg-gray-50">
+              <div className="border border-[var(--fm-line)] p-3 bg-gray-50">
                 <p className="text-xs text-muted-foreground font-bold">TESTS PASSED</p>
                 <p className="text-2xl font-bold mt-1">
                   {biasData.testsPassed}/{biasData.totalTests}
                 </p>
               </div>
-              <div className="border-2 border-black p-3 bg-gray-50">
+              <div className="border border-[var(--fm-line)] p-3 bg-gray-50">
                 <p className="text-xs text-muted-foreground font-bold">COMPLIANCE</p>
                 <p className="text-2xl font-bold mt-1">{(biasData.complianceScore * 100).toFixed(0)}%</p>
               </div>
@@ -145,7 +145,7 @@ export function BiasDetectionWidget() {
             {/* Compliance Score Progress */}
             <div className="space-y-2">
               <p className="text-sm font-bold">Fairness Score</p>
-              <Progress value={biasData.complianceScore * 100} className="h-3 border-2 border-black" />
+              <Progress value={biasData.complianceScore * 100} className="h-3 border border-[var(--fm-line)]" />
             </div>
 
             {/* Latest Recommendations Preview */}
@@ -168,7 +168,7 @@ export function BiasDetectionWidget() {
 
             {/* CTA Button */}
             <Link href="/dashboard/modern-bias" className="block">
-              <Button className="w-full border-2 border-black font-bold shadow-brutal hover:shadow-brutal-lg">
+              <Button className="w-full font-bold fm-card">
                 View Detailed Results
                 <IconArrowRight className="h-4 w-4 ml-2" />
               </Button>
@@ -182,7 +182,7 @@ export function BiasDetectionWidget() {
               <p className="text-sm">Run a bias evaluation to get started</p>
             </div>
             <Link href="/dashboard/modern-bias">
-              <Button variant="neutral" size="sm" className="border-2 border-black mt-2">
+              <Button variant="neutral" size="sm" className="border border-[var(--fm-line)] mt-2">
                 Start Evaluation
               </Button>
             </Link>

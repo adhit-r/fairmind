@@ -112,8 +112,8 @@ export function EvidenceUploader({ systemId, onCollect, onClose }: EvidenceUploa
             onClick={() => setKind(k)}
             className={`flex flex-col items-center gap-1.5 rounded-xl border-2 p-3 text-[11px] font-bold uppercase transition-colors ${
               kind === k
-                ? 'border-black bg-black text-white'
-                : 'border-black bg-white text-black hover:bg-slate-50'
+                ? 'border-[var(--fm-line)] bg-black text-white'
+                : 'border-[var(--fm-line)] bg-white text-black hover:bg-slate-50'
             }`}
           >
             <Icon className="h-4 w-4" />
@@ -124,11 +124,11 @@ export function EvidenceUploader({ systemId, onCollect, onClose }: EvidenceUploa
 
       {/* Title */}
       <div className="space-y-1.5">
-        <Label className="font-bold uppercase tracking-wide text-xs">Title</Label>
+        <Label className="font-semibold uppercase tracking-wide text-xs">Title</Label>
         <Input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          className="border-2 border-black font-medium"
+          className="border border-[var(--fm-line)] font-medium"
           placeholder="Short name for this evidence artifact"
           required
         />
@@ -136,11 +136,11 @@ export function EvidenceUploader({ systemId, onCollect, onClose }: EvidenceUploa
 
       {/* Evidence type */}
       <div className="space-y-1.5">
-        <Label className="font-bold uppercase tracking-wide text-xs">Evidence type</Label>
+        <Label className="font-semibold uppercase tracking-wide text-xs">Evidence type</Label>
         <Input
           value={evidenceType}
           onChange={(e) => setEvidenceType(e.target.value)}
-          className="border-2 border-black font-medium"
+          className="border border-[var(--fm-line)] font-medium"
           placeholder="e.g. bias_test_result, monitoring_snapshot, audit_log"
           required
         />
@@ -149,14 +149,14 @@ export function EvidenceUploader({ systemId, onCollect, onClose }: EvidenceUploa
       {/* Kind-specific content */}
       {kind === 'file' && (
         <div className="space-y-2">
-          <Label className="font-bold uppercase tracking-wide text-xs">Upload file</Label>
+          <Label className="font-semibold uppercase tracking-wide text-xs">Upload file</Label>
           <div
             onDragOver={(e) => { e.preventDefault(); setDragActive(true) }}
             onDragLeave={() => setDragActive(false)}
             onDrop={handleDrop}
             onClick={() => fileInputRef.current?.click()}
             className={`flex cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed p-8 transition-colors ${
-              dragActive ? 'border-black bg-slate-100' : 'border-black/40 hover:border-black hover:bg-slate-50'
+              dragActive ? 'border-[var(--fm-line)] bg-slate-100' : 'border-[rgba(21,23,26,.14)] hover:border-[var(--fm-ink)] hover:bg-slate-50'
             }`}
           >
             <IconCloudUpload className="h-8 w-8 text-muted-foreground" />
@@ -180,12 +180,12 @@ export function EvidenceUploader({ systemId, onCollect, onClose }: EvidenceUploa
 
       {kind === 'url' && (
         <div className="space-y-1.5">
-          <Label className="font-bold uppercase tracking-wide text-xs">External URL</Label>
+          <Label className="font-semibold uppercase tracking-wide text-xs">External URL</Label>
           <Input
             value={fileUrl}
             onChange={(e) => setFileUrl(e.target.value)}
             type="url"
-            className="border-2 border-black font-medium"
+            className="border border-[var(--fm-line)] font-medium"
             placeholder="https://..."
             required
           />
@@ -195,13 +195,13 @@ export function EvidenceUploader({ systemId, onCollect, onClose }: EvidenceUploa
 
       {(kind === 'narrative' || kind === 'attestation') && (
         <div className="space-y-1.5">
-          <Label className="font-bold uppercase tracking-wide text-xs">
+          <Label className="font-semibold uppercase tracking-wide text-xs">
             {kind === 'attestation' ? 'Attestation note' : 'Evidence content'}
           </Label>
           <Textarea
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            className="min-h-[120px] border-2 border-black font-mono text-sm"
+            className="min-h-[120px] border border-[var(--fm-line)] font-mono text-sm"
             placeholder={
               kind === 'attestation'
                 ? 'Describe what was manually verified and confirmed...'
@@ -213,7 +213,7 @@ export function EvidenceUploader({ systemId, onCollect, onClose }: EvidenceUploa
 
       {/* Tags */}
       <div className="space-y-2">
-        <Label className="font-bold uppercase tracking-wide text-xs">Tags</Label>
+        <Label className="font-semibold uppercase tracking-wide text-xs">Tags</Label>
         <div className="flex gap-2">
           <Input
             value={tagInput}
@@ -222,10 +222,10 @@ export function EvidenceUploader({ systemId, onCollect, onClose }: EvidenceUploa
               if (e.key === 'Enter') { e.preventDefault(); addTag(tagInput) }
               if (e.key === ',') { e.preventDefault(); addTag(tagInput) }
             }}
-            className="border-2 border-black font-medium"
+            className="border border-[var(--fm-line)] font-medium"
             placeholder="Type a tag and press Enter"
           />
-          <Button type="button" variant="neutral" className="border-2 border-black font-bold" onClick={() => addTag(tagInput)}>
+          <Button type="button" variant="neutral" className="border border-[var(--fm-line)] font-bold" onClick={() => addTag(tagInput)}>
             Add
           </Button>
         </div>
@@ -233,7 +233,7 @@ export function EvidenceUploader({ systemId, onCollect, onClose }: EvidenceUploa
         <div className="flex flex-wrap gap-1.5">
           {SUGGESTED_TAGS.filter((t) => !tags.includes(t)).map((t) => (
             <button key={t} type="button" onClick={() => addTag(t)}>
-              <Badge variant="outline" className="cursor-pointer border-2 border-black/30 bg-white px-2 py-0.5 text-[11px] font-bold hover:border-black">
+              <Badge variant="outline" className="cursor-pointer border border-[rgba(21,23,26,.14)] bg-white px-2 py-0.5 text-[11px] font-bold hover:border-[var(--fm-ink)]">
                 + {t}
               </Badge>
             </button>
@@ -242,7 +242,7 @@ export function EvidenceUploader({ systemId, onCollect, onClose }: EvidenceUploa
         {tags.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {tags.map((tag) => (
-              <Badge key={tag} className="border-2 border-black bg-black px-2 py-0.5 text-[11px] font-bold text-white">
+              <Badge key={tag} className="border border-[var(--fm-line)] bg-black px-2 py-0.5 text-[11px] font-bold text-white">
                 {tag}
                 <button type="button" onClick={() => removeTag(tag)} className="ml-1.5">
                   <IconX className="h-2.5 w-2.5" />
@@ -255,17 +255,17 @@ export function EvidenceUploader({ systemId, onCollect, onClose }: EvidenceUploa
 
       {/* Folder */}
       <div className="space-y-2">
-        <Label className="font-bold uppercase tracking-wide text-xs">Folder (optional)</Label>
+        <Label className="font-semibold uppercase tracking-wide text-xs">Folder (optional)</Label>
         <Input
           value={folder}
           onChange={(e) => setFolder(e.target.value)}
-          className="border-2 border-black font-medium"
+          className="border border-[var(--fm-line)] font-medium"
           placeholder="e.g. EU AI Act, Monitoring, Q1 2026"
         />
         <div className="flex flex-wrap gap-1.5">
           {SUGGESTED_FOLDERS.filter((f) => f !== folder).map((f) => (
             <button key={f} type="button" onClick={() => setFolder(f)}>
-              <Badge variant="outline" className="cursor-pointer border-2 border-black/30 bg-white px-2 py-0.5 text-[11px] font-bold hover:border-black">
+              <Badge variant="outline" className="cursor-pointer border border-[rgba(21,23,26,.14)] bg-white px-2 py-0.5 text-[11px] font-bold hover:border-[var(--fm-ink)]">
                 {f}
               </Badge>
             </button>
@@ -276,7 +276,7 @@ export function EvidenceUploader({ systemId, onCollect, onClose }: EvidenceUploa
       {/* Confidence */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
-          <Label className="font-bold uppercase tracking-wide text-xs">Confidence</Label>
+          <Label className="font-semibold uppercase tracking-wide text-xs">Confidence</Label>
           <span className="text-sm font-bold">{Math.round(confidence * 100)}%</span>
         </div>
         <input
@@ -294,7 +294,7 @@ export function EvidenceUploader({ systemId, onCollect, onClose }: EvidenceUploa
       <div className="flex gap-3">
         <Button
           type="submit"
-          className="flex-1 border-2 border-black font-black uppercase"
+          className="flex-1 border border-[var(--fm-line)] font-semibold"
           disabled={submitting}
         >
           {submitting ? (
@@ -309,7 +309,7 @@ export function EvidenceUploader({ systemId, onCollect, onClose }: EvidenceUploa
             </>
           )}
         </Button>
-        <Button type="button" variant="neutral" className="border-2 border-black font-bold" onClick={onClose}>
+        <Button type="button" variant="neutral" className="border border-[var(--fm-line)] font-bold" onClick={onClose}>
           Cancel
         </Button>
       </div>

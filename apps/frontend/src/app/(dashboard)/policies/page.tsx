@@ -65,14 +65,14 @@ export default function PoliciesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold">Policies</h1>
+          <h1 className="text-[30px] font-semibold tracking-[-.03em]">Policies</h1>
           <p className="text-muted-foreground mt-1">
             Manage governance policies and compliance rules
           </p>
         </div>
         <div className="flex gap-2">
           <Select value={framework} onValueChange={setFramework}>
-            <SelectTrigger className="w-48 border-2 border-black">
+            <SelectTrigger className="w-48 border border-[var(--fm-line)]">
               <SelectValue placeholder="Filter by framework" />
             </SelectTrigger>
             <SelectContent>
@@ -89,7 +89,7 @@ export default function PoliciesPage() {
                 Create Policy
               </Button>
             </DialogTrigger>
-            <DialogContent className="border-2 border-black shadow-brutal-lg max-w-2xl">
+            <DialogContent className="max-w-2xl fm-card">
               <DialogHeader>
                 <DialogTitle>Create Policy</DialogTitle>
                 <DialogDescription>
@@ -102,7 +102,7 @@ export default function PoliciesPage() {
                   <Input
                     id="name"
                     {...register('name')}
-                    className="border-2 border-black"
+                    className="border border-[var(--fm-line)]"
                   />
                   {errors.name && (
                     <p className="text-sm text-red-600">{errors.name.message}</p>
@@ -116,7 +116,7 @@ export default function PoliciesPage() {
                       register('framework').onChange({ target: { value } })
                     }}
                   >
-                    <SelectTrigger className="border-2 border-black">
+                    <SelectTrigger className="border border-[var(--fm-line)]">
                       <SelectValue placeholder="Select framework" />
                     </SelectTrigger>
                     <SelectContent>
@@ -136,7 +136,7 @@ export default function PoliciesPage() {
                   <Textarea
                     id="description"
                     {...register('description')}
-                    className="border-2 border-black"
+                    className="border border-[var(--fm-line)]"
                     rows={4}
                   />
                 </div>
@@ -160,7 +160,7 @@ export default function PoliciesPage() {
       </div>
 
       {/* Policies Table */}
-      <Card className="p-6 border-2 border-black shadow-brutal">
+      <Card className="p-6 fm-card">
         {error && (
           <div className="mb-4 p-4 border-2 border-red-500 bg-red-50">
             <p className="text-red-600">{error.message}</p>
@@ -178,7 +178,7 @@ export default function PoliciesPage() {
         ) : (
           <Table>
             <TableHeader>
-              <TableRow className="border-2 border-black">
+              <TableRow className="border border-[var(--fm-line)]">
                 <TableHead className="font-bold">Name</TableHead>
                 <TableHead className="font-bold">Framework</TableHead>
                 <TableHead className="font-bold">Status</TableHead>
@@ -189,15 +189,15 @@ export default function PoliciesPage() {
             </TableHeader>
             <TableBody>
               {policies.map((policy) => (
-                <TableRow key={policy.id} className="border-b-2 border-black">
+                <TableRow key={policy.id} className="border-b border-[var(--fm-line)]">
                   <TableCell className="font-medium">{policy.name}</TableCell>
                   <TableCell>
-                    <Badge variant="default" className="border-2 border-black">
+                    <Badge variant="default" className="border border-[var(--fm-line)]">
                       {policy.framework}
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="default" className="border-2 border-black">
+                    <Badge variant="default" className="border border-[var(--fm-line)]">
                       {policy.status}
                     </Badge>
                   </TableCell>
