@@ -352,9 +352,16 @@ export const API_ENDPOINTS = {
 
   // Agentic packs
   packs: {
+    catalogue: '/api/v1/packs/catalogue',
     list: '/api/v1/packs',
-    install: (packId: string) => `/api/v1/packs/${packId}/install`,
-    journey: (packId: string) => `/api/v1/packs/journeys/${packId}`,
+    install: (packId: string) => `/api/v1/packs/${encodeURIComponent(packId)}/install`,
+    detail: (packId: string) => `/api/v1/packs/library/${encodeURIComponent(packId)}`,
+    bundles: '/api/v1/packs/bundles',
+    installBundle: (bundleId: string) => `/api/v1/packs/bundles/${encodeURIComponent(bundleId)}/install`,
+    journeys: '/api/v1/packs/journeys',
+    journey: (frameworkKey: string) => `/api/v1/packs/journeys/${encodeURIComponent(frameworkKey)}`,
+    evaluations: '/api/v1/packs/evaluations',
+    evaluation: (evaluationId: string) => `/api/v1/packs/evaluations/${encodeURIComponent(evaluationId)}`,
     workflow: (workflowId: string) => `/api/v1/packs/workflows/${workflowId}`,
     startRun: (workflowId: string) => `/api/v1/packs/workflows/${workflowId}/runs`,
     runs: '/api/v1/packs/runs',

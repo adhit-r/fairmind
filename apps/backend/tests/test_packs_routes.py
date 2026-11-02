@@ -1,5 +1,7 @@
 """Tests for agentic pack routes, on an in-memory database with real organizations and members."""
 
+import copy
+import json
 import uuid
 from datetime import datetime, timezone
 
@@ -18,7 +20,9 @@ from database.models import Organization, OrganizationMember, User
 from middleware.security import RateLimitMiddleware
 
 PACKS = "/api/v1/packs"
-WORKFLOW = "ai_policy_review"
+FOUNDATION = "PK-FOUNDATION"
+WORKFLOW = "ai_policy_review"  # in PK-FOUNDATION
+MONITORING = "PK-MONITORING"
 ASK_STEP = "ask"
 
 
@@ -103,12 +107,12 @@ def _org(engine, **kw):
 
 def _installed_org(engine):
     org_id, client = _org(engine)
-    assert client.post(f"{PACKS}/iso_42001/install").status_code == 200
+    assert client.post(f"{PACKS}/{FOUNDATION}/install").status_code == 200
     return org_id, client
 
 
-def _start(client, **body):
-    response = client.post(f"{PACKS}/workflows/{WORKFLOW}/runs", json=body)
+def _start(client, workflow=WORKFLOW, **body):
+    response = client.post(f"{PACKS}/workflows/{workflow}/runs", json=body)
     assert response.status_code == 200, response.text
     return response.json()
 
@@ -128,29 +132,97 @@ def _approval_count(engine, run_id):
         ).scalar()
 
 
-def test_catalogue_lists_both_packs(tmp_database):
+def test_catalogue_counts(tmp_database):
     _, client = _org(tmp_database)
-    packs = {p["id"]: p for p in client.get(PACKS).json()}
-    assert set(packs) == {"iso_42001", "security_controls"}
-    assert packs["iso_42001"]["hasJourney"] and not packs["security_controls"]["hasJourney"]
-    assert packs["security_controls"]["workflowIds"] == ["access_control_review"]
+    body = client.get(f"{PACKS}/catalogue").json()
+    assert body["counts"] == {"packs": 21, "patterns": 38, "workflows": 90, "evaluations": 109, "frameworks": 50, "requirements": 506}
+    assert [p["id"] for p in body["pillars"]] == ["GOVERN", "EVALUATE", "SECURE", "COMPLY"]
+    assert sum(p["packs"] for p in body["pillars"]) == 21
+    packs = client.get(PACKS).json()
+    assert len(packs) == 21 and FOUNDATION in {p["id"] for p in packs}
 
 
 def test_install_and_uninstall_toggle(tmp_database):
     _, client = _org(tmp_database)
-    assert client.post(f"{PACKS}/iso_42001/install").json()["installed"] is True
-    assert {p["id"]: p["installed"] for p in client.get(PACKS).json()}["iso_42001"] is True
-    assert client.delete(f"{PACKS}/iso_42001/install").json()["installed"] is False
-    assert {p["id"]: p["installed"] for p in client.get(PACKS).json()}["iso_42001"] is False
+    assert client.post(f"{PACKS}/{FOUNDATION}/install").json()["installed"] is True
+    assert {p["id"]: p["installed"] for p in client.get(PACKS).json()}[FOUNDATION] is True
+    assert client.delete(f"{PACKS}/{FOUNDATION}/install").json()["installed"] is False
+    assert {p["id"]: p["installed"] for p in client.get(PACKS).json()}[FOUNDATION] is False
     assert client.post(f"{PACKS}/nope/install").status_code == 404
 
 
-def test_journey_statuses_null_before_runs(tmp_database):
+def test_installed_pack_ids_missing_from_catalogue_are_ignored(tmp_database):
+    org_id, client = _org(tmp_database)
+    client.get(PACKS)  # creates the tables
+    with tmp_database.begin() as conn:
+        conn.execute(
+            text("INSERT INTO pack_installs (id, org_id, pack_id, installed_by, created_at) VALUES (:id, :org, 'iso_42001', 'x', 'now')"),
+            {"id": str(uuid.uuid4()), "org": str(org_id)},
+        )
+    assert all(not p["installed"] for p in client.get(PACKS).json())
+    assert client.get(f"{PACKS}/journeys/ISO42001").status_code == 200
+
+
+def test_bundle_install_installs_its_packs(tmp_database):
     _, client = _org(tmp_database)
-    journey = client.get(f"{PACKS}/journeys/iso_42001").json()
-    assert [c["number"] for c in journey["clauses"]] == ["4", "5", "6", "7", "8", "9", "10"]
-    workflows = [w for c in journey["clauses"] for w in c["workflows"]]
-    assert len(workflows) == 3 and all(w["latestRun"] is None for w in workflows)
+    bundle = client.get(f"{PACKS}/bundles").json()[0]
+    assert bundle["installedCount"] == 0
+    done = client.post(f"{PACKS}/bundles/{bundle['id']}/install").json()
+    assert done["installedCount"] == len(done["packs"]) == len(bundle["packs"]) and all(p["installed"] for p in done["packs"])
+    assert {p["id"] for p in client.get(PACKS).json() if p["installed"]} == {p["id"] for p in bundle["packs"]}
+    assert all(t["coveredInstalled"] == t["coveredAll"] for t in done["targets"])
+    assert client.post(f"{PACKS}/bundles/nope/install").status_code == 404
+
+
+def test_journey_requirement_moves_from_available_to_covered(tmp_database):
+    _, client = _org(tmp_database)
+    # A requirement that only PK-FOUNDATION's workflows cover.
+    only = pack_catalogue.PACK_DONE[FOUNDATION] - set().union(*(d for p, d in pack_catalogue.PACK_DONE.items() if p != FOUNDATION))
+    key = next(k for k in sorted(only) if k in pack_catalogue._C.pack_covers[FOUNDATION])
+    framework = pack_catalogue.REQUIREMENTS[key].framework
+
+    def status():
+        journey = client.get(f"{PACKS}/journeys/{framework}").json()
+        return journey, {r["key"]: r["status"] for g in journey["groups"] for r in g["requirements"]}[key]
+
+    before, state = status()
+    assert state == "available" and before["coveredInstalled"] == 0
+    client.post(f"{PACKS}/{FOUNDATION}/install")
+    after, state = status()
+    assert state == "covered" and after["coveredInstalled"] > 0
+    assert after["coveredAll"] == before["coveredAll"]
+    assert [s["installed"] for s in after["steps"] if s["pack"] == FOUNDATION] == [True]
+    assert FOUNDATION in {j["contributingPacks"][0] for j in client.get(f"{PACKS}/journeys").json() if j["key"] == framework}
+
+
+def test_journeys_list_has_five_active_requirements_each(tmp_database):
+    _, client = _org(tmp_database)
+    journeys = client.get(f"{PACKS}/journeys").json()
+    assert journeys and all(j["active"] >= 5 for j in journeys)
+    assert [j["name"] for j in journeys] == sorted(j["name"] for j in journeys)
+    assert client.get(f"{PACKS}/journeys/nope").status_code == 404
+
+
+def test_evaluations_filter_by_pillar_and_engine(tmp_database):
+    _, client = _org(tmp_database)
+    everything = client.get(f"{PACKS}/evaluations").json()
+    assert len(everything) == 109
+    secure = client.get(f"{PACKS}/evaluations", params={"pillar": "SECURE", "engine": "Partial"}).json()
+    assert len(secure) == 6 and all(e["pillar"] == "SECURE" and e["engine"] == "Partial" for e in secure)
+    drift = client.get(f"{PACKS}/evaluations", params={"q": "data drift"}).json()
+    assert [e["id"] for e in drift] == ["EV-DAT-01"] and drift[0]["tests"] and drift[0]["installed"] is False
+    assert client.get(f"{PACKS}/evaluations/EV-DAT-01").json()["pack"]["id"] == drift[0]["pack"]["id"]
+    assert client.get(f"{PACKS}/evaluations/nope").status_code == 404
+
+
+def test_library_and_workflow_detail(tmp_database):
+    _, client = _org(tmp_database)
+    library = client.get(f"{PACKS}/library/{FOUNDATION}").json()
+    assert library["patterns"] and library["frameworks"]
+    assert any(w["id"] == WORKFLOW for p in library["patterns"] for w in p["workflows"])
+    assert client.get(f"{PACKS}/library/nope").status_code == 404
+    detail = client.get(f"{PACKS}/workflows/{WORKFLOW}").json()
+    assert detail["pack"]["id"] == FOUNDATION and detail["mappings"] and detail["steps"][0]["kind"] == "trigger"
 
 
 def test_start_run_requires_install_and_known_workflow(tmp_database):
@@ -184,6 +256,7 @@ def test_event_validation(tmp_database):
     assert client.post(url, json={"kind": "gate.decided", "step_id": ASK_STEP}).status_code == 422
     assert client.post(url, json={"kind": "step.started", "step_id": "nope"}).status_code == 422
     assert client.post(url, json={"kind": "gate.opened", "step_id": "trigger"}).status_code == 422
+    assert client.post(url, json={"kind": "gate.opened", "step_id": "record"}).status_code == 422
     done = client.post(url, json={"kind": "run.completed"}).json()
     assert done["status"] == "done" and done["finishedAt"]
     assert client.post(url, json={"kind": "step.started", "step_id": "trigger"}).status_code == 409
@@ -248,17 +321,48 @@ def test_foreign_system_id_is_404(tmp_database):
     assert response.status_code == 404
 
 
-def test_loader_rejects_unknown_workflow_in_journey(tmp_database):
-    iso, security = pack_catalogue._PACKS
-    packs = [{**iso, "journey": [{"number": "5", "name": "Leadership", "workflow_ids": ["missing"]}]}, security]
+def test_gate_opens_on_exception_step_of_a_supervised_workflow(tmp_database):
+    _, client = _org(tmp_database)
+    client.post(f"{PACKS}/{MONITORING}/install")
+    workflow = "agent_activity_monitoring"  # autonomy A3; its "ask" step has kind exception
+    run = _start(client, workflow)
+    url = f"{PACKS}/runs/{run['id']}/events"
+    assert client.post(url, json={"kind": "gate.opened", "step_id": "collect"}).status_code == 422
+    opened = client.post(url, json={"kind": "gate.opened", "step_id": "ask"})
+    assert opened.status_code == 200 and opened.json()["status"] == "waiting"
+
+
+def _raw():
+    return copy.deepcopy(json.loads(pack_catalogue.DATA_FILE.read_text(encoding="utf-8")))
+
+
+def test_loader_accepts_the_shipped_catalogue():
+    assert len(pack_catalogue.load(_raw()).workflows) == 90
+
+
+def test_loader_rejects_unknown_workflow_in_pattern():
+    raw = _raw()
+    raw["patterns"][0]["workflows"].append("missing")
     with pytest.raises(ValueError, match="unknown workflow"):
-        pack_catalogue.load(packs, pack_catalogue._WORKFLOWS)
+        pack_catalogue.load(raw)
 
 
-def test_loader_rejects_unknown_next_step(tmp_database):
-    bad = {**pack_catalogue._WORKFLOWS[0], "steps": [{"id": "a", "kind": "trigger", "title": "t", "detail": "d", "next": [{"to": "zzz"}]}]}
+def test_loader_rejects_unknown_next_step():
+    raw = _raw()
+    raw["workflows"][0]["steps"][0]["next"] = [{"to": "zzz", "label": None}]
     with pytest.raises(ValueError, match="unknown step"):
-        pack_catalogue.load(pack_catalogue._PACKS, [bad])
+        pack_catalogue.load(raw)
+
+
+def test_loader_rejects_unknown_requirement_and_orphans():
+    raw = _raw()
+    raw["workflows"][0]["mappings"][0]["key"] = "NOPE|1"
+    with pytest.raises(ValueError, match="unknown requirement"):
+        pack_catalogue.load(raw)
+    raw = _raw()
+    raw["packs"][0]["patterns"].pop()
+    with pytest.raises(ValueError, match="is in no pack"):
+        pack_catalogue.load(raw)
 
 
 def test_requires_org_membership(tmp_database):
@@ -275,4 +379,5 @@ def test_plain_member_can_read_but_not_change(tmp_database):
     org_id = _new_org(tmp_database)
     member = _client(tmp_database, org_id, role="member", token_role=UserRole.ANALYST)
     assert member.get(PACKS).status_code == 200
-    assert member.post(f"{PACKS}/iso_42001/install").status_code == 403
+    assert member.post(f"{PACKS}/{FOUNDATION}/install").status_code == 403
+    assert member.post(f"{PACKS}/bundles/BN-GENAI-COPILOT/install").status_code == 403

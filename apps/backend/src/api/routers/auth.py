@@ -258,14 +258,11 @@ async def signup(payload: SignupRequest):
         async with get_db_transaction() as db:
             if await db.fetch_one("SELECT id FROM users WHERE lower(email) = lower(:e)", {"e": payload.email}):
                 raise HTTPException(status_code=409, detail="An account with this email already exists")
+            # users and organizations reference each other, so create the user first,
+            # then the organization it owns, then point the user at it.
             await db.execute(
-                "INSERT INTO organizations (id, name, slug, owner_id, is_active) "
-                "VALUES (:id, :name, :slug, :owner, TRUE)",
-                {"id": org_id, "name": org_name, "slug": f"{slug_base}-{secrets.token_hex(3)}", "owner": user_id},
-            )
-            await db.execute(
-                "INSERT INTO users (id, email, username, name, password_hash, role, roles, is_active, org_id, primary_org_id) "
-                "VALUES (:id, :email, :username, :name, :pw, 'admin', CAST(:roles AS jsonb), TRUE, :org, :org)",
+                "INSERT INTO users (id, email, username, name, password_hash, role, roles, is_active) "
+                "VALUES (:id, :email, :username, :name, :pw, 'admin', CAST(:roles AS jsonb), TRUE)",
                 {
                     "id": user_id,
                     "email": payload.email,
@@ -273,8 +270,16 @@ async def signup(payload: SignupRequest):
                     "name": name,
                     "pw": auth_manager.get_password_hash(payload.password),
                     "roles": '["admin"]',
-                    "org": org_id,
                 },
+            )
+            await db.execute(
+                "INSERT INTO organizations (id, name, slug, owner_id, is_active) "
+                "VALUES (:id, :name, :slug, :owner, TRUE)",
+                {"id": org_id, "name": org_name, "slug": f"{slug_base}-{secrets.token_hex(3)}", "owner": user_id},
+            )
+            await db.execute(
+                "UPDATE users SET org_id = :org, primary_org_id = :org WHERE id = :id",
+                {"org": org_id, "id": user_id},
             )
             await db.execute(
                 "INSERT INTO org_members (id, org_id, user_id, role, status, joined_at) "

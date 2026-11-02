@@ -6,7 +6,24 @@ import { apiClient, type ApiResponse } from '../api-client'
 import { API_ENDPOINTS } from '../endpoints'
 
 export type RunStatus = 'queued' | 'running' | 'waiting' | 'blocked' | 'done' | 'failed'
-export type StepKind = 'trigger' | 'collect' | 'check' | 'suggest' | 'ask' | 'act' | 'file'
+export type StepKind =
+  | 'trigger'
+  | 'collect'
+  | 'check'
+  | 'suggest'
+  | 'preflight'
+  | 'ask'
+  | 'exception'
+  | 'decide'
+  | 'act'
+  | 'verify'
+  | 'escalate'
+  | 'file'
+/** Step kinds at which a run stops for a person. */
+export const GATE_KINDS: readonly StepKind[] = ['ask', 'exception', 'decide']
+export type ReqStatus = 'covered' | 'tested' | 'available' | 'supported' | 'gap'
+/** As the catalogue spells it; the UI shows "Not found" as "Not built yet". */
+export type EngineStatus = 'Engine exists' | 'Partial' | 'Not found'
 
 export interface RunSummary {
   id: string
@@ -18,43 +35,151 @@ export interface RunSummary {
   updatedAt: string
 }
 
+export interface CataloguePillar {
+  id: string
+  name: string
+  description: string
+  packs: number
+  workflows: number
+  evaluations: number
+  frameworks: number
+}
+
+export interface Catalogue {
+  version: string
+  pillars: CataloguePillar[]
+  counts: { packs: number; patterns: number; workflows: number; evaluations: number; frameworks: number; requirements: number }
+}
+
+export interface PackPattern {
+  id: string
+  name: string
+  agentic: boolean
+  workflowCount: number
+  evaluationCount: number
+}
+
 export interface Pack {
   id: string
   name: string
-  version: string
+  /** Pillar id, as in Catalogue.pillars. */
+  pillar: string
   description: string
   installed: boolean
-  hasJourney: boolean
-  workflowIds: string[]
+  patterns: PackPattern[]
+  workflowCount: number
+  evaluationCount: number
+  requirementsTouched: number
+  agentic: boolean
 }
 
 export interface WorkflowRef {
   id: string
   name: string
+  autonomy: string
   stage: string
   latestRun: RunSummary | null
 }
 
-export interface Journey {
-  packId: string
+export interface EvaluationRef {
+  id: string
   name: string
+  engine: EngineStatus
+}
+
+export interface PackDetail extends Omit<Pack, 'patterns'> {
+  patterns: Array<{ id: string; name: string; objective: string; agentic: boolean; workflows: WorkflowRef[]; evaluations: EvaluationRef[] }>
+  frameworks: Array<{ key: string; name: string; touched: number; covered: number }>
+}
+
+/** Requirements covered out of the framework's active requirements. */
+export interface TargetCoverage {
+  key: string
+  name: string
+  active: number
+  coveredAll: number
+  coveredInstalled: number
+}
+
+export interface Bundle {
+  id: string
+  name: string
+  for: string
+  packs: Array<{ id: string; name: string; installed: boolean }>
+  installedCount: number
+  targets: TargetCoverage[]
+}
+
+export interface JourneySummary {
+  key: string
+  name: string
+  pillar: string
+  active: number
+  coveredAll: number
+  coveredInstalled: number
+  contributingPacks: string[]
+}
+
+export interface JourneyRequirement {
+  key: string
+  control: string
+  title: string
+  status: ReqStatus
+  workflows: Array<{ id: string; name: string; relation: string; pack: string; installed: boolean; latestRun: RunSummary | null }>
+  evaluations: Array<{ id: string; name: string; engine: EngineStatus; pack: string; installed: boolean }>
+}
+
+export interface Journey {
+  key: string
+  name: string
+  pillar: string
+  version: string | null
+  binding: string | null
+  status: string | null
+  active: number
+  coveredAll: number
+  coveredInstalled: number
+  groups: Array<{ name: string; requirements: JourneyRequirement[] }>
+  steps: Array<{ pack: string; name: string; installed: boolean; newlyCovered: number; cumulative: number }>
+}
+
+export interface EvaluationRow {
+  id: string
+  name: string
+  measures: string
+  metric: string
+  threshold: string
+  appliesTo: string
+  pillar: string
+  pattern: { id: string; name: string }
+  pack: { id: string; name: string }
+  engine: EngineStatus
+  codeLocation: string | null
+  tests: Array<{ key: string; framework: string; control: string; title: string }>
   installed: boolean
-  clauses: Array<{ number: string; name: string; workflows: WorkflowRef[] }>
 }
 
 export interface Step {
   id: string
   kind: StepKind
+  type: string
   title: string
   detail: string
   systems: string[]
+  permission: string | null
+  runsWithoutApproval: boolean
   next: Array<{ to: string; label: string | null }>
+  failure: string | null
+  output: string | null
 }
 
-export interface Control {
+export interface Mapping {
+  key: string
   framework: string
   control: string
-  relation: 'satisfies' | 'supports'
+  title: string
+  relation: string
+  note: string | null
 }
 
 export interface Workflow {
@@ -64,9 +189,21 @@ export interface Workflow {
   stage: string
   description: string
   packId: string
+  pack: { id: string; name: string }
   installed: boolean
+  pattern: { id: string; name: string }
+  pillar: string
+  commonControl: string | null
+  autonomy: string
+  gate: string | null
+  gateConditions: string | null
+  approver: string | null
+  separationOfDuties: string | null
+  externalWrite: string | null
+  triggers: string[]
+  mappings: Mapping[]
+  evaluations: EvaluationRef[]
   steps: Step[]
-  controls: Control[]
   latestRun: RunSummary | null
 }
 
@@ -143,9 +280,29 @@ function useOrgResource<T>(path: string | null): Resource<T> {
   return res
 }
 
+export const useCatalogue = () => useOrgResource<Catalogue>(API_ENDPOINTS.packs.catalogue)
 export const usePacks = () => useOrgResource<Pack[]>(API_ENDPOINTS.packs.list)
-export const useJourney = (packId: string | undefined) =>
-  useOrgResource<Journey>(packId ? API_ENDPOINTS.packs.journey(packId) : null)
+export const usePackDetail = (packId: string | undefined) =>
+  useOrgResource<PackDetail>(packId ? API_ENDPOINTS.packs.detail(packId) : null)
+/** Pack id -> name, from the pack list; an id with no match shows as itself. */
+export function usePackNames() {
+  const packs = usePacks()
+  return useMemo(() => {
+    const names = new Map((packs.data ?? []).map((p) => [p.id, p.name]))
+    return (id: string) => names.get(id) ?? id
+  }, [packs.data])
+}
+export const useBundles = () => useOrgResource<Bundle[]>(API_ENDPOINTS.packs.bundles)
+export const useJourneys = () => useOrgResource<JourneySummary[]>(API_ENDPOINTS.packs.journeys)
+export const useJourney = (frameworkKey: string | undefined) =>
+  useOrgResource<Journey>(frameworkKey ? API_ENDPOINTS.packs.journey(frameworkKey) : null)
+/** The evaluation catalogue; filters are optional and applied by the server. */
+export function useEvaluations(filters: { pillar?: string; engine?: string; q?: string } = {}) {
+  const qs = new URLSearchParams()
+  for (const [k, v] of Object.entries(filters)) if (v) qs.set(k, v)
+  const q = qs.toString()
+  return useOrgResource<EvaluationRow[]>(q ? `${API_ENDPOINTS.packs.evaluations}?${q}` : API_ENDPOINTS.packs.evaluations)
+}
 export const useWorkflow = (workflowId: string | undefined) =>
   useOrgResource<Workflow>(workflowId ? API_ENDPOINTS.packs.workflow(workflowId) : null)
 export const useRun = (runId: string | undefined) =>
@@ -179,10 +336,32 @@ export function usePackActions() {
     return {
       installPack: (packId: string) => send<Pack>(API_ENDPOINTS.packs.install(packId), (p) => apiClient.post(p)),
       uninstallPack: (packId: string) => send<Pack>(API_ENDPOINTS.packs.install(packId), (p) => apiClient.delete(p)),
+      installBundle: (bundleId: string) => send<Bundle>(API_ENDPOINTS.packs.installBundle(bundleId), (p) => apiClient.post(p)),
       startRun: (workflowId: string, systemId?: string) =>
         send<Run>(API_ENDPOINTS.packs.startRun(workflowId), (p) => apiClient.post(p, systemId ? { system_id: systemId } : {})),
       decideRun: (runId: string, decision: 'approve' | 'reject', notes?: string) =>
         send<Run>(API_ENDPOINTS.packs.decision(runId), (p) => apiClient.post(p, { decision, ...(notes ? { notes } : {}) })),
     }
   }, [orgId])
+}
+
+/** Install, remove and bundle-install with one busy id and one failure message; `onDone` runs after every attempt so pages can reload. */
+export function useInstaller(onDone: () => void) {
+  const { installPack, uninstallPack, installBundle } = usePackActions()
+  const [busy, setBusy] = useState<string | null>(null)
+  const [failure, setFailure] = useState<string | null>(null)
+  async function run(id: string, call: () => Promise<MutationResult<unknown>>) {
+    setBusy(id)
+    setFailure(null)
+    const res = await call()
+    setBusy(null)
+    if (res.error) setFailure(res.error)
+    onDone()
+  }
+  return {
+    busy,
+    failure,
+    pack: (id: string, remove = false) => run(id, () => (remove ? uninstallPack(id) : installPack(id))),
+    bundle: (id: string) => run(id, () => installBundle(id)),
+  }
 }

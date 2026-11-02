@@ -2,11 +2,11 @@
 
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import ReactFlow, { Background, Controls, Handle, MarkerType, Position, type Edge, type Node, type NodeProps } from 'reactflow'
 import 'reactflow/dist/style.css'
-import { usePackActions, useRun, useWorkflow, type Step, type StepKind } from '@/lib/api/hooks/usePacks'
-import { BTN, BTN_P, Crumbs, ErrorNote, Heading, Loading, MUTED, Pill, StatusPill } from '@/components/packs/parts'
+import { GATE_KINDS, usePackActions, useRun, useWorkflow, type Step, type StepKind } from '@/lib/api/hooks/usePacks'
+import { BTN, BTN_P, Crumbs, EnginePill, ErrorNote, Heading, Loading, MUTED, Pill, StatusPill, cap, when } from '@/components/packs/parts'
 
 type NodeState = 'done' | 'current' | 'waiting' | 'idle'
 
@@ -15,8 +15,13 @@ const ICON: Record<StepKind, string[]> = {
   collect: ['M4 5c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3z', 'M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5', 'M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3'],
   check: ['M20 13c0 5-3.5 7.5-7.7 9a1 1 0 0 1-.6 0C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.2-2.7a1.2 1.2 0 0 1 1.6 0C14.5 3.8 17 5 19 5a1 1 0 0 1 1 1z', 'm9 12 2 2 4-4'],
   suggest: ['M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01'],
+  preflight: ['M9 11l3 3L22 4', 'M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'],
   ask: ['M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2', 'M9 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8z', 'm16 11 2 2 4-4'],
+  exception: ['M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z', 'M12 9v4', 'M12 17h.01'],
+  decide: ['M6 3v12', 'M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6z', 'M6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6z', 'M18 9a9 9 0 0 1-9 9'],
   act: ['M13 2 3 14h9l-1 8 10-12h-9l1-8z'],
+  verify: ['M21.8 10A10 10 0 1 1 17 3.3', 'm9 11 3 3L22 4'],
+  escalate: ['M12 19V5', 'm5 12 7-7 7 7'],
   file: ['M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z', 'M14 2v6h6', 'm9 15 2 2 4-4'],
 }
 const KIND_LABEL: Record<StepKind, string> = {
@@ -24,15 +29,20 @@ const KIND_LABEL: Record<StepKind, string> = {
   collect: 'Collect',
   check: 'Check',
   suggest: 'Suggest',
+  preflight: 'Preflight',
   ask: 'Ask a person',
+  exception: 'Exception',
+  decide: 'Decide',
   act: 'Act',
+  verify: 'Verify',
+  escalate: 'Escalate',
   file: 'File evidence',
 }
 
 function KindIcon({ kind, size = 16 }: { kind: StepKind; size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      {ICON[kind].map((d) => (
+      {(ICON[kind] ?? ICON.act).map((d) => (
         <path key={d} d={d} />
       ))}
     </svg>
@@ -47,6 +57,7 @@ function StepNode({ data }: NodeProps<{ step: Step; state: NodeState }>) {
   const detail = step.detail || (step.systems.length ? step.systems.join(', ') : '')
   return (
     <div
+      title={KIND_LABEL[step.kind] ?? step.kind}
       className={[
         'relative flex h-[92px] w-[160px] items-start gap-2 rounded-xl p-2.5 text-left shadow-[0_1px_2px_#14141e0a,0_10px_24px_-14px_#14141e40]',
         waiting ? 'border-2 border-[#ff6b35] bg-[#fff7f2]' : state === 'current' ? 'border-2 border-[#15171a] bg-white' : 'border border-[#15171a14] bg-white',
@@ -162,17 +173,6 @@ export default function WorkflowPage() {
     return { nodes, edges, viewport }
   }, [wf.data, run.data, overlay])
 
-  const controls = useMemo(() => {
-    const groups = new Map<string, { framework: string; relation: string; codes: string[] }>()
-    for (const c of wf.data?.controls ?? []) {
-      const key = `${c.framework}|${c.relation}`
-      const g = groups.get(key) ?? { framework: c.framework, relation: c.relation, codes: [] }
-      g.codes.push(c.control)
-      groups.set(key, g)
-    }
-    return [...groups.values()]
-  }, [wf.data])
-
   async function start() {
     if (!wf.data) return
     setStarting(true)
@@ -196,7 +196,7 @@ export default function WorkflowPage() {
 
   const w = wf.data
   const last = w.latestRun
-  const stage = w.stage.charAt(0).toUpperCase() + w.stage.slice(1)
+  const stage = cap(w.stage)
 
   return (
     <div className="flex flex-col gap-5">
@@ -209,9 +209,11 @@ export default function WorkflowPage() {
       <div className="-mt-3 flex flex-wrap items-center gap-2">
         <Pill>Version {w.version}</Pill>
         <Pill>Runs in {stage}</Pill>
+        <Pill>{cap(w.pillar.toLowerCase())}</Pill>
+        <span title={w.autonomy}><Pill>Autonomy {w.autonomy.split(/\s/)[0]}</Pill></span>
         {!w.installed && (
           <span id="start-reason" className={`text-[13px] ${MUTED}`}>
-            Start run is off because this workflow&apos;s pack is not installed. <Link href="/compliance" className="font-semibold underline">Install it in Frameworks</Link>.
+            Start run is off because this workflow&apos;s pack is not installed. <Link href={`/compliance/packs/${w.pack.id}`} className="font-semibold underline">Install {w.pack.name}</Link>.
           </span>
         )}
       </div>
@@ -260,30 +262,36 @@ export default function WorkflowPage() {
       </section>
 
       <div className="flex flex-wrap items-start gap-5">
-        <section aria-labelledby="ctl" className="pk-card min-w-0 flex-[1_1_360px] px-[22px] py-5">
-          <h2 id="ctl" className="m-0 mb-1 text-base font-semibold">This run counts toward</h2>
-          {controls.length === 0 ? (
-            <p className={`m-0 text-[13px] ${MUTED}`}>No controls are mapped to this workflow.</p>
-          ) : (
-            <>
-              <p className={`m-0 mb-2 text-[13px] ${MUTED}`}>{new Set(controls.map((c) => c.framework)).size} frameworks, from one run</p>
-              {controls.map((c) => (
-                <div key={`${c.framework}|${c.relation}`} className="flex items-center justify-between gap-2.5 border-t border-[#15171a14] py-[9px] text-[13px]">
-                  <span>
-                    {c.framework} <span className="font-mono text-xs">{c.codes.join(' ')}</span>
-                  </span>
-                  <Pill>{c.relation === 'satisfies' ? 'Satisfies' : 'Supports'}</Pill>
+        <section aria-labelledby="about" className="pk-card min-w-0 flex-[1_1_360px] px-[22px] py-5">
+          <h2 id="about" className="m-0 mb-2 text-base font-semibold">About this workflow</h2>
+          <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-[13px]">
+            {([
+              ['Pattern', w.pattern.name],
+              ['Pack', <Link key="pk" href={`/compliance/packs/${w.pack.id}`} className="font-semibold hover:underline">{w.pack.name}</Link>],
+              ['Common control', w.commonControl],
+              ['Autonomy', w.autonomy],
+              ['Gate', w.gate],
+              ['Gate conditions', w.gateConditions],
+              ['Approver', w.approver],
+              ['Separation of duties', w.separationOfDuties],
+              ['External write', w.externalWrite],
+              ['Triggers', w.triggers.length ? w.triggers.join('; ') : null],
+            ] as Array<[string, ReactNode]>)
+              .filter(([, v]) => v)
+              .map(([k, v]) => (
+                <div key={k} className="contents">
+                  <dt className={`font-semibold ${MUTED}`}>{k}</dt>
+                  <dd className="m-0 leading-snug">{v}</dd>
                 </div>
               ))}
-            </>
-          )}
+          </dl>
         </section>
         <section aria-labelledby="lastrun" className="pk-card min-w-0 flex-[1_1_320px] px-[22px] py-5">
           <h2 id="lastrun" className="m-0 mb-2 text-base font-semibold">Latest run</h2>
           {last ? (
             <div className="flex flex-col gap-2 text-[13px]">
               <div className="flex items-center gap-2"><StatusPill status={last.status} /></div>
-              <span className={MUTED}>Updated {new Date(last.updatedAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+              <span className={MUTED}>Updated {when(last.updatedAt)}</span>
               <Link href={`/compliance/runs/${last.id}`} className={`${BTN} self-start`}>Open the run</Link>
             </div>
           ) : (
@@ -292,6 +300,98 @@ export default function WorkflowPage() {
           <p className={`m-0 mt-3 text-[13px] ${MUTED}`}>Editing steps and publishing versions are coming soon.</p>
         </section>
       </div>
+
+      <section aria-labelledby="steps-h" className="pk-card px-6 py-5">
+        <h2 id="steps-h" className="m-0 mb-2 text-base font-semibold">Steps</h2>
+        {w.steps.length === 0 ? (
+          <p className={`m-0 text-[13px] ${MUTED}`}>This workflow has no steps defined yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-left text-[13px]">
+              <thead>
+                <tr className={`text-[12px] ${MUTED}`}>
+                  <th scope="col" className="py-2 pr-3 font-semibold">Step</th>
+                  <th scope="col" className="py-2 pr-3 font-semibold">Kind</th>
+                  <th scope="col" className="py-2 pr-3 font-semibold">Permission</th>
+                  <th scope="col" className="py-2 pr-3 font-semibold">Needs a person</th>
+                  <th scope="col" className="py-2 pr-3 font-semibold">If it fails</th>
+                  <th scope="col" className="py-2 font-semibold">Output</th>
+                </tr>
+              </thead>
+              <tbody>
+                {w.steps.map((s) => (
+                  <tr key={s.id} className="border-t border-[#15171a14] align-top">
+                    <td className="max-w-[280px] py-[9px] pr-3">
+                      <b className="font-semibold">{s.title}</b>
+                      {s.detail && <div className={`mt-0.5 text-[12.5px] leading-snug ${MUTED}`}>{s.detail}</div>}
+                      {s.systems.length > 0 && <div className={`mt-0.5 text-[12px] ${MUTED}`}>{s.systems.join(', ')}</div>}
+                    </td>
+                    <td className="py-[9px] pr-3">
+                      <span className="inline-flex items-center gap-1.5"><KindIcon kind={s.kind} size={14} />{KIND_LABEL[s.kind] ?? s.kind}</span>
+                    </td>
+                    <td className="py-[9px] pr-3">{s.permission ?? <span className={MUTED}>None</span>}</td>
+                    <td className="py-[9px] pr-3">{GATE_KINDS.includes(s.kind) || !s.runsWithoutApproval ? <Pill tone="you">Yes</Pill> : <Pill>No</Pill>}</td>
+                    <td className="max-w-[220px] py-[9px] pr-3">{s.failure ?? <span className={MUTED}>Not set</span>}</td>
+                    <td className="max-w-[220px] py-[9px]">{s.output ?? <span className={MUTED}>None</span>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section aria-labelledby="map-h" className="pk-card px-6 py-5">
+        <h2 id="map-h" className="m-0 mb-1 text-base font-semibold">This run counts toward</h2>
+        {w.mappings.length === 0 ? (
+          <p className={`m-0 text-[13px] ${MUTED}`}>No framework requirements are mapped to this workflow.</p>
+        ) : (
+          <>
+            <p className={`m-0 mb-2 text-[13px] ${MUTED}`}>{w.mappings.length} {w.mappings.length === 1 ? 'requirement' : 'requirements'} across {new Set(w.mappings.map((m) => m.framework)).size} frameworks, from one run.</p>
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-left text-[13px]">
+                <thead>
+                  <tr className={`text-[12px] ${MUTED}`}>
+                    <th scope="col" className="py-2 pr-3 font-semibold">Framework</th>
+                    <th scope="col" className="py-2 pr-3 font-semibold">Control</th>
+                    <th scope="col" className="py-2 pr-3 font-semibold">Title</th>
+                    <th scope="col" className="py-2 font-semibold">Relation</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {w.mappings.map((m) => (
+                    <tr key={m.key} className="border-t border-[#15171a14] align-top">
+                      <td className="py-[9px] pr-3">{m.framework}</td>
+                      <td className="py-[9px] pr-3 font-mono text-xs">{m.control}</td>
+                      <td className="py-[9px] pr-3">
+                        {m.title}
+                        {m.note && <div className={`mt-0.5 text-[12.5px] ${MUTED}`}>{m.note}</div>}
+                      </td>
+                      <td className="py-[9px]"><Pill>{m.relation}</Pill></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </section>
+
+      <section aria-labelledby="ev-h" className="pk-card px-6 py-5">
+        <h2 id="ev-h" className="m-0 mb-1 text-base font-semibold">Evaluations in this pattern</h2>
+        {w.evaluations.length === 0 ? (
+          <p className={`m-0 text-[13px] ${MUTED}`}>This pattern has no evaluations.</p>
+        ) : (
+          <ul className="m-0 list-none p-0">
+            {w.evaluations.map((e) => (
+              <li key={e.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-[#15171a14] py-2.5">
+                <Link href={`/compliance/evaluations#${encodeURIComponent(e.id)}`} className="min-w-[180px] flex-[1_1_220px] font-semibold hover:underline">{e.name}</Link>
+                <EnginePill engine={e.engine} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   )
 }
