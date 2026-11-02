@@ -202,6 +202,26 @@ export interface DecisionSeal {
   verification: { status: 'intact' | 'broken'; changed: string[]; missing: string[]; addedSince: number }
 }
 
+export interface ClauseMapFramework {
+  key: string
+  name: string
+  counts: { proven: number; attested: number; open: number; total: number }
+  clauses: Array<{
+    key: string
+    control: string
+    title: string
+    group: string | null
+    state: 'proven' | 'attested' | 'open'
+    checks: Array<{ check: string; label: string; state: 'proven' | 'attested' | 'open'; confidence: number; evidenceId: string | null; relation: string }>
+  }>
+}
+
+export interface ClauseMap {
+  verdict: string | null
+  confidence: number | null
+  frameworks: ClauseMapFramework[]
+}
+
 export type AttestableCheck = 'data_governance' | 'human_oversight' | 'monitoring' | 'environmental'
 
 export interface SystemFile {
@@ -215,6 +235,7 @@ export interface SystemFile {
   fairnessRuns: FairnessRunSummary[]
   monitoringRuns: MonitoringRunSummary[]
   seals: DecisionSeal[]
+  clauseMap: ClauseMap | null
 }
 
 function unwrap<T>(res: ApiResponse<T>, fallback: T): T {
@@ -223,7 +244,7 @@ function unwrap<T>(res: ApiResponse<T>, fallback: T): T {
 
 /** Everything the system file shows, fetched once per system id from the governance API. */
 export function useSystemFile(systemId: string | undefined) {
-  const [file, setFile] = useState<SystemFile>({ system: null, evidence: null, approval: null, remediation: null, risks: null, reports: [], gate: null, fairnessRuns: [], monitoringRuns: [], seals: [] })
+  const [file, setFile] = useState<SystemFile>({ system: null, evidence: null, approval: null, remediation: null, risks: null, reports: [], gate: null, fairnessRuns: [], monitoringRuns: [], seals: [], clauseMap: null })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -238,7 +259,7 @@ export function useSystemFile(systemId: string | undefined) {
       return
     }
     const q = `system_id=${encodeURIComponent(systemId)}`
-    const [evidence, approval, remediation, risks, reports, gate, fairnessRuns, monitoringRuns, seals] = await Promise.all([
+    const [evidence, approval, remediation, risks, reports, gate, fairnessRuns, monitoringRuns, seals, clauseMap] = await Promise.all([
       apiClient.get<EvidenceSummary>(`${GOV}/evidence/${systemId}/summary`),
       apiClient.get<ApprovalStatus>(`${GOV}/approval/system/${systemId}`),
       apiClient.get<RemediationStatus>(`${GOV}/remediation?${q}`),
@@ -248,6 +269,7 @@ export function useSystemFile(systemId: string | undefined) {
       apiClient.get<FairnessRunSummary[]>(`${GOV}/systems/${systemId}/fairness-runs`),
       apiClient.get<MonitoringRunSummary[]>(`${GOV}/systems/${systemId}/monitoring-runs`),
       apiClient.get<DecisionSeal[]>(`${GOV}/systems/${systemId}/seals`),
+      apiClient.get<ClauseMap>(`${GOV}/systems/${systemId}/clause-map`),
     ])
     setFile({
       system: sys.data,
@@ -260,6 +282,7 @@ export function useSystemFile(systemId: string | undefined) {
       fairnessRuns: unwrap(fairnessRuns, []),
       monitoringRuns: unwrap(monitoringRuns, []),
       seals: unwrap(seals, []),
+      clauseMap: unwrap(clauseMap, null),
     })
     setError(null)
     setLoading(false)
