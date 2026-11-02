@@ -77,6 +77,76 @@ export interface AuditReport {
   createdAt: string
 }
 
+export interface GateCheck {
+  key: 'fairness' | 'data_governance' | 'human_oversight' | 'monitoring' | 'environmental'
+  label: string
+  state: 'proven' | 'attested' | 'open'
+  confidence: number
+  evidenceId: string | null
+  detail: { all_checks_pass?: boolean | null; rows?: number; attributes?: string[] } | null
+}
+
+export interface ReleaseGate {
+  verdict: 'go' | 'conditional_go' | 'no_go'
+  confidence: number
+  band: 'measured' | 'estimated' | 'unknown'
+  checks: GateCheck[]
+  reasons: string[]
+  proven: number
+  attested: number
+  open: number
+}
+
+export interface FairnessRunSummary {
+  evidenceId: string
+  title: string
+  rows: number | null
+  allChecksPass: boolean | null
+  attributes: Array<{ attribute: string; disparateImpactRatio: number; checks: Record<string, boolean> }>
+  confidence: number
+  createdAt: string
+}
+
+export interface CsvInspection {
+  rows: number
+  columns: Array<{ name: string; dtype: string; distinct: number; sample: string[] }>
+  suggested: { outcome: string | null; prediction: string | null; score: string | null; attributes: string[] }
+}
+
+export interface FairnessMapping {
+  outcome: string
+  prediction?: string
+  score?: string
+  attributes: string[]
+  favorableLabel?: string
+}
+
+export interface FairnessRunResult {
+  runId: string
+  evidenceId: string
+  title: string
+  result: {
+    rows: number
+    all_checks_pass: boolean
+    smallest_group: number | null
+    evidence_confidence: number
+    thresholds: { disparate_impact_ratio: number; gap: number }
+    attributes: Array<{
+      attribute: string
+      groups: Record<string, number>
+      selection_rates: Record<string, number>
+      disparate_impact_ratio: number
+      demographic_parity: { value: number; confidence_interval: [number, number]; is_fair: boolean }
+      equal_opportunity: { value: number; confidence_interval: [number, number]; is_fair: boolean }
+      equalized_odds: { value: number; confidence_interval: [number, number]; is_fair: boolean }
+      calibration: { value: number; confidence_interval: [number, number]; is_fair: boolean } | null
+      checks: Record<string, boolean>
+      small_groups: string[]
+    }>
+  }
+  gate: ReleaseGate
+}
+
 export interface SystemFile {
   system: SystemRecord | null
   evidence: EvidenceSummary | null
@@ -84,6 +154,8 @@ export interface SystemFile {
   remediation: RemediationStatus | null
   risks: RiskStatus | null
   reports: AuditReport[]
+  gate: ReleaseGate | null
+  fairnessRuns: FairnessRunSummary[]
 }
 
 function unwrap<T>(res: ApiResponse<T>, fallback: T): T {
@@ -92,7 +164,7 @@ function unwrap<T>(res: ApiResponse<T>, fallback: T): T {
 
 /** Everything the system file shows, fetched once per system id from the governance API. */
 export function useSystemFile(systemId: string | undefined) {
-  const [file, setFile] = useState<SystemFile>({ system: null, evidence: null, approval: null, remediation: null, risks: null, reports: [] })
+  const [file, setFile] = useState<SystemFile>({ system: null, evidence: null, approval: null, remediation: null, risks: null, reports: [], gate: null, fairnessRuns: [] })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -107,12 +179,14 @@ export function useSystemFile(systemId: string | undefined) {
       return
     }
     const q = `system_id=${encodeURIComponent(systemId)}`
-    const [evidence, approval, remediation, risks, reports] = await Promise.all([
+    const [evidence, approval, remediation, risks, reports, gate, fairnessRuns] = await Promise.all([
       apiClient.get<EvidenceSummary>(`${GOV}/evidence/${systemId}/summary`),
       apiClient.get<ApprovalStatus>(`${GOV}/approval/system/${systemId}`),
       apiClient.get<RemediationStatus>(`${GOV}/remediation?${q}`),
       apiClient.get<RiskStatus>(`${GOV}/dashboard/risk?${q}`),
       apiClient.get<AuditReport[]>(`${GOV}/reports?${q}`),
+      apiClient.get<ReleaseGate>(`${GOV}/systems/${systemId}/gate`),
+      apiClient.get<FairnessRunSummary[]>(`${GOV}/systems/${systemId}/fairness-runs`),
     ])
     setFile({
       system: sys.data,
@@ -121,6 +195,8 @@ export function useSystemFile(systemId: string | undefined) {
       remediation: unwrap(remediation, null),
       risks: unwrap(risks, null),
       reports: unwrap(reports, []),
+      gate: unwrap(gate, null),
+      fairnessRuns: unwrap(fairnessRuns, []),
     })
     setError(null)
     setLoading(false)
@@ -143,5 +219,27 @@ export function useSystemFile(systemId: string | undefined) {
     await refresh()
   }
 
-  return { ...file, loading, error, refresh, requestDecision, recordDecision }
+  const inspectCsv = async (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    const res = await apiClient.post<CsvInspection>(`${GOV}/systems/${systemId}/fairness-runs/inspect`, form, { enableRetry: false })
+    if (!res.success || !res.data) throw new Error(res.error || 'Could not read the file')
+    return res.data
+  }
+
+  const runFairness = async (file: File, mapping: FairnessMapping) => {
+    const form = new FormData()
+    form.append('file', file)
+    form.append('outcome', mapping.outcome)
+    form.append('attributes', mapping.attributes.join(','))
+    if (mapping.prediction) form.append('prediction', mapping.prediction)
+    if (mapping.score) form.append('score', mapping.score)
+    if (mapping.favorableLabel) form.append('favorable_label', mapping.favorableLabel)
+    const res = await apiClient.post<FairnessRunResult>(`${GOV}/systems/${systemId}/fairness-runs`, form, { enableRetry: false, timeout: 120_000 })
+    if (!res.success || !res.data) throw new Error(res.error || 'The run failed')
+    await refresh()
+    return res.data
+  }
+
+  return { ...file, loading, error, refresh, requestDecision, recordDecision, inspectCsv, runFairness }
 }
