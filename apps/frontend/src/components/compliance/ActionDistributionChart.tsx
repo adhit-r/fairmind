@@ -53,7 +53,7 @@ export function ActionDistributionChart({
                 contentStyle={{
                   backgroundColor: '#fff',
                   border: '2px solid #000',
-                  boxShadow: '6px 6px 0 rgba(0, 0, 0, 0.15)',
+                  boxShadow: 'var(--fm-shadow)',
                 }}
                 formatter={(value: any) => `${value} events`}
               />

@@ -275,15 +275,15 @@ export default function AuditReportsPage() {
     <div className="space-y-6">
       {/* Header */}
       <Card className="overflow-hidden fm-card">
-        <div className="border-b border-[var(--fm-line)] bg-black p-5 text-white">
+        <div className="border-b border-[var(--fm-line)] p-5">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge className="border-2 border-white bg-white px-2 py-0.5 text-[11px] font-semibold uppercase text-black">
+            <Badge className="rounded-full bg-[var(--fm-bg)] px-2.5 py-0.5 text-[11px] font-semibold uppercase text-[var(--fm-ink)]">
               <IconFileAnalytics className="mr-1.5 h-3.5 w-3.5" />
               Audit Reports
             </Badge>
           </div>
           <h1 className="mt-3 text-3xl font-semibold">Governance Report Generator</h1>
-          <p className="mt-1 text-sm text-slate-300">
+          <p className="mt-1 text-sm text-[var(--fm-ink2)]">
             Generate structured audit reports for regulators, compliance teams, and governance boards.
           </p>
         </div>
@@ -300,7 +300,7 @@ export default function AuditReportsPage() {
               }`}
             >
               {reportType === type.id && (
-                <span className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-black text-white">
+                <span className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--fm-ink)] text-white">
                   <IconCheck className="h-3 w-3" />
                 </span>
               )}

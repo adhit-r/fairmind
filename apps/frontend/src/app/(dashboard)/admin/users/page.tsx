@@ -67,7 +67,7 @@ export default function AdminUsersPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background p-8">
+    <div className="min-w-0">
       <div className="mx-auto max-w-6xl">
         {/* Header */}
         <div className="mb-8 flex items-center justify-between border-b border-[var(--fm-line)] pb-6">
@@ -79,7 +79,7 @@ export default function AdminUsersPage() {
           </div>
           <button
             onClick={() => setShowInviteModal(true)}
-            className="flex items-center gap-2 rounded-lg bg-black px-4 py-2 font-bold text-white transition-all"
+            className="flex items-center gap-2 rounded-full bg-[var(--fm-ink)] px-4 py-2 font-semibold text-white transition-all"
           >
             <IconPlus size={20} />
             Invite User

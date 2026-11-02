@@ -180,7 +180,7 @@ export default function ComplianceDashboardPage() {
   return (
     <main
       data-testid="framework-controls-workbench"
-      className="space-y-5 bg-white pb-10 text-[var(--fm-ink)]"
+      className="space-y-5 pb-10 text-[var(--fm-ink)]"
     >
       <header className="flex flex-col gap-3 border-b border-[var(--fm-line)] pb-4 sm:flex-row sm:items-end sm:justify-between">
         <div>

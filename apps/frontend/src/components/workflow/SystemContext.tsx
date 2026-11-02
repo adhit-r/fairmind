@@ -478,7 +478,7 @@ export function SystemContextBar() {
     <section aria-label="Selected AI system context" className="mb-6 border border-[var(--fm-line)] bg-white p-4">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-start gap-3">
-          <div className="bg-black p-3 text-white rounded-[14px] shadow-[var(--fm-shadow)]">
+          <div className="bg-[var(--fm-ink)] p-3 text-white rounded-[14px] shadow-[var(--fm-shadow)]">
             <IconBuildingSkyscraper className="h-5 w-5" />
           </div>
           <div>
@@ -533,7 +533,7 @@ export function SystemContextBar() {
 
           <div className="space-y-1">
             <p className="text-xs font-semibold uppercase text-muted-foreground">Lifecycle Stage</p>
-            <Badge className="border border-[var(--fm-line)] bg-black px-3 py-2 font-semibold text-white">
+            <Badge className="border border-[var(--fm-line)] bg-[var(--fm-ink)] px-3 py-2 font-semibold text-white">
               <IconRouteAltLeft className="mr-2 h-4 w-4 text-[var(--fm-brand)]" />
               {selectedSystemStatus.stage}
             </Badge>

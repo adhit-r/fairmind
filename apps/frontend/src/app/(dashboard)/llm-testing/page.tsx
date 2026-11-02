@@ -228,7 +228,7 @@ export default function LLMTestingPage() {
                 className={`
                   p-4 border-2 rounded-none text-left transition-all
                   ${isActive 
-                    ? 'bg-black text-white border-[var(--fm-line)]' 
+                    ? 'bg-[var(--fm-ink)] text-white border-[var(--fm-line)]' 
                     : 'bg-white border-[var(--fm-line)] hover:bg-[var(--fm-bg)]'
                   }
                 `}

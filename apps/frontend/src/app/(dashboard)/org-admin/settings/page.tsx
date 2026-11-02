@@ -103,7 +103,7 @@ export default function OrgSettingsPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background p-8">
+      <div className="min-w-0">
         <div className="mx-auto max-w-2xl">
           <div className="flex justify-center">
             <div className="h-12 w-12 animate-spin rounded-full border-2 border-[var(--fm-line)] border-t-[var(--fm-ink)]" />
@@ -114,7 +114,7 @@ export default function OrgSettingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background p-8">
+    <div className="min-w-0">
       <div className="mx-auto max-w-2xl">
         {/* Header */}
         <div className="mb-8 border-b border-[var(--fm-line)] pb-6">
@@ -235,7 +235,7 @@ export default function OrgSettingsPage() {
             <button
               type="submit"
               disabled={isSaving}
-              className="rounded-lg bg-black px-6 py-2 font-bold text-white transition-all disabled:opacity-50"
+              className="rounded-full bg-[var(--fm-ink)] px-6 py-2 font-semibold text-white transition-all disabled:opacity-50"
             >
               {isSaving ? 'Saving...' : 'Save Settings'}
             </button>

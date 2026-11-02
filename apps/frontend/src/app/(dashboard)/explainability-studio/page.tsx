@@ -275,7 +275,7 @@ export default function ExplainabilityStudioPage() {
                     onClick={() => toggleMethod(method.id)}
                     className={`w-full flex items-start gap-3 p-3 border-2 text-left transition-all ${
                       isSelected
-                        ? 'border-[var(--fm-line)] bg-black text-white'
+                        ? 'border-[var(--fm-line)] bg-[var(--fm-ink)] text-white'
                         : 'border-[var(--fm-line)] bg-white hover:bg-gray-50'
                     }`}
                   >
@@ -316,7 +316,7 @@ export default function ExplainabilityStudioPage() {
           <Button
             onClick={handleRunAnalysis}
             disabled={loading || selectedMethods.length === 0 || !modelOutput.trim()}
-            className="w-full font-semibold text-base h-12 bg-black text-white hover:bg-gray-900 disabled:opacity-50 rounded-[14px] shadow-[var(--fm-shadow)]"
+            className="w-full font-semibold text-base h-12 bg-[var(--fm-ink)] text-white hover:bg-black disabled:opacity-50 rounded-[14px] shadow-[var(--fm-shadow)]"
           >
             {loading ? (
               <>
@@ -360,7 +360,7 @@ export default function ExplainabilityStudioPage() {
                     'Click Run Analysis',
                   ].map((step, i) => (
                     <div key={i} className="flex items-center gap-3">
-                      <span className="flex-shrink-0 w-6 h-6 border border-[var(--fm-line)] bg-black text-white text-xs font-semibold flex items-center justify-center">
+                      <span className="flex-shrink-0 w-6 h-6 border border-[var(--fm-line)] bg-[var(--fm-ink)] text-white text-xs font-semibold flex items-center justify-center">
                         {i + 1}
                       </span>
                       <span className="text-sm text-muted-foreground">{step}</span>
@@ -721,7 +721,7 @@ export default function ExplainabilityStudioPage() {
               </Card>
 
               {/* Next step CTA */}
-              <div className="p-4 bg-black text-white flex items-center justify-between rounded-[14px] shadow-[var(--fm-shadow)]">
+              <div className="p-4 bg-[var(--fm-ink)] text-white flex items-center justify-between rounded-[14px] shadow-[var(--fm-shadow)]">
                 <div>
                   <p className="font-semibold">Ready to run a full bias evaluation?</p>
                   <p className="text-white/70 text-xs mt-0.5">
@@ -731,7 +731,7 @@ export default function ExplainabilityStudioPage() {
                 <a href="/modern-bias">
                   <Button
                     variant="noShadow"
-                    className="border-2 border-white bg-transparent text-white hover:bg-white hover:text-black font-bold"
+                    className="border border-white/40 bg-transparent text-white hover:bg-white hover:text-black font-bold"
                   >
                     Run Bias Evaluation
                     <IconArrowRight className="h-4 w-4 ml-2" />

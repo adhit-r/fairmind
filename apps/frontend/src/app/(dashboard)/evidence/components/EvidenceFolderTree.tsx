@@ -35,7 +35,7 @@ export function EvidenceFolderTree({ evidence, activeFolder, onFolderChange }: E
         onClick={() => onFolderChange(null)}
         className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-bold transition-colors ${
           activeFolder === null
-            ? 'bg-black text-white'
+            ? 'bg-[var(--fm-ink)] text-white'
             : 'hover:bg-slate-100'
         }`}
       >
@@ -52,7 +52,7 @@ export function EvidenceFolderTree({ evidence, activeFolder, onFolderChange }: E
           onClick={() => onFolderChange('__uncategorized__')}
           className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-bold transition-colors ${
             activeFolder === '__uncategorized__'
-              ? 'bg-black text-white'
+              ? 'bg-[var(--fm-ink)] text-white'
               : 'hover:bg-slate-100'
           }`}
         >
@@ -72,7 +72,7 @@ export function EvidenceFolderTree({ evidence, activeFolder, onFolderChange }: E
             type="button"
             onClick={() => onFolderChange(folder)}
             className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-bold transition-colors ${
-              isActive ? 'bg-black text-white' : 'hover:bg-slate-100'
+              isActive ? 'bg-[var(--fm-ink)] text-white' : 'hover:bg-slate-100'
             }`}
           >
             {isActive ? (

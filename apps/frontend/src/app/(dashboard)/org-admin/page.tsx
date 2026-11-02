@@ -11,7 +11,7 @@ export default function OrgAdminPage() {
 
   if (!selectedOrg) {
     return (
-      <div className="min-h-screen bg-background p-8">
+      <div className="min-w-0">
         <div className="mx-auto max-w-4xl">
           <div className="rounded-lg border-2 border-gray-300 bg-gray-50 p-6 text-center">
             <p className="text-gray-600">Loading organization...</p>
@@ -57,7 +57,7 @@ export default function OrgAdminPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-background p-8">
+    <div className="min-w-0">
       <div className="mx-auto max-w-6xl">
         {/* Header */}
         <div className="mb-8 border-b border-[var(--fm-line)] pb-6">

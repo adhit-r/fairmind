@@ -89,7 +89,7 @@ export function SystemDetailDrawer({
               {system.name}
             </SheetTitle>
             <div className="flex flex-wrap items-center gap-2">
-              <Badge className="border border-[var(--fm-line)] bg-black px-2 py-0.5 text-[11px] font-semibold uppercase text-white">
+              <Badge className="border border-[var(--fm-line)] bg-[var(--fm-ink)] px-2 py-0.5 text-[11px] font-semibold uppercase text-white">
                 {system.riskTier} risk
               </Badge>
               <Badge className="border border-[var(--fm-line)] bg-white px-2 py-0.5 text-[11px] font-semibold uppercase">

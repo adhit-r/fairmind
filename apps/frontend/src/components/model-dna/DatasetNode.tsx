@@ -7,7 +7,7 @@ import { IconDatabase } from '@tabler/icons-react';
 const DatasetNode = ({ data }: NodeProps) => {
     return (
         <Card className="w-56 fm-card">
-            <Handle type="target" position={Position.Top} className="w-3 h-3 bg-black border-2 border-white" />
+            <Handle type="target" position={Position.Top} className="w-3 h-3 bg-[var(--fm-ink)] border-2 border-white" />
 
             <CardHeader className="p-3 pb-0">
                 <div className="flex justify-between items-start">
@@ -39,7 +39,7 @@ const DatasetNode = ({ data }: NodeProps) => {
                 </div>
             </CardContent>
 
-            <Handle type="source" position={Position.Bottom} className="w-3 h-3 bg-black border-2 border-white" />
+            <Handle type="source" position={Position.Bottom} className="w-3 h-3 bg-[var(--fm-ink)] border-2 border-white" />
         </Card>
     );
 };

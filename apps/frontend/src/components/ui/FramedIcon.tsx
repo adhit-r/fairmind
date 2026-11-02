@@ -68,7 +68,7 @@ export const FramedIcon = React.forwardRef<
     compact
       ? 'h-10 w-10 rounded-full border border-[var(--fm-line)] bg-white hover:border-[var(--fm-ink)]'
       : 'w-full justify-start gap-3 rounded-[10px] px-2 py-1.5 text-[13.5px] hover:bg-[var(--fm-bg)]',
-    active && 'bg-[var(--fm-ink)] text-white hover:bg-[var(--fm-ink)]',
+    active && 'bg-[var(--fm-ink)] text-white hover:bg-black',
     className,
   )
   const content = (

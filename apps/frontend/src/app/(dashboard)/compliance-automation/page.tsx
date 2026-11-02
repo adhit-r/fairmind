@@ -56,7 +56,7 @@ export default function ComplianceAutomationPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background p-8">
+      <div className="min-w-0">
         <div className="mx-auto max-w-7xl">
           <div className="flex justify-center">
             <div className="h-12 w-12 animate-spin rounded-full border-2 border-[var(--fm-line)] border-t-[var(--fm-ink)]" />
@@ -67,7 +67,7 @@ export default function ComplianceAutomationPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background p-8">
+    <div className="min-w-0">
       <div className="mx-auto max-w-7xl">
         {/* Header */}
         <div className="mb-8 border-b border-[var(--fm-line)] pb-6">
@@ -143,7 +143,7 @@ export default function ComplianceAutomationPage() {
             onClick={() => setActiveTab("schedules")}
             className={`px-6 py-3 font-bold transition-all ${
               activeTab === "schedules"
-                ? "border-b border-[var(--fm-line)] bg-black text-white"
+                ? "border-b border-[var(--fm-line)] bg-[var(--fm-ink)] text-white"
                 : "border-b-4 border-gray-300 hover:border-[var(--fm-ink)]"
             }`}
           >
@@ -153,7 +153,7 @@ export default function ComplianceAutomationPage() {
             onClick={() => setActiveTab("violations")}
             className={`flex items-center gap-2 px-6 py-3 font-bold transition-all ${
               activeTab === "violations"
-                ? "border-b border-[var(--fm-line)] bg-black text-white"
+                ? "border-b border-[var(--fm-line)] bg-[var(--fm-ink)] text-white"
                 : "border-b-4 border-gray-300 hover:border-[var(--fm-ink)]"
             }`}
           >
@@ -168,7 +168,7 @@ export default function ComplianceAutomationPage() {
             onClick={() => setActiveTab("remediation")}
             className={`px-6 py-3 font-bold transition-all ${
               activeTab === "remediation"
-                ? "border-b border-[var(--fm-line)] bg-black text-white"
+                ? "border-b border-[var(--fm-line)] bg-[var(--fm-ink)] text-white"
                 : "border-b-4 border-gray-300 hover:border-[var(--fm-ink)]"
             }`}
           >
@@ -178,7 +178,7 @@ export default function ComplianceAutomationPage() {
             onClick={() => setActiveTab("reports")}
             className={`px-6 py-3 font-bold transition-all ${
               activeTab === "reports"
-                ? "border-b border-[var(--fm-line)] bg-black text-white"
+                ? "border-b border-[var(--fm-line)] bg-[var(--fm-ink)] text-white"
                 : "border-b-4 border-gray-300 hover:border-[var(--fm-ink)]"
             }`}
           >
@@ -238,7 +238,7 @@ function SchedulesSection() {
         <h2 className="text-2xl font-bold text-black">Compliance Schedules</h2>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="flex items-center gap-2 rounded-lg bg-black px-4 py-2 font-bold text-white"
+          className="flex items-center gap-2 rounded-full bg-[var(--fm-ink)] px-4 py-2 font-semibold text-white"
         >
           <IconPlus size={20} />
           New Schedule
@@ -345,7 +345,7 @@ function ViolationsSection() {
                   {violation.framework} • {violation.status.toUpperCase()}
                 </p>
               </div>
-              <button className="rounded px-3 py-1 text-xs font-bold text-white bg-black">
+              <button className="rounded px-3 py-1 text-xs font-bold text-white bg-[var(--fm-ink)]">
                 View
               </button>
             </div>

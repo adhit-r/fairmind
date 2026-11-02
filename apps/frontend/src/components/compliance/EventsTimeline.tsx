@@ -40,7 +40,7 @@ export function EventsTimeline({ data, isLoading = false }: EventsTimelineProps)
                 contentStyle={{
                   backgroundColor: '#fff',
                   border: '2px solid #000',
-                  boxShadow: '6px 6px 0 rgba(0, 0, 0, 0.15)',
+                  boxShadow: 'var(--fm-shadow)',
                 }}
                 labelStyle={{ color: '#000', fontWeight: 'bold' }}
               />

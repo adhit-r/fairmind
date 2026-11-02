@@ -83,33 +83,35 @@ See `CONTRIBUTING.md` for detailed contribution guidelines.
 **Job to do**: Detect bias quickly, generate remediation code, and produce audit-ready compliance documentation with minimal friction.
 
 ### Brand Personality
-**Neobrutalist + Professional**
-FairMind should feel bold, confident, and trustworthy—not corporate-sterile or playful. The interface communicates competence and seriousness about AI ethics without being cold or inaccessible. It's for engineers and compliance officers who value clarity and efficiency over visual decoration.
+**Calm, precise, trustworthy.**
+FairMind should feel like a well-made instrument: quiet surfaces, clear hierarchy, and data that reads at a glance. It is for engineers and compliance officers who value clarity and efficiency over visual decoration.
 
 ### Aesthetic Direction
-**Neobrut Design System** (maintain current direction):
-- **Bold geometric shadows**: 6px/8px hard-drop shadows communicate confidence and solidity
-- **Strong borders**: Thick outlines (4px) create visual clarity and hierarchy
-- **High contrast**: Teal primary (#FF6B35 orange accent), clean whites, deep blacks
-- **Geometric confidence**: Square corners, deliberate spacing, no softness
-- **No gradients or gloss**: Direct, no-nonsense visual communication
-- **Light + Dark modes**: Professional in both contexts
+**Lifecycle-shell design** (the reference pages are `/dashboard`, `/integrations`, `/onboard`, `/systems/[id]`):
+- **Soft surfaces**: white cards with 14px corners and a soft layered shadow, on a warm grey page background
+- **Hairlines, not heavy borders**: 1px borders in `--fm-line`; no thick black outlines
+- **Ink, not black**: text and primary fills use `--fm-ink`, secondary text `--fm-ink2`, labels `--fm-ink3`
+- **Semibold type**: headings `font-semibold` with tight tracking; uppercase only on small (10-11px) section labels
+- **Pill controls**: buttons are `rounded-full`, primary is a dark ink pill, secondary is white with a hairline border
+- **Orange is a brand accent, not a button color**: `--fm-brand` (#FF6B35) for marks and highlights only
+- **No gradients, gloss, hard offset shadows or press-down transforms**
 
-**Design tokens already in place**:
-- Primary: oklch(0.60 0.13 163) — confident teal
-- Accent: #FF6B35 — bold orange
-- Shadows: `brutal-shadow`, `brutal-shadow-lg`, `brutal-shadow-xl`
-- Radius: 0 (sharp corners for authority)
+**Design tokens** (`apps/frontend/src/app/globals.css`):
+- `--fm-bg` #f4f4f2, `--fm-ink` #15171a, `--fm-ink2` #5a5f68, `--fm-ink3` #9096a0
+- `--fm-line` rgba(21,23,26,.08), `--fm-brand` #ff6b35, `--fm-shadow` (soft card shadow)
+- `--radius` 10px for shadcn primitives; cards 14px; inputs `rounded-[10px]`
+- Use the shared primitives in `components/ui/` (Card, Button, dropdown) rather than restyling per page
+- Use the tokens via `var(--fm-*)`, never hardcoded hex for ink, lines or backgrounds; status colors (red, amber, green) are fine as literals
 
 ### Design Principles
-1. **Authority through clarity** — Bold typography, strong visual hierarchy, unambiguous interactive states. Users must never wonder what to do.
+1. **Authority through clarity** — Strong hierarchy from size and weight, not from borders and shadows. Users must never wonder what to do.
 2. **Data over decoration** — Visualizations and metrics are the focus. Remove anything ornamental that doesn't serve the user's task.
 3. **Compliance-first mindset** — Every page should support the user's regulatory documentation goal. Design for audit-readiness: screenshots, exports, and reports must be professional and exportable.
-4. **Neobrutalism for confidence** — Thick shadows, sharp edges, and geometric strength signal "this handles serious work." No soft-edged, glassy, corporate look.
+4. **One system** — Every page uses the same tokens and primitives, so the product reads as one tool.
 5. **Accessibility by default** — High contrast, clear hierarchy, predictable patterns. Works for compliance teams and engineers alike, with or without assistive tech.
 
 ### What to Avoid
-- Generic SaaS aesthetic (bland blue, generic cards, indistinct hierarchy)
+- The retired neobrutalist style: `border-2`/`border-4 border-black`, `shadow-brutal*`, `shadow-[4px_4px_0_0_...]`, `font-black uppercase`, `rounded-none`, the `#0F1412`/`#FCFDF8` palette, orange fill buttons
+- Generic SaaS aesthetic (bland blue, indistinct hierarchy)
 - Dark + moody (glassmorphism, neon glows, crypto/gaming vibes that undermine trustworthiness)
 - Overly decorative elements (gradients, animations that don't reduce cognitive load, superfluous icons)
-- Inconsistent neobrutalism (mix of soft and harsh aesthetics — commit to the bold approach or drop it entirely)
