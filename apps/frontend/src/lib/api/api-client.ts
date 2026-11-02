@@ -392,7 +392,8 @@ export class ApiClient {
     const url = `${this.baseUrl}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`
 
     const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
+      // A FormData body sets its own multipart boundary; forcing JSON here drops the file.
+      ...(fetchOptions.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
       ...(fetchOptions.headers as Record<string, string>),
     }
 

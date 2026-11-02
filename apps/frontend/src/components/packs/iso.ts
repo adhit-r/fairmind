@@ -130,6 +130,7 @@ export const TONES = {
   pad: ['#f6f4ef', '#dcd7cc', '#cdc7bb'],
   card: ['#ffffff', '#e6e3dd', '#d7d3cb'],
   seal: ['#d3eee0', '#a9d6bf', '#93c9ad'],
+  test: ['#e6effb', '#c4d7f1', '#aec6e8'],
   held: ['#d0d2d6', '#b0b3b9', '#999ca3'],
   queued: ['#fbfaf8', '#ebe9e4', '#dedbd4'],
   need: ['#ff7a45', '#e15e2b', '#c75224'],

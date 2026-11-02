@@ -12,7 +12,23 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from api.routes.ai_governance import _ensure_tables, _utc_now_iso
-from api.routes.pack_catalogue import PACKS, WORKFLOWS, Workflow
+from api.routes import pack_catalogue as cat
+from api.routes.pack_catalogue import (
+    BUNDLES,
+    EVALUATIONS,
+    EVERY_PACK,
+    FRAMEWORK_KEYS,
+    FRAMEWORKS,
+    GATE_KINDS,
+    PACKS,
+    PATTERNS,
+    PILLARS,
+    REQUIREMENTS,
+    WORKFLOWS,
+    Coverage,
+    Workflow,
+    requirement_status,
+)
 from config.auth import TokenData, UserRole, get_current_active_user, require_role
 from database.connection import get_db
 from src.application.services.governance_assurance_service import (
@@ -78,12 +94,34 @@ def _pack_json(pack_id: str, installed: bool) -> dict:
     return {
         "id": pack.id,
         "name": pack.name,
-        "version": pack.version,
+        "pillar": pack.pillar,
         "description": pack.description,
         "installed": installed,
-        "hasJourney": pack.journey is not None,
-        "workflowIds": [w.id for w in WORKFLOWS.values() if w.pack_id == pack.id],
+        "patterns": [
+            {
+                "id": p.id,
+                "name": p.name,
+                "agentic": p.agentic,
+                "workflowCount": len(p.workflows),
+                "evaluationCount": len(p.evaluations),
+            }
+            for p in (PATTERNS[pid] for pid in pack.patterns)
+        ],
+        "workflowCount": len(cat.PACK_WORKFLOWS[pack_id]),
+        "evaluationCount": len(cat.PACK_EVALUATIONS[pack_id]),
+        "requirementsTouched": len(cat.PACK_TOUCHED[pack_id]),
+        "agentic": any(PATTERNS[pid].agentic for pid in pack.patterns),
     }
+
+
+def _installed_ids(db: Session, org_id: str) -> List[str]:
+    """Installed pack ids the catalogue still knows; ids left over from an older catalogue are ignored."""
+    rows = db.execute(text("SELECT pack_id FROM pack_installs WHERE org_id = :org_id"), {"org_id": org_id})
+    return [r[0] for r in rows if r[0] in PACKS]
+
+
+def _pack_ref(pack_id: str) -> dict:
+    return {"id": pack_id, "name": PACKS[pack_id].name}
 
 
 def _is_installed(db: Session, org_id: str, pack_id: str) -> bool:
@@ -244,15 +282,284 @@ def _run_or_404(db: Session, org_id: str, run_id: str):
     return run
 
 
-# --- catalogue and install -------------------------------------------------
+# --- catalogue, library and install ----------------------------------------
+# Fixed paths come before parameterised ones so nothing is shadowed.
+
+
+@router.get("/catalogue")
+async def get_catalogue(_m: OrgMembership = Depends(_member)):
+    pillars = [
+        {
+            "id": p.id,
+            "name": p.name,
+            "description": p.description,
+            "packs": sum(1 for x in PACKS.values() if x.pillar == p.id),
+            "workflows": sum(1 for x in WORKFLOWS.values() if x.pillar == p.id),
+            "evaluations": sum(1 for x in EVALUATIONS.values() if x.pillar == p.id),
+            "frameworks": sum(1 for x in FRAMEWORKS.values() if x.pillar == p.id),
+        }
+        for p in PILLARS.values()
+    ]
+    counts = {
+        "packs": len(PACKS),
+        "patterns": len(PATTERNS),
+        "workflows": len(WORKFLOWS),
+        "evaluations": len(EVALUATIONS),
+        "frameworks": len(FRAMEWORKS),
+        "requirements": len(REQUIREMENTS),
+    }
+    return {"version": cat.VERSION, "pillars": pillars, "counts": counts}
 
 
 @router.get("")
 async def list_packs(m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     _ensure_tables(db)
-    rows = db.execute(text("SELECT pack_id FROM pack_installs WHERE org_id = :org_id"), {"org_id": m.org_id})
-    installed = {r[0] for r in rows}
+    installed = set(_installed_ids(db, m.org_id))
     return [_pack_json(pid, pid in installed) for pid in PACKS]
+
+
+def _evaluation_json(ev, installed: set) -> dict:
+    pattern = PATTERNS[ev.pattern]
+    pack_id = cat.EVALUATION_PACK[ev.id]
+    return {
+        "id": ev.id,
+        "name": ev.name,
+        "measures": ev.measures,
+        "metric": ev.metric,
+        "threshold": ev.threshold,
+        "appliesTo": ev.appliesTo,
+        "pillar": ev.pillar,
+        "pattern": {"id": pattern.id, "name": pattern.name},
+        "pack": _pack_ref(pack_id),
+        "engine": ev.engine,
+        "codeLocation": ev.codeLocation,
+        "tests": [
+            {"key": k, "framework": REQUIREMENTS[k].framework, "control": REQUIREMENTS[k].control, "title": REQUIREMENTS[k].title}
+            for k in ev.tests
+        ],
+        "installed": pack_id in installed,
+    }
+
+
+@router.get("/evaluations")
+async def list_evaluations(
+    pillar: Optional[str] = Query(default=None),
+    engine: Optional[str] = Query(default=None),
+    q: Optional[str] = Query(default=None),
+    m: OrgMembership = Depends(_member),
+    db: Session = Depends(get_db),
+):
+    _ensure_tables(db)
+    installed = set(_installed_ids(db, m.org_id))
+    needle = q.strip().lower() if q else ""
+    return [
+        _evaluation_json(ev, installed)
+        for ev in EVALUATIONS.values()
+        if (not pillar or ev.pillar == pillar.upper())
+        and (not engine or ev.engine == engine)
+        and (not needle or needle in f"{ev.id} {ev.name} {ev.measures or ''} {ev.metric or ''}".lower())
+    ]
+
+
+@router.get("/evaluations/{evaluation_id}")
+async def get_evaluation(evaluation_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+    ev = EVALUATIONS.get(evaluation_id)
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evaluation not found")
+    _ensure_tables(db)
+    return _evaluation_json(ev, set(_installed_ids(db, m.org_id)))
+
+
+@router.get("/library/{pack_id}")
+async def get_library(pack_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+    if pack_id not in PACKS:
+        raise HTTPException(status_code=404, detail="Pack not found")
+    _ensure_tables(db)
+    org_id = m.org_id
+    latest = _latest_runs(db, org_id, set(cat.PACK_WORKFLOWS[pack_id]))
+    patterns = [
+        {
+            "id": p.id,
+            "name": p.name,
+            "objective": p.objective,
+            "agentic": p.agentic,
+            "workflows": [
+                {
+                    "id": wid,
+                    "name": WORKFLOWS[wid].name,
+                    "autonomy": WORKFLOWS[wid].autonomy,
+                    "stage": WORKFLOWS[wid].stage,
+                    "latestRun": _summary(latest[wid]) if wid in latest else None,
+                }
+                for wid in p.workflows
+            ],
+            "evaluations": [{"id": e, "name": EVALUATIONS[e].name, "engine": EVALUATIONS[e].engine} for e in p.evaluations],
+        }
+        for p in (PATTERNS[pid] for pid in PACKS[pack_id].patterns)
+    ]
+    own = Coverage([pack_id])
+    frameworks = [
+        {"key": fk, "name": fw.name, "touched": touched, "covered": own.count(fk)}
+        for fk, fw in FRAMEWORKS.items()
+        if (touched := len(FRAMEWORK_KEYS[fk] & cat.PACK_TOUCHED[pack_id]))
+    ]
+    return {**_pack_json(pack_id, pack_id in _installed_ids(db, org_id)), "patterns": patterns, "frameworks": frameworks}
+
+
+def _bundle_json(bundle_id: str, installed: List[str]) -> dict:
+    bundle = BUNDLES[bundle_id]
+    own, org = Coverage(bundle.packs), Coverage(installed)
+    return {
+        "id": bundle.id,
+        "name": bundle.name,
+        "for": bundle.for_,
+        "packs": [{**_pack_ref(p), "installed": p in installed} for p in bundle.packs],
+        "installedCount": sum(1 for p in bundle.packs if p in installed),
+        "targets": [
+            {
+                "key": fk,
+                "name": FRAMEWORKS[fk].name,
+                "active": len(FRAMEWORK_KEYS[fk]),
+                "coveredAll": own.count(fk),
+                "coveredInstalled": org.count(fk),
+            }
+            for fk in bundle.targets
+        ],
+    }
+
+
+@router.get("/bundles")
+async def list_bundles(m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+    _ensure_tables(db)
+    installed = _installed_ids(db, m.org_id)
+    return [_bundle_json(b, installed) for b in BUNDLES]
+
+
+@router.post("/bundles/{bundle_id}/install")
+async def install_bundle(bundle_id: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+    if bundle_id not in BUNDLES:
+        raise HTTPException(status_code=404, detail="Bundle not found")
+    _ensure_tables(db)
+    for pack_id in BUNDLES[bundle_id].packs:
+        _install(db, m, pack_id)
+    return _bundle_json(bundle_id, _installed_ids(db, m.org_id))
+
+
+@router.get("/journeys")
+async def list_journeys(m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+    _ensure_tables(db)
+    org = Coverage(_installed_ids(db, m.org_id))
+    rows = [
+        {
+            "key": fk,
+            "name": fw.name,
+            "pillar": fw.pillar,
+            "active": len(FRAMEWORK_KEYS[fk]),
+            "coveredAll": EVERY_PACK.count(fk),
+            "coveredInstalled": org.count(fk),
+            "contributingPacks": [p for p in PACKS if FRAMEWORK_KEYS[fk] & cat.PACK_DONE[p]],
+        }
+        for fk, fw in FRAMEWORKS.items()
+        if len(FRAMEWORK_KEYS[fk]) >= 5
+    ]
+    return sorted(rows, key=lambda r: r["name"])
+
+
+@router.get("/journeys/{framework_key}")
+async def get_journey(framework_key: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+    fw = FRAMEWORKS.get(framework_key)
+    if not fw:
+        raise HTTPException(status_code=404, detail="Journey not found")
+    _ensure_tables(db)
+    ids = _installed_ids(db, m.org_id)
+    installed, org = set(ids), Coverage(ids)
+    keys = FRAMEWORK_KEYS[framework_key]
+    latest = _latest_runs(db, m.org_id, {w for k in keys for w, _ in cat.REQUIREMENT_WORKFLOWS.get(k, [])})
+    groups: Dict[str, list] = {}
+    for req in REQUIREMENTS.values():
+        if req.key not in keys:
+            continue
+        groups.setdefault(req.group or "Other", []).append(
+            {
+                "key": req.key,
+                "control": req.control,
+                "title": req.title,
+                "status": requirement_status(req.key, org),
+                "workflows": [
+                    {
+                        "id": wid,
+                        "name": WORKFLOWS[wid].name,
+                        "relation": relation,
+                        "pack": cat.WORKFLOW_PACK[wid],
+                        "installed": cat.WORKFLOW_PACK[wid] in installed,
+                        "latestRun": _summary(latest[wid]) if wid in latest else None,
+                    }
+                    for wid, relation in cat.REQUIREMENT_WORKFLOWS.get(req.key, [])
+                ],
+                "evaluations": [
+                    {
+                        "id": eid,
+                        "name": EVALUATIONS[eid].name,
+                        "engine": EVALUATIONS[eid].engine,
+                        "pack": cat.EVALUATION_PACK[eid],
+                        "installed": cat.EVALUATION_PACK[eid] in installed,
+                    }
+                    for eid in cat.REQUIREMENT_EVALUATIONS.get(req.key, [])
+                ],
+            }
+        )
+    # Only packs that cover or test something in this framework are steps; cumulative runs over all of them in catalogue order.
+    steps, seen = [], set()
+    for pack_id, pack in PACKS.items():
+        done = keys & cat.PACK_DONE[pack_id]
+        if not done:
+            continue
+        new = done - seen
+        seen |= done
+        steps.append(
+            {
+                "pack": pack_id,
+                "name": pack.name,
+                "installed": pack_id in installed,
+                "newlyCovered": len(new),
+                "cumulative": len(seen),
+            }
+        )
+    return {
+        "key": fw.key,
+        "name": fw.name,
+        "pillar": fw.pillar,
+        "version": fw.version,
+        "binding": fw.binding,
+        "status": fw.status,
+        "active": len(keys),
+        "coveredAll": EVERY_PACK.count(framework_key),
+        "coveredInstalled": org.count(framework_key),
+        "groups": [{"name": name, "requirements": reqs} for name, reqs in groups.items()],
+        "steps": steps,
+    }
+
+
+def _install(db: Session, m: OrgMembership, pack_id: str) -> None:
+    if _is_installed(db, m.org_id, pack_id):
+        return
+    try:
+        db.execute(
+            text(
+                "INSERT INTO pack_installs (id, org_id, pack_id, installed_by, created_at) "
+                "VALUES (:id, :org_id, :pack_id, :installed_by, :created_at)"
+            ),
+            {
+                "id": str(uuid.uuid4()),
+                "org_id": m.org_id,
+                "pack_id": pack_id,
+                "installed_by": m.user_id,
+                "created_at": _utc_now_iso(),
+            },
+        )
+        db.commit()
+    except IntegrityError:
+        db.rollback()  # a concurrent install won; same end state
 
 
 @router.post("/{pack_id}/install")
@@ -260,25 +567,7 @@ async def install_pack(pack_id: str, m: OrgMembership = Depends(_manager), db: S
     if pack_id not in PACKS:
         raise HTTPException(status_code=404, detail="Pack not found")
     _ensure_tables(db)
-    org_id = m.org_id
-    if not _is_installed(db, org_id, pack_id):
-        try:
-            db.execute(
-                text(
-                    "INSERT INTO pack_installs (id, org_id, pack_id, installed_by, created_at) "
-                    "VALUES (:id, :org_id, :pack_id, :installed_by, :created_at)"
-                ),
-                {
-                    "id": str(uuid.uuid4()),
-                    "org_id": org_id,
-                    "pack_id": pack_id,
-                    "installed_by": m.user_id,
-                    "created_at": _utc_now_iso(),
-                },
-            )
-            db.commit()
-        except IntegrityError:
-            db.rollback()  # a concurrent install won; same end state
+    _install(db, m, pack_id)
     return _pack_json(pack_id, True)
 
 
@@ -295,38 +584,6 @@ async def uninstall_pack(pack_id: str, m: OrgMembership = Depends(_manager), db:
     return _pack_json(pack_id, False)
 
 
-@router.get("/journeys/{pack_id}")
-async def get_journey(pack_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
-    pack = PACKS.get(pack_id)
-    if not pack or pack.journey is None:
-        raise HTTPException(status_code=404, detail="Journey not found")
-    _ensure_tables(db)
-    org_id = m.org_id
-    workflow_ids = [wid for c in pack.journey for wid in c.workflow_ids]
-    latest = _latest_runs(db, org_id, workflow_ids)
-    return {
-        "packId": pack.id,
-        "name": pack.name,
-        "installed": _is_installed(db, org_id, pack.id),
-        "clauses": [
-            {
-                "number": c.number,
-                "name": c.name,
-                "workflows": [
-                    {
-                        "id": wid,
-                        "name": WORKFLOWS[wid].name,
-                        "stage": WORKFLOWS[wid].stage,
-                        "latestRun": _summary(latest[wid]) if wid in latest else None,
-                    }
-                    for wid in c.workflow_ids
-                ],
-            }
-            for c in pack.journey
-        ],
-    }
-
-
 def _workflow_or_404(workflow_id: str) -> Workflow:
     wf = WORKFLOWS.get(workflow_id)
     if not wf:
@@ -340,26 +597,40 @@ async def get_workflow(workflow_id: str, m: OrgMembership = Depends(_member), db
     _ensure_tables(db)
     org_id = m.org_id
     latest = _latest_runs(db, org_id, [wf.id]).get(wf.id)
+    pattern = PATTERNS[wf.pattern]
+    pack_id = cat.WORKFLOW_PACK[wf.id]
     return {
         "id": wf.id,
         "name": wf.name,
-        "version": wf.version,
+        "version": cat.VERSION,
         "stage": wf.stage,
         "description": wf.description,
-        "packId": wf.pack_id,
-        "installed": _is_installed(db, org_id, wf.pack_id),
-        "steps": [
+        "packId": pack_id,
+        "pack": _pack_ref(pack_id),
+        "installed": _is_installed(db, org_id, pack_id),
+        "pattern": {"id": pattern.id, "name": pattern.name},
+        "pillar": wf.pillar,
+        "commonControl": wf.commonControl,
+        "autonomy": wf.autonomy,
+        "gate": wf.gate,
+        "gateConditions": wf.gateConditions,
+        "approver": wf.approver,
+        "separationOfDuties": wf.separationOfDuties,
+        "externalWrite": wf.externalWrite,
+        "triggers": wf.triggers,
+        "mappings": [
             {
-                "id": s.id,
-                "kind": s.kind,
-                "title": s.title,
-                "detail": s.detail,
-                "systems": s.systems,
-                "next": [{"to": n.to, "label": n.label} for n in s.next],
+                "key": mp.key,
+                "framework": REQUIREMENTS[mp.key].framework,
+                "control": REQUIREMENTS[mp.key].control,
+                "title": REQUIREMENTS[mp.key].title,
+                "relation": mp.relation,
+                "note": mp.note,
             }
-            for s in wf.steps
+            for mp in wf.mappings
         ],
-        "controls": [c.model_dump() for c in wf.controls],
+        "evaluations": [{"id": e, "name": EVALUATIONS[e].name, "engine": EVALUATIONS[e].engine} for e in pattern.evaluations],
+        "steps": [s.model_dump() for s in wf.steps],
         "latestRun": _summary(latest) if latest else None,
     }
 
@@ -377,7 +648,7 @@ async def start_run(
     wf = _workflow_or_404(workflow_id)
     _ensure_tables(db)
     org_id = m.org_id
-    if not _is_installed(db, org_id, wf.pack_id):
+    if not _is_installed(db, org_id, cat.WORKFLOW_PACK[wf.id]):
         raise HTTPException(status_code=409, detail="Install the pack before starting a run")
     if body.system_id:
         system = db.execute(
@@ -397,13 +668,13 @@ async def start_run(
             "id": run_id,
             "org_id": org_id,
             "workflow_id": wf.id,
-            "workflow_version": wf.version,
+            "workflow_version": cat.VERSION,
             "ai_system_id": body.system_id,
             "started_by": m.user_id,
             "now": now,
         },
     )
-    _append(db, run_id, "run.created", None, {"workflowId": wf.id, "workflowVersion": wf.version})
+    _append(db, run_id, "run.created", None, {"workflowId": wf.id, "workflowVersion": cat.VERSION})
     db.commit()
     return _run_json(db, run_id)
 
@@ -514,8 +785,8 @@ async def append_event(
         raise HTTPException(status_code=422, detail="step_id is required for this event kind")
     if body.step_id and body.step_id not in steps:
         raise HTTPException(status_code=422, detail="Unknown step for this workflow")
-    if body.kind == "gate.opened" and steps[body.step_id].kind != "ask":
-        raise HTTPException(status_code=422, detail="A gate can only open on an ask step")
+    if body.kind == "gate.opened" and steps[body.step_id].kind not in GATE_KINDS:
+        raise HTTPException(status_code=422, detail="A gate can only open on an ask, exception or decide step")
 
     now = _utc_now_iso()
     payload = dict(body.payload)

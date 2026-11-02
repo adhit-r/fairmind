@@ -1,0 +1,11 @@
+{
+  "title": "Product workflows",
+  "pages": [
+    "register-system",
+    "environmental-evaluation",
+    "evidence-review",
+    "remediation-retest",
+    "reports-approvals",
+    "release-gate-in-ci"
+  ]
+}

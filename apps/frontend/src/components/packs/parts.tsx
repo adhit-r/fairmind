@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import './iso.css'
 import type { ReactNode } from 'react'
-import type { RunStatus } from '@/lib/api/hooks/usePacks'
+import type { EngineStatus, ReqStatus, RunStatus } from '@/lib/api/hooks/usePacks'
 import { cn } from '@/lib/utils'
 
 /** Class strings shared by the pack screens; they follow the approved design (pill buttons, soft pills). */
@@ -10,13 +10,15 @@ export const BTN =
 export const BTN_P = cn(BTN, 'border-[var(--fm-ink,#15171a)] bg-[var(--fm-ink,#15171a)] text-white hover:bg-[#2b2e3a]')
 export const MUTED = 'text-[var(--fm-ink2,#5a5f68)]'
 
-type Tone = 'plain' | 'you' | 'done' | 'run' | 'block'
+type Tone = 'plain' | 'you' | 'done' | 'run' | 'block' | 'info' | 'warn'
 const TONE: Record<Tone, string> = {
   plain: 'bg-[#f4f4f2] text-[#5a5f68]',
   you: 'bg-[#ffeee4] text-[#a8430b]',
   done: 'bg-[#e3f5ec] text-[#00704e]',
   run: 'bg-[#eceef1] text-[#15171a]',
   block: 'bg-[#fde8e8] text-[#b42318]',
+  info: 'bg-[#e6effb] text-[#1d4f91]',
+  warn: 'bg-[#fff4d6] text-[#8a5a00]',
 }
 
 export function Pill({ tone = 'plain', dot, children }: { tone?: Tone; dot?: boolean; children: ReactNode }) {
@@ -41,6 +43,63 @@ export function StatusPill({ status }: { status: RunStatus | null | undefined })
   if (!status) return <Pill>Not started</Pill>
   return <Pill tone={STATUS[status].tone} dot={status === 'waiting'}>{STATUS[status].label}</Pill>
 }
+
+/** Requirement coverage on a journey; the same words and colours everywhere. */
+const REQ: Record<ReqStatus, { label: string; tone: Tone; hint: string }> = {
+  covered: { label: 'Covered', tone: 'done', hint: 'An installed workflow covers this requirement.' },
+  tested: { label: 'Tested', tone: 'info', hint: 'An installed evaluation tests this requirement.' },
+  available: { label: 'Available', tone: 'you', hint: 'A pack that is not installed would cover or test this requirement.' },
+  supported: { label: 'Supported', tone: 'plain', hint: 'Workflows only support this requirement; none satisfies it.' },
+  gap: { label: 'Gap', tone: 'block', hint: 'Nothing in the catalogue maps to this requirement.' },
+}
+export const REQ_ORDER: ReqStatus[] = ['covered', 'tested', 'available', 'supported', 'gap']
+export const reqLabel = (s: ReqStatus) => REQ[s].label
+export const reqHint = (s: ReqStatus) => REQ[s].hint
+
+export function ReqPill({ status }: { status: ReqStatus }) {
+  return (
+    <span title={REQ[status].hint}>
+      <Pill tone={REQ[status].tone}>{REQ[status].label}</Pill>
+    </span>
+  )
+}
+
+const ENGINE: Record<EngineStatus, { label: string; tone: Tone }> = {
+  'Engine exists': { label: 'Engine exists', tone: 'done' },
+  Partial: { label: 'Partial', tone: 'warn' },
+  'Not found': { label: 'Not built yet', tone: 'plain' },
+}
+
+export function EnginePill({ engine }: { engine: EngineStatus }) {
+  const e = ENGINE[engine] ?? { label: String(engine), tone: 'plain' as Tone }
+  return <Pill tone={e.tone}>{e.label}</Pill>
+}
+
+/** Installed coverage (dark) over what every pack would cover (light), out of the active requirements. */
+export function CoverageBar({ installed, all, total, label, allLabel = 'with every pack' }: { installed: number; all: number; total: number; label: string; allLabel?: string }) {
+  const pct = (n: number) => (total > 0 ? Math.min(100, Math.round((n / total) * 100)) : 0)
+  return (
+    <div className="flex flex-col gap-1">
+      <div
+        role="progressbar"
+        aria-label={label}
+        aria-valuemin={0}
+        aria-valuemax={total}
+        aria-valuenow={installed}
+        aria-valuetext={`${installed} of ${total} requirements covered by installed packs, ${all} ${allLabel}`}
+        className="relative h-2 w-full overflow-hidden rounded-full bg-[#eceef1]"
+      >
+        <div className="absolute inset-y-0 left-0 bg-[#a9d6bf]" style={{ width: `${pct(all)}%` }} />
+        <div className="absolute inset-y-0 left-0 bg-[#009869]" style={{ width: `${pct(installed)}%` }} />
+      </div>
+      <span className={cn('text-[12px] tabular-nums', MUTED)}>
+        {installed} of {total} covered. {all} {allLabel}.
+      </span>
+    </div>
+  )
+}
+
+export const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s)
 
 /** Orange numbered disc; the number matches the agent in the figure. */
 export function Num({ n }: { n: number }) {

@@ -8,11 +8,6 @@ const nextConfig = {
         permanent: false,
       },
       {
-        source: '/compliance',
-        destination: '/compliance-dashboard',
-        permanent: false,
-      },
-      {
         source: '/compliance/dashboard',
         destination: '/compliance-dashboard',
         permanent: false,

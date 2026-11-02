@@ -1,16 +1,31 @@
-"""Static catalogue of agentic packs and their workflows.
+"""Static catalogue of agentic packs, patterns, workflows and evaluations.
 
-Constants only: nothing here is written to the database. The raw dicts are
-parsed into pydantic models and cross-checked at import, so a journey that
-names an unknown workflow or a step whose `next` names an unknown step stops
-the app from starting instead of surfacing as a broken page.
+Read once from pack_catalogue_data/catalogue.json (exported from the product
+spreadsheet by scripts/export_pack_catalogue.py). Constants only: nothing here
+is written to the database. The JSON is parsed into pydantic models and every
+cross-reference is checked at import, so a pattern that names an unknown
+workflow or a mapping to an unknown requirement stops the app from starting
+instead of surfacing as a broken page.
 """
 
-from typing import Dict, List, Literal, Optional, Tuple
+import json
+from pathlib import Path
+from typing import Dict, Iterable, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
-StepKind = Literal["trigger", "collect", "check", "suggest", "ask", "act", "file"]
+DATA_FILE = Path(__file__).parent / "pack_catalogue_data" / "catalogue.json"
+
+StepKind = Literal[
+    "trigger", "collect", "check", "suggest", "preflight", "ask", "exception", "decide", "act", "verify", "escalate", "file"
+]
+Relation = Literal["Satisfies", "Partially satisfies", "Aligns with", "Supports"]
+Engine = Literal["Engine exists", "Partial", "Not found"]
+
+# A workflow with one of these relations covers the requirement; Supports does not.
+COVERING = ("Satisfies", "Partially satisfies", "Aligns with")
+# Step kinds a run can pause on for a human decision.
+GATE_KINDS = ("ask", "exception", "decide")
 
 
 class Edge(BaseModel):
@@ -21,427 +36,258 @@ class Edge(BaseModel):
 class Step(BaseModel):
     id: str
     kind: StepKind
+    type: Optional[str] = None
     title: str
     detail: str
     systems: List[str] = Field(default_factory=list)
+    permission: Optional[str] = None
+    runsWithoutApproval: Optional[str] = None
     next: List[Edge] = Field(default_factory=list)
+    failure: Optional[str] = None
+    output: Optional[str] = None
 
 
-class Control(BaseModel):
-    framework: str
-    control: str
-    relation: Literal["satisfies", "supports"]
+class Mapping(BaseModel):
+    key: str
+    relation: Relation
+    note: Optional[str] = None
 
 
 class Workflow(BaseModel):
     id: str
     name: str
-    version: str
+    pattern: str
+    pillar: str
+    commonControl: Optional[str] = None
     stage: str
+    scope: Optional[str] = None
     description: str
-    pack_id: str
+    schedule: Optional[str] = None
+    triggers: List[str] = Field(default_factory=list)
+    autonomy: str
+    gate: Optional[str] = None
+    gateConditions: Optional[str] = None
+    approver: Optional[str] = None
+    separationOfDuties: Optional[str] = None
+    externalWrite: bool = False
+    systems: List[str] = Field(default_factory=list)
+    evidence: Optional[str] = None
+    agentRisks: List[str] = Field(default_factory=list)
     steps: List[Step]
-    controls: List[Control]
+    mappings: List[Mapping] = Field(default_factory=list)
 
 
-class Clause(BaseModel):
-    number: str
+class Evaluation(BaseModel):
+    id: str
     name: str
-    workflow_ids: List[str] = Field(default_factory=list)
+    measures: Optional[str] = None
+    metric: Optional[str] = None
+    threshold: Optional[str] = None
+    thresholdSource: Optional[str] = None
+    appliesTo: Optional[str] = None
+    inputs: Optional[str] = None
+    commonControl: Optional[str] = None
+    pattern: str
+    pillar: str
+    engine: Engine
+    codeLocation: Optional[str] = None
+    tests: List[str] = Field(default_factory=list)
+
+
+class Pattern(BaseModel):
+    id: str
+    pillar: str
+    name: str
+    objective: Optional[str] = None
+    agentic: bool
+    pack: str
+    workflows: List[str] = Field(default_factory=list)
+    evaluations: List[str] = Field(default_factory=list)
 
 
 class Pack(BaseModel):
     id: str
     name: str
-    version: str
+    pillar: str
     description: str
-    journey: Optional[List[Clause]] = None
+    patterns: List[str]
 
 
-def _edges(*targets: str) -> List[dict]:
-    return [{"to": t} for t in targets]
+class Bundle(BaseModel):
+    id: str
+    name: str
+    for_: str = Field(alias="for")
+    packs: List[str]
+    targets: List[str]
 
 
-def _gate(approved: str, revise: str) -> List[dict]:
-    return [{"to": approved, "label": "approved"}, {"to": revise, "label": "changes asked"}]
+class Pillar(BaseModel):
+    id: str
+    name: str
+    description: str
 
 
-_PACKS: List[dict] = [
-    {
-        "id": "iso_42001",
-        "name": "ISO/IEC 42001",
-        "version": "1",
-        "description": (
-            "Workflows that produce the records an ISO/IEC 42001 AI management system audit asks for, "
-            "organised by the standard's clauses."
-        ),
-        "journey": [
-            {"number": "4", "name": "Context of the organization"},
-            {"number": "5", "name": "Leadership", "workflow_ids": ["ai_policy_review"]},
-            {
-                "number": "6",
-                "name": "Planning",
-                "workflow_ids": ["ai_risk_assessment", "ai_system_impact_assessment"],
-            },
-            {"number": "7", "name": "Support"},
-            {"number": "8", "name": "Operation"},
-            {"number": "9", "name": "Performance evaluation"},
-            {"number": "10", "name": "Improvement"},
-        ],
-    },
-    {
-        "id": "security_controls",
-        "name": "Security Controls",
-        "version": "1",
-        "description": "Workflows that check security controls over AI systems and file the evidence.",
-    },
-]
-
-_WORKFLOWS: List[dict] = [
-    {
-        "id": "ai_policy_review",
-        "name": "AI policy review",
-        "version": "1",
-        "stage": "govern",
-        "pack_id": "iso_42001",
-        "description": (
-            "Reviews the organization's AI policy against ISO/IEC 42001 clause 5.2 and control A.2.2, "
-            "proposes changes, and files the owner's decision as evidence."
-        ),
-        "controls": [
-            {"framework": "ISO/IEC 42001", "control": "5.2", "relation": "satisfies"},
-            {"framework": "ISO/IEC 42001", "control": "A.2.2", "relation": "satisfies"},
-        ],
-        "steps": [
-            {
-                "id": "trigger",
-                "kind": "trigger",
-                "title": "Start the review",
-                "detail": "Starts when a policy review is requested for the organization.",
-                "next": _edges("collect-policy"),
-            },
-            {
-                "id": "collect-policy",
-                "kind": "collect",
-                "title": "Collect the current AI policy",
-                "detail": "Reads the active AI policy and its version history from the policy library.",
-                "systems": ["Policy library"],
-                "next": _edges("check-policy"),
-            },
-            {
-                "id": "check-policy",
-                "kind": "check",
-                "title": "Check the policy against 5.2",
-                "detail": (
-                    "Checks that the policy fits the organization's purpose, gives a framework for AI objectives, "
-                    "commits to meeting applicable requirements and to continual improvement, and is documented "
-                    "and available as control A.2.2 requires."
-                ),
-                "next": _edges("suggest"),
-            },
-            {
-                "id": "suggest",
-                "kind": "suggest",
-                "title": "Suggest changes",
-                "detail": "Lists each gap against clause 5.2 with the wording change that would close it.",
-                "next": _edges("ask"),
-            },
-            {
-                "id": "ask",
-                "kind": "ask",
-                "title": "Ask the policy owner",
-                "detail": "Sends the suggested changes to the policy owner for approval before anything is recorded.",
-                "next": _gate("record", "suggest-revise"),
-            },
-            {
-                "id": "record",
-                "kind": "act",
-                "title": "Record the approved policy",
-                "detail": "Saves the approved wording as a new version of the policy.",
-                "next": _edges("file-evidence"),
-            },
-            {
-                "id": "suggest-revise",
-                "kind": "suggest",
-                "title": "Revise",
-                "detail": "Reworks the suggested changes using the owner's comments.",
-                "next": _edges("ask"),
-            },
-            {
-                "id": "file-evidence",
-                "kind": "file",
-                "title": "File evidence",
-                "detail": "Files the reviewed policy, the findings and the owner's decision against clause 5.2 and A.2.2.",
-            },
-        ],
-    },
-    {
-        "id": "ai_risk_assessment",
-        "name": "AI risk assessment",
-        "version": "1",
-        "stage": "assess",
-        "pack_id": "iso_42001",
-        "description": (
-            "Identifies and rates the risks of an AI system against the organization's risk criteria, "
-            "as ISO/IEC 42001 clause 6.1.2 requires, and files the approved risk record."
-        ),
-        "controls": [
-            {"framework": "ISO/IEC 42001", "control": "6.1.2", "relation": "satisfies"},
-            {"framework": "ISO/IEC 42001", "control": "8.2", "relation": "supports"},
-        ],
-        "steps": [
-            {
-                "id": "trigger",
-                "kind": "trigger",
-                "title": "Start the assessment",
-                "detail": "Starts when an assessment is requested for an AI system, or when one is due again.",
-                "next": _edges("collect-context"),
-            },
-            {
-                "id": "collect-context",
-                "kind": "collect",
-                "title": "Collect the system context",
-                "detail": "Reads the system's purpose, owner, risk tier, linked model and earlier risk records.",
-                "systems": ["AI system inventory", "Model registry"],
-                "next": _edges("check-criteria"),
-            },
-            {
-                "id": "check-criteria",
-                "kind": "check",
-                "title": "Identify risks against the criteria",
-                "detail": (
-                    "Identifies risks to the system's objectives and applies the organization's risk acceptance "
-                    "criteria to each one."
-                ),
-                "next": _edges("suggest"),
-            },
-            {
-                "id": "suggest",
-                "kind": "suggest",
-                "title": "Rate and treat each risk",
-                "detail": "Proposes a likelihood, a consequence and a treatment for every risk found.",
-                "next": _edges("ask"),
-            },
-            {
-                "id": "ask",
-                "kind": "ask",
-                "title": "Ask the risk owner",
-                "detail": "Sends the rated risks to the risk owner to accept or send back.",
-                "next": _gate("record", "suggest-revise"),
-            },
-            {
-                "id": "record",
-                "kind": "act",
-                "title": "Record the risks",
-                "detail": "Saves the approved risks and treatments to the system's risk register.",
-                "next": _edges("file-evidence"),
-            },
-            {
-                "id": "suggest-revise",
-                "kind": "suggest",
-                "title": "Revise",
-                "detail": "Reworks the ratings and treatments using the owner's comments.",
-                "next": _edges("ask"),
-            },
-            {
-                "id": "file-evidence",
-                "kind": "file",
-                "title": "File evidence",
-                "detail": "Files the assessment, the criteria used and the owner's decision against 6.1.2 and 8.2.",
-            },
-        ],
-    },
-    {
-        "id": "ai_system_impact_assessment",
-        "name": "AI system impact assessment",
-        "version": "1",
-        "stage": "assess",
-        "pack_id": "iso_42001",
-        "description": (
-            "Assesses the consequences of an AI system for individuals, groups and society, as ISO/IEC 42001 "
-            "clause 6.1.4 and control A.5.2 require, and files the approved assessment."
-        ),
-        "controls": [
-            {"framework": "ISO/IEC 42001", "control": "6.1.4", "relation": "satisfies"},
-            {"framework": "ISO/IEC 42001", "control": "A.5.2", "relation": "satisfies"},
-        ],
-        "steps": [
-            {
-                "id": "trigger",
-                "kind": "trigger",
-                "title": "Start the assessment",
-                "detail": "Starts when an impact assessment is requested for a new or changed AI system.",
-                "next": _edges("collect-context"),
-            },
-            {
-                "id": "collect-context",
-                "kind": "collect",
-                "title": "Describe the system and who it affects",
-                "detail": "Reads the intended use, the people and groups the system's outputs reach, and its deployment context.",
-                "systems": ["AI system inventory", "Model registry"],
-                "next": _edges("check-impact"),
-            },
-            {
-                "id": "check-impact",
-                "kind": "check",
-                "title": "Assess the impact",
-                "detail": (
-                    "Assesses the foreseeable consequences of intended use and reasonably foreseeable misuse "
-                    "for individuals, groups and society."
-                ),
-                "next": _edges("suggest"),
-            },
-            {
-                "id": "suggest",
-                "kind": "suggest",
-                "title": "Suggest mitigations",
-                "detail": "Proposes a mitigation or monitoring measure for each impact found.",
-                "next": _edges("ask"),
-            },
-            {
-                "id": "ask",
-                "kind": "ask",
-                "title": "Ask the assessment owner",
-                "detail": "Sends the assessment to its owner to approve or send back.",
-                "next": _gate("record", "suggest-revise"),
-            },
-            {
-                "id": "record",
-                "kind": "act",
-                "title": "Record the assessment",
-                "detail": "Saves the approved assessment against the AI system.",
-                "next": _edges("file-evidence"),
-            },
-            {
-                "id": "suggest-revise",
-                "kind": "suggest",
-                "title": "Revise",
-                "detail": "Reworks the impacts and mitigations using the owner's comments.",
-                "next": _edges("ask"),
-            },
-            {
-                "id": "file-evidence",
-                "kind": "file",
-                "title": "File evidence",
-                "detail": "Files the assessment and the owner's decision against 6.1.4 and A.5.2.",
-            },
-        ],
-    },
-    {
-        "id": "access_control_review",
-        "name": "Access control review",
-        "version": "1",
-        "stage": "govern",
-        "pack_id": "security_controls",
-        "description": (
-            "Finds who can reach an AI system and its model, matches them to current staff, checks the result "
-            "against the access policy, and files the owner's decision as evidence."
-        ),
-        "controls": [
-            {"framework": "ISO 27001", "control": "A.5.15", "relation": "satisfies"},
-            {"framework": "ISO 27001", "control": "A.5.18", "relation": "satisfies"},
-            {"framework": "ISO 27001", "control": "A.8.2", "relation": "satisfies"},
-            {"framework": "SOC 2", "control": "CC6.1", "relation": "satisfies"},
-            {"framework": "SOC 2", "control": "CC6.2", "relation": "satisfies"},
-            {"framework": "SOC 2", "control": "CC6.3", "relation": "satisfies"},
-        ],
-        "steps": [
-            {
-                "id": "trigger",
-                "kind": "trigger",
-                "title": "Start the review",
-                "detail": "Starts when an access review is requested or comes due.",
-                "next": _edges("collect-access"),
-            },
-            {
-                "id": "collect-access",
-                "kind": "collect",
-                "title": "Find who has access",
-                "detail": "Lists every account with access to the system, its data and its model.",
-                "systems": ["Okta", "AWS IAM", "Model registry"],
-                "next": _edges("collect-hr"),
-            },
-            {
-                "id": "collect-hr",
-                "kind": "collect",
-                "title": "Match to HR",
-                "detail": "Matches each account to a current employee or contractor and their role.",
-                "systems": ["HRIS"],
-                "next": _edges("check-policy"),
-            },
-            {
-                "id": "check-policy",
-                "kind": "check",
-                "title": "Check the policy",
-                "detail": (
-                    "Flags accounts with no matching person, access beyond the person's role, and "
-                    "privileged access without a recorded approval."
-                ),
-                "next": _edges("suggest"),
-            },
-            {
-                "id": "suggest",
-                "kind": "suggest",
-                "title": "Suggest fixes",
-                "detail": "Proposes the access to remove or reduce for each flagged account.",
-                "next": _edges("ask"),
-            },
-            {
-                "id": "ask",
-                "kind": "ask",
-                "title": "Ask the owner",
-                "detail": "Sends the proposed access changes to the system owner to approve or send back.",
-                "next": _gate("act", "suggest-revise"),
-            },
-            {
-                "id": "act",
-                "kind": "act",
-                "title": "Make changes",
-                "detail": "Applies the approved access changes.",
-                "next": _edges("file-evidence"),
-            },
-            {
-                "id": "suggest-revise",
-                "kind": "suggest",
-                "title": "Revise",
-                "detail": "Reworks the proposed changes using the owner's comments.",
-                "next": _edges("ask"),
-            },
-            {
-                "id": "file-evidence",
-                "kind": "file",
-                "title": "File evidence",
-                "detail": "Files the access list, the findings, the owner's decision and the changes made.",
-            },
-        ],
-    },
-]
+class Framework(BaseModel):
+    key: str
+    name: str
+    pillar: str
+    version: Optional[str] = None
+    binding: Optional[str] = None
+    status: Optional[str] = None
 
 
-def load(raw_packs: List[dict], raw_workflows: List[dict]) -> Tuple[Dict[str, Pack], Dict[str, Workflow]]:
+class Requirement(BaseModel):
+    key: str
+    framework: str
+    control: str
+    title: str
+    group: Optional[str] = None
+    active: bool
+
+
+def _need(ok: bool, message: str) -> None:
+    if not ok:
+        raise ValueError(message)
+
+
+def _index(items: list, attr: str, what: str) -> dict:
+    out = {getattr(i, attr): i for i in items}
+    _need(len(out) == len(items), f"duplicate {what} id")
+    return out
+
+
+def _owners(parents: dict, parent_kind: str, list_attr: str, children: dict, kind: str, back_attr: str) -> Dict[str, str]:
+    """Each child is listed by exactly one parent, and that parent is the one the child names."""
+    owner: Dict[str, str] = {}
+    for parent in parents.values():
+        for child_id in getattr(parent, list_attr):
+            _need(child_id in children, f"{parent_kind} {parent.id} names unknown {kind} {child_id}")
+            _need(child_id not in owner, f"{kind} {child_id} is listed by more than one {parent_kind}")
+            owner[child_id] = parent.id
+    for child_id, child in children.items():
+        _need(child_id in owner, f"{kind} {child_id} is in no {parent_kind}")
+        _need(getattr(child, back_attr) == owner[child_id], f"{kind} {child_id} disagrees with its {parent_kind}")
+    return owner
+
+
+class Catalogue:
+    """Parsed, cross-checked catalogue plus the coverage sets the coverage rules need."""
+
+    def __init__(self, raw: dict):
+        self.version = str(raw["version"])
+        self.pillars = _index([Pillar(**p) for p in raw["pillars"]], "id", "pillar")
+        self.frameworks = _index([Framework(**f) for f in raw["frameworks"]], "key", "framework")
+        self.requirements = _index([Requirement(**r) for r in raw["requirements"]], "key", "requirement")
+        self.workflows = _index([Workflow(**w) for w in raw["workflows"]], "id", "workflow")
+        self.evaluations = _index([Evaluation(**e) for e in raw["evaluations"]], "id", "evaluation")
+        self.patterns = _index([Pattern(**p) for p in raw["patterns"]], "id", "pattern")
+        self.packs = _index([Pack(**p) for p in raw["packs"]], "id", "pack")
+        self.bundles = _index([Bundle(**b) for b in raw["bundles"]], "id", "bundle")
+        self._check()
+        self._derive()
+
+    def _check(self) -> None:
+        for r in self.requirements.values():
+            _need(r.framework in self.frameworks, f"requirement {r.key} names unknown framework {r.framework}")
+        for kind, items in (("pattern", self.patterns), ("pack", self.packs), ("workflow", self.workflows), ("evaluation", self.evaluations)):
+            for item in items.values():
+                _need(item.pillar in self.pillars, f"{kind} {item.id} names unknown pillar {item.pillar}")
+        for fw in self.frameworks.values():
+            _need(fw.pillar in self.pillars, f"framework {fw.key} names unknown pillar {fw.pillar}")
+        for wf in self.workflows.values():
+            step_ids = [s.id for s in wf.steps]
+            _need(len(set(step_ids)) == len(step_ids), f"workflow {wf.id} has duplicate step ids")
+            for step in wf.steps:
+                for edge in step.next:
+                    _need(edge.to in step_ids, f"workflow {wf.id} step {step.id} leads to unknown step {edge.to}")
+            for m in wf.mappings:
+                _need(m.key in self.requirements, f"workflow {wf.id} maps unknown requirement {m.key}")
+        for ev in self.evaluations.values():
+            for key in ev.tests:
+                _need(key in self.requirements, f"evaluation {ev.id} tests unknown requirement {key}")
+        for b in self.bundles.values():
+            for pack_id in b.packs:
+                _need(pack_id in self.packs, f"bundle {b.id} names unknown pack {pack_id}")
+            for key in b.targets:
+                _need(key in self.frameworks, f"bundle {b.id} targets unknown framework {key}")
+        _owners(self.patterns, "pattern", "workflows", self.workflows, "workflow", "pattern")
+        _owners(self.patterns, "pattern", "evaluations", self.evaluations, "evaluation", "pattern")
+        _owners(self.packs, "pack", "patterns", self.patterns, "pattern", "pack")
+
+    def _derive(self) -> None:
+        active = frozenset(k for k, r in self.requirements.items() if r.active)
+        self.framework_keys = {
+            fk: frozenset(k for k in active if self.requirements[k].framework == fk) for fk in self.frameworks
+        }
+        self.covers = {
+            w.id: frozenset(m.key for m in w.mappings if m.relation in COVERING) & active for w in self.workflows.values()
+        }
+        self.supports = {
+            w.id: frozenset(m.key for m in w.mappings if m.relation == "Supports") & active for w in self.workflows.values()
+        }
+        self.tests = {e.id: frozenset(e.tests) & active for e in self.evaluations.values()}
+        self.pack_workflows = {p.id: [w for pid in p.patterns for w in self.patterns[pid].workflows] for p in self.packs.values()}
+        self.pack_evaluations = {p.id: [e for pid in p.patterns for e in self.patterns[pid].evaluations] for p in self.packs.values()}
+        self.workflow_pack = {w: p for p, ws in self.pack_workflows.items() for w in ws}
+        self.evaluation_pack = {e: p for p, es in self.pack_evaluations.items() for e in es}
+        union = frozenset().union
+        self.pack_covers = {p: union(*(self.covers[w] for w in ws)) for p, ws in self.pack_workflows.items()}
+        self.pack_tests = {p: union(*(self.tests[e] for e in es)) for p, es in self.pack_evaluations.items()}
+        self.pack_done = {p: self.pack_covers[p] | self.pack_tests[p] for p in self.packs}
+        self.pack_touched = {
+            p: self.pack_done[p] | union(*(self.supports[w] for w in ws)) for p, ws in self.pack_workflows.items()
+        }
+        self.supported = union(*self.supports.values())
+        self.requirement_workflows: Dict[str, List[tuple]] = {}
+        for w in self.workflows.values():
+            for m in w.mappings:
+                if m.key in active:
+                    self.requirement_workflows.setdefault(m.key, []).append((w.id, m.relation))
+        self.requirement_evaluations: Dict[str, List[str]] = {}
+        for e in self.evaluations.values():
+            for key in self.tests[e.id]:
+                self.requirement_evaluations.setdefault(key, []).append(e.id)
+
+
+def load(raw: dict) -> Catalogue:
     """Parse and cross-check a catalogue. Raises ValueError on any dangling reference."""
-    packs = {p["id"]: Pack(**p) for p in raw_packs}
-    workflows = {w["id"]: Workflow(**w) for w in raw_workflows}
-    if len(packs) != len(raw_packs) or len(workflows) != len(raw_workflows):
-        raise ValueError("duplicate pack or workflow id")
-    for wf in workflows.values():
-        if wf.pack_id not in packs:
-            raise ValueError(f"workflow {wf.id} names unknown pack {wf.pack_id}")
-        step_ids = [s.id for s in wf.steps]
-        if len(set(step_ids)) != len(step_ids):
-            raise ValueError(f"workflow {wf.id} has duplicate step ids")
-        for step in wf.steps:
-            for edge in step.next:
-                if edge.to not in step_ids:
-                    raise ValueError(f"workflow {wf.id} step {step.id} leads to unknown step {edge.to}")
-    for pack in packs.values():
-        for clause in pack.journey or []:
-            for workflow_id in clause.workflow_ids:
-                if workflow_id not in workflows:
-                    raise ValueError(f"pack {pack.id} clause {clause.number} names unknown workflow {workflow_id}")
-                if workflows[workflow_id].pack_id != pack.id:
-                    raise ValueError(f"pack {pack.id} lists workflow {workflow_id} that belongs to another pack")
-    return packs, workflows
+    return Catalogue(raw)
 
 
-PACKS, WORKFLOWS = load(_PACKS, _WORKFLOWS)
+_C = load(json.loads(DATA_FILE.read_text(encoding="utf-8")))
+
+VERSION = _C.version
+PILLARS, FRAMEWORKS, REQUIREMENTS = _C.pillars, _C.frameworks, _C.requirements
+PACKS, PATTERNS, WORKFLOWS, EVALUATIONS, BUNDLES = _C.packs, _C.patterns, _C.workflows, _C.evaluations, _C.bundles
+FRAMEWORK_KEYS = _C.framework_keys
+PACK_WORKFLOWS, PACK_EVALUATIONS = _C.pack_workflows, _C.pack_evaluations
+WORKFLOW_PACK, EVALUATION_PACK = _C.workflow_pack, _C.evaluation_pack
+PACK_TOUCHED, PACK_DONE = _C.pack_touched, _C.pack_done
+REQUIREMENT_WORKFLOWS, REQUIREMENT_EVALUATIONS = _C.requirement_workflows, _C.requirement_evaluations
+
+
+class Coverage:
+    """What a set of packs covers. Pack ids that are not in the catalogue (retired ids) are ignored."""
+
+    def __init__(self, pack_ids: Iterable[str]):
+        ids = [p for p in pack_ids if p in PACKS]
+        self.covered = frozenset().union(*(_C.pack_covers[p] for p in ids))
+        self.tested = frozenset().union(*(_C.pack_tests[p] for p in ids))
+
+    def count(self, framework_key: str) -> int:
+        """Active requirements of the framework that are covered or tested."""
+        return len(FRAMEWORK_KEYS[framework_key] & (self.covered | self.tested))
+
+
+EVERY_PACK = Coverage(PACKS)
+
+
+def requirement_status(key: str, installed: Coverage) -> str:
+    """covered | tested | available | supported | gap, for one requirement given an org's installed packs."""
+    if key in installed.covered:
+        return "covered"
+    if key in installed.tested:
+        return "tested"
+    if key in EVERY_PACK.covered or key in EVERY_PACK.tested:
+        return "available"
+    return "supported" if key in _C.supported else "gap"

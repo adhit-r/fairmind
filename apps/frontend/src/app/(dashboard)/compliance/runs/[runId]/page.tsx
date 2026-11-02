@@ -2,10 +2,10 @@
 
 import { useParams } from 'next/navigation'
 import { useMemo, useState } from 'react'
-import { usePackActions, useRun, useWaitingRuns, useWorkflow } from '@/lib/api/hooks/usePacks'
+import { GATE_KINDS, usePackActions, useRun, useWaitingRuns, useWorkflow } from '@/lib/api/hooks/usePacks'
 import { IsoFigure } from '@/components/packs/IsoFigure'
 import { runFigure } from '@/components/packs/figures'
-import { BTN, BTN_P, Crumbs, ErrorNote, Heading, Loading, MUTED, Num, Pill, StatusPill, when } from '@/components/packs/parts'
+import { BTN, BTN_P, Crumbs, ErrorNote, Heading, Loading, MUTED, Num, Pill, StatusPill, cap, when } from '@/components/packs/parts'
 
 export default function RunPage() {
   const { runId } = useParams<{ runId: string }>()
@@ -22,15 +22,16 @@ export default function RunPage() {
     const steps = workflow.data?.steps ?? []
     if (!r) return null
     const completed = new Set(r.events.filter((e) => e.kind === 'step.completed' && e.stepId).map((e) => e.stepId))
-    const askIds = new Set(steps.filter((s) => s.kind === 'ask').map((s) => s.id))
-    const reachedAsk = r.status === 'waiting' || r.events.some((e) => e.stepId !== null && askIds.has(e.stepId))
+    // A gate is any step where the run stops for a person: ask, exception or decide.
+    const gateIds = new Set(steps.filter((s) => GATE_KINDS.includes(s.kind)).map((s) => s.id))
+    const reachedAsk = r.status === 'waiting' || r.events.some((e) => e.stepId !== null && gateIds.has(e.stepId))
     const approved = r.approval?.status.toLowerCase().startsWith('approv') ?? false
     const rank = (waiting.data ?? []).findIndex((x) => x.id === r.id) + 1
     const waitNo = rank || 1
     return {
       waitNo,
       figure: runFigure({
-        systems: [...new Set(steps.filter((s) => s.kind === 'collect').flatMap((s) => s.systems))],
+        systems: [...new Set(steps.flatMap((s) => s.systems))],
         steps: steps.map((s) => ({ status: completed.has(s.id) ? 'done' : r.currentStep === s.id ? 'current' : 'next' })),
         gate: !reachedAsk ? 'none' : approved ? 'open' : 'closed',
         waitNo,
@@ -39,6 +40,7 @@ export default function RunPage() {
       }),
       sealed: r.events.filter((e) => e.kind === 'evidence.sealed').length,
       stepNo: steps.findIndex((s) => s.id === r.currentStep) + 1,
+      current: steps.find((s) => s.id === r.currentStep) ?? null,
       titleOf: (id: string | null) => (id ? steps.find((s) => s.id === id)?.title ?? id : ''),
     }
   }, [run.data, workflow.data, waiting.data])
@@ -66,7 +68,7 @@ export default function RunPage() {
 
   const r = run.data
   const isWaiting = r.status === 'waiting'
-  const stage = workflow.data ? workflow.data.stage.charAt(0).toUpperCase() + workflow.data.stage.slice(1) : null
+  const stage = workflow.data ? cap(workflow.data.stage) : null
   const stepsTotal = workflow.data?.steps.length ?? 0
 
   return (
@@ -103,6 +105,23 @@ export default function RunPage() {
               <p className="m-0 leading-normal">
                 The agent is holding at {view.titleOf(r.currentStep) ? <b className="font-semibold">{view.titleOf(r.currentStep)}</b> : 'the gate'}. Nothing in your systems changes until you decide.
               </p>
+              {view.current?.detail && <p className={`m-0 text-[13px] leading-normal ${MUTED}`}>{view.current.detail}</p>}
+              {workflow.data && (workflow.data.approver || workflow.data.gateConditions || workflow.data.separationOfDuties) && (
+                <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[13px]">
+                  {([
+                    ['Approver', workflow.data.approver],
+                    ['Gate conditions', workflow.data.gateConditions],
+                    ['Separation of duties', workflow.data.separationOfDuties],
+                  ] as const)
+                    .filter(([, v]) => v)
+                    .map(([k, v]) => (
+                      <div key={k} className="contents">
+                        <dt className={`font-semibold ${MUTED}`}>{k}</dt>
+                        <dd className="m-0 leading-snug">{v}</dd>
+                      </div>
+                    ))}
+                </dl>
+              )}
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="notes" className="text-[13px] font-semibold">Notes (optional)</label>
                 <textarea
