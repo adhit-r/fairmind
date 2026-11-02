@@ -31,11 +31,11 @@ export function EvaluationWorkbenchStatusNotice({
   const state = evaluationWorkbenchFailureState(error)
   const denied = state.kind === 'denied'
   return (
-    <section role="alert" className={`border-4 p-4 ${denied ? 'border-[#0F1412] bg-[#FFF1D6]' : 'border-[#D83A2E] bg-red-50'}`}>
-      <h2 className={`text-lg font-black ${denied ? 'text-[#0F1412]' : 'text-[#8F2019]'}`}>{state.title}</h2>
+    <section role="alert" className={`border p-4 ${denied ? 'border-[var(--fm-line)] bg-[#FFF1D6]' : 'border-[#D83A2E] bg-red-50'}`}>
+      <h2 className={`text-lg font-semibold ${denied ? 'text-[var(--fm-ink)]' : 'text-[#8F2019]'}`}>{state.title}</h2>
       <p className={`mt-1 max-w-[70ch] text-sm font-semibold ${denied ? 'text-[#5B492E]' : 'text-[#5B211D]'}`}>{state.message}</p>
       {onRetry && !denied ? (
-        <button type="button" onClick={onRetry} className="mt-4 inline-flex min-h-11 items-center border-2 border-[#0F1412] bg-[#FCFDF8] px-4 font-black shadow-[3px_3px_0_0_#0F1412] outline outline-0 outline-offset-2 transition-[transform,box-shadow] duration-150 hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none focus:outline-2 focus:outline-[#0F1412] motion-reduce:transition-none motion-reduce:transform-none">Retry loading evaluations</button>
+        <button type="button" onClick={onRetry} className="mt-4 inline-flex min-h-11 items-center px-4 font-semibold outline outline-0 outline-offset-2 transition-[transform,box-shadow] duration-150 focus:outline-2 focus:outline-[var(--fm-ink)] motion-reduce:transition-none motion-reduce:transform-none fm-card">Retry loading evaluations</button>
       ) : null}
     </section>
   )

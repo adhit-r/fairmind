@@ -86,19 +86,19 @@ export function ReportPreview({ reportType, system, data, sections, frameworks }
   const showSection = (key: string) => sections.length === 0 || sections.includes(key)
 
   return (
-    <div className="space-y-6 rounded-2xl border-4 border-black bg-white p-6 font-mono shadow-[6px_6px_0px_0px_#000]">
+    <div className="space-y-6 rounded-2xl p-6 font-mono fm-card">
       {/* Report header */}
-      <div className="border-b-4 border-black pb-4">
+      <div className="border-b border-[var(--fm-line)] pb-4">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-muted-foreground">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-muted-foreground">
               {reportType === 'compliance'
                 ? 'Compliance Audit Report'
                 : reportType === 'bias'
                 ? 'Bias Assessment Report'
                 : 'Governance Summary Report'}
             </p>
-            <h2 className="mt-1 text-2xl font-black uppercase">{system?.name ?? 'AI System'}</h2>
+            <h2 className="mt-1 text-2xl font-semibold">{system?.name ?? 'AI System'}</h2>
             <p className="text-xs text-muted-foreground">
               Owner: {system?.owner || 'Unassigned'} · Risk tier: {system?.riskTier} · Stage:{' '}
               {system?.lifecycleStage}
@@ -116,7 +116,7 @@ export function ReportPreview({ reportType, system, data, sections, frameworks }
       {/* Executive summary */}
       {showSection('executive_summary') && (
         <section>
-          <h3 className="text-sm font-black uppercase tracking-widest text-muted-foreground">
+          <h3 className="text-sm font-semibold tracking-widest text-muted-foreground">
             Executive Summary
           </h3>
           <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -128,11 +128,11 @@ export function ReportPreview({ reportType, system, data, sections, frameworks }
             ].map(({ label, value, warn, sub }) => (
               <div
                 key={label}
-                className={`rounded-lg border-2 border-black p-3 text-center ${warn && Number(value) > 0 ? 'bg-red-50' : 'bg-slate-50'}`}
+                className={`rounded-lg border border-[var(--fm-line)] p-3 text-center ${warn && Number(value) > 0 ? 'bg-red-50' : 'bg-slate-50'}`}
               >
-                <p className="text-[10px] font-bold uppercase text-muted-foreground">{label}</p>
+                <p className="text-[10px] font-semibold uppercase text-muted-foreground">{label}</p>
                 {sub && <p className="text-[9px] text-muted-foreground">{sub}</p>}
-                <p className={`text-2xl font-black ${warn && Number(value) > 0 ? 'text-red-700' : ''}`}>
+                <p className={`text-2xl font-semibold ${warn && Number(value) > 0 ? 'text-red-700' : ''}`}>
                   {value}
                 </p>
               </div>
@@ -140,11 +140,11 @@ export function ReportPreview({ reportType, system, data, sections, frameworks }
           </div>
           {system && (
             <div className="mt-3 space-y-1">
-              <div className="flex justify-between text-xs font-bold uppercase text-muted-foreground">
+              <div className="flex justify-between text-xs font-semibold uppercase text-muted-foreground">
                 <span>Governance readiness</span>
                 <span>{system.readiness}%</span>
               </div>
-              <Progress value={system.readiness} className="h-2 border border-black" />
+              <Progress value={system.readiness} className="h-2 border border-[var(--fm-line)]" />
             </div>
           )}
         </section>
@@ -153,14 +153,14 @@ export function ReportPreview({ reportType, system, data, sections, frameworks }
       {/* Risk overview */}
       {showSection('risk_overview') && risks.length > 0 && (
         <section>
-          <h3 className="text-sm font-black uppercase tracking-widest text-muted-foreground">
+          <h3 className="text-sm font-semibold tracking-widest text-muted-foreground">
             Risk Overview
           </h3>
           <div className="mt-3 space-y-2">
             {risks.slice(0, 6).map((risk) => (
               <div
                 key={risk.id}
-                className={`flex items-start justify-between gap-2 rounded-lg border-2 p-3 ${SEVERITY_COLORS[risk.severity] || 'border-black bg-white'}`}
+                className={`flex items-start justify-between gap-2 rounded-lg border p-3 ${SEVERITY_COLORS[risk.severity] || 'border-[var(--fm-line)] bg-white'}`}
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
@@ -171,7 +171,7 @@ export function ReportPreview({ reportType, system, data, sections, frameworks }
                     <p className="mt-0.5 text-xs opacity-80">{risk.description}</p>
                   )}
                 </div>
-                <Badge className="shrink-0 border border-current bg-transparent px-2 py-0.5 text-[10px] font-black uppercase">
+                <Badge className="shrink-0 border border-current bg-transparent px-2 py-0.5 text-[10px] font-semibold uppercase">
                   {risk.status}
                 </Badge>
               </div>
@@ -186,13 +186,13 @@ export function ReportPreview({ reportType, system, data, sections, frameworks }
       {/* Compliance status */}
       {showSection('compliance_status') && frameworks.length > 0 && (
         <section>
-          <h3 className="text-sm font-black uppercase tracking-widest text-muted-foreground">
+          <h3 className="text-sm font-semibold tracking-widest text-muted-foreground">
             Compliance Status
           </h3>
           <div className="mt-3 flex flex-wrap gap-2">
             {frameworks.map((fw) => (
-              <div key={fw} className="rounded-lg border-2 border-black bg-slate-50 px-4 py-2">
-                <p className="text-xs font-black uppercase">{fw}</p>
+              <div key={fw} className="rounded-lg border border-[var(--fm-line)] bg-slate-50 px-4 py-2">
+                <p className="text-xs font-semibold uppercase">{fw}</p>
                 <p className="text-[10px] text-muted-foreground">Referenced</p>
               </div>
             ))}
@@ -203,7 +203,7 @@ export function ReportPreview({ reportType, system, data, sections, frameworks }
       {/* Evidence summary */}
       {showSection('evidence_summary') && (
         <section>
-          <h3 className="text-sm font-black uppercase tracking-widest text-muted-foreground">
+          <h3 className="text-sm font-semibold tracking-widest text-muted-foreground">
             Evidence Summary
           </h3>
           {evidence.length === 0 ? (
@@ -213,7 +213,7 @@ export function ReportPreview({ reportType, system, data, sections, frameworks }
               {evidence.slice(0, 5).map((item) => (
                 <div
                   key={item.id}
-                  className="flex items-center justify-between rounded-lg border border-black/20 bg-slate-50 px-3 py-2"
+                  className="flex items-center justify-between rounded-lg border border-[var(--fm-line)] bg-slate-50 px-3 py-2"
                 >
                   <div className="flex items-center gap-2">
                     <IconFileText className="h-3.5 w-3.5 text-muted-foreground" />
@@ -223,7 +223,7 @@ export function ReportPreview({ reportType, system, data, sections, frameworks }
                     <span className="text-[10px] text-muted-foreground">
                       {item.confidence}% confidence
                     </span>
-                    <Badge variant="outline" className="border border-black text-[10px]">
+                    <Badge variant="outline" className="border border-[var(--fm-line)] text-[10px]">
                       {item.status}
                     </Badge>
                   </div>
@@ -240,7 +240,7 @@ export function ReportPreview({ reportType, system, data, sections, frameworks }
       {/* Open remediations */}
       {showSection('remediations') && (
         <section>
-          <h3 className="text-sm font-black uppercase tracking-widest text-muted-foreground">
+          <h3 className="text-sm font-semibold tracking-widest text-muted-foreground">
             Open Remediations ({openRemediation})
           </h3>
           {openRemediation === 0 ? (
@@ -256,7 +256,7 @@ export function ReportPreview({ reportType, system, data, sections, frameworks }
                 .map((task) => (
                   <div
                     key={task.id}
-                    className="flex items-center justify-between rounded-lg border border-black/20 bg-amber-50 px-3 py-2"
+                    className="flex items-center justify-between rounded-lg border border-[var(--fm-line)] bg-amber-50 px-3 py-2"
                   >
                     <div className="flex items-center gap-2">
                       <IconTool className="h-3.5 w-3.5 text-amber-700" />
@@ -275,7 +275,7 @@ export function ReportPreview({ reportType, system, data, sections, frameworks }
       {/* Approval decision log */}
       {showSection('decision_log') && (
         <section>
-          <h3 className="text-sm font-black uppercase tracking-widest text-muted-foreground">
+          <h3 className="text-sm font-semibold tracking-widest text-muted-foreground">
             Latest Approval Decision
           </h3>
           {!latestApproval ? (
@@ -290,7 +290,7 @@ export function ReportPreview({ reportType, system, data, sections, frameworks }
                   ? 'border-emerald-500 bg-emerald-50'
                   : latestApproval.status === 'rejected'
                   ? 'border-red-500 bg-red-50'
-                  : 'border-black bg-slate-50'
+                  : 'border-[var(--fm-line)] bg-slate-50'
               }`}
             >
               <div className="flex items-center gap-2">
@@ -299,7 +299,7 @@ export function ReportPreview({ reportType, system, data, sections, frameworks }
                 ) : (
                   <IconClock className="h-4 w-4 text-muted-foreground" />
                 )}
-                <p className="text-sm font-black uppercase">{latestApproval.status}</p>
+                <p className="text-sm font-semibold">{latestApproval.status}</p>
                 <span className="ml-auto text-xs text-muted-foreground">
                   {formatDate(latestApproval.createdAt)}
                 </span>

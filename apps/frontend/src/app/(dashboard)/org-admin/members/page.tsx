@@ -118,17 +118,17 @@ export default function OrgMembersPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background p-8">
+    <div className="min-w-0">
       <div className="mx-auto max-w-6xl">
         {/* Header */}
-        <div className="mb-8 flex items-center justify-between border-b-4 border-black pb-6">
+        <div className="mb-8 flex items-center justify-between border-b border-[var(--fm-line)] pb-6">
           <div>
-            <h1 className="text-4xl font-bold text-black">Organization Members</h1>
+            <h1 className="text-[30px] font-semibold tracking-[-.03em] text-black">Organization Members</h1>
             <p className="mt-2 text-gray-600">Manage team members and their roles</p>
           </div>
           <button
             onClick={() => setShowInviteForm(!showInviteForm)}
-            className="flex items-center gap-2 rounded-lg bg-black px-4 py-2 font-bold text-white transition-all hover:shadow-brutal-lg active:translate-y-1"
+            className="flex items-center gap-2 rounded-full bg-[var(--fm-ink)] px-4 py-2 font-semibold text-white transition-all"
           >
             <IconPlus size={20} />
             {showInviteForm ? 'Cancel' : 'Invite Member'}
@@ -137,7 +137,7 @@ export default function OrgMembersPage() {
 
         {/* Invite Form */}
         {showInviteForm && (
-          <div className="mb-8 rounded-lg border-4 border-black bg-white p-6 shadow-brutal-lg">
+          <div className="mb-8 p-6 fm-card">
             <form onSubmit={handleInvite}>
               <div className="mb-4">
                 <label className="mb-2 block font-bold text-black">Email Address</label>
@@ -145,7 +145,7 @@ export default function OrgMembersPage() {
                   type="email"
                   value={inviteEmail}
                   onChange={(e) => setInviteEmail(e.target.value)}
-                  className="w-full rounded border-2 border-black px-4 py-2 font-mono text-black placeholder-gray-400"
+                  className="w-full rounded border border-[var(--fm-line)] px-4 py-2 font-mono text-black placeholder-gray-400"
                   placeholder="user@example.com"
                   required
                 />
@@ -156,7 +156,7 @@ export default function OrgMembersPage() {
                 <select
                   value={inviteRole}
                   onChange={(e) => setInviteRole(e.target.value)}
-                  className="w-full rounded border-2 border-black px-4 py-2 font-bold text-black"
+                  className="w-full rounded border border-[var(--fm-line)] px-4 py-2 font-bold text-black"
                 >
                   <option value="viewer">Viewer</option>
                   <option value="analyst">Analyst</option>
@@ -174,7 +174,7 @@ export default function OrgMembersPage() {
                 <button
                   type="submit"
                   disabled={inviteLoading}
-                  className="rounded-lg bg-black px-6 py-2 font-bold text-white transition-all hover:shadow-brutal-lg disabled:opacity-50"
+                  className="rounded-full bg-[var(--fm-ink)] px-6 py-2 font-semibold text-white transition-all disabled:opacity-50"
                 >
                   {inviteLoading ? 'Sending...' : 'Send Invitation'}
                 </button>
@@ -184,7 +184,7 @@ export default function OrgMembersPage() {
                     setShowInviteForm(false);
                     setInviteError(null);
                   }}
-                  className="rounded-lg border-2 border-black px-6 py-2 font-bold text-black transition-all hover:bg-gray-50"
+                  className="rounded-lg border border-[var(--fm-line)] px-6 py-2 font-bold text-black transition-all hover:bg-gray-50"
                 >
                   Cancel
                 </button>
@@ -196,16 +196,16 @@ export default function OrgMembersPage() {
         {/* Members List */}
         {isLoading ? (
           <div className="flex justify-center">
-            <div className="h-12 w-12 animate-spin rounded-full border-4 border-gray-300 border-t-black" />
+            <div className="h-12 w-12 animate-spin rounded-full border-2 border-[var(--fm-line)] border-t-[var(--fm-ink)]" />
           </div>
         ) : error ? (
           <div className="rounded-lg border-2 border-red-800 bg-red-50 p-4">
             <p className="text-red-800">Error: {error}</p>
           </div>
         ) : (
-          <div className="overflow-x-auto rounded-lg border-4 border-black shadow-brutal-lg">
+          <div className="overflow-x-auto fm-card">
             <table className="w-full">
-              <thead className="border-b-4 border-black bg-gray-100">
+              <thead className="border-b border-[var(--fm-line)] bg-gray-100">
                 <tr>
                   <th className="px-6 py-4 text-left font-bold text-black">Name</th>
                   <th className="px-6 py-4 text-left font-bold text-black">Email</th>
@@ -257,7 +257,7 @@ export default function OrgMembersPage() {
                       <td className="px-6 py-4">
                         <button
                           onClick={() => handleRemoveMember(member.id)}
-                          className="flex items-center gap-2 rounded bg-red-600 px-3 py-1 text-sm font-bold text-white transition-all hover:bg-red-700 active:translate-y-1"
+                          className="flex items-center gap-2 rounded bg-red-600 px-3 py-1 text-sm font-bold text-white transition-all hover:bg-red-700"
                         >
                           <IconTrash size={16} />
                           Remove

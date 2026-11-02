@@ -69,22 +69,22 @@ function EvidenceCard({
     <button
       type="button"
       onClick={onClick}
-      className="group w-full rounded-xl border-2 border-black bg-white p-4 text-left shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all hover:shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] hover:-translate-x-0.5 hover:-translate-y-0.5"
+      className="group w-full rounded-xl p-4 text-left transition-all hover:-translate-x-0.5 hover:-translate-y-0.5 fm-card"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1 space-y-1.5">
           <div className="flex flex-wrap items-center gap-1.5">
-            <Badge className="border-2 border-black bg-black px-2 py-0.5 text-[10px] font-black uppercase text-white">
+            <Badge className="border border-[var(--fm-line)] bg-[var(--fm-ink)] px-2 py-0.5 text-[10px] font-semibold uppercase text-white">
               {evidence.type}
             </Badge>
             {evidence.stale && (
-              <Badge className="border-2 border-amber-400 bg-amber-50 px-2 py-0.5 text-[10px] font-black uppercase text-amber-800">
+              <Badge className="border-2 border-amber-400 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-800">
                 <IconAlertTriangle className="mr-1 h-2.5 w-2.5" />
                 Stale
               </Badge>
             )}
             {evidence.linkedEntityCount > 0 && (
-              <Badge className="border-2 border-emerald-500 bg-emerald-50 px-2 py-0.5 text-[10px] font-black uppercase text-emerald-800">
+              <Badge className="border-2 border-emerald-500 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase text-emerald-800">
                 <IconCircleCheck className="mr-1 h-2.5 w-2.5" />
                 {evidence.linkedEntityCount} link{evidence.linkedEntityCount !== 1 ? 's' : ''}
               </Badge>
@@ -100,7 +100,7 @@ function EvidenceCard({
               <Badge
                 key={tag}
                 variant="outline"
-                className="border border-black/30 bg-white px-1.5 py-0 text-[10px] font-bold"
+                className="border border-[rgba(21,23,26,.14)] bg-white px-1.5 py-0 text-[10px] font-bold"
               >
                 {tag}
               </Badge>
@@ -114,10 +114,10 @@ function EvidenceCard({
         </div>
 
         <div className="shrink-0 text-right">
-          <p className="text-[10px] font-bold uppercase text-muted-foreground">
+          <p className="text-[10px] font-semibold uppercase text-muted-foreground">
             {getArtifactKindLabel(evidence.artifactKind)}
           </p>
-          <p className="mt-0.5 text-sm font-black">{Math.round(evidence.confidence * 100)}%</p>
+          <p className="mt-0.5 text-sm font-semibold">{Math.round(evidence.confidence * 100)}%</p>
           <p className="mt-0.5 text-[10px] text-muted-foreground">{formatDate(evidence.timestamp)}</p>
         </div>
       </div>
@@ -241,18 +241,18 @@ export default function EvidencePage() {
   return (
     <div data-testid="evidence-evaluations-surface" className="flex min-h-0 flex-col gap-6">
       {/* Header */}
-      <Card className="rounded-none border-4 border-[#0F1412] bg-[#FCFDF8] p-6 shadow-[8px_8px_0px_0px_#0F1412]">
+      <Card className="p-6 fm-card">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge className="rounded-none border-2 border-[#0F1412] bg-[#0B7659] px-3 py-1 font-black uppercase text-white">
+              <Badge className="border border-[var(--fm-line)] bg-[#0B7659] px-3 py-1 font-semibold text-white">
                 Assurance evidence
               </Badge>
-              <Badge variant="outline" className="border-2 border-black bg-white px-3 py-1 font-black uppercase">
+              <Badge variant="outline" className="border border-[var(--fm-line)] bg-white px-3 py-1 font-semibold">
                 {selectedSystem.name}
               </Badge>
             </div>
-            <h1 className="text-3xl font-black uppercase tracking-tight">
+            <h1 className="text-3xl font-semibold tracking-tight">
               Evidence &amp; Evaluations
             </h1>
             <p className="max-w-2xl text-sm text-muted-foreground">
@@ -262,21 +262,21 @@ export default function EvidencePage() {
 
           {canReview ? (
             <Button
-              className="rounded-none border-2 border-black font-black uppercase shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
+              className="font-semibold fm-card"
               onClick={() => setUploaderOpen(true)}
             >
               <IconPlus className="mr-2 h-4 w-4" />
               Add evidence
             </Button>
           ) : (
-            <Badge variant="outline" className="rounded-none border-2 border-[#0F1412] bg-[#F3F5F0] px-3 py-2 font-black uppercase">
+            <Badge variant="outline" className="border border-[var(--fm-line)] bg-[var(--fm-bg)] px-3 py-2 font-semibold">
               Read-only evidence access
             </Badge>
           )}
         </div>
       </Card>
 
-      <nav aria-label="Evidence views" className="grid border-2 border-[#0F1412] bg-[#FCFDF8] sm:grid-cols-3">
+      <nav aria-label="Evidence views" className="flex flex-col gap-1 rounded-[22px] border border-[var(--fm-line)] bg-white p-1 sm:flex-row sm:rounded-full">
         {([
           ['gaps', 'Evidence gaps'],
           ['evaluations', 'Evaluations'],
@@ -286,7 +286,7 @@ export default function EvidencePage() {
             key={view}
             href={`/evidence?view=${view}`}
             aria-current={activeView === view ? 'page' : undefined}
-            className={`min-h-12 border-b-2 border-[#0F1412] px-4 py-3 text-center text-sm font-black uppercase outline-none last:border-b-0 hover:bg-[#DDF4EA] focus-visible:ring-2 focus-visible:ring-[#0B7659] focus-visible:ring-inset sm:border-b-0 sm:border-r-2 sm:last:border-r-0 ${activeView === view ? 'bg-[#0F1412] text-[#FCFDF8] hover:bg-[#0F1412]' : ''}`}
+            className={`flex h-9 flex-1 items-center justify-center rounded-full px-4 text-[13px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-ink)] ${activeView === view ? 'bg-[var(--fm-ink)] text-white' : 'text-[var(--fm-ink2)] hover:text-[var(--fm-ink)]'}`}
           >
             {label}
           </Link>
@@ -296,28 +296,28 @@ export default function EvidencePage() {
       {/* Stats row */}
       {activeView === 'artifacts' ? (
       <div className="grid gap-4 sm:grid-cols-4">
-        <Card className="border-2 border-black p-4 shadow-brutal">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Total artifacts</p>
-          <p className="mt-1 text-3xl font-black">{data.length}</p>
+        <Card className="p-4 fm-card">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Total artifacts</p>
+          <p className="mt-1 text-3xl font-semibold">{data.length}</p>
         </Card>
-        <Card className="border-2 border-black p-4 shadow-brutal">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Linked to entities</p>
-          <p className="mt-1 text-3xl font-black text-emerald-700">{linkedCount}</p>
+        <Card className="p-4 fm-card">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Linked to entities</p>
+          <p className="mt-1 text-3xl font-semibold text-emerald-700">{linkedCount}</p>
         </Card>
-        <Card className="border-2 border-black p-4 shadow-brutal">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">High confidence</p>
-          <p className="mt-1 text-3xl font-black">{highConfidenceCount}</p>
+        <Card className="p-4 fm-card">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">High confidence</p>
+          <p className="mt-1 text-3xl font-semibold">{highConfidenceCount}</p>
         </Card>
-        <Card className={`border-2 border-black p-4 shadow-brutal ${staleCount > 0 ? 'bg-amber-50' : ''}`}>
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Potentially stale</p>
-          <p className={`mt-1 text-3xl font-black ${staleCount > 0 ? 'text-amber-700' : ''}`}>{staleCount}</p>
+        <Card className={`p-4 ${staleCount > 0 ? 'bg-amber-50' : ''} rounded-[14px] shadow-[var(--fm-shadow)]`}>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Potentially stale</p>
+          <p className={`mt-1 text-3xl font-semibold ${staleCount > 0 ? 'text-amber-700' : ''}`}>{staleCount}</p>
         </Card>
       </div>
       ) : null}
 
       {/* Artifact coverage summary */}
       {activeView === 'gaps' ? (
-      <Card className={`border-4 p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] ${
+      <Card className={`border p-5 ${
         completeness.gate === 'green' ? 'border-emerald-600 bg-emerald-50' :
         completeness.gate === 'yellow' ? 'border-amber-500 bg-amber-50' :
         'border-red-600 bg-red-50'
@@ -331,7 +331,7 @@ export default function EvidencePage() {
             <IconShieldOff className="h-6 w-6 text-red-700" />
           )}
           <div className="flex-1">
-            <p className="font-black uppercase">
+            <p className="font-semibold">
               {completeness.gate === 'green' ? 'Artifact coverage recorded' :
                completeness.gate === 'yellow' ? 'Artifact coverage gaps identified' :
                'Multiple artifact coverage gaps identified'}
@@ -342,11 +342,11 @@ export default function EvidencePage() {
           </div>
           {completeness.totalRequired > 0 && (
             <div className="min-w-[120px] space-y-1">
-              <div className="flex justify-between text-[10px] font-bold uppercase text-muted-foreground">
+              <div className="flex justify-between text-[10px] font-semibold uppercase text-muted-foreground">
                 <span>Artifact links</span>
                 <span>{Math.round((completeness.linked / completeness.totalRequired) * 100)}%</span>
               </div>
-              <Progress value={Math.round((completeness.linked / completeness.totalRequired) * 100)} className="h-2 border border-black" />
+              <Progress value={Math.round((completeness.linked / completeness.totalRequired) * 100)} className="h-2 border border-[var(--fm-line)]" />
             </div>
           )}
         </div>
@@ -355,19 +355,19 @@ export default function EvidencePage() {
 
       {/* Evidence gaps */}
       {activeView === 'gaps' && summary.missingSignals.length > 0 && (
-        <Card className="border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+        <Card className="p-5 fm-card">
           <div className="mb-3 flex items-center gap-2">
             <IconX className="h-5 w-5 text-red-600" />
-            <h2 className="font-black uppercase">Artifact coverage gaps</h2>
-            <Badge className="border-2 border-red-600 bg-red-100 px-2 font-black uppercase text-red-800">
+            <h2 className="font-semibold">Artifact coverage gaps</h2>
+            <Badge className="border-2 border-red-600 bg-red-100 px-2 font-semibold text-red-800">
               {summary.missingSignals.length}
             </Badge>
           </div>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {summary.missingSignals.map((signal) => (
-              <div key={signal} className="flex flex-col gap-2 rounded-xl border-2 border-black bg-red-50 p-3 shadow-[3px_3px_0px_0px_#000]">
-                <p className="text-sm font-bold uppercase">{signal}</p>
-                <Button asChild size="sm" variant="default" className="mt-auto border-2 border-black font-black uppercase">
+              <div key={signal} className="flex flex-col gap-2 rounded-xl bg-red-50 p-3 rounded-[14px] shadow-[var(--fm-shadow)]">
+                <p className="text-sm font-semibold">{signal}</p>
+                <Button asChild size="sm" variant="default" className="mt-auto border border-[var(--fm-line)] font-semibold">
                   <Link
                     href={{
                       pathname: '/remediation',
@@ -391,10 +391,10 @@ export default function EvidencePage() {
       )}
 
       {activeView === 'gaps' && !loading && !error && summary.missingSignals.length === 0 ? (
-        <Card className="rounded-none border-2 border-[#0F1412] bg-[#DDF4EA] p-8 text-center shadow-[5px_5px_0_0_#0F1412]">
+        <Card className="bg-[#DDF4EA] p-8 text-center rounded-[14px] shadow-[var(--fm-shadow)]">
           <IconShieldCheck className="mx-auto h-8 w-8 text-[#0B7659]" />
-          <h2 className="mt-3 text-lg font-black uppercase">No evidence gaps reported</h2>
-          <p className="mt-2 text-sm text-[#59615D]">This reflects the current evidence summary, not a certification or compliance decision.</p>
+          <h2 className="mt-3 text-lg font-semibold">No evidence gaps reported</h2>
+          <p className="mt-2 text-sm text-[var(--fm-ink2)]">This reflects the current evidence summary, not a certification or compliance decision.</p>
         </Card>
       ) : null}
 
@@ -431,7 +431,7 @@ export default function EvidencePage() {
               activeFolder={activeFolder}
               onFolderChange={setActiveFolder}
             />
-            <div className="border-t-2 border-black/10 pt-4">
+            <div className="border-t border-[var(--fm-line)] pt-4">
               <EvidenceTagFilter
                 evidence={data}
                 activeTags={activeTags}
@@ -451,13 +451,13 @@ export default function EvidencePage() {
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="border-2 border-black pl-9 font-medium"
+                className="border border-[var(--fm-line)] pl-9 font-medium"
                 placeholder="Search evidence by title, type, or tag..."
               />
             </div>
             <Button
               variant="neutral"
-              className="border-2 border-black font-bold"
+              className="border border-[var(--fm-line)] font-bold"
               onClick={() => void refreshEvidence()}
               disabled={loading}
             >
@@ -469,9 +469,9 @@ export default function EvidencePage() {
           {/* Active filter chips */}
           {(activeTags.length > 0 || activeFolder !== null || search) && (
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-bold uppercase text-muted-foreground">Filters:</span>
+              <span className="text-xs font-semibold uppercase text-muted-foreground">Filters:</span>
               {activeFolder !== null && (
-                <Badge className="border-2 border-black bg-black px-2 py-0.5 text-[11px] font-bold text-white">
+                <Badge className="border border-[var(--fm-line)] bg-[var(--fm-ink)] px-2 py-0.5 text-[11px] font-bold text-white">
                   Folder: {activeFolder === '__uncategorized__' ? 'Uncategorized' : activeFolder}
                   <button type="button" onClick={() => setActiveFolder(null)} className="ml-1.5">
                     <IconX className="h-2.5 w-2.5" />
@@ -479,7 +479,7 @@ export default function EvidencePage() {
                 </Badge>
               )}
               {activeTags.map((tag) => (
-                <Badge key={tag} className="border-2 border-black bg-black px-2 py-0.5 text-[11px] font-bold text-white">
+                <Badge key={tag} className="border border-[var(--fm-line)] bg-[var(--fm-ink)] px-2 py-0.5 text-[11px] font-bold text-white">
                   #{tag}
                   <button type="button" onClick={() => handleTagToggle(tag)} className="ml-1.5">
                     <IconX className="h-2.5 w-2.5" />
@@ -487,7 +487,7 @@ export default function EvidencePage() {
                 </Badge>
               ))}
               {search && (
-                <Badge className="border-2 border-black bg-black px-2 py-0.5 text-[11px] font-bold text-white">
+                <Badge className="border border-[var(--fm-line)] bg-[var(--fm-ink)] px-2 py-0.5 text-[11px] font-bold text-white">
                   Search: {search}
                   <button type="button" onClick={() => setSearch('')} className="ml-1.5">
                     <IconX className="h-2.5 w-2.5" />
@@ -498,7 +498,7 @@ export default function EvidencePage() {
           )}
 
           {loading && (
-            <div className="flex flex-col items-center justify-center gap-3 rounded-3xl border-2 border-dashed border-black bg-slate-50 px-6 py-16 text-center">
+            <div className="flex flex-col items-center justify-center gap-3 rounded-3xl border border-dashed border-[var(--fm-line)] bg-slate-50 px-6 py-16 text-center">
               <IconLoader2 className="h-8 w-8 animate-spin" />
               <p className="font-bold">Loading evidence for {selectedSystem.name}</p>
             </div>
@@ -524,14 +524,14 @@ export default function EvidencePage() {
           )}
 
           {!loading && !error && data.length === 0 && (
-            <div className="rounded-3xl border-2 border-dashed border-black bg-slate-50 px-6 py-16 text-center">
+            <div className="rounded-3xl border border-dashed border-[var(--fm-line)] bg-slate-50 px-6 py-16 text-center">
               <IconFileText className="mx-auto h-12 w-12 opacity-50" />
-              <h3 className="mt-4 text-xl font-black">No evidence yet</h3>
+              <h3 className="mt-4 text-xl font-semibold">No evidence yet</h3>
               <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
                 Start by uploading a file, linking an external artifact, or writing a narrative for {selectedSystem.name}.
               </p>
               <Button
-                className="mt-5 border-2 border-black font-black uppercase"
+                className="mt-5 border border-[var(--fm-line)] font-semibold"
                 onClick={() => setUploaderOpen(true)}
                 disabled={!canReview}
               >
@@ -542,12 +542,12 @@ export default function EvidencePage() {
           )}
 
           {!loading && !error && data.length > 0 && filteredData.length === 0 && (
-            <div className="rounded-3xl border-2 border-dashed border-black bg-slate-50 px-6 py-10 text-center">
+            <div className="rounded-3xl border border-dashed border-[var(--fm-line)] bg-slate-50 px-6 py-10 text-center">
               <p className="font-bold text-muted-foreground">No evidence matches your filters.</p>
               <Button
                 variant="neutral"
                 size="sm"
-                className="mt-3 border-2 border-black font-bold"
+                className="mt-3 border border-[var(--fm-line)] font-bold"
                 onClick={() => { setActiveFolder(null); setActiveTags([]); setSearch('') }}
               >
                 Clear filters
@@ -557,7 +557,7 @@ export default function EvidencePage() {
 
           {!loading && !error && filteredData.length > 0 && (
             <div className="space-y-3">
-              <p className="text-xs font-bold uppercase text-muted-foreground">
+              <p className="text-xs font-semibold uppercase text-muted-foreground">
                 {filteredData.length} artifact{filteredData.length !== 1 ? 's' : ''}
                 {data.length !== filteredData.length && ` (${data.length} total)`}
               </p>
@@ -576,9 +576,9 @@ export default function EvidencePage() {
 
       {/* Add evidence dialog */}
       <Dialog open={uploaderOpen} onOpenChange={setUploaderOpen}>
-        <DialogContent className="max-w-lg border-4 border-black">
+        <DialogContent className="max-w-lg border border-[var(--fm-line)]">
           <DialogHeader>
-            <DialogTitle className="font-black uppercase">Add evidence</DialogTitle>
+            <DialogTitle className="font-semibold">Add evidence</DialogTitle>
             <DialogDescription>
               Add a scoped evidence artifact for {selectedSystem.name}.
             </DialogDescription>

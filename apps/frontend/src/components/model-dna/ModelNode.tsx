@@ -31,14 +31,14 @@ export function ModelNode({ data }: ModelNodeProps) {
 
     return (
         <div className={`px-4 py-2 shadow-md rounded-md border-2 ${getColor()} min-w-[150px]`}>
-            <Handle type="target" position={Position.Top} className="w-3 h-3 bg-black" />
+            <Handle type="target" position={Position.Top} className="w-3 h-3 bg-[var(--fm-ink)]" />
             <div className="flex items-center">
-                <div className="mr-2 p-1 bg-white rounded-full border border-black">
+                <div className="mr-2 p-1 bg-white rounded-full border border-[var(--fm-line)]">
                     {getIcon()}
                 </div>
                 <div className="text-sm font-bold text-black">{data.label}</div>
             </div>
-            <Handle type="source" position={Position.Bottom} className="w-3 h-3 bg-black" />
+            <Handle type="source" position={Position.Bottom} className="w-3 h-3 bg-[var(--fm-ink)]" />
         </div>
     );
 }

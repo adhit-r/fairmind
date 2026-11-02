@@ -43,7 +43,7 @@ export function LineageGraph() {
     );
 
     return (
-        <Card className="h-[600px] w-full border-2 border-black shadow-brutal overflow-hidden">
+        <Card className="h-[600px] w-full overflow-hidden fm-card">
             <ReactFlow
                 nodes={nodes}
                 edges={edges}

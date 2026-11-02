@@ -68,7 +68,7 @@ export function ReportHistoryTable({
 
   if (reports.length === 0) {
     return (
-      <div className="rounded-xl border-2 border-dashed border-black/30 bg-slate-50 p-8 text-center">
+      <div className="rounded-xl border border-dashed border-[rgba(21,23,26,.14)] bg-slate-50 p-8 text-center">
         <IconFileAnalytics className="mx-auto h-8 w-8 text-muted-foreground" />
         <p className="mt-2 font-bold text-muted-foreground">No reports generated yet</p>
         <p className="mt-0.5 text-xs text-muted-foreground">
@@ -83,7 +83,7 @@ export function ReportHistoryTable({
       {reports.map((report) => (
         <div
           key={report.id}
-          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-black bg-white p-4 shadow-[2px_2px_0px_0px_#000]"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-xl p-4 fm-card"
         >
           <div className="flex min-w-0 flex-1 items-start gap-3">
             <IconFileCheck className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
@@ -102,20 +102,20 @@ export function ReportHistoryTable({
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <Badge
-              className={`border-2 px-2 py-0.5 text-[10px] font-black uppercase ${TYPE_COLORS[report.reportType] || 'border-black bg-slate-50'}`}
+              className={`border px-2 py-0.5 text-[10px] font-semibold uppercase ${TYPE_COLORS[report.reportType] || 'border-[var(--fm-line)] bg-slate-50'}`}
             >
               {TYPE_LABELS[report.reportType] ?? report.reportType}
             </Badge>
             <Button
               variant="neutral"
-              className="h-7 border-2 border-black px-2 text-xs font-bold"
+              className="h-7 border border-[var(--fm-line)] px-2 text-xs font-bold"
               onClick={() => onPreview(report)}
             >
               Preview
             </Button>
             <Button
               variant="neutral"
-              className="h-7 border-2 border-black px-2 text-xs font-bold"
+              className="h-7 border border-[var(--fm-line)] px-2 text-xs font-bold"
               onClick={() => onDownloadJson(report)}
               title="Download JSON"
             >
@@ -124,7 +124,7 @@ export function ReportHistoryTable({
             </Button>
             <Button
               variant="default"
-              className="h-7 border-2 border-black px-2 text-xs font-bold"
+              className="h-7 border border-[var(--fm-line)] px-2 text-xs font-bold"
               onClick={() => onDownloadPdf(report)}
               title="Download PDF"
             >

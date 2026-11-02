@@ -274,16 +274,16 @@ export default function AuditReportsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <Card className="overflow-hidden border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
-        <div className="border-b-4 border-black bg-black p-5 text-white">
+      <Card className="overflow-hidden fm-card">
+        <div className="border-b border-[var(--fm-line)] p-5">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge className="border-2 border-white bg-white px-2 py-0.5 text-[11px] font-black uppercase text-black">
+            <Badge className="rounded-full bg-[var(--fm-bg)] px-2.5 py-0.5 text-[11px] font-semibold uppercase text-[var(--fm-ink)]">
               <IconFileAnalytics className="mr-1.5 h-3.5 w-3.5" />
               Audit Reports
             </Badge>
           </div>
-          <h1 className="mt-3 text-3xl font-black uppercase">Governance Report Generator</h1>
-          <p className="mt-1 text-sm text-slate-300">
+          <h1 className="mt-3 text-3xl font-semibold">Governance Report Generator</h1>
+          <p className="mt-1 text-sm text-[var(--fm-ink2)]">
             Generate structured audit reports for regulators, compliance teams, and governance boards.
           </p>
         </div>
@@ -295,16 +295,16 @@ export default function AuditReportsPage() {
               key={type.id}
               type="button"
               onClick={() => setReportType(type.id)}
-              className={`relative border-b-2 border-r-2 border-black p-5 text-left transition-colors last:border-r-0 hover:bg-slate-50 ${
+              className={`relative border-b border-r border-[var(--fm-line)] p-5 text-left transition-colors last:border-r-0 hover:bg-slate-50 ${
                 reportType === type.id ? 'bg-slate-100' : 'bg-white'
               }`}
             >
               {reportType === type.id && (
-                <span className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-black text-white">
+                <span className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--fm-ink)] text-white">
                   <IconCheck className="h-3 w-3" />
                 </span>
               )}
-              <Badge className={`border-2 px-2 py-0.5 text-[10px] font-black uppercase ${type.color}`}>
+              <Badge className={`border-2 px-2 py-0.5 text-[10px] font-semibold uppercase ${type.color}`}>
                 {type.label}
               </Badge>
               <p className="mt-2 text-xs text-muted-foreground">{type.description}</p>
@@ -316,8 +316,8 @@ export default function AuditReportsPage() {
       <div className="grid gap-6 xl:grid-cols-[1fr_1.4fr]">
         {/* Configuration panel */}
         <div className="space-y-4">
-          <Card className="border-2 border-black p-5 shadow-brutal">
-            <h2 className="flex items-center gap-2 text-sm font-black uppercase">
+          <Card className="p-5 fm-card">
+            <h2 className="flex items-center gap-2 text-sm font-semibold">
               <IconSettings className="h-4 w-4" />
               Report Configuration
             </h2>
@@ -325,11 +325,11 @@ export default function AuditReportsPage() {
             <div className="mt-4 space-y-4">
               {/* AI System */}
               <div className="space-y-1.5">
-                <label className="text-[11px] font-black uppercase text-muted-foreground">
+                <label className="text-[11px] font-semibold uppercase text-muted-foreground">
                   AI System
                 </label>
                 <Select value={selectedSystemId} onValueChange={setSelectedSystemId}>
-                  <SelectTrigger className="border-2 border-black font-semibold">
+                  <SelectTrigger className="border border-[var(--fm-line)] font-semibold">
                     <SelectValue placeholder="Select system…" />
                   </SelectTrigger>
                   <SelectContent>
@@ -349,20 +349,20 @@ export default function AuditReportsPage() {
 
               {/* Frameworks */}
               <div className="space-y-1.5">
-                <label className="text-[11px] font-black uppercase text-muted-foreground">
+                <label className="text-[11px] font-semibold uppercase text-muted-foreground">
                   Frameworks to include
                 </label>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="neutral" className="w-full justify-between border-2 border-black font-semibold">
+                    <Button variant="neutral" className="w-full justify-between border border-[var(--fm-line)] font-semibold">
                       {selectedFrameworks.length > 0
                         ? `${selectedFrameworks.length} framework${selectedFrameworks.length > 1 ? 's' : ''} selected`
                         : 'All frameworks'}
                       <IconChevronDown className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent className="w-56 border-2 border-black">
-                    <DropdownMenuLabel className="text-[10px] font-black uppercase">
+                  <DropdownMenuContent className="w-56 border border-[var(--fm-line)]">
+                    <DropdownMenuLabel className="text-[10px] font-semibold uppercase">
                       Select frameworks
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
@@ -382,32 +382,32 @@ export default function AuditReportsPage() {
               {/* Date range */}
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1.5">
-                  <label className="text-[11px] font-black uppercase text-muted-foreground">
+                  <label className="text-[11px] font-semibold uppercase text-muted-foreground">
                     Date from
                   </label>
                   <Input
                     type="date"
                     value={dateFrom}
                     onChange={(e) => setDateFrom(e.target.value)}
-                    className="border-2 border-black"
+                    className="border border-[var(--fm-line)]"
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-[11px] font-black uppercase text-muted-foreground">
+                  <label className="text-[11px] font-semibold uppercase text-muted-foreground">
                     Date to
                   </label>
                   <Input
                     type="date"
                     value={dateTo}
                     onChange={(e) => setDateTo(e.target.value)}
-                    className="border-2 border-black"
+                    className="border border-[var(--fm-line)]"
                   />
                 </div>
               </div>
 
               {/* Sections */}
               <div className="space-y-1.5">
-                <label className="text-[11px] font-black uppercase text-muted-foreground">
+                <label className="text-[11px] font-semibold uppercase text-muted-foreground">
                   Sections to include
                 </label>
                 <div className="flex flex-wrap gap-1.5">
@@ -416,9 +416,9 @@ export default function AuditReportsPage() {
                       key={sec.id}
                       type="button"
                       onClick={() => toggleSection(sec.id)}
-                      className={`rounded border-2 border-black px-2 py-0.5 text-[11px] font-bold transition-colors ${
+                      className={`rounded-full border border-[var(--fm-line)] px-2.5 py-0.5 text-[11px] font-medium transition-colors ${
                         selectedSections.includes(sec.id)
-                          ? 'bg-black text-white'
+                          ? 'border-[var(--fm-ink)] bg-[var(--fm-ink)] text-white'
                           : 'bg-white hover:bg-slate-100'
                       }`}
                     >
@@ -433,7 +433,7 @@ export default function AuditReportsPage() {
 
               {/* Generate button */}
               <Button
-                className="w-full border-2 border-black font-black uppercase shadow-[3px_3px_0px_0px_#000]"
+                className="w-full font-semibold fm-card"
                 disabled={!selectedSystemId || generating}
                 onClick={handleGenerate}
               >
@@ -454,22 +454,22 @@ export default function AuditReportsPage() {
 
           {/* Quick export of active report */}
           {activeReport && (
-            <Card className="border-2 border-black p-4 shadow-brutal">
-              <h3 className="text-xs font-black uppercase text-muted-foreground">
+            <Card className="p-4 fm-card">
+              <h3 className="text-xs font-semibold uppercase text-muted-foreground">
                 Export last generated
               </h3>
               <p className="mt-1 truncate text-sm font-bold">{activeReport.title}</p>
               <div className="mt-3 flex gap-2">
                 <Button
                   variant="neutral"
-                  className="flex-1 border-2 border-black text-xs font-bold"
+                  className="flex-1 border border-[var(--fm-line)] text-xs font-bold"
                   onClick={() => downloadJson(activeReport)}
                 >
                   <IconDownload className="mr-1 h-3.5 w-3.5" />
                   JSON
                 </Button>
                 <Button
-                  className="flex-1 border-2 border-black text-xs font-bold shadow-[2px_2px_0px_0px_#000]"
+                  className="flex-1 text-xs font-bold fm-card"
                   onClick={() => generatePdf(activeReport)}
                 >
                   <IconDownload className="mr-1 h-3.5 w-3.5" />
@@ -481,13 +481,13 @@ export default function AuditReportsPage() {
         </div>
 
         {/* Preview panel */}
-        <Card className="border-2 border-black p-5 shadow-brutal">
+        <Card className="p-5 fm-card">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-sm font-black uppercase">Report Preview</h2>
+            <h2 className="text-sm font-semibold">Report Preview</h2>
             {previewReport && (
               <Button
                 variant="neutral"
-                className="h-7 border-2 border-black px-2 text-xs font-bold"
+                className="h-7 border border-[var(--fm-line)] px-2 text-xs font-bold"
                 onClick={() => setPreviewReport(null)}
               >
                 Clear
@@ -496,7 +496,7 @@ export default function AuditReportsPage() {
           </div>
 
           {!reportForPreview ? (
-            <div className="rounded-xl border-2 border-dashed border-black/30 bg-slate-50 p-10 text-center">
+            <div className="rounded-xl border border-dashed border-[rgba(21,23,26,.14)] bg-slate-50 p-10 text-center">
               <IconFileAnalytics className="mx-auto h-10 w-10 text-muted-foreground" />
               <p className="mt-3 font-bold text-muted-foreground">No report generated yet</p>
               <p className="mt-1 text-xs text-muted-foreground">
@@ -516,12 +516,12 @@ export default function AuditReportsPage() {
       </div>
 
       {/* Report history */}
-      <Card className="border-2 border-black p-5 shadow-brutal">
+      <Card className="p-5 fm-card">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-sm font-black uppercase">Report History</h2>
+          <h2 className="text-sm font-semibold">Report History</h2>
           <Button
             variant="neutral"
-            className="h-7 border-2 border-black px-2 text-xs font-bold"
+            className="h-7 border border-[var(--fm-line)] px-2 text-xs font-bold"
             onClick={loadHistory}
           >
             <IconRefresh className="mr-1 h-3.5 w-3.5" />

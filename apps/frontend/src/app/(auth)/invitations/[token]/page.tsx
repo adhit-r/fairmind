@@ -224,10 +224,10 @@ export default function InvitationPage() {
   if (state === 'loading') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
-        <Card className="w-full max-w-md p-8 border-4 border-black shadow-brutal-lg">
+        <Card className="w-full max-w-md p-8 fm-card">
           <div className="flex flex-col items-center">
             <div
-              className="h-12 w-12 animate-spin rounded-full border-4 border-gray-300 border-t-black mb-4"
+              className="h-12 w-12 animate-spin rounded-full border-2 border-[var(--fm-line)] border-t-[var(--fm-ink)] mb-4"
               role="status"
               aria-label="Loading"
             />
@@ -247,9 +247,9 @@ export default function InvitationPage() {
   if (state === 'success') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
-        <Card className="w-full max-w-md p-8 border-4 border-black shadow-brutal-lg">
+        <Card className="w-full max-w-md p-8 fm-card">
           <div className="flex flex-col items-center text-center">
-            <div className="mb-4 p-3 bg-green-50 rounded-full border-2 border-black">
+            <div className="mb-4 p-3 bg-green-50 rounded-full border border-[var(--fm-line)]">
               <IconCheck className="h-8 w-8 text-green-700" />
             </div>
             <h1 className="text-2xl font-bold text-black mb-2">Welcome!</h1>
@@ -286,8 +286,8 @@ export default function InvitationPage() {
 
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
-        <Card className="w-full max-w-md p-8 border-4 border-black shadow-brutal-lg">
-          <Alert className={`mb-6 border-2 border-black ${getErrorColor()}`}>
+        <Card className="w-full max-w-md p-8 fm-card">
+          <Alert className={`mb-6 border border-[var(--fm-line)] ${getErrorColor()}`}>
             <IconAlertTriangle className="h-4 w-4 text-red-600" />
             <AlertDescription className="text-gray-900 font-medium">
               {error?.message || 'An error occurred. Please try again.'}
@@ -316,28 +316,28 @@ export default function InvitationPage() {
    */
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md p-8 border-4 border-black shadow-brutal-lg">
+      <Card className="w-full max-w-md p-8 fm-card">
         <div className="flex flex-col items-center mb-6">
           <OrangeLogo size="lg" />
-          <h1 className="text-3xl font-bold mt-4 text-black">Join Organization</h1>
+          <h1 className="text-[24px] font-semibold tracking-tight mt-4 text-black">Join Organization</h1>
         </div>
 
         {invitation && (
           <div className="mb-8 space-y-4">
-            <div className="bg-gray-50 border-2 border-black p-4 rounded">
-              <p className="text-xs font-bold text-gray-600 uppercase mb-1">Organization</p>
+            <div className="bg-gray-50 border border-[var(--fm-line)] p-4 rounded">
+              <p className="text-xs font-semibold text-gray-600 mb-1">Organization</p>
               <p className="text-2xl font-bold text-black break-words">
                 {invitation.org_name}
               </p>
             </div>
 
-            <div className="bg-gray-50 border-2 border-black p-4 rounded">
-              <p className="text-xs font-bold text-gray-600 uppercase mb-1">Your Role</p>
+            <div className="bg-gray-50 border border-[var(--fm-line)] p-4 rounded">
+              <p className="text-xs font-semibold text-gray-600 mb-1">Your Role</p>
               <p className="text-lg font-bold text-black capitalize">{invitation.role}</p>
             </div>
 
-            <div className="bg-gray-50 border-2 border-black p-4 rounded">
-              <p className="text-xs font-bold text-gray-600 uppercase mb-1">Email</p>
+            <div className="bg-gray-50 border border-[var(--fm-line)] p-4 rounded">
+              <p className="text-xs font-semibold text-gray-600 mb-1">Email</p>
               <p className="text-sm text-gray-700">{invitation.email}</p>
             </div>
           </div>
@@ -346,7 +346,7 @@ export default function InvitationPage() {
         {state === 'accepting' ? (
           <div className="flex justify-center py-4">
             <div
-              className="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-black"
+              className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--fm-line)] border-t-[var(--fm-ink)]"
               role="status"
               aria-label="Accepting invitation"
             />
@@ -355,14 +355,14 @@ export default function InvitationPage() {
           <div className="space-y-3">
             <Button
               onClick={handleAccept}
-              className="w-full bg-[#FF6B35] text-white font-bold border-2 border-black hover:shadow-brutal-lg"
+              className="w-full bg-[#FF6B35] text-white font-bold border border-[var(--fm-line)]"
             >
               Accept Invitation
             </Button>
             <Button
               onClick={handleDecline}
               variant="neutral"
-              className="w-full border-2 border-black font-bold hover:shadow-brutal"
+              className="w-full border border-[var(--fm-line)] font-bold"
             >
               Decline
             </Button>

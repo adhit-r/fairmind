@@ -108,11 +108,11 @@ export default function AdminAuditLogPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background p-8">
+    <div className="min-w-0">
       <div className="mx-auto max-w-7xl">
         {/* Header */}
-        <div className="mb-8 border-b-4 border-black pb-6">
-          <h1 className="text-4xl font-bold text-black">Audit Log</h1>
+        <div className="mb-8 border-b border-[var(--fm-line)] pb-6">
+          <h1 className="text-[30px] font-semibold tracking-[-.03em] text-black">Audit Log</h1>
           <p className="mt-2 text-gray-600">
             View audit trail of user actions for compliance and security
           </p>
@@ -122,12 +122,12 @@ export default function AdminAuditLogPage() {
         <div className="mb-6 flex flex-wrap gap-4">
           <button
             onClick={handleExportCSV}
-            className="flex items-center gap-2 rounded-lg bg-black px-4 py-2 font-bold text-white hover:shadow-brutal-lg"
+            className="flex items-center gap-2 rounded-full bg-[var(--fm-ink)] px-4 py-2 font-semibold text-white"
           >
             <IconDownload size={20} />
             Export as CSV
           </button>
-          <button className="flex items-center gap-2 rounded-lg border-2 border-black bg-white px-4 py-2 font-bold text-black hover:shadow-brutal-lg">
+          <button className="flex items-center gap-2 rounded-lg border border-[var(--fm-line)] bg-white px-4 py-2 font-bold text-black">
             <IconFilter size={20} />
             Filters
           </button>
@@ -136,10 +136,10 @@ export default function AdminAuditLogPage() {
         {/* Content */}
         {isLoading ? (
           <div className="flex justify-center">
-            <div className="h-12 w-12 animate-spin rounded-full border-4 border-gray-300 border-t-black" />
+            <div className="h-12 w-12 animate-spin rounded-full border-2 border-[var(--fm-line)] border-t-[var(--fm-ink)]" />
           </div>
         ) : logs.length === 0 ? (
-          <div className="rounded-lg border-4 border-black bg-white p-8 shadow-brutal-lg">
+          <div className="p-8 fm-card">
             <div className="text-center">
               <h3 className="text-xl font-bold text-black">No Audit Logs</h3>
               <p className="mt-2 text-gray-600">
@@ -150,9 +150,9 @@ export default function AdminAuditLogPage() {
             </div>
           </div>
         ) : (
-          <div className="overflow-x-auto rounded-lg border-4 border-black shadow-brutal-lg">
+          <div className="overflow-x-auto fm-card">
             <table className="w-full">
-              <thead className="border-b-4 border-black bg-gray-100">
+              <thead className="border-b border-[var(--fm-line)] bg-gray-100">
                 <tr>
                   <th className="px-6 py-4 text-left font-bold text-black">
                     Timestamp
@@ -215,14 +215,14 @@ export default function AdminAuditLogPage() {
               <button
                 onClick={() => setPage(Math.max(1, page - 1))}
                 disabled={page === 1}
-                className="rounded-lg border-2 border-black px-4 py-2 font-bold disabled:opacity-50"
+                className="rounded-lg border border-[var(--fm-line)] px-4 py-2 font-bold disabled:opacity-50"
               >
                 Previous
               </button>
               <button
                 onClick={() => setPage(page + 1)}
                 disabled={logs.length < limit}
-                className="rounded-lg border-2 border-black px-4 py-2 font-bold disabled:opacity-50"
+                className="rounded-lg border border-[var(--fm-line)] px-4 py-2 font-bold disabled:opacity-50"
               >
                 Next
               </button>
@@ -231,7 +231,7 @@ export default function AdminAuditLogPage() {
         )}
 
         {/* Info Box */}
-        <div className="mt-8 rounded-lg border-2 border-black bg-white p-6">
+        <div className="mt-8 rounded-lg border border-[var(--fm-line)] bg-white p-6">
           <h3 className="mb-2 font-bold text-black">Audit Trail Information</h3>
           <p className="text-gray-600">
             All user actions are logged for compliance and security purposes.

@@ -76,11 +76,11 @@ export default function AnalyticsPage() {
     <div className="space-y-8 p-8">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-4xl font-bold">Advanced Analytics</h1>
+          <h1 className="text-[30px] font-semibold tracking-[-.03em]">Advanced Analytics</h1>
           <p className="text-muted-foreground mt-2">Deep dive into model fairness and performance trends.</p>
         </div>
         <Select value={selectedModel} onValueChange={setSelectedModel} disabled={modelsLoading || models.length === 0}>
-          <SelectTrigger className="w-[250px] border-2 border-black">
+          <SelectTrigger className="w-[250px] border border-[var(--fm-line)]">
             <SelectValue placeholder={modelsLoading ? "Loading models..." : "Select Model"} />
           </SelectTrigger>
           <SelectContent>

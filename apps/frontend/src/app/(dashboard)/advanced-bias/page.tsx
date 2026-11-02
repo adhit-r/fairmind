@@ -100,7 +100,7 @@ export default function AdvancedBiasPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-4xl font-bold">Advanced Bias Detection</h1>
+        <h1 className="text-[30px] font-semibold tracking-[-.03em]">Advanced Bias Detection</h1>
         <p className="text-muted-foreground mt-1">
           Advanced bias analysis techniques for comprehensive evaluation
         </p>
@@ -108,7 +108,7 @@ export default function AdvancedBiasPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Analysis Form */}
-        <Card className="p-6 border-2 border-black shadow-brutal">
+        <Card className="p-6 fm-card">
           <h2 className="text-2xl font-bold mb-4">Run Advanced Analysis</h2>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -117,7 +117,7 @@ export default function AdvancedBiasPage() {
               <Input
                 id="modelId"
                 {...register('modelId')}
-                className="border-2 border-black"
+                className="border border-[var(--fm-line)]"
                 placeholder="Enter model ID"
               />
               {errors.modelId && (
@@ -132,7 +132,7 @@ export default function AdvancedBiasPage() {
                 onValueChange={setSelectedDataset}
                 disabled={datasetsLoading}
               >
-                <SelectTrigger className="border-2 border-black">
+                <SelectTrigger className="border border-[var(--fm-line)]">
                   <SelectValue placeholder={datasetsLoading ? "Loading datasets..." : "Select dataset"} />
                 </SelectTrigger>
                 <SelectContent>
@@ -164,7 +164,7 @@ export default function AdvancedBiasPage() {
                   setActiveTab(value)
                 }}
               >
-                <SelectTrigger className="border-2 border-black">
+                <SelectTrigger className="border border-[var(--fm-line)]">
                   <SelectValue placeholder="Select analysis type" />
                 </SelectTrigger>
                 <SelectContent>
@@ -185,7 +185,7 @@ export default function AdvancedBiasPage() {
               <Textarea
                 id="parameters"
                 {...register('parameters')}
-                className="border-2 border-black font-mono"
+                className="border border-[var(--fm-line)] font-mono"
                 rows={6}
                 placeholder='{"sensitiveAttributes": ["gender", "race"], "threshold": 0.05}'
               />
@@ -201,33 +201,33 @@ export default function AdvancedBiasPage() {
         </Card>
 
         {/* Results */}
-        <Card className="p-6 border-2 border-black shadow-brutal">
+        <Card className="p-6 fm-card">
           <h2 className="text-2xl font-bold mb-4">Analysis Results</h2>
 
           {results ? (
             <div className="space-y-4">
-              <div className="p-4 border-2 border-black bg-white">
+              <div className="p-4 border border-[var(--fm-line)] bg-white">
                 <p className="text-sm font-medium mb-2">Analysis ID</p>
                 <p className="font-mono text-sm">{results.id}</p>
               </div>
 
-              <div className="p-4 border-2 border-black bg-white">
+              <div className="p-4 border border-[var(--fm-line)] bg-white">
                 <p className="text-sm font-medium mb-2">Type</p>
-                <Badge variant="default" className="border-2 border-black">
+                <Badge variant="default" className="border border-[var(--fm-line)]">
                   {results.type}
                 </Badge>
               </div>
 
               {results.results && (
-                <div className="p-4 border-2 border-black bg-white">
+                <div className="p-4 border border-[var(--fm-line)] bg-white">
                   <p className="text-sm font-medium mb-2">Results</p>
-                  <pre className="text-xs bg-gray-50 p-2 border-2 border-black overflow-auto max-h-64">
+                  <pre className="text-xs bg-gray-50 p-2 border border-[var(--fm-line)] overflow-auto max-h-64">
                     {JSON.stringify(results.results, null, 2)}
                   </pre>
                 </div>
               )}
 
-              <div className="p-4 border-2 border-black bg-white">
+              <div className="p-4 border border-[var(--fm-line)] bg-white">
                 <p className="text-sm font-medium mb-2">Timestamp</p>
                 <p className="text-sm">{new Date(results.timestamp).toLocaleString()}</p>
               </div>
@@ -243,13 +243,13 @@ export default function AdvancedBiasPage() {
       </div>
 
       {/* Analysis Types Info */}
-      <Card className="p-6 border-2 border-black shadow-brutal">
+      <Card className="p-6 fm-card">
         <h2 className="text-2xl font-bold mb-4">Analysis Types</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {ANALYSIS_TYPES.map((type) => (
             <div
               key={type.value}
-              className="p-4 border-2 border-black bg-white"
+              className="p-4 border border-[var(--fm-line)] bg-white"
             >
               <h3 className="font-bold mb-2">{type.label}</h3>
               <p className="text-sm text-muted-foreground">

@@ -50,7 +50,7 @@ export default function DNAComparison({ comparison }: DNAComparisonProps) {
                 </div>
             </div>
 
-            <Card className="border-2 border-black shadow-brutal">
+            <Card className="fm-card">
                 <CardHeader className="pb-2">
                     <div className="flex justify-between items-center">
                         <CardTitle className="text-lg flex items-center gap-2">

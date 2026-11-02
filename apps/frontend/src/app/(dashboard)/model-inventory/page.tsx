@@ -46,18 +46,18 @@ function SystemRow({ system, onClick }: { system: AISystem; onClick: () => void 
     <button
       type="button"
       onClick={onClick}
-      className="group w-full rounded-xl border-2 border-black bg-white p-4 text-left shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all hover:shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] hover:-translate-x-0.5 hover:-translate-y-0.5"
+      className="group w-full rounded-xl p-4 text-left transition-all hover:-translate-x-0.5 hover:-translate-y-0.5 fm-card"
     >
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-5">
         {/* Name + badges */}
         <div className="min-w-0 flex-1 space-y-2">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-base font-black">{system.name}</p>
-            <Badge className={`border-2 px-2 py-0.5 text-[10px] font-black uppercase ${RISK_TIER_COLORS[system.riskTier] ?? 'border-black bg-white text-black'}`}>
+            <p className="text-base font-semibold">{system.name}</p>
+            <Badge className={`border-2 px-2 py-0.5 text-[10px] font-semibold uppercase ${RISK_TIER_COLORS[system.riskTier] ?? 'border-[var(--fm-line)] bg-white text-[var(--fm-ink)]'}`}>
               {system.riskTier} risk
             </Badge>
             {ls.criticalBlockers > 0 && (
-              <Badge className="border-2 border-red-600 bg-red-100 px-2 py-0.5 text-[10px] font-black uppercase text-red-800">
+              <Badge className="border-2 border-red-600 bg-red-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-red-800">
                 <IconAlertHexagon className="mr-1 h-2.5 w-2.5" />
                 {ls.criticalBlockers} blocker{ls.criticalBlockers !== 1 ? 's' : ''}
               </Badge>
@@ -73,28 +73,28 @@ function SystemRow({ system, onClick }: { system: AISystem; onClick: () => void 
         <div className="flex shrink-0 items-center gap-4 lg:flex-col lg:items-end lg:gap-2">
           <div className="flex items-center gap-1.5">
             {recIcon}
-            <span className={`text-xs font-black uppercase ${recColor}`}>
+            <span className={`text-xs font-semibold uppercase ${recColor}`}>
               {ls.releaseRecommendation}
             </span>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold text-muted-foreground">Readiness</span>
-            <span className="text-sm font-black">{system.readiness}%</span>
+            <span className="text-sm font-semibold">{system.readiness}%</span>
           </div>
           <div className="hidden w-24 lg:block">
-            <Progress value={system.readiness} className="h-2 border border-black" />
+            <Progress value={system.readiness} className="h-2 border border-[var(--fm-line)]" />
           </div>
         </div>
 
         {/* Risk counts */}
         <div className="flex items-center gap-3 lg:flex-col lg:items-end lg:gap-1">
           <div className="text-center">
-            <p className="text-[10px] font-bold uppercase text-muted-foreground">Open risks</p>
-            <p className={`text-lg font-black ${ls.openRisks > 0 ? 'text-red-700' : ''}`}>{ls.openRisks}</p>
+            <p className="text-[10px] font-semibold uppercase text-muted-foreground">Open risks</p>
+            <p className={`text-lg font-semibold ${ls.openRisks > 0 ? 'text-red-700' : ''}`}>{ls.openRisks}</p>
           </div>
           <div className="text-center">
-            <p className="text-[10px] font-bold uppercase text-muted-foreground">Remediation</p>
-            <p className={`text-lg font-black ${ls.activeRemediation > 0 ? 'text-amber-700' : ''}`}>{ls.activeRemediation}</p>
+            <p className="text-[10px] font-semibold uppercase text-muted-foreground">Remediation</p>
+            <p className={`text-lg font-semibold ${ls.activeRemediation > 0 ? 'text-amber-700' : ''}`}>{ls.activeRemediation}</p>
           </div>
         </div>
       </div>
@@ -146,16 +146,16 @@ export default function ModelInventoryPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <Card className="border-4 border-black bg-gradient-to-br from-[#f0f4ff] via-white to-[#fff4de] p-6 shadow-[10px_10px_0px_0px_rgba(0,0,0,1)]">
+      <Card className="bg-gradient-to-br from-[#f0f4ff] via-white to-[#fff4de] p-6 rounded-[14px] shadow-[var(--fm-shadow)]">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge className="border-2 border-black bg-black px-3 py-1 font-black uppercase text-white">
+              <Badge className="border border-[var(--fm-line)] bg-[var(--fm-ink)] px-3 py-1 font-semibold text-white">
                 <IconDatabase className="mr-2 h-4 w-4" />
                 Model Inventory
               </Badge>
             </div>
-            <h1 className="text-3xl font-black uppercase tracking-tight">
+            <h1 className="text-3xl font-semibold tracking-tight">
               Governance Registry
             </h1>
             <p className="max-w-2xl text-sm text-muted-foreground">
@@ -164,7 +164,7 @@ export default function ModelInventoryPage() {
           </div>
           <Button
             variant="neutral"
-            className="border-2 border-black font-bold"
+            className="border border-[var(--fm-line)] font-bold"
             onClick={() => void refreshSystems()}
             disabled={loading}
           >
@@ -175,21 +175,21 @@ export default function ModelInventoryPage() {
 
       {/* Stats */}
       <div className="grid gap-4 sm:grid-cols-4">
-        <Card className="border-2 border-black p-4 shadow-brutal">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Total systems</p>
-          <p className="mt-1 text-3xl font-black">{stats.total}</p>
+        <Card className="p-4 fm-card">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Total systems</p>
+          <p className="mt-1 text-3xl font-semibold">{stats.total}</p>
         </Card>
-        <Card className="border-2 border-black p-4 shadow-brutal">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Approved</p>
-          <p className="mt-1 text-3xl font-black text-emerald-700">{stats.approved}</p>
+        <Card className="p-4 fm-card">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Approved</p>
+          <p className="mt-1 text-3xl font-semibold text-emerald-700">{stats.approved}</p>
         </Card>
-        <Card className={`border-2 border-black p-4 shadow-brutal ${stats.criticalBlockers > 0 ? 'bg-red-50' : ''}`}>
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">With blockers</p>
-          <p className={`mt-1 text-3xl font-black ${stats.criticalBlockers > 0 ? 'text-red-700' : ''}`}>{stats.criticalBlockers}</p>
+        <Card className={`p-4 ${stats.criticalBlockers > 0 ? 'bg-red-50' : ''} rounded-[14px] shadow-[var(--fm-shadow)]`}>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">With blockers</p>
+          <p className={`mt-1 text-3xl font-semibold ${stats.criticalBlockers > 0 ? 'text-red-700' : ''}`}>{stats.criticalBlockers}</p>
         </Card>
-        <Card className="border-2 border-black p-4 shadow-brutal">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Avg readiness</p>
-          <p className="mt-1 text-3xl font-black">{stats.avgReadiness}%</p>
+        <Card className="p-4 fm-card">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Avg readiness</p>
+          <p className="mt-1 text-3xl font-semibold">{stats.avgReadiness}%</p>
         </Card>
       </div>
 
@@ -200,12 +200,12 @@ export default function ModelInventoryPage() {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="border-2 border-black pl-9 font-medium"
+            className="border border-[var(--fm-line)] pl-9 font-medium"
             placeholder="Search by name or owner..."
           />
         </div>
         <Select value={riskFilter} onValueChange={setRiskFilter}>
-          <SelectTrigger className="w-40 border-2 border-black font-bold">
+          <SelectTrigger className="w-40 border border-[var(--fm-line)] font-bold">
             <IconFilterSearch className="mr-2 h-4 w-4" />
             <SelectValue placeholder="Risk tier" />
           </SelectTrigger>
@@ -218,7 +218,7 @@ export default function ModelInventoryPage() {
           </SelectContent>
         </Select>
         <Select value={stageFilter} onValueChange={setStageFilter}>
-          <SelectTrigger className="w-44 border-2 border-black font-bold">
+          <SelectTrigger className="w-44 border border-[var(--fm-line)] font-bold">
             <SelectValue placeholder="Lifecycle stage" />
           </SelectTrigger>
           <SelectContent>
@@ -234,7 +234,7 @@ export default function ModelInventoryPage() {
 
       {/* System list */}
       {loading && (
-        <div className="flex flex-col items-center justify-center gap-3 rounded-3xl border-2 border-dashed border-black bg-slate-50 py-16 text-center">
+        <div className="flex flex-col items-center justify-center gap-3 rounded-3xl border border-dashed border-[var(--fm-line)] bg-slate-50 py-16 text-center">
           <IconLoader2 className="h-8 w-8 animate-spin" />
           <p className="font-bold">Loading model inventory...</p>
         </div>
@@ -260,9 +260,9 @@ export default function ModelInventoryPage() {
       )}
 
       {!loading && !error && systems.length === 0 && (
-        <div className="rounded-3xl border-2 border-dashed border-black bg-slate-50 px-6 py-16 text-center">
+        <div className="rounded-3xl border border-dashed border-[var(--fm-line)] bg-slate-50 px-6 py-16 text-center">
           <IconDatabase className="mx-auto h-12 w-12 opacity-50" />
-          <h3 className="mt-4 text-xl font-black">No AI systems registered</h3>
+          <h3 className="mt-4 text-xl font-semibold">No AI systems registered</h3>
           <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
             Register your first AI system via the Onboard flow to begin tracking its governance lifecycle.
           </p>
@@ -271,17 +271,17 @@ export default function ModelInventoryPage() {
 
       {!loading && !error && systems.length > 0 && (
         <div className="space-y-3">
-          <p className="text-xs font-bold uppercase text-muted-foreground">
+          <p className="text-xs font-semibold uppercase text-muted-foreground">
             {filteredSystems.length} system{filteredSystems.length !== 1 ? 's' : ''}
             {systems.length !== filteredSystems.length && ` (${systems.length} total)`}
           </p>
           {filteredSystems.length === 0 ? (
-            <div className="rounded-3xl border-2 border-dashed border-black bg-slate-50 px-6 py-10 text-center">
+            <div className="rounded-3xl border border-dashed border-[var(--fm-line)] bg-slate-50 px-6 py-10 text-center">
               <p className="font-bold text-muted-foreground">No systems match your filters.</p>
               <Button
                 variant="neutral"
                 size="sm"
-                className="mt-3 border-2 border-black font-bold"
+                className="mt-3 border border-[var(--fm-line)] font-bold"
                 onClick={() => { setSearch(''); setRiskFilter('all'); setStageFilter('all') }}
               >
                 Clear filters

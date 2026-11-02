@@ -9,7 +9,7 @@ interface TrendLineChartProps {
 
 export function TrendLineChart({ data }: TrendLineChartProps) {
     return (
-        <Card className="p-6 h-[400px] border-2 border-black shadow-brutal">
+        <Card className="p-6 h-[400px] fm-card">
             <h3 className="text-lg font-bold mb-4">Bias Score Trend (30 Days)</h3>
             <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={data}>

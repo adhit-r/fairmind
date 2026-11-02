@@ -43,14 +43,14 @@ export function AuthGuard({ children }: AuthGuardProps) {
       <main className="flex min-h-screen items-center justify-center bg-[#F7F4EC] p-6">
         <section
           aria-labelledby="auth-guard-state-heading"
-          className="w-full max-w-xl border-2 border-black bg-white p-6 shadow-[8px_8px_0_#111111]"
+          className="w-full max-w-xl p-6 fm-card"
           role="alert"
         >
-          <p className="mb-3 text-xs font-black uppercase tracking-[0.18em] text-[#0B6E69]">Session status</p>
-          <h1 id="auth-guard-state-heading" className="text-2xl font-black tracking-tight text-black">{heading}</h1>
+          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-[#0B6E69]">Session status</p>
+          <h1 id="auth-guard-state-heading" className="text-2xl font-semibold tracking-tight text-black">{heading}</h1>
           <p className="mt-3 text-sm font-semibold leading-6 text-[#34312D]">{message}</p>
           <button
-            className="mt-6 border-2 border-black bg-[#F47B20] px-4 py-2 text-sm font-black text-black shadow-[3px_3px_0_#111111] transition-transform hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#0B6E69]"
+            className="mt-6 bg-[#F47B20] px-4 py-2 text-sm font-semibold text-black transition-transform hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#0B6E69] rounded-[14px] shadow-[var(--fm-shadow)]"
             onClick={() => { void refreshSession() }}
             type="button"
           >
