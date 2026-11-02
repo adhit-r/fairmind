@@ -1,11 +1,12 @@
 'use client'
 
 import { useParams } from 'next/navigation'
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { GATE_KINDS, usePackActions, useRun, useWaitingRuns, useWorkflow } from '@/lib/api/hooks/usePacks'
 import { IsoFigure } from '@/components/packs/IsoFigure'
 import { runFigure } from '@/components/packs/figures'
-import { BTN, BTN_P, Crumbs, ErrorNote, Heading, Loading, MUTED, Num, Pill, StatusPill, cap, when } from '@/components/packs/parts'
+import { BTN, BTN_P, Crumbs, ErrorNote, Heading, LABEL, LINE, Loading, MUTED, Num, Pill, StatusPill, cap, when } from '@/components/packs/parts'
+import { cn } from '@/lib/utils'
 
 export default function RunPage() {
   const { runId } = useParams<{ runId: string }>()
@@ -98,16 +99,16 @@ export default function RunPage() {
         <div className="flex flex-[1_1_300px] flex-col gap-3.5 px-1 py-1.5">
           <div className="flex items-center gap-2.5">
             {isWaiting && <Num n={view.waitNo} />}
-            <h2 className="m-0 text-base font-semibold">Your decision</h2>
+            <h2 className="m-0 text-base font-semibold text-[var(--fm-ink)]">{isWaiting ? 'Your decision' : 'Where it stands'}</h2>
           </div>
           {isWaiting ? (
             <>
-              <p className="m-0 leading-normal">
+              <p className="m-0 leading-normal text-[var(--fm-ink)]">
                 The agent is holding at {view.titleOf(r.currentStep) ? <b className="font-semibold">{view.titleOf(r.currentStep)}</b> : 'the gate'}. Nothing in your systems changes until you decide.
               </p>
               {view.current?.detail && <p className={`m-0 text-[13px] leading-normal ${MUTED}`}>{view.current.detail}</p>}
               {workflow.data && (workflow.data.approver || workflow.data.gateConditions || workflow.data.separationOfDuties) && (
-                <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[13px]">
+                <dl className="m-0 flex flex-col gap-2.5 text-[13px]">
                   {([
                     ['Approver', workflow.data.approver],
                     ['Gate conditions', workflow.data.gateConditions],
@@ -115,21 +116,21 @@ export default function RunPage() {
                   ] as const)
                     .filter(([, v]) => v)
                     .map(([k, v]) => (
-                      <div key={k} className="contents">
-                        <dt className={`font-semibold ${MUTED}`}>{k}</dt>
-                        <dd className="m-0 leading-snug">{v}</dd>
+                      <div key={k} className="flex flex-col gap-0.5">
+                        <dt className={LABEL}>{k}</dt>
+                        <dd className="m-0 leading-snug text-[var(--fm-ink)]">{v}</dd>
                       </div>
                     ))}
                 </dl>
               )}
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="notes" className="text-[13px] font-semibold">Notes (optional)</label>
+                <label htmlFor="notes" className="text-[13px] font-semibold text-[var(--fm-ink)]">Notes (optional)</label>
                 <textarea
                   id="notes"
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   rows={3}
-                  className="resize-y rounded-[10px] border border-[#15171a24] bg-white p-2.5 text-sm"
+                  className="resize-y rounded-[10px] border border-[var(--fm-line)] bg-white p-2.5 text-sm text-[var(--fm-ink)] focus:border-[var(--fm-ink)] focus:outline-none"
                 />
               </div>
               {failure && <ErrorNote message={failure} />}
@@ -144,13 +145,23 @@ export default function RunPage() {
             </>
           ) : (
             <>
-              <p className={`m-0 leading-normal ${MUTED}`}>This run is not at a gate, so there is nothing to decide.</p>
-              {r.approval && (
-                <p className="m-0 text-[13px] leading-normal">
-                  Decision on record: <b className="font-semibold">{r.approval.status}</b>
-                  {r.approval.decisionNotes ? `. ${r.approval.decisionNotes}` : ''}
-                </p>
-              )}
+              <dl className="m-0 flex flex-col gap-3 text-[13px]">
+                {([
+                  ['Status', <StatusPill key="s" status={r.status} />],
+                  ['Current step', view.current ? `${view.stepNo} of ${stepsTotal}: ${view.current.title}` : null],
+                  ['Started', when(r.createdAt)],
+                  ['Finished', r.finishedAt ? when(r.finishedAt) : null],
+                  ['Decision on record', r.approval ? `${cap(r.approval.status)}${r.approval.decisionNotes ? `. ${r.approval.decisionNotes}` : ''}` : null],
+                ] as Array<[string, ReactNode]>)
+                  .filter(([, v]) => v)
+                  .map(([k, v]) => (
+                    <div key={k} className="flex flex-col gap-1">
+                      <dt className={LABEL}>{k}</dt>
+                      <dd className="m-0 leading-snug text-[var(--fm-ink)]">{v}</dd>
+                    </div>
+                  ))}
+              </dl>
+              <p className={`m-0 text-[13px] leading-normal ${MUTED}`}>Nothing to decide until the agent reaches a gate.</p>
               {failure && <ErrorNote message={failure} />}
             </>
           )}
@@ -158,32 +169,39 @@ export default function RunPage() {
       </section>
 
       <section aria-labelledby="ledger" className="pk-card px-6 py-5">
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2.5">
-          <h2 id="ledger" className="m-0 text-base font-semibold">On the ledger</h2>
-          {r.chainValid ? <Pill tone="done">Chain valid</Pill> : <Pill tone="block">Chain broken</Pill>}
+        <div className="mb-3 flex flex-wrap items-start justify-between gap-2.5">
+          <div className="flex max-w-[640px] flex-col gap-1">
+            <h2 id="ledger" className="m-0 text-base font-semibold text-[var(--fm-ink)]">On the ledger</h2>
+            <p className={cn('m-0 text-[13px] leading-normal', MUTED)}>
+              Every event carries the hash of the one before it, so changing any past event breaks the chain from that point on.
+            </p>
+          </div>
+          {r.chainValid ? <Pill tone="done" dot>Chain valid</Pill> : <Pill tone="block" dot>Chain broken</Pill>}
         </div>
         {r.events.length === 0 ? (
           <p className={`m-0 text-[13px] ${MUTED}`}>No events have been recorded yet.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-left text-[13px]">
+            <table className="w-full min-w-[720px] border-collapse text-left text-[13px] text-[var(--fm-ink)]">
               <thead>
-                <tr className={`text-[12px] ${MUTED}`}>
-                  <th scope="col" className="py-2 pr-3 font-semibold">No.</th>
+                <tr className={LABEL}>
+                  <th scope="col" className="w-12 py-2 pr-3 font-semibold">No.</th>
                   <th scope="col" className="py-2 pr-3 font-semibold">Event</th>
                   <th scope="col" className="py-2 pr-3 font-semibold">Step</th>
                   <th scope="col" className="py-2 pr-3 font-semibold">Time</th>
+                  <th scope="col" className="py-2 pr-3 font-semibold">Previous</th>
                   <th scope="col" className="py-2 font-semibold">Hash</th>
                 </tr>
               </thead>
               <tbody>
                 {r.events.map((e) => (
-                  <tr key={e.seq} className="border-t border-[#15171a14]">
-                    <td className="py-[9px] pr-3 tabular-nums">{e.seq}</td>
+                  <tr key={e.seq} className={cn('border-t', LINE)}>
+                    <td className={`py-[9px] pr-3 tabular-nums ${MUTED}`}>{e.seq}</td>
                     <td className="py-[9px] pr-3 font-mono text-xs">{e.kind}</td>
-                    <td className="py-[9px] pr-3">{view.titleOf(e.stepId)}</td>
-                    <td className={`py-[9px] pr-3 ${MUTED}`}>{when(e.createdAt)}</td>
-                    <td className="py-[9px] font-mono text-xs">{e.hash.slice(0, 8)}</td>
+                    <td className="py-[9px] pr-3">{view.titleOf(e.stepId) || <span className="text-[var(--fm-ink3)]">Run</span>}</td>
+                    <td className={`whitespace-nowrap py-[9px] pr-3 ${MUTED}`}>{when(e.createdAt)}</td>
+                    <td className="py-[9px] pr-3 font-mono text-xs text-[var(--fm-ink3)]" title={e.prevHash ?? undefined}>{e.prevHash ? e.prevHash.slice(0, 10) : 'Genesis'}</td>
+                    <td className="py-[9px] font-mono text-xs" title={e.hash}>{e.hash.slice(0, 10)}</td>
                   </tr>
                 ))}
               </tbody>
