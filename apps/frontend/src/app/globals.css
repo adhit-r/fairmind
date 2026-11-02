@@ -23,7 +23,7 @@
     --border: oklch(0.923 0.003 48.717);
     --input: oklch(0.923 0.003 48.717);
     --ring: oklch(0.709 0.01 56.259);
-    --radius: 0;
+    --radius: 10px;
 
     /* Shell tokens (lifecycle-spine layout) */
     --fm-bg: #f4f4f2;
