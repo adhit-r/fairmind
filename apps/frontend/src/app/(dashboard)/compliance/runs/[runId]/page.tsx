@@ -2,7 +2,7 @@
 
 import { useParams } from 'next/navigation'
 import { useMemo, useState, type ReactNode } from 'react'
-import { GATE_KINDS, decisionsFor, usePackActions, useRun, useWaitingRuns, useWorkflow, type Decision, type RunEvent } from '@/lib/api/hooks/usePacks'
+import { GATE_KINDS, decisionsFor, usePackActions, useRun, useWaitingRuns, useWorkflow, versionName, type Decision, type RunEvent } from '@/lib/api/hooks/usePacks'
 import { IsoFigure } from '@/components/packs/IsoFigure'
 import { runFigure } from '@/components/packs/figures'
 import { BTN, BTN_P, Crumbs, ErrorNote, Heading, LABEL, LINE, Loading, MUTED, Num, Pill, StatusPill, cap, when } from '@/components/packs/parts'
@@ -41,8 +41,8 @@ export default function RunPage() {
 
   const view = useMemo(() => {
     const r = run.data
-    const steps = workflow.data?.steps ?? []
     if (!r) return null
+    const steps = r.steps
     const completed = new Set(r.events.filter((e) => e.kind === 'step.completed' && e.stepId).map((e) => e.stepId))
     // A gate is any step where the run stops for a person: ask, exception or decide.
     const gateIds = new Set(steps.filter((s) => GATE_KINDS.includes(s.kind)).map((s) => s.id))
@@ -108,7 +108,7 @@ export default function RunPage() {
   const branches = view.current && view.current.next.length > 1 ? view.current.next : []
   const decisions = view.current ? decisionsFor(view.current) : []
   const stage = workflow.data ? cap(workflow.data.stage) : null
-  const stepsTotal = workflow.data?.steps.length ?? 0
+  const stepsTotal = r.steps.length
 
   return (
     <div className="flex flex-col gap-[22px]">
@@ -118,6 +118,7 @@ export default function RunPage() {
           <StatusPill status={r.status} />
           {isWaiting && view.stepNo > 0 && <Pill tone="you">At step {view.stepNo} of {stepsTotal}</Pill>}
           {stage && <Pill>{stage}</Pill>}
+          <Pill>{versionName(r.version)}</Pill>
         </div>
         <Heading
           title={r.workflowName}

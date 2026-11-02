@@ -364,6 +364,8 @@ export const API_ENDPOINTS = {
     evaluation: (evaluationId: string) => `/api/v1/packs/evaluations/${encodeURIComponent(evaluationId)}`,
     workflow: (workflowId: string) => `/api/v1/packs/workflows/${workflowId}`,
     startRun: (workflowId: string) => `/api/v1/packs/workflows/${workflowId}/runs`,
+    draft: (workflowId: string) => `/api/v1/packs/workflows/${workflowId}/draft`,
+    publishDraft: (workflowId: string) => `/api/v1/packs/workflows/${workflowId}/draft/publish`,
     runs: '/api/v1/packs/runs',
     run: (runId: string) => `/api/v1/packs/runs/${runId}`,
     stepOutput: (runId: string, stepId: string) => `/api/v1/packs/runs/${runId}/steps/${stepId}/output`,

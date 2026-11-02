@@ -424,3 +424,76 @@ def test_plain_member_can_read_but_not_change(tmp_database):
     owner.post(f"{PACKS}/{FOUNDATION}/install")
     run = _start(owner)
     assert member.post(f"{PACKS}/runs/{run['id']}/steps/collect/output", json={"summary": "x"}).status_code == 403
+
+
+# --- builder ---------------------------------------------------------------
+
+
+def _without_check(steps):
+    """The policy review with its check step removed: collect goes straight to suggest."""
+    steps = [s for s in steps if s["id"] != "check"]
+    next(s for s in steps if s["id"] == "collect")["next"] = [{"to": "suggest", "label": None}]
+    return steps
+
+
+def test_published_version_drives_new_runs_and_old_runs_keep_theirs(tmp_database):
+    _, client = _installed_org(tmp_database)
+    url = f"{PACKS}/workflows/{WORKFLOW}"
+    draft = client.post(f"{url}/draft").json()
+    assert (draft["version"], draft["basedOn"], draft["problems"]) == (1, "2.3", [])
+    assert client.post(f"{url}/draft").json()["version"] == 1  # one draft at a time
+
+    saved = client.put(f"{url}/draft", json={"steps": _without_check(draft["steps"])})
+    assert saved.status_code == 200 and saved.json()["problems"] == []
+    detail = client.get(url).json()
+    assert detail["version"] == "2.3" and detail["draft"]["version"] == 1  # a draft is not live
+    old_run = _start(client)
+
+    published = client.post(f"{url}/draft/publish").json()
+    assert published["version"] == "org-1" and published["draft"] is None
+    assert "check" not in [s["id"] for s in published["steps"]]
+    assert [v["status"] for v in client.get(f"{url}/versions").json()] == ["published"]
+
+    new_run = _start(client)
+    assert new_run["version"] == "org-1"
+    assert _submit(client, new_run)["currentStep"] == "suggest"
+    assert _submit(client, old_run)["currentStep"] == "check"  # started on 2.3, stays on 2.3
+
+    assert client.post(f"{url}/draft").json()["basedOn"] == "org-1"
+
+
+def test_publish_refuses_a_draft_with_problems(tmp_database):
+    _, client = _installed_org(tmp_database)
+    url = f"{PACKS}/workflows/{WORKFLOW}"
+    steps = client.post(f"{url}/draft").json()["steps"]
+    steps = [s for s in steps if s["kind"] != "file"]
+    for s in steps:
+        s["next"] = [e for e in s["next"] if e["to"] != "file-evidence"]
+    ask = next(s for s in steps if s["id"] == ASK_STEP)
+    ask["next"] = [e for e in ask["next"] if not (e["label"] or "").startswith("approved")]
+    steps.append({"id": "orphan", "kind": "check", "title": "Orphan check", "detail": "", "next": []})
+
+    problems = client.put(f"{url}/draft", json={"steps": steps}).json()["problems"]
+    assert "Keep a file evidence step so every run is sealed." in problems
+    assert any("approves" in p for p in problems)
+    assert "Orphan check cannot be reached from the start." in problems
+    response = client.post(f"{url}/draft/publish")
+    assert response.status_code == 422 and response.json()["detail"]["problems"] == problems
+    assert client.get(url).json()["version"] == "2.3"
+
+
+def test_draft_rules(tmp_database):
+    org_id, client = _org(tmp_database)
+    url = f"{PACKS}/workflows/{WORKFLOW}"
+    assert client.post(f"{url}/draft").status_code == 409  # pack not installed
+    client.post(f"{PACKS}/{FOUNDATION}/install")
+    assert client.get(f"{url}/draft").status_code == 404
+    client.post(f"{url}/draft")
+    member = _client(tmp_database, org_id, role="member", token_role=UserRole.ANALYST)
+    assert member.get(f"{url}/draft").status_code == 200
+    assert member.post(f"{url}/draft/publish").status_code == 403
+    _, other = _org(tmp_database)
+    assert other.get(f"{url}/draft").status_code == 404
+    assert client.put(f"{url}/draft", json={"steps": []}).status_code == 422
+    assert client.delete(f"{url}/draft").status_code == 200
+    assert client.get(f"{url}/draft").status_code == 404
