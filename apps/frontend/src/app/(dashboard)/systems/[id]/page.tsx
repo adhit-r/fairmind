@@ -7,6 +7,7 @@ import { useOrg } from '@/context/OrgContext'
 import { useSystemContext } from '@/components/workflow/SystemContext'
 import { useEnvironmentalImpact } from '@/lib/api/hooks/useAIGovernance'
 import { useSystemFile, type SystemRecord } from '@/lib/api/hooks/useSystemFile'
+import { FairnessRunPanel } from './FairnessRunPanel'
 import { cn } from '@/lib/utils'
 
 type JourneyKey = 'onboard' | 'assess' | 'govern' | 'remediate' | 'decision' | 'operate'
@@ -20,6 +21,10 @@ const JOURNEY: Array<{ key: JourneyKey; label: string; purpose: string }> = [
   { key: 'decision', label: 'Decision', purpose: 'A release decision is requested and recorded against the evidence.' },
   { key: 'operate', label: 'Operate', purpose: 'The system runs, is watched, and its audit record stays current.' },
 ]
+
+const VERDICT_LABEL: Record<string, string> = { go: 'Go', conditional_go: 'Conditional go', no_go: 'No go' }
+const VERDICT_TONE: Record<string, string> = { go: 'text-[#1f7a4d]', conditional_go: 'text-[#a14d00]', no_go: 'text-[#b4232c]' }
+const CHECK_STATE: Record<string, string> = { proven: 'proven', attested: 'attested', open: 'open' }
 
 const READINESS_LABEL: Record<string, string> = {
   empty: 'No evidence yet',
@@ -95,7 +100,7 @@ export default function SystemFilePage() {
   const router = useRouter()
   const { selectedOrg } = useOrg()
   const { setSelectedSystemId } = useSystemContext()
-  const { system, evidence, approval, remediation, risks, reports, loading, error, requestDecision, recordDecision } = useSystemFile(id)
+  const { system, evidence, approval, remediation, risks, reports, gate, fairnessRuns, loading, error, requestDecision, recordDecision, inspectCsv, runFairness } = useSystemFile(id)
   const env = useEnvironmentalImpact(selectedOrg?.id, id)
   const [busy, setBusy] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -173,6 +178,13 @@ export default function SystemFilePage() {
             <div className="mt-0.5 text-[20px] font-semibold">{JOURNEY.find((j) => j.key === current)?.label}</div>
           </div>
           <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[.08em] text-[var(--fm-ink3)]">Release gate</div>
+            <div className={cn('mt-0.5 text-[20px] font-semibold', gate ? VERDICT_TONE[gate.verdict] : '')}>{gate ? VERDICT_LABEL[gate.verdict] : ''}</div>
+            <div className="max-w-[220px] text-[11.5px] leading-snug text-[var(--fm-ink3)]">
+              {gate ? `Confidence ${gate.confidence.toFixed(2)} (${gate.band}): ${gate.proven} proven, ${gate.attested} attested, ${gate.open} open.` : ''}
+            </div>
+          </div>
+          <div>
             <div className="text-[11px] font-semibold uppercase tracking-[.08em] text-[var(--fm-ink3)]">Readiness</div>
             <div className="mt-0.5 text-[20px] font-semibold tabular-nums">{summary ? `${summary.readiness}%` : ''}</div>
             <div className="max-w-[220px] text-[11.5px] leading-snug text-[var(--fm-ink3)]">From stage, linked evidence, open risks and active remediation.</div>
@@ -198,7 +210,15 @@ export default function SystemFilePage() {
       </>}>
         <Fact label="Environmental" value={env.loading ? 'Checking' : env.data ? `Assessed${envStatus ? `, ${String(envStatus).replace(/_/g, ' ')}` : ''}${env.data.generatedAt ? ` on ${when(env.data.generatedAt)}` : ''}` : 'No assessment yet'} />
         <Fact label="Evaluation runs" value={<span className="text-[var(--fm-ink2)]">Listed in the test workspace</span>} />
-        <Fact label="Evidence produced" value={evidence ? `${evidence.totalEvidence} item${evidence.totalEvidence === 1 ? '' : 's'}` : ''} />
+        <Fact
+          label="Fairness"
+          value={
+            fairnessRuns.length === 0
+              ? 'Not measured yet'
+              : `${fairnessRuns[0].allChecksPass ? 'Within thresholds' : 'Outside thresholds'} on ${fairnessRuns[0].attributes.map((a) => `${a.attribute} ${a.disparateImpactRatio.toFixed(2)}`).join(', ')} · ${fairnessRuns.length} run${fairnessRuns.length === 1 ? '' : 's'}`
+          }
+        />
+        <FairnessRunPanel inspect={inspectCsv} run={runFairness} />
       </Stage>
 
       <Stage step={JOURNEY[2]} status={statusOf('govern')} actions={<>
@@ -239,6 +259,29 @@ export default function SystemFilePage() {
         <Fact label="Request" value={!req ? 'Not requested' : req.status === 'pending' ? `Pending since ${when(req.createdAt)}` : `${req.status[0].toUpperCase()}${req.status.slice(1)}${req.updatedAt ? ` on ${when(req.updatedAt)}` : ''}`} />
         <Fact label="Decisions recorded" value={approval ? `${approval.decisions.length}` : ''} />
         <Fact label="Blocking" value={summary ? (summary.criticalBlockers ? `${summary.criticalBlockers} critical blocker${summary.criticalBlockers === 1 ? '' : 's'}` : 'Nothing blocking') : ''} />
+        {gate && (
+          <div className="sm:col-span-2 xl:col-span-3">
+            <div className="text-[11px] font-semibold uppercase tracking-[.08em] text-[var(--fm-ink3)]">Gate checks</div>
+            <ul className="mt-1 grid gap-1 sm:grid-cols-2 xl:grid-cols-3">
+              {gate.checks.map((c) => (
+                <li key={c.key} className="flex items-center gap-2 text-[12.5px]">
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      'inline-block h-2 w-2 rounded-full',
+                      c.state === 'proven' && 'bg-[#1f7a4d]',
+                      c.state === 'attested' && 'bg-[#a14d00]',
+                      c.state === 'open' && 'border border-[var(--fm-ink3)]',
+                    )}
+                  />
+                  <span>{c.label}</span>
+                  <span className="text-[var(--fm-ink3)]">{CHECK_STATE[c.state]}{c.confidence ? ` ${c.confidence.toFixed(2)}` : ''}</span>
+                </li>
+              ))}
+            </ul>
+            {gate.reasons.length > 0 && <p className="mt-2 text-[12.5px] text-[var(--fm-ink2)]">{gate.reasons.join('. ')}.</p>}
+          </div>
+        )}
         {req?.decisionNotes && <p className="text-[12.5px] text-[var(--fm-ink2)] sm:col-span-2 xl:col-span-3">{req.decisionNotes}</p>}
       </Stage>
 
