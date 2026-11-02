@@ -6,16 +6,20 @@ import { cn } from '@/lib/utils'
 
 /** Class strings shared by the pack screens; they follow the approved design (pill buttons, soft pills). */
 export const BTN =
-  'inline-flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-full border border-[#15171a24] bg-white px-[18px] text-[13px] font-semibold text-[var(--fm-ink,#15171a)] hover:bg-[#f4f4f2] disabled:cursor-not-allowed disabled:opacity-50'
-export const BTN_P = cn(BTN, 'border-[var(--fm-ink,#15171a)] bg-[var(--fm-ink,#15171a)] text-white hover:bg-[#2b2e3a]')
-export const MUTED = 'text-[var(--fm-ink2,#5a5f68)]'
+  'inline-flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-full border border-[var(--fm-line)] bg-white px-[18px] text-[13px] font-semibold text-[var(--fm-ink)] transition-colors hover:border-[var(--fm-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-ink)] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-[var(--fm-line)]'
+export const BTN_P = cn(BTN, 'border-transparent bg-[var(--fm-ink)] text-white hover:border-transparent hover:bg-black disabled:hover:border-transparent disabled:hover:bg-[var(--fm-ink)]')
+export const MUTED = 'text-[var(--fm-ink2)]'
+/** Small uppercase section label (10-11px only, per the design). */
+export const LABEL = 'text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--fm-ink3)]'
+/** Hairline row divider. */
+export const LINE = 'border-[var(--fm-line)]'
 
 type Tone = 'plain' | 'you' | 'done' | 'run' | 'block' | 'info' | 'warn'
 const TONE: Record<Tone, string> = {
-  plain: 'bg-[#f4f4f2] text-[#5a5f68]',
+  plain: 'bg-[var(--fm-bg)] text-[var(--fm-ink2)]',
   you: 'bg-[#ffeee4] text-[#a8430b]',
   done: 'bg-[#e3f5ec] text-[#00704e]',
-  run: 'bg-[#eceef1] text-[#15171a]',
+  run: 'bg-[rgba(21,23,26,.06)] text-[var(--fm-ink)]',
   block: 'bg-[#fde8e8] text-[#b42318]',
   info: 'bg-[#e6effb] text-[#1d4f91]',
   warn: 'bg-[#fff4d6] text-[#8a5a00]',
@@ -87,7 +91,7 @@ export function CoverageBar({ installed, all, total, label, allLabel = 'with eve
         aria-valuemax={total}
         aria-valuenow={installed}
         aria-valuetext={`${installed} of ${total} requirements covered by installed packs, ${all} ${allLabel}`}
-        className="relative h-2 w-full overflow-hidden rounded-full bg-[#eceef1]"
+        className="relative h-2 w-full overflow-hidden rounded-full bg-[rgba(21,23,26,.06)]"
       >
         <div className="absolute inset-y-0 left-0 bg-[#a9d6bf]" style={{ width: `${pct(all)}%` }} />
         <div className="absolute inset-y-0 left-0 bg-[#009869]" style={{ width: `${pct(installed)}%` }} />
@@ -104,7 +108,7 @@ export const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : 
 /** Orange numbered disc; the number matches the agent in the figure. */
 export function Num({ n }: { n: number }) {
   return (
-    <span className="inline-flex h-[22px] w-[22px] flex-none items-center justify-center rounded-full bg-[var(--fm-brand,#ff6b35)] text-xs font-bold text-[var(--fm-ink,#15171a)]">
+    <span className="inline-flex h-[22px] w-[22px] flex-none items-center justify-center rounded-full bg-[var(--fm-brand)] text-xs font-bold text-[var(--fm-ink)]">
       {n}
     </span>
   )
@@ -117,9 +121,9 @@ export function Crumbs({ items }: { items: Array<{ label: string; href?: string 
         <span key={c.label} className="flex gap-1.5">
           {i > 0 && <span aria-hidden>/</span>}
           {c.href ? (
-            <Link href={c.href} className="hover:text-[var(--fm-ink,#15171a)]">{c.label}</Link>
+            <Link href={c.href} className="hover:text-[var(--fm-ink)]">{c.label}</Link>
           ) : (
-            <span className="font-semibold text-[var(--fm-ink,#15171a)]">{c.label}</span>
+            <span className="font-semibold text-[var(--fm-ink)]">{c.label}</span>
           )}
         </span>
       ))}
@@ -131,7 +135,7 @@ export function Heading({ title, lead, children }: { title: string; lead?: React
   return (
     <div className="flex flex-wrap items-end justify-between gap-4">
       <div className="flex max-w-[720px] flex-col gap-2">
-        <h1 className="m-0 text-[28px] font-semibold tracking-[-0.02em]">{title}</h1>
+        <h1 className="m-0 text-[28px] font-semibold tracking-[-0.02em] text-[var(--fm-ink)]">{title}</h1>
         {lead && <p className={cn('m-0 text-[15px] leading-normal', MUTED)}>{lead}</p>}
       </div>
       {children && <div className="flex flex-wrap gap-2.5">{children}</div>}
@@ -163,7 +167,7 @@ export function ErrorNote({ message, onRetry }: { message: string; onRetry?: () 
 }
 
 export function Empty({ children }: { children: ReactNode }) {
-  return <p className={cn('m-0 rounded-xl border border-dashed border-[#15171a24] px-4 py-6 text-center text-[13px]', MUTED)}>{children}</p>
+  return <p className={cn('m-0 rounded-xl border border-dashed border-[rgba(21,23,26,.16)] px-4 py-6 text-center text-[13px]', MUTED)}>{children}</p>
 }
 
 export function when(iso: string) {
