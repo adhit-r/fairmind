@@ -1,0 +1,369 @@
+"""First verdict: a predictions CSV in, measured fairness evidence and a release gate out.
+
+Pure functions over bytes and dicts; the router owns persistence. Metrics come
+from ``fairness_library.metrics`` (bootstrap intervals and permutation tests),
+which until now was never reachable from any route.
+"""
+
+from __future__ import annotations
+
+import io
+import json
+import math
+from typing import Any, Dict, Iterable, List, Optional
+
+import numpy as np
+import pandas as pd
+
+from fairness_library.metrics import (
+    _compute_calibration_diff,
+    _compute_dp_diff,
+    _compute_eo_diff,
+    _compute_eopp_diff,
+)
+from src.domain.environmental.confidence import band_from_score, cap_confidence_for_provenance
+from src.domain.environmental.decision_matrix import get_recommendation
+
+MAX_ROWS = 100_000  # ponytail: synchronous run; move to a job past this
+MIN_GROUP_SIZE = 30
+
+OUTCOME_HINTS = ("y_true", "label", "outcome", "target", "actual", "ground_truth", "truth", "repaid", "defaulted", "default", "churned", "hired", "readmitted", "fraud", "claim_paid")
+PREDICTION_HINTS = ("y_pred", "prediction", "pred", "decision", "predicted", "approved", "selected")
+SCORE_HINTS = ("score", "proba", "probability", "p_", "prob", "risk_score", "likelihood")
+ATTRIBUTE_HINTS = (
+    "gender", "sex", "age", "age_band", "age_group", "caste", "religion", "region", "state", "district",
+    "language", "race", "ethnicity", "disability", "nationality", "marital", "urban_rural", "tier",
+)
+
+DI_THRESHOLD = 0.80   # four-fifths rule
+GAP_THRESHOLD = 0.05  # equal opportunity and equalized odds difference
+
+
+def json_safe(value: Any) -> Any:
+    """Round-trip through JSON with numpy scalars and arrays made plain."""
+    def default(obj: Any) -> Any:
+        if isinstance(obj, (np.bool_,)):
+            return bool(obj)
+        if isinstance(obj, (np.integer,)):
+            return int(obj)
+        if isinstance(obj, (np.floating,)):
+            return None if math.isnan(float(obj)) else float(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+    return json.loads(json.dumps(value, default=default))
+
+
+class FairnessRunError(ValueError):
+    """A problem with the file or the column mapping; reported as 422."""
+
+
+def _read_csv(data: bytes) -> pd.DataFrame:
+    try:
+        frame = pd.read_csv(io.BytesIO(data))
+    except Exception as exc:  # pragma: no cover - pandas message is the useful part
+        raise FairnessRunError(f"Could not read the file as CSV: {exc}") from exc
+    if frame.empty:
+        raise FairnessRunError("The CSV has no rows")
+    if len(frame) > MAX_ROWS:
+        raise FairnessRunError(f"The CSV has {len(frame)} rows; the limit for a synchronous run is {MAX_ROWS}")
+    return frame
+
+
+def _match(columns: Iterable[str], hints: Iterable[str]) -> Optional[str]:
+    lowered = {c: c.lower().strip() for c in columns}
+    for hint in hints:
+        for original, low in lowered.items():
+            if low == hint:
+                return original
+    for hint in hints:
+        for original, low in lowered.items():
+            if hint in low:
+                return original
+    return None
+
+
+def inspect_csv(data: bytes) -> Dict[str, Any]:
+    """Columns, a few sample values each, and a suggested mapping to confirm."""
+    frame = _read_csv(data)
+    columns = [str(c) for c in frame.columns]
+    binary_like = [c for c in columns if frame[c].dropna().nunique() <= 2]
+    numeric_unit = [
+        c for c in columns
+        if pd.api.types.is_numeric_dtype(frame[c]) and frame[c].dropna().between(0, 1).all() and frame[c].dropna().nunique() > 2
+    ]
+    low_card = [c for c in columns if 2 <= frame[c].dropna().nunique() <= 12 and c not in binary_like]
+    outcome = _match(binary_like, OUTCOME_HINTS) or _match(columns, OUTCOME_HINTS)
+    prediction = _match([c for c in binary_like if c != outcome], PREDICTION_HINTS) or _match(columns, PREDICTION_HINTS)
+    if outcome is None:
+        # No recognisable name: the first 0/1 column that is not the prediction is the best guess to confirm.
+        outcome = next((c for c in binary_like if c != prediction), None)
+    score = _match(numeric_unit, SCORE_HINTS) or _match(columns, SCORE_HINTS)
+    attributes = [c for c in columns if c not in (outcome, prediction, score) and _match([c], ATTRIBUTE_HINTS)]
+    if not attributes:
+        attributes = [c for c in low_card if c not in (outcome, prediction, score)][:3]
+    return {
+        "rows": int(len(frame)),
+        "columns": [
+            {
+                "name": c,
+                "dtype": str(frame[c].dtype),
+                "distinct": int(frame[c].dropna().nunique()),
+                "sample": [str(v) for v in frame[c].dropna().unique()[:5]],
+            }
+            for c in columns
+        ],
+        "suggested": {"outcome": outcome, "prediction": prediction, "score": score, "attributes": attributes},
+    }
+
+
+def _binary(series: pd.Series, favorable: Any, name: str) -> np.ndarray:
+    values = series
+    if favorable is None or favorable == "":
+        uniques = set(values.dropna().unique().tolist())
+        if uniques <= {0, 1, 0.0, 1.0, True, False}:
+            return values.fillna(0).astype(int).to_numpy()
+        if uniques <= {"0", "1", "true", "false", "yes", "no", "True", "False", "Yes", "No"}:
+            return values.astype(str).str.lower().isin(["1", "true", "yes"]).astype(int).to_numpy()
+        raise FairnessRunError(f"Column {name} is not 0/1; say which value counts as favorable")
+    return (values.astype(str) == str(favorable)).astype(int).to_numpy()
+
+
+
+
+N_RESAMPLES = 400  # ponytail: bootstrap and permutation draws; raise when runs move to a job
+
+
+def _di_ratio(y_pred: np.ndarray, sensitive: np.ndarray) -> float:
+    rates = [y_pred[sensitive == g].mean() for g in np.unique(sensitive)]
+    top = max(rates)
+    return float(min(rates) / top) if top > 0 else 0.0
+
+
+def _attribute_stats(
+    y_true: np.ndarray, y_pred: np.ndarray, proba: Optional[np.ndarray], sensitive: np.ndarray, rng: np.random.Generator
+) -> Dict[str, Any]:
+    """Point estimate, 95% bootstrap interval and permutation p-value per metric.
+
+    The library's own ``_bootstrap_metric_ci`` re-evaluates the statistic on the
+    same rows, so its intervals collapse to the estimate; the resampling is done
+    here. Bootstrap resamples rows with replacement; the permutation test shuffles
+    the attribute, so the p-value is the share of shuffles at least as unequal.
+    """
+    n = len(y_pred)
+    has_proba = proba is not None
+
+    def all_stats(yt: np.ndarray, yp: np.ndarray, pr: Optional[np.ndarray], sa: np.ndarray) -> Dict[str, float]:
+        out = {
+            "disparate_impact_ratio": _di_ratio(yp, sa),
+            "demographic_parity": float(_compute_dp_diff(yp, sa)),
+            "equal_opportunity": float(_compute_eopp_diff(yt, yp, sa)),
+            "equalized_odds": float(_compute_eo_diff(yt, yp, sa)),
+        }
+        if has_proba:
+            out["calibration"] = float(_compute_calibration_diff(yt, pr, sa, 10))
+        return out
+
+    observed = all_stats(y_true, y_pred, proba, sensitive)
+    boot: Dict[str, List[float]] = {k: [] for k in observed}
+    perm: Dict[str, List[float]] = {k: [] for k in observed}
+    for _ in range(N_RESAMPLES):
+        idx = rng.integers(0, n, n)
+        for k, v in all_stats(y_true[idx], y_pred[idx], proba[idx] if has_proba else None, sensitive[idx]).items():
+            boot[k].append(v)
+        shuffled = rng.permutation(sensitive)
+        for k, v in all_stats(y_true, y_pred, proba, shuffled).items():
+            perm[k].append(v)
+
+    def metric(key: str, *, lower_is_fair: bool = True) -> Dict[str, Any]:
+        value = observed[key]
+        lo, hi = np.nanpercentile(np.array(boot[key], dtype=float), [2.5, 97.5])
+        draws = np.array(perm[key], dtype=float)
+        p_value = float(np.mean(draws <= value)) if not lower_is_fair else float(np.mean(draws >= value))
+        is_fair = value >= DI_THRESHOLD if not lower_is_fair else value <= GAP_THRESHOLD
+        return {
+            "metric_name": key,
+            "value": float(value),
+            "confidence_interval": [float(lo), float(hi)],
+            "p_value": p_value,
+            "is_fair": bool(is_fair),
+            "threshold": DI_THRESHOLD if not lower_is_fair else GAP_THRESHOLD,
+            "resamples": N_RESAMPLES,
+        }
+
+    return {
+        "disparate_impact_ratio": metric("disparate_impact_ratio", lower_is_fair=False),
+        "demographic_parity": metric("demographic_parity"),
+        "equal_opportunity": metric("equal_opportunity"),
+        "equalized_odds": metric("equalized_odds"),
+        "calibration": metric("calibration") if has_proba else None,
+    }
+
+
+def run_fairness(
+    data: bytes,
+    *,
+    outcome: str,
+    attributes: List[str],
+    prediction: Optional[str] = None,
+    score: Optional[str] = None,
+    favorable_label: Any = None,
+    score_threshold: float = 0.5,
+) -> Dict[str, Any]:
+    """Compute the first-verdict metric set for each protected attribute."""
+    frame = _read_csv(data)
+    missing = [c for c in [outcome, prediction, score, *attributes] if c and c not in frame.columns]
+    if missing:
+        raise FairnessRunError(f"Columns not in the file: {', '.join(missing)}")
+    if not prediction and not score:
+        raise FairnessRunError("Map either a prediction column or a score column")
+    if not attributes:
+        raise FairnessRunError("Map at least one protected attribute column")
+
+    y_true = _binary(frame[outcome], favorable_label, outcome)
+    proba = None
+    if score:
+        proba = pd.to_numeric(frame[score], errors="coerce").to_numpy(dtype=float)
+        if np.isnan(proba).any():
+            raise FairnessRunError(f"Column {score} has non-numeric values")
+    y_pred = _binary(frame[prediction], favorable_label, prediction) if prediction else (proba >= score_threshold).astype(int)
+
+    per_attribute: List[Dict[str, Any]] = []
+    all_fair = True
+    smallest_group = None
+    rng = np.random.default_rng(20261102)
+    for attribute in attributes:
+        sensitive = frame[attribute].astype(str).fillna("missing").to_numpy()
+        groups, counts = np.unique(sensitive, return_counts=True)
+        if len(groups) < 2:
+            raise FairnessRunError(f"Column {attribute} has only one value; it cannot be a protected attribute here")
+        rates = {str(g): float(y_pred[sensitive == g].mean()) for g in groups}
+        stats = _attribute_stats(y_true, y_pred, proba, sensitive, rng)
+        checks = {
+            "disparate_impact": bool(stats["disparate_impact_ratio"]["value"] >= DI_THRESHOLD),
+            "equal_opportunity": bool(stats["equal_opportunity"]["is_fair"]),
+            "equalized_odds": bool(stats["equalized_odds"]["is_fair"]),
+            **({"calibration": bool(stats["calibration"]["is_fair"])} if stats["calibration"] else {}),
+        }
+        group_sizes = {str(g): int(n) for g, n in zip(groups, counts)}
+        smallest_here = min(group_sizes.values())
+        smallest_group = smallest_here if smallest_group is None else min(smallest_group, smallest_here)
+        all_fair = all_fair and all(checks.values())
+        per_attribute.append(
+            {
+                "attribute": attribute,
+                "groups": group_sizes,
+                "selection_rates": rates,
+                "disparate_impact_ratio": stats["disparate_impact_ratio"]["value"],
+                "disparate_impact": stats["disparate_impact_ratio"],
+                "demographic_parity": stats["demographic_parity"],
+                "equal_opportunity": stats["equal_opportunity"],
+                "equalized_odds": stats["equalized_odds"],
+                "calibration": stats["calibration"],
+                "checks": checks,
+                "small_groups": [g for g, n in group_sizes.items() if n < MIN_GROUP_SIZE],
+            }
+        )
+
+    n = int(len(frame))
+    payload = {
+        "rows": n,
+        "positive_rate": float(y_pred.mean()),
+        "base_rate": float(y_true.mean()),
+        "mapping": {"outcome": outcome, "prediction": prediction, "score": score, "attributes": attributes, "favorable_label": favorable_label},
+        "thresholds": {"disparate_impact_ratio": DI_THRESHOLD, "gap": GAP_THRESHOLD},
+        "attributes": per_attribute,
+        "all_checks_pass": bool(all_fair),
+        "smallest_group": smallest_group,
+        "evidence_confidence": evidence_confidence(n, smallest_group or 0, per_attribute),
+    }
+    return json_safe(payload)
+
+
+def evidence_confidence(rows: int, smallest_group: int, per_attribute: List[Dict[str, Any]]) -> float:
+    """Measured evidence starts at the bottom of the measured band and earns the rest.
+
+    Sample size, group coverage and interval width move it up; nothing here can
+    push attested evidence into the measured band (see confidence.py).
+    """
+    score = 0.85
+    if rows >= 1_000:
+        score += 0.05
+    if smallest_group >= 100:
+        score += 0.05
+    widths = [a["demographic_parity"]["confidence_interval"][1] - a["demographic_parity"]["confidence_interval"][0] for a in per_attribute]
+    if widths and max(widths) <= 0.05:
+        score += 0.05
+    if smallest_group < MIN_GROUP_SIZE:
+        score = 0.85  # too few rows in a group: measured, but not more than the floor
+    return round(min(score, 1.0), 2)
+
+
+# ---------------------------------------------------------------------------
+# Release gate: the FairMind-E matrix applied to a system's whole evidence record
+# ---------------------------------------------------------------------------
+
+GATE_CHECKS = (
+    ("fairness", "Fairness measured", {"fairness_test"}),
+    ("data_governance", "Data governance", {"data", "dataset", "data_governance", "data_lineage", "provenance", "training_data"}),
+    ("human_oversight", "Human oversight", {"human_oversight", "policy", "oversight", "approval_policy"}),
+    ("monitoring", "Monitoring in place", {"monitoring", "monitoring_snapshot", "drift"}),
+    ("environmental", "Environmental impact", {"environmental", "environmental_assessment"}),
+)
+
+TIER_TO_IMPACT = {"low": "low", "medium": "medium", "high": "high", "critical": "high"}
+PROVEN_CLASSES = {"measured", "tool_estimated"}
+
+
+def _provenance(record: Dict[str, Any]) -> str:
+    meta = record.get("metadata") or {}
+    return str(meta.get("provenance_class") or meta.get("provenance") or "manual").lower()
+
+
+def release_gate(risk_tier: str, evidence: List[Dict[str, Any]], *, environmental_assessed: bool = False) -> Dict[str, Any]:
+    """Verdict, confidence and the state of each check from the evidence on file.
+
+    A check is proven when measured or tool-estimated evidence with confidence
+    at or above 0.70 backs it, attested when any other evidence does, open when
+    nothing does. The verdict comes from the impact-by-confidence matrix; a
+    measured fairness failure never lets a system through as a plain go.
+    """
+    checks: List[Dict[str, Any]] = []
+    reasons: List[str] = []
+    for key, label, types in GATE_CHECKS:
+        matching = [r for r in evidence if str(r.get("evidenceType") or r.get("type") or "").lower() in types]
+        if key == "environmental" and environmental_assessed and not matching:
+            matching = [{"evidenceType": "environmental", "confidence": 0.85, "metadata": {"provenance_class": "tool_estimated"}}]
+        state, confidence, evidence_id, detail = "open", 0.0, None, None
+        for record in sorted(matching, key=lambda r: float(r.get("confidence") or 0.0), reverse=True):
+            prov = _provenance(record)
+            conf = cap_confidence_for_provenance(float(record.get("confidence") or 0.0), prov if prov in PROVEN_CLASSES else "manual")
+            if prov in PROVEN_CLASSES and conf >= 0.70:
+                state, confidence, evidence_id = "proven", conf, record.get("id")
+                content = record.get("content") or {}
+                if key == "fairness" and isinstance(content, dict):
+                    detail = {"all_checks_pass": content.get("all_checks_pass"), "rows": content.get("rows"), "attributes": [a.get("attribute") for a in content.get("attributes", [])]}
+                    if content.get("all_checks_pass") is False:
+                        reasons.append("Measured fairness checks fail on at least one attribute")
+                break
+            if state == "open":
+                state, confidence, evidence_id = "attested", conf, record.get("id")
+        checks.append({"key": key, "label": label, "state": state, "confidence": round(confidence, 2), "evidenceId": evidence_id, "detail": detail})
+
+    overall = round(sum(c["confidence"] for c in checks) / len(checks), 2) if checks else 0.0
+    verdict = get_recommendation(TIER_TO_IMPACT.get(str(risk_tier).lower(), "high"), overall)
+    if reasons and verdict == "go":
+        verdict = "conditional_go"
+    open_checks = [c["label"] for c in checks if c["state"] == "open"]
+    if open_checks:
+        reasons.append(f"Nothing on file for: {', '.join(open_checks)}")
+    return {
+        "verdict": verdict,
+        "confidence": overall,
+        "band": band_from_score(overall),
+        "checks": checks,
+        "reasons": reasons,
+        "proven": sum(1 for c in checks if c["state"] == "proven"),
+        "attested": sum(1 for c in checks if c["state"] == "attested"),
+        "open": len(open_checks),
+    }
