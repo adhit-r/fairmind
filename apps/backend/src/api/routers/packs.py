@@ -29,7 +29,7 @@ from api.routes.pack_catalogue import (
     Workflow,
     requirement_status,
 )
-from config.auth import TokenData, UserRole, get_current_active_user, require_role
+from config.auth import TokenData, get_current_active_user
 from database.connection import get_db
 from src.application.services.governance_assurance_service import (
     GovernanceAssuranceService,
@@ -51,22 +51,14 @@ class StartRunBody(BaseModel):
     system_id: Optional[str] = None
 
 
-class EventBody(BaseModel):
-    kind: Literal[
-        "step.started",
-        "step.completed",
-        "finding.recorded",
-        "gate.opened",
-        "evidence.sealed",
-        "run.completed",
-        "run.failed",
-    ]
-    step_id: Optional[str] = None
-    payload: Dict[str, Any] = Field(default_factory=dict)
+class StepOutputBody(BaseModel):
+    summary: str = Field(min_length=1, max_length=20000)
+    # Required when the step branches: the label of the branch to take, e.g. "routine" or "exception".
+    route: Optional[str] = None
 
 
 class DecisionBody(BaseModel):
-    decision: Literal["approve", "reject"]
+    decision: Literal["approve", "request_changes", "reject"]
     notes: str = ""
 
 
@@ -134,6 +126,16 @@ def _is_installed(db: Session, org_id: str, pack_id: str) -> bool:
     )
 
 
+def _waiting_for(run) -> Optional[str]:
+    """What a waiting run needs: a gate decision ("approval") or a person to submit the step's output ("input")."""
+    if run["status"] != "waiting" or not run["current_step"]:
+        return None
+    step = next((s for s in WORKFLOWS[run["workflow_id"]].steps if s.id == run["current_step"]), None)
+    if not step:
+        return None
+    return "approval" if step.kind in GATE_KINDS else "input"
+
+
 def _summary(run) -> dict:
     return {
         "id": run["id"],
@@ -141,6 +143,7 @@ def _summary(run) -> dict:
         "workflowName": WORKFLOWS[run["workflow_id"]].name,
         "status": run["status"],
         "currentStep": run["current_step"],
+        "waitingFor": _waiting_for(run),
         "createdAt": run["created_at"],
         "updatedAt": run["updated_at"],
     }
@@ -675,6 +678,8 @@ async def start_run(
         },
     )
     _append(db, run_id, "run.created", None, {"workflowId": wf.id, "workflowVersion": cat.VERSION})
+    run = {"id": run_id, "workflow_id": wf.id, "ai_system_id": body.system_id, "started_by": m.user_id, "approval_request_id": None}
+    _advance(db, run, wf.steps[0].id, m.user_id)
     db.commit()
     return _run_json(db, run_id)
 
@@ -764,44 +769,63 @@ def _open_gate(db: Session, run, requested_by: Optional[str]) -> str:
     return request_id
 
 
-@router.post("/runs/{run_id}/events")
-async def append_event(
-    run_id: str,
-    body: EventBody,
-    m: OrgMembership = Depends(_member),
-    db: Session = Depends(get_db),
-    _admin: TokenData = Depends(require_role([UserRole.ADMIN])),
-):
-    """Hook for a future agent executor. Status, current step and finish time are derived here, never client-set."""
-    _ensure_tables(db)
-    run = _run_or_404(db, m.org_id, run_id)
-    steps = {s.id: s for s in WORKFLOWS[run["workflow_id"]].steps}
-    if run["status"] in ("done", "failed"):
-        raise HTTPException(status_code=409, detail="Run is finished")
-    # A waiting or blocked run must not resume by appending events; only an approval decision moves it.
-    if run["status"] in ("waiting", "blocked") and body.kind != "run.failed":
-        raise HTTPException(status_code=409, detail=f"Run is {run['status']}")
-    if body.kind in ("step.started", "step.completed", "gate.opened") and not body.step_id:
-        raise HTTPException(status_code=422, detail="step_id is required for this event kind")
-    if body.step_id and body.step_id not in steps:
-        raise HTTPException(status_code=422, detail="Unknown step for this workflow")
-    if body.kind == "gate.opened" and steps[body.step_id].kind not in GATE_KINDS:
-        raise HTTPException(status_code=422, detail="A gate can only open on an ask, exception or decide step")
+# --- engine ----------------------------------------------------------------
+# A guided run: the engine finishes the steps it can do alone (start, escalate,
+# file evidence), opens a gate on ask, exception and decide steps, and stops on
+# every other step until a person (later an agent) submits that step's output.
 
-    now = _utc_now_iso()
-    payload = dict(body.payload)
-    status, current_step, finished_at = run["status"], run["current_step"], run["finished_at"]
-    approval_request_id = run["approval_request_id"]
-    if body.kind == "step.started":
-        status, current_step = "running", body.step_id
-    elif body.kind == "gate.opened":
-        approval_request_id = _open_gate(db, run, m.user_id)
-        payload["approvalRequestId"] = approval_request_id
-        status, current_step = "waiting", body.step_id
-    elif body.kind == "run.completed":
-        status, finished_at = "done", now
-    elif body.kind == "run.failed":
-        status, finished_at = "failed", now
+AUTO_KINDS = ("trigger", "escalate", "file")
+MAX_REVISIONS = 3  # the catalogue's "changes asked: max 3 rounds then escalate"
+DECISION_EDGES = {
+    "approve": ("approved", "conclusions"),
+    "request_changes": ("changes asked", "more drafting"),
+    "reject": ("rejected", "risk accepted"),
+}
+DECISION_STATUS = {"approve": "approved", "request_changes": "changes_requested", "reject": "rejected"}
+
+
+def _edge(step, *needles: str) -> Optional[str]:
+    """The step that follows: the only edge when no needles are given, else the first whose label contains one."""
+    if not needles:
+        return step.next[0].to if step.next else None
+    for e in step.next:
+        if e.label and any(n in e.label.lower() for n in needles):
+            return e.to
+    return None
+
+
+def _advance(db: Session, run, step_id: Optional[str], user_id: Optional[str]) -> None:
+    """Move the run onto step_id and through every step the engine finishes itself. Caller commits."""
+    wf = WORKFLOWS[run["workflow_id"]]
+    steps = {s.id: s for s in wf.steps}
+    status, approval_request_id, finished_at = "running", run["approval_request_id"], None
+    while step_id is not None:
+        step = steps[step_id]
+        if step.kind in GATE_KINDS:
+            approval_request_id = _open_gate(db, run, user_id)
+            _append(db, run["id"], "gate.opened", step_id, {"approvalRequestId": approval_request_id, "approver": wf.approver})
+            status = "waiting"
+            break
+        _append(db, run["id"], "step.started", step_id, {})
+        if step.kind not in AUTO_KINDS:
+            status = "waiting"
+            break
+        if step.kind == "trigger":
+            payload = {"systemId": run["ai_system_id"], "startedBy": run["started_by"], "workflowVersion": cat.VERSION}
+        elif step.kind == "escalate":
+            # ponytail: recorded only; no notifier exists yet, so nobody is messaged.
+            payload = {"approver": wf.approver, "notificationSent": False}
+        else:
+            head = db.execute(
+                text("SELECT seq, hash FROM workflow_run_events WHERE run_id = :id ORDER BY seq DESC LIMIT 1"),
+                {"id": run["id"]},
+            ).fetchone()
+            payload = {"sealedThroughSeq": head[0], "sealedHeadHash": head[1]}
+        _append(db, run["id"], "step.completed", step_id, payload)
+        step_id = _edge(step)
+    if step_id is None:
+        status, finished_at = "done", _utc_now_iso()
+        _append(db, run["id"], "run.completed", None, {})
     db.execute(
         text(
             "UPDATE workflow_runs SET status = :status, current_step = :current_step, finished_at = :finished_at, "
@@ -809,14 +833,56 @@ async def append_event(
         ),
         {
             "status": status,
-            "current_step": current_step,
+            "current_step": step_id,
             "finished_at": finished_at,
             "approval_request_id": approval_request_id,
-            "now": now,
-            "id": run_id,
+            "now": _utc_now_iso(),
+            "id": run["id"],
         },
     )
-    _append(db, run_id, body.kind, body.step_id, payload)
+
+
+def _claim(db: Session, run_id: str, step_id: str) -> None:
+    """Take a waiting run off its step; a concurrent second caller updates zero rows and gets 409."""
+    claimed = db.execute(
+        text(
+            "UPDATE workflow_runs SET status = 'running', updated_at = :now "
+            "WHERE id = :id AND status = 'waiting' AND current_step = :step"
+        ),
+        {"now": _utc_now_iso(), "id": run_id, "step": step_id},
+    ).rowcount
+    if not claimed:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Run is no longer waiting on this step")
+
+
+@router.post("/runs/{run_id}/steps/{step_id}/output")
+async def submit_step_output(
+    run_id: str,
+    step_id: str,
+    body: StepOutputBody,
+    m: OrgMembership = Depends(_manager),
+    db: Session = Depends(get_db),
+):
+    _ensure_tables(db)
+    run = _run_or_404(db, m.org_id, run_id)
+    step = next((s for s in WORKFLOWS[run["workflow_id"]].steps if s.id == step_id), None)
+    if not step:
+        raise HTTPException(status_code=404, detail="Step not found")
+    if run["status"] != "waiting" or run["current_step"] != step_id or step.kind in GATE_KINDS:
+        raise HTTPException(status_code=409, detail="This step is not waiting for output")
+    if len(step.next) > 1:
+        target = next((e.to for e in step.next if e.label == body.route), None)
+        if target is None:
+            raise HTTPException(status_code=422, detail=f"route must be one of: {', '.join(e.label or '' for e in step.next)}")
+    else:
+        target = _edge(step)
+    _claim(db, run_id, step_id)
+    payload = {"summary": body.summary, "source": "manual", "submittedBy": m.user_id}
+    if len(step.next) > 1:
+        payload["route"] = body.route
+    _append(db, run_id, "step.completed", step_id, payload)
+    _advance(db, run, target, m.user_id)
     db.commit()
     return _run_json(db, run_id)
 
@@ -830,16 +896,26 @@ async def decide_run(
 ):
     _ensure_tables(db)
     run = _run_or_404(db, m.org_id, run_id)
-    if run["status"] != "waiting" or not run["approval_request_id"]:
+    if _waiting_for(run) != "approval" or not run["approval_request_id"]:
         raise HTTPException(status_code=409, detail="Run is not waiting for a decision")
-    approved = body.decision == "approve"
-    decision = "approved" if approved else "rejected"
+    step = next(s for s in WORKFLOWS[run["workflow_id"]].steps if s.id == run["current_step"])
+    target = _edge(step, *DECISION_EDGES[body.decision])
+    if target is None:
+        raise HTTPException(status_code=422, detail="This step does not offer that decision")
+    escalated = False
+    if body.decision == "request_changes":
+        rounds = sum(
+            json.loads(p).get("decision") == "request_changes"
+            for (p,) in db.execute(
+                text("SELECT payload_json FROM workflow_run_events WHERE run_id = :id AND kind = 'gate.decided' AND step_id = :step"),
+                {"id": run_id, "step": step.id},
+            )
+        )
+        if rounds >= MAX_REVISIONS and _edge(step, "sla"):
+            target, escalated = _edge(step, "sla"), True
+    _claim(db, run_id, step.id)
+    decision = DECISION_STATUS[body.decision]
     now = _utc_now_iso()
-    # Claim the run and its request first: a concurrent second decision updates zero rows and gets 409.
-    claimed = db.execute(
-        text("UPDATE workflow_runs SET status = :status, updated_at = :now WHERE id = :id AND status = 'waiting'"),
-        {"status": "running" if approved else "blocked", "now": now, "id": run_id},
-    ).rowcount
     decided = db.execute(
         text(
             "UPDATE governance_approval_requests "
@@ -849,7 +925,7 @@ async def decide_run(
         ),
         {"status": decision, "notes": body.notes, "decided_by": m.user_id, "now": now, "id": run["approval_request_id"]},
     ).rowcount
-    if not claimed or not decided:
+    if not decided:
         db.rollback()
         raise HTTPException(status_code=409, detail="Run is not waiting for a decision")
     db.execute(
@@ -866,6 +942,10 @@ async def decide_run(
             "created_at": now,
         },
     )
-    _append(db, run_id, "gate.decided", run["current_step"], {"decision": body.decision, "notes": body.notes})
+    payload = {"decision": body.decision, "notes": body.notes, "decidedBy": m.user_id}
+    if escalated:
+        payload["escalated"] = f"more than {MAX_REVISIONS} rounds of changes"
+    _append(db, run_id, "gate.decided", step.id, payload)
+    _advance(db, run, target, m.user_id)
     db.commit()
     return _run_json(db, run_id)

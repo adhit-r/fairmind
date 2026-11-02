@@ -21,6 +21,18 @@ export type StepKind =
   | 'file'
 /** Step kinds at which a run stops for a person. */
 export const GATE_KINDS: readonly StepKind[] = ['ask', 'exception', 'decide']
+export type Decision = 'approve' | 'request_changes' | 'reject'
+/** Which branch of a gate each decision takes, matched against the branch label the way the backend does. */
+const DECISION_EDGES: Record<Decision, string[]> = {
+  approve: ['approved', 'conclusions'],
+  request_changes: ['changes asked', 'more drafting'],
+  reject: ['rejected', 'risk accepted'],
+}
+/** The decisions a gate step offers, in the order the buttons show them. */
+export const decisionsFor = (step: { next: Array<{ label: string | null }> }): Decision[] =>
+  (Object.keys(DECISION_EDGES) as Decision[]).filter((d) =>
+    step.next.some((e) => e.label && DECISION_EDGES[d].some((n) => e.label!.toLowerCase().includes(n))),
+  )
 export type ReqStatus = 'covered' | 'tested' | 'available' | 'supported' | 'gap'
 /** As the catalogue spells it; the UI shows "Not found" as "Not built yet". */
 export type EngineStatus = 'Engine exists' | 'Partial' | 'Not found'
@@ -31,6 +43,8 @@ export interface RunSummary {
   workflowName: string
   status: RunStatus
   currentStep: string | null
+  /** What a waiting run needs: a gate decision, or a person to submit the current step's output. */
+  waitingFor: 'approval' | 'input' | null
   createdAt: string
   updatedAt: string
 }
@@ -339,8 +353,10 @@ export function usePackActions() {
       installBundle: (bundleId: string) => send<Bundle>(API_ENDPOINTS.packs.installBundle(bundleId), (p) => apiClient.post(p)),
       startRun: (workflowId: string, systemId?: string) =>
         send<Run>(API_ENDPOINTS.packs.startRun(workflowId), (p) => apiClient.post(p, systemId ? { system_id: systemId } : {})),
-      decideRun: (runId: string, decision: 'approve' | 'reject', notes?: string) =>
+      decideRun: (runId: string, decision: Decision, notes?: string) =>
         send<Run>(API_ENDPOINTS.packs.decision(runId), (p) => apiClient.post(p, { decision, ...(notes ? { notes } : {}) })),
+      submitStepOutput: (runId: string, stepId: string, summary: string, route?: string) =>
+        send<Run>(API_ENDPOINTS.packs.stepOutput(runId, stepId), (p) => apiClient.post(p, { summary, ...(route ? { route } : {}) })),
     }
   }, [orgId])
 }

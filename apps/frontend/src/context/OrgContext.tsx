@@ -71,11 +71,10 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       if (res.success && res.data) {
         setOrganizations(res.data.organizations);
 
-        // Select first org or restore from localStorage
+        // Restore from localStorage, or the first org when the saved one is not this user's (e.g. after switching accounts)
         const savedOrgId = typeof window !== 'undefined' ? localStorage.getItem('selected_org_id') : null;
-        const orgToSelect = savedOrgId
-          ? res.data.organizations.find((o) => o.id === savedOrgId)
-          : res.data.organizations[0];
+        const orgToSelect =
+          res.data.organizations.find((o) => o.id === savedOrgId) ?? res.data.organizations[0];
 
         if (orgToSelect) {
           setSelectedOrg(orgToSelect);
