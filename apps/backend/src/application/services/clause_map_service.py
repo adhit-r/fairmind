@@ -9,6 +9,7 @@ speaks to, each carrying the state of the check behind it (proven, attested, ope
 from __future__ import annotations
 
 import json
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -31,6 +32,11 @@ FRAMEWORK_ALIASES: Dict[str, str] = {"eu_ai_act": "EUAIA", "iso_42001": "ISO4200
 LEAD_FRAMEWORKS = ("EUAIA", "ISO42001", "NISTRMF", "INDAI")
 
 RELATION_RANK = {"Satisfies": 0, "Partially satisfies": 1, "Supports": 2, "Aligns with": 3}
+
+
+def _natural(control: str) -> List[Any]:
+    """'Art 10' < 'Art 12' < 'Art 53'; 'A.6.2.4' < 'A.7.2'; 'MAP 3.5' < 'MEASURE 2.11'."""
+    return [int(part) if part.isdigit() else part.lower() for part in re.split(r"(\d+)", control)]
 
 
 @lru_cache(maxsize=1)
@@ -79,7 +85,7 @@ def clause_map(gate: Dict[str, Any], *, frameworks: Optional[List[str]] = None) 
             # a clause is as good as its best-evidenced check: proven beats attested beats open
             clause["state"] = "proven" if "proven" in states else "attested" if "attested" in states else "open"
             clauses.append(clause)
-        clauses.sort(key=lambda c: (c["group"] or "", c["control"]))
+        clauses.sort(key=lambda c: _natural(c["control"]))
         counts = {s: sum(1 for c in clauses if c["state"] == s) for s in ("proven", "attested", "open")}
         out.append({**fw, "clauses": clauses, "counts": {**counts, "total": len(clauses)}})
     order = {k: i for i, k in enumerate(LEAD_FRAMEWORKS)}

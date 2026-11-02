@@ -201,6 +201,8 @@ def test_clause_map_reads_the_gate_per_framework_clause():
     eu = {c["control"]: c for c in by_key["EUAIA"]["clauses"]}
     assert eu["Art 10"]["state"] == "proven" and any(ch["check"] == "fairness" for ch in eu["Art 10"]["checks"])
     assert eu["Art 14"]["state"] == "attested" and eu["Art 72"]["state"] == "open"
+    controls = [c["control"] for c in by_key["EUAIA"]["clauses"]]
+    assert controls.index("Art 10") < controls.index("Art 12") < controls.index("Art 53") < controls.index("Art 72")
     counts = by_key["EUAIA"]["counts"]
     assert counts["total"] == counts["proven"] + counts["attested"] + counts["open"] and counts["proven"] >= 1
     only_nist = clause_map(gate, frameworks=["NISTRMF"])
