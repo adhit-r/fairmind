@@ -1,21 +1,12 @@
 {
-  "name": "Fairmind - AI Governance Platform",
-  "short_name": "Fairmind",
-  "description": "Open-source AI governance platform with bias detection and model explainability",
+  "name": "FairMind: AI bias detection and governance",
+  "short_name": "FairMind",
+  "description": "Detect AI bias, track fixes to retests, and export audit-ready evidence for the EU AI Act, DPDP Act, NITI Aayog, and NIST AI RMF.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0B021D",
-  "theme_color": "#0B021D",
+  "background_color": "#fbfaf7",
+  "theme_color": "#0d0f0e",
   "icons": [
-    {
-      "src": "/logo.png",
-      "sizes": "192x192",
-      "type": "image/png"
-    },
-    {
-      "src": "/logo.png",
-      "sizes": "512x512",
-      "type": "image/png"
-    }
+    { "src": "/logo-mark.png", "sizes": "192x192", "type": "image/png" }
   ]
 }
