@@ -60,44 +60,44 @@ export function ControlTracePanel({ control, canEdit, onUpdate }: ControlTracePa
       id={`trace-${control.id}`}
       role="region"
       aria-label={`Trace for ${control.externalId}`}
-      className="border-2 border-[#0F1412] bg-[#F3F5F0] p-4 sm:p-5"
+      className="border border-[var(--fm-line)] bg-[var(--fm-bg)] p-4 sm:p-5"
     >
       <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.8fr)]">
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.12em] text-[#0B7659]">Requirement trace</p>
-          <h3 className="mt-1 text-base font-black">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#0B7659]">Requirement trace</p>
+          <h3 className="mt-1 text-base font-semibold">
             {control.parentRequirementId || 'Parent requirement'}: {control.parentRequirementTitle || control.title}
           </h3>
-          <p className="mt-2 max-w-[70ch] text-sm text-[#59615D]">{control.statement}</p>
+          <p className="mt-2 max-w-[70ch] text-sm text-[var(--fm-ink2)]">{control.statement}</p>
 
-          <div className="mt-4 border-2 border-[#0F1412] bg-[#FCFDF8] p-3">
-            <p className="text-xs font-black uppercase tracking-[0.1em]">Mapping rationale</p>
+          <div className="mt-4 border border-[var(--fm-line)] bg-white p-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.1em]">Mapping rationale</p>
             <p className="mt-1 text-sm">
               {control.mappingRationale || 'No reviewed mapping rationale is available for this control yet.'}
             </p>
           </div>
 
           <div className="mt-4">
-            <p className="text-xs font-black uppercase tracking-[0.1em]">Evidence trail</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.1em]">Evidence trail</p>
             {control.evidenceTrace?.length ? (
-              <ol className="mt-2 divide-y-2 divide-[#0F1412] border-2 border-[#0F1412] bg-[#FCFDF8]">
+              <ol className="mt-2 divide-y-2 divide-[var(--fm-line)] border border-[var(--fm-line)] bg-white">
                 {control.evidenceTrace.map((item) => (
                   <li key={item.id} className="grid gap-1 p-3 text-sm sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
                     <div className="flex items-start gap-2">
                       <IconLink aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-[#0B7659]" />
                       <div>
-                        <p className="font-black">{item.label}</p>
-                        <p className="text-[#59615D]">{item.kind} · {formatDate(item.capturedAt)}</p>
+                        <p className="font-semibold">{item.label}</p>
+                        <p className="text-[var(--fm-ink2)]">{item.kind} · {formatDate(item.capturedAt)}</p>
                       </div>
                     </div>
-                    <span className="w-fit border-2 border-[#0F1412] bg-[#FFF4DE] px-2 py-1 text-xs font-black uppercase">
+                    <span className="w-fit border border-[var(--fm-line)] bg-[#FFF4DE] px-2 py-1 text-xs font-semibold uppercase">
                       {item.state}
                     </span>
                   </li>
                 ))}
               </ol>
             ) : (
-              <p className="mt-2 border-2 border-[#0F1412] bg-[#FCFDF8] p-3 text-sm font-bold">
+              <p className="mt-2 border border-[var(--fm-line)] bg-white p-3 text-sm font-bold">
                 No evidence links have been reviewed for this control.
               </p>
             )}
@@ -106,32 +106,32 @@ export function ControlTracePanel({ control, canEdit, onUpdate }: ControlTracePa
 
         {canEdit ? (
           <form
-            className="border-2 border-[#0F1412] bg-[#FCFDF8] p-4"
+            className="border border-[var(--fm-line)] bg-white p-4"
             onSubmit={(event) => {
               event.preventDefault()
               void save()
             }}
           >
-            <h3 className="font-black uppercase">Assessment update</h3>
+            <h3 className="font-semibold">Assessment update</h3>
             <div className="mt-4 space-y-4">
-            <label className="block text-sm font-black" htmlFor={`owner-${control.id}`}>
+            <label className="block text-sm font-semibold" htmlFor={`owner-${control.id}`}>
               Control owner
               <input
                 id={`owner-${control.id}`}
                 value={owner}
                 onChange={(event) => setOwner(event.target.value)}
-                className="mt-1 min-h-11 w-full rounded-none border-2 border-[#0F1412] bg-[#FCFDF8] px-3 py-2 font-medium outline-none focus-visible:ring-2 focus-visible:ring-[#0B7659] focus-visible:ring-offset-2"
+                className="mt-1 min-h-11 w-full border border-[var(--fm-line)] bg-white px-3 py-2 font-medium outline-none focus-visible:ring-2 focus-visible:ring-[#0B7659] focus-visible:ring-offset-2"
                 placeholder="owner@company.test"
               />
             </label>
 
-            <label className="block text-sm font-black" htmlFor={`applicability-${control.id}`}>
+            <label className="block text-sm font-semibold" htmlFor={`applicability-${control.id}`}>
               Applicability
               <select
                 id={`applicability-${control.id}`}
                 value={applicability}
                 onChange={(event) => setApplicability(event.target.value)}
-                className="mt-1 min-h-11 w-full rounded-none border-2 border-[#0F1412] bg-[#FCFDF8] px-3 py-2 font-medium outline-none focus-visible:ring-2 focus-visible:ring-[#0B7659] focus-visible:ring-offset-2"
+                className="mt-1 min-h-11 w-full border border-[var(--fm-line)] bg-white px-3 py-2 font-medium outline-none focus-visible:ring-2 focus-visible:ring-[#0B7659] focus-visible:ring-offset-2"
               >
                 <option value="applicable">Applicable</option>
                 <option value="not_applicable">Not applicable</option>
@@ -139,13 +139,13 @@ export function ControlTracePanel({ control, canEdit, onUpdate }: ControlTracePa
               </select>
             </label>
 
-            <label className="block text-sm font-black" htmlFor={`state-${control.id}`}>
+            <label className="block text-sm font-semibold" htmlFor={`state-${control.id}`}>
               Assessment state
               <select
                 id={`state-${control.id}`}
                 value={status}
                 onChange={(event) => setStatus(event.target.value)}
-                className="mt-1 min-h-11 w-full rounded-none border-2 border-[#0F1412] bg-[#FCFDF8] px-3 py-2 font-medium outline-none focus-visible:ring-2 focus-visible:ring-[#0B7659] focus-visible:ring-offset-2"
+                className="mt-1 min-h-11 w-full border border-[var(--fm-line)] bg-white px-3 py-2 font-medium outline-none focus-visible:ring-2 focus-visible:ring-[#0B7659] focus-visible:ring-offset-2"
               >
                 <option value="not_started">Not started</option>
                 <option value="partial">Partial</option>
@@ -163,18 +163,18 @@ export function ControlTracePanel({ control, canEdit, onUpdate }: ControlTracePa
             <Button
               type="submit"
               disabled={saving}
-              className="mt-2 w-full rounded-none border-[#0F1412] bg-[#FF6B35] font-black uppercase text-[#0F1412]"
+              className="mt-2 w-full border-[var(--fm-line)] bg-[#FF6B35] font-semibold text-[var(--fm-ink)]"
             >
               {saving ? 'Saving changes' : 'Save control changes'}
             </Button>
-            <p className="mt-3 text-xs text-[#59615D]">
+            <p className="mt-3 text-xs text-[var(--fm-ink2)]">
               State labels record reviewer workflow. Evidence acceptance remains a separate decision.
             </p>
           </form>
         ) : (
-          <aside className="border-2 border-[#0F1412] bg-[#FCFDF8] p-4">
-            <h3 className="font-black uppercase">Read-only access</h3>
-            <p className="mt-2 text-sm text-[#59615D]">
+          <aside className="border border-[var(--fm-line)] bg-white p-4">
+            <h3 className="font-semibold">Read-only access</h3>
+            <p className="mt-2 text-sm text-[var(--fm-ink2)]">
               You can inspect this assessment and its evidence trace, but your organization role cannot change control state.
             </p>
           </aside>

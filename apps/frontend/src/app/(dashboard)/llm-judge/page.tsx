@@ -54,7 +54,7 @@ export default function LLMJudgePage() {
     <div className="space-y-8">
       {/* Page Header */}
       <div>
-        <h1 className="text-4xl font-bold mb-3">LLM-as-a-Judge</h1>
+        <h1 className="text-[30px] font-semibold tracking-[-.03em] mb-3">LLM-as-a-Judge</h1>
         <p className="text-gray-600 text-lg">
           Use advanced LLMs to evaluate your content for subtle bias and fairness issues across multiple
           dimensions
@@ -92,21 +92,21 @@ export default function LLMJudgePage() {
 
           {/* How It Works */}
           <div className="grid md:grid-cols-3 gap-4">
-            <div className="border-2 border-black p-4 rounded space-y-2">
+            <div className="border border-[var(--fm-line)] p-4 rounded space-y-2">
               <div className="text-2xl font-bold">1</div>
               <p className="font-semibold">Input Text</p>
               <p className="text-sm text-gray-600">
                 Paste or upload the content you want to evaluate for bias
               </p>
             </div>
-            <div className="border-2 border-black p-4 rounded space-y-2">
+            <div className="border border-[var(--fm-line)] p-4 rounded space-y-2">
               <div className="text-2xl font-bold">2</div>
               <p className="font-semibold">Configure Judge</p>
               <p className="text-sm text-gray-600">
                 Select your judge model and bias categories to evaluate
               </p>
             </div>
-            <div className="border-2 border-black p-4 rounded space-y-2">
+            <div className="border border-[var(--fm-line)] p-4 rounded space-y-2">
               <div className="text-2xl font-bold">3</div>
               <p className="font-semibold">Review Results</p>
               <p className="text-sm text-gray-600">
@@ -176,7 +176,7 @@ export default function LLMJudgePage() {
             </div>
             <Button
               onClick={handleNewEvaluation}
-              className="border-2 border-black font-bold"
+              className="border border-[var(--fm-line)] font-bold"
               variant="neutral"
             >
               <IconRefresh className="w-4 h-4 mr-2" />
@@ -186,12 +186,12 @@ export default function LLMJudgePage() {
 
           {/* Results Tabs */}
           <Tabs defaultValue={Object.keys(result.results)[0]} className="space-y-6">
-            <TabsList className="border-2 border-black w-full overflow-x-auto">
+            <TabsList className="border border-[var(--fm-line)] w-full overflow-x-auto">
               {Object.keys(result.results).map((category) => (
                 <TabsTrigger
                   key={category}
                   value={category}
-                  className="border-r-2 border-black last:border-r-0 capitalize"
+                  className="border-r border-[var(--fm-line)] last:border-r-0 capitalize"
                 >
                   {category}
                 </TabsTrigger>
@@ -211,7 +211,7 @@ export default function LLMJudgePage() {
                 <RecommendationsPanel result={categoryResult} />
 
                 {/* Full Reasoning */}
-                <div className="border-2 border-black shadow-brutal p-6 rounded space-y-3">
+                <div className="p-6 rounded space-y-3 fm-card">
                   <h3 className="font-bold text-lg">Judge's Full Reasoning</h3>
                   <p className="text-sm leading-relaxed bg-gray-50 p-4 rounded border border-gray-300">
                     {categoryResult.reasoning}
@@ -231,8 +231,8 @@ export default function LLMJudgePage() {
 
           {/* Summary Statistics */}
           <div className="grid md:grid-cols-4 gap-4">
-            <div className="border-2 border-black p-4 rounded text-center">
-              <div className="text-3xl font-bold">
+            <div className="border border-[var(--fm-line)] p-4 rounded text-center">
+              <div className="text-[24px] font-semibold tracking-tight">
                 {Math.round(
                   (Object.values(result.results).reduce((sum, r) => sum + r.bias_score, 0) /
                     Object.keys(result.results).length) *
@@ -240,25 +240,25 @@ export default function LLMJudgePage() {
                 )}
                 %
               </div>
-              <p className="text-xs text-gray-600 uppercase font-bold mt-2">Avg Bias Score</p>
+              <p className="text-xs text-gray-600 uppercase font-semibold mt-2">Avg Bias Score</p>
             </div>
 
-            <div className="border-2 border-black p-4 rounded text-center">
-              <div className="text-3xl font-bold">
+            <div className="border border-[var(--fm-line)] p-4 rounded text-center">
+              <div className="text-[24px] font-semibold tracking-tight">
                 {Object.values(result.results).reduce((sum, r) => sum + r.detected_biases.length, 0)}
               </div>
-              <p className="text-xs text-gray-600 uppercase font-bold mt-2">Total Biases Found</p>
+              <p className="text-xs text-gray-600 uppercase font-semibold mt-2">Total Biases Found</p>
             </div>
 
-            <div className="border-2 border-black p-4 rounded text-center">
-              <div className="text-3xl font-bold">
+            <div className="border border-[var(--fm-line)] p-4 rounded text-center">
+              <div className="text-[24px] font-semibold tracking-tight">
                 {Object.values(result.results).reduce((sum, r) => sum + r.recommendations.length, 0)}
               </div>
-              <p className="text-xs text-gray-600 uppercase font-bold mt-2">Recommendations</p>
+              <p className="text-xs text-gray-600 uppercase font-semibold mt-2">Recommendations</p>
             </div>
 
-            <div className="border-2 border-black p-4 rounded text-center">
-              <div className="text-3xl font-bold">
+            <div className="border border-[var(--fm-line)] p-4 rounded text-center">
+              <div className="text-[24px] font-semibold tracking-tight">
                 {Math.round(
                   (Object.values(result.results).reduce((sum, r) => sum + r.confidence, 0) /
                     Object.keys(result.results).length) *
@@ -266,7 +266,7 @@ export default function LLMJudgePage() {
                 )}
                 %
               </div>
-              <p className="text-xs text-gray-600 uppercase font-bold mt-2">Avg Confidence</p>
+              <p className="text-xs text-gray-600 uppercase font-semibold mt-2">Avg Confidence</p>
             </div>
           </div>
 

@@ -60,7 +60,7 @@ export default function AlertsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold">Alerts</h1>
+          <h1 className="text-[30px] font-semibold tracking-[-.03em]">Alerts</h1>
           <p className="text-muted-foreground mt-1">System and model monitoring alerts</p>
         </div>
         <Button onClick={loadAlerts}>
@@ -70,14 +70,14 @@ export default function AlertsPage() {
       </div>
 
       {error && (
-        <Alert className="border-2 border-yellow-500 shadow-brutal">
+        <Alert className="border-2 border-yellow-500">
           <IconAlertTriangle className="h-4 w-4" />
           <AlertTitle>Alerts Unavailable</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
 
-      <Card className="p-6 border-2 border-black shadow-brutal">
+      <Card className="p-6 fm-card">
         {loading ? (
           <p>Loading alerts...</p>
         ) : alerts.length === 0 ? (
@@ -85,8 +85,8 @@ export default function AlertsPage() {
         ) : (
           <div className="space-y-3">
             {alerts.map((a, idx) => (
-              <div key={a.id || `${a.type || 'alert'}-${idx}`} className="border-2 border-black p-3">
-                <div className="font-bold uppercase text-sm">{a.severity || 'info'} - {a.type || 'alert'}</div>
+              <div key={a.id || `${a.type || 'alert'}-${idx}`} className="border border-[var(--fm-line)] p-3">
+                <div className="font-semibold text-sm">{a.severity || 'info'} - {a.type || 'alert'}</div>
                 <div>{a.message || 'No message'}</div>
                 <div className="text-xs text-muted-foreground mt-1">
                   {a.created_at || a.timestamp || 'timestamp unavailable'}

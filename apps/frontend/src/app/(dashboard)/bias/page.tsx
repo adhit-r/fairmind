@@ -64,7 +64,7 @@ export default function BiasDetectionPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-4xl font-bold">Bias Detection</h1>
+        <h1 className="text-[30px] font-semibold tracking-[-.03em]">Bias Detection</h1>
         <p className="text-muted-foreground mt-1">
           Detect and analyze bias in your AI models
         </p>
@@ -72,7 +72,7 @@ export default function BiasDetectionPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Test Form */}
-        <Card className="p-6 border-2 border-black shadow-brutal">
+        <Card className="p-6 fm-card">
           <h2 className="text-2xl font-bold mb-4">Run Bias Test</h2>
 
           {error && (
@@ -89,7 +89,7 @@ export default function BiasDetectionPage() {
                 onValueChange={(value) => setFormData({ ...formData, modelId: value })}
                 disabled={modelsLoading}
               >
-                <SelectTrigger className="border-2 border-black">
+                <SelectTrigger className="border border-[var(--fm-line)]">
                   <SelectValue placeholder={modelsLoading ? "Loading models..." : "Select model"} />
                 </SelectTrigger>
                 <SelectContent>
@@ -119,7 +119,7 @@ export default function BiasDetectionPage() {
                 onValueChange={(value) => setFormData({ ...formData, datasetId: value })}
                 disabled={datasetsLoading}
               >
-                <SelectTrigger className="border-2 border-black">
+                <SelectTrigger className="border border-[var(--fm-line)]">
                   <SelectValue placeholder={datasetsLoading ? "Loading datasets..." : "Select dataset"} />
                 </SelectTrigger>
                 <SelectContent>
@@ -150,7 +150,7 @@ export default function BiasDetectionPage() {
                 onChange={(e) => setFormData({ ...formData, sensitiveAttributes: e.target.value })}
                 placeholder="gender, race, age"
                 required
-                className="border-2 border-black"
+                className="border border-[var(--fm-line)]"
               />
             </div>
 
@@ -162,7 +162,7 @@ export default function BiasDetectionPage() {
                 onChange={(e) => setFormData({ ...formData, targetColumn: e.target.value })}
                 placeholder="income, loan_status"
                 required
-                className="border-2 border-black"
+                className="border border-[var(--fm-line)]"
               />
             </div>
 
@@ -173,18 +173,18 @@ export default function BiasDetectionPage() {
         </Card>
 
         {/* Results */}
-        <Card className="p-6 border-2 border-black shadow-brutal">
+        <Card className="p-6 fm-card">
           <h2 className="text-2xl font-bold mb-4">Test Results</h2>
 
           {results ? (
             <div className="space-y-4">
-              <div className="p-4 border-2 border-black bg-white">
+              <div className="p-4 border border-[var(--fm-line)] bg-white">
                 <p className="text-sm font-medium mb-2">Analysis ID</p>
                 <p className="font-mono text-sm">{results.analysis_id}</p>
               </div>
 
               {results.dataset_info && (
-                <div className="p-4 border-2 border-black bg-white">
+                <div className="p-4 border border-[var(--fm-line)] bg-white">
                   <p className="text-sm font-medium mb-2">Dataset Info</p>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
@@ -203,7 +203,7 @@ export default function BiasDetectionPage() {
                 <div className="space-y-2">
                   <p className="text-sm font-medium">Fairness Metrics</p>
                   {Object.entries(results.fairness_metrics).map(([attr, metrics]: [string, any]) => (
-                    <div key={attr} className="p-3 border-2 border-black bg-white">
+                    <div key={attr} className="p-3 border border-[var(--fm-line)] bg-white">
                       <p className="font-bold mb-2">{attr}</p>
                       <div className="space-y-1">
                         <div className="flex justify-between">
@@ -225,7 +225,7 @@ export default function BiasDetectionPage() {
               )}
 
               {results.recommendations && results.recommendations.length > 0 && (
-                <div className="p-4 border-2 border-black bg-white">
+                <div className="p-4 border border-[var(--fm-line)] bg-white">
                   <p className="text-sm font-medium mb-2">Recommendations</p>
                   <ul className="list-disc list-inside space-y-1">
                     {results.recommendations.map((rec: string, index: number) => (

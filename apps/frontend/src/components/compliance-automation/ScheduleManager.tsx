@@ -57,26 +57,26 @@ export default function ScheduleManager() {
     };
 
     return (
-        <Card className="border-2 border-black shadow-brutal">
+        <Card className="fm-card">
             <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle className="flex items-center gap-2">
                     <IconCalendar />
                     Report Schedules
                 </CardTitle>
-                <Button size="sm" onClick={() => setShowForm(!showForm)} className="border-2 border-black">
+                <Button size="sm" onClick={() => setShowForm(!showForm)} className="border border-[var(--fm-line)]">
                     <IconPlus size={16} className="mr-1" />
                     New Schedule
                 </Button>
             </CardHeader>
             <CardContent className="space-y-4">
                 {showForm && (
-                    <div className="p-4 bg-gray-50 border-2 border-black rounded-lg space-y-4 mb-4">
+                    <div className="p-4 bg-gray-50 border border-[var(--fm-line)] rounded-lg space-y-4 mb-4">
                         <h4 className="font-bold">Create New Schedule</h4>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <label className="text-sm font-medium">Framework</label>
                                 <Select value={framework} onValueChange={setFramework}>
-                                    <SelectTrigger className="bg-white border-2 border-black">
+                                    <SelectTrigger className="bg-white border border-[var(--fm-line)]">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -90,7 +90,7 @@ export default function ScheduleManager() {
                             <div className="space-y-2">
                                 <label className="text-sm font-medium">Frequency</label>
                                 <Select value={frequency} onValueChange={setFrequency}>
-                                    <SelectTrigger className="bg-white border-2 border-black">
+                                    <SelectTrigger className="bg-white border border-[var(--fm-line)]">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -107,12 +107,12 @@ export default function ScheduleManager() {
                                 value={recipients}
                                 onChange={(e) => setRecipients(e.target.value)}
                                 placeholder="email@example.com, team@example.com"
-                                className="bg-white border-2 border-black"
+                                className="bg-white border border-[var(--fm-line)]"
                             />
                         </div>
                         <div className="flex justify-end gap-2">
                             <Button variant="neutral" onClick={() => setShowForm(false)}>Cancel</Button>
-                            <Button onClick={handleCreate} className="border-2 border-black shadow-brutal">Save Schedule</Button>
+                            <Button onClick={handleCreate} className="fm-card">Save Schedule</Button>
                         </div>
                     </div>
                 )}
@@ -124,7 +124,7 @@ export default function ScheduleManager() {
                         </div>
                     ) : (
                         schedules.map(schedule => (
-                            <div key={schedule.id} className="flex items-center justify-between p-3 border-2 border-black rounded-lg bg-white hover:translate-x-1 transition-transform">
+                            <div key={schedule.id} className="flex items-center justify-between p-3 border border-[var(--fm-line)] rounded-lg bg-white transition-transform">
                                 <div>
                                     <div className="flex items-center gap-2">
                                         <span className="font-bold">{schedule.framework}</span>

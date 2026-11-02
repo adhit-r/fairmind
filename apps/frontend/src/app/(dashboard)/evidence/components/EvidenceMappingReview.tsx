@@ -70,17 +70,17 @@ export function EvidenceMappingReview({ mapping, control, canReview, onReview, o
   return (
     <section
       aria-label={`Mapping review for ${externalId}`}
-      className="border-2 border-[#0F1412] bg-[#FCFDF8] p-4 shadow-[4px_4px_0_0_#0F1412]"
+      className="p-4 fm-card"
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.12em] text-[#59615D]">Control mapping</p>
-          <h4 className="mt-1 text-base font-black">{externalId} — {controlTitle}</h4>
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fm-ink2)]">Control mapping</p>
+          <h4 className="mt-1 text-base font-semibold">{externalId} — {controlTitle}</h4>
           <p className="mt-2 text-sm text-[#39413D]">
             {current.rationale || 'No mapping rationale was supplied.'}
           </p>
         </div>
-        <span className={`w-fit border-2 border-[#0F1412] px-2 py-1 text-xs font-black uppercase ${
+        <span className={`w-fit border border-[var(--fm-line)] px-2 py-1 text-xs font-semibold uppercase ${
           current.state === 'accepted'
             ? 'bg-[#DDF4EA]'
             : current.state === 'rejected'
@@ -92,8 +92,8 @@ export function EvidenceMappingReview({ mapping, control, canReview, onReview, o
       </div>
 
       {canReview ? (
-        <div className="mt-4 space-y-3 border-t-2 border-[#0F1412] pt-4">
-          <label className="block text-xs font-black uppercase tracking-[0.08em]" htmlFor={`mapping-rationale-${mapping.id}`}>
+        <div className="mt-4 space-y-3 border-t border-[var(--fm-line)] pt-4">
+          <label className="block text-xs font-semibold uppercase tracking-[0.08em]" htmlFor={`mapping-rationale-${mapping.id}`}>
             Review rationale for {externalId}
           </label>
           <textarea
@@ -101,7 +101,7 @@ export function EvidenceMappingReview({ mapping, control, canReview, onReview, o
             value={rationale}
             onChange={(event) => setRationale(event.target.value)}
             rows={3}
-            className="w-full resize-y rounded-none border-2 border-[#0F1412] bg-white p-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[#0B7659] focus-visible:ring-offset-2"
+            className="w-full resize-y border border-[var(--fm-line)] bg-white p-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[#0B7659] focus-visible:ring-offset-2"
             placeholder="Record why this evidence does or does not support the control."
           />
           {error ? (
@@ -112,7 +112,7 @@ export function EvidenceMappingReview({ mapping, control, canReview, onReview, o
                 disabled={refreshing}
                 onClick={() => void refresh()}
                 variant="neutral"
-                className="mt-3 rounded-none border-2 border-[#0F1412] bg-white font-black uppercase shadow-[2px_2px_0_0_#0F1412]"
+                className="mt-3 font-semibold fm-card"
               >
                 {refreshing ? 'Reloading mapping' : 'Reload mapping'}
               </Button>
@@ -123,7 +123,7 @@ export function EvidenceMappingReview({ mapping, control, canReview, onReview, o
               type="button"
               disabled={saving}
               onClick={() => void review('accepted')}
-              className="rounded-none border-2 border-[#0F1412] bg-[#0B7659] font-black uppercase text-white shadow-[3px_3px_0_0_#0F1412] hover:bg-[#095F49]"
+              className="bg-[#0B7659] font-semibold text-white hover:bg-[#095F49] rounded-[14px] shadow-[var(--fm-shadow)]"
             >
               {saving ? 'Saving review' : `Accept mapping to ${externalId}`}
             </Button>
@@ -132,14 +132,14 @@ export function EvidenceMappingReview({ mapping, control, canReview, onReview, o
               disabled={saving}
               onClick={() => void review('rejected')}
               variant="neutral"
-              className="rounded-none border-2 border-[#0F1412] bg-[#FFF0ED] font-black uppercase shadow-[3px_3px_0_0_#0F1412]"
+              className="bg-[#FFF0ED] font-semibold rounded-[14px] shadow-[var(--fm-shadow)]"
             >
               Reject mapping to {externalId}
             </Button>
           </div>
         </div>
       ) : (
-        <p className="mt-4 border-t-2 border-[#0F1412] pt-3 text-sm font-bold text-[#59615D]">
+        <p className="mt-4 border-t border-[var(--fm-line)] pt-3 text-sm font-bold text-[var(--fm-ink2)]">
           Read-only access. A governance editor must review this mapping.
         </p>
       )}

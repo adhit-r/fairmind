@@ -36,8 +36,8 @@ export function AuditReportPanel({
   };
 
   return (
-    <Card className="border-4 border-black shadow-brutal">
-      <CardHeader className="border-b-4 border-black">
+    <Card className="fm-card">
+      <CardHeader className="border-b border-[var(--fm-line)]">
         <CardTitle className="text-xl font-bold tracking-tight">AUDIT REPORT GENERATOR</CardTitle>
         <CardDescription>Generate compliance audit reports for your organization</CardDescription>
       </CardHeader>
@@ -65,7 +65,7 @@ export function AuditReportPanel({
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="border-2 border-black focus:ring-2 focus:ring-orange-500"
+              className="border border-[var(--fm-line)] focus:ring-2 focus:ring-orange-500"
             />
           </div>
 
@@ -76,7 +76,7 @@ export function AuditReportPanel({
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-              className="border-2 border-black focus:ring-2 focus:ring-orange-500"
+              className="border border-[var(--fm-line)] focus:ring-2 focus:ring-orange-500"
             />
           </div>
 
@@ -84,7 +84,7 @@ export function AuditReportPanel({
           <div className="md:col-span-2">
             <label className="block text-sm font-bold mb-2">FORMAT</label>
             <Select value={format} onValueChange={(value: any) => setFormat(value)}>
-              <SelectTrigger className="border-2 border-black">
+              <SelectTrigger className="border border-[var(--fm-line)]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -100,7 +100,7 @@ export function AuditReportPanel({
             <Button
               onClick={handleGenerate}
               disabled={isLoading}
-              className="w-full bg-orange-600 text-white font-bold border-2 border-black shadow-brutal hover:shadow-brutal-lg transition-all disabled:opacity-50"
+              className="w-full bg-orange-600 text-white font-bold transition-all disabled:opacity-50 rounded-[14px] shadow-[var(--fm-shadow)]"
             >
               {isLoading ? (
                 <>

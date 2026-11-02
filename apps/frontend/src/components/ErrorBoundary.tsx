@@ -51,8 +51,8 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
 
       return (
         <div className="min-h-screen flex items-center justify-center p-4 bg-gray-50">
-          <Card className="w-full max-w-md p-6 border-2 border-black shadow-brutal">
-            <Alert variant="destructive" className="mb-4 border-2 border-red-500 shadow-brutal">
+          <Card className="w-full max-w-md p-6 fm-card">
+            <Alert variant="destructive" className="mb-4 border-2 border-red-500">
               <IconAlertTriangle className="h-4 w-4" />
               <AlertTitle>Something went wrong</AlertTitle>
               <AlertDescription>
@@ -63,7 +63,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
               <p className="text-sm text-muted-foreground">
                 The application encountered an error. Please try refreshing the page.
               </p>
-              <Button onClick={this.handleReset} className="w-full border-2 border-black shadow-brutal">
+              <Button onClick={this.handleReset} className="w-full fm-card">
                 <IconRefresh className="mr-2 h-4 w-4" />
                 Reload Page
               </Button>

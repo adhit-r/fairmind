@@ -98,14 +98,14 @@ export default function SettingsPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-4xl font-bold">Settings</h1>
+        <h1 className="text-[30px] font-semibold tracking-[-.03em]">Settings</h1>
         <p className="text-muted-foreground mt-1">
           Manage your account and application settings
         </p>
       </div>
 
       {error && (
-        <Alert className="border-2 border-red-500 shadow-brutal">
+        <Alert className="border-2 border-red-500">
           <IconAlertTriangle className="h-4 w-4" />
           <AlertDescription>{error.message}</AlertDescription>
         </Alert>
@@ -119,16 +119,16 @@ export default function SettingsPage() {
 
       {!loading && (
         <Tabs defaultValue="profile" className="space-y-4">
-          <TabsList className="border-2 border-black">
-            <TabsTrigger value="profile" className="border-r-2 border-black">
+          <TabsList className="border border-[var(--fm-line)]">
+            <TabsTrigger value="profile" className="border-r border-[var(--fm-line)]">
               <IconUser className="mr-2 h-4 w-4" />
               Profile
             </TabsTrigger>
-            <TabsTrigger value="notifications" className="border-r-2 border-black">
+            <TabsTrigger value="notifications" className="border-r border-[var(--fm-line)]">
               <IconBell className="mr-2 h-4 w-4" />
               Notifications
             </TabsTrigger>
-            <TabsTrigger value="security" className="border-r-2 border-black">
+            <TabsTrigger value="security" className="border-r border-[var(--fm-line)]">
               <IconShield className="mr-2 h-4 w-4" />
               Security
             </TabsTrigger>
@@ -143,7 +143,7 @@ export default function SettingsPage() {
           </TabsList>
 
           <TabsContent value="profile">
-            <Card className="p-6 border-2 border-black shadow-brutal">
+            <Card className="p-6 fm-card">
               <h3 className="text-lg font-bold mb-4">Profile Settings</h3>
               <div className="space-y-4">
                 <div className="space-y-2">
@@ -153,7 +153,7 @@ export default function SettingsPage() {
                     type="email"
                     value={settings.email}
                     onChange={(e) => setSettings({ ...settings, email: e.target.value })}
-                    className="border-2 border-black"
+                    className="border border-[var(--fm-line)]"
                   />
                 </div>
                 <div className="space-y-2">
@@ -162,7 +162,7 @@ export default function SettingsPage() {
                     value={settings.language}
                     onValueChange={(value) => setSettings({ ...settings, language: value })}
                   >
-                    <SelectTrigger className="border-2 border-black">
+                    <SelectTrigger className="border border-[var(--fm-line)]">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -180,7 +180,7 @@ export default function SettingsPage() {
           </TabsContent>
 
           <TabsContent value="notifications">
-            <Card className="p-6 border-2 border-black shadow-brutal">
+            <Card className="p-6 fm-card">
               <h3 className="text-lg font-bold mb-4">Notification Settings</h3>
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
@@ -219,7 +219,7 @@ export default function SettingsPage() {
           </TabsContent>
 
           <TabsContent value="security">
-            <Card className="p-6 border-2 border-black shadow-brutal">
+            <Card className="p-6 fm-card">
               <h3 className="text-lg font-bold mb-4">Security Settings</h3>
               <div className="space-y-4">
                 <div className="space-y-2">
@@ -227,7 +227,7 @@ export default function SettingsPage() {
                   <Input
                     id="current-password"
                     type="password"
-                    className="border-2 border-black"
+                    className="border border-[var(--fm-line)]"
                     disabled={loading}
                   />
                 </div>
@@ -236,7 +236,7 @@ export default function SettingsPage() {
                   <Input
                     id="new-password"
                     type="password"
-                    className="border-2 border-black"
+                    className="border border-[var(--fm-line)]"
                     disabled={loading}
                   />
                 </div>
@@ -245,7 +245,7 @@ export default function SettingsPage() {
                   <Input
                     id="confirm-password"
                     type="password"
-                    className="border-2 border-black"
+                    className="border border-[var(--fm-line)]"
                     disabled={loading}
                   />
                 </div>
@@ -261,8 +261,8 @@ export default function SettingsPage() {
           </TabsContent>
 
           <TabsContent value="about">
-            <Card className="p-6 border-2 border-black shadow-brutal">
-              <h3 className="text-3xl font-bold mb-2">About FairMind</h3>
+            <Card className="p-6 fm-card">
+              <h3 className="text-[24px] font-semibold tracking-tight mb-2">About FairMind</h3>
               <p className="text-muted-foreground mb-6">
                 FairMind is an AI governance workspace for bias evaluation, compliance tracking, monitoring, and audit-ready reporting.
               </p>

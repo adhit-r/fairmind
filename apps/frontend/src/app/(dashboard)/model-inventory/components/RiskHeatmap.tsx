@@ -47,7 +47,7 @@ export function RiskHeatmap({ risks }: RiskHeatmapProps) {
 
   return (
     <div className="space-y-3">
-      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
         Risk matrix — likelihood × impact
       </p>
       <div className="overflow-x-auto">
@@ -55,7 +55,7 @@ export function RiskHeatmap({ risks }: RiskHeatmapProps) {
           {/* Likelihood labels */}
           <div className="mb-1 ml-16 grid grid-cols-5 gap-1">
             {LIKELIHOOD_LABELS.map((l, i) => (
-              <div key={i} className="text-center text-[9px] font-bold uppercase leading-tight text-muted-foreground">
+              <div key={i} className="text-center text-[9px] font-semibold leading-tight text-muted-foreground">
                 {l}
               </div>
             ))}
@@ -63,14 +63,14 @@ export function RiskHeatmap({ risks }: RiskHeatmapProps) {
           {/* Matrix rows */}
           {IMPACT_LABELS.map((impact, row) => (
             <div key={impact} className="mb-1 flex items-center gap-1">
-              <div className="w-14 shrink-0 text-right text-[9px] font-bold uppercase leading-tight text-muted-foreground">
+              <div className="w-14 shrink-0 text-right text-[9px] font-semibold leading-tight text-muted-foreground">
                 {impact}
               </div>
               <div className="grid flex-1 grid-cols-5 gap-1">
                 {Array.from({ length: 5 }, (_, col) => (
                   <div
                     key={col}
-                    className={`flex h-8 items-center justify-center rounded border border-black/10 text-xs font-black ${getCellColor(row, col)}`}
+                    className={`flex h-8 items-center justify-center rounded border border-[var(--fm-line)] text-xs font-semibold ${getCellColor(row, col)}`}
                   >
                     {matrix[row][col] > 0 ? matrix[row][col] : ''}
                   </div>

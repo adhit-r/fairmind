@@ -86,7 +86,7 @@ export default function LifecyclePage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-4xl font-bold">Lifecycle Management</h1>
+        <h1 className="text-[30px] font-semibold tracking-[-.03em]">Lifecycle Management</h1>
         <p className="text-muted-foreground mt-1">
           Manage AI system lifecycle stages and compliance checks
         </p>
@@ -94,7 +94,7 @@ export default function LifecyclePage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Process Stage Form */}
-        <Card className="p-6 border-2 border-black shadow-brutal">
+        <Card className="p-6 fm-card">
           <h2 className="text-2xl font-bold mb-4">Process Lifecycle Stage</h2>
           
           {error && (
@@ -110,7 +110,7 @@ export default function LifecyclePage() {
               <Input
                 id="systemId"
                 {...register('systemId')}
-                className="border-2 border-black"
+                className="border border-[var(--fm-line)]"
                 placeholder="Enter system ID"
               />
               {errors.systemId && (
@@ -125,7 +125,7 @@ export default function LifecyclePage() {
                   register('stage').onChange({ target: { value } })
                 }}
               >
-                <SelectTrigger className="border-2 border-black">
+                <SelectTrigger className="border border-[var(--fm-line)]">
                   <SelectValue placeholder="Select lifecycle stage" />
                 </SelectTrigger>
                 <SelectContent>
@@ -148,7 +148,7 @@ export default function LifecyclePage() {
         </Card>
 
         {/* Summary */}
-        <Card className="p-6 border-2 border-black shadow-brutal">
+        <Card className="p-6 fm-card">
           <h2 className="text-2xl font-bold mb-4">Lifecycle Summary</h2>
           
           <div className="space-y-4 mb-4">
@@ -157,7 +157,7 @@ export default function LifecyclePage() {
                 value={systemId}
                 onChange={(e) => setSystemId(e.target.value)}
                 placeholder="Enter system ID"
-                className="border-2 border-black"
+                className="border border-[var(--fm-line)]"
               />
               <Button variant="default" onClick={handleGetSummary}>
                 Get Summary
@@ -167,9 +167,9 @@ export default function LifecyclePage() {
 
           {summary ? (
             <div className="space-y-4">
-              <div className="p-4 border-2 border-black bg-white">
+              <div className="p-4 border border-[var(--fm-line)] bg-white">
                 <p className="text-sm font-medium mb-2">Current Stage</p>
-                <Badge variant="default" className="border-2 border-black">
+                <Badge variant="default" className="border border-[var(--fm-line)]">
                   {summary.currentStage}
                 </Badge>
               </div>
@@ -187,7 +187,7 @@ export default function LifecyclePage() {
                       {isCompleted ? (
                         <IconCheck className="h-4 w-4 text-green-600" />
                       ) : isCurrent ? (
-                        <IconActivity className="h-4 w-4 text-orange" />
+                        <IconActivity className="h-4 w-4 text-[var(--fm-brand)]" />
                       ) : (
                         <IconX className="h-4 w-4 text-muted-foreground" />
                       )}

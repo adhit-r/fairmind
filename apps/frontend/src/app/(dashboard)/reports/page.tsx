@@ -104,20 +104,20 @@ export default function ReportsPage() {
   }
 
   return (
-    <main data-testid="assurance-report" className="space-y-5 bg-[#FCFDF8] pb-10 text-[#0F1412]">
-      <header className="border-4 border-[#0F1412] bg-[#0F1412] p-5 text-[#FCFDF8] shadow-[8px_8px_0_0_#E97522]">
+    <main data-testid="assurance-report" className="space-y-5 bg-white pb-10 text-[var(--fm-ink)]">
+      <header className="bg-[var(--fm-ink)] p-5 text-white rounded-[14px] shadow-[var(--fm-shadow)]">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <Badge className="rounded-none border-2 border-[#FCFDF8] bg-[#FCFDF8] font-black uppercase text-[#0F1412]">
+              <Badge className="border-2 border-white bg-white font-semibold text-[var(--fm-ink)]">
                 <IconFileCheck aria-hidden="true" />
                 Assurance summary
               </Badge>
-              <Badge className="rounded-none border-2 border-[#E97522] bg-transparent font-black uppercase text-[#FCFDF8]">
+              <Badge className="border-2 border-[#E97522] bg-transparent font-semibold text-white">
                 {auditorMode ? 'Auditor mode' : 'Builder mode'}
               </Badge>
             </div>
-            <h1 className="mt-4 text-2xl font-black uppercase tracking-tight sm:text-3xl">Reports &amp; Assurance</h1>
+            <h1 className="mt-4 text-2xl font-semibold tracking-tight sm:text-3xl">Reports &amp; Assurance</h1>
             <p className="mt-2 max-w-[72ch] text-sm text-[#D9E0DC]">
               A version-pinned review surface for control state, evidence provenance, reviewer decisions, unresolved findings, and known limitations.
             </p>
@@ -126,7 +126,7 @@ export default function ReportsPage() {
             type="button"
             variant="neutral"
             onClick={() => void refresh()}
-            className="rounded-none border-2 border-[#FCFDF8] bg-[#FCFDF8] font-black uppercase text-[#0F1412]"
+            className="border-2 border-white bg-white font-semibold text-[var(--fm-ink)]"
           >
             <IconRefresh aria-hidden="true" />
             Refresh summary
@@ -135,23 +135,23 @@ export default function ReportsPage() {
       </header>
 
       {auditorMode ? (
-        <section className="flex items-start gap-3 border-2 border-[#0F1412] bg-[#E5F4EF] p-4" aria-label="Auditor access">
+        <section className="flex items-start gap-3 border border-[var(--fm-line)] bg-[#E5F4EF] p-4" aria-label="Auditor access">
           <IconLockCheck aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0" />
           <div>
-            <p className="font-black uppercase">Read-only auditor view</p>
-            <p className="mt-1 text-sm text-[#59615D]">The same assurance route is shown without control or evidence review actions.</p>
+            <p className="font-semibold">Read-only auditor view</p>
+            <p className="mt-1 text-sm text-[var(--fm-ink2)]">The same assurance route is shown without control or evidence review actions.</p>
           </div>
         </section>
       ) : null}
 
       {assuranceBase.resolvedAssignments.length > 0 ? (
-        <label className="flex flex-col gap-2 border-2 border-[#0F1412] bg-[#FCFDF8] p-3 text-xs font-black uppercase tracking-[0.1em] sm:flex-row sm:items-center">
+        <label className="flex flex-col gap-2 border border-[var(--fm-line)] bg-white p-3 text-xs font-semibold uppercase tracking-[0.1em] sm:flex-row sm:items-center">
           Framework scope
           <select
             aria-label="Framework scope"
             value={selectedAssignmentId}
             onChange={(event) => setSelectedAssignmentId(event.target.value)}
-            className="min-h-11 flex-1 rounded-none border-2 border-[#0F1412] bg-[#FCFDF8] px-3 text-sm font-black normal-case"
+            className="min-h-11 flex-1 border border-[var(--fm-line)] bg-white px-3 text-sm font-semibold normal-case"
           >
             {assuranceBase.resolvedAssignments.map(({ assignment, framework, version }) => (
               <option key={assignment.id} value={assignment.id}>{framework.name} {version.versionLabel}</option>
@@ -160,10 +160,10 @@ export default function ReportsPage() {
         </label>
       ) : null}
 
-      <section aria-label="Assurance scope" className="border-2 border-[#0F1412] bg-[#F3F5F0]">
-        <div className="border-b-2 border-[#0F1412] px-4 py-3">
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-[#0B7659]">Pinned scope</p>
-          <h2 className="mt-1 text-lg font-black uppercase">Assurance Scope</h2>
+      <section aria-label="Assurance scope" className="border border-[var(--fm-line)] bg-[var(--fm-bg)]">
+        <div className="border-b border-[var(--fm-line)] px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#0B7659]">Pinned scope</p>
+          <h2 className="mt-1 text-lg font-semibold">Assurance Scope</h2>
         </div>
         <dl className="grid sm:grid-cols-2 xl:grid-cols-5">
           {[
@@ -173,79 +173,79 @@ export default function ReportsPage() {
             ['Catalog hash', assignedVersion?.sourceHash || 'Not available'],
             ['Evidence period', evidencePeriod],
           ].map(([label, value]) => (
-            <div key={label} className="border-b-2 border-[#0F1412] px-4 py-3 sm:border-r-2 xl:border-b-0 last:border-b-0 xl:last:border-r-0">
-              <dt className="text-[11px] font-black uppercase tracking-[0.1em] text-[#59615D]">{label}</dt>
-              <dd className="mt-1 break-all text-sm font-black">{value}</dd>
+            <div key={label} className="border-b border-[var(--fm-line)] px-4 py-3 sm:border-r-2 xl:border-b-0 last:border-b-0 xl:last:border-r-0">
+              <dt className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--fm-ink2)]">{label}</dt>
+              <dd className="mt-1 break-all text-sm font-semibold">{value}</dd>
             </div>
           ))}
         </dl>
       </section>
 
       {error ? (
-        <Alert role="alert" className="rounded-none border-2 border-[#D83A2E] bg-[#FFF0ED] text-[#0F1412]">
+        <Alert role="alert" className="border-2 border-[#D83A2E] bg-[#FFF0ED] text-[var(--fm-ink)]">
           <IconAlertTriangle aria-hidden="true" />
           <AlertDescription className="font-bold">{error.message}</AlertDescription>
         </Alert>
       ) : loading ? (
         <div aria-label="Loading assurance report" className="grid gap-4 lg:grid-cols-2">
-          <Skeleton className="h-56 rounded-none" />
-          <Skeleton className="h-56 rounded-none" />
-          <Skeleton className="h-56 rounded-none" />
-          <Skeleton className="h-56 rounded-none" />
+          <Skeleton className="h-56" />
+          <Skeleton className="h-56" />
+          <Skeleton className="h-56" />
+          <Skeleton className="h-56" />
         </div>
       ) : !activeAssignment || !assignedVersion ? (
-        <section className="border-4 border-[#0F1412] bg-[#F3F5F0] p-7 shadow-[8px_8px_0_0_#0F1412]">
-          <h2 className="text-xl font-black uppercase">No version-pinned scope</h2>
-          <p className="mt-2 max-w-[66ch] text-sm text-[#59615D]">Activate a framework version before preparing an assurance summary. Unknown scope is not represented as zero readiness.</p>
+        <section className="bg-[var(--fm-bg)] p-7 rounded-[14px] shadow-[var(--fm-shadow)]">
+          <h2 className="text-xl font-semibold">No version-pinned scope</h2>
+          <p className="mt-2 max-w-[66ch] text-sm text-[var(--fm-ink2)]">Activate a framework version before preparing an assurance summary. Unknown scope is not represented as zero readiness.</p>
           {!auditorMode ? (
-            <Button asChild className="mt-5 rounded-none border-2 border-[#0F1412] bg-[#E97522] font-black uppercase text-[#0F1412]">
+            <Button asChild className="mt-5 border border-[var(--fm-line)] bg-[#E97522] font-semibold text-[var(--fm-ink)]">
               <Link href="/compliance-dashboard">Assign framework scope<IconArrowRight aria-hidden="true" /></Link>
             </Button>
           ) : null}
         </section>
       ) : (
         <>
-          <section className="grid border-2 border-[#0F1412] bg-[#FCFDF8] lg:grid-cols-3" aria-label={`${frameworkName} readiness summary`}>
-            <div className="border-b-2 border-[#0F1412] bg-[oklch(0.60_0.13_163)] p-5 lg:border-b-0 lg:border-r-2">
-              <p className="text-xs font-black uppercase tracking-[0.14em]">Transparent readiness</p>
-              <p className="mt-2 text-3xl font-black">{readiness ? `${readiness.accepted} / ${readiness.applicable}` : 'Unknown'}</p>
+          <section className="grid border border-[var(--fm-line)] bg-white lg:grid-cols-3" aria-label={`${frameworkName} readiness summary`}>
+            <div className="border-b border-[var(--fm-line)] bg-[oklch(0.60_0.13_163)] p-5 lg:border-b-0 lg:border-r-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em]">Transparent readiness</p>
+              <p className="mt-2 text-3xl font-semibold">{readiness ? `${readiness.accepted} / ${readiness.applicable}` : 'Unknown'}</p>
               <p className="mt-1 text-sm font-bold">Accepted controls / applicable controls</p>
             </div>
-            <div className="border-b-2 border-[#0F1412] p-5 lg:border-b-0 lg:border-r-2">
-              <p className="text-xs font-black uppercase tracking-[0.1em] text-[#59615D]">Review queue</p>
-              <p className="mt-2 text-3xl font-black">{readiness?.readyForReview ?? 'Unknown'}</p>
+            <div className="border-b border-[var(--fm-line)] p-5 lg:border-b-0 lg:border-r-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--fm-ink2)]">Review queue</p>
+              <p className="mt-2 text-3xl font-semibold">{readiness?.readyForReview ?? 'Unknown'}</p>
               <p className="mt-1 text-sm font-bold">Ready for reviewer assessment</p>
             </div>
             <div className="p-5">
-              <p className="text-xs font-black uppercase tracking-[0.1em] text-[#59615D]">Evidence gaps</p>
-              <p className="mt-2 text-3xl font-black">{readiness?.missingEvidence ?? 'Unknown'}</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--fm-ink2)]">Evidence gaps</p>
+              <p className="mt-2 text-3xl font-semibold">{readiness?.missingEvidence ?? 'Unknown'}</p>
               <p className="mt-1 text-sm font-bold">Controls missing accepted evidence</p>
             </div>
           </section>
 
           <div className="grid gap-5 xl:grid-cols-2">
-            <section aria-label="Evidence index" className="border-2 border-[#0F1412] bg-[#FCFDF8]">
-              <div className="border-b-2 border-[#0F1412] bg-[#F3F5F0] px-4 py-3">
-                <h2 className="font-black uppercase">Evidence Index</h2>
-                <p className="mt-1 text-xs text-[#59615D]">Immutable run identity and canonical content hash.</p>
+            <section aria-label="Evidence index" className="border border-[var(--fm-line)] bg-white">
+              <div className="border-b border-[var(--fm-line)] bg-[var(--fm-bg)] px-4 py-3">
+                <h2 className="font-semibold">Evidence Index</h2>
+                <p className="mt-1 text-xs text-[var(--fm-ink2)]">Immutable run identity and canonical content hash.</p>
               </div>
               {assurance.evidenceRuns.length === 0 ? (
-                <p className="p-5 text-sm font-bold text-[#59615D]">No evidence runs are recorded for this AI system.</p>
+                <p className="p-5 text-sm font-bold text-[var(--fm-ink2)]">No evidence runs are recorded for this AI system.</p>
               ) : (
-                <ol className="divide-y-2 divide-[#0F1412]">
+                <ol className="divide-y-2 divide-[var(--fm-line)]">
                   {assurance.evidenceRuns.map((run) => (
                     <li key={run.id} className="p-4">
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <div>
-                          <p className="font-black">{run.suiteName || run.sourceIdentifier}</p>
-                          <p className="text-xs font-bold uppercase text-[#59615D]">{run.sourceIdentifier} · {run.result.replace(/_/g, ' ')}</p>
+                          <p className="font-semibold">{run.suiteName || run.sourceIdentifier}</p>
+                          <p className="text-xs font-semibold uppercase text-[var(--fm-ink2)]">{run.sourceIdentifier} · {run.result.replace(/_/g, ' ')}</p>
                         </div>
-                        <Badge variant="outline" className="rounded-none border-2 border-[#0F1412] bg-[#FCFDF8] font-black uppercase">{run.assuranceSource?.replace(/_/g, ' ') || 'Source unknown'}</Badge>
+                        <Badge variant="outline" className="border border-[var(--fm-line)] bg-white font-semibold">{run.assuranceSource?.replace(/_/g, ' ') || 'Source unknown'}</Badge>
                       </div>
                       <dl className="mt-3 space-y-2 text-xs">
-                        <div><dt className="font-black uppercase text-[#59615D]">Content hash</dt><dd className="break-all font-mono font-bold">{run.contentHash}</dd></div>
-                        <div><dt className="font-black uppercase text-[#59615D]">Captured</dt><dd className="font-bold">{formatDate(run.capturedAt)}</dd></div>
-                        <div><dt className="font-black uppercase text-[#59615D]">Versions</dt><dd className="font-bold">Subject {run.subjectVersion || 'not recorded'} · Suite {run.suiteVersion || 'not recorded'} · Runner {run.runnerVersion || 'not recorded'}</dd></div>
+                        <div><dt className="font-semibold text-[var(--fm-ink2)]">Content hash</dt><dd className="break-all font-mono font-bold">{run.contentHash}</dd></div>
+                        <div><dt className="font-semibold text-[var(--fm-ink2)]">Captured</dt><dd className="font-bold">{formatDate(run.capturedAt)}</dd></div>
+                        <div><dt className="font-semibold text-[var(--fm-ink2)]">Versions</dt><dd className="font-bold">Subject {run.subjectVersion || 'not recorded'} · Suite {run.suiteVersion || 'not recorded'} · Runner {run.runnerVersion || 'not recorded'}</dd></div>
                       </dl>
                     </li>
                   ))}
@@ -253,16 +253,16 @@ export default function ReportsPage() {
               )}
             </section>
 
-            <section aria-label="Unresolved findings" className="border-2 border-[#0F1412] bg-[#FCFDF8]">
-              <div className="border-b-2 border-[#0F1412] bg-[#FFF0ED] px-4 py-3">
-                <h2 className="font-black uppercase">Unresolved Findings</h2>
-                <p className="mt-1 text-xs text-[#59615D]">Counts are reported only when present in the framework assessment contract.</p>
+            <section aria-label="Unresolved findings" className="border border-[var(--fm-line)] bg-white">
+              <div className="border-b border-[var(--fm-line)] bg-[#FFF0ED] px-4 py-3">
+                <h2 className="font-semibold">Unresolved Findings</h2>
+                <p className="mt-1 text-xs text-[var(--fm-ink2)]">Counts are reported only when present in the framework assessment contract.</p>
               </div>
               <div className="p-5">
-                <p className="text-3xl font-black text-[#D83A2E]">{readiness?.blockingFindings ?? 'Unknown'}</p>
-                <p className="mt-1 font-black">{readiness ? countLabel(readiness.blockingFindings, 'rejected assessment') : 'Rejected assessment count unavailable'}</p>
-                <div className="mt-5 border-t-2 border-[#0F1412] pt-4">
-                  <p className="text-xs font-black uppercase text-[#59615D]">Control-linked detail</p>
+                <p className="text-3xl font-semibold text-[#D83A2E]">{readiness?.blockingFindings ?? 'Unknown'}</p>
+                <p className="mt-1 font-semibold">{readiness ? countLabel(readiness.blockingFindings, 'rejected assessment') : 'Rejected assessment count unavailable'}</p>
+                <div className="mt-5 border-t border-[var(--fm-line)] pt-4">
+                  <p className="text-xs font-semibold uppercase text-[var(--fm-ink2)]">Control-linked detail</p>
                   <p className="mt-1 text-sm font-bold">
                     {controlFindingsIncomplete
                       ? `${knownControlFindings} known; at least one control does not expose a finding count.`
@@ -272,28 +272,28 @@ export default function ReportsPage() {
               </div>
             </section>
 
-            <section aria-label="Decision register" className="border-2 border-[#0F1412] bg-[#FCFDF8]">
-              <div className="border-b-2 border-[#0F1412] bg-[#F3F5F0] px-4 py-3">
-                <h2 className="font-black uppercase">Decision Register</h2>
-                <p className="mt-1 text-xs text-[#59615D]">Recorded mapping reviews; candidate suggestions are not decisions.</p>
+            <section aria-label="Decision register" className="border border-[var(--fm-line)] bg-white">
+              <div className="border-b border-[var(--fm-line)] bg-[var(--fm-bg)] px-4 py-3">
+                <h2 className="font-semibold">Decision Register</h2>
+                <p className="mt-1 text-xs text-[var(--fm-ink2)]">Recorded mapping reviews; candidate suggestions are not decisions.</p>
               </div>
               {reviewedMappings.length === 0 ? (
-                <p className="p-5 text-sm font-bold text-[#59615D]">No accepted or rejected mapping decisions are recorded.</p>
+                <p className="p-5 text-sm font-bold text-[var(--fm-ink2)]">No accepted or rejected mapping decisions are recorded.</p>
               ) : (
-                <ol className="divide-y-2 divide-[#0F1412]">
+                <ol className="divide-y-2 divide-[var(--fm-line)]">
                   {reviewedMappings.map((mapping) => {
                     const review = latestReview(mapping)
                     const control = controlById.get(mapping.controlAssessmentId)
                     return (
                       <li key={mapping.id} className="p-4">
                         <div className="flex flex-wrap items-center gap-2">
-                          <Badge className={`rounded-none border-2 border-[#0F1412] font-black uppercase text-[#0F1412] ${mapping.state === 'accepted' ? 'bg-[#E5F4EF]' : 'bg-[#FFF0ED]'}`}>
+                          <Badge className={`border border-[var(--fm-line)] font-semibold text-[var(--fm-ink)] ${mapping.state === 'accepted' ? 'bg-[#E5F4EF]' : 'bg-[#FFF0ED]'}`}>
                             {mapping.state === 'accepted' ? 'Accepted' : 'Rejected'}
                           </Badge>
-                          <p className="font-black">{control ? `${control.externalId} — ${control.title}` : 'Control reference unavailable'}</p>
+                          <p className="font-semibold">{control ? `${control.externalId} — ${control.title}` : 'Control reference unavailable'}</p>
                         </div>
                         <p className="mt-2 text-sm font-bold">{review?.rationale || mapping.rationale || 'No rationale recorded.'}</p>
-                        <p className="mt-2 text-xs text-[#59615D]">Reviewed by {review?.reviewedBy || 'identity unavailable'} · {formatDate(review?.reviewedAt || null)}</p>
+                        <p className="mt-2 text-xs text-[var(--fm-ink2)]">Reviewed by {review?.reviewedBy || 'identity unavailable'} · {formatDate(review?.reviewedAt || null)}</p>
                       </li>
                     )
                   })}
@@ -301,16 +301,16 @@ export default function ReportsPage() {
               )}
             </section>
 
-            <section aria-label="Limitations" className="border-2 border-[#0F1412] bg-[#FCFDF8]">
-              <div className="border-b-2 border-[#0F1412] bg-[#F3F5F0] px-4 py-3">
-                <h2 className="font-black uppercase">Limitations</h2>
-                <p className="mt-1 text-xs text-[#59615D]">Known evaluation and assurance-boundary limitations remain part of the report.</p>
+            <section aria-label="Limitations" className="border border-[var(--fm-line)] bg-white">
+              <div className="border-b border-[var(--fm-line)] bg-[var(--fm-bg)] px-4 py-3">
+                <h2 className="font-semibold">Limitations</h2>
+                <p className="mt-1 text-xs text-[var(--fm-ink2)]">Known evaluation and assurance-boundary limitations remain part of the report.</p>
               </div>
-              <ul className="divide-y-2 divide-[#0F1412]">
+              <ul className="divide-y-2 divide-[var(--fm-line)]">
                 {limitations.length > 0 ? limitations.map((limitation) => (
                   <li key={limitation} className="p-4 text-sm font-bold">{limitation}</li>
                 )) : (
-                  <li className="p-4 text-sm font-bold text-[#59615D]">
+                  <li className="p-4 text-sm font-bold text-[var(--fm-ink2)]">
                     {assurance.evidenceRuns.length === 0
                       ? 'No evidence runs are in scope, so evaluation limitations are unknown.'
                       : 'No evaluation limitations were recorded in the in-scope run envelopes.'}
@@ -321,25 +321,25 @@ export default function ReportsPage() {
             </section>
           </div>
 
-          <section aria-label="Assurance history" className="border-2 border-[#0F1412] bg-[#FCFDF8]">
-            <div className="flex items-center gap-3 border-b-2 border-[#0F1412] bg-[#F3F5F0] px-4 py-3">
+          <section aria-label="Assurance history" className="border border-[var(--fm-line)] bg-white">
+            <div className="flex items-center gap-3 border-b border-[var(--fm-line)] bg-[var(--fm-bg)] px-4 py-3">
               <IconHistory aria-hidden="true" />
               <div>
-                <h2 className="font-black uppercase">Assurance History</h2>
-                <p className="mt-1 text-xs text-[#59615D]">Tenant-scoped evidence runs retained for the current report scope.</p>
+                <h2 className="font-semibold">Assurance History</h2>
+                <p className="mt-1 text-xs text-[var(--fm-ink2)]">Tenant-scoped evidence runs retained for the current report scope.</p>
               </div>
             </div>
             {assurance.evidenceRuns.length === 0 ? (
-              <p className="p-5 text-sm font-bold text-[#59615D]">No evidence-run history is recorded.</p>
+              <p className="p-5 text-sm font-bold text-[var(--fm-ink2)]">No evidence-run history is recorded.</p>
             ) : (
-              <ol className="divide-y-2 divide-[#0F1412]">
+              <ol className="divide-y-2 divide-[var(--fm-line)]">
                 {[...assurance.evidenceRuns]
                   .sort((left, right) => (right.capturedAt || '').localeCompare(left.capturedAt || ''))
                   .map((run) => (
                     <li key={run.id} className="grid gap-2 p-4 sm:grid-cols-[1fr_auto] sm:items-center">
                       <div>
-                        <p className="font-black">{run.suiteName || run.sourceIdentifier}</p>
-                        <p className="mt-1 text-xs text-[#59615D]">Run {run.runId} · captured {formatDate(run.capturedAt)}</p>
+                        <p className="font-semibold">{run.suiteName || run.sourceIdentifier}</p>
+                        <p className="mt-1 text-xs text-[var(--fm-ink2)]">Run {run.runId} · captured {formatDate(run.capturedAt)}</p>
                       </div>
                       <p className="break-all font-mono text-xs font-bold">{run.contentHash}</p>
                     </li>
@@ -385,11 +385,11 @@ export default function ReportsPage() {
           />
 
           {!auditorMode ? (
-            <nav aria-label="Assurance builder actions" className="flex flex-col gap-3 border-t-2 border-[#0F1412] pt-5 sm:flex-row">
-              <Button asChild className="rounded-none border-2 border-[#0F1412] bg-[#E97522] font-black uppercase text-[#0F1412]">
+            <nav aria-label="Assurance builder actions" className="flex flex-col gap-3 border-t border-[var(--fm-line)] pt-5 sm:flex-row">
+              <Button asChild className="border border-[var(--fm-line)] bg-[#E97522] font-semibold text-[var(--fm-ink)]">
                 <Link href="/compliance-dashboard">Review control assessments<IconArrowRight aria-hidden="true" /></Link>
               </Button>
-              <Button asChild variant="neutral" className="rounded-none border-2 border-[#0F1412] bg-[#FCFDF8] font-black uppercase">
+              <Button asChild variant="neutral" className="border border-[var(--fm-line)] bg-white font-semibold">
                 <Link href="/evidence?view=evaluations">Review evidence mappings<IconArrowRight aria-hidden="true" /></Link>
               </Button>
             </nav>

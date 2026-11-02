@@ -36,11 +36,11 @@ export default function StatusPage() {
 
   const getStatusBadge = (status: string) => {
     if (status === 'healthy' || status === 'operational') {
-      return <Badge variant="default" className="border-2 border-black bg-green-500">Healthy</Badge>
+      return <Badge variant="default" className="border border-[var(--fm-line)] bg-green-500">Healthy</Badge>
     } else if (status === 'degraded') {
-      return <Badge variant="secondary" className="border-2 border-black bg-yellow-400">Degraded</Badge>
+      return <Badge variant="secondary" className="border border-[var(--fm-line)] bg-yellow-400">Degraded</Badge>
     } else {
-      return <Badge variant="destructive" className="border-2 border-black">Down</Badge>
+      return <Badge variant="destructive" className="border border-[var(--fm-line)]">Down</Badge>
     }
   }
 
@@ -60,7 +60,7 @@ export default function StatusPage() {
   if (error && !health) {
     return (
       <div className="space-y-6">
-        <Alert className="border-2 border-red-500 shadow-brutal">
+        <Alert className="border-2 border-red-500">
           <IconAlertTriangle className="h-4 w-4" />
           <AlertTitle>Error Loading System Status</AlertTitle>
           <AlertDescription>{error.message}</AlertDescription>
@@ -77,7 +77,7 @@ export default function StatusPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-4xl font-bold">System Status</h1>
+        <h1 className="text-[30px] font-semibold tracking-[-.03em]">System Status</h1>
         <p className="text-muted-foreground mt-1">
           Monitor system health and service status
         </p>
@@ -108,13 +108,13 @@ export default function StatusPage() {
       </div>
 
       {/* Services */}
-      <Card className="p-6 border-2 border-black shadow-brutal">
+      <Card className="p-6 fm-card">
         <h2 className="text-2xl font-bold mb-4">Service Status</h2>
         <div className="space-y-3">
           {services.map((service) => (
             <div
               key={service.name}
-              className="p-4 border-2 border-black bg-white flex items-center justify-between"
+              className="p-4 border border-[var(--fm-line)] bg-white flex items-center justify-between"
             >
               <div className="flex items-center gap-4">
                 {service.status === 'healthy' ? (

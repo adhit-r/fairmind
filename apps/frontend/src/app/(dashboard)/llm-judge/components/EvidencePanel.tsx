@@ -38,7 +38,7 @@ export function EvidencePanel({ result }: EvidencePanelProps) {
 
   if (result.detected_biases.length === 0) {
     return (
-      <Card className="border-2 border-black shadow-brutal p-6">
+      <Card className="p-6 fm-card">
         <div className="text-center py-8">
           <p className="text-lg font-semibold mb-2">No Biases Detected</p>
           <p className="text-sm text-gray-600">
@@ -50,8 +50,8 @@ export function EvidencePanel({ result }: EvidencePanelProps) {
   }
 
   return (
-    <Card className="border-2 border-black shadow-brutal">
-      <div className="p-6 border-b-2 border-black">
+    <Card className="fm-card">
+      <div className="p-6 border-b border-[var(--fm-line)]">
         <h3 className="text-xl font-bold">Detected Biases & Evidence</h3>
         <p className="text-sm text-gray-600 mt-1">
           Specific instances of bias with supporting evidence from the judge model
@@ -87,7 +87,7 @@ export function EvidencePanel({ result }: EvidencePanelProps) {
             {expandedBias === index && result.evidence[index] && (
               <div className="mt-4 space-y-3 bg-gray-50 p-4 rounded border border-gray-300">
                 <div className="space-y-2">
-                  <p className="text-xs font-bold uppercase text-gray-600">Evidence from Text</p>
+                  <p className="text-xs font-semibold uppercase text-gray-600">Evidence from Text</p>
                   <p className="text-sm font-mono bg-white p-3 rounded border border-gray-200 italic text-gray-700">
                     &quot;{result.evidence[index]}&quot;
                   </p>
@@ -119,7 +119,7 @@ export function EvidencePanel({ result }: EvidencePanelProps) {
       </div>
 
       {/* Summary */}
-      <div className="bg-blue-50 border-t-2 border-black p-4">
+      <div className="bg-blue-50 border-t border-[var(--fm-line)] p-4">
         <p className="text-xs text-blue-900">
           <strong>💡 How to use:</strong> Click on each detected bias to see the supporting evidence from your
           text. Use this information to revise your content and remove these biases.

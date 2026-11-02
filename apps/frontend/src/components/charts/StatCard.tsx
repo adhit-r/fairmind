@@ -17,11 +17,11 @@ interface StatCardProps {
 
 export function StatCard({ title, value, icon, trend, className }: StatCardProps) {
   return (
-    <Card className={cn('p-6 border-2 border-black shadow-brutal hover:shadow-brutal-lg transition-all', className)}>
+    <Card className={cn('p-6 transition-all fm-card', className)}>
       <div className="flex items-start justify-between">
         <div className="flex-1">
           <p className="text-sm font-medium text-muted-foreground mb-1">{title}</p>
-          <p className="text-3xl font-bold">{value}</p>
+          <p className="text-[24px] font-semibold tracking-tight">{value}</p>
           {trend && (
             <p className={cn(
               'text-xs mt-2 font-medium',
@@ -32,7 +32,7 @@ export function StatCard({ title, value, icon, trend, className }: StatCardProps
           )}
         </div>
         {icon && (
-          <div className="p-2 border-2 border-black bg-orange shadow-brutal">
+          <div className="p-2 bg-[#fff1ea] rounded-[14px] shadow-[var(--fm-shadow)]">
             {icon}
           </div>
         )}

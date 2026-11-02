@@ -49,7 +49,7 @@ export function LifecycleStepper({ currentStage, readiness, compact = false }: L
             )
           })}
         </div>
-        <span className="text-xs font-bold uppercase">{stage.label}</span>
+        <span className="text-xs font-semibold uppercase">{stage.label}</span>
       </div>
     )
   }
@@ -57,7 +57,7 @@ export function LifecycleStepper({ currentStage, readiness, compact = false }: L
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
           Governance lifecycle
         </p>
         <span className="text-xs font-bold text-muted-foreground">{readiness}% ready</span>
@@ -76,8 +76,8 @@ export function LifecycleStepper({ currentStage, readiness, compact = false }: L
                     isComplete
                       ? 'border-emerald-600 bg-emerald-600 text-white'
                       : isCurrent
-                        ? 'border-black bg-black text-white'
-                        : 'border-black/20 bg-white text-muted-foreground'
+                        ? 'border-[var(--fm-line)] bg-black text-white'
+                        : 'border-[var(--fm-line)] bg-white text-muted-foreground'
                   }`}
                 >
                   {isComplete ? (

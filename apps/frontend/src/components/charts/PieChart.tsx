@@ -27,7 +27,7 @@ const COLORS = ['#FF6B35', '#000000', '#F59E0B', '#10B981', '#3B82F6', '#8B5CF6'
 
 export function PieChart({ title, data, className }: PieChartProps) {
   return (
-    <Card className={cn('p-6 border-2 border-black shadow-brutal', className)}>
+    <Card className={cn('p-6 fm-card', className)}>
       <h3 className="text-lg font-bold mb-4">{title}</h3>
       <ResponsiveContainer width="100%" height={300}>
         <RechartsPieChart>

@@ -6,16 +6,16 @@ import { IconDatabase } from '@tabler/icons-react';
 
 const DatasetNode = ({ data }: NodeProps) => {
     return (
-        <Card className="w-56 border-2 border-black shadow-brutal bg-white">
+        <Card className="w-56 fm-card">
             <Handle type="target" position={Position.Top} className="w-3 h-3 bg-black border-2 border-white" />
 
             <CardHeader className="p-3 pb-0">
                 <div className="flex justify-between items-start">
-                    <Badge variant="outline" className="bg-blue-100 text-blue-800 border-black mb-2">
+                    <Badge variant="outline" className="bg-blue-100 text-blue-800 border-[var(--fm-line)] mb-2">
                         Dataset
                     </Badge>
                     {data.version && (
-                        <span className="text-xs font-mono bg-gray-100 px-1 border border-black rounded">
+                        <span className="text-xs font-mono bg-gray-100 px-1 border border-[var(--fm-line)] rounded">
                             v{data.version}
                         </span>
                     )}
