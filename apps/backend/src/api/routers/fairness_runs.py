@@ -33,6 +33,7 @@ from config.auth import TokenData, get_current_active_user
 from database.connection import get_db
 from pydantic import BaseModel, Field
 
+from src.application.services.decision_seal_service import list_seals
 from src.application.services.fairness_run_service import (
     ATTESTABLE_CHECKS,
     ATTESTATION_CONFIDENCE,
@@ -208,6 +209,18 @@ async def list_fairness_runs(
             }
         )
     return runs
+
+
+@router.get("/systems/{system_id}/seals")
+async def get_decision_seals(
+    system_id: str,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Every seal taken at a release decision, each verified against the evidence as it is now."""
+    _ensure_tables(db)
+    _require_system_access(db, system_id, current_user)
+    return list_seals(db, system_id)
 
 
 @router.get("/systems/{system_id}/gate")

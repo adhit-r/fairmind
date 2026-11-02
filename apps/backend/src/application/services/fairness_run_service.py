@@ -37,6 +37,7 @@ ATTRIBUTE_HINTS = (
 
 DI_THRESHOLD = 0.80   # four-fifths rule
 GAP_THRESHOLD = 0.05  # equal opportunity and equalized odds difference
+SIGNIFICANCE = 0.05   # permutation p-value below which a disparity is not noise
 
 
 def json_safe(value: Any) -> Any:
@@ -141,7 +142,7 @@ def _di_ratio(y_pred: np.ndarray, sensitive: np.ndarray) -> float:
 
 
 def _attribute_stats(
-    y_true: np.ndarray, y_pred: np.ndarray, proba: Optional[np.ndarray], sensitive: np.ndarray, rng: np.random.Generator
+    y_true: np.ndarray, y_pred: np.ndarray, proba: Optional[np.ndarray], sensitive: np.ndarray, rng: np.random.Generator, *, alpha: float = SIGNIFICANCE
 ) -> Dict[str, Any]:
     """Point estimate, 95% bootstrap interval and permutation p-value per metric.
 
@@ -180,12 +181,19 @@ def _attribute_stats(
         lo, hi = np.nanpercentile(np.array(boot[key], dtype=float), [2.5, 97.5])
         draws = np.array(perm[key], dtype=float)
         p_value = float(np.mean(draws <= value)) if not lower_is_fair else float(np.mean(draws >= value))
-        is_fair = value >= DI_THRESHOLD if not lower_is_fair else value <= GAP_THRESHOLD
+        crosses = value < DI_THRESHOLD if not lower_is_fair else value > GAP_THRESHOLD
+        significant = p_value < alpha
+        # A disparity counts only when it crosses the threshold and the shuffled-attribute
+        # null rarely produces one that large; noise on small samples does not fail a check.
+        is_fair = not (crosses and significant)
         return {
             "metric_name": key,
             "value": float(value),
             "confidence_interval": [float(lo), float(hi)],
             "p_value": p_value,
+            "significant": bool(significant),
+            "alpha": alpha,
+            "crosses_threshold": bool(crosses),
             "is_fair": bool(is_fair),
             "threshold": DI_THRESHOLD if not lower_is_fair else GAP_THRESHOLD,
             "resamples": N_RESAMPLES,
@@ -232,15 +240,19 @@ def run_fairness(
     all_fair = True
     smallest_group = None
     rng = np.random.default_rng(20261102)
+    # One run asks several questions at once (3 or 4 checks per attribute); Bonferroni keeps the
+    # chance that fair data fails any of them at SIGNIFICANCE, instead of 5% per check.
+    checks_per_attribute = 4 if proba is not None else 3
+    alpha = SIGNIFICANCE / (len(attributes) * checks_per_attribute)
     for attribute in attributes:
         sensitive = frame[attribute].astype(str).fillna("missing").to_numpy()
         groups, counts = np.unique(sensitive, return_counts=True)
         if len(groups) < 2:
             raise FairnessRunError(f"Column {attribute} has only one value; it cannot be a protected attribute here")
         rates = {str(g): float(y_pred[sensitive == g].mean()) for g in groups}
-        stats = _attribute_stats(y_true, y_pred, proba, sensitive, rng)
+        stats = _attribute_stats(y_true, y_pred, proba, sensitive, rng, alpha=alpha)
         checks = {
-            "disparate_impact": bool(stats["disparate_impact_ratio"]["value"] >= DI_THRESHOLD),
+            "disparate_impact": bool(stats["disparate_impact_ratio"]["is_fair"]),
             "equal_opportunity": bool(stats["equal_opportunity"]["is_fair"]),
             "equalized_odds": bool(stats["equalized_odds"]["is_fair"]),
             **({"calibration": bool(stats["calibration"]["is_fair"])} if stats["calibration"] else {}),
@@ -282,7 +294,7 @@ def run_fairness(
         "positive_rate": float(y_pred.mean()),
         "base_rate": float(y_true.mean()),
         "mapping": {"outcome": outcome, "prediction": prediction, "score": score, "attributes": attributes, "favorable_label": favorable_label},
-        "thresholds": {"disparate_impact_ratio": DI_THRESHOLD, "gap": GAP_THRESHOLD},
+        "thresholds": {"disparate_impact_ratio": DI_THRESHOLD, "gap": GAP_THRESHOLD, "alpha": alpha, "tests": len(attributes) * checks_per_attribute},
         "attributes": per_attribute,
         "all_checks_pass": bool(all_fair),
         "smallest_group": smallest_group,
