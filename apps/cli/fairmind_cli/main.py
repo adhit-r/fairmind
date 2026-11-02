@@ -3,6 +3,7 @@
     fairmind gate --system <id>                 exit 0 go, 2 conditional go, 1 no go
     fairmind test --system <id> --file p.csv \
         --outcome repaid --attributes gender,region [--prediction approved] [--score score]
+    fairmind monitor --system <id> --file decisions.csv --attributes gender [--prediction approved] [--score score]
     fairmind systems
 
 Configuration comes from flags or the environment: FAIRMIND_API_URL (default
@@ -165,6 +166,48 @@ def cmd_test(args: argparse.Namespace, factory: ClientFactory, out: Callable[[st
 
 
 # ---------------------------------------------------------------------------
+# monitor
+# ---------------------------------------------------------------------------
+
+def render_monitoring(run: Dict[str, Any]) -> str:
+    result = run["result"]
+    base = result["baseline"]
+    lines = [
+        f"{'Stable against the baseline' if result['all_checks_pass'] else 'Drift or disparity outside thresholds'}  "
+        f"{result['rows']} rows  overall score PSI {('%.3f' % result['overall_psi']) if result.get('overall_psi') is not None else 'n/a'}  "
+        f"baseline {'present' if base.get('present') else 'none (run a fairness test first)'}  evidence {run['evidenceId']}",
+        "",
+        f"  {'attribute':<14}{'max rate drift':>15}{'impact ratio':>13}{'worst PSI':>11}",
+    ]
+    for attr in result["attributes"]:
+        checks = attr["checks"]
+        def cell(value: Optional[float], ok: Optional[bool], width: int) -> str:
+            if value is None:
+                return f"{'n/a':>{width}}"
+            return f"{value:.3f}{'' if ok in (None, True) else '!'}".rjust(width)
+        lines.append(f"  {attr['attribute']:<14}" + cell(attr.get("max_rate_drift"), checks.get("selection_rate_stable"), 15) + cell(attr["disparate_impact_ratio"], checks.get("disparate_impact"), 13) + cell(attr.get("worst_psi"), checks.get("score_stable"), 11))
+    lines += ["", "  ! marks a check outside its threshold (rate drift above 0.05, impact ratio below 0.80, PSI at or above 0.10)", "", render_gate(run["gate"])]
+    return "\n".join(lines)
+
+
+def cmd_monitor(args: argparse.Namespace, factory: ClientFactory, out: Callable[[str], None]) -> int:
+    path = Path(args.file)
+    if not path.is_file():
+        raise CliError(f"No such file: {path}")
+    if not args.prediction and not args.score:
+        raise CliError("Give --prediction (a 0/1 column) or --score (a 0 to 1 column)")
+    data = {"attributes": args.attributes}
+    if args.prediction:
+        data["prediction"] = args.prediction
+    if args.score:
+        data["score"] = args.score
+    with _client(args, factory) as client, path.open("rb") as handle:
+        run = _call(client, "POST", f"{GOV}/systems/{args.system}/monitoring-runs", data=data, files={"file": (path.name, handle, "text/csv")})
+    out(json.dumps(run, indent=2) if args.json else render_monitoring(run))
+    return EXIT_GO if run["result"]["all_checks_pass"] else EXIT_NO_GO
+
+
+# ---------------------------------------------------------------------------
 # systems
 # ---------------------------------------------------------------------------
 
@@ -214,6 +257,14 @@ def build_parser() -> argparse.ArgumentParser:
     test.add_argument("--gate", action="store_true", help="exit by the release gate's verdict instead of the test's checks")
     test.add_argument("--allow-conditional", action="store_true", help="with --gate: exit 0 on a conditional go")
     test.set_defaults(func=cmd_test)
+
+    monitor = sub.add_parser("monitor", parents=[common], help="record a monitoring snapshot from recent decisions; exit 1 on drift or disparity")
+    monitor.add_argument("--system", required=True, help="AI system id")
+    monitor.add_argument("--file", required=True, help="CSV of recent decisions")
+    monitor.add_argument("--attributes", required=True, help="comma-separated protected attribute columns")
+    monitor.add_argument("--prediction", help="column with the model's decision (0/1)")
+    monitor.add_argument("--score", help="column with the model's score (0 to 1)")
+    monitor.set_defaults(func=cmd_monitor)
 
     systems = sub.add_parser("systems", parents=[common], help="list the AI systems your key can see")
     systems.set_defaults(func=cmd_systems)
