@@ -14,11 +14,11 @@ browser -> Cloudflare (fairmind.axonome.xyz) -> Caddy :443
 ```bash
 ssh-keygen -t ed25519 -N "" -f ~/.ssh/fairmind-lightsail
 aws lightsail import-key-pair --region us-east-1 --key-pair-name fairmind --public-key-base64 "$(cat ~/.ssh/fairmind-lightsail.pub)"
-aws lightsail create-instances --region us-east-1 --instance-names fairmind \
+aws lightsail create-instances --region us-east-1 --instance-names fairmind-app \
   --availability-zone us-east-1a --blueprint-id ubuntu_24_04 --bundle-id small_3_0 --key-pair-name fairmind
-aws lightsail allocate-static-ip --region us-east-1 --static-ip-name fairmind-ip
-aws lightsail attach-static-ip --region us-east-1 --static-ip-name fairmind-ip --instance-name fairmind
-aws lightsail enable-add-on --region us-east-1 --resource-name fairmind \
+aws lightsail allocate-static-ip --region us-east-1 --static-ip-name fairmind-app-ip
+aws lightsail attach-static-ip --region us-east-1 --static-ip-name fairmind-app-ip --instance-name fairmind-app
+aws lightsail enable-add-on --region us-east-1 --resource-name fairmind-app \
   --add-on-request addOnType=AutoSnapshot,autoSnapshotAddOnRequest={snapshotTimeOfDay=21:00}
 ```
 
@@ -26,7 +26,7 @@ Firewall: 443 from Cloudflare only, 22 from your IP.
 
 ```bash
 CF=$(curl -s https://www.cloudflare.com/ips-v4 | paste -sd, -)
-aws lightsail put-instance-public-ports --region us-east-1 --instance-name fairmind --port-infos \
+aws lightsail put-instance-public-ports --region us-east-1 --instance-name fairmind-app --port-infos \
   "fromPort=443,toPort=443,protocol=tcp,cidrs=[$CF]" \
   "fromPort=22,toPort=22,protocol=tcp,cidrs=[$(curl -s https://checkip.amazonaws.com)/32]"
 ```
