@@ -119,3 +119,20 @@ def test_systems_lists_what_the_key_can_see(monkeypatch):
     systems = [{"id": "s1", "name": "Loan scoring", "riskTier": "high", "lifecycleStage": "assess"}]
     code, text, _ = run_cli(["systems", "--api-key", "k"], lambda r: httpx.Response(200, json=systems), monkeypatch=monkeypatch)
     assert code == EXIT_GO and "Loan scoring" in text and "s1" in text
+
+
+def test_monitor_posts_the_snapshot_and_reports_drift(tmp_path, monkeypatch):
+    csv = tmp_path / "d.csv"; csv.write_text("gender,approved,score\nF,1,0.7\nM,0,0.2\n")
+    seen = {}
+    def handler(request):
+        seen["path"] = request.url.path; seen["body"] = request.read()
+        run = {"evidenceId": "m1", "systemId": "s", "title": "t", "gate": {**GATE, "verdict": "no_go"}, "result": {
+            "rows": 2, "all_checks_pass": False, "overall_psi": 0.31, "evidence_confidence": 0.9, "baseline": {"present": True, "rows": 600},
+            "thresholds": {"disparate_impact_ratio": 0.8, "rate_drift": 0.05, "psi_moderate": 0.1, "psi_significant": 0.25},
+            "attributes": [{"attribute": "gender", "groups": {"F": 1, "M": 1}, "selection_rates": {"F": 1.0, "M": 0.0}, "baseline_selection_rates": {"F": 0.5, "M": 0.5},
+                            "rate_drift": {"F": 0.5, "M": 0.5}, "max_rate_drift": 0.5, "disparate_impact_ratio": 0.0, "psi_by_group": {"F": 0.31}, "worst_psi": 0.31,
+                            "checks": {"disparate_impact": False, "selection_rate_stable": False, "score_stable": False}}]}}
+        return httpx.Response(200, json=run)
+    code, text, _ = run_cli(["monitor", "--system", "s", "--file", str(csv), "--attributes", "gender", "--prediction", "approved", "--score", "score", "--api-key", "k"], handler, monkeypatch=monkeypatch)
+    assert code == EXIT_NO_GO and seen["path"].endswith("/systems/s/monitoring-runs") and b'name="score"' in seen["body"]
+    assert "0.500!" in text and "0.310!" in text and "baseline present" in text

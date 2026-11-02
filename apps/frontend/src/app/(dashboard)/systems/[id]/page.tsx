@@ -6,8 +6,10 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { useOrg } from '@/context/OrgContext'
 import { useSystemContext } from '@/components/workflow/SystemContext'
 import { useEnvironmentalImpact } from '@/lib/api/hooks/useAIGovernance'
-import { useSystemFile, type SystemRecord } from '@/lib/api/hooks/useSystemFile'
+import { useSystemFile, type AttestableCheck, type SystemRecord } from '@/lib/api/hooks/useSystemFile'
 import { FairnessRunPanel } from './FairnessRunPanel'
+import { MonitoringRunPanel } from './MonitoringRunPanel'
+import { AttestForm } from './AttestForm'
 import { cn } from '@/lib/utils'
 
 type JourneyKey = 'onboard' | 'assess' | 'govern' | 'remediate' | 'decision' | 'operate'
@@ -24,6 +26,9 @@ const JOURNEY: Array<{ key: JourneyKey; label: string; purpose: string }> = [
 
 const VERDICT_LABEL: Record<string, string> = { go: 'Go', conditional_go: 'Conditional go', no_go: 'No go' }
 const VERDICT_TONE: Record<string, string> = { go: 'text-[#1f7a4d]', conditional_go: 'text-[#a14d00]', no_go: 'text-[#b4232c]' }
+const ATTESTABLE = new Set(['data_governance', 'human_oversight', 'monitoring', 'environmental'])
+const isAttestable = (key: string): key is AttestableCheck => ATTESTABLE.has(key)
+
 const CHECK_STATE: Record<string, string> = { proven: 'proven', attested: 'attested', open: 'open' }
 
 const READINESS_LABEL: Record<string, string> = {
@@ -100,10 +105,11 @@ export default function SystemFilePage() {
   const router = useRouter()
   const { selectedOrg } = useOrg()
   const { setSelectedSystemId } = useSystemContext()
-  const { system, evidence, approval, remediation, risks, reports, gate, fairnessRuns, loading, error, requestDecision, recordDecision, inspectCsv, runFairness } = useSystemFile(id)
+  const { system, evidence, approval, remediation, risks, reports, gate, fairnessRuns, monitoringRuns, loading, error, requestDecision, recordDecision, inspectCsv, runFairness, runMonitoring, attest } = useSystemFile(id)
   const env = useEnvironmentalImpact(selectedOrg?.id, id)
   const [busy, setBusy] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [attesting, setAttesting] = useState<AttestableCheck | null>(null)
 
   const open = (href: string) => {
     if (id) setSelectedSystemId(id)
@@ -154,6 +160,7 @@ export default function SystemFilePage() {
   const req = approval?.request ?? null
   const decided = req && req.status !== 'pending' ? req : null
   const latestReport = reports[0]
+  const latestMonitoring = monitoringRuns[0]
   const envStatus = typeof env.data?.recommendation === 'string' ? env.data.recommendation : env.data?.recommendation?.status
 
   return (
@@ -263,7 +270,9 @@ export default function SystemFilePage() {
           <div className="sm:col-span-2 xl:col-span-3">
             <div className="text-[11px] font-semibold uppercase tracking-[.08em] text-[var(--fm-ink3)]">Gate checks</div>
             <ul className="mt-1 grid gap-1 sm:grid-cols-2 xl:grid-cols-3">
-              {gate.checks.map((c) => (
+              {gate.checks.map((c) => {
+                const attestable = c.state === 'open' && isAttestable(c.key) ? c.key : null
+                return (
                 <li key={c.key} className="flex items-center gap-2 text-[12.5px]">
                   <span
                     aria-hidden="true"
@@ -276,9 +285,25 @@ export default function SystemFilePage() {
                   />
                   <span>{c.label}</span>
                   <span className="text-[var(--fm-ink3)]">{CHECK_STATE[c.state]}{c.confidence ? ` ${c.confidence.toFixed(2)}` : ''}</span>
+                  {attestable && (
+                    <button type="button" onClick={() => setAttesting(attesting === attestable ? null : attestable)} className="ml-auto text-[12px] font-medium text-[var(--fm-ink2)] underline-offset-2 hover:underline">
+                      Attest
+                    </button>
+                  )}
                 </li>
-              ))}
+                )
+              })}
             </ul>
+            {attesting && (
+              <AttestForm
+                check={attesting}
+                onCancel={() => setAttesting(null)}
+                onSubmit={async (statement, reference) => {
+                  await attest(attesting, statement, reference)
+                  setAttesting(null)
+                }}
+              />
+            )}
             {gate.reasons.length > 0 && <p className="mt-2 text-[12.5px] text-[var(--fm-ink2)]">{gate.reasons.join('. ')}.</p>}
           </div>
         )}
@@ -290,8 +315,9 @@ export default function SystemFilePage() {
         <Action onClick={() => open('/monitoring')} primary={false}>Monitoring</Action>
       </>}>
         <Fact label="Audit reports" value={reports.length ? `${reports.length}, latest ${when(latestReport.createdAt)}` : 'None generated'} />
-        <Fact label="Live metrics" value={<span className="text-[var(--fm-ink2)]">Coming soon</span>} />
+        <Fact label="Monitoring snapshots" value={latestMonitoring ? `${latestMonitoring.allChecksPass ? 'Stable' : 'Drifting'} on ${when(latestMonitoring.createdAt)}${monitoringRuns.length > 1 ? `, ${monitoringRuns.length} snapshots` : ''}` : 'None recorded'} />
         <Fact label="Approved" value={decided?.status === 'approved' ? when(decided.updatedAt) || 'Yes' : 'Not yet'} />
+        <MonitoringRunPanel inspect={inspectCsv} run={runMonitoring} hasBaseline={fairnessRuns.length > 0} />
       </Stage>
     </div>
   )

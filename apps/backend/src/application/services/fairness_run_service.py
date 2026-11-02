@@ -266,8 +266,19 @@ def run_fairness(
         )
 
     n = int(len(frame))
+    histograms = None
+    if proba is not None:
+        histograms = {
+            "bins": SCORE_BINS.tolist(),
+            "overall": score_histogram(proba),
+            "by_attribute": {
+                attribute: {str(g): score_histogram(proba[frame[attribute].astype(str).fillna("missing").to_numpy() == g]) for g in np.unique(frame[attribute].astype(str).fillna("missing").to_numpy())}
+                for attribute in attributes
+            },
+        }
     payload = {
         "rows": n,
+        "score_histograms": histograms,
         "positive_rate": float(y_pred.mean()),
         "base_rate": float(y_true.mean()),
         "mapping": {"outcome": outcome, "prediction": prediction, "score": score, "attributes": attributes, "favorable_label": favorable_label},
@@ -297,6 +308,130 @@ def evidence_confidence(rows: int, smallest_group: int, per_attribute: List[Dict
     if smallest_group < MIN_GROUP_SIZE:
         score = 0.85  # too few rows in a group: measured, but not more than the floor
     return round(min(score, 1.0), 2)
+
+
+# ---------------------------------------------------------------------------
+# Monitoring runs: current scores against the last fairness run as baseline
+# ---------------------------------------------------------------------------
+
+SCORE_BINS = np.linspace(0.0, 1.0, 11)
+PSI_MODERATE, PSI_SIGNIFICANT = 0.10, 0.25
+RATE_DRIFT_THRESHOLD = 0.05
+
+
+def score_histogram(scores: np.ndarray) -> List[int]:
+    """Counts of scores per fixed decile bin on [0, 1]."""
+    counts, _ = np.histogram(np.clip(scores, 0.0, 1.0), bins=SCORE_BINS)
+    return [int(c) for c in counts]
+
+
+def psi(expected_counts: List[int], actual_counts: List[int]) -> Optional[float]:
+    """Population stability index between two histograms over the same bins.
+
+    Empty bins are floored at 0.0001 so a single empty bin does not blow up;
+    below 0.10 is stable, 0.10 to 0.25 moderate, above 0.25 significant.
+    """
+    e, a = np.array(expected_counts, dtype=float), np.array(actual_counts, dtype=float)
+    if e.sum() == 0 or a.sum() == 0 or len(e) != len(a):
+        return None
+    e = np.maximum(e / e.sum(), 1e-4)
+    a = np.maximum(a / a.sum(), 1e-4)
+    return float(np.sum((a - e) * np.log(a / e)))
+
+
+def run_monitoring(
+    data: bytes,
+    *,
+    attributes: List[str],
+    prediction: Optional[str] = None,
+    score: Optional[str] = None,
+    baseline: Optional[Dict[str, Any]] = None,
+    favorable_label: Any = None,
+    score_threshold: float = 0.5,
+) -> Dict[str, Any]:
+    """Selection-rate drift, impact ratio and score PSI per attribute against the baseline run."""
+    frame = _read_csv(data)
+    missing = [c for c in [prediction, score, *attributes] if c and c not in frame.columns]
+    if missing:
+        raise FairnessRunError(f"Columns not in the file: {', '.join(missing)}")
+    if not prediction and not score:
+        raise FairnessRunError("Map either a prediction column or a score column")
+    if not attributes:
+        raise FairnessRunError("Map at least one protected attribute column")
+    proba = None
+    if score:
+        proba = pd.to_numeric(frame[score], errors="coerce").to_numpy(dtype=float)
+        if np.isnan(proba).any():
+            raise FairnessRunError(f"Column {score} has non-numeric values")
+    y_pred = _binary(frame[prediction], favorable_label, prediction) if prediction else (proba >= score_threshold).astype(int)
+
+    base_attrs = {a["attribute"]: a for a in (baseline or {}).get("attributes", [])}
+    base_hist = (baseline or {}).get("score_histograms") or {}
+    per_attribute: List[Dict[str, Any]] = []
+    all_pass = True
+    for attribute in attributes:
+        sensitive = frame[attribute].astype(str).fillna("missing").to_numpy()
+        groups, counts = np.unique(sensitive, return_counts=True)
+        rates = {str(g): float(y_pred[sensitive == g].mean()) for g in groups}
+        top = max(rates.values())
+        di_ratio = float(min(rates.values()) / top) if top > 0 else 0.0
+        base_rates = (base_attrs.get(attribute) or {}).get("selection_rates") or {}
+        drift = {g: abs(rates[g] - base_rates[g]) for g in rates if g in base_rates}
+        psi_by_group: Dict[str, Optional[float]] = {}
+        if proba is not None and base_hist.get("by_attribute", {}).get(attribute):
+            for g in groups:
+                expected = base_hist["by_attribute"][attribute].get(str(g))
+                psi_by_group[str(g)] = psi(expected, score_histogram(proba[sensitive == g])) if expected else None
+        worst_psi = max((v for v in psi_by_group.values() if v is not None), default=None)
+        checks = {"disparate_impact": bool(di_ratio >= DI_THRESHOLD)}
+        if drift:
+            checks["selection_rate_stable"] = bool(max(drift.values()) <= RATE_DRIFT_THRESHOLD)
+        if worst_psi is not None:
+            checks["score_stable"] = bool(worst_psi < PSI_MODERATE)
+        all_pass = all_pass and all(checks.values())
+        per_attribute.append(
+            {
+                "attribute": attribute,
+                "groups": {str(g): int(c) for g, c in zip(groups, counts)},
+                "selection_rates": rates,
+                "baseline_selection_rates": base_rates,
+                "rate_drift": drift,
+                "max_rate_drift": max(drift.values()) if drift else None,
+                "disparate_impact_ratio": di_ratio,
+                "psi_by_group": psi_by_group,
+                "worst_psi": worst_psi,
+                "checks": checks,
+            }
+        )
+    overall_psi = psi(base_hist.get("overall"), score_histogram(proba)) if proba is not None and base_hist.get("overall") else None
+    n = int(len(frame))
+    confidence = 0.85 + (0.05 if n >= 1_000 else 0.0) + (0.05 if baseline else 0.0)
+    return json_safe(
+        {
+            "rows": n,
+            "positive_rate": float(y_pred.mean()),
+            "mapping": {"prediction": prediction, "score": score, "attributes": attributes},
+            "thresholds": {"disparate_impact_ratio": DI_THRESHOLD, "rate_drift": RATE_DRIFT_THRESHOLD, "psi_moderate": PSI_MODERATE, "psi_significant": PSI_SIGNIFICANT},
+            "baseline": {"present": bool(baseline), "rows": (baseline or {}).get("rows")},
+            "overall_psi": overall_psi,
+            "attributes": per_attribute,
+            "all_checks_pass": bool(all_pass),
+            "evidence_confidence": round(min(confidence, 1.0), 2),
+        }
+    )
+
+
+# ---------------------------------------------------------------------------
+# Attestations: a person states that a check is satisfied; manual provenance
+# ---------------------------------------------------------------------------
+
+ATTESTABLE_CHECKS = {
+    "data_governance": ("data_governance", "Data governance attested"),
+    "human_oversight": ("human_oversight", "Human oversight attested"),
+    "monitoring": ("monitoring", "Monitoring attested"),
+    "environmental": ("environmental", "Environmental impact attested"),
+}
+ATTESTATION_CONFIDENCE = 0.30  # top of the manual band (confidence.py)
 
 
 # ---------------------------------------------------------------------------
@@ -341,10 +476,10 @@ def release_gate(risk_tier: str, evidence: List[Dict[str, Any]], *, environmenta
             if prov in PROVEN_CLASSES and conf >= 0.70:
                 state, confidence, evidence_id = "proven", conf, record.get("id")
                 content = record.get("content") or {}
-                if key == "fairness" and isinstance(content, dict):
+                if key in ("fairness", "monitoring") and isinstance(content, dict):
                     detail = {"all_checks_pass": content.get("all_checks_pass"), "rows": content.get("rows"), "attributes": [a.get("attribute") for a in content.get("attributes", [])]}
                     if content.get("all_checks_pass") is False:
-                        reasons.append("Measured fairness checks fail on at least one attribute")
+                        reasons.append("Measured fairness checks fail on at least one attribute" if key == "fairness" else "Latest monitoring snapshot shows drift or disparity outside thresholds")
                 break
             if state == "open":
                 state, confidence, evidence_id = "attested", conf, record.get("id")

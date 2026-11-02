@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./fairmind.db"
     database_echo: bool = False
     database_pool_size: int = 20
+    # Seconds to wait for a pooled connection at startup. Serverless Postgres
+    # (Neon) can take 10 to 30 seconds to wake a suspended compute.
+    database_connect_timeout: int = 60
     database_max_overflow: int = 30
     database_timeout: int = 30
     assurance_v2_enabled: bool = False

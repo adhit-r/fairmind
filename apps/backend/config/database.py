@@ -145,7 +145,7 @@ class DatabaseManager:
                     "max_size": settings.database_pool_size,
                     "max_queries": 50000,
                     "max_inactive_connection_lifetime": 300,
-                    "timeout": 20,
+                    "timeout": settings.database_connect_timeout,
                     "command_timeout": 60,
                 }
                 if runtime_search_path is not None:
@@ -160,7 +160,7 @@ class DatabaseManager:
                     "max_size": settings.database_pool_size,
                     "max_queries": 50000,
                     "max_inactive_connection_lifetime": 300,
-                    "timeout": 20,
+                    "timeout": settings.database_connect_timeout,
                     "command_timeout": 60,
                 }
                 if runtime_search_path is not None:
