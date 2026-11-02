@@ -29,14 +29,14 @@ export default function AutomationDashboard() {
                         <TabsList className="border border-[var(--fm-line)] p-0 h-auto bg-transparent gap-2">
                             <TabsTrigger
                                 value="schedules"
-                                className="data-[state=active]:bg-black data-[state=active]:text-white border border-transparent data-[state=active]:border-[var(--fm-line)] px-4 py-2"
+                                className="data-[state=active]:bg-[var(--fm-ink)] data-[state=active]:text-white border border-transparent data-[state=active]:border-[var(--fm-line)] px-4 py-2"
                             >
                                 <IconCalendar size={18} className="mr-2" />
                                 Schedules
                             </TabsTrigger>
                             <TabsTrigger
                                 value="reports"
-                                className="data-[state=active]:bg-black data-[state=active]:text-white border border-transparent data-[state=active]:border-[var(--fm-line)] px-4 py-2"
+                                className="data-[state=active]:bg-[var(--fm-ink)] data-[state=active]:text-white border border-transparent data-[state=active]:border-[var(--fm-line)] px-4 py-2"
                             >
                                 <IconFileText size={18} className="mr-2" />
                                 Report History

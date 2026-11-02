@@ -108,7 +108,7 @@ export default function AdminAuditLogPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background p-8">
+    <div className="min-w-0">
       <div className="mx-auto max-w-7xl">
         {/* Header */}
         <div className="mb-8 border-b border-[var(--fm-line)] pb-6">
@@ -122,7 +122,7 @@ export default function AdminAuditLogPage() {
         <div className="mb-6 flex flex-wrap gap-4">
           <button
             onClick={handleExportCSV}
-            className="flex items-center gap-2 rounded-lg bg-black px-4 py-2 font-bold text-white"
+            className="flex items-center gap-2 rounded-full bg-[var(--fm-ink)] px-4 py-2 font-semibold text-white"
           >
             <IconDownload size={20} />
             Export as CSV

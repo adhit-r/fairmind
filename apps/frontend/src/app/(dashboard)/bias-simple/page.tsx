@@ -176,16 +176,16 @@ export default function BiasDetectionPage() {
                 </div>
 
                 {/* Mode Toggle */}
-                <div className="flex bg-gray-100 p-1 rounded-[14px] shadow-[var(--fm-shadow)]">
+                <div className="flex gap-1 rounded-full bg-[var(--fm-bg)] p-1 text-[12.5px]">
                     <button
                         onClick={() => toggleMode('tabular')}
-                        className={`px-6 py-2 font-semibold transition-all ${mode === 'tabular' ? 'bg-black text-white ' : 'text-gray-500 hover:text-black'}`}
+                        className={`h-8 rounded-full px-4 font-medium transition-colors ${mode === 'tabular' ? 'bg-[var(--fm-ink)] text-white' : 'text-[var(--fm-ink2)] hover:text-[var(--fm-ink)]'}`}
                     >
                         Tabular (ML)
                     </button>
                     <button
                         onClick={() => toggleMode('llm')}
-                        className={`px-6 py-2 font-semibold transition-all ${mode === 'llm' ? 'bg-black text-white ' : 'text-gray-500 hover:text-black'}`}
+                        className={`h-8 rounded-full px-4 font-medium transition-colors ${mode === 'llm' ? 'bg-[var(--fm-ink)] text-white' : 'text-[var(--fm-ink2)] hover:text-[var(--fm-ink)]'}`}
                     >
                         Text (LLM)
                     </button>
@@ -193,7 +193,7 @@ export default function BiasDetectionPage() {
             </div>
 
             {error && (
-                <div className="bg-[#f87171] text-black px-4 py-3 font-bold flex items-center gap-2 rounded-[14px] shadow-[var(--fm-shadow)]">
+                <div className="flex items-center gap-2 rounded-[10px] bg-[#fde9ea] px-3 py-2 text-[13px] text-[#b4232c]">
                     <IconAlertTriangle size={24} stroke={2} />
                     <span>{error}</span>
                 </div>
@@ -202,7 +202,7 @@ export default function BiasDetectionPage() {
             {/* Step 1: Upload Dataset */}
             <div className="p-6 transition-all fm-card">
                 <div className="flex items-center gap-3 mb-6">
-                    <div className="bg-black text-white w-10 h-10 flex items-center justify-center font-semibold text-xl border border-[var(--fm-line)]">1</div>
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--fm-ink)] text-[13px] font-semibold text-white">1</div>
                     <h3 className="text-2xl font-bold">Upload Dataset</h3>
                 </div>
 
@@ -218,16 +218,16 @@ export default function BiasDetectionPage() {
                         accept=".csv"
                         onChange={(e) => setFile(e.target.files?.[0] || null)}
                         disabled={!!datasetId}
-                        className="block w-full text-[13.5px] text-[var(--fm-ink2)] file:mr-4 file:h-9 file:cursor-pointer file:rounded-full file:border-0 file:bg-[var(--fm-ink)] file:px-4 file:text-[12.5px] file:font-semibold file:text-white hover:file:bg-black"
+                        className="block w-full text-[13.5px] text-[var(--fm-ink2)] file:mr-4 file:h-9 file:cursor-pointer file:rounded-full file:border-0 file:bg-[var(--fm-ink)] file:px-4 file:text-[12.5px] file:font-semibold file:text-white hover:file:bg-[var(--fm-ink)]"
                     />
 
                     <button
                         onClick={handleUpload}
                         disabled={!file || !!datasetId || uploading}
-                        className={`flex items-center gap-2 px-6 py-3 border border-[var(--fm-line)] font-bold transition-all
+                        className={`flex h-10 items-center gap-2 rounded-full px-5 text-[13px] font-semibold transition-colors
               ${!file || !!datasetId || uploading
-                                ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                                : 'bg-[#fb7185] text-black hover:bg-[#f43f5e]'}`}
+                                ? 'bg-[var(--fm-bg)] text-[var(--fm-ink3)] cursor-not-allowed'
+                                : 'bg-[var(--fm-ink)] text-white hover:bg-black'}`}
                     >
                         {uploading ? <IconLoader className="animate-spin" size={20} stroke={2} /> : <IconUpload size={20} stroke={2} />}
                         UPLOAD CSV
@@ -235,7 +235,7 @@ export default function BiasDetectionPage() {
                 </div>
 
                 {datasetId && (
-                    <div className="mt-6 bg-[#86efac] text-black px-4 py-3 font-bold flex items-center gap-2 rounded-[14px] shadow-[var(--fm-shadow)]">
+                    <div className="mt-6 flex items-center gap-2 rounded-[10px] bg-[#e7f6ec] px-3 py-2 text-[13px] text-[#1a7f3c]">
                         <IconCheck size={24} stroke={2} />
                         <span>Dataset uploaded! ID: {datasetId} • {columns.length} columns detected</span>
                     </div>
@@ -246,7 +246,7 @@ export default function BiasDetectionPage() {
             {datasetId && (
                 <div className="p-6 transition-all fm-card">
                     <div className="flex items-center gap-3 mb-6">
-                        <div className="bg-black text-white w-10 h-10 flex items-center justify-center font-semibold text-xl border border-[var(--fm-line)]">2</div>
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--fm-ink)] text-[13px] font-semibold text-white">2</div>
                         <h3 className="text-2xl font-bold">Configure Analysis</h3>
                     </div>
 
@@ -347,10 +347,10 @@ export default function BiasDetectionPage() {
                                 <button
                                     key={metric.id}
                                     onClick={() => toggleMetric(metric.id)}
-                                    className={`px-4 py-2 font-bold border border-[var(--fm-line)] transition-all
+                                    className={`h-9 rounded-full border border-[var(--fm-line)] px-4 text-[13px] font-medium transition-colors
                     ${selectedMetrics.includes(metric.id)
-                                            ? 'bg-[#67e8f9] text-black'
-                                            : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+                                            ? 'border-[var(--fm-ink)] bg-[var(--fm-ink)] text-white'
+                                            : 'bg-white text-[var(--fm-ink2)] hover:border-[var(--fm-ink)]'}`}
                                 >
                                     {metric.label}
                                 </button>
@@ -361,10 +361,10 @@ export default function BiasDetectionPage() {
                     <button
                         onClick={handleAnalyze}
                         disabled={analyzing || (mode === 'tabular' ? (!protectedAttr || !predictionCol) : (!promptCol || !responseCol))}
-                        className={`mt-10 w-full flex justify-center items-center gap-3 py-4 px-6 border border-[var(--fm-line)] font-semibold text-lg uppercase tracking-wider transition-all
+                        className={`mt-10 flex h-11 w-full items-center justify-center gap-3 rounded-full px-6 text-[14px] font-semibold transition-colors
               ${analyzing || (mode === 'tabular' ? (!protectedAttr || !predictionCol) : (!promptCol || !responseCol))
-                                ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                                : 'bg-[#c084fc] text-black hover:bg-[#a855f7]'}`}
+                                ? 'bg-[var(--fm-bg)] text-[var(--fm-ink3)] cursor-not-allowed'
+                                : 'bg-[var(--fm-ink)] text-white hover:bg-black'}`}
                     >
                         {analyzing ? (
                             <>
@@ -384,7 +384,7 @@ export default function BiasDetectionPage() {
                 <div className="p-6 fm-card">
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
                         <div className="flex items-center gap-3">
-                            <div className="bg-black text-white w-10 h-10 flex items-center justify-center font-semibold text-xl border border-[var(--fm-line)]">3</div>
+                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--fm-ink)] text-[13px] font-semibold text-white">3</div>
                             <div>
                                 <h3 className="text-2xl font-bold">Analysis Results</h3>
                                 <p className="text-sm font-bold text-gray-500">ID: {results.test_id}</p>
@@ -423,11 +423,11 @@ export default function BiasDetectionPage() {
                                 <div className="flex justify-between items-center mb-4">
                                     <h5 className="font-bold text-lg capitalize">{metric.replace(/_/g, ' ')}</h5>
                                     {result.passed ? (
-                                        <span className="px-3 py-1 bg-[#86efac] text-black border border-[var(--fm-line)] text-xs font-semibold uppercase flex items-center gap-1">
+                                        <span className="flex items-center gap-1 rounded-full bg-[#e7f6ec] px-2.5 py-0.5 text-[11px] font-semibold uppercase text-[#1a7f3c]">
                                             <IconCheck size={14} stroke={3} /> PASS
                                         </span>
                                     ) : (
-                                        <span className="px-3 py-1 bg-[#fca5a5] text-black border border-[var(--fm-line)] text-xs font-semibold uppercase flex items-center gap-1">
+                                        <span className="flex items-center gap-1 rounded-full bg-[#fde9ea] px-2.5 py-0.5 text-[11px] font-semibold uppercase text-[#b4232c]">
                                             <IconX size={14} stroke={3} /> FAIL
                                         </span>
                                     )}
@@ -472,7 +472,7 @@ export default function BiasDetectionPage() {
                     <h4 className="text-xl font-semibold mt-10 mb-6">Recommendations</h4>
                     <div className="space-y-4">
                         {results.recommendations.map((rec, idx) => (
-                            <div key={idx} className="bg-[#bfdbfe] p-4 rounded-[14px] shadow-[var(--fm-shadow)]">
+                            <div key={idx} className="rounded-[12px] bg-[var(--fm-bg)] p-4">
                                 <p className="font-bold text-black">{rec}</p>
                             </div>
                         ))}

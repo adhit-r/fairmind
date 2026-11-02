@@ -435,7 +435,7 @@ export default function LLMBiasDetectionPage() {
                       disabled={isRunning}
                       className={`p-3 border-2 text-left font-medium transition-all ${
                         formData.model_type === type
-                          ? 'border-[var(--fm-line)] bg-black text-white'
+                          ? 'border-[var(--fm-line)] bg-[var(--fm-ink)] text-white'
                           : 'border-[var(--fm-line)] bg-white hover:bg-gray-100'
                       }`}
                     >
@@ -456,7 +456,7 @@ export default function LLMBiasDetectionPage() {
                       disabled={isRunning}
                       className={`p-3 border-2 text-left transition-all ${
                         formData.selected_tests.includes(test.id)
-                          ? 'bg-black text-white rounded-[14px] shadow-[var(--fm-shadow)]'
+                          ? 'bg-[var(--fm-ink)] text-white rounded-[14px] shadow-[var(--fm-shadow)]'
                           : 'border-[var(--fm-line)] bg-white hover:bg-gray-50'
                       }`}
                     >
@@ -486,7 +486,7 @@ export default function LLMBiasDetectionPage() {
                       disabled={isRunning}
                       className={`px-3 py-2 border-2 text-sm font-medium transition-all ${
                         (formData.protected_attributes || []).includes(attr)
-                          ? 'border-[var(--fm-line)] bg-black text-white'
+                          ? 'border-[var(--fm-line)] bg-[var(--fm-ink)] text-white'
                           : 'border-[var(--fm-line)] bg-white hover:bg-gray-100'
                       }`}
                     >

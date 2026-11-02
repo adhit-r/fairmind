@@ -74,7 +74,7 @@ function EvidenceCard({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1 space-y-1.5">
           <div className="flex flex-wrap items-center gap-1.5">
-            <Badge className="border border-[var(--fm-line)] bg-black px-2 py-0.5 text-[10px] font-semibold uppercase text-white">
+            <Badge className="border border-[var(--fm-line)] bg-[var(--fm-ink)] px-2 py-0.5 text-[10px] font-semibold uppercase text-white">
               {evidence.type}
             </Badge>
             {evidence.stale && (
@@ -276,7 +276,7 @@ export default function EvidencePage() {
         </div>
       </Card>
 
-      <nav aria-label="Evidence views" className="grid border border-[var(--fm-line)] bg-white sm:grid-cols-3">
+      <nav aria-label="Evidence views" className="flex flex-col gap-1 rounded-[22px] border border-[var(--fm-line)] bg-white p-1 sm:flex-row sm:rounded-full">
         {([
           ['gaps', 'Evidence gaps'],
           ['evaluations', 'Evaluations'],
@@ -286,7 +286,7 @@ export default function EvidencePage() {
             key={view}
             href={`/evidence?view=${view}`}
             aria-current={activeView === view ? 'page' : undefined}
-            className={`min-h-12 border-b border-[var(--fm-line)] px-4 py-3 text-center text-sm font-semibold outline-none last:border-b-0 hover:bg-[#DDF4EA] focus-visible:ring-2 focus-visible:ring-[#0B7659] focus-visible:ring-inset sm:border-b-0 sm:border-r sm:last:border-r-0 ${activeView === view ? 'bg-[var(--fm-ink)] text-white hover:bg-[var(--fm-ink)]' : ''}`}
+            className={`flex h-9 flex-1 items-center justify-center rounded-full px-4 text-[13px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-ink)] ${activeView === view ? 'bg-[var(--fm-ink)] text-white' : 'text-[var(--fm-ink2)] hover:text-[var(--fm-ink)]'}`}
           >
             {label}
           </Link>
@@ -471,7 +471,7 @@ export default function EvidencePage() {
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-semibold uppercase text-muted-foreground">Filters:</span>
               {activeFolder !== null && (
-                <Badge className="border border-[var(--fm-line)] bg-black px-2 py-0.5 text-[11px] font-bold text-white">
+                <Badge className="border border-[var(--fm-line)] bg-[var(--fm-ink)] px-2 py-0.5 text-[11px] font-bold text-white">
                   Folder: {activeFolder === '__uncategorized__' ? 'Uncategorized' : activeFolder}
                   <button type="button" onClick={() => setActiveFolder(null)} className="ml-1.5">
                     <IconX className="h-2.5 w-2.5" />
@@ -479,7 +479,7 @@ export default function EvidencePage() {
                 </Badge>
               )}
               {activeTags.map((tag) => (
-                <Badge key={tag} className="border border-[var(--fm-line)] bg-black px-2 py-0.5 text-[11px] font-bold text-white">
+                <Badge key={tag} className="border border-[var(--fm-line)] bg-[var(--fm-ink)] px-2 py-0.5 text-[11px] font-bold text-white">
                   #{tag}
                   <button type="button" onClick={() => handleTagToggle(tag)} className="ml-1.5">
                     <IconX className="h-2.5 w-2.5" />
@@ -487,7 +487,7 @@ export default function EvidencePage() {
                 </Badge>
               ))}
               {search && (
-                <Badge className="border border-[var(--fm-line)] bg-black px-2 py-0.5 text-[11px] font-bold text-white">
+                <Badge className="border border-[var(--fm-line)] bg-[var(--fm-ink)] px-2 py-0.5 text-[11px] font-bold text-white">
                   Search: {search}
                   <button type="button" onClick={() => setSearch('')} className="ml-1.5">
                     <IconX className="h-2.5 w-2.5" />

@@ -147,7 +147,7 @@ export function BiasScoreCard({ result }: BiasScoreCardProps) {
           <p className="text-sm font-semibold">Key Biases Detected</p>
           <div className="flex flex-wrap gap-2">
             {result.detected_biases.slice(0, 5).map((bias, i) => (
-              <Badge key={i} variant="secondary" className="bg-black text-white">
+              <Badge key={i} variant="secondary" className="bg-[var(--fm-ink)] text-white">
                 {bias}
               </Badge>
             ))}

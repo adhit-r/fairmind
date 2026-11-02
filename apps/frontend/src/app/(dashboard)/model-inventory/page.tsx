@@ -150,7 +150,7 @@ export default function ModelInventoryPage() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge className="border border-[var(--fm-line)] bg-black px-3 py-1 font-semibold text-white">
+              <Badge className="border border-[var(--fm-line)] bg-[var(--fm-ink)] px-3 py-1 font-semibold text-white">
                 <IconDatabase className="mr-2 h-4 w-4" />
                 Model Inventory
               </Badge>

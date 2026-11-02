@@ -170,7 +170,7 @@ export function EvidenceDetailDrawer({
                 Evidence details and scoped governance links for {displayTitle}.
               </SheetDescription>
               <div className="flex flex-wrap items-center gap-1.5">
-                <Badge className="border border-[var(--fm-line)] bg-black px-2 py-0.5 text-[11px] font-semibold uppercase text-white">
+                <Badge className="border border-[var(--fm-line)] bg-[var(--fm-ink)] px-2 py-0.5 text-[11px] font-semibold uppercase text-white">
                   {evidence.type}
                 </Badge>
                 {evidence.stale && (
@@ -239,7 +239,7 @@ export function EvidenceDetailDrawer({
                 {editTags.length > 0 && (
                   <div className="flex flex-wrap gap-1.5">
                     {editTags.map((tag) => (
-                      <Badge key={tag} className="border border-[var(--fm-line)] bg-black px-2 py-0.5 text-[11px] font-bold text-white">
+                      <Badge key={tag} className="border border-[var(--fm-line)] bg-[var(--fm-ink)] px-2 py-0.5 text-[11px] font-bold text-white">
                         {tag}
                         <button type="button" onClick={() => setEditTags((prev) => prev.filter((t) => t !== tag))} className="ml-1.5">
                           <IconX className="h-2.5 w-2.5" />
@@ -345,7 +345,7 @@ export function EvidenceDetailDrawer({
                   <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Tags</p>
                   <div className="flex flex-wrap gap-1.5">
                     {evidence.tags.map((tag) => (
-                      <Badge key={tag} className="border border-[var(--fm-line)] bg-black px-2 py-0.5 text-[11px] font-bold text-white">
+                      <Badge key={tag} className="border border-[var(--fm-line)] bg-[var(--fm-ink)] px-2 py-0.5 text-[11px] font-bold text-white">
                         <IconTag className="mr-1 h-2.5 w-2.5" />
                         {tag}
                       </Badge>

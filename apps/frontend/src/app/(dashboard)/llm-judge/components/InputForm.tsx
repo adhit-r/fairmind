@@ -289,7 +289,7 @@ export function InputForm({
         <Button
           onClick={handleEvaluate}
           disabled={loading || !text.trim() || selectedCategories.length === 0}
-          className="flex-1 border border-[var(--fm-line)] font-bold bg-black text-white hover:bg-gray-800"
+          className="flex-1 border border-[var(--fm-line)] font-bold bg-[var(--fm-ink)] text-white hover:bg-gray-800"
         >
           {loading ? (
             <>

@@ -112,7 +112,7 @@ export function EvidenceUploader({ systemId, onCollect, onClose }: EvidenceUploa
             onClick={() => setKind(k)}
             className={`flex flex-col items-center gap-1.5 rounded-xl border-2 p-3 text-[11px] font-bold uppercase transition-colors ${
               kind === k
-                ? 'border-[var(--fm-line)] bg-black text-white'
+                ? 'border-[var(--fm-line)] bg-[var(--fm-ink)] text-white'
                 : 'border-[var(--fm-line)] bg-white text-black hover:bg-slate-50'
             }`}
           >
@@ -242,7 +242,7 @@ export function EvidenceUploader({ systemId, onCollect, onClose }: EvidenceUploa
         {tags.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {tags.map((tag) => (
-              <Badge key={tag} className="border border-[var(--fm-line)] bg-black px-2 py-0.5 text-[11px] font-bold text-white">
+              <Badge key={tag} className="border border-[var(--fm-line)] bg-[var(--fm-ink)] px-2 py-0.5 text-[11px] font-bold text-white">
                 {tag}
                 <button type="button" onClick={() => removeTag(tag)} className="ml-1.5">
                   <IconX className="h-2.5 w-2.5" />

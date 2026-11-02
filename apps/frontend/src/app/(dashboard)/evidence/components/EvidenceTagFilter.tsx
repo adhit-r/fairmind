@@ -53,7 +53,7 @@ export function EvidenceTagFilter({ evidence, activeTags, onTagToggle, onClearTa
               <Badge
                 className={`cursor-pointer border border-[var(--fm-line)] px-2 py-0.5 text-[11px] font-bold transition-colors ${
                   isActive
-                    ? 'bg-black text-white'
+                    ? 'bg-[var(--fm-ink)] text-white'
                     : 'bg-white text-black hover:bg-slate-100'
                 }`}
               >

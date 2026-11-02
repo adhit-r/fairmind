@@ -118,7 +118,7 @@ export default function OrgMembersPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background p-8">
+    <div className="min-w-0">
       <div className="mx-auto max-w-6xl">
         {/* Header */}
         <div className="mb-8 flex items-center justify-between border-b border-[var(--fm-line)] pb-6">
@@ -128,7 +128,7 @@ export default function OrgMembersPage() {
           </div>
           <button
             onClick={() => setShowInviteForm(!showInviteForm)}
-            className="flex items-center gap-2 rounded-lg bg-black px-4 py-2 font-bold text-white transition-all"
+            className="flex items-center gap-2 rounded-full bg-[var(--fm-ink)] px-4 py-2 font-semibold text-white transition-all"
           >
             <IconPlus size={20} />
             {showInviteForm ? 'Cancel' : 'Invite Member'}
@@ -174,7 +174,7 @@ export default function OrgMembersPage() {
                 <button
                   type="submit"
                   disabled={inviteLoading}
-                  className="rounded-lg bg-black px-6 py-2 font-bold text-white transition-all disabled:opacity-50"
+                  className="rounded-full bg-[var(--fm-ink)] px-6 py-2 font-semibold text-white transition-all disabled:opacity-50"
                 >
                   {inviteLoading ? 'Sending...' : 'Send Invitation'}
                 </button>

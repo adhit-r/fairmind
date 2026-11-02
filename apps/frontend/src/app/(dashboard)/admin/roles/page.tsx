@@ -60,7 +60,7 @@ export default function AdminRolesPage() {
   );
 
   return (
-    <div className="min-h-screen bg-background p-8">
+    <div className="min-w-0">
       <div className="mx-auto max-w-6xl">
         {/* Header */}
         <div className="mb-8 border-b border-[var(--fm-line)] pb-6">
@@ -115,7 +115,7 @@ export default function AdminRolesPage() {
                         key={permission}
                         className="flex items-center gap-3 rounded-lg border border-[var(--fm-line)] bg-white p-3"
                       >
-                        <div className="h-4 w-4 rounded border border-[var(--fm-line)] bg-black" />
+                        <div className="h-4 w-4 rounded border border-[var(--fm-line)] bg-[var(--fm-ink)]" />
                         <span className="font-semibold text-black">
                           {permission}
                         </span>
@@ -176,7 +176,7 @@ export default function AdminRolesPage() {
                   href={process.env.NEXT_PUBLIC_AUTHENTIK_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-block rounded-lg bg-black px-4 py-2 font-bold text-white"
+                  className="inline-block rounded-full bg-[var(--fm-ink)] px-4 py-2 font-semibold text-white"
                 >
                   Open Authentik Admin Interface
                 </a>

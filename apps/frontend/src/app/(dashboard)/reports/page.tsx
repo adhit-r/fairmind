@@ -104,21 +104,21 @@ export default function ReportsPage() {
   }
 
   return (
-    <main data-testid="assurance-report" className="space-y-5 bg-white pb-10 text-[var(--fm-ink)]">
-      <header className="bg-[var(--fm-ink)] p-5 text-white rounded-[14px] shadow-[var(--fm-shadow)]">
+    <main data-testid="assurance-report" className="space-y-5 pb-10 text-[var(--fm-ink)]">
+      <header className="fm-card p-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <Badge className="border-2 border-white bg-white font-semibold text-[var(--fm-ink)]">
+              <Badge className="border border-[var(--fm-line)] bg-[var(--fm-bg)] font-semibold text-[var(--fm-ink)]">
                 <IconFileCheck aria-hidden="true" />
                 Assurance summary
               </Badge>
-              <Badge className="border-2 border-[#E97522] bg-transparent font-semibold text-white">
+              <Badge className="border border-[#E97522] bg-transparent font-semibold text-[#B85A16]">
                 {auditorMode ? 'Auditor mode' : 'Builder mode'}
               </Badge>
             </div>
             <h1 className="mt-4 text-2xl font-semibold tracking-tight sm:text-3xl">Reports &amp; Assurance</h1>
-            <p className="mt-2 max-w-[72ch] text-sm text-[#D9E0DC]">
+            <p className="mt-2 max-w-[72ch] text-sm text-[var(--fm-ink2)]">
               A version-pinned review surface for control state, evidence provenance, reviewer decisions, unresolved findings, and known limitations.
             </p>
           </div>
@@ -126,7 +126,7 @@ export default function ReportsPage() {
             type="button"
             variant="neutral"
             onClick={() => void refresh()}
-            className="border-2 border-white bg-white font-semibold text-[var(--fm-ink)]"
+            className="border border-[var(--fm-line)] bg-[var(--fm-bg)] font-semibold text-[var(--fm-ink)]"
           >
             <IconRefresh aria-hidden="true" />
             Refresh summary

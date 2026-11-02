@@ -157,43 +157,43 @@ export default function RisksPage() {
             </div>
           </div>
 
-          <div className="bg-black p-6 text-white">
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--fm-brand)]">Next Actions</p>
+          <div className="fm-card p-6">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--fm-ink3)]">Next Actions</p>
             <div className="mt-4 space-y-3">
               {/* Evidence completeness indicator */}
-              <Link href="/evidence" className="block border-2 border-white bg-white/10 p-4 transition hover:bg-[var(--fm-bg)] hover:text-black">
+              <Link href="/evidence" className="block rounded-[12px] border border-[var(--fm-line)] bg-[var(--fm-bg)] p-4 transition-colors hover:border-[var(--fm-ink)]">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     {evidenceSummary.decisionReadiness === 'review_ready' ? (
-                      <IconShieldCheck className="h-5 w-5 shrink-0 text-emerald-400" />
+                      <IconShieldCheck className="h-5 w-5 shrink-0 text-emerald-600" />
                     ) : (
-                      <IconShieldOff className="h-5 w-5 shrink-0 text-red-400" />
+                      <IconShieldOff className="h-5 w-5 shrink-0 text-red-600" />
                     )}
                     <p className="font-semibold">Evidence completeness</p>
                   </div>
                   {evidenceSummary.missingSignals.length > 0 && (
-                    <span className="shrink-0 rounded border-2 border-red-500 bg-red-500 px-2 py-0.5 text-xs font-semibold text-white">
+                    <span className="shrink-0 rounded-full bg-[#fde9ea] px-2 py-0.5 text-xs font-semibold text-[#b4232c]">
                       {evidenceSummary.missingSignals.length} gap{evidenceSummary.missingSignals.length !== 1 ? 's' : ''}
                     </span>
                   )}
                 </div>
-                <p className="mt-1 text-sm opacity-90">
+                <p className="mt-1 text-sm text-[var(--fm-ink2)]">
                   {evidenceSummary.decisionReadiness === 'review_ready'
                     ? 'Evidence is linked and ready for approval review.'
                     : evidenceSummary.recommendedNextStep || 'Evidence gaps detected — review before proceeding to approval.'}
                 </p>
               </Link>
-              <Link href="/ai-governance" className="block border-2 border-white bg-white/10 p-4 transition hover:bg-[var(--fm-bg)] hover:text-black">
+              <Link href="/ai-governance" className="block rounded-[12px] border border-[var(--fm-line)] bg-[var(--fm-bg)] p-4 transition-colors hover:border-[var(--fm-ink)]">
                 <p className="font-semibold">Review failed controls</p>
-                <p className="mt-1 text-sm opacity-90">Use governance review to validate whether blockers are evidence, policy, or remediation gaps.</p>
+                <p className="mt-1 text-sm text-[var(--fm-ink2)]">Use governance review to validate whether blockers are evidence, policy, or remediation gaps.</p>
               </Link>
-              <Link href="/remediation" className="block border-2 border-white bg-white/10 p-4 transition hover:bg-[var(--fm-bg)] hover:text-black">
+              <Link href="/remediation" className="block rounded-[12px] border border-[var(--fm-line)] bg-[var(--fm-bg)] p-4 transition-colors hover:border-[var(--fm-ink)]">
                 <p className="font-semibold">Open remediation work</p>
-                <p className="mt-1 text-sm opacity-90">Turn unresolved risk items into owned corrective actions before release approval.</p>
+                <p className="mt-1 text-sm text-[var(--fm-ink2)]">Turn unresolved risk items into owned corrective actions before release approval.</p>
               </Link>
-              <Link href="/audit-reports" className="block border-2 border-white bg-white/10 p-4 transition hover:bg-[var(--fm-bg)] hover:text-black">
+              <Link href="/audit-reports" className="block rounded-[12px] border border-[var(--fm-line)] bg-[var(--fm-bg)] p-4 transition-colors hover:border-[var(--fm-ink)]">
                 <p className="font-semibold">Export current state</p>
-                <p className="mt-1 text-sm opacity-90">Use reports after blockers and evidence gaps are reviewed, not before.</p>
+                <p className="mt-1 text-sm text-[var(--fm-ink2)]">Use reports after blockers and evidence gaps are reviewed, not before.</p>
               </Link>
             </div>
           </div>

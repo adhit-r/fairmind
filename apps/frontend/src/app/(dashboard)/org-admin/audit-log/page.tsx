@@ -94,7 +94,7 @@ export default function OrgAuditLogPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-background p-8">
+    <div className="min-w-0">
       <div className="mx-auto max-w-6xl">
         {/* Header */}
         <div className="mb-8 border-b border-[var(--fm-line)] pb-6">

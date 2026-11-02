@@ -42,7 +42,7 @@ export function LifecycleStepper({ currentStage, readiness, compact = false }: L
                 key={s.id}
                 className={`h-2 w-2 rounded-full ${
                   isComplete ? 'bg-emerald-500' :
-                  isCurrent ? 'bg-black' :
+                  isCurrent ? 'bg-[var(--fm-ink)]' :
                   'bg-slate-200'
                 }`}
               />
@@ -76,7 +76,7 @@ export function LifecycleStepper({ currentStage, readiness, compact = false }: L
                     isComplete
                       ? 'border-emerald-600 bg-emerald-600 text-white'
                       : isCurrent
-                        ? 'border-[var(--fm-line)] bg-black text-white'
+                        ? 'border-[var(--fm-line)] bg-[var(--fm-ink)] text-white'
                         : 'border-[var(--fm-line)] bg-white text-muted-foreground'
                   }`}
                 >
