@@ -100,12 +100,12 @@ export default function RisksPage() {
   const getSeverityBadge = (severity: string) => {
     const variants: Record<string, string> = {
       critical: 'bg-red-100 text-red-800 border-red-500',
-      high: 'bg-orange text-black border-black',
+      high: 'border-[var(--fm-line)] bg-[var(--fm-ink)] text-white hover:bg-black',
       medium: 'bg-amber-100 text-amber-800 border-amber-500',
       low: 'bg-emerald-100 text-emerald-800 border-emerald-500',
     }
     return (
-      <Badge className={`border-2 font-black uppercase ${variants[severity] || variants.low}`}>
+      <Badge className={`border-2 font-semibold ${variants[severity] || variants.low}`}>
         {severity}
       </Badge>
     )
@@ -127,41 +127,41 @@ export default function RisksPage() {
 
   return (
     <div className="space-y-6">
-      <Card className="overflow-hidden border-4 border-black bg-[linear-gradient(135deg,#ffe7cc_0%,#fff 55%,#eff9f0_100%)] shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+      <Card className="overflow-hidden bg-[linear-gradient(135deg,#ffe7cc_0%,#fff 55%,#eff9f0_100%)] rounded-[14px] shadow-[var(--fm-shadow)]">
         <CardContent className="grid gap-0 p-0 xl:grid-cols-[1.2fr_0.8fr]">
-          <div className="border-b-4 border-black p-6 xl:border-b-0 xl:border-r-4">
-            <p className="text-xs font-black uppercase tracking-[0.22em] text-muted-foreground">Risk Register</p>
-            <h1 className="mt-2 text-4xl font-black uppercase">Govern {selectedSystem.name}</h1>
+          <div className="border-b border-[var(--fm-line)] p-6 xl:border-b-0 xl:border-r-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Risk Register</p>
+            <h1 className="mt-2 text-4xl font-semibold">Govern {selectedSystem.name}</h1>
             <p className="mt-3 max-w-2xl text-sm text-slate-700">
               This page should help the governance team decide whether the selected AI system can move forward,
               what is blocking it, and which evidence or remediation steps still need work.
             </p>
 
             <div className="mt-5 grid gap-4 md:grid-cols-3">
-              <div className="border-2 border-black bg-white p-4 shadow-[4px_4px_0px_0px_#000]">
-                <p className="text-xs font-bold uppercase text-muted-foreground">Open Risks</p>
-                <p className="mt-2 text-4xl font-black">{summary.open}</p>
+              <div className="p-4 fm-card">
+                <p className="text-xs font-semibold uppercase text-muted-foreground">Open Risks</p>
+                <p className="mt-2 text-4xl font-semibold">{summary.open}</p>
               </div>
-              <div className="border-2 border-black bg-white p-4 shadow-[4px_4px_0px_0px_#000]">
-                <p className="text-xs font-bold uppercase text-muted-foreground">Automated Risks</p>
-                <p className="mt-2 text-4xl font-black">{summary.automated}</p>
+              <div className="p-4 fm-card">
+                <p className="text-xs font-semibold uppercase text-muted-foreground">Automated Risks</p>
+                <p className="mt-2 text-4xl font-semibold">{summary.automated}</p>
               </div>
-              <div className="border-2 border-black bg-white p-4 shadow-[4px_4px_0px_0px_#000]">
-                <p className="text-xs font-bold uppercase text-muted-foreground">Readiness Impact</p>
-                <p className="mt-2 text-4xl font-black">{Math.max(0, selectedSystem.readiness - summary.open * 4)}%</p>
+              <div className="p-4 fm-card">
+                <p className="text-xs font-semibold uppercase text-muted-foreground">Readiness Impact</p>
+                <p className="mt-2 text-4xl font-semibold">{Math.max(0, selectedSystem.readiness - summary.open * 4)}%</p>
                 <Progress
                   value={Math.max(0, selectedSystem.readiness - summary.open * 4)}
-                  className="mt-3 h-3 border-2 border-black"
+                  className="mt-3 h-3 border border-[var(--fm-line)]"
                 />
               </div>
             </div>
           </div>
 
           <div className="bg-black p-6 text-white">
-            <p className="text-xs font-black uppercase tracking-[0.22em] text-orange">Next Actions</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--fm-brand)]">Next Actions</p>
             <div className="mt-4 space-y-3">
               {/* Evidence completeness indicator */}
-              <Link href="/evidence" className="block border-2 border-white bg-white/10 p-4 transition hover:bg-orange hover:text-black">
+              <Link href="/evidence" className="block border-2 border-white bg-white/10 p-4 transition hover:bg-[var(--fm-bg)] hover:text-black">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     {evidenceSummary.decisionReadiness === 'review_ready' ? (
@@ -169,10 +169,10 @@ export default function RisksPage() {
                     ) : (
                       <IconShieldOff className="h-5 w-5 shrink-0 text-red-400" />
                     )}
-                    <p className="font-black uppercase">Evidence completeness</p>
+                    <p className="font-semibold">Evidence completeness</p>
                   </div>
                   {evidenceSummary.missingSignals.length > 0 && (
-                    <span className="shrink-0 rounded border-2 border-red-500 bg-red-500 px-2 py-0.5 text-xs font-black text-white">
+                    <span className="shrink-0 rounded border-2 border-red-500 bg-red-500 px-2 py-0.5 text-xs font-semibold text-white">
                       {evidenceSummary.missingSignals.length} gap{evidenceSummary.missingSignals.length !== 1 ? 's' : ''}
                     </span>
                   )}
@@ -183,16 +183,16 @@ export default function RisksPage() {
                     : evidenceSummary.recommendedNextStep || 'Evidence gaps detected — review before proceeding to approval.'}
                 </p>
               </Link>
-              <Link href="/ai-governance" className="block border-2 border-white bg-white/10 p-4 transition hover:bg-orange hover:text-black">
-                <p className="font-black uppercase">Review failed controls</p>
+              <Link href="/ai-governance" className="block border-2 border-white bg-white/10 p-4 transition hover:bg-[var(--fm-bg)] hover:text-black">
+                <p className="font-semibold">Review failed controls</p>
                 <p className="mt-1 text-sm opacity-90">Use governance review to validate whether blockers are evidence, policy, or remediation gaps.</p>
               </Link>
-              <Link href="/remediation" className="block border-2 border-white bg-white/10 p-4 transition hover:bg-orange hover:text-black">
-                <p className="font-black uppercase">Open remediation work</p>
+              <Link href="/remediation" className="block border-2 border-white bg-white/10 p-4 transition hover:bg-[var(--fm-bg)] hover:text-black">
+                <p className="font-semibold">Open remediation work</p>
                 <p className="mt-1 text-sm opacity-90">Turn unresolved risk items into owned corrective actions before release approval.</p>
               </Link>
-              <Link href="/audit-reports" className="block border-2 border-white bg-white/10 p-4 transition hover:bg-orange hover:text-black">
-                <p className="font-black uppercase">Export current state</p>
+              <Link href="/audit-reports" className="block border-2 border-white bg-white/10 p-4 transition hover:bg-[var(--fm-bg)] hover:text-black">
+                <p className="font-semibold">Export current state</p>
                 <p className="mt-1 text-sm opacity-90">Use reports after blockers and evidence gaps are reviewed, not before.</p>
               </Link>
             </div>
@@ -207,33 +207,33 @@ export default function RisksPage() {
           )}
 
           <Card>
-            <CardHeader className="border-b-2 border-black bg-[#fff4de]">
-              <CardTitle className="text-xl font-black uppercase">How To Use This Page</CardTitle>
+            <CardHeader className="border-b border-[var(--fm-line)] bg-[#fff4de]">
+              <CardTitle className="text-xl font-semibold">How To Use This Page</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 p-6">
-              <div className="border-2 border-black p-4">
+              <div className="border border-[var(--fm-line)] p-4">
                 <div className="flex items-center gap-3">
                   <IconSparkles className="h-5 w-5" />
                   <div>
-                    <p className="font-black uppercase">Automated Intake</p>
+                    <p className="font-semibold">Automated Intake</p>
                     <p className="text-sm text-slate-700">Risk suggestions are generated from the MIT and IBM AI risk libraries for the selected system.</p>
                   </div>
                 </div>
               </div>
-              <div className="border-2 border-black p-4">
+              <div className="border border-[var(--fm-line)] p-4">
                 <div className="flex items-center gap-3">
                   <IconClipboardCheck className="h-5 w-5" />
                   <div>
-                    <p className="font-black uppercase">Manual Assessment</p>
+                    <p className="font-semibold">Manual Assessment</p>
                     <p className="text-sm text-slate-700">Add system-specific findings when the automated register is incomplete or too generic.</p>
                   </div>
                 </div>
               </div>
-              <div className="border-2 border-black p-4">
+              <div className="border border-[var(--fm-line)] p-4">
                 <div className="flex items-center gap-3">
                   <IconRouteAltLeft className="h-5 w-5" />
                   <div>
-                    <p className="font-black uppercase">Workflow Link</p>
+                    <p className="font-semibold">Workflow Link</p>
                     <p className="text-sm text-slate-700">A risk is only useful if it leads into evidence review, remediation, and approval.</p>
                   </div>
                 </div>
@@ -242,10 +242,10 @@ export default function RisksPage() {
           </Card>
         </div>
 
-        <Card className="border-2 border-black shadow-brutal">
-          <CardHeader className="flex flex-row items-center justify-between border-b-2 border-black bg-white p-6">
+        <Card className="fm-card">
+          <CardHeader className="flex flex-row items-center justify-between border-b border-[var(--fm-line)] bg-white p-6">
             <div>
-              <CardTitle className="text-2xl font-black uppercase">Scoped Risks</CardTitle>
+              <CardTitle className="text-2xl font-semibold">Scoped Risks</CardTitle>
               <p className="mt-1 text-sm text-muted-foreground">
                 Showing risks for <span className="font-bold">{selectedSystem.name}</span>
               </p>
@@ -257,7 +257,7 @@ export default function RisksPage() {
                   Assess Risk
                 </Button>
               </DialogTrigger>
-              <DialogContent className="border-2 border-black shadow-brutal-lg">
+              <DialogContent className="fm-card">
                 <DialogHeader>
                   <DialogTitle>Assess Risk For {selectedSystem.name}</DialogTitle>
                   <DialogDescription>
@@ -271,7 +271,7 @@ export default function RisksPage() {
                       id="systemId"
                       value={selectedSystem.id}
                       readOnly
-                      className="border-2 border-black bg-muted"
+                      className="border border-[var(--fm-line)] bg-muted"
                     />
                   </div>
 
@@ -283,7 +283,7 @@ export default function RisksPage() {
                         setValue('riskType', value, { shouldValidate: true })
                       }}
                     >
-                      <SelectTrigger className="border-2 border-black">
+                      <SelectTrigger className="border border-[var(--fm-line)]">
                         <SelectValue placeholder="Select risk type" />
                       </SelectTrigger>
                       <SelectContent>
@@ -307,7 +307,7 @@ export default function RisksPage() {
                         setValue('severity', value as RiskAssessmentFormData['severity'], { shouldValidate: true })
                       }}
                     >
-                      <SelectTrigger className="border-2 border-black">
+                      <SelectTrigger className="border border-[var(--fm-line)]">
                         <SelectValue placeholder="Select severity" />
                       </SelectTrigger>
                       <SelectContent>
@@ -327,7 +327,7 @@ export default function RisksPage() {
                     <Textarea
                       id="description"
                       {...register('description')}
-                      className="border-2 border-black"
+                      className="border border-[var(--fm-line)]"
                       rows={4}
                     />
                     {errors.description && (
@@ -366,7 +366,7 @@ export default function RisksPage() {
             ) : (
               <Table>
                 <TableHeader>
-                  <TableRow className="border-2 border-black">
+                  <TableRow className="border border-[var(--fm-line)]">
                     <TableHead className="font-bold">Title</TableHead>
                     <TableHead className="font-bold">Severity</TableHead>
                     <TableHead className="font-bold">Status</TableHead>
@@ -376,11 +376,11 @@ export default function RisksPage() {
                 </TableHeader>
                 <TableBody>
                   {risks.map((risk) => (
-                    <TableRow key={risk.id} className="border-b-2 border-black">
+                    <TableRow key={risk.id} className="border-b border-[var(--fm-line)]">
                       <TableCell className="font-medium">{risk.title}</TableCell>
                       <TableCell>{getSeverityBadge(risk.severity)}</TableCell>
                       <TableCell>
-                        <Badge variant="default" className="border-2 border-black uppercase">
+                        <Badge variant="default" className="border border-[var(--fm-line)] uppercase">
                           {risk.status}
                         </Badge>
                       </TableCell>
