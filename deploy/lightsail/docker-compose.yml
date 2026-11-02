@@ -1,0 +1,40 @@
+# Single-box production stack for Lightsail. Database, auth and realtime stay on Neon.
+services:
+  backend:
+    build: ../../apps/backend
+    env_file: backend.env
+    volumes:
+      - uploads:/app/uploads
+      - datasets:/app/datasets
+      - models:/app/models
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ../../apps/frontend
+      args:
+        NEXT_PUBLIC_NEON_REALTIME_URL: ${NEXT_PUBLIC_NEON_REALTIME_URL:-}
+        NEXT_PUBLIC_AUTHENTIK_URL: ${NEXT_PUBLIC_AUTHENTIK_URL:-}
+        NEXT_PUBLIC_AUTHENTIK_CLIENT_ID: ${NEXT_PUBLIC_AUTHENTIK_CLIENT_ID:-}
+        NEXT_PUBLIC_AUTHENTIK_REDIRECT_URI: ${NEXT_PUBLIC_AUTHENTIK_REDIRECT_URI:-}
+    env_file: frontend.env
+    environment:
+      BACKEND_INTERNAL_URL: http://backend:8000
+    depends_on: [backend]
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2.10-alpine
+    ports: ["443:443"]
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./certs:/etc/caddy/certs:ro
+    depends_on: [frontend, backend]
+    restart: unless-stopped
+
+volumes:
+  uploads:
+  datasets:
+  models:
