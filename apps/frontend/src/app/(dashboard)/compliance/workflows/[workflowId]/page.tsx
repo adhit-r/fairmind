@@ -2,140 +2,23 @@
 
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import ReactFlow, { Background, Controls, Handle, MarkerType, Position, useNodesInitialized, useReactFlow, type Edge, type Node, type NodeProps } from 'reactflow'
+import { useMemo, useState, type ReactNode } from 'react'
+import ReactFlow, { Background, Controls } from 'reactflow'
 import 'reactflow/dist/style.css'
-import { GATE_KINDS, usePackActions, useRun, useWorkflow, type Step, type StepKind } from '@/lib/api/hooks/usePacks'
+import { needsPerson, usePackActions, useRun, useWorkflow, versionName } from '@/lib/api/hooks/usePacks'
+import { FitWhenReady, KIND_LABEL, KindIcon, flowGraph, nodeTypes, type NodeState } from '@/components/packs/flow'
 import { BTN, BTN_P, Crumbs, EnginePill, ErrorNote, Heading, LABEL, LINE, Loading, MUTED, Pill, StatusPill, cap, when } from '@/components/packs/parts'
 import { cn } from '@/lib/utils'
-
-type NodeState = 'done' | 'current' | 'waiting' | 'idle'
-
-const ICON: Record<StepKind, string[]> = {
-  trigger: ['M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z', 'M12 7v5l3 2'],
-  collect: ['M4 5c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3z', 'M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5', 'M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3'],
-  check: ['M20 13c0 5-3.5 7.5-7.7 9a1 1 0 0 1-.6 0C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.2-2.7a1.2 1.2 0 0 1 1.6 0C14.5 3.8 17 5 19 5a1 1 0 0 1 1 1z', 'm9 12 2 2 4-4'],
-  suggest: ['M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01'],
-  preflight: ['M9 11l3 3L22 4', 'M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'],
-  ask: ['M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2', 'M9 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8z', 'm16 11 2 2 4-4'],
-  exception: ['M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z', 'M12 9v4', 'M12 17h.01'],
-  decide: ['M6 3v12', 'M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6z', 'M6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6z', 'M18 9a9 9 0 0 1-9 9'],
-  act: ['M13 2 3 14h9l-1 8 10-12h-9l1-8z'],
-  verify: ['M21.8 10A10 10 0 1 1 17 3.3', 'm9 11 3 3L22 4'],
-  escalate: ['M12 19V5', 'm5 12 7-7 7 7'],
-  file: ['M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z', 'M14 2v6h6', 'm9 15 2 2 4-4'],
-}
-const KIND_LABEL: Record<StepKind, string> = {
-  trigger: 'Trigger',
-  collect: 'Collect',
-  check: 'Check',
-  suggest: 'Suggest',
-  preflight: 'Preflight',
-  ask: 'Ask a person',
-  exception: 'Exception',
-  decide: 'Decide',
-  act: 'Act',
-  verify: 'Verify',
-  escalate: 'Escalate',
-  file: 'File evidence',
-}
-
-function KindIcon({ kind, size = 16 }: { kind: StepKind; size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      {(ICON[kind] ?? ICON.act).map((d) => (
-        <path key={d} d={d} />
-      ))}
-    </svg>
-  )
-}
-
-const PORT = '!h-2 !w-2 !border-2 !border-[var(--fm-ink3)] !bg-white'
-
-function StepNode({ data }: NodeProps<{ step: Step; state: NodeState }>) {
-  const { step, state } = data
-  const waiting = state === 'waiting'
-  const detail = step.detail || (step.systems.length ? step.systems.join(', ') : '')
-  return (
-    <div
-      title={KIND_LABEL[step.kind] ?? step.kind}
-      className={[
-        'relative flex h-[92px] w-[160px] items-start gap-2 rounded-xl p-2.5 text-left shadow-[0_1px_2px_#14141e0a,0_10px_24px_-14px_#14141e40]',
-        waiting ? 'border-2 border-[var(--fm-brand)] bg-[#fff7f2]' : state === 'current' ? 'border-2 border-[var(--fm-ink)] bg-white' : 'border border-[var(--fm-line)] bg-white',
-        step.kind === 'trigger' ? 'border-dashed border-[rgba(21,23,26,.2)] bg-[var(--fm-bg)]' : '',
-      ].join(' ')}
-    >
-      <Handle type="target" position={Position.Left} className={PORT} />
-      {state === 'done' && (
-        <span aria-label="Done" role="img" className="absolute -right-[7px] -top-[7px] flex h-[18px] w-[18px] items-center justify-center rounded-full border-2 border-white bg-[#009869]">
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M20 6 9 17l-5-5" />
-          </svg>
-        </span>
-      )}
-      <span className={`flex h-7 w-7 flex-none items-center justify-center rounded-lg ${waiting ? 'bg-[var(--fm-brand)] text-[var(--fm-ink)]' : 'bg-[var(--fm-bg)] text-[var(--fm-ink)]'}`}>
-        <KindIcon kind={step.kind} />
-      </span>
-      <span className="min-w-0">
-        <b className="line-clamp-2 text-[13px] font-semibold leading-tight text-[var(--fm-ink)]">{step.title}</b>
-        {detail && <small title={detail} className={`mt-[3px] text-[11.5px] leading-tight ${MUTED} ${waiting ? 'line-clamp-1' : 'line-clamp-2'}`}>{detail}</small>}
-        {waiting && <small className="mt-[3px] block text-[11.5px] font-semibold text-[#a8430b]">Agent waiting here</small>}
-      </span>
-      <Handle type="source" position={Position.Right} className={PORT} />
-      <Handle type="source" id="back-out" position={Position.Bottom} className="!h-px !w-px !min-w-0 !border-0 !bg-transparent" />
-      <Handle type="target" id="back-in" position={Position.Bottom} className="!h-px !w-px !min-w-0 !border-0 !bg-transparent" />
-    </div>
-  )
-}
-
-const nodeTypes = { step: StepNode }
-
-/** Fit the whole flow once every node has been measured; the fitView prop runs too early. */
-function FitWhenReady() {
-  const ready = useNodesInitialized()
-  const { fitView } = useReactFlow()
-  useEffect(() => {
-    if (ready) fitView({ padding: 0.12, maxZoom: 1 })
-  }, [ready, fitView])
-  return null
-}
-const COL = 240
-const ROW = 140
-
-/** Columns by first-reached depth from the entry step(s); steps in a column fan out vertically. */
-function layout(steps: Step[]): Map<string, { x: number; y: number }> {
-  const incoming = new Set(steps.flatMap((s) => s.next.map((n) => n.to)))
-  const roots = steps.filter((s) => !incoming.has(s.id))
-  const byId = new Map(steps.map((s) => [s.id, s]))
-  const depth = new Map<string, number>()
-  const queue = (roots.length ? roots : steps.slice(0, 1)).map((s) => s.id)
-  queue.forEach((id) => depth.set(id, 0))
-  for (let i = 0; i < queue.length; i++) {
-    for (const n of byId.get(queue[i])?.next ?? []) {
-      if (!depth.has(n.to) && byId.has(n.to)) {
-        depth.set(n.to, (depth.get(queue[i]) ?? 0) + 1)
-        queue.push(n.to)
-      }
-    }
-  }
-  const cols = new Map<number, string[]>()
-  for (const s of steps) {
-    const d = depth.get(s.id) ?? 0
-    cols.set(d, [...(cols.get(d) ?? []), s.id])
-  }
-  const pos = new Map<string, { x: number; y: number }>()
-  cols.forEach((ids, d) => ids.forEach((id, i) => pos.set(id, { x: 20 + d * COL, y: (i - (ids.length - 1) / 2) * ROW })))
-  return pos
-}
 
 export default function WorkflowPage() {
   const { workflowId } = useParams<{ workflowId: string }>()
   const router = useRouter()
-  const { startRun } = usePackActions()
+  const { startRun, createDraft } = usePackActions()
   const wf = useWorkflow(workflowId)
   const run = useRun(wf.data?.latestRun?.id)
   const [overlay, setOverlay] = useState(true)
   const [starting, setStarting] = useState(false)
+  const [opening, setOpening] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
 
   const graph = useMemo(() => {
@@ -148,37 +31,7 @@ export default function WorkflowPage() {
       if (r.currentStep === id && (r.status === 'running' || r.status === 'blocked')) return 'current'
       return completed.has(id) ? 'done' : 'idle'
     }
-    const pos = layout(steps)
-    const minY = Math.min(0, ...[...pos.values()].map((p) => p.y))
-    const nodes: Node[] = steps.map((s) => {
-      const p = pos.get(s.id) ?? { x: 0, y: 0 }
-      return { id: s.id, type: 'step', position: { x: p.x, y: p.y - minY + 20 }, data: { step: s, state: stateOf(s.id) }, draggable: false, selectable: false, connectable: false }
-    })
-    const edges: Edge[] = steps.flatMap((s) =>
-      s.next.map((n) => {
-        const traced = r !== null && stateOf(s.id) === 'done' && stateOf(n.to) !== 'idle'
-        const untraced = r !== null && !traced
-        // A loop back (e.g. Revise -> Suggest) routes below the row instead of through the nodes.
-        const back = (pos.get(n.to)?.x ?? 0) <= (pos.get(s.id)?.x ?? 0)
-        return {
-          id: `${s.id}>${n.to}`,
-          type: back ? 'smoothstep' : 'default',
-          sourceHandle: back ? 'back-out' : undefined,
-          targetHandle: back ? 'back-in' : undefined,
-          pathOptions: back ? { offset: 24, borderRadius: 12 } : undefined,
-          source: s.id,
-          target: n.to,
-          label: n.label ?? undefined,
-          animated: traced && stateOf(n.to) !== 'done',
-          markerEnd: { type: MarkerType.ArrowClosed, color: untraced ? 'var(--fm-ink3)' : 'var(--fm-ink)' },
-          style: { stroke: untraced ? 'var(--fm-ink3)' : 'var(--fm-ink)', strokeWidth: 1.6, strokeDasharray: untraced ? '5 5' : undefined },
-          labelStyle: { fontSize: 11.5, fontWeight: 600, fill: 'var(--fm-ink2)' },
-          labelBgStyle: { fill: 'var(--fm-bg)' },
-          labelBgBorderRadius: 999,
-        }
-      }),
-    )
-    return { nodes, edges }
+    return flowGraph(steps, { stateOf, run: r !== null })
   }, [wf.data, run.data, overlay])
 
   async function start() {
@@ -190,6 +43,18 @@ export default function WorkflowPage() {
     wf.reload()
     if (res.error || !res.data) setFailure(res.error ?? 'The run could not be started.')
     else router.push(`/compliance/runs/${res.data.id}`)
+  }
+
+  async function edit() {
+    if (!wf.data) return
+    if (!wf.data.draft) {
+      setOpening(true)
+      setFailure(null)
+      const res = await createDraft(wf.data.id)
+      setOpening(false)
+      if (res.error) return setFailure(res.error)
+    }
+    router.push(`/compliance/workflows/${wf.data.id}/edit`)
   }
 
   if (wf.loading && !wf.data) return <Loading label="Loading workflow" />
@@ -210,7 +75,7 @@ export default function WorkflowPage() {
     ['Autonomy', <span key="a" title={w.autonomy}>{w.autonomy.split(/\s/)[0]}</span>],
     ['Approver', w.approver],
     ['Pattern', w.pattern.name],
-    ['Version', w.version],
+    ['Version', versionName(w.version)],
   ]
   const governance = ([
     ['Common control', w.commonControl],
@@ -222,20 +87,23 @@ export default function WorkflowPage() {
     ['Triggers', w.triggers.length ? w.triggers.join('; ') : null],
   ] as Array<[string, ReactNode]>).filter(([, v]) => v)
   const byFramework = [...new Set(w.mappings.map((m) => m.framework))].map((f) => ({ framework: f, rows: w.mappings.filter((m) => m.framework === f) }))
-  const people = w.steps.filter((s) => GATE_KINDS.includes(s.kind) || !s.runsWithoutApproval).length
+  const people = w.steps.filter(needsPerson).length
 
   return (
     <div className="flex flex-col gap-[22px]">
       <Crumbs items={[{ label: 'Frameworks', href: '/compliance' }, { label: w.pack.name, href: `/compliance/packs/${w.pack.id}` }, { label: w.name }]} />
       <Heading title={w.name} lead={w.description}>
         {last && <Link href={`/compliance/runs/${last.id}`} className={BTN}>Open latest run</Link>}
+        <button type="button" className={BTN} onClick={edit} disabled={!w.installed || opening}>
+          {opening ? 'Opening' : w.draft ? `Continue draft of version ${w.draft.version}` : 'Edit workflow'}
+        </button>
         <button type="button" className={BTN_P} onClick={start} disabled={!w.installed || starting} aria-describedby={w.installed ? undefined : 'start-reason'}>
           {starting ? 'Starting' : 'Start run'}
         </button>
       </Heading>
       {!w.installed && (
         <p id="start-reason" className={cn('-mt-3 m-0 text-[13px]', MUTED)}>
-          Start run is off because this workflow&apos;s pack is not installed.{' '}
+          Start run and editing are off because this workflow&apos;s pack is not installed.{' '}
           <Link href={`/compliance/packs/${w.pack.id}`} className="font-semibold text-[var(--fm-ink)] underline">Install {w.pack.name}</Link>.
         </p>
       )}
@@ -266,7 +134,7 @@ export default function WorkflowPage() {
           <div className="flex flex-grow flex-col">
             <b className="text-sm font-semibold text-[var(--fm-ink)]">Flow</b>
             <span className={cn('text-[12px]', MUTED)}>
-              {w.steps.length} {w.steps.length === 1 ? 'step' : 'steps'}, {people} {people === 1 ? 'needs' : 'need'} a person. Editing steps is coming soon.
+              {w.steps.length} {w.steps.length === 1 ? 'step' : 'steps'}, {people} {people === 1 ? 'needs' : 'need'} a person.{w.draft ? ` A draft of version ${w.draft.version} is in progress; runs use ${versionName(w.version)} until it is published.` : ''}
             </span>
           </div>
           {last && overlay && (
@@ -334,7 +202,7 @@ export default function WorkflowPage() {
                       <span className="inline-flex items-center gap-1.5"><KindIcon kind={s.kind} size={14} />{KIND_LABEL[s.kind] ?? s.kind}</span>
                     </td>
                     <td className="py-[10px] pr-3">{s.permission ?? <span className="text-[var(--fm-ink3)]">None</span>}</td>
-                    <td className="py-[10px] pr-3">{GATE_KINDS.includes(s.kind) || !s.runsWithoutApproval ? <Pill tone="you">Yes</Pill> : <Pill>No</Pill>}</td>
+                    <td className="py-[10px] pr-3">{needsPerson(s) ? <Pill tone="you">Yes</Pill> : <Pill>No</Pill>}</td>
                     <td className="max-w-[220px] py-[10px] pr-3">{s.failure ?? <span className="text-[var(--fm-ink3)]">Not set</span>}</td>
                     <td className="max-w-[220px] py-[10px]">{s.output ?? <span className="text-[var(--fm-ink3)]">None</span>}</td>
                   </tr>

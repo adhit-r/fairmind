@@ -21,6 +21,9 @@ export type StepKind =
   | 'file'
 /** Step kinds at which a run stops for a person. */
 export const GATE_KINDS: readonly StepKind[] = ['ask', 'exception', 'decide']
+/** A person must act at this step: a gate, or a step the catalogue says does not run without approval. */
+export const needsPerson = (s: { kind: StepKind; runsWithoutApproval: string | null }) =>
+  GATE_KINDS.includes(s.kind) || (s.runsWithoutApproval ?? '').startsWith('No')
 export type Decision = 'approve' | 'request_changes' | 'reject'
 /** Which branch of a gate each decision takes, matched against the branch label the way the backend does. */
 const DECISION_EDGES: Record<Decision, string[]> = {
@@ -43,6 +46,8 @@ export interface RunSummary {
   workflowName: string
   status: RunStatus
   currentStep: string | null
+  /** The workflow version the run follows: the catalogue's, or an organisation version like "org-3". */
+  version: string
   /** What a waiting run needs: a gate decision, or a person to submit the current step's output. */
   waitingFor: 'approval' | 'input' | null
   createdAt: string
@@ -176,12 +181,13 @@ export interface EvaluationRow {
 export interface Step {
   id: string
   kind: StepKind
-  type: string
+  type: string | null
   title: string
   detail: string
   systems: string[]
   permission: string | null
-  runsWithoutApproval: boolean
+  /** As the catalogue words it: "Yes", "No", or a condition such as "Yes for routine internal records". */
+  runsWithoutApproval: string | null
   next: Array<{ to: string; label: string | null }>
   failure: string | null
   output: string | null
@@ -199,7 +205,10 @@ export interface Mapping {
 export interface Workflow {
   id: string
   name: string
+  /** The version new runs use: an organisation version like "org-3", else the catalogue version. */
   version: string
+  catalogueVersion: string
+  draft: { version: number; updatedAt: string } | null
   stage: string
   description: string
   packId: string
@@ -231,7 +240,23 @@ export interface RunEvent {
   createdAt: string
 }
 
+export interface Draft {
+  workflowId: string
+  version: number
+  basedOn: string
+  steps: Step[]
+  /** Why it cannot be published yet; empty when it can. */
+  problems: string[]
+  updatedAt: string
+  updatedBy: string | null
+}
+
+/** "org-3" reads as "Version 3"; the catalogue version as "Catalogue 2.3". */
+export const versionName = (label: string) => (label.startsWith('org-') ? `Version ${label.slice(4)}` : `Catalogue ${label}`)
+
 export interface Run extends RunSummary {
+  /** The steps of the version this run follows, which may differ from the workflow's current ones. */
+  steps: Step[]
   systemId: string | null
   approvalRequestId: string | null
   approval: { status: string; decisionNotes: string | null } | null
@@ -319,6 +344,8 @@ export function useEvaluations(filters: { pillar?: string; engine?: string; q?: 
 }
 export const useWorkflow = (workflowId: string | undefined) =>
   useOrgResource<Workflow>(workflowId ? API_ENDPOINTS.packs.workflow(workflowId) : null)
+export const useDraft = (workflowId: string | undefined) =>
+  useOrgResource<Draft>(workflowId ? API_ENDPOINTS.packs.draft(workflowId) : null)
 export const useRun = (runId: string | undefined) =>
   useOrgResource<Run>(runId ? API_ENDPOINTS.packs.run(runId) : null)
 /** Every run of the organisation, newest first. */
@@ -355,6 +382,10 @@ export function usePackActions() {
         send<Run>(API_ENDPOINTS.packs.startRun(workflowId), (p) => apiClient.post(p, systemId ? { system_id: systemId } : {})),
       decideRun: (runId: string, decision: Decision, notes?: string) =>
         send<Run>(API_ENDPOINTS.packs.decision(runId), (p) => apiClient.post(p, { decision, ...(notes ? { notes } : {}) })),
+      createDraft: (workflowId: string) => send<Draft>(API_ENDPOINTS.packs.draft(workflowId), (p) => apiClient.post(p)),
+      saveDraft: (workflowId: string, steps: Step[]) => send<Draft>(API_ENDPOINTS.packs.draft(workflowId), (p) => apiClient.put(p, { steps })),
+      discardDraft: (workflowId: string) => send<{ discarded: number }>(API_ENDPOINTS.packs.draft(workflowId), (p) => apiClient.delete(p)),
+      publishDraft: (workflowId: string) => send<Workflow>(API_ENDPOINTS.packs.publishDraft(workflowId), (p) => apiClient.post(p)),
       submitStepOutput: (runId: string, stepId: string, summary: string, route?: string) =>
         send<Run>(API_ENDPOINTS.packs.stepOutput(runId, stepId), (p) => apiClient.post(p, { summary, ...(route ? { route } : {}) })),
     }

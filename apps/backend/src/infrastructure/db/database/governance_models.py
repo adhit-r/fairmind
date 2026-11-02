@@ -3437,3 +3437,27 @@ class WorkflowRunEvent(Base):
     __table_args__ = (
         Index("idx_workflow_run_events_run_seq", "run_id", "seq", unique=True),
     )
+
+
+class WorkflowVersion(Base):
+    """An organization's edited copy of a pack workflow: one draft, then numbered published versions."""
+
+    __tablename__ = "workflow_versions"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    workflow_id = Column(String, nullable=False)
+    version = Column(Integer, nullable=False)
+    status = Column(String, nullable=False, default="draft")  # draft | published
+    base_version = Column(String, nullable=False)  # the version the draft started from
+    steps_json = Column(Text, nullable=False)
+    created_by = Column(String, nullable=True)
+    updated_by = Column(String, nullable=True)
+    published_by = Column(String, nullable=True)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    published_at = Column(String, nullable=True)
+
+    __table_args__ = (
+        Index("idx_workflow_versions_org_wf_version", "org_id", "workflow_id", "version", unique=True),
+    )
