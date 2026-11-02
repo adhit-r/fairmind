@@ -15,6 +15,7 @@ import { MlopsSettings } from '@/components/settings/MlopsSettings'
 import { IconSettings, IconUser, IconBell, IconShield, IconAlertTriangle, IconActivity } from '@tabler/icons-react'
 import { apiClient } from '@/lib/api/api-client';
 import Link from 'next/link'
+import { useSession } from '@/context/SessionContext'
 
 interface UserSettings {
   email: string;
@@ -26,6 +27,7 @@ interface UserSettings {
 
 export default function SettingsPage() {
   const { toast } = useToast()
+  const { user } = useSession()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const [settings, setSettings] = useState<UserSettings>({
@@ -36,33 +38,22 @@ export default function SettingsPage() {
     language: 'en',
   })
 
-  // Fetch settings on mount
+  // The settings API is not user-scoped, so the email always comes from the session
+  useEffect(() => {
+    setSettings((s) => ({ ...s, email: user?.email ?? '' }))
+  }, [user])
+
+  // Fetch settings on mount; on failure keep the defaults
   useEffect(() => {
     const fetchSettings = async () => {
       try {
         setLoading(true)
         const response = await apiClient.get('/api/v1/settings/')
         if (response.success && response.data) {
-          setSettings(response.data as UserSettings)
-        } else {
-          // Fallback to defaults if API fails
-          setSettings({
-            email: 'user@example.com',
-            notifications: true,
-            autoRefresh: true,
-            theme: 'light',
-            language: 'en',
-          })
+          setSettings((s) => ({ ...s, ...(response.data as UserSettings), email: s.email }))
         }
-      } catch (err) {
-        // Fallback to defaults on error
-        setSettings({
-          email: 'user@example.com',
-          notifications: true,
-          autoRefresh: true,
-          theme: 'light',
-          language: 'en',
-        })
+      } catch {
+        // keep defaults
       } finally {
         setLoading(false)
       }
