@@ -2051,13 +2051,14 @@ async def make_approval_decision(
             detail=f"Request is already '{current[0]}'; only pending requests can be decided",
         )
 
+    decision_id = str(uuid.uuid4())
     db.execute(
         text(
             "INSERT INTO governance_approval_decisions (id, request_id, decision, notes, decided_by, created_at) "
             "VALUES (:id, :request_id, :decision, :notes, :decided_by, :created_at)"
         ),
         {
-            "id": str(uuid.uuid4()),
+            "id": decision_id,
             "request_id": request_id,
             "decision": new_status,
             "notes": request.notes,
@@ -2065,6 +2066,21 @@ async def make_approval_decision(
             "created_at": now,
         },
     )
+    seal = None
+    if existing.entity_type == "ai_system" and approval_system_id:
+        from api.routes.fairness_runs import _gate_payload  # function-level: that router imports this one
+        from src.application.services.decision_seal_service import seal_decision
+
+        system = db.execute(text("SELECT risk_tier FROM governance_ai_systems WHERE id = :id"), {"id": approval_system_id}).fetchone()
+        seal = seal_decision(
+            db,
+            system_id=approval_system_id,
+            request_id=request_id,
+            decision_id=decision_id,
+            decision=new_status,
+            sealed_by=actor,
+            gate=_gate_payload(db, approval_system_id, system[0] if system else "medium"),
+        )
 
     db.commit()
     return {
@@ -2072,6 +2088,7 @@ async def make_approval_decision(
         "status": new_status,
         "notes": request.notes,
         "updatedAt": now,
+        "seal": seal,
     }
 
 
@@ -2104,10 +2121,10 @@ async def list_approval_requests(
     db: Session = Depends(get_db),
 ):
     _ensure_tables(db)
-    if entity_type != "ai_system" or not entity_id:
+    if entity_type != "ai_system":
         raise HTTPException(status_code=404, detail="Approval requests not found")
-    _require_system_access(db, entity_id, current_user)
     if entity_id:
+        _require_system_access(db, entity_id, current_user)
         rows = db.execute(
             text(
                 "SELECT id, workflow_id, entity_type, entity_id, requested_by, status, current_step, decision_notes, created_at, updated_at "
@@ -2126,9 +2143,16 @@ async def list_approval_requests(
             {"entity_type": entity_type},
         ).fetchall()
 
+    visible = []
     for row in rows:
-        _require_approval_request_access(db, str(row[0]), current_user)
-    return [_serialize_approval_request_row(row) for row in rows]
+        try:
+            _require_approval_request_access(db, str(row[0]), current_user)
+        except HTTPException:
+            if entity_id:
+                raise
+            continue  # ponytail: one access check per row; a join on org membership if the list grows
+        visible.append(row)
+    return [_serialize_approval_request_row(row) for row in visible]
 
 
 @router.get("/approval-requests/{request_id}/decisions")

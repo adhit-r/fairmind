@@ -936,3 +936,26 @@ def test_tenant_user_cannot_create_global_approval_workflow(assurance_client) ->
     )
 
     assert response.status_code == 403, response.text
+
+
+def test_listing_approval_requests_across_systems_shows_only_what_the_user_can_see(assurance_client) -> None:
+    client, session_factory, active_user = assurance_client
+    session = session_factory()
+    _seed_org(session, ORG_A, USER_A, role="owner")
+    _seed_org(session, ORG_B, USER_B, role="owner")
+    system_id, _, _ = _seed_catalog_and_system(session)
+    session.close()
+
+    created = client.post(f"/api/v1/ai-governance/approval/system/{system_id}/request", json={})
+    assert created.status_code == 200, created.text
+    request_id = created.json()["request"]["id"]
+
+    mine = client.get("/api/v1/ai-governance/approval-requests?entity_type=ai_system")
+    assert mine.status_code == 200, mine.text
+    assert [r["id"] for r in mine.json()] == [request_id]
+
+    active_user["value"] = _token(USER_B)
+    theirs = client.get("/api/v1/ai-governance/approval-requests?entity_type=ai_system")
+    assert theirs.status_code == 200 and theirs.json() == []
+    scoped = client.get(f"/api/v1/ai-governance/approval-requests?entity_type=ai_system&entity_id={system_id}")
+    assert scoped.status_code in (403, 404)
