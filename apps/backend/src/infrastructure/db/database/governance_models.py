@@ -3171,6 +3171,31 @@ class GovernanceApprovalDecision(Base):
         return f"<GovernanceApprovalDecision(id={self.id}, decision={self.decision})>"
 
 
+class GovernanceDecisionSeal(Base):
+    """Hash chain over a system's evidence, frozen at the moment a release decision is recorded.
+
+    ``chain_head`` folds the per-record hashes in creation order; ``entries_json`` keeps each
+    record's id and hash so a later verification can say which record changed or vanished.
+    """
+
+    __tablename__ = "governance_decision_seals"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    system_id = Column(String, nullable=False, index=True)
+    request_id = Column(String, nullable=False, index=True)
+    decision_id = Column(String, nullable=False)
+    decision = Column(String, nullable=False)
+    chain_head = Column(String, nullable=False)
+    evidence_count = Column(Integer, nullable=False, default=0)
+    entries_json = Column(Text, nullable=False, default="[]")
+    gate_json = Column(Text, nullable=False, default="{}")
+    sealed_by = Column(String, nullable=True)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+    def __repr__(self) -> str:
+        return f"<GovernanceDecisionSeal(id={self.id}, chain_head={self.chain_head[:12]})>"
+
+
 class GovernanceRisk(Base):
     """Risk record linked to an AI system."""
 

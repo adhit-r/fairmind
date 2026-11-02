@@ -284,7 +284,7 @@ export default function SystemFilePage() {
             ) : seal.verification.status === 'intact' ? (
               <span><span className="text-[#1f7a4d]">Intact</span> · {seal.evidenceCount} record{seal.evidenceCount === 1 ? '' : 's'} sealed {when(seal.createdAt)}{seal.verification.addedSince ? `, ${seal.verification.addedSince} added since` : ''} · <span className="font-mono text-[11.5px]">{seal.chainHead.slice(0, 12)}</span></span>
             ) : (
-              <span className="text-[#b4232c]">Broken: {[seal.verification.changed.length && `${seal.verification.changed.length} changed`, seal.verification.missing.length && `${seal.verification.missing.length} missing`].filter(Boolean).join(', ')} since the decision on {when(seal.createdAt)}</span>
+              <span className="text-[#b4232c]">Broken, {[seal.verification.changed.length && `${seal.verification.changed.length} changed`, seal.verification.missing.length && `${seal.verification.missing.length} missing`].filter(Boolean).join(', ')} since {when(seal.createdAt)}</span>
             )
           }
         />

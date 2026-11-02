@@ -142,3 +142,47 @@ def test_monitoring_run_and_attestations_move_the_gate():
     by_key = {c["key"]: c for c in att.json()["gate"]["checks"]}
     assert by_key["human_oversight"]["state"] == "attested" and by_key["human_oversight"]["confidence"] <= 0.4
     assert client.post(f"/api/v1/ai-governance/systems/{sid}/attestations", json={"check": "fairness", "statement": "x" * 20}).status_code == 422
+
+
+def test_balanced_data_passes_and_noise_is_not_a_failure():
+    fair = run_fairness(_csv(n=400, seed=11), outcome="label", prediction="prediction", score="score", attributes=["gender", "region"])
+    assert fair["all_checks_pass"] is True, [a["checks"] for a in fair["attributes"]]
+    for attr in fair["attributes"]:
+        for key in ("equal_opportunity", "equalized_odds", "calibration"):
+            m = attr[key]
+            assert m is None or m["is_fair"] or (m["crosses_threshold"] and m["significant"])
+    biased = run_fairness(_csv(n=600, biased=True), outcome="label", prediction="prediction", score="score", attributes=["gender"])
+    di = biased["attributes"][0]["disparate_impact"]
+    assert di["crosses_threshold"] and di["significant"] and biased["all_checks_pass"] is False
+
+
+def test_decision_seals_the_evidence_and_verification_catches_edits():
+    from sqlalchemy import text as sql
+
+    client = TestClient(app, client=(f"seal-{uuid.uuid4().hex[:8]}", 50000), headers=auth_headers())
+    ws = client.post("/api/v1/ai-governance/workspaces", json={"name": "Seal ws", "owner": "owner"}).json()
+    sid = client.post("/api/v1/ai-governance/systems", json={"workspace_id": ws["id"], "name": "Sealed", "owner": "owner", "risk_tier": "low", "lifecycle_stage": "govern"}).json()["id"]
+    first = client.post(f"/api/v1/ai-governance/systems/{sid}/attestations", json={"check": "data_governance", "statement": "Training data comes from the 2024 lending book under the DPDP notice."})
+    assert first.status_code == 200, first.text
+    assert client.get(f"/api/v1/ai-governance/systems/{sid}/seals").json() == []
+
+    req = client.post(f"/api/v1/ai-governance/approval/system/{sid}/request", json={})
+    assert req.status_code == 200, req.text
+    decided = client.post(f"/api/v1/ai-governance/approval-requests/{req.json()['request']['id']}/decision", json={"decision": "rejected", "notes": "not yet"})
+    assert decided.status_code == 200, decided.text
+    seal = decided.json()["seal"]
+    assert seal["evidenceCount"] == 1 and seal["verification"] == {"status": "intact", "changed": [], "missing": [], "addedSince": 0}
+    assert seal["gate"]["verdict"] and len(seal["chainHead"]) == 64
+
+    # Evidence added after the decision is counted, not treated as tampering.
+    client.post(f"/api/v1/ai-governance/systems/{sid}/attestations", json={"check": "human_oversight", "statement": "A credit officer reviews every declined application."})
+    listed = client.get(f"/api/v1/ai-governance/systems/{sid}/seals").json()
+    assert listed[0]["id"] == seal["id"] and listed[0]["verification"] == {"status": "intact", "changed": [], "missing": [], "addedSince": 1}
+
+    # Editing a sealed record breaks the seal and names the record.
+    from database.connection import db_manager
+    with db_manager.SessionLocal() as session:
+        session.execute(sql("UPDATE governance_evidence SET content_json = :c WHERE id = :id"), {"c": '{"statement": "edited later"}', "id": first.json()["evidenceId"]})
+        session.commit()
+    broken = client.get(f"/api/v1/ai-governance/systems/{sid}/seals").json()[0]["verification"]
+    assert broken["status"] == "broken" and broken["changed"] == [first.json()["evidenceId"]] and broken["missing"] == []
