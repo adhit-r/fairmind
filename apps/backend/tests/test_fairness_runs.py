@@ -109,3 +109,36 @@ def test_route_stores_measured_evidence_and_moves_the_gate():
     stored = next(e for e in evidence if e["id"] == body["evidenceId"])
     assert stored["evidenceType"] == "fairness_test" and stored["metadata"]["provenance_class"] == "measured"
     assert client.get(f"/api/v1/ai-governance/systems/{sid}/fairness-runs").json()[0]["evidenceId"] == body["evidenceId"]
+
+
+def test_monitoring_run_and_attestations_move_the_gate():
+    from src.application.services.fairness_run_service import psi, run_monitoring
+
+    assert psi([10, 10, 10], [10, 10, 10]) == 0.0
+    assert psi([30, 10, 0], [0, 10, 30]) > 0.25
+
+    client = TestClient(app, client=(f"mon-{uuid.uuid4().hex[:8]}", 50000), headers=auth_headers())
+    ws = client.post("/api/v1/ai-governance/workspaces", json={"name": "Mon ws", "owner": "owner"}).json()
+    sid = client.post("/api/v1/ai-governance/systems", json={"workspace_id": ws["id"], "name": "Scorer", "owner": "owner", "risk_tier": "low", "lifecycle_stage": "operate"}).json()["id"]
+
+    # Without a baseline the run still measures the current rates and impact ratio.
+    cold = run_monitoring(_csv(), attributes=["gender"], prediction="prediction", score="score", baseline=None)
+    assert cold["baseline"]["present"] is False and cold["attributes"][0]["worst_psi"] is None
+
+    client.post(f"/api/v1/ai-governance/systems/{sid}/fairness-runs", files={"file": ("b.csv", _csv(), "text/csv")}, data={"outcome": "label", "prediction": "prediction", "score": "score", "attributes": "gender"})
+    drifted = client.post(f"/api/v1/ai-governance/systems/{sid}/monitoring-runs", files={"file": ("c.csv", _csv(biased=True, seed=9), "text/csv")}, data={"prediction": "prediction", "score": "score", "attributes": "gender"})
+    assert drifted.status_code == 200, drifted.text
+    body = drifted.json()
+    attr = body["result"]["attributes"][0]
+    assert body["result"]["baseline"]["present"] is True and attr["worst_psi"] is not None and attr["max_rate_drift"] is not None
+    by_key = {c["key"]: c for c in body["gate"]["checks"]}
+    assert by_key["monitoring"]["state"] == "proven" and by_key["fairness"]["state"] == "proven"
+    if body["result"]["all_checks_pass"] is False:
+        assert any("monitoring snapshot" in r for r in body["gate"]["reasons"])
+    assert client.get(f"/api/v1/ai-governance/systems/{sid}/monitoring-runs").json()[0]["evidenceId"] == body["evidenceId"]
+
+    att = client.post(f"/api/v1/ai-governance/systems/{sid}/attestations", json={"check": "human_oversight", "statement": "A credit officer reviews every declined application before a decision is sent.", "reference": "SOP-14"})
+    assert att.status_code == 200, att.text
+    by_key = {c["key"]: c for c in att.json()["gate"]["checks"]}
+    assert by_key["human_oversight"]["state"] == "attested" and by_key["human_oversight"]["confidence"] <= 0.4
+    assert client.post(f"/api/v1/ai-governance/systems/{sid}/attestations", json={"check": "fairness", "statement": "x" * 20}).status_code == 422
