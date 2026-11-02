@@ -186,3 +186,33 @@ def test_decision_seals_the_evidence_and_verification_catches_edits():
         session.commit()
     broken = client.get(f"/api/v1/ai-governance/systems/{sid}/seals").json()[0]["verification"]
     assert broken["status"] == "broken" and broken["changed"] == [first.json()["evidenceId"]] and broken["missing"] == []
+
+
+def test_clause_map_reads_the_gate_per_framework_clause():
+    from src.application.services.clause_map_service import clause_map
+
+    gate = release_gate("high", [
+        {"id": "e1", "evidenceType": "fairness_test", "confidence": 0.95, "metadata": {"provenance_class": "measured"}, "content": {"all_checks_pass": True, "rows": 600, "attributes": []}},
+        {"id": "e2", "evidenceType": "human_oversight", "confidence": 0.30, "metadata": {"provenance_class": "manual"}, "content": {}},
+    ])
+    out = clause_map(gate)
+    by_key = {f["key"]: f for f in out["frameworks"]}
+    assert [f["key"] for f in out["frameworks"]][:3] == ["EUAIA", "ISO42001", "NISTRMF"]
+    eu = {c["control"]: c for c in by_key["EUAIA"]["clauses"]}
+    assert eu["Art 10"]["state"] == "proven" and any(ch["check"] == "fairness" for ch in eu["Art 10"]["checks"])
+    assert eu["Art 14"]["state"] == "attested" and eu["Art 72"]["state"] == "open"
+    counts = by_key["EUAIA"]["counts"]
+    assert counts["total"] == counts["proven"] + counts["attested"] + counts["open"] and counts["proven"] >= 1
+    only_nist = clause_map(gate, frameworks=["NISTRMF"])
+    assert [f["key"] for f in only_nist["frameworks"]] == ["NISTRMF"]
+    assert {c["control"] for c in only_nist["frameworks"][0]["clauses"]} >= {"MEASURE 2.11", "MAP 3.5", "MANAGE 4.1"}
+
+    client = TestClient(app, client=(f"cm-{uuid.uuid4().hex[:8]}", 50000), headers=auth_headers())
+    ws = client.post("/api/v1/ai-governance/workspaces", json={"name": "Clause ws", "owner": "owner"}).json()
+    sid = client.post("/api/v1/ai-governance/systems", json={"workspace_id": ws["id"], "name": "Mapped", "owner": "owner", "risk_tier": "low", "lifecycle_stage": "govern"}).json()["id"]
+    res = client.get(f"/api/v1/ai-governance/systems/{sid}/clause-map")
+    assert res.status_code == 200, res.text
+    assert res.json()["systemId"] == sid and all(c["state"] == "open" for f in res.json()["frameworks"] for c in f["clauses"])
+    report = client.post("/api/v1/ai-governance/reports/generate", json={"system_id": sid, "report_type": "governance", "frameworks": ["eu_ai_act"]})
+    assert report.status_code == 200, report.text
+    assert [f["key"] for f in report.json()["data"]["clauseMap"]["frameworks"]] == ["EUAIA"] and report.json()["data"]["gate"]["verdict"]

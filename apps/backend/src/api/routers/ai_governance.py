@@ -3054,12 +3054,18 @@ async def generate_audit_report(
             "readiness": None,
         }
 
+    from api.routes.fairness_runs import _gate_payload  # function-level: that router imports this one
+    from src.application.services.clause_map_service import clause_map, framework_keys
+
+    gate = _gate_payload(db, system_id, sys_row.risk_tier if sys_row else "medium")
     data_snapshot = {
         "system": system_data,
         "risks": risks_data,
         "evidence": evidence_data,
         "remediation": remediation_data,
         "approvals": approvals_data,
+        "gate": {"verdict": gate.get("verdict"), "confidence": gate.get("confidence"), "checks": gate.get("checks", []), "reasons": gate.get("reasons", [])},
+        "clauseMap": clause_map(gate, frameworks=framework_keys(request.frameworks)),
         "generatedAt": _utc_now_iso(),
     }
 
