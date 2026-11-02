@@ -366,7 +366,7 @@ export const API_ENDPOINTS = {
     startRun: (workflowId: string) => `/api/v1/packs/workflows/${workflowId}/runs`,
     runs: '/api/v1/packs/runs',
     run: (runId: string) => `/api/v1/packs/runs/${runId}`,
-    runEvents: (runId: string) => `/api/v1/packs/runs/${runId}/events`,
+    stepOutput: (runId: string, stepId: string) => `/api/v1/packs/runs/${runId}/steps/${stepId}/output`,
     decision: (runId: string) => `/api/v1/packs/runs/${runId}/decision`,
   },
 

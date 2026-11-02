@@ -117,11 +117,28 @@ def _start(client, workflow=WORKFLOW, **body):
     return response.json()
 
 
-def _gate(client, run_id):
-    client.post(f"{PACKS}/runs/{run_id}/events", json={"kind": "step.started", "step_id": "trigger"})
-    response = client.post(f"{PACKS}/runs/{run_id}/events", json={"kind": "gate.opened", "step_id": ASK_STEP})
+def _submit(client, run, **body):
+    body = {"summary": "Reviewed and recorded", **body}
+    response = client.post(f"{PACKS}/runs/{run['id']}/steps/{run['currentStep']}/output", json=body)
     assert response.status_code == 200, response.text
     return response.json()
+
+
+def _to_gate(client, workflow=WORKFLOW):
+    run = _start(client, workflow)
+    while run["waitingFor"] == "input":
+        run = _submit(client, run)
+    return run
+
+
+def _decide(client, run, decision, notes=""):
+    response = client.post(f"{PACKS}/runs/{run['id']}/decision", json={"decision": decision, "notes": notes})
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def _kinds(run):
+    return [(e["kind"], e["stepId"]) for e in run["events"]]
 
 
 def _approval_count(engine, run_id):
@@ -231,73 +248,105 @@ def test_start_run_requires_install_and_known_workflow(tmp_database):
     assert client.post(f"{PACKS}/workflows/nope/runs", json={}).status_code == 404
 
 
-def test_run_creation_chain_valid(tmp_database):
+def test_run_starts_and_waits_on_the_first_step_that_needs_a_person(tmp_database):
     _, client = _installed_org(tmp_database)
     run = _start(client)
-    assert run["status"] == "queued" and run["chainValid"] is True
-    assert [e["kind"] for e in run["events"]] == ["run.created"]
-    assert run["events"][0]["prevHash"] == "0" * 64
+    assert (run["status"], run["currentStep"], run["waitingFor"]) == ("waiting", "collect", "input")
+    assert _kinds(run) == [
+        ("run.created", None),
+        ("step.started", "trigger"),
+        ("step.completed", "trigger"),
+        ("step.started", "collect"),
+    ]
+    assert run["chainValid"] and run["events"][0]["prevHash"] == "0" * 64
     assert client.get(f"{PACKS}/workflows/{WORKFLOW}").json()["latestRun"]["id"] == run["id"]
-    assert [r["id"] for r in client.get(f"{PACKS}/runs?status=queued").json()] == [run["id"]]
+    assert [r["id"] for r in client.get(f"{PACKS}/runs?status=waiting").json()] == [run["id"]]
 
 
-def test_non_admin_cannot_append_events(tmp_database):
-    org_id, client = _installed_org(tmp_database)
-    run = _start(client)
-    analyst = _client(tmp_database, org_id, role="member", token_role=UserRole.ANALYST)
-    response = analyst.post(f"{PACKS}/runs/{run['id']}/events", json={"kind": "step.started", "step_id": "trigger"})
-    assert response.status_code == 403
+def test_approved_run_acts_files_evidence_and_completes(tmp_database):
+    _, client = _installed_org(tmp_database)
+    run = _to_gate(client)
+    assert (run["currentStep"], run["waitingFor"]) == (ASK_STEP, "approval")
+    assert run["approval"]["status"] == "pending" and _approval_count(tmp_database, run["id"]) == 1
+    assert run["events"][-2]["payload"]["summary"] == "Reviewed and recorded"
+
+    run = _decide(client, run, "approve", "ok")
+    assert (run["currentStep"], run["waitingFor"]) == ("record", "input")
+    assert run["approval"] == {"status": "approved", "decisionNotes": "ok"}
+
+    run = _submit(client, run)
+    assert run["status"] == "done" and run["finishedAt"] and run["currentStep"] is None and run["chainValid"]
+    sealed = run["events"][-2]
+    assert (sealed["kind"], sealed["stepId"]) == ("step.completed", "file-evidence")
+    assert sealed["payload"]["sealedHeadHash"] == run["events"][-3]["hash"]
+    assert _kinds(run)[-1] == ("run.completed", None)
 
 
-def test_event_validation(tmp_database):
+def test_reject_files_evidence_and_completes(tmp_database):
+    _, client = _installed_org(tmp_database)
+    run = _decide(client, _to_gate(client), "reject", "no")
+    assert run["status"] == "done" and run["approval"]["status"] == "rejected"
+    assert ("step.completed", "record") not in _kinds(run)
+
+
+def test_changes_loop_through_revise_then_escalate_after_three_rounds(tmp_database):
+    _, client = _installed_org(tmp_database)
+    run = _to_gate(client)
+    for _ in range(3):
+        run = _decide(client, run, "request_changes", "tighten scope")
+        assert (run["currentStep"], run["waitingFor"]) == ("revise", "input")
+        run = _submit(client, run)
+        assert (run["currentStep"], run["waitingFor"]) == (ASK_STEP, "approval")
+    run = _decide(client, run, "request_changes", "still not right")
+    assert run["events"][-4]["payload"]["escalated"]
+    assert ("step.completed", "escalate") in _kinds(run)
+    assert (run["currentStep"], run["waitingFor"]) == (ASK_STEP, "approval")
+    assert _approval_count(tmp_database, run["id"]) == 5
+
+
+def test_step_output_and_decision_rules(tmp_database):
     _, client = _installed_org(tmp_database)
     run = _start(client)
-    url = f"{PACKS}/runs/{run['id']}/events"
-    assert client.post(url, json={"kind": "gate.decided", "step_id": ASK_STEP}).status_code == 422
-    assert client.post(url, json={"kind": "step.started", "step_id": "nope"}).status_code == 422
-    assert client.post(url, json={"kind": "gate.opened", "step_id": "trigger"}).status_code == 422
-    assert client.post(url, json={"kind": "gate.opened", "step_id": "record"}).status_code == 422
-    done = client.post(url, json={"kind": "run.completed"}).json()
-    assert done["status"] == "done" and done["finishedAt"]
-    assert client.post(url, json={"kind": "step.started", "step_id": "trigger"}).status_code == 409
+    url = f"{PACKS}/runs/{run['id']}"
+    assert client.post(f"{url}/steps/check/output", json={"summary": "x"}).status_code == 409
+    assert client.post(f"{url}/steps/nope/output", json={"summary": "x"}).status_code == 404
+    assert client.post(f"{url}/steps/collect/output", json={"summary": ""}).status_code == 422
+    assert client.post(f"{url}/decision", json={"decision": "approve"}).status_code == 409
+
+    run = _to_gate(client)
+    url = f"{PACKS}/runs/{run['id']}"
+    assert client.post(f"{url}/steps/{ASK_STEP}/output", json={"summary": "x"}).status_code == 409
+    _decide(client, run, "approve")
+    assert client.post(f"{url}/decision", json={"decision": "approve"}).status_code == 409
 
 
-def test_gate_opens_one_approval_and_decision_resumes(tmp_database):
+def test_branching_step_needs_a_route(tmp_database):
+    _, client = _org(tmp_database)
+    client.post(f"{PACKS}/{MONITORING}/install")
+    workflow = "agent_activity_monitoring"  # its suggest step branches to routine or exception
+    run = _start(client, workflow)
+    run = _submit(client, _submit(client, run))
+    assert run["currentStep"] == "suggest"
+    missing = client.post(f"{PACKS}/runs/{run['id']}/steps/suggest/output", json={"summary": "x"})
+    assert missing.status_code == 422
+    assert _submit(client, run, route="routine")["currentStep"] == "record"
+
+    exception = _start(client, workflow)
+    exception = _submit(client, _submit(client, _submit(client, exception)), route="exception")
+    assert (exception["currentStep"], exception["waitingFor"]) == ("ask", "approval")
+
+
+def test_decision_must_be_one_the_gate_offers(tmp_database):
     _, client = _installed_org(tmp_database)
-    run = _gate(client, _start(client)["id"])
-    assert run["status"] == "waiting" and run["currentStep"] == ASK_STEP and run["chainValid"]
-    assert run["approval"]["status"] == "pending"
-    assert _approval_count(tmp_database, run["id"]) == 1
-    # a waiting run cannot be resumed by appending events
-    resume = client.post(f"{PACKS}/runs/{run['id']}/events", json={"kind": "step.started", "step_id": "record"})
-    assert resume.status_code == 409
-
-    decided = client.post(f"{PACKS}/runs/{run['id']}/decision", json={"decision": "approve", "notes": "ok"}).json()
-    assert decided["status"] == "running" and decided["chainValid"]
-    assert decided["events"][-1]["kind"] == "gate.decided"
-    assert decided["approval"] == {"status": "approved", "decisionNotes": "ok"}
-    assert _approval_count(tmp_database, run["id"]) == 1
-    again = client.post(f"{PACKS}/runs/{run['id']}/decision", json={"decision": "approve"})
-    assert again.status_code == 409
-
-
-def test_reject_blocks_run(tmp_database):
-    _, client = _installed_org(tmp_database)
-    run = _gate(client, _start(client)["id"])
-    decided = client.post(f"{PACKS}/runs/{run['id']}/decision", json={"decision": "reject", "notes": "no"}).json()
-    assert decided["status"] == "blocked" and decided["chainValid"]
-    assert decided["approval"]["status"] == "rejected"
-
-
-def test_decision_requires_waiting_run(tmp_database):
-    _, client = _installed_org(tmp_database)
-    run = _start(client)
-    assert client.post(f"{PACKS}/runs/{run['id']}/decision", json={"decision": "approve"}).status_code == 409
+    run = _to_gate(client, "ai_ethics_committee_review")  # a decide step: no rejected branch
+    response = client.post(f"{PACKS}/runs/{run['id']}/decision", json={"decision": "reject"})
+    assert response.status_code == 422
+    assert _decide(client, run, "approve")["currentStep"] == "record"
 
 
 def test_tampered_event_breaks_chain(tmp_database):
     _, client = _installed_org(tmp_database)
-    run = _gate(client, _start(client)["id"])
+    run = _start(client)
     with tmp_database.begin() as conn:
         conn.execute(
             text("UPDATE workflow_run_events SET payload_json = :p WHERE run_id = :id AND seq = 1"),
@@ -308,10 +357,11 @@ def test_tampered_event_breaks_chain(tmp_database):
 
 def test_other_org_cannot_read_or_decide_run(tmp_database):
     _, client = _installed_org(tmp_database)
-    run = _gate(client, _start(client)["id"])
+    run = _to_gate(client)
     _, other = _org(tmp_database)
     assert other.get(f"{PACKS}/runs/{run['id']}").status_code == 404
     assert other.post(f"{PACKS}/runs/{run['id']}/decision", json={"decision": "approve"}).status_code == 404
+    assert other.post(f"{PACKS}/runs/{run['id']}/steps/collect/output", json={"summary": "x"}).status_code == 404
     assert other.get(f"{PACKS}/runs").json() == []
 
 
@@ -319,17 +369,6 @@ def test_foreign_system_id_is_404(tmp_database):
     _, client = _installed_org(tmp_database)
     response = client.post(f"{PACKS}/workflows/{WORKFLOW}/runs", json={"system_id": "not-in-this-org"})
     assert response.status_code == 404
-
-
-def test_gate_opens_on_exception_step_of_a_supervised_workflow(tmp_database):
-    _, client = _org(tmp_database)
-    client.post(f"{PACKS}/{MONITORING}/install")
-    workflow = "agent_activity_monitoring"  # autonomy A3; its "ask" step has kind exception
-    run = _start(client, workflow)
-    url = f"{PACKS}/runs/{run['id']}/events"
-    assert client.post(url, json={"kind": "gate.opened", "step_id": "collect"}).status_code == 422
-    opened = client.post(url, json={"kind": "gate.opened", "step_id": "ask"})
-    assert opened.status_code == 200 and opened.json()["status"] == "waiting"
 
 
 def _raw():
@@ -381,3 +420,7 @@ def test_plain_member_can_read_but_not_change(tmp_database):
     assert member.get(PACKS).status_code == 200
     assert member.post(f"{PACKS}/{FOUNDATION}/install").status_code == 403
     assert member.post(f"{PACKS}/bundles/BN-GENAI-COPILOT/install").status_code == 403
+    _, owner = org_id, _client(tmp_database, org_id)
+    owner.post(f"{PACKS}/{FOUNDATION}/install")
+    run = _start(owner)
+    assert member.post(f"{PACKS}/runs/{run['id']}/steps/collect/output", json={"summary": "x"}).status_code == 403
