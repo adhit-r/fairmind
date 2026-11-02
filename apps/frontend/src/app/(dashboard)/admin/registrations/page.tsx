@@ -85,16 +85,16 @@ export default function RegistrationsPage() {
   return (
     <div className="min-h-screen bg-background p-8">
       <div className="mx-auto max-w-5xl">
-        <div className="mb-8 border-b-4 border-black pb-6 flex items-center justify-between">
+        <div className="mb-8 border-b border-[var(--fm-line)] pb-6 flex items-center justify-between">
           <div>
-            <h1 className="text-4xl font-bold">Access Requests</h1>
+            <h1 className="text-[30px] font-semibold tracking-[-.03em]">Access Requests</h1>
             <p className="mt-2 text-gray-600">Review and approve org signup requests. Applicants are notified via email.</p>
           </div>
           <div className="flex gap-2">
             {['pending', 'approved', 'denied'].map(s => (
               <button key={s} onClick={() => setFilter(s)}
-                className={`px-4 py-2 border-2 border-black font-bold text-sm uppercase capitalize transition-all ${
-                  filter === s ? 'bg-black text-white shadow-brutal' : 'bg-white hover:shadow-brutal'
+                className={`h-8 rounded-full px-4 text-[12.5px] font-medium capitalize transition-colors ${
+                  filter === s ? 'bg-[var(--fm-ink)] text-white' : 'border border-[var(--fm-line)] bg-white text-[var(--fm-ink2)]'
                 }`}>
                 {s}
               </button>
@@ -104,10 +104,10 @@ export default function RegistrationsPage() {
 
         {loading ? (
           <div className="flex justify-center py-16">
-            <div className="h-12 w-12 animate-spin rounded-full border-4 border-gray-300 border-t-black" />
+            <div className="h-12 w-12 animate-spin rounded-full border-2 border-[var(--fm-line)] border-t-[var(--fm-ink)]" />
           </div>
         ) : requests.length === 0 ? (
-          <div className="border-4 border-black bg-white p-12 text-center shadow-brutal-lg">
+          <div className="p-12 text-center fm-card">
             <IconClock className="mx-auto mb-4 h-12 w-12 text-gray-400" />
             <h3 className="text-xl font-bold">No {filter} requests</h3>
             <p className="mt-2 text-gray-600">New access requests appear here when users sign up.</p>
@@ -115,15 +115,15 @@ export default function RegistrationsPage() {
         ) : (
           <div className="space-y-4">
             {requests.map(req => (
-              <div key={req.id} className="border-4 border-black bg-white p-6 shadow-brutal-lg">
+              <div key={req.id} className="p-6 fm-card">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-1">
                       <h3 className="text-lg font-bold">{req.name}</h3>
-                      <span className={`border-2 px-2 py-0.5 text-xs font-bold uppercase ${STATUS_COLORS[req.status]}`}>
+                      <span className={`border-2 px-2 py-0.5 text-xs font-semibold ${STATUS_COLORS[req.status]}`}>
                         {req.status}
                       </span>
-                      <span className="border-2 border-black px-2 py-0.5 text-xs font-bold uppercase">
+                      <span className="border border-[var(--fm-line)] px-2 py-0.5 text-xs font-semibold">
                         {req.requested_role}
                       </span>
                     </div>
@@ -137,7 +137,7 @@ export default function RegistrationsPage() {
                       </span>
                     </div>
                     {req.message && (
-                      <p className="mt-3 border-l-4 border-black pl-3 text-sm italic text-gray-700">
+                      <p className="mt-3 border-l border-[var(--fm-line)] pl-3 text-sm italic text-gray-700">
                         "{req.message}"
                       </p>
                     )}
@@ -150,13 +150,13 @@ export default function RegistrationsPage() {
                     <div className="flex gap-2 flex-shrink-0">
                       <button
                         onClick={() => { setReviewModal({ id: req.id, action: 'approve' }); setNotes('') }}
-                        className="flex items-center gap-2 border-2 border-black bg-black px-4 py-2 font-bold text-sm text-white hover:shadow-brutal transition-all"
+                        className="flex items-center gap-2 border border-[var(--fm-line)] bg-black px-4 py-2 font-bold text-sm text-white transition-all"
                       >
                         <IconCheck className="h-4 w-4" /> Approve
                       </button>
                       <button
                         onClick={() => { setReviewModal({ id: req.id, action: 'deny' }); setNotes('') }}
-                        className="flex items-center gap-2 border-2 border-black bg-white px-4 py-2 font-bold text-sm hover:shadow-brutal transition-all"
+                        className="flex items-center gap-2 border border-[var(--fm-line)] bg-white px-4 py-2 font-bold text-sm transition-all"
                       >
                         <IconX className="h-4 w-4" /> Deny
                       </button>
@@ -177,7 +177,7 @@ export default function RegistrationsPage() {
       {/* Review modal */}
       {reviewModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md border-4 border-black bg-white p-8 shadow-brutal-xl">
+          <div className="w-full max-w-md p-8 fm-card">
             <h2 className="text-2xl font-bold mb-2 capitalize">
               {reviewModal.action} Request
             </h2>
@@ -193,24 +193,24 @@ export default function RegistrationsPage() {
                 value={notes}
                 onChange={e => setNotes(e.target.value)}
                 rows={3}
-                className="w-full border-2 border-black px-3 py-2 text-sm resize-none focus:outline-none"
+                className="w-full border border-[var(--fm-line)] px-3 py-2 text-sm resize-none focus:outline-none"
               />
             </div>
             <div className="flex gap-3">
               <button
                 onClick={submitReview}
                 disabled={submitting}
-                className={`flex-1 border-2 border-black py-3 font-bold uppercase text-sm transition-all ${
+                className={`h-10 flex-1 rounded-full text-[13px] font-semibold capitalize transition-colors ${
                   reviewModal.action === 'approve'
-                    ? 'bg-black text-white hover:shadow-brutal'
-                    : 'bg-red-600 text-white border-red-600 hover:shadow-brutal'
+                    ? 'bg-[var(--fm-ink)] text-white'
+                    : 'bg-[#b4232c] text-white'
                 }`}
               >
                 {submitting ? 'Processing...' : `Confirm ${reviewModal.action}`}
               </button>
               <button
                 onClick={() => setReviewModal(null)}
-                className="flex-1 border-2 border-black py-3 font-bold uppercase text-sm bg-white hover:shadow-brutal"
+                className="flex-1 border border-[var(--fm-line)] py-3 font-semibold text-sm bg-white"
               >
                 Cancel
               </button>

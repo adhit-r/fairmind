@@ -379,15 +379,15 @@ export default function LLMBiasDetectionPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="border-b-4 border-black pb-4">
-        <h1 className="text-4xl font-bold">LLM Bias Detection</h1>
+      <div className="border-b border-[var(--fm-line)] pb-4">
+        <h1 className="text-[30px] font-semibold tracking-[-.03em]">LLM Bias Detection</h1>
         <p className="text-muted-foreground mt-2">
           Comprehensive bias testing with WEAT, SEAT, StereoSet, CrowS-Pairs, Minimal Pairs, and BBQ. Includes explainability analysis and compliance assessment.
         </p>
       </div>
 
       {error && (
-        <Alert className="border-2 border-red-500 bg-red-50 shadow-brutal">
+        <Alert className="border-2 border-red-500 bg-red-50">
           <IconAlertTriangle className="h-4 w-4" />
           <AlertTitle>Error</AlertTitle>
           <AlertDescription>{error.message}</AlertDescription>
@@ -395,8 +395,8 @@ export default function LLMBiasDetectionPage() {
       )}
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'form' | 'results')} className="space-y-4">
-        <TabsList className="border-2 border-black bg-white">
-          <TabsTrigger value="form" className="border-r-2 border-black">
+        <TabsList className="border border-[var(--fm-line)] bg-white">
+          <TabsTrigger value="form" className="border-r border-[var(--fm-line)]">
             Test Configuration
           </TabsTrigger>
           <TabsTrigger value="results" disabled={!results}>
@@ -406,7 +406,7 @@ export default function LLMBiasDetectionPage() {
 
         {/* Form Tab */}
         <TabsContent value="form" className="space-y-6">
-          <Card className="p-6 border-4 border-black shadow-brutal-lg">
+          <Card className="p-6 fm-card">
             <div className="space-y-6">
               {/* Model Description */}
               <div className="space-y-3">
@@ -415,7 +415,7 @@ export default function LLMBiasDetectionPage() {
                   placeholder="Example: GPT-3.5 fine-tuned for customer service with 1.3B parameters. Trained on conversation data from 2021-2024. Used for automated support ticket responses."
                   value={formData.model_description}
                   onChange={(e) => setFormData({ ...formData, model_description: e.target.value })}
-                  className="border-2 border-black focus:border-4 font-mono text-sm"
+                  className="border border-[var(--fm-line)] font-mono text-sm"
                   rows={4}
                   disabled={isRunning}
                 />
@@ -435,8 +435,8 @@ export default function LLMBiasDetectionPage() {
                       disabled={isRunning}
                       className={`p-3 border-2 text-left font-medium transition-all ${
                         formData.model_type === type
-                          ? 'border-black bg-black text-white'
-                          : 'border-black bg-white hover:bg-gray-100'
+                          ? 'border-[var(--fm-line)] bg-black text-white'
+                          : 'border-[var(--fm-line)] bg-white hover:bg-gray-100'
                       }`}
                     >
                       {type === 'llm' ? 'LLM' : type === 'image_gen' ? 'Image Gen' : type === 'audio_gen' ? 'Audio Gen' : 'Video Gen'}
@@ -456,8 +456,8 @@ export default function LLMBiasDetectionPage() {
                       disabled={isRunning}
                       className={`p-3 border-2 text-left transition-all ${
                         formData.selected_tests.includes(test.id)
-                          ? 'border-4 border-black bg-black text-white shadow-brutal'
-                          : 'border-black bg-white hover:bg-gray-50'
+                          ? 'bg-black text-white rounded-[14px] shadow-[var(--fm-shadow)]'
+                          : 'border-[var(--fm-line)] bg-white hover:bg-gray-50'
                       }`}
                     >
                       <div className="font-bold text-sm">{test.label}</div>
@@ -486,8 +486,8 @@ export default function LLMBiasDetectionPage() {
                       disabled={isRunning}
                       className={`px-3 py-2 border-2 text-sm font-medium transition-all ${
                         (formData.protected_attributes || []).includes(attr)
-                          ? 'border-black bg-black text-white'
-                          : 'border-black bg-white hover:bg-gray-100'
+                          ? 'border-[var(--fm-line)] bg-black text-white'
+                          : 'border-[var(--fm-line)] bg-white hover:bg-gray-100'
                       }`}
                     >
                       {attr}
@@ -501,7 +501,7 @@ export default function LLMBiasDetectionPage() {
                 onClick={handleRunEvaluation}
                 disabled={isRunning || loading}
                 size="lg"
-                className="w-full border-2 border-black font-bold h-12 text-base shadow-brutal hover:shadow-brutal-lg"
+                className="w-full font-bold h-12 text-base fm-card"
               >
                 {isRunning ? (
                   <>
@@ -524,12 +524,12 @@ export default function LLMBiasDetectionPage() {
           {results && (
             <>
               {/* Overall Risk Banner */}
-              <div className={`border-4 border-black p-6 shadow-brutal-lg ${getRiskColor(results.overall_risk)}`}>
+              <div className={`p-6 ${getRiskColor(results.overall_risk)} rounded-[14px] shadow-[var(--fm-shadow)]`}>
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="flex items-center gap-2 mb-1">
                       {getRiskIcon(results.overall_risk)}
-                      <h2 className="text-2xl font-bold uppercase">
+                      <h2 className="text-2xl font-semibold">
                         {results.overall_risk} Risk
                       </h2>
                     </div>
@@ -540,7 +540,7 @@ export default function LLMBiasDetectionPage() {
                     </p>
                   </div>
                   <div className="text-right">
-                    <div className="text-3xl font-bold">
+                    <div className="text-[24px] font-semibold tracking-tight">
                       {results.evaluation_summary.tests_passed}/{results.evaluation_summary.total_tests}
                     </div>
                     <p className="text-sm font-medium">Tests Passed</p>
@@ -550,7 +550,7 @@ export default function LLMBiasDetectionPage() {
 
               {/* Risk Factors */}
               {results.risk_factors && results.risk_factors.length > 0 && (
-                <Card className="p-6 border-2 border-red-500 shadow-brutal">
+                <Card className="p-6 border-2 border-red-500">
                   <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
                     <IconFlame className="h-5 w-5 text-red-500" />
                     Risk Factors
@@ -567,10 +567,10 @@ export default function LLMBiasDetectionPage() {
               )}
 
               {/* Evaluation Summary */}
-              <Card className="p-6 border-2 border-black shadow-brutal">
+              <Card className="p-6 fm-card">
                 <h3 className="text-xl font-bold mb-4">Evaluation Summary</h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="border-l-4 border-black pl-3">
+                  <div className="border-l border-[var(--fm-line)] pl-3">
                     <p className="text-xs text-muted-foreground">Total Tests</p>
                     <p className="text-2xl font-bold">{results.evaluation_summary.total_tests}</p>
                   </div>
@@ -590,31 +590,31 @@ export default function LLMBiasDetectionPage() {
               </Card>
 
               {/* Compliance Status */}
-              <Card className="p-6 border-2 border-black shadow-brutal">
+              <Card className="p-6 fm-card">
                 <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
                   <IconShield className="h-5 w-5" />
                   Compliance Status
                 </h3>
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 border-2 border-black bg-gray-50">
+                  <div className="flex items-center justify-between p-3 border border-[var(--fm-line)] bg-gray-50">
                     <span className="font-medium">GDPR Compliance</span>
-                    <Badge variant={results.compliance_status.gdpr_compliant ? 'default' : 'destructive'} className="border-2 border-black">
+                    <Badge variant={results.compliance_status.gdpr_compliant ? 'default' : 'destructive'} className="border border-[var(--fm-line)]">
                       {results.compliance_status.gdpr_compliant ? 'Compliant' : 'Non-Compliant'}
                     </Badge>
                   </div>
-                  <div className="flex items-center justify-between p-3 border-2 border-black bg-gray-50">
+                  <div className="flex items-center justify-between p-3 border border-[var(--fm-line)] bg-gray-50">
                     <span className="font-medium">EU AI Act</span>
-                    <Badge variant={results.compliance_status.ai_act_compliant ? 'default' : 'destructive'} className="border-2 border-black">
+                    <Badge variant={results.compliance_status.ai_act_compliant ? 'default' : 'destructive'} className="border border-[var(--fm-line)]">
                       {results.compliance_status.ai_act_compliant ? 'Compliant' : 'Non-Compliant'}
                     </Badge>
                   </div>
                   {results.compliance_status.fairness_score !== undefined && (
-                    <div className="space-y-2 p-3 border-2 border-black bg-gray-50">
+                    <div className="space-y-2 p-3 border border-[var(--fm-line)] bg-gray-50">
                       <div className="flex items-center justify-between">
                         <span className="font-medium">Fairness Score</span>
                         <span className="font-bold">{(results.compliance_status.fairness_score * 100).toFixed(1)}%</span>
                       </div>
-                      <Progress value={results.compliance_status.fairness_score * 100} className="h-2 border border-black" />
+                      <Progress value={results.compliance_status.fairness_score * 100} className="h-2 border border-[var(--fm-line)]" />
                     </div>
                   )}
                 </div>
@@ -622,7 +622,7 @@ export default function LLMBiasDetectionPage() {
 
               {/* Explainability Analysis */}
               {results.explainability_analysis && (
-                <Card className="p-6 border-2 border-black shadow-brutal">
+                <Card className="p-6 fm-card">
                   <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
                     <IconEye className="h-5 w-5" />
                     Explainability Analysis
@@ -633,7 +633,7 @@ export default function LLMBiasDetectionPage() {
                         <p className="font-medium mb-2">Methods Used:</p>
                         <div className="flex flex-wrap gap-2">
                           {results.explainability_analysis.methods_used.map((method, idx) => (
-                            <Badge key={idx} variant="outline" className="border-2 border-black">
+                            <Badge key={idx} variant="outline" className="border border-[var(--fm-line)]">
                               {method.replace(/_/g, ' ')}
                             </Badge>
                           ))}
@@ -643,7 +643,7 @@ export default function LLMBiasDetectionPage() {
                     {results.explainability_analysis.confidence !== undefined && (
                       <div className="space-y-2">
                         <p className="font-medium">Analysis Confidence: {(results.explainability_analysis.confidence * 100).toFixed(1)}%</p>
-                        <Progress value={results.explainability_analysis.confidence * 100} className="h-2 border border-black" />
+                        <Progress value={results.explainability_analysis.confidence * 100} className="h-2 border border-[var(--fm-line)]" />
                       </div>
                     )}
                     {results.explainability_analysis.insights && results.explainability_analysis.insights.length > 0 && (
@@ -665,7 +665,7 @@ export default function LLMBiasDetectionPage() {
 
               {/* Recommendations */}
               {results.recommendations && results.recommendations.length > 0 && (
-                <Card className="p-6 border-2 border-green-500 shadow-brutal bg-green-50">
+                <Card className="p-6 border-2 border-green-500 bg-green-50">
                   <h3 className="text-xl font-bold mb-4">Recommendations</h3>
                   <ul className="space-y-3">
                     {results.recommendations.map((rec, idx) => (
@@ -682,7 +682,7 @@ export default function LLMBiasDetectionPage() {
               <div className="grid grid-cols-3 gap-3">
                 <Button
                   variant="neutral"
-                  className="border-2 border-black font-bold hover:bg-black hover:text-white"
+                  className="border border-[var(--fm-line)] font-bold hover:bg-black hover:text-white"
                   onClick={handleExportPDF}
                 >
                   <IconFile className="h-4 w-4 mr-2" />
@@ -690,7 +690,7 @@ export default function LLMBiasDetectionPage() {
                 </Button>
                 <Button
                   variant="neutral"
-                  className="border-2 border-black font-bold hover:bg-black hover:text-white"
+                  className="border border-[var(--fm-line)] font-bold hover:bg-black hover:text-white"
                   onClick={handleExportDOCX}
                 >
                   <IconFileText className="h-4 w-4 mr-2" />
@@ -698,7 +698,7 @@ export default function LLMBiasDetectionPage() {
                 </Button>
                 <Button
                   variant="neutral"
-                  className="border-2 border-black font-bold hover:bg-black hover:text-white"
+                  className="border border-[var(--fm-line)] font-bold hover:bg-black hover:text-white"
                   onClick={handleExportJSON}
                 >
                   <IconFileText className="h-4 w-4 mr-2" />

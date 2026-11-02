@@ -208,14 +208,14 @@ export default function LLMTestingPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-4xl font-bold">LLM Testing - SOTA Methods</h1>
+        <h1 className="text-[30px] font-semibold tracking-[-.03em]">LLM Testing - SOTA Methods</h1>
         <p className="text-muted-foreground mt-1">
           Test LLMs using State-of-the-Art bias detection methods
         </p>
       </div>
 
       {/* Method Selection */}
-      <Card className="p-6 border-2 border-black shadow-brutal">
+      <Card className="p-6 fm-card">
         <h2 className="text-2xl font-bold mb-4">Available SOTA Methods</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {SOTA_METHODS.map((method) => {
@@ -228,15 +228,15 @@ export default function LLMTestingPage() {
                 className={`
                   p-4 border-2 rounded-none text-left transition-all
                   ${isActive 
-                    ? 'bg-black text-white border-black shadow-[4px_4px_0px_0px_#FF6B35]' 
-                    : 'bg-white border-black hover:bg-orange hover:shadow-[4px_4px_0px_0px_#000] hover:-translate-y-[2px] hover:-translate-x-[2px]'
+                    ? 'bg-black text-white border-[var(--fm-line)]' 
+                    : 'bg-white border-[var(--fm-line)] hover:bg-[var(--fm-bg)]'
                   }
                 `}
               >
                 <div className="flex items-start gap-3">
                   <Icon className="h-6 w-6 mt-1 flex-shrink-0" />
                   <div>
-                    <h3 className="font-bold text-sm uppercase">{method.name}</h3>
+                    <h3 className="font-semibold text-sm">{method.name}</h3>
                     <p className="text-xs mt-1 opacity-80">{method.description}</p>
                     <Badge 
                       variant={method.status === 'available' ? 'default' : 'secondary'}
@@ -263,11 +263,11 @@ export default function LLMTestingPage() {
 
       {/* LLM-as-Judge Form */}
       {activeMethod === 'llm-as-judge' && (
-        <Card className="p-6 border-2 border-black shadow-brutal">
+        <Card className="p-6 fm-card">
           <div className="flex items-center gap-2 mb-4">
             <IconSparkles className="h-6 w-6" />
             <h2 className="text-2xl font-bold">LLM-as-Judge Evaluation</h2>
-            <Badge className="ml-auto bg-orange text-black border-2 border-black">SOTA 2025</Badge>
+            <Badge className="ml-auto border border-[var(--fm-line)] bg-[var(--fm-ink)] text-white hover:bg-black">SOTA 2025</Badge>
           </div>
           
           <form onSubmit={handleLLMAsJudge} className="space-y-4">
@@ -278,7 +278,7 @@ export default function LLMTestingPage() {
                   value={judgeForm.judgeModel}
                   onValueChange={(value) => setJudgeForm({ ...judgeForm, judgeModel: value })}
                 >
-                  <SelectTrigger className="border-2 border-black">
+                  <SelectTrigger className="border border-[var(--fm-line)]">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -297,7 +297,7 @@ export default function LLMTestingPage() {
                   value={judgeForm.biasCategory}
                   onValueChange={(value) => setJudgeForm({ ...judgeForm, biasCategory: value })}
                 >
-                  <SelectTrigger className="border-2 border-black">
+                  <SelectTrigger className="border border-[var(--fm-line)]">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -318,7 +318,7 @@ export default function LLMTestingPage() {
                 value={judgeForm.targetModel}
                 onChange={(e) => setJudgeForm({ ...judgeForm, targetModel: e.target.value })}
                 placeholder="e.g., gpt-4, claude-3, custom-model"
-                className="border-2 border-black"
+                className="border border-[var(--fm-line)]"
               />
             </div>
 
@@ -330,7 +330,7 @@ export default function LLMTestingPage() {
                 onChange={(e) => setJudgeForm({ ...judgeForm, prompts: e.target.value })}
                 placeholder="The doctor was&#10;The nurse was&#10;The engineer was"
                 rows={4}
-                className="border-2 border-black font-mono"
+                className="border border-[var(--fm-line)] font-mono"
                 required
               />
             </div>
@@ -343,7 +343,7 @@ export default function LLMTestingPage() {
                 onChange={(e) => setJudgeForm({ ...judgeForm, responses: e.target.value })}
                 placeholder="The doctor was a skilled professional&#10;The nurse was caring and attentive&#10;The engineer was brilliant and innovative"
                 rows={4}
-                className="border-2 border-black font-mono"
+                className="border border-[var(--fm-line)] font-mono"
                 required
               />
             </div>
@@ -351,7 +351,7 @@ export default function LLMTestingPage() {
             <Button
               type="submit"
               disabled={loading}
-              className="w-full h-12 border-2 border-black bg-orange text-black hover:bg-yellow-400 font-bold uppercase shadow-[4px_4px_0px_0px_#000] hover:shadow-none hover:translate-x-[4px] hover:translate-y-[4px] transition-all"
+              className="w-full h-12 border border-[var(--fm-line)] font-semibold transition-all bg-[var(--fm-ink)] text-white hover:bg-black"
             >
               {loading ? 'Evaluating...' : 'Run LLM-as-Judge Evaluation'}
             </Button>
@@ -361,11 +361,11 @@ export default function LLMTestingPage() {
 
       {/* Counterfactual Fairness Form */}
       {activeMethod === 'counterfactual' && (
-        <Card className="p-6 border-2 border-black shadow-brutal">
+        <Card className="p-6 fm-card">
           <div className="flex items-center gap-2 mb-4">
             <IconTarget className="h-6 w-6" />
             <h2 className="text-2xl font-bold">Counterfactual Fairness</h2>
-            <Badge className="ml-auto bg-orange text-black border-2 border-black">SOTA</Badge>
+            <Badge className="ml-auto border border-[var(--fm-line)] bg-[var(--fm-ink)] text-white hover:bg-black">SOTA</Badge>
           </div>
           
           <form onSubmit={handleCounterfactual} className="space-y-4">
@@ -377,7 +377,7 @@ export default function LLMTestingPage() {
                 onChange={(e) => setCounterfactualForm({ ...counterfactualForm, prompts: e.target.value })}
                 placeholder="The doctor was&#10;The nurse was"
                 rows={4}
-                className="border-2 border-black font-mono"
+                className="border border-[var(--fm-line)] font-mono"
                 required
               />
             </div>
@@ -390,7 +390,7 @@ export default function LLMTestingPage() {
                 onChange={(e) => setCounterfactualForm({ ...counterfactualForm, responses: e.target.value })}
                 placeholder="The doctor was skilled&#10;The nurse was caring"
                 rows={4}
-                className="border-2 border-black font-mono"
+                className="border border-[var(--fm-line)] font-mono"
                 required
               />
             </div>
@@ -398,7 +398,7 @@ export default function LLMTestingPage() {
             <Button
               type="submit"
               disabled={loading}
-              className="w-full h-12 border-2 border-black bg-orange text-black hover:bg-yellow-400 font-bold uppercase shadow-[4px_4px_0px_0px_#000] hover:shadow-none hover:translate-x-[4px] hover:translate-y-[4px] transition-all"
+              className="w-full h-12 border border-[var(--fm-line)] font-semibold transition-all bg-[var(--fm-ink)] text-white hover:bg-black"
             >
               {loading ? 'Analyzing...' : 'Run Counterfactual Analysis'}
             </Button>
@@ -408,52 +408,52 @@ export default function LLMTestingPage() {
 
       {/* Results Display */}
       {results && (
-        <Card className="p-6 border-2 border-black shadow-brutal">
+        <Card className="p-6 fm-card">
           <h2 className="text-2xl font-bold mb-4">Evaluation Results</h2>
           
           <Tabs defaultValue="summary" className="w-full">
-            <TabsList className="border-2 border-black">
-              <TabsTrigger value="summary" className="border-r-2 border-black">Summary</TabsTrigger>
+            <TabsList className="border border-[var(--fm-line)]">
+              <TabsTrigger value="summary" className="border-r border-[var(--fm-line)]">Summary</TabsTrigger>
               <TabsTrigger value="details">Details</TabsTrigger>
               <TabsTrigger value="recommendations">Recommendations</TabsTrigger>
             </TabsList>
 
             <TabsContent value="summary" className="space-y-4 mt-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="p-4 border-2 border-black bg-white">
+                <div className="p-4 border border-[var(--fm-line)] bg-white">
                   <p className="text-sm font-medium text-muted-foreground mb-1">Bias Score</p>
-                  <p className="text-3xl font-bold">
+                  <p className="text-[24px] font-semibold tracking-tight">
                     {results.overall_bias_score?.toFixed(2) || results.bias_score?.toFixed(2) || 'N/A'}
                   </p>
                 </div>
-                <div className="p-4 border-2 border-black bg-white">
+                <div className="p-4 border border-[var(--fm-line)] bg-white">
                   <p className="text-sm font-medium text-muted-foreground mb-1">Severity</p>
                   <Badge 
                     className={`
                       text-lg px-3 py-1
                       ${results.severity === 'high' ? 'bg-red-500 text-white' : ''}
-                      ${results.severity === 'medium' ? 'bg-orange text-black' : ''}
+                      ${results.severity === 'medium' ? 'bg-[var(--fm-ink)] text-white hover:bg-black' : ''}
                       ${results.severity === 'low' ? 'bg-green-500 text-white' : ''}
                     `}
                   >
                     {results.severity?.toUpperCase() || 'UNKNOWN'}
                   </Badge>
                 </div>
-                <div className="p-4 border-2 border-black bg-white">
+                <div className="p-4 border border-[var(--fm-line)] bg-white">
                   <p className="text-sm font-medium text-muted-foreground mb-1">Method</p>
-                  <p className="text-lg font-bold uppercase">{results.method || 'N/A'}</p>
+                  <p className="text-lg font-semibold">{results.method || 'N/A'}</p>
                 </div>
               </div>
 
               {results.reasoning && (
-                <div className="p-4 border-2 border-black bg-white">
+                <div className="p-4 border border-[var(--fm-line)] bg-white">
                   <p className="text-sm font-bold mb-2">Judge Reasoning:</p>
                   <p className="text-sm">{results.reasoning}</p>
                 </div>
               )}
 
               {results.evidence && results.evidence.length > 0 && (
-                <div className="p-4 border-2 border-black bg-white">
+                <div className="p-4 border border-[var(--fm-line)] bg-white">
                   <p className="text-sm font-bold mb-2">Evidence:</p>
                   <ul className="list-disc list-inside space-y-1">
                     {results.evidence.map((ev: string, i: number) => (
@@ -465,7 +465,7 @@ export default function LLMTestingPage() {
             </TabsContent>
 
             <TabsContent value="details" className="mt-4">
-              <pre className="p-4 border-2 border-black bg-white overflow-auto text-xs">
+              <pre className="p-4 border border-[var(--fm-line)] bg-white overflow-auto text-xs">
                 {JSON.stringify(results, null, 2)}
               </pre>
             </TabsContent>
@@ -474,7 +474,7 @@ export default function LLMTestingPage() {
               <div className="space-y-2">
                 {results.recommendations && results.recommendations.length > 0 ? (
                   results.recommendations.map((rec: string, i: number) => (
-                    <div key={i} className="p-3 border-2 border-black bg-white">
+                    <div key={i} className="p-3 border border-[var(--fm-line)] bg-white">
                       <p className="text-sm">{rec}</p>
                     </div>
                   ))
@@ -488,7 +488,7 @@ export default function LLMTestingPage() {
       )}
 
       {/* Info Card */}
-      <Card className="p-6 border-2 border-black shadow-brutal bg-orange">
+      <Card className="p-6 bg-[#fff1ea] rounded-[14px] shadow-[var(--fm-shadow)]">
         <h3 className="font-bold text-lg mb-2">About SOTA Methods</h3>
         <p className="text-sm mb-2">
           These methods represent the latest State-of-the-Art techniques for LLM bias detection:

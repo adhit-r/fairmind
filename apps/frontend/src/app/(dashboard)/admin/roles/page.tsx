@@ -63,8 +63,8 @@ export default function AdminRolesPage() {
     <div className="min-h-screen bg-background p-8">
       <div className="mx-auto max-w-6xl">
         {/* Header */}
-        <div className="mb-8 border-b-4 border-black pb-6">
-          <h1 className="text-4xl font-bold text-black">Role Management</h1>
+        <div className="mb-8 border-b border-[var(--fm-line)] pb-6">
+          <h1 className="text-[30px] font-semibold tracking-[-.03em] text-black">Role Management</h1>
           <p className="mt-2 text-gray-600">
             Define and manage user roles and permissions
           </p>
@@ -81,8 +81,8 @@ export default function AdminRolesPage() {
                   onClick={() => setSelectedRole(role)}
                   className={`w-full rounded-lg border-2 p-4 text-left transition-all ${
                     selectedRole?.role === role.role
-                      ? `${role.color} border-2 shadow-brutal-lg`
-                      : "border-gray-300 bg-white hover:border-black"
+                      ? `${role.color} border-2`
+                      : "border-gray-300 bg-white hover:border-[var(--fm-ink)]"
                   }`}
                 >
                   <h3 className="font-bold text-black capitalize">{role.role}</h3>
@@ -98,9 +98,9 @@ export default function AdminRolesPage() {
           <div className="md:col-span-2">
             {selectedRole && (
               <div
-                className={`rounded-lg border-4 border-black p-8 shadow-brutal-lg ${selectedRole.color}`}
+                className={`p-8 ${selectedRole.color} rounded-[14px] shadow-[var(--fm-shadow)]`}
               >
-                <h2 className="text-3xl font-bold text-black capitalize">
+                <h2 className="text-[24px] font-semibold tracking-tight text-black capitalize">
                   {selectedRole.role}
                 </h2>
                 <p className="mt-3 text-gray-700">{selectedRole.description}</p>
@@ -113,9 +113,9 @@ export default function AdminRolesPage() {
                     {selectedRole.permissions.map((permission) => (
                       <div
                         key={permission}
-                        className="flex items-center gap-3 rounded-lg border-2 border-black bg-white p-3"
+                        className="flex items-center gap-3 rounded-lg border border-[var(--fm-line)] bg-white p-3"
                       >
-                        <div className="h-4 w-4 rounded border-2 border-black bg-black" />
+                        <div className="h-4 w-4 rounded border border-[var(--fm-line)] bg-black" />
                         <span className="font-semibold text-black">
                           {permission}
                         </span>
@@ -125,7 +125,7 @@ export default function AdminRolesPage() {
                 </div>
 
                 {/* Info Box */}
-                <div className="mt-8 rounded-lg border-2 border-black bg-white p-4">
+                <div className="mt-8 rounded-lg border border-[var(--fm-line)] bg-white p-4">
                   <p className="text-sm text-gray-700">
                     <strong className="text-black">Note:</strong> Roles are
                     managed in Authentik. To modify roles and permissions,
@@ -140,7 +140,7 @@ export default function AdminRolesPage() {
 
         {/* Role Assignment Guide */}
         <div className="mt-12 space-y-8">
-          <div className="rounded-lg border-4 border-black bg-white p-8 shadow-brutal-lg">
+          <div className="p-8 fm-card">
             <h2 className="mb-4 text-2xl font-bold text-black">
               Role Assignment Guide
             </h2>
@@ -176,7 +176,7 @@ export default function AdminRolesPage() {
                   href={process.env.NEXT_PUBLIC_AUTHENTIK_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-block rounded-lg bg-black px-4 py-2 font-bold text-white hover:shadow-brutal-lg"
+                  className="inline-block rounded-lg bg-black px-4 py-2 font-bold text-white"
                 >
                   Open Authentik Admin Interface
                 </a>
