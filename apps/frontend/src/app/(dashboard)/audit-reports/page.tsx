@@ -124,6 +124,22 @@ async function generatePdf(report: SavedReport): Promise<void> {
   addLine(`Owner: ${system.owner ?? '—'}  |  Risk Tier: ${system.riskTier ?? '—'}  |  Stage: ${system.lifecycleStage ?? '—'}`, 10)
   addLine(`Governance Readiness: ${system.readiness ?? 0}%`, 10, false, 12)
 
+  // Release gate and framework coverage
+  const gate = d.gate
+  const clauseMap = d.clauseMap
+  if (gate || clauseMap) {
+    addSection('Release Gate and Framework Coverage')
+    if (gate) {
+      addLine(`Verdict: ${String(gate.verdict ?? '').replace(/_/g, ' ').toUpperCase()}  |  Confidence: ${gate.confidence ?? 0}`, 10)
+      for (const c of gate.checks ?? []) addLine(`• ${c.label}: ${c.state}${c.confidence ? ` (${c.confidence})` : ''}`, 10)
+      for (const r of gate.reasons ?? []) addLine(`  ${r}`, 9)
+    }
+    for (const fw of clauseMap?.frameworks ?? []) {
+      addLine(`${fw.name}: ${fw.counts.proven} proven, ${fw.counts.attested} attested, ${fw.counts.open} open of ${fw.counts.total} clauses`, 10, true, 4)
+      for (const c of fw.clauses) addLine(`  ${c.state === 'proven' ? '+' : c.state === 'attested' ? '~' : '-'} ${c.control} ${c.title}`, 9)
+    }
+  }
+
   // Risks
   const risks = d.risks ?? []
   if (risks.length > 0) {

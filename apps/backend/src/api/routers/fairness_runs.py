@@ -33,6 +33,7 @@ from config.auth import TokenData, get_current_active_user
 from database.connection import get_db
 from pydantic import BaseModel, Field
 
+from src.application.services.clause_map_service import clause_map
 from src.application.services.decision_seal_service import list_seals
 from src.application.services.fairness_run_service import (
     ATTESTABLE_CHECKS,
@@ -209,6 +210,21 @@ async def list_fairness_runs(
             }
         )
     return runs
+
+
+@router.get("/systems/{system_id}/clause-map")
+async def get_clause_map(
+    system_id: str,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """The release gate read per framework clause, via the catalogue's common-control crosswalk."""
+    _ensure_tables(db)
+    _require_system_access(db, system_id, current_user)
+    system = _system_row(db, system_id)
+    payload = clause_map(_gate_payload(db, system_id, system.risk_tier))
+    payload["systemId"] = system_id
+    return payload
 
 
 @router.get("/systems/{system_id}/seals")

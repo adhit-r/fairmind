@@ -10,6 +10,7 @@ import { useSystemFile, type AttestableCheck, type FairnessRunSummary, type Syst
 import { FairnessRunPanel } from './FairnessRunPanel'
 import { MonitoringRunPanel } from './MonitoringRunPanel'
 import { AttestForm } from './AttestForm'
+import { ClauseMapPanel } from './ClauseMapPanel'
 import { cn } from '@/lib/utils'
 
 type JourneyKey = 'onboard' | 'assess' | 'govern' | 'remediate' | 'decision' | 'operate'
@@ -114,7 +115,7 @@ export default function SystemFilePage() {
   const router = useRouter()
   const { selectedOrg } = useOrg()
   const { setSelectedSystemId } = useSystemContext()
-  const { system, evidence, approval, remediation, risks, reports, gate, fairnessRuns, monitoringRuns, seals, loading, error, requestDecision, recordDecision, inspectCsv, runFairness, runMonitoring, attest } = useSystemFile(id)
+  const { system, evidence, approval, remediation, risks, reports, gate, fairnessRuns, monitoringRuns, seals, clauseMap, loading, error, requestDecision, recordDecision, inspectCsv, runFairness, runMonitoring, attest } = useSystemFile(id)
   const env = useEnvironmentalImpact(selectedOrg?.id, id)
   const [busy, setBusy] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -245,6 +246,7 @@ export default function SystemFilePage() {
         <Fact label="Evidence" value={evidence ? `${evidence.linkedEvidence} of ${evidence.totalEvidence} linked to controls` : ''} />
         <Fact label="Review state" value={evidence ? READINESS_LABEL[evidence.decisionReadiness] ?? evidence.decisionReadiness : ''} />
         <Fact label="Missing" value={evidence && evidence.missingSignals.length ? evidence.missingSignals.join(', ') : 'Nothing flagged'} />
+        {clauseMap && <ClauseMapPanel map={clauseMap} />}
         {evidence?.recommendedNextStep && (
           <p className="text-[12.5px] text-[var(--fm-ink2)] sm:col-span-2 xl:col-span-3">{evidence.recommendedNextStep}</p>
         )}
