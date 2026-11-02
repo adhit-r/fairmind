@@ -6,7 +6,7 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { useOrg } from '@/context/OrgContext'
 import { useSystemContext } from '@/components/workflow/SystemContext'
 import { useEnvironmentalImpact } from '@/lib/api/hooks/useAIGovernance'
-import { useSystemFile, type AttestableCheck, type SystemRecord } from '@/lib/api/hooks/useSystemFile'
+import { useSystemFile, type AttestableCheck, type FairnessRunSummary, type SystemRecord } from '@/lib/api/hooks/useSystemFile'
 import { FairnessRunPanel } from './FairnessRunPanel'
 import { MonitoringRunPanel } from './MonitoringRunPanel'
 import { AttestForm } from './AttestForm'
@@ -28,6 +28,15 @@ const VERDICT_LABEL: Record<string, string> = { go: 'Go', conditional_go: 'Condi
 const VERDICT_TONE: Record<string, string> = { go: 'text-[#1f7a4d]', conditional_go: 'text-[#a14d00]', no_go: 'text-[#b4232c]' }
 const ATTESTABLE = new Set(['data_governance', 'human_oversight', 'monitoring', 'environmental'])
 const isAttestable = (key: string): key is AttestableCheck => ATTESTABLE.has(key)
+
+const CHECK_NAMES: Record<string, string> = { disparate_impact: 'impact ratio', equal_opportunity: 'equal opportunity', equalized_odds: 'equalized odds', calibration: 'calibration' }
+
+/** "Within thresholds, gender 0.95, region 0.91" or "Outside thresholds: gender calibration, region equalized odds". */
+function fairnessSummary(run: FairnessRunSummary): string {
+  if (run.allChecksPass) return `Within thresholds, ${run.attributes.map((a) => `${a.attribute} ${a.disparateImpactRatio.toFixed(2)}`).join(', ')}`
+  const failing = run.attributes.flatMap((a) => Object.entries(a.checks).filter(([, ok]) => !ok).map(([k]) => `${a.attribute} ${CHECK_NAMES[k] ?? k.replace(/_/g, ' ')}`))
+  return failing.length ? `Outside thresholds: ${failing.join(', ')}` : 'Outside thresholds'
+}
 
 const CHECK_STATE: Record<string, string> = { proven: 'proven', attested: 'attested', open: 'open' }
 
@@ -105,7 +114,7 @@ export default function SystemFilePage() {
   const router = useRouter()
   const { selectedOrg } = useOrg()
   const { setSelectedSystemId } = useSystemContext()
-  const { system, evidence, approval, remediation, risks, reports, gate, fairnessRuns, monitoringRuns, loading, error, requestDecision, recordDecision, inspectCsv, runFairness, runMonitoring, attest } = useSystemFile(id)
+  const { system, evidence, approval, remediation, risks, reports, gate, fairnessRuns, monitoringRuns, seals, loading, error, requestDecision, recordDecision, inspectCsv, runFairness, runMonitoring, attest } = useSystemFile(id)
   const env = useEnvironmentalImpact(selectedOrg?.id, id)
   const [busy, setBusy] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -161,6 +170,7 @@ export default function SystemFilePage() {
   const decided = req && req.status !== 'pending' ? req : null
   const latestReport = reports[0]
   const latestMonitoring = monitoringRuns[0]
+  const seal = seals[0]
   const envStatus = typeof env.data?.recommendation === 'string' ? env.data.recommendation : env.data?.recommendation?.status
 
   return (
@@ -222,7 +232,7 @@ export default function SystemFilePage() {
           value={
             fairnessRuns.length === 0
               ? 'Not measured yet'
-              : `${fairnessRuns[0].allChecksPass ? 'Within thresholds' : 'Outside thresholds'} on ${fairnessRuns[0].attributes.map((a) => `${a.attribute} ${a.disparateImpactRatio.toFixed(2)}`).join(', ')} · ${fairnessRuns.length} run${fairnessRuns.length === 1 ? '' : 's'}`
+              : `${fairnessSummary(fairnessRuns[0])} · ${fairnessRuns.length} run${fairnessRuns.length === 1 ? '' : 's'}`
           }
         />
         <FairnessRunPanel inspect={inspectCsv} run={runFairness} />
@@ -266,6 +276,18 @@ export default function SystemFilePage() {
         <Fact label="Request" value={!req ? 'Not requested' : req.status === 'pending' ? `Pending since ${when(req.createdAt)}` : `${req.status[0].toUpperCase()}${req.status.slice(1)}${req.updatedAt ? ` on ${when(req.updatedAt)}` : ''}`} />
         <Fact label="Decisions recorded" value={approval ? `${approval.decisions.length}` : ''} />
         <Fact label="Blocking" value={summary ? (summary.criticalBlockers ? `${summary.criticalBlockers} critical blocker${summary.criticalBlockers === 1 ? '' : 's'}` : 'Nothing blocking') : ''} />
+        <Fact
+          label="Evidence seal"
+          value={
+            !seal ? (
+              'Taken when a decision is recorded'
+            ) : seal.verification.status === 'intact' ? (
+              <span><span className="text-[#1f7a4d]">Intact</span> · {seal.evidenceCount} record{seal.evidenceCount === 1 ? '' : 's'} sealed {when(seal.createdAt)}{seal.verification.addedSince ? `, ${seal.verification.addedSince} added since` : ''} · <span className="font-mono text-[11.5px]">{seal.chainHead.slice(0, 12)}</span></span>
+            ) : (
+              <span className="text-[#b4232c]">Broken: {[seal.verification.changed.length && `${seal.verification.changed.length} changed`, seal.verification.missing.length && `${seal.verification.missing.length} missing`].filter(Boolean).join(', ')} since the decision on {when(seal.createdAt)}</span>
+            )
+          }
+        />
         {gate && (
           <div className="sm:col-span-2 xl:col-span-3">
             <div className="text-[11px] font-semibold uppercase tracking-[.08em] text-[var(--fm-ink3)]">Gate checks</div>
