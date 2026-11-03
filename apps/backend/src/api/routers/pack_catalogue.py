@@ -267,12 +267,19 @@ REQUIREMENT_WORKFLOWS, REQUIREMENT_EVALUATIONS = _C.requirement_workflows, _C.re
 
 
 class Coverage:
-    """What a set of packs covers. Pack ids that are not in the catalogue (retired ids) are ignored."""
+    """What a set of packs covers. Pack ids that are not in the catalogue (retired ids) are ignored.
 
-    def __init__(self, pack_ids: Iterable[str]):
+    tested_by None: what the packs' evaluations could test once they pass (for what-if counts).
+    tested_by a list of evaluation ids with a passing result: what is tested now.
+    """
+
+    def __init__(self, pack_ids: Iterable[str], tested_by: Optional[Iterable[str]] = None):
         ids = [p for p in pack_ids if p in PACKS]
         self.covered = frozenset().union(*(_C.pack_covers[p] for p in ids))
-        self.tested = frozenset().union(*(_C.pack_tests[p] for p in ids))
+        if tested_by is None:
+            self.tested = frozenset().union(*(_C.pack_tests[p] for p in ids))
+        else:
+            self.tested = frozenset().union(*(_C.tests[e] for e in tested_by if e in _C.tests))
 
     def count(self, framework_key: str) -> int:
         """Active requirements of the framework that are covered or tested."""

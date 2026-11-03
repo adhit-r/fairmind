@@ -145,7 +145,7 @@ export interface JourneyRequirement {
   title: string
   status: ReqStatus
   workflows: Array<{ id: string; name: string; relation: string; pack: string; installed: boolean; latestRun: RunSummary | null }>
-  evaluations: Array<{ id: string; name: string; engine: EngineStatus; pack: string; installed: boolean }>
+  evaluations: Array<{ id: string; name: string; engine: EngineStatus; pack: string; installed: boolean; result: ResultStatus | null }>
 }
 
 export interface Journey {
@@ -162,6 +162,14 @@ export interface Journey {
   steps: Array<{ pack: string; name: string; installed: boolean; newlyCovered: number; cumulative: number }>
 }
 
+export type ResultStatus = 'passed' | 'failed' | 'insufficient' | 'not_run'
+/** Results FairMind reads for an evaluation: the organisation-wide status and the latest result per AI system. */
+export interface EvaluationResults {
+  status: ResultStatus
+  systems: Array<{ systemId: string; systemName: string; status: Exclude<ResultStatus, 'not_run'>; detail: string; evidenceId: string; at: string }>
+  latestAt: string | null
+}
+
 export interface EvaluationRow {
   id: string
   name: string
@@ -176,6 +184,8 @@ export interface EvaluationRow {
   codeLocation: string | null
   tests: Array<{ key: string; framework: string; control: string; title: string }>
   installed: boolean
+  /** Null when FairMind does not record results for this evaluation yet. */
+  results: EvaluationResults | null
 }
 
 export interface Step {
