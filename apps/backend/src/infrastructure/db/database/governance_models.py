@@ -3196,6 +3196,21 @@ class GovernanceDecisionSeal(Base):
         return f"<GovernanceDecisionSeal(id={self.id}, chain_head={self.chain_head[:12]})>"
 
 
+class GovernanceMonitoringPolicy(Base):
+    """How often a system's monitoring snapshots are expected, and how many drifting ones open a finding."""
+
+    __tablename__ = "governance_monitoring_policies"
+
+    system_id = Column(String, primary_key=True)
+    cadence_hours = Column(Integer, nullable=False, default=168)
+    drift_window = Column(Integer, nullable=False, default=3)
+    updated_by = Column(String, nullable=True)
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+    def __repr__(self) -> str:
+        return f"<GovernanceMonitoringPolicy(system_id={self.system_id}, cadence_hours={self.cadence_hours})>"
+
+
 class GovernanceRisk(Base):
     """Risk record linked to an AI system."""
 
