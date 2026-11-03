@@ -5,7 +5,7 @@ Endpoints for generating audit-ready reports in PDF and DOCX formats
 with compliance documentation and bias evaluation summaries.
 """
 
-from fastapi import APIRouter, HTTPException, Body
+from fastapi import APIRouter, Depends, HTTPException, Body
 from fastapi.responses import StreamingResponse
 from typing import Dict, List, Any, Optional
 from pydantic import BaseModel, Field
@@ -13,6 +13,7 @@ from datetime import datetime
 import io
 import logging
 
+from config.auth import get_current_active_user
 from ..services.report_generator import (
     ReportGenerator,
     BiasReportData,
@@ -20,7 +21,12 @@ from ..services.report_generator import (
     ComplianceStatus,
 )
 
-router = APIRouter(prefix="/api/v1/reports", tags=["reports"])
+# Stateless: renders the evaluation data sent in the request; sign-in only.
+router = APIRouter(
+    prefix="/api/v1/reports",
+    tags=["reports"],
+    dependencies=[Depends(get_current_active_user)],
+)
 logger = logging.getLogger(__name__)
 
 

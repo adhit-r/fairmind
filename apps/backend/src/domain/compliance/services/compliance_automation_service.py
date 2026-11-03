@@ -5,11 +5,11 @@ from datetime import datetime, timedelta
 import uuid
 import json
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import String, cast, select, text
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
-from database.models import ComplianceSchedule, ComplianceViolation, AIBOMDocument
+from database.models import ComplianceSchedule, ComplianceViolation, AIBOMDocument, OrganizationMember
 from database.connection import db_manager
 from core.container import inject, provide
 
@@ -55,7 +55,8 @@ class ComplianceAutomationService:
         framework: str,
         frequency: str,
         recipients: List[str],
-        filters: Dict[str, Any]
+        filters: Dict[str, Any],
+        org_id: Optional[str] = None,
     ) -> ComplianceSchedule:
         """Create a new compliance report schedule"""
         await self.start_scheduler()
@@ -83,7 +84,8 @@ class ComplianceAutomationService:
             recipients=recipients,
             filters=filters,
             next_run=next_run, # Placeholder, actual scheduling handled by APScheduler
-            is_active=True
+            is_active=True,
+            org_id=org_id,
         )
         
         db.add(schedule)
@@ -115,8 +117,18 @@ class ComplianceAutomationService:
                     return
 
                 # 1. Fetch relevant models based on filters
-                # For now, we'll fetch all models, but in production this should use schedule.filters
-                models = db.query(AIBOMDocument).all()
+                # Only the schedule's own organisation: AI-BOM documents record their creator,
+                # so a model belongs to the organisation its creator is an active member of.
+                # (In production this should also use schedule.filters.)
+                members = select(cast(OrganizationMember.user_id, String)).where(
+                    cast(OrganizationMember.org_id, String) == str(schedule.org_id),
+                    OrganizationMember.status == "active",
+                )
+                models = (
+                    db.query(AIBOMDocument).filter(AIBOMDocument.created_by.in_(members)).all()
+                    if schedule.org_id
+                    else []
+                )
 
                 generated_reports = []
                 overall_violations = 0
@@ -174,10 +186,12 @@ class ComplianceAutomationService:
                             status=compliance_status,
                             report_id=schedule_id,
                             violation_count=len(db.query(ComplianceViolation).filter(
+                                ComplianceViolation.org_id == schedule.org_id,
                                 ComplianceViolation.framework == schedule.framework,
                                 ComplianceViolation.resolved == False
                             ).all()),
                             critical_count=len(db.query(ComplianceViolation).filter(
+                                ComplianceViolation.org_id == schedule.org_id,
                                 ComplianceViolation.framework == schedule.framework,
                                 ComplianceViolation.severity == "critical",
                                 ComplianceViolation.resolved == False
@@ -197,7 +211,9 @@ class ComplianceAutomationService:
         except Exception as e:
             logger.error(f"Error in generate_automated_report: {e}", exc_info=True)
 
-    async def check_compliance_violations(self, db: Session, model_id: str) -> List[ComplianceViolation]:
+    async def check_compliance_violations(
+        self, db: Session, model_id: str, org_id: Optional[str] = None
+    ) -> List[ComplianceViolation]:
         """Check for compliance violations for a specific model"""
         logger.info(f"Checking compliance violations for model {model_id}")
         
@@ -221,7 +237,8 @@ class ComplianceAutomationService:
                     severity="high",
                     description=f"Model fairness score {overall_score:.2f} is below threshold of 0.8",
                     detected_at=datetime.utcnow(),
-                    resolved=False
+                    resolved=False,
+                    org_id=org_id,
                 )
                 db.add(violation)
                 violations.append(violation)
@@ -239,11 +256,13 @@ class ComplianceAutomationService:
         db.commit()
         return violations
 
-    async def list_schedules(self, db: Session) -> List[ComplianceSchedule]:
-        return db.query(ComplianceSchedule).all()
+    async def list_schedules(self, db: Session, org_id: str) -> List[ComplianceSchedule]:
+        return db.query(ComplianceSchedule).filter(ComplianceSchedule.org_id == org_id).all()
 
-    async def list_violations(self, db: Session) -> List[ComplianceViolation]:
-        return db.query(ComplianceViolation).filter(ComplianceViolation.resolved == False).all()
+    async def list_violations(self, db: Session, org_id: str) -> List[ComplianceViolation]:
+        return db.query(ComplianceViolation).filter(
+            ComplianceViolation.org_id == org_id, ComplianceViolation.resolved == False
+        ).all()
 
     async def notify_violations(
         self,
@@ -294,14 +313,16 @@ class ComplianceAutomationService:
             logger.error(f"Failed to send violation notifications: {e}", exc_info=True)
             return False
 
-    async def get_automation_status(self, db: Session) -> Dict[str, Any]:
-        """Get current status of compliance automation system"""
+    async def get_automation_status(self, db: Session, org_id: str) -> Dict[str, Any]:
+        """Get current status of compliance automation for one organisation"""
         try:
             active_schedules = db.query(ComplianceSchedule).filter(
+                ComplianceSchedule.org_id == org_id,
                 ComplianceSchedule.is_active == True
             ).count()
 
             pending_violations = db.query(ComplianceViolation).filter(
+                ComplianceViolation.org_id == org_id,
                 ComplianceViolation.resolved == False
             ).all()
 
@@ -316,6 +337,7 @@ class ComplianceAutomationService:
                 "total_violations": len(pending_violations),
                 "critical_violations": critical_violations,
                 "reports_generated_today": db.query(ComplianceSchedule).filter(
+                    ComplianceSchedule.org_id == org_id,
                     ComplianceSchedule.last_run >= datetime.utcnow().replace(
                         hour=0, minute=0, second=0, microsecond=0
                     )

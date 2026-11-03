@@ -21,9 +21,13 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from api.routes.ai_governance import _caller_org, _load_json_value
+from api.routes.org_scope import org_member, org_mutator
 from database.connection import get_db
 
-router = APIRouter(prefix="/integrations", tags=["integrations"])
+# Every query below already filters on the caller's org_id. The dependencies add
+# what the middleware alone did not: an active member of that organisation, and
+# the organisation's mutation permission for anything that writes.
+router = APIRouter(prefix="/integrations", tags=["integrations"], dependencies=[Depends(org_member)])
 
 _tables_ready = False
 
@@ -298,7 +302,7 @@ async def list_integrations(http: Request, db: Session = Depends(get_db)):
     return [_integration_out(r) for r in rows]
 
 
-@router.post("", status_code=201)
+@router.post("", status_code=201, dependencies=[Depends(org_mutator)])
 async def create_integration(body: IntegrationCreate, http: Request, db: Session = Depends(get_db)):
     _ensure_tables()
     row_id = str(uuid.uuid4())
@@ -321,7 +325,7 @@ async def create_integration(body: IntegrationCreate, http: Request, db: Session
     return _integration_out(_get_integration(db, _caller_org(http), row_id))
 
 
-@router.delete("/{integration_id}", status_code=204)
+@router.delete("/{integration_id}", status_code=204, dependencies=[Depends(org_mutator)])
 async def delete_integration(integration_id: str, http: Request, db: Session = Depends(get_db)):
     _ensure_tables()
     org = _caller_org(http)
@@ -332,7 +336,7 @@ async def delete_integration(integration_id: str, http: Request, db: Session = D
     return None
 
 
-@router.post("/{integration_id}/sync")
+@router.post("/{integration_id}/sync", dependencies=[Depends(org_mutator)])
 async def sync_integration(integration_id: str, http: Request, db: Session = Depends(get_db)):
     """Pull the source and upsert discovered assets. Promoted or ignored assets keep their status."""
     _ensure_tables()
@@ -442,7 +446,7 @@ def _workspace_for(db: Session, org_id: str, integration_row: Any) -> str:
     return ws_id
 
 
-@router.post("/discovered/{asset_id}/promote")
+@router.post("/discovered/{asset_id}/promote", dependencies=[Depends(org_mutator)])
 async def promote_asset(asset_id: str, body: PromoteRequest, http: Request, db: Session = Depends(get_db)):
     """Turn a discovered asset into a governed system. Suggestions apply unless overridden."""
     _ensure_tables()
@@ -489,7 +493,7 @@ async def promote_asset(asset_id: str, body: PromoteRequest, http: Request, db: 
     return {"systemId": system_id, "alreadyPromoted": False}
 
 
-@router.post("/discovered/{asset_id}/ignore")
+@router.post("/discovered/{asset_id}/ignore", dependencies=[Depends(org_mutator)])
 async def ignore_asset(asset_id: str, http: Request, db: Session = Depends(get_db)):
     _ensure_tables()
     org = _caller_org(http)

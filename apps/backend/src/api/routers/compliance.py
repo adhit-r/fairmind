@@ -50,7 +50,7 @@ class ComplianceReportRequest(BaseModel):
 async def _check_org_admin(org_id: str, user_id: str, db) -> bool:
     """Check if user is an admin of the organization."""
     admin = await db.fetch_one(
-        "SELECT id FROM org_members WHERE org_id = :org_id AND user_id = :user_id AND role IN ('admin', 'owner')",
+        "SELECT id FROM org_members WHERE org_id = :org_id AND user_id = :user_id AND status = 'active' AND role IN ('admin', 'owner')",
         {"org_id": org_id, "user_id": user_id}
     )
     return admin is not None
