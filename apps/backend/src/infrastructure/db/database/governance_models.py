@@ -3196,6 +3196,21 @@ class GovernanceDecisionSeal(Base):
         return f"<GovernanceDecisionSeal(id={self.id}, chain_head={self.chain_head[:12]})>"
 
 
+class GovernanceMonitoringPolicy(Base):
+    """How often a system's monitoring snapshots are expected, and how many drifting ones open a finding."""
+
+    __tablename__ = "governance_monitoring_policies"
+
+    system_id = Column(String, primary_key=True)
+    cadence_hours = Column(Integer, nullable=False, default=168)
+    drift_window = Column(Integer, nullable=False, default=3)
+    updated_by = Column(String, nullable=True)
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+    def __repr__(self) -> str:
+        return f"<GovernanceMonitoringPolicy(system_id={self.system_id}, cadence_hours={self.cadence_hours})>"
+
+
 class GovernanceRisk(Base):
     """Risk record linked to an AI system."""
 
@@ -3461,3 +3476,25 @@ class WorkflowVersion(Base):
     __table_args__ = (
         Index("idx_workflow_versions_org_wf_version", "org_id", "workflow_id", "version", unique=True),
     )
+
+
+class GovernanceEvidencePack(Base):
+    """An inspection pack: a frozen, hashed manifest of chosen systems and frameworks.
+
+    ``manifest_hash`` is SHA-256 over the canonical manifest bytes, so anyone holding the
+    JSON can recompute it. Only the SHA-256 of the auditor share token is stored.
+    """
+
+    __tablename__ = "governance_evidence_packs"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    title = Column(String, nullable=False)
+    frameworks_json = Column(Text, nullable=False, default="[]")
+    system_ids_json = Column(Text, nullable=False, default="[]")
+    manifest_json = Column(Text, nullable=False)
+    manifest_hash = Column(String, nullable=False)
+    created_by = Column(String, nullable=True)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    share_token_hash = Column(String, nullable=True)
+    share_expires_at = Column(String, nullable=True)

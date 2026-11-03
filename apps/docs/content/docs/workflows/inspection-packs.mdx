@@ -1,0 +1,67 @@
+---
+title: Inspection packs
+description: Build a hashed evidence pack for chosen systems and frameworks, share a read-only auditor link, and let the auditor verify it offline.
+---
+
+An inspection pack is the answer to "show me" from a validator or auditor. It freezes, for each system you choose, the release gate, the clause coverage for the frameworks you choose, a hash for every evidence record and the latest decision seals. The pack carries its own SHA-256, so the auditor can check it without trusting FairMind.
+
+## Build a pack
+
+1. Open **Evidence**, then **Inspection packs**, then **New pack**.
+2. Give it a title, pick frameworks (EU AI Act, ISO/IEC 42001, NIST AI RMF and India AI Governance Guidelines are preselected) and pick the systems. You need access to every system you include.
+3. **Build pack**. The pack is a snapshot: evidence added later does not change it. Build a new pack to capture it.
+
+Over the API: `POST /api/v1/ai-governance/packs` with `title`, `frameworks` (catalogue keys) and `system_ids`.
+
+## Share a read-only link
+
+On the pack page choose **Create auditor link**. The full address is shown once; FairMind stores only a hash of the token. The link works for 30 days and shows the same summary the pack page does: gate verdict, clause coverage per framework, evidence count and seal status for each system. It cannot change anything.
+
+**Revoke link** ends access at once. **Replace auditor link** issues a new token and invalidates the old one. Creating or revoking a link needs organisation mutation permission.
+
+An unknown pack and a wrong token both answer 404, so a link cannot be used to learn which packs exist. An expired link answers 410.
+
+## Verify offline
+
+The auditor saves the pack as `pack.json` (the page has a button, or use **Download JSON** when signed in) and runs:
+
+```bash
+pipx install ./apps/cli
+fairmind verify pack.json
+```
+
+The command makes no network calls. It recomputes the manifest hash and each system's evidence chain head, prints what it found, and exits 0 when both match and 1 when they do not. A file that is not a pack exits 3.
+
+```text
+Q3 inspection
+  manifest hash  ok  9f2c...
+  ok       Loan scoring  14 evidence records, chain head matches
+
+Pack intact
+```
+
+## The canonical form
+
+`pack.json` holds `{"manifest": {...}, "manifestHash": "..."}`. Anyone can re-implement the check:
+
+```python
+import hashlib, json
+
+doc = json.load(open("pack.json"))
+manifest = doc["manifest"]
+
+canonical = json.dumps(manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+assert hashlib.sha256(canonical).hexdigest() == doc["manifestHash"]
+
+for item in manifest["systems"]:
+    head = hashlib.sha256(b"fairmind-evidence-chain-v1").hexdigest()
+    for entry in item["evidence"]:                      # in the order listed
+        head = hashlib.sha256(f"{head}:{entry['hash']}".encode()).hexdigest()
+    assert head == item["chainHead"]
+```
+
+Each evidence entry's `hash` is a SHA-256 over that record's stable fields (id, type, title, source, content, confidence, status, metadata, creation time). The seals in the pack record the chain head at each release decision, so a pack that lists an intact seal shows the evidence behind a decision was not edited afterwards.
+
+## What verification proves
+
+Verification proves the file is internally consistent: no field was edited and no evidence entry was added, removed or changed without recomputing every hash. It does not prove the file is the one FairMind produced, because someone who edits the pack can also recompute its hashes. To close that gap, compare the manifest hash in the file with the hash on the auditor link page, which FairMind serves from its own record, or with the hash you were sent when the pack was built.

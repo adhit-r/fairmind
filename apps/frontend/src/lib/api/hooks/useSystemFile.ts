@@ -164,9 +164,25 @@ export interface MonitoringMapping {
   attributes: string[]
 }
 
+export interface MonitoringPolicy {
+  cadenceHours: number
+  driftWindow: number
+  updatedBy: string | null
+  updatedAt: string | null
+  isDefault: boolean
+}
+
+export interface MonitoringWatch {
+  policy: MonitoringPolicy
+  consecutiveDrifting: number
+  findingId: string | null
+  findingOpened: boolean
+}
+
 export interface MonitoringRunResult {
   evidenceId: string
   title: string
+  watch: MonitoringWatch
   result: {
     rows: number
     all_checks_pass: boolean
@@ -234,6 +250,7 @@ export interface SystemFile {
   gate: ReleaseGate | null
   fairnessRuns: FairnessRunSummary[]
   monitoringRuns: MonitoringRunSummary[]
+  monitoringPolicy: MonitoringPolicy | null
   seals: DecisionSeal[]
   clauseMap: ClauseMap | null
 }
@@ -244,7 +261,7 @@ function unwrap<T>(res: ApiResponse<T>, fallback: T): T {
 
 /** Everything the system file shows, fetched once per system id from the governance API. */
 export function useSystemFile(systemId: string | undefined) {
-  const [file, setFile] = useState<SystemFile>({ system: null, evidence: null, approval: null, remediation: null, risks: null, reports: [], gate: null, fairnessRuns: [], monitoringRuns: [], seals: [], clauseMap: null })
+  const [file, setFile] = useState<SystemFile>({ system: null, evidence: null, approval: null, remediation: null, risks: null, reports: [], gate: null, fairnessRuns: [], monitoringRuns: [], monitoringPolicy: null, seals: [], clauseMap: null })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -259,7 +276,7 @@ export function useSystemFile(systemId: string | undefined) {
       return
     }
     const q = `system_id=${encodeURIComponent(systemId)}`
-    const [evidence, approval, remediation, risks, reports, gate, fairnessRuns, monitoringRuns, seals, clauseMap] = await Promise.all([
+    const [evidence, approval, remediation, risks, reports, gate, fairnessRuns, monitoringRuns, monitoringPolicy, seals, clauseMap] = await Promise.all([
       apiClient.get<EvidenceSummary>(`${GOV}/evidence/${systemId}/summary`),
       apiClient.get<ApprovalStatus>(`${GOV}/approval/system/${systemId}`),
       apiClient.get<RemediationStatus>(`${GOV}/remediation?${q}`),
@@ -268,6 +285,7 @@ export function useSystemFile(systemId: string | undefined) {
       apiClient.get<ReleaseGate>(`${GOV}/systems/${systemId}/gate`),
       apiClient.get<FairnessRunSummary[]>(`${GOV}/systems/${systemId}/fairness-runs`),
       apiClient.get<MonitoringRunSummary[]>(`${GOV}/systems/${systemId}/monitoring-runs`),
+      apiClient.get<MonitoringPolicy>(`${GOV}/systems/${systemId}/monitoring-policy`),
       apiClient.get<DecisionSeal[]>(`${GOV}/systems/${systemId}/seals`),
       apiClient.get<ClauseMap>(`${GOV}/systems/${systemId}/clause-map`),
     ])
@@ -281,6 +299,7 @@ export function useSystemFile(systemId: string | undefined) {
       gate: unwrap(gate, null),
       fairnessRuns: unwrap(fairnessRuns, []),
       monitoringRuns: unwrap(monitoringRuns, []),
+      monitoringPolicy: unwrap(monitoringPolicy, null),
       seals: unwrap(seals, []),
       clauseMap: unwrap(clauseMap, null),
     })
@@ -339,6 +358,13 @@ export function useSystemFile(systemId: string | undefined) {
     return res.data
   }
 
+  const saveMonitoringPolicy = async (policy: { cadenceHours?: number; driftWindow?: number }) => {
+    const res = await apiClient.put<MonitoringPolicy>(`${GOV}/systems/${systemId}/monitoring-policy`, policy)
+    if (!res.success || !res.data) throw new Error(res.error || 'Could not save the monitoring cadence')
+    await refresh()
+    return res.data
+  }
+
   const attest = async (check: AttestableCheck, statement: string, reference?: string) => {
     const res = await apiClient.post<{ evidenceId: string }>(`${GOV}/systems/${systemId}/attestations`, { check, statement, reference: reference || null })
     if (!res.success || !res.data) throw new Error(res.error || 'Could not record the attestation')
@@ -346,5 +372,5 @@ export function useSystemFile(systemId: string | undefined) {
     return res.data
   }
 
-  return { ...file, loading, error, refresh, requestDecision, recordDecision, inspectCsv, runFairness, runMonitoring, attest }
+  return { ...file, loading, error, refresh, requestDecision, recordDecision, inspectCsv, runFairness, runMonitoring, saveMonitoringPolicy, attest }
 }

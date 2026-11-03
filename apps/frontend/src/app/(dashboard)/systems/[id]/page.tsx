@@ -9,7 +9,9 @@ import { useEnvironmentalImpact } from '@/lib/api/hooks/useAIGovernance'
 import { useSystemFile, type AttestableCheck, type FairnessRunSummary, type SystemRecord } from '@/lib/api/hooks/useSystemFile'
 import { FairnessRunPanel } from './FairnessRunPanel'
 import { MonitoringRunPanel } from './MonitoringRunPanel'
+import { WatchPanel } from './WatchPanel'
 import { AttestForm } from './AttestForm'
+import { ConditionsForm } from './ConditionsForm'
 import { ClauseMapPanel } from './ClauseMapPanel'
 import { cn } from '@/lib/utils'
 
@@ -115,11 +117,12 @@ export default function SystemFilePage() {
   const router = useRouter()
   const { selectedOrg } = useOrg()
   const { setSelectedSystemId } = useSystemContext()
-  const { system, evidence, approval, remediation, risks, reports, gate, fairnessRuns, monitoringRuns, seals, clauseMap, loading, error, requestDecision, recordDecision, inspectCsv, runFairness, runMonitoring, attest } = useSystemFile(id)
+  const { system, evidence, approval, remediation, risks, reports, gate, fairnessRuns, monitoringRuns, monitoringPolicy, seals, clauseMap, loading, error, requestDecision, recordDecision, inspectCsv, runFairness, runMonitoring, saveMonitoringPolicy, attest } = useSystemFile(id)
   const env = useEnvironmentalImpact(selectedOrg?.id, id)
   const [busy, setBusy] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [attesting, setAttesting] = useState<AttestableCheck | null>(null)
+  const [conditioning, setConditioning] = useState(false)
 
   const open = (href: string) => {
     if (id) setSelectedSystemId(id)
@@ -268,7 +271,12 @@ export default function SystemFilePage() {
           </Action>
         ) : req.status === 'pending' ? (
           <>
-            <Action onClick={() => act('approve', () => recordDecision(req.id, 'approved'))} disabled={busy !== null}>Approve release</Action>
+            <Action
+              onClick={() => (gate?.verdict === 'conditional_go' ? setConditioning(true) : void act('approve', () => recordDecision(req.id, 'approved')))}
+              disabled={busy !== null || gate?.verdict === 'no_go'}
+            >
+              Approve release
+            </Action>
             <Action onClick={() => act('reject', () => recordDecision(req.id, 'rejected'))} disabled={busy !== null} primary={false}>Reject</Action>
           </>
         ) : (
@@ -331,6 +339,20 @@ export default function SystemFilePage() {
             {gate.reasons.length > 0 && <p className="mt-2 text-[12.5px] text-[var(--fm-ink2)]">{gate.reasons.join('. ')}.</p>}
           </div>
         )}
+        {req?.status === 'pending' && gate?.verdict === 'no_go' && (
+          <p className="text-[12.5px] text-[#b4232c] sm:col-span-2 xl:col-span-3">Approval is blocked: {gate.reasons[0] ?? 'the release gate says no go'}.</p>
+        )}
+        {req?.status === 'pending' && gate?.verdict === 'conditional_go' && conditioning && (
+          <div className="sm:col-span-2 xl:col-span-3">
+            <ConditionsForm
+              onCancel={() => setConditioning(false)}
+              onSubmit={async (conditions) => {
+                await recordDecision(req.id, 'approved', conditions)
+                setConditioning(false)
+              }}
+            />
+          </div>
+        )}
         {req?.decisionNotes && <p className="text-[12.5px] text-[var(--fm-ink2)] sm:col-span-2 xl:col-span-3">{req.decisionNotes}</p>}
       </Stage>
 
@@ -341,6 +363,7 @@ export default function SystemFilePage() {
         <Fact label="Audit reports" value={reports.length ? `${reports.length}, latest ${when(latestReport.createdAt)}` : 'None generated'} />
         <Fact label="Monitoring snapshots" value={latestMonitoring ? `${latestMonitoring.allChecksPass ? 'Stable' : 'Drifting'} on ${when(latestMonitoring.createdAt)}${monitoringRuns.length > 1 ? `, ${monitoringRuns.length} snapshots` : ''}` : 'None recorded'} />
         <Fact label="Approved" value={decided?.status === 'approved' ? when(decided.updatedAt) || 'Yes' : 'Not yet'} />
+        <WatchPanel systemId={id} policy={monitoringPolicy} runs={monitoringRuns} save={saveMonitoringPolicy} />
         <MonitoringRunPanel inspect={inspectCsv} run={runMonitoring} hasBaseline={fairnessRuns.length > 0} />
       </Stage>
     </div>

@@ -50,7 +50,7 @@ export default function OnboardPage() {
       </div>
       <h1 className="mt-1.5 text-[30px] font-semibold leading-[1.1] tracking-[-.03em]">Register an AI system</h1>
       <p className="mt-2 max-w-[560px] text-[15px] text-[var(--fm-ink2)]">
-        Manual entry for one system. To discover systems from MLflow or GitHub instead, use{' '}
+        Manual entry for one system. To discover systems from MLflow, GitHub or Hugging Face instead, use{' '}
         <Link href="/integrations" className="font-medium text-[var(--fm-ink)] underline-offset-2 hover:underline">Integrations</Link>.
       </p>
 

@@ -86,7 +86,6 @@ bun test tests/e2e.spec.ts
 
 ### ✅ Bias Detection
 - Loads bias detection page
-- Navigates to modern bias page
 - Navigates to multimodal bias page
 - Form submission
 
