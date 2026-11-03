@@ -136,3 +136,50 @@ def test_monitor_posts_the_snapshot_and_reports_drift(tmp_path, monkeypatch):
     code, text, _ = run_cli(["monitor", "--system", "s", "--file", str(csv), "--attributes", "gender", "--prediction", "approved", "--score", "score", "--api-key", "k"], handler, monkeypatch=monkeypatch)
     assert code == EXIT_NO_GO and seen["path"].endswith("/systems/s/monitoring-runs") and b'name="score"' in seen["body"]
     assert "0.500!" in text and "0.310!" in text and "baseline present" in text
+
+
+def _pack_document():
+    import hashlib
+
+    entries = [{"id": "e1", "type": "fairness_test", "hash": "a" * 64, "createdAt": "2026-01-01"}, {"id": "e2", "type": "attestation", "hash": "b" * 64, "createdAt": "2026-01-02"}]
+    head = hashlib.sha256(b"fairmind-evidence-chain-v1").hexdigest()
+    for entry in entries:
+        head = hashlib.sha256(f"{head}:{entry['hash']}".encode()).hexdigest()
+    manifest = {"version": 1, "title": "Q3 inspection", "frameworks": ["EUAIA"], "createdAt": "2026-01-03", "createdBy": "a", "systems": [
+        {"system": {"id": "s1", "name": "Loan scoring", "riskTier": "high"}, "gate": {"verdict": "go"}, "evidence": entries, "chainHead": head, "seals": []}]}
+    digest = hashlib.sha256(json.dumps(manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+    return {"manifest": manifest, "manifestHash": digest}
+
+
+def _no_network(request):
+    raise AssertionError("verify must not touch the network")
+
+
+def _write(tmp_path, doc):
+    path = tmp_path / "pack.json"
+    path.write_text(json.dumps(doc))
+    return str(path)
+
+
+def test_verify_accepts_an_intact_pack_offline(tmp_path):
+    code, text, _ = run_cli(["verify", _write(tmp_path, _pack_document())], _no_network)
+    assert code == EXIT_GO and "Pack intact" in text and "Loan scoring" in text
+
+
+def test_verify_catches_a_tampered_evidence_hash(tmp_path):
+    doc = _pack_document()
+    doc["manifest"]["systems"][0]["evidence"][0]["hash"] = "c" * 64
+    code, text, _ = run_cli(["verify", _write(tmp_path, doc)], _no_network)
+    assert code == EXIT_NO_GO and "BROKEN" in text and "MISMATCH" in text
+
+
+def test_verify_catches_a_tampered_manifest_field(tmp_path):
+    doc = _pack_document()
+    doc["manifest"]["systems"][0]["gate"]["verdict"] = "no_go"
+    code, text, _ = run_cli(["verify", _write(tmp_path, doc)], _no_network)
+    assert code == EXIT_NO_GO and "MISMATCH" in text and "does NOT verify" in text
+
+
+def test_verify_rejects_a_file_that_is_not_a_pack(tmp_path, capsys):
+    code, _, _ = run_cli(["verify", _write(tmp_path, {"hello": 1})], _no_network)
+    assert code == EXIT_ERROR and "Not an inspection pack" in capsys.readouterr().err

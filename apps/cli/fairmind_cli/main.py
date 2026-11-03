@@ -5,6 +5,7 @@
         --outcome repaid --attributes gender,region [--prediction approved] [--score score]
     fairmind monitor --system <id> --file decisions.csv --attributes gender [--prediction approved] [--score score]
     fairmind systems
+    fairmind verify pack.json                   offline: recompute the pack hash and chain heads; exit 0 intact, 1 not
 
 Configuration comes from flags or the environment: FAIRMIND_API_URL (default
 http://localhost:8010) and FAIRMIND_API_KEY, a key minted at POST /api/v1/auth/api-keys.
@@ -14,6 +15,8 @@ Exit code 3 means the command itself failed (network, auth, bad input).
 from __future__ import annotations
 
 import argparse
+import hashlib
+import hmac
 import json
 import os
 import sys
@@ -228,6 +231,65 @@ def cmd_systems(args: argparse.Namespace, factory: ClientFactory, out: Callable[
 
 
 # ---------------------------------------------------------------------------
+# verify (offline)
+# ---------------------------------------------------------------------------
+
+CANONICAL_FORM = (
+    'Canonical form: sha256(json.dumps(manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()). '
+    'Chain head per system: h = sha256("fairmind-evidence-chain-v1"); for each evidence entry in order, '
+    'h = sha256(f"{h}:{entry.hash}"). The file is {"manifest": {...}, "manifestHash": "..."}.'
+)
+
+
+def _chain_head(entries: Sequence[Dict[str, Any]]) -> str:
+    head = hashlib.sha256(b"fairmind-evidence-chain-v1").hexdigest()
+    for entry in entries:
+        head = hashlib.sha256(f"{head}:{entry['hash']}".encode()).hexdigest()
+    return head
+
+
+def verify_pack(document: Dict[str, Any]) -> Dict[str, Any]:
+    """Pure check of a downloaded pack; no network."""
+    manifest, expected = document.get("manifest"), document.get("manifestHash")
+    if not isinstance(manifest, dict) or not isinstance(expected, str):
+        raise CliError('Not an inspection pack: expected {"manifest": {...}, "manifestHash": "..."}')
+    actual = hashlib.sha256(json.dumps(manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+    systems = []
+    for item in manifest.get("systems", []):
+        try:
+            recomputed = _chain_head(item.get("evidence", []))
+        except (KeyError, TypeError) as exc:
+            raise CliError(f"Malformed evidence entry: {exc!r}") from exc
+        system = item.get("system") or {}
+        systems.append({"name": system.get("name") or system.get("id"), "evidence": len(item.get("evidence", [])), "intact": hmac.compare_digest(str(item.get("chainHead")), recomputed)})
+    hash_ok = hmac.compare_digest(expected, actual)
+    return {"title": manifest.get("title"), "hashOk": hash_ok, "expected": expected, "actual": actual, "systems": systems, "intact": hash_ok and all(s["intact"] for s in systems)}
+
+
+def cmd_verify(args: argparse.Namespace, factory: ClientFactory, out: Callable[[str], None]) -> int:
+    path = Path(args.pack)
+    if not path.is_file():
+        raise CliError(f"No such file: {path}")
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError as exc:
+        raise CliError(f"{path} is not valid JSON: {exc}") from exc
+    result = verify_pack(document)
+    if args.json:
+        out(json.dumps(result, indent=2))
+    else:
+        out(f"{result['title']}")
+        out(f"  manifest hash  {'ok' if result['hashOk'] else 'MISMATCH'}  {result['actual']}")
+        if not result["hashOk"]:
+            out(f"  recorded       {result['expected']}")
+        for s in result["systems"]:
+            out(f"  {'ok' if s['intact'] else 'BROKEN':<9}{s['name']}  {s['evidence']} evidence records, chain head {'matches' if s['intact'] else 'does not match'}")
+        out("")
+        out("Pack intact" if result["intact"] else "Pack does NOT verify: it was changed after it was built")
+    return EXIT_GO if result["intact"] else EXIT_NO_GO
+
+
+# ---------------------------------------------------------------------------
 # entry point
 # ---------------------------------------------------------------------------
 
@@ -268,6 +330,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     systems = sub.add_parser("systems", parents=[common], help="list the AI systems your key can see")
     systems.set_defaults(func=cmd_systems)
+
+    verify = sub.add_parser("verify", help="verify a downloaded inspection pack offline (no network); exit 0 intact, 1 not", description=CANONICAL_FORM)
+    verify.add_argument("pack", help="pack JSON downloaded from FairMind or an auditor link")
+    verify.add_argument("--json", action="store_true", help="print the result as JSON")
+    verify.set_defaults(func=cmd_verify)
     return parser
 
 
