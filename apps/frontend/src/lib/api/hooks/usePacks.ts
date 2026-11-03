@@ -137,6 +137,11 @@ export interface JourneySummary {
   coveredAll: number
   coveredInstalled: number
   contributingPacks: string[]
+  binding: string | null
+  /** Workflows of installed packs that map to this framework, with their latest run status. */
+  workflows: Array<{ id: string; name: string; stage: string; status: RunStatus | null }>
+  /** How many of those workflows have a run waiting for a person. */
+  waiting: number
 }
 
 export interface JourneyRequirement {
@@ -144,7 +149,7 @@ export interface JourneyRequirement {
   control: string
   title: string
   status: ReqStatus
-  workflows: Array<{ id: string; name: string; relation: string; pack: string; installed: boolean; latestRun: RunSummary | null }>
+  workflows: Array<{ id: string; name: string; relation: string; stage: string; pack: string; installed: boolean; latestRun: RunSummary | null }>
   evaluations: Array<{ id: string; name: string; engine: EngineStatus; pack: string; installed: boolean }>
 }
 
@@ -378,6 +383,7 @@ export function usePackActions() {
       installPack: (packId: string) => send<Pack>(API_ENDPOINTS.packs.install(packId), (p) => apiClient.post(p)),
       uninstallPack: (packId: string) => send<Pack>(API_ENDPOINTS.packs.install(packId), (p) => apiClient.delete(p)),
       installBundle: (bundleId: string) => send<Bundle>(API_ENDPOINTS.packs.installBundle(bundleId), (p) => apiClient.post(p)),
+      installFramework: (frameworkKey: string) => send<{ installed: string[] }>(API_ENDPOINTS.packs.installFramework(frameworkKey), (p) => apiClient.post(p)),
       startRun: (workflowId: string, systemId?: string) =>
         send<Run>(API_ENDPOINTS.packs.startRun(workflowId), (p) => apiClient.post(p, systemId ? { system_id: systemId } : {})),
       decideRun: (runId: string, decision: Decision, notes?: string) =>
@@ -394,7 +400,7 @@ export function usePackActions() {
 
 /** Install, remove and bundle-install with one busy id and one failure message; `onDone` runs after every attempt so pages can reload. */
 export function useInstaller(onDone: () => void) {
-  const { installPack, uninstallPack, installBundle } = usePackActions()
+  const { installPack, uninstallPack, installBundle, installFramework } = usePackActions()
   const [busy, setBusy] = useState<string | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
   async function run(id: string, call: () => Promise<MutationResult<unknown>>) {
@@ -410,5 +416,6 @@ export function useInstaller(onDone: () => void) {
     failure,
     pack: (id: string, remove = false) => run(id, () => (remove ? uninstallPack(id) : installPack(id))),
     bundle: (id: string) => run(id, () => installBundle(id)),
+    framework: (key: string) => run(key, () => installFramework(key)),
   }
 }
