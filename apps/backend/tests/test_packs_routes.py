@@ -152,7 +152,7 @@ def _approval_count(engine, run_id):
 def test_catalogue_counts(tmp_database):
     _, client = _org(tmp_database)
     body = client.get(f"{PACKS}/catalogue").json()
-    assert body["counts"] == {"packs": 21, "patterns": 38, "workflows": 90, "evaluations": 109, "frameworks": 50, "requirements": 506}
+    assert body["counts"] == {"packs": 21, "patterns": 38, "workflows": 90, "evaluations": 109, "frameworks": 51, "requirements": 539}
     assert [p["id"] for p in body["pillars"]] == ["GOVERN", "EVALUATE", "SECURE", "COMPLY"]
     assert sum(p["packs"] for p in body["pillars"]) == 21
     packs = client.get(PACKS).json()

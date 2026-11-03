@@ -218,7 +218,7 @@ def test_approving_a_no_go_system_is_refused_but_rejecting_is_allowed():
 
 
 def test_clause_map_reads_the_gate_per_framework_clause():
-    from src.application.services.clause_map_service import clause_map
+    from src.application.services.clause_map_service import clause_map, framework_keys
 
     gate = release_gate("high", [
         {"id": "e1", "evidenceType": "fairness_test", "confidence": 0.95, "metadata": {"provenance_class": "measured"}, "content": {"all_checks_pass": True, "rows": 600, "attributes": []}},
@@ -237,6 +237,17 @@ def test_clause_map_reads_the_gate_per_framework_clause():
     only_nist = clause_map(gate, frameworks=["NISTRMF"])
     assert [f["key"] for f in only_nist["frameworks"]] == ["NISTRMF"]
     assert {c["control"] for c in only_nist["frameworks"][0]["clauses"]} >= {"MEASURE 2.11", "MAP 3.5", "MANAGE 4.1"}
+
+    rbi = by_key["RBIFREEAI"]
+    order = [f["key"] for f in out["frameworks"]]
+    assert order.index("RBIFREEAI") == order.index("INDAI") + 1
+    rbi_clauses = {c["control"]: c for c in rbi["clauses"]}
+    assert rbi_clauses["Sutra 4"]["title"] == "Fairness and equity" and rbi_clauses["Sutra 4"]["state"] == "proven"
+    assert any(ch["check"] == "fairness" and ch["state"] == "proven" for ch in rbi_clauses["Sutra 4"]["checks"])
+    assert rbi_clauses["Sutra 2"]["state"] == "attested" and rbi_clauses["Rec 15"]["state"] == "open"
+    assert rbi["counts"]["total"] == len(rbi["clauses"]) and rbi["counts"]["proven"] >= 1
+    for alias in ("rbi_free_ai", "RBI FREE-AI", "RBIFREEAI"):
+        assert [f["key"] for f in clause_map(gate, frameworks=framework_keys([alias]))["frameworks"]] == ["RBIFREEAI"]
 
     client = TestClient(app, client=(f"cm-{uuid.uuid4().hex[:8]}", 50000), headers=auth_headers())
     ws = client.post("/api/v1/ai-governance/workspaces", json={"name": "Clause ws", "owner": "owner"}).json()
