@@ -1,60 +1,24 @@
-## 📝 Description
+## What this changes
 
-A brief description of what this PR does.
+<!-- One or two sentences on what this pull request does and why. -->
 
-## 🔗 Related Issue
+Closes #
 
-Closes #(issue number)
+## Type of change
 
-## 🎯 Type of Change
+- [ ] Bug fix
+- [ ] New feature
+- [ ] Documentation
+- [ ] Refactor or cleanup
+- [ ] Tests
 
-- [ ] Bug fix (non-breaking change which fixes an issue)
-- [ ] New feature (non-breaking change which adds functionality)
-- [ ] Breaking change (fix or feature that would cause existing functionality to not work as expected)
-- [ ] Documentation update
-- [ ] Code refactoring
-- [ ] Performance improvement
-- [ ] Test addition or update
+## How it was tested
 
-## 🧪 Testing
+<!-- Commands you ran and what you checked by hand. For UI changes, add a screenshot. -->
 
-How has this been tested?
-- [ ] Unit tests
-- [ ] Integration tests
-- [ ] Manual testing
-- [ ] E2E tests
+## Checklist
 
-**Test Steps:**
-1. Step 1
-2. Step 2
-3. Step 3
-
-## 📸 Screenshots (if applicable)
-
-Add screenshots to help explain your changes.
-
-## ✅ Checklist
-
-- [ ] My code follows the style guidelines of this project
-- [ ] I have performed a self-review of my own code
-- [ ] I have commented my code, particularly in hard-to-understand areas
-- [ ] I have made corresponding changes to the documentation
-- [ ] My changes generate no new warnings
-- [ ] I have added tests that prove my fix is effective or that my feature works
-- [ ] New and existing unit tests pass locally with my changes
-- [ ] Any dependent changes have been merged and published
-
-## 🔍 Review Notes
-
-Any special notes for reviewers:
-- Note 1
-- Note 2
-
-## 📚 Additional Context
-
-Add any other context about the PR here.
-
----
-
-**Thank you for contributing to FairMind!** 🎉
-
+- [ ] Tests pass locally (`uv run pytest` in `apps/backend`, `npm run test` in `apps/frontend`)
+- [ ] New or changed behaviour has tests
+- [ ] Docs are updated if setup, configuration or behaviour changed
+- [ ] No mock data, hardcoded IDs, placeholder content or emoji

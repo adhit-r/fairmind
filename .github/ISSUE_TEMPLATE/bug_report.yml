@@ -1,0 +1,46 @@
+name: Bug report
+description: Something does not work as expected, including setup problems.
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Commands you ran or pages you visited, in order.
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error output
+      description: Paste the error message or relevant log lines.
+      render: shell
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Backend (apps/backend)
+        - Frontend (apps/frontend)
+        - Docs site (apps/docs)
+        - Website (apps/website)
+        - Local setup
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Python version, Node.js version, and the commit or branch you are on.
