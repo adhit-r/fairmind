@@ -2,6 +2,7 @@
 
 import io
 import uuid
+from datetime import datetime, timedelta, timezone
 
 import numpy as np
 import pandas as pd
@@ -188,6 +189,34 @@ def test_decision_seals_the_evidence_and_verification_catches_edits():
     assert broken["status"] == "broken" and broken["changed"] == [first.json()["evidenceId"]] and broken["missing"] == []
 
 
+def test_gate_decision_block_rule():
+    from src.api.routers.ai_governance import _gate_decision_block
+
+    checks = [{"label": "Fairness", "state": "open"}, {"label": "Oversight", "state": "attested"}]
+    no_go = {"verdict": "no_go", "confidence": 0.1, "reasons": ["No fairness evidence"], "checks": checks}
+    status, detail = _gate_decision_block(no_go, "looks fine to me")
+    assert status == 409 and detail["gate"]["openChecks"] == ["Fairness"] and detail["gate"]["reasons"] == ["No fairness evidence"]
+    conditional = {"verdict": "conditional_go", "confidence": 0.6, "reasons": [], "checks": checks}
+    assert _gate_decision_block(conditional, "")[0] == 422
+    assert _gate_decision_block(conditional, "   ")[0] == 422
+    assert _gate_decision_block(conditional, "Re-test fairness in 30 days") is None
+    assert _gate_decision_block({"verdict": "go", "checks": []}, "") is None
+
+
+def test_approving_a_no_go_system_is_refused_but_rejecting_is_allowed():
+    client = TestClient(app, client=(f"gate-{uuid.uuid4().hex[:8]}", 50000), headers=auth_headers())
+    ws = client.post("/api/v1/ai-governance/workspaces", json={"name": "Gate ws", "owner": "owner"}).json()
+    sid = client.post("/api/v1/ai-governance/systems", json={"workspace_id": ws["id"], "name": "Ungated", "owner": "owner", "risk_tier": "high", "lifecycle_stage": "govern"}).json()["id"]
+    req = client.post(f"/api/v1/ai-governance/approval/system/{sid}/request", json={})
+    assert req.status_code == 200, req.text
+    url = f"/api/v1/ai-governance/approval-requests/{req.json()['request']['id']}/decision"
+    refused = client.post(url, json={"decision": "approved", "notes": "ship it"})
+    assert refused.status_code == 409, refused.text
+    detail = refused.json()["detail"]
+    assert detail["gate"]["verdict"] == "no_go" and detail["gate"]["openChecks"]
+    assert client.post(url, json={"decision": "rejected", "notes": "not ready"}).status_code == 200
+
+
 def test_clause_map_reads_the_gate_per_framework_clause():
     from src.application.services.clause_map_service import clause_map
 
@@ -218,3 +247,83 @@ def test_clause_map_reads_the_gate_per_framework_clause():
     report = client.post("/api/v1/ai-governance/reports/generate", json={"system_id": sid, "report_type": "governance", "frameworks": ["eu_ai_act"]})
     assert report.status_code == 200, report.text
     assert [f["key"] for f in report.json()["data"]["clauseMap"]["frameworks"]] == ["EUAIA"] and report.json()["data"]["gate"]["verdict"]
+
+
+def _snapshot(age_days: float, now: datetime, **extra) -> dict:
+    return {"id": f"m-{age_days}", "evidenceType": "monitoring", "confidence": 0.9, "metadata": {"provenance_class": "measured"}, "timestamp": (now - timedelta(days=age_days)).isoformat(), "content": {"all_checks_pass": True, "attributes": []}, **extra}
+
+
+def test_stale_monitoring_is_not_proven():
+    now = datetime(2026, 11, 3, tzinfo=timezone.utc)
+    monitoring = lambda gate: next(c for c in gate["checks"] if c["key"] == "monitoring")
+
+    fresh = release_gate("low", [_snapshot(9, now)], monitoring_cadence_hours=168, now=now)
+    assert monitoring(fresh)["state"] == "proven"  # 9 days is inside 1.5 x 7
+
+    stale = release_gate("low", [_snapshot(12, now), _snapshot(20, now)], monitoring_cadence_hours=168, now=now)
+    assert monitoring(stale)["state"] == "open" and monitoring(stale)["stale"] is True
+    assert "Latest monitoring snapshot is 12 days old; the cadence is 7 days" in stale["reasons"]
+    assert not any(r.startswith("Nothing on file") and "Monitoring" in r for r in stale["reasons"])
+
+    # The newest qualifying snapshot decides, however many old ones exist.
+    assert monitoring(release_gate("low", [_snapshot(30, now), _snapshot(1, now)], monitoring_cadence_hours=168, now=now))["state"] == "proven"
+    # No cadence given: behaviour is unchanged.
+    assert monitoring(release_gate("low", [_snapshot(400, now)], now=now))["state"] == "proven"
+    # An attestation alone has no age to judge.
+    attested = {"id": "a", "evidenceType": "monitoring", "confidence": 0.3, "metadata": {"provenance_class": "manual"}, "timestamp": (now - timedelta(days=400)).isoformat()}
+    assert monitoring(release_gate("low", [attested], monitoring_cadence_hours=168, now=now))["state"] == "attested"
+
+
+def test_monitoring_policy_defaults_and_validation():
+    client = TestClient(app, client=(f"pol-{uuid.uuid4().hex[:8]}", 50000), headers=auth_headers())
+    ws = client.post("/api/v1/ai-governance/workspaces", json={"name": "Policy ws", "owner": "owner"}).json()
+    sid = client.post("/api/v1/ai-governance/systems", json={"workspace_id": ws["id"], "name": "Watched", "owner": "owner", "risk_tier": "low", "lifecycle_stage": "operate"}).json()["id"]
+    url = f"/api/v1/ai-governance/systems/{sid}/monitoring-policy"
+
+    default = client.get(url).json()
+    assert default["cadenceHours"] == 168 and default["driftWindow"] == 3 and default["isDefault"] is True
+    for bad in ({"cadenceHours": 0}, {"cadenceHours": 2161}, {"driftWindow": 1}, {"driftWindow": 11}):
+        assert client.put(url, json=bad).status_code == 422, bad
+
+    saved = client.put(url, json={"cadenceHours": 24, "driftWindow": 5})
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["cadenceHours"] == 24 and saved.json()["driftWindow"] == 5 and saved.json()["isDefault"] is False
+    assert client.put(url, json={"cadenceHours": 720}).json() == {**client.get(url).json()}
+    after = client.get(url).json()
+    assert after["cadenceHours"] == 720 and after["driftWindow"] == 5 and after["updatedBy"]
+
+
+def test_sustained_drift_opens_exactly_one_finding():
+    client = TestClient(app, client=(f"wat-{uuid.uuid4().hex[:8]}", 50000), headers=auth_headers())
+    ws = client.post("/api/v1/ai-governance/workspaces", json={"name": "Watch ws", "owner": "owner"}).json()
+    sid = client.post("/api/v1/ai-governance/systems", json={"workspace_id": ws["id"], "name": "Drifter", "owner": "owner", "risk_tier": "low", "lifecycle_stage": "operate"}).json()["id"]
+    base = f"/api/v1/ai-governance/systems/{sid}"
+    client.post(f"{base}/fairness-runs", files={"file": ("b.csv", _csv(), "text/csv")}, data={"outcome": "label", "prediction": "prediction", "score": "score", "attributes": "gender"})
+
+    def snapshot(biased: bool, seed: int) -> dict:
+        res = client.post(f"{base}/monitoring-runs", files={"file": ("c.csv", _csv(biased=biased, seed=seed), "text/csv")}, data={"prediction": "prediction", "score": "score", "attributes": "gender"})
+        assert res.status_code == 200, res.text
+        return res.json()
+
+    def watch_findings() -> list:
+        return [r for r in client.get(f"/api/v1/ai-governance/dashboard/risk?system_id={sid}").json()["risks"] if r.get("source") == "fairmind.watch"]
+
+    first, second = snapshot(True, 1), snapshot(True, 2)
+    assert first["result"]["all_checks_pass"] is False
+    assert first["watch"]["consecutiveDrifting"] == 1 and second["watch"]["consecutiveDrifting"] == 2
+    assert second["watch"]["findingId"] is None and watch_findings() == []
+
+    third = snapshot(True, 3)
+    assert third["watch"]["consecutiveDrifting"] == 3 and third["watch"]["findingOpened"] is True
+    finding = watch_findings()
+    assert len(finding) == 1 and finding[0]["id"] == third["watch"]["findingId"]
+    assert finding[0]["severity"] == "high" and "gender" in finding[0]["title"] and "impact ratio" in finding[0]["description"]
+
+    fourth = snapshot(True, 4)
+    assert fourth["watch"]["consecutiveDrifting"] == 4 and fourth["watch"]["findingOpened"] is False
+    assert fourth["watch"]["findingId"] == third["watch"]["findingId"] and len(watch_findings()) == 1
+
+    # A passing snapshot is reported and closes nothing.
+    passing = snapshot(False, 5)
+    assert passing["watch"]["consecutiveDrifting"] == 0 and passing["watch"]["findingId"] == third["watch"]["findingId"]
+    assert len(watch_findings()) == 1
