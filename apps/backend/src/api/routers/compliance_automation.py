@@ -12,8 +12,8 @@ import logging
 import uuid
 import asyncio
 
-from config.auth import get_current_user, require_admin
-from api.routes.org_scope import org_member
+from config.auth import get_current_user
+from api.routes.org_scope import org_member, org_mutator
 from config.database import db_manager
 from src.application.services.governance_assurance_service import OrgMembership
 from src.application.services.api_boundary_dependencies import (
@@ -55,8 +55,8 @@ router = APIRouter(prefix="/compliance", tags=["compliance-automation"], depende
 @router.post("/schedules", response_model=ScheduleResponse, status_code=status.HTTP_201_CREATED)
 async def create_compliance_schedule(
     request: ScheduleCreateRequest,
-    current_user=Depends(require_admin),
-    m: OrgMembership = Depends(org_member),
+    current_user=Depends(get_current_user),
+    m: OrgMembership = Depends(org_mutator),
 ) -> ScheduleResponse:
     """
     Create a new compliance automation schedule.
@@ -247,8 +247,8 @@ async def get_compliance_schedule(
 async def update_compliance_schedule(
     schedule_id: str,
     request: ScheduleUpdateRequest,
-    current_user=Depends(require_admin),
-    m: OrgMembership = Depends(org_member),
+    current_user=Depends(get_current_user),
+    m: OrgMembership = Depends(org_mutator),
 ) -> ScheduleResponse:
     """Update a compliance automation schedule."""
     try:
@@ -316,8 +316,8 @@ async def update_compliance_schedule(
 @router.delete("/schedules/{schedule_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_compliance_schedule(
     schedule_id: str,
-    current_user=Depends(require_admin),
-    m: OrgMembership = Depends(org_member),
+    current_user=Depends(get_current_user),
+    m: OrgMembership = Depends(org_mutator),
 ):
     """Delete a compliance automation schedule."""
     try:
@@ -359,8 +359,8 @@ async def delete_compliance_schedule(
 @router.post("/schedules/{schedule_id}/run", response_model=dict)
 async def run_compliance_schedule_now(
     schedule_id: str,
-    current_user=Depends(require_admin),
-    m: OrgMembership = Depends(org_member),
+    current_user=Depends(get_current_user),
+    m: OrgMembership = Depends(org_mutator),
 ) -> dict:
     """
     Trigger immediate execution of a compliance schedule.
