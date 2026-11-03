@@ -23,6 +23,7 @@ const {
 } = Astro.props;
 
 const canonicalURL = canonical || Astro.url.href;
+const appUrl = import.meta.env.PUBLIC_APP_URL;
 ---
 
 <!doctype html>
@@ -100,7 +101,7 @@ const canonicalURL = canonical || Astro.url.href;
         </nav>
 
         <div class="header-actions">
-          <a class="header-sign-in" href="https://app.fairmind.io">Sign in</a>
+          <a class="header-sign-in" href={`${appUrl}/login`}>Sign in</a>
           <a class="button button-primary button-compact" href="/request-access">Request access</a>
         </div>
 
@@ -112,7 +113,7 @@ const canonicalURL = canonical || Astro.url.href;
             <a href="/#capabilities">Capability truth</a>
             <a href="/#research">Research</a>
             <a href="https://docs.fairmind.xyz">Docs</a>
-            <a href="https://app.fairmind.io">Sign in</a>
+            <a href={`${appUrl}/login`}>Sign in</a>
             <a href="/request-access">Request access</a>
           </nav>
         </details>

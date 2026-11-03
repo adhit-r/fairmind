@@ -9,6 +9,11 @@ const chapters = [
   ['03 · Review the mapping', 'A technical result can create a candidate relationship to a control. A reviewer accepts, rejects, or narrows it with recorded rationale.', ['Candidate mapping', 'Reviewer decision', 'Rationale and review state']],
   ['04 · Close the loop', 'Turn failures into findings, assign remediation, and link a clean retest without erasing the history. Compile the package at a stated evidence cutoff.', ['Finding and risk', 'Remediation and retest', 'Framework-pinned manifest']],
 ];
+
+// Sandbox runs on synthetic sample data in its own database; credentials are public by design.
+const demoUrl = import.meta.env.PUBLIC_DEMO_URL;
+const demoEmail = import.meta.env.PUBLIC_DEMO_EMAIL;
+const demoPassword = import.meta.env.PUBLIC_DEMO_PASSWORD;
 ---
 
 <Layout
@@ -54,6 +59,19 @@ const chapters = [
         </div>
       </div>
     </section>
+
+    {demoUrl && (
+      <section class="route-section" aria-labelledby="demo-sandbox-title">
+        <div class="route-split">
+          <div class="route-split-copy"><h2 id="demo-sandbox-title">Try the sandbox.</h2><p>A shared FairMind workspace filled with synthetic sample systems, evaluations and findings. Nothing in it is customer data, and it is reset periodically.</p></div>
+          <div class="route-checklist">
+            <div><span>Sandbox</span><strong><a href={`${demoUrl}/login`}>{demoUrl.replace('https://', '')}</a></strong></div>
+            <div><span>Email</span><strong>{demoEmail}</strong></div>
+            <div><span>Password</span><strong>{demoPassword}</strong></div>
+          </div>
+        </div>
+      </section>
+    )}
 
     <section class="route-closing" aria-labelledby="demo-closing-title">
       <div><p>Use your own evaluator output</p><h2 id="demo-closing-title">Make the walkthrough real.</h2></div>

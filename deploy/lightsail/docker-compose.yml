@@ -1,8 +1,21 @@
 # Single-box production stack for Lightsail. Database, auth and realtime stay on Neon.
-# Cloudflare Tunnel -> Next.js; Next.js forwards /api/proxy/* to the backend.
+# Cloudflare Tunnel routes each hostname (see tunnel.yml); the Next.js apps forward /api/proxy/* to their backend.
 services:
+  website:
+    build:
+      context: ../../apps/website
+      args:
+        PUBLIC_APP_URL: ${PUBLIC_APP_URL:?set PUBLIC_APP_URL in .env}
+        PUBLIC_DEMO_URL: ${PUBLIC_DEMO_URL:-}
+        PUBLIC_DEMO_EMAIL: ${PUBLIC_DEMO_EMAIL:-}
+        PUBLIC_DEMO_PASSWORD: ${PUBLIC_DEMO_PASSWORD:-}
+        PUBLIC_POSTHOG_KEY: ${PUBLIC_POSTHOG_KEY:-}
+        PUBLIC_POSTHOG_HOST: ${PUBLIC_POSTHOG_HOST:-}
+    restart: unless-stopped
+
   backend:
     build: ../../apps/backend
+    image: fairmind-backend
     env_file: backend.env
     volumes:
       - uploads:/app/uploads
@@ -18,22 +31,42 @@ services:
         NEXT_PUBLIC_AUTHENTIK_URL: ${NEXT_PUBLIC_AUTHENTIK_URL:-}
         NEXT_PUBLIC_AUTHENTIK_CLIENT_ID: ${NEXT_PUBLIC_AUTHENTIK_CLIENT_ID:-}
         NEXT_PUBLIC_AUTHENTIK_REDIRECT_URI: ${NEXT_PUBLIC_AUTHENTIK_REDIRECT_URI:-}
+    image: fairmind-frontend
     env_file: frontend.env
     environment:
       BACKEND_INTERNAL_URL: http://backend:8000
     depends_on: [backend]
     restart: unless-stopped
 
+  # Public demo: same images, isolated Neon "demo" branch with synthetic data only
+  backend-demo:
+    image: fairmind-backend
+    env_file: backend-demo.env
+    volumes:
+      - demo-uploads:/app/uploads
+      - demo-datasets:/app/datasets
+    restart: unless-stopped
+
+  frontend-demo:
+    image: fairmind-frontend
+    environment:
+      BACKEND_INTERNAL_URL: http://backend-demo:8000
+    depends_on: [backend-demo]
+    restart: unless-stopped
+
   # Outbound-only Cloudflare Tunnel: no inbound ports, TLS ends at Cloudflare
   cloudflared:
     image: cloudflare/cloudflared:2026.10.7
-    command: tunnel --no-autoupdate --cred-file /etc/cloudflared/creds.json run --url http://frontend:3000 ${TUNNEL_ID:?set TUNNEL_ID in .env}
+    command: tunnel --no-autoupdate --config /etc/cloudflared/tunnel.yml --cred-file /etc/cloudflared/creds.json run ${TUNNEL_ID:?set TUNNEL_ID in .env}
     volumes:
+      - ./tunnel.yml:/etc/cloudflared/tunnel.yml:ro
       - ./tunnel.json:/etc/cloudflared/creds.json:ro
-    depends_on: [frontend]
+    depends_on: [website, frontend, frontend-demo]
     restart: unless-stopped
 
 volumes:
   uploads:
   datasets:
   models:
+  demo-uploads:
+  demo-datasets:
