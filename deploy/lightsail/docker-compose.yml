@@ -1,16 +1,11 @@
 # Single-box production stack for Lightsail. Database, auth and realtime stay on Neon.
 # Cloudflare Tunnel routes each hostname (see tunnel.yml); the Next.js apps forward /api/proxy/* to their backend.
 services:
-  website:
-    build:
-      context: ../../apps/website
-      args:
-        PUBLIC_APP_URL: ${PUBLIC_APP_URL:?set PUBLIC_APP_URL in .env}
-        PUBLIC_DEMO_URL: ${PUBLIC_DEMO_URL:-}
-        PUBLIC_DEMO_EMAIL: ${PUBLIC_DEMO_EMAIL:-}
-        PUBLIC_DEMO_PASSWORD: ${PUBLIC_DEMO_PASSWORD:-}
-        PUBLIC_POSTHOG_KEY: ${PUBLIC_POSTHOG_KEY:-}
-        PUBLIC_POSTHOG_HOST: ${PUBLIC_POSTHOG_HOST:-}
+  # The website is on Netlify (fairmind.xyz); the old host just redirects there
+  redirect:
+    image: caddy:2.10-alpine
+    volumes:
+      - ./redirect.Caddyfile:/etc/caddy/Caddyfile:ro
     restart: unless-stopped
 
   backend:
@@ -61,7 +56,7 @@ services:
     volumes:
       - ./tunnel.yml:/etc/cloudflared/tunnel.yml:ro
       - ./tunnel.json:/etc/cloudflared/creds.json:ro
-    depends_on: [website, frontend, frontend-demo]
+    depends_on: [redirect, frontend, frontend-demo]
     restart: unless-stopped
 
 volumes:

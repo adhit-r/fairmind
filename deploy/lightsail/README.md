@@ -1,11 +1,13 @@
 # FairMind on Lightsail + Cloudflare Tunnel
 
-One Lightsail instance (us-east-1, next to the Neon database; 2 GB, $12/mo) runs the backend, frontend and cloudflared.
+One Lightsail instance (us-east-1, next to the Neon database; 2 GB, $12/mo) runs the app and the public demo.
 Postgres, auth and realtime stay on Neon. The instance takes no inbound web traffic: cloudflared dials out to Cloudflare.
+The marketing website is not here: Netlify builds `apps/website` from `main` and serves it at fairmind.xyz.
 
 ```
-browser -> Cloudflare (fairmind.axonome.xyz) -> tunnel -> frontend:3000 (Next.js)
-                                                            /api/proxy/* -> backend:8000 (FastAPI)
+fairmind-app.axonome.xyz  -> tunnel -> frontend:3000       -> /api/proxy/* -> backend:8000      (Neon production branch)
+fairmind-demo.axonome.xyz -> tunnel -> frontend-demo:3000  -> /api/proxy/* -> backend-demo:8000 (Neon demo branch, synthetic data)
+fairmind.axonome.xyz      -> tunnel -> redirect:80         -> 301 to https://fairmind.xyz
 ```
 
 ## 1. Instance
@@ -57,7 +59,7 @@ On the instance: `chmod 644 tunnel.json` (cloudflared runs as a non-root user in
 ## 4. Deploy / update
 
 ```bash
-git clone -b task/lightsail-deploy https://github.com/adhit-r/fairmind.git && cd fairmind/deploy/lightsail
+git clone https://github.com/adhit-r/fairmind.git && cd fairmind/deploy/lightsail
 docker compose up -d --build
 docker compose logs -f backend
 ```
