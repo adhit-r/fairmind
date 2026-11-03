@@ -57,6 +57,7 @@ const siteSchema = [
   },
 ];
 const pageSchema = structuredData ? [structuredData].flat() : [];
+const appUrl = import.meta.env.PUBLIC_APP_URL;
 ---
 
 <!doctype html>
@@ -122,7 +123,7 @@ const pageSchema = structuredData ? [structuredData].flat() : [];
         </nav>
 
         <div class="header-actions">
-          <a class="header-sign-in" href="https://app.fairmind.io">Sign in</a>
+          <a class="header-sign-in" href={`${appUrl}/login`}>Sign in</a>
           <a class="button button-primary button-compact" href="/request-access/">Request access</a>
         </div>
 
@@ -131,7 +132,7 @@ const pageSchema = structuredData ? [structuredData].flat() : [];
           <nav aria-label="Mobile">
             {nav.map((item) => <a href={item.href}>{item.label}</a>)}
             <a href="https://docs.fairmind.xyz">Docs</a>
-            <a href="https://app.fairmind.io">Sign in</a>
+            <a href={`${appUrl}/login`}>Sign in</a>
             <a href="/request-access/">Request access</a>
           </nav>
         </details>

@@ -50,6 +50,11 @@ const structuredData = {
     { '@type': 'ListItem', position: 2, name: 'Walkthrough', item: 'https://fairmind.xyz/demo/' },
   ],
 };
+
+// Sandbox runs on synthetic sample data in its own database; credentials are public by design.
+const demoUrl = import.meta.env.PUBLIC_DEMO_URL;
+const demoEmail = import.meta.env.PUBLIC_DEMO_EMAIL;
+const demoPassword = import.meta.env.PUBLIC_DEMO_PASSWORD;
 ---
 
 <Layout
@@ -92,6 +97,19 @@ const structuredData = {
         <ul class="route-checklist">{wontFake.map((w) => <li><strong>{w.strong}</strong>{w.text}</li>)}</ul>
       </div>
     </section>
+
+    {demoUrl && (
+      <section class="route-section" aria-labelledby="demo-sandbox-title">
+        <div class="route-split">
+          <div class="route-split-copy"><h2 id="demo-sandbox-title">Try the sandbox.</h2><p>A shared FairMind workspace filled with synthetic sample systems, evaluations and findings. Nothing in it is customer data, and it is reset periodically.</p></div>
+          <div class="route-checklist">
+            <div><span>Sandbox</span><strong><a href={`${demoUrl}/login`}>{demoUrl.replace('https://', '')}</a></strong></div>
+            <div><span>Email</span><strong>{demoEmail}</strong></div>
+            <div><span>Password</span><strong>{demoPassword}</strong></div>
+          </div>
+        </div>
+      </section>
+    )}
 
     <section class="route-closing" aria-labelledby="demo-closing-title">
       <h2 id="demo-closing-title">Bring a predictions file and a question.</h2>

@@ -1,0 +1,12 @@
+.venv
+venv
+__pycache__
+**/__pycache__
+.env*
+*.db
+*.log
+htmlcov
+coverage.xml
+archive
+security_reports
+simulation_results

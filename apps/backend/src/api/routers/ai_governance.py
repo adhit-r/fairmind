@@ -319,7 +319,7 @@ def _ensure_system_approval_workflow(db: Session, now: str) -> str:
         text(
             "UPDATE governance_approval_workflows "
             "SET name = :name, entity_type = 'ai_system', steps_json = :steps_json, "
-            "is_active = 1, updated_at = :updated_at WHERE id = :id"
+            "is_active = TRUE, updated_at = :updated_at WHERE id = :id"
         ),
         {
             "id": SYSTEM_APPROVAL_WORKFLOW_ID,
@@ -333,7 +333,7 @@ def _ensure_system_approval_workflow(db: Session, now: str) -> str:
             text(
                 "INSERT INTO governance_approval_workflows "
                 "(id, name, entity_type, steps_json, is_active, created_by, created_at, updated_at) "
-                "VALUES (:id, :name, 'ai_system', :steps_json, 1, :created_by, :created_at, :updated_at)"
+                "VALUES (:id, :name, 'ai_system', :steps_json, TRUE, :created_by, :created_at, :updated_at)"
             ),
             {
                 "id": SYSTEM_APPROVAL_WORKFLOW_ID,
@@ -1872,7 +1872,7 @@ async def create_approval_workflow(
             "name": request.name,
             "entity_type": request.entity_type,
             "steps_json": json.dumps(request.steps),
-            "is_active": 1,
+            "is_active": True,
             "created_by": _authenticated_actor(current_user),
             "created_at": now,
             "updated_at": now,
@@ -1937,7 +1937,7 @@ async def create_approval_request(
         raise HTTPException(status_code=404, detail="Approval target not found")
     _require_system_access(db, request.entity_id, current_user, mutate=True)
     workflow = db.execute(
-        text("SELECT id FROM governance_approval_workflows WHERE id = :id AND is_active = 1"),
+        text("SELECT id FROM governance_approval_workflows WHERE id = :id AND is_active = TRUE"),
         {"id": workflow_id},
     ).fetchone()
     if not workflow:
