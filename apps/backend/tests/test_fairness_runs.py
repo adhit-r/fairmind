@@ -188,6 +188,34 @@ def test_decision_seals_the_evidence_and_verification_catches_edits():
     assert broken["status"] == "broken" and broken["changed"] == [first.json()["evidenceId"]] and broken["missing"] == []
 
 
+def test_gate_decision_block_rule():
+    from src.api.routers.ai_governance import _gate_decision_block
+
+    checks = [{"label": "Fairness", "state": "open"}, {"label": "Oversight", "state": "attested"}]
+    no_go = {"verdict": "no_go", "confidence": 0.1, "reasons": ["No fairness evidence"], "checks": checks}
+    status, detail = _gate_decision_block(no_go, "looks fine to me")
+    assert status == 409 and detail["gate"]["openChecks"] == ["Fairness"] and detail["gate"]["reasons"] == ["No fairness evidence"]
+    conditional = {"verdict": "conditional_go", "confidence": 0.6, "reasons": [], "checks": checks}
+    assert _gate_decision_block(conditional, "")[0] == 422
+    assert _gate_decision_block(conditional, "   ")[0] == 422
+    assert _gate_decision_block(conditional, "Re-test fairness in 30 days") is None
+    assert _gate_decision_block({"verdict": "go", "checks": []}, "") is None
+
+
+def test_approving_a_no_go_system_is_refused_but_rejecting_is_allowed():
+    client = TestClient(app, client=(f"gate-{uuid.uuid4().hex[:8]}", 50000), headers=auth_headers())
+    ws = client.post("/api/v1/ai-governance/workspaces", json={"name": "Gate ws", "owner": "owner"}).json()
+    sid = client.post("/api/v1/ai-governance/systems", json={"workspace_id": ws["id"], "name": "Ungated", "owner": "owner", "risk_tier": "high", "lifecycle_stage": "govern"}).json()["id"]
+    req = client.post(f"/api/v1/ai-governance/approval/system/{sid}/request", json={})
+    assert req.status_code == 200, req.text
+    url = f"/api/v1/ai-governance/approval-requests/{req.json()['request']['id']}/decision"
+    refused = client.post(url, json={"decision": "approved", "notes": "ship it"})
+    assert refused.status_code == 409, refused.text
+    detail = refused.json()["detail"]
+    assert detail["gate"]["verdict"] == "no_go" and detail["gate"]["openChecks"]
+    assert client.post(url, json={"decision": "rejected", "notes": "not ready"}).status_code == 200
+
+
 def test_clause_map_reads_the_gate_per_framework_clause():
     from src.application.services.clause_map_service import clause_map
 
