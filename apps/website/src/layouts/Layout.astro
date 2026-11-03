@@ -15,9 +15,9 @@ export interface Props {
 
 const {
   title,
-  description = 'FairMind detects AI bias, tracks every fix to a retest, and maps the evidence to the EU AI Act, DPDP Act, NITI Aayog principles, and NIST AI RMF.',
+  description = 'FairMind is an agentic AI governance platform. Agents collect evidence, check it against 50 frameworks, and propose what to do next; a person decides.',
   image = '/og-image.png',
-  imageAlt = 'FairMind: AI bias detection and governance evidence',
+  imageAlt = 'FairMind: governance that runs itself, decisions that stay human',
   canonical,
   noindex = false,
   structuredData,
@@ -68,10 +68,10 @@ const pageSchema = structuredData ? [structuredData].flat() : [];
     <meta name="description" content={description} />
     <meta name="robots" content={noindex ? 'noindex,nofollow' : 'index,follow,max-image-preview:large'} />
     <link rel="canonical" href={canonicalURL} />
-    <meta name="theme-color" content="#0d0f0e" />
+    <meta name="theme-color" content="#ffffff" />
 
+    <link rel="icon" href="/logo-mark.svg" type="image/svg+xml" />
     <link rel="icon" href="/favicon.ico" sizes="32x32" />
-    <link rel="icon" type="image/png" href="/logo-mark.png" sizes="192x192" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
     <link rel="sitemap" href="/sitemap-index.xml" />
@@ -96,7 +96,7 @@ const pageSchema = structuredData ? [structuredData].flat() : [];
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=IBM+Plex+Mono:wght@500&family=Inter+Tight:wght@400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Instrument+Serif:ital@1&display=swap"
     />
 
     {[...siteSchema, ...pageSchema].map((schema) => (
@@ -110,7 +110,7 @@ const pageSchema = structuredData ? [structuredData].flat() : [];
     <header class="site-header">
       <div class="wrap site-header-inner">
         <a class="brand" href="/" aria-label="FairMind home">
-          <img src="/logo-mark.png" alt="" width="36" height="36" />
+          <img src="/logo-mark.svg" alt="" width="30" height="30" />
           <span>FairMind</span>
         </a>
 
@@ -151,6 +151,37 @@ const pageSchema = structuredData ? [structuredData].flat() : [];
           if (menu instanceof HTMLDetailsElement) menu.open = false;
         });
       });
+
+      const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const io = new IntersectionObserver(
+        (entries) =>
+          entries.forEach((entry) => {
+            if (!entry.isIntersecting) return;
+            entry.target.classList.add('in');
+            io.unobserve(entry.target);
+          }),
+        { threshold: 0.15 },
+      );
+      document.querySelectorAll('.reveal').forEach((el) => io.observe(el));
+
+      if (!reduceMotion && matchMedia('(pointer: fine)').matches) {
+        document.querySelectorAll<HTMLElement>('[data-magnet]').forEach((el) => {
+          el.addEventListener('pointermove', (e) => {
+            const r = el.getBoundingClientRect();
+            el.style.transform = `translate(${(e.clientX - r.left - r.width / 2) * 0.25}px, ${(e.clientY - r.top - r.height / 2) * 0.35}px)`;
+          });
+          el.addEventListener('pointerleave', () => (el.style.transform = ''));
+        });
+        document.querySelectorAll<HTMLElement>('.tilt').forEach((el) => {
+          el.addEventListener('pointermove', (e) => {
+            const r = el.getBoundingClientRect();
+            const x = (e.clientX - r.left) / r.width - 0.5;
+            const y = (e.clientY - r.top) / r.height - 0.5;
+            el.style.transform = `perspective(1000px) rotateX(${-y * 9}deg) rotateY(${x * 9}deg) translateY(-6px)`;
+          });
+          el.addEventListener('pointerleave', () => (el.style.transform = ''));
+        });
+      }
     </script>
   </body>
 </html>

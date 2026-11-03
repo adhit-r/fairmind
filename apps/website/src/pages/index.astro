@@ -3,63 +3,76 @@ import Layout from '../layouts/Layout.astro';
 import { frameworks } from '../lib/frameworks';
 import '../styles/home.css';
 
-const record = [
-  { label: 'AI system', state: 'Credit scoring v3' },
-  { label: 'Bias evaluation', state: 'Finding raised', tone: 'alert' },
-  { label: 'Remediation', state: 'Owner assigned' },
-  { label: 'Framework mapping', state: 'EU AI Act Art. 10', tone: 'teal' },
-  { label: 'Reviewer decision', state: 'Awaiting review', tone: 'pending' },
-];
-
-const pillars = [
-  {
-    step: '01 Detect',
-    title: 'Bias and safety testing',
-    body: 'Run fairness and safety evaluations, or import results from the tools you already use. Thresholds are fixed before the run, not after.',
-  },
-  {
-    step: '02 Remediate',
-    title: 'Fixes linked to retests',
-    body: 'Every finding gets an owner, a fix, and a retest that links back to the original failure. History is kept, never overwritten.',
-  },
-  {
-    step: '03 Prove',
-    title: 'Audit-ready packages',
-    body: 'Export evidence mapped to versioned framework controls, with human sign-off recorded and open findings left visible.',
-  },
+const stats = [
+  { n: '50', t: 'Frameworks in the registry, EU AI Act to OWASP Agentic' },
+  { n: '90', t: 'Governance workflows agents can run' },
+  { n: '109', t: 'Evaluations mapped to requirement IDs' },
+  { n: '21', t: 'Packs across Govern, Evaluate, Secure, Comply' },
+  { n: '0', t: 'External changes made without a human approval' },
 ];
 
 const steps = [
-  { title: 'Register the AI system', body: 'Model, version, owner, deployment, and intended use.' },
-  { title: 'Evaluate or import results', body: 'Bias, fairness, and safety runs bound to that exact version.' },
-  { title: 'Review and remediate', body: 'A named reviewer accepts or rejects each finding and mapping.' },
-  { title: 'Export the assurance package', body: 'Framework-pinned evidence, decisions, limitations, and history.' },
+  { n: '01', title: 'Collect', body: 'Pull policies, tickets, model cards, logs. Read-only scopes.' },
+  { n: '02', title: 'Check', body: 'Rules first, model second. Every finding cites its source.' },
+  { n: '03', title: 'Suggest', body: 'Propose the record, mapping, or fix. Confidence stated.' },
+  { n: '04 · Gate', title: 'Ask a person', body: 'Approve, edit, request changes, reject, or accept the risk. Deny by default.', gate: true },
+  { n: '05', title: 'Act', body: 'Dry run, blast radius, rollback plan. Then the change.' },
+  { n: '06', title: 'Verify', body: 'Re-read the target. A mismatch rolls back and escalates.' },
+  { n: '07', title: 'File evidence', body: 'Hash-chained trace, mapped to every requirement it satisfies.' },
+];
+
+const autonomy = [
+  { level: 'A0', name: 'Manual', detail: 'The agent does nothing unless asked for a draft.' },
+  { level: 'A1', name: 'Assist', detail: 'Collects and checks. Humans write every conclusion.' },
+  { level: 'A2', name: 'Propose', detail: 'Proposes; nothing is recorded until a human approves. The default.' },
+  { level: 'A3', name: 'Act on internal records', detail: 'Files records inside FairMind; humans review by sampling. Never external writes.' },
+];
+
+const pillars = [
+  { name: 'Govern', title: 'Run the management system', body: 'Policies, accountability, inventory, risk and impact, data, suppliers.' },
+  { name: 'Evaluate', title: 'Test before and after release', body: 'Quality, fairness and bias, agent behaviour, production drift.' },
+  { name: 'Secure', title: 'Protect LLM apps and agents', body: 'OWASP LLM and Agentic Top 10, MITRE ATLAS, supply chain.' },
+  { name: 'Comply', title: 'Show it, requirement by requirement', body: 'EU AI Act, ISO/IEC 42001, AIUC-1. Gaps shown, not hidden.' },
+];
+
+const registry = [
+  { b: 'EU AI Act', s: '2024/1689', href: '/frameworks/eu-ai-act/' },
+  { b: 'ISO/IEC 42001', s: '', href: '/frameworks/iso-42001/' },
+  { b: 'NIST AI RMF', s: '', href: '/frameworks/nist-ai-rmf/' },
+  { b: 'OWASP', s: 'Agentic Top 10', href: '/frameworks/' },
+  { b: 'AIUC-1', s: '', href: '/frameworks/' },
+  { b: 'DPDP Act', s: '2023', href: '/frameworks/dpdp-act/' },
+  { b: 'MITRE ATLAS', s: '', href: '/frameworks/' },
+  { b: 'NIST AI 600-1', s: '', href: '/frameworks/nist-ai-rmf/' },
+  { b: 'NITI Aayog', s: 'RAI', href: '/frameworks/niti-aayog/' },
+  { b: 'RBI', s: 'FREE-AI', href: '/frameworks/rbi-free-ai/' },
+  { b: 'GDPR', s: '', href: '/frameworks/gdpr/' },
 ];
 
 const faqs = [
   {
-    q: 'What is AI bias detection?',
-    a: 'AI bias detection measures whether a model produces systematically different outcomes or error rates for different groups of people, such as by gender, age, region, or income. It compares results against fairness thresholds that are set before testing.',
+    q: 'What is agentic AI governance?',
+    a: 'Agentic AI governance uses AI agents to run the repeatable parts of governing AI systems: collecting evidence, checking it against framework requirements, proposing records and fixes, and filing the trace. The decisions stay with people. In FairMind, every workflow stops at an approval gate before anything is recorded or changed.',
   },
   {
-    q: 'How do I test an AI model for bias?',
-    a: 'Define the groups your system affects and the fairness metrics that matter for the decision, set thresholds, run the evaluation on representative data, then fix and retest anything that fails. FairMind records each step against the exact model version so the result can be audited later.',
+    q: 'What does a FairMind agent actually do?',
+    a: 'It runs a workflow made of seven step types: collect, check, suggest, ask a person, act, verify, and file evidence. It reads with scoped, read-only credentials, runs deterministic rules before any model judgement, cites the source of every finding, and never writes to an external system without a human approval and a verified rollback path.',
   },
   {
-    q: 'Does FairMind help with EU AI Act compliance?',
-    a: 'FairMind organises the technical evidence the EU AI Act expects from high-risk AI providers, including data governance and bias examination (Article 10), risk management, logging, and human oversight, and links it to the relevant articles for human review. It does not decide conformity.',
+    q: 'Can the agent change things on its own?',
+    a: 'Only inside FairMind, and only if you set that workflow to autonomy level A3. The default is A2: the agent proposes and a person approves. External systems are never written without an approval. If an approver is unreachable or no policy covers the action, nothing happens.',
   },
   {
-    q: "What does India's DPDP Act mean for AI systems?",
-    a: 'Any AI system that processes digital personal data of people in India falls under the DPDP Act, 2023. Data used to make decisions about people must be complete, accurate, and consistent, and Significant Data Fiduciaries must run impact assessments and audits.',
+    q: 'Which frameworks does FairMind cover?',
+    a: 'The registry holds 50 frameworks, including the EU AI Act, ISO/IEC 42001, NIST AI RMF and AI 600-1, the OWASP Top 10 for LLM and Agentic applications, AIUC-1, MITRE ATLAS, India’s DPDP Act and NITI Aayog principles, RBI FREE-AI, and GDPR. One workflow run counts toward every requirement it maps to.',
+  },
+  {
+    q: 'How is FairMind’s own agent governed?',
+    a: 'Twenty runtime controls apply to it: per-step scoped identity, a deterministic tool allowlist that prompts cannot widen, collected content treated as data rather than instructions, mandatory citations, pinned model and prompt versions with golden-set evaluations, a hash-chained immutable trace, cost and rate caps, and a kill switch per run. Customers can see the agent’s metrics and incidents.',
   },
   {
     q: 'Is FairMind a certification?',
-    a: 'No. FairMind produces and organises evidence that supports a governance or audit decision. Certification and conformity decisions stay with your reviewers, auditors, and, where relevant, accredited bodies.',
-  },
-  {
-    q: 'Can I use FairMind with my existing evaluation tools?',
-    a: 'Yes. FairMind is vendor-neutral. You can bring results from the evaluators you already run and FairMind binds them to the system, threshold, reviewer, and remediation that give them meaning.',
+    a: 'No. FairMind produces and organises evidence and records human decisions. Certification and conformity decisions stay with your reviewers, auditors, and, where relevant, accredited bodies.',
   },
 ];
 
@@ -72,7 +85,7 @@ const structuredData = [
     operatingSystem: 'Web',
     url: 'https://fairmind.xyz',
     description:
-      'AI bias detection and governance platform that links bias testing, remediation, and human review to the EU AI Act, DPDP Act, NITI Aayog, and NIST AI RMF.',
+      'Agentic AI governance platform. Agents collect evidence, check it against 50 frameworks, and propose actions; people approve. Covers EU AI Act, ISO/IEC 42001, NIST AI RMF, OWASP Agentic, AIUC-1, and DPDP.',
     publisher: { '@id': 'https://fairmind.xyz/#organization' },
   },
   {
@@ -88,65 +101,112 @@ const structuredData = [
 ---
 
 <Layout
-  title="FairMind: AI bias detection and AI governance platform"
-  description="Detect AI bias, track every fix to a retest, and export audit-ready evidence mapped to the EU AI Act, India's DPDP Act, NITI Aayog, and NIST AI RMF."
+  title="FairMind: agentic AI governance platform"
+  description="Agents that collect evidence, check it against 50 frameworks, and propose what to do next, then stop for a human decision. EU AI Act, ISO/IEC 42001, NIST AI RMF, OWASP Agentic, AIUC-1, DPDP."
   structuredData={structuredData}
 >
-  <section class="hero">
-    <div class="wrap hero-grid">
-      <div>
-        <p class="kicker">AI bias detection · AI governance · Audit evidence</p>
-        <h1>
-          Find AI bias.<br />Prove it's fixed.<br /><span>Pass the audit.</span>
-        </h1>
-        <p class="hero-intro">
-          FairMind tests your models for bias and safety issues, tracks every fix to a retest, and
-          maps the evidence to the EU AI Act, India's DPDP Act, NITI Aayog principles, and NIST AI
-          RMF.
-        </p>
-        <div class="hero-actions">
-          <a class="button button-primary" href="/request-access/">Request access <span aria-hidden="true">→</span></a>
-          <a class="button button-secondary" href="#how-it-works">See how it works</a>
-        </div>
-      </div>
+  <div class="story" data-story>
+    <div class="stage" data-stage>
+      <canvas data-canvas aria-hidden="true"></canvas>
+      <p class="counter" aria-live="polite">
+        <b data-counter>0</b>
+        <span>items approved by you</span>
+        <em>24,000 checked by the agent · 0 changed without you</em>
+      </p>
+      <div class="scroll-cue" aria-hidden="true"><i></i>Scroll</div>
+    </div>
 
-      <figure class="record" aria-label="Example FairMind evidence record">
-        <figcaption class="record-head">
-          <span>Evidence record</span><span class="record-status">Retest pending</span>
-        </figcaption>
-        <ol class="record-rows">
-          {record.map((row) => (
-            <li class:list={['record-row', row.tone && `record-row-${row.tone}`]}>
-              <strong>{row.label}</strong>
-              <span class="chip">{row.state}</span>
-            </li>
-          ))}
-        </ol>
-      </figure>
+    <div class="panels">
+      <section class="panel" aria-labelledby="hero-title">
+        <div class="wrap">
+          <p class="label reveal">Agentic AI governance</p>
+          <h1 id="hero-title" class="reveal" style="transition-delay: 80ms">
+            Governance that runs itself.<br />Decisions that stay <em>human.</em>
+          </h1>
+          <p class="panel-intro reveal" style="transition-delay: 160ms">
+            FairMind's agents collect evidence, check it against 50 frameworks, and propose what to
+            do next. Then they stop, and a person decides. Right now, that person is you.
+          </p>
+          <div class="panel-actions reveal" style="transition-delay: 240ms">
+            <a class="button button-primary" href="/request-access/" data-magnet>Request access <span class="arr" aria-hidden="true">→</span></a>
+            <a class="button" href="#how-a-run-works" data-magnet>How a run works</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" aria-label="What the tunnel shows">
+        <div class="wrap">
+          <div class="glass reveal">
+            <p class="label">What you just did</p>
+            <h2>Every tile is a check the agent ran. It stayed grey until <em>you</em> looked at it.</h2>
+            <p>Deny by default. Nothing is recorded or changed until an approver decides, and every decision is kept with who made it and why.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" aria-label="The evidence trail">
+        <div class="wrap">
+          <div class="glass reveal">
+            <p class="label">Behind you</p>
+            <h2>Your decisions become the <em>evidence trail.</em></h2>
+            <p>A hash-chained trace of inputs, model calls, tool calls, and approvals, mapped to the requirements it satisfies. Auditors read the trail; they don't take our word for it.</p>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div class="strip" aria-label="FairMind by the numbers">
+    <div class="wrap">
+      {stats.map((s) => (<div><b>{s.n}</b><span>{s.t}</span></div>))}
+    </div>
+  </div>
+
+  <section class="section" id="how-a-run-works">
+    <div class="wrap">
+      <header class="section-heading">
+        <p class="label reveal">How a run works</p>
+        <h2 class="reveal">Seven step types. One of them is always a <em>person.</em></h2>
+      </header>
+      <ol class="steps">
+        {steps.map((s) => (
+          <li class:list={[s.gate && 'gate']}>
+            <div>
+              <p class="label">{s.n}</p>
+              <b>{s.title}</b>
+              <span>{s.body}</span>
+            </div>
+          </li>
+        ))}
+      </ol>
     </div>
   </section>
 
-  <nav class="framework-strip" aria-label="Supported frameworks">
-    <div class="wrap framework-strip-inner">
-      <span class="kicker">Mapped to</span>
-      <ul>
-        {frameworks.map((f) => (
-          <li><a href={`/frameworks/${f.slug}/`}>{f.shortName}</a></li>
+  <section class="section section-grey" id="autonomy">
+    <div class="wrap split">
+      <header>
+        <p class="label reveal">Autonomy</p>
+        <h2 class="reveal">You set how far the agent goes. <em>Per workflow.</em></h2>
+        <p class="split-lead reveal">Internal audit stays at Assist. Inventory upkeep can run at Act. External systems are never written without a person.</p>
+      </header>
+      <div class="ladder reveal">
+        {autonomy.map((a) => (
+          <div><b>{a.level}</b><span>{a.name}</span><span>{a.detail}</span></div>
         ))}
-      </ul>
+      </div>
     </div>
-  </nav>
+  </section>
 
-  <section class="section" id="platform">
+  <section class="section" id="packs">
     <div class="wrap">
       <header class="section-heading">
-        <h2>One platform from bias test to audit-ready evidence</h2>
-        <p>Engineers, reviewers, and compliance owners work from the same record for each AI system.</p>
+        <p class="label reveal">Four pillars</p>
+        <h2 class="reveal">Install the packs your systems <em>need.</em></h2>
       </header>
-      <div class="grid-3">
+      <div class="grid-4">
         {pillars.map((p, i) => (
-          <article class:list={['card', i === 2 && 'card-teal']}>
-            <p class="kicker">{p.step}</p>
+          <article class="card tilt reveal" style={`transition-delay: ${i * 80}ms`}>
+            <p class="label">{p.name}</p>
             <h3>{p.title}</h3>
             <p>{p.body}</p>
           </article>
@@ -155,51 +215,45 @@ const structuredData = [
     </div>
   </section>
 
-  <section class="section section-white" id="how-it-works">
-    <div class="wrap steps-grid">
+  <nav class="marquee" aria-label="Frameworks in the registry">
+    <ul>
+      {[...registry, ...registry].map((r) => (
+        <li><a href={r.href}><b>{r.b}</b> {r.s}</a></li>
+      ))}
+    </ul>
+  </nav>
+
+  <section class="section" id="governed-agent">
+    <div class="wrap split" style="align-items: center">
       <header>
-        <h2>How FairMind works</h2>
-        <p class="steps-lead">Four steps. Each one leaves a record an auditor can follow.</p>
-        <a class="button button-secondary" href="/demo/">Watch the walkthrough</a>
+        <p class="label reveal">The agent is governed too</p>
+        <h2 class="reveal">Twenty controls on <em>our own</em> agent.</h2>
+        <p class="split-lead reveal">
+          Per-step scoped identity. A deterministic tool allowlist prompts cannot widen. Collected
+          content treated as data, never instructions. A hash-chained trace of every call. A kill
+          switch per run. You can see our agent's metrics and incidents; we cannot hide them.
+        </p>
       </header>
-      <ol class="steps">
-        {steps.map((s, i) => (
-          <li>
-            <span class="steps-number" aria-hidden="true">{i + 1}</span>
-            <div>
-              <h3>{s.title}</h3>
-              <p>{s.body}</p>
-            </div>
-          </li>
-        ))}
-      </ol>
+      <div class="card trace reveal" aria-label="Example run trace">
+        <div>
+          <div><span class="dim">run</span> 7f3a…c21e <span class="dim">workflow</span> deployment_release_gate@v4</div>
+          <div><i>collect</i> 14 items · scopes: read</div>
+          <div><i>check</i> 11 pass · 2 fail · 1 cannot conclude</div>
+          <div><i>suggest</i> finding RSK-0412, cites item 9 §3</div>
+          <div class="hi"><i class="ask">ask</i> approver: priya.n · decision: approve with edits</div>
+          <div><i>act</i> dry-run ok · blast radius 1 record</div>
+          <div><i>verify</i> target re-read · match</div>
+          <div><i>file</i> evidence → ISO42001 6.1.2, EUAIA Art.9, NISTRMF GOVERN 1.7</div>
+          <div class="dim">trace sha256 e1b0…9a44 · chained to previous run</div>
+        </div>
+      </div>
     </div>
   </section>
 
-  <section class="section section-ink" id="frameworks">
+  <section class="section section-grey" id="faq">
     <div class="wrap">
       <header class="section-heading">
-        <h2>Collect evidence once. Use it across frameworks.</h2>
-        <p>A reviewer accepts each mapping, so one bias evaluation can support several regulations without being re-run.</p>
-      </header>
-      <ul class="framework-cards">
-        {frameworks.map((f) => (
-          <li>
-            <a href={`/frameworks/${f.slug}/`}>
-              <span class="kicker">{f.region} · {f.type}</span>
-              <strong>{f.shortName}</strong>
-              <span class="framework-cards-more">Read the guide <span aria-hidden="true">→</span></span>
-            </a>
-          </li>
-        ))}
-      </ul>
-    </div>
-  </section>
-
-  <section class="section" id="faq">
-    <div class="wrap">
-      <header class="section-heading">
-        <h2>Questions teams ask</h2>
+        <h2 class="reveal">Questions teams ask</h2>
       </header>
       <div class="faq">
         {faqs.map((f) => (
@@ -212,10 +266,27 @@ const structuredData = [
     </div>
   </section>
 
-  <section class="section section-orange">
-    <div class="wrap cta-band">
-      <h2>Your next AI audit starts with evidence.</h2>
-      <a class="button button-secondary" href="/request-access/">Request access <span aria-hidden="true">→</span></a>
+  <section class="section">
+    <div class="wrap">
+      <div class="cta-band reveal">
+        <h2>Let the agents do the paperwork. Keep the <em>decisions.</em></h2>
+        <a class="button" href="/request-access/" data-magnet>Request access <span class="arr" aria-hidden="true">→</span></a>
+      </div>
     </div>
   </section>
+
+  <script>
+    import { mountTunnel } from '../scripts/tunnel';
+    const story = document.querySelector<HTMLElement>('[data-story]');
+    const stage = document.querySelector<HTMLElement>('[data-stage]');
+    const canvas = document.querySelector<HTMLCanvasElement>('[data-canvas]');
+    const counter = document.querySelector<HTMLElement>('[data-counter]');
+    if (story && stage && canvas && counter) {
+      try {
+        mountTunnel(story, stage, canvas, counter);
+      } catch {
+        canvas.remove();
+      }
+    }
+  </script>
 </Layout>

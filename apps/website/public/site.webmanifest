@@ -1,12 +1,21 @@
 {
-  "name": "FairMind: AI bias detection and governance",
+  "name": "FairMind: agentic AI governance",
   "short_name": "FairMind",
-  "description": "Detect AI bias, track fixes to retests, and export audit-ready evidence for the EU AI Act, DPDP Act, NITI Aayog, and NIST AI RMF.",
+  "description": "Agents collect evidence, check it against 50 frameworks, and propose what to do next. People decide.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#fbfaf7",
-  "theme_color": "#0d0f0e",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
   "icons": [
-    { "src": "/logo-mark.png", "sizes": "192x192", "type": "image/png" }
+    {
+      "src": "/logo-mark.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/logo-mark.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
   ]
 }

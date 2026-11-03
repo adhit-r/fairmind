@@ -8,7 +8,7 @@
   min-height: 44rem;
   align-items: center;
   padding: clamp(5rem, 8vw, 8rem) max(3.5vw, 1.25rem);
-  border-bottom: 2px solid var(--ink);
+  border-bottom: 1px solid var(--line-color);
   grid-template-columns: minmax(0, 0.88fr) minmax(32rem, 1.12fr);
   gap: clamp(3rem, 6vw, 7rem);
 }
@@ -35,7 +35,7 @@
   color: var(--orange);
   font-family: var(--font-mono);
   font-size: 0.75rem;
-  font-weight: 800;
+  font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
@@ -44,7 +44,7 @@
   max-width: 11ch;
   margin: 0;
   font-size: clamp(3.4rem, 6.4vw, 5.8rem);
-  letter-spacing: -0.04em;
+  letter-spacing: -0.035em;
   line-height: 0.91;
   text-wrap: balance;
 }
@@ -75,25 +75,25 @@
 }
 
 .route-hero-dark .button-secondary {
-  border-color: var(--white);
+  border-color: rgba(255,255,255,0.2);
   background: var(--ink);
-  box-shadow: 5px 5px 0 var(--orange);
+  box-shadow: var(--shadow);
   color: var(--white);
 }
 
 .route-proof-world {
   position: relative;
   min-height: 32rem;
-  border: 2px solid currentColor;
+  border: 1px solid var(--line-color);
   background: var(--white);
-  box-shadow: 12px 12px 0 var(--ink);
+  box-shadow: var(--shadow);
   color: var(--ink);
   perspective: 90rem;
 }
 
 .route-hero-dark .route-proof-world {
-  border-color: var(--white);
-  box-shadow: 12px 12px 0 var(--orange);
+  border-color: rgba(255,255,255,0.2);
+  box-shadow: var(--shadow);
 }
 
 .route-proof-world::after {
@@ -102,7 +102,7 @@
   bottom: 2.5rem;
   left: 8%;
   height: 36%;
-  border: 2px solid var(--ink);
+  border: 1px solid var(--line-color);
   background: rgba(255, 107, 53, 0.1);
   content: '';
   transform: rotateX(72deg) translateZ(-6rem);
@@ -128,10 +128,10 @@
   min-height: 8.8rem;
   align-content: center;
   padding: 1.2rem;
-  border: 2px solid var(--ink);
+  border: 1px solid var(--line-color);
   margin-top: -1rem;
   background: var(--white);
-  box-shadow: 8px 8px 0 var(--ink);
+  box-shadow: var(--shadow);
   gap: 0.5rem;
   transform: translate3d(1.6rem, 0, 1.5rem) rotateY(1deg);
   transition:
@@ -150,15 +150,16 @@
 
 .route-proof.is-primary,
 .route-proof:hover {
-  background: var(--orange);
+  background: var(--ink);
   transform: translate3d(-0.6rem, -0.45rem, 7rem) rotateY(0deg);
+  color: var(--white);
 }
 
 .route-proof span,
 .route-meta {
   font-family: var(--font-mono);
   font-size: 0.75rem;
-  font-weight: 800;
+  font-weight: 600;
   text-transform: uppercase;
 }
 
@@ -178,7 +179,7 @@
 
 .route-section {
   padding: clamp(5rem, 8vw, 8rem) max(3.5vw, 1.25rem);
-  border-bottom: 2px solid var(--ink);
+  border-bottom: 1px solid var(--line-color);
 }
 
 .route-section-dark {
@@ -202,7 +203,7 @@
   max-width: 15ch;
   margin: 0;
   font-size: clamp(2.8rem, 5vw, 5.2rem);
-  letter-spacing: -0.04em;
+  letter-spacing: -0.035em;
   line-height: 0.94;
   text-wrap: balance;
 }
@@ -221,7 +222,7 @@
 }
 
 .route-ledger {
-  border-top: 2px solid currentColor;
+  border-top: 1px solid var(--line-color);
 }
 
 .route-ledger-row {
@@ -229,7 +230,7 @@
   min-height: 9rem;
   align-items: center;
   padding: 1.5rem 0;
-  border-bottom: 2px solid currentColor;
+  border-bottom: 1px solid var(--line-color);
   grid-template-columns: minmax(10rem, 0.55fr) minmax(18rem, 1fr) minmax(20rem, 1.15fr);
   gap: 2rem;
   transition:
@@ -250,7 +251,7 @@
 .route-ledger-row > span {
   font-family: var(--font-mono);
   font-size: 0.75rem;
-  font-weight: 800;
+  font-weight: 600;
   text-transform: uppercase;
 }
 
@@ -273,12 +274,12 @@
   min-height: 2rem;
   align-items: center;
   padding: 0.35rem 0.65rem;
-  border: 2px solid currentColor;
+  border: 1px solid var(--line-color);
   background: var(--white);
   color: var(--ink);
   font-family: var(--font-mono);
   font-size: 0.75rem;
-  font-weight: 800;
+  font-weight: 600;
   text-transform: uppercase;
 }
 
@@ -301,7 +302,7 @@
   max-width: 10ch;
   margin: 0 0 1.5rem;
   font-size: clamp(2.8rem, 5vw, 5rem);
-  letter-spacing: -0.04em;
+  letter-spacing: -0.035em;
   line-height: 0.94;
 }
 
@@ -317,9 +318,9 @@
 }
 
 .route-checklist {
-  border: 2px solid var(--ink);
+  border: 1px solid var(--line-color);
   background: var(--white);
-  box-shadow: 10px 10px 0 var(--ink);
+  box-shadow: var(--shadow);
 }
 
 .route-checklist > div,
@@ -328,7 +329,7 @@
   min-height: 5.5rem;
   align-items: center;
   padding: 1rem 1.2rem;
-  border-bottom: 2px solid var(--ink);
+  border-bottom: 1px solid var(--line-color);
   grid-template-columns: 4rem 1fr;
   gap: 1rem;
 }
@@ -340,7 +341,7 @@
 .route-checklist span {
   color: var(--orange);
   font-family: var(--font-mono);
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .route-checklist strong {
@@ -352,24 +353,24 @@
   min-height: 24rem;
   align-items: end;
   padding: clamp(2rem, 5vw, 5rem);
-  border: 2px solid var(--ink);
+  border: 1px solid var(--line-color);
   background: var(--orange);
-  box-shadow: 12px 12px 0 var(--ink);
+  box-shadow: var(--shadow);
 }
 
 .route-quote blockquote {
   max-width: 22ch;
   margin: 0;
   font-size: clamp(2.2rem, 4.4vw, 4.8rem);
-  font-weight: 900;
-  letter-spacing: -0.04em;
+  font-weight: 600;
+  letter-spacing: -0.035em;
   line-height: 0.98;
 }
 
 .route-table-wrap {
   overflow-x: auto;
-  border: 2px solid var(--ink);
-  box-shadow: 10px 10px 0 var(--ink);
+  border: 1px solid var(--line-color);
+  box-shadow: var(--shadow);
 }
 
 .route-table {
@@ -382,8 +383,8 @@
 .route-table th,
 .route-table td {
   padding: 1.2rem;
-  border-right: 1px solid var(--ink);
-  border-bottom: 1px solid var(--ink);
+  border-right: 1px solid var(--line-color);
+  border-bottom: 1px solid var(--line-color);
   text-align: left;
   vertical-align: top;
 }
@@ -412,7 +413,7 @@
 .roadmap-controls {
   display: flex;
   flex-wrap: wrap;
-  border: 2px solid var(--ink);
+  border: 1px solid var(--line-color);
   border-bottom: 0;
 }
 
@@ -420,11 +421,11 @@
   min-height: 3rem;
   padding: 0.65rem 1rem;
   border: 0;
-  border-right: 2px solid var(--ink);
+  border-right: 1px solid var(--line-color);
   background: var(--white);
   color: var(--ink);
   cursor: pointer;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .roadmap-controls button:hover,
@@ -437,14 +438,14 @@
   display: grid;
   min-height: 13rem;
   padding: 2rem;
-  border: 2px solid var(--ink);
+  border: 1px solid var(--line-color);
   border-bottom: 0;
   grid-template-columns: 10rem minmax(18rem, 0.8fr) minmax(24rem, 1.2fr);
   gap: 2rem;
 }
 
 .roadmap-phase:last-child {
-  border-bottom: 2px solid var(--ink);
+  border-bottom: 1px solid var(--line-color);
 }
 
 .roadmap-phase:hover {
@@ -484,9 +485,9 @@
 .route-form {
   display: grid;
   padding: clamp(1.4rem, 3vw, 3rem);
-  border: 2px solid var(--ink);
+  border: 1px solid var(--line-color);
   background: var(--white);
-  box-shadow: 12px 12px 0 var(--ink);
+  box-shadow: var(--shadow);
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1.2rem;
 }
@@ -503,7 +504,7 @@
 .route-field label {
   font-family: var(--font-mono);
   font-size: 0.75rem;
-  font-weight: 800;
+  font-weight: 600;
   text-transform: uppercase;
 }
 
@@ -513,8 +514,8 @@
   width: 100%;
   min-height: 3.4rem;
   padding: 0.8rem 0.9rem;
-  border: 2px solid var(--ink);
-  border-radius: 0;
+  border: 1px solid var(--line-color);
+  border-radius: 14px;
   background: var(--white);
   color: var(--ink);
   font: inherit;
@@ -559,23 +560,23 @@
   min-height: 2.8rem;
   padding: 0.65rem 0;
   grid-column: 1 / -1;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .route-aside-ledger {
-  border-top: 2px solid var(--ink);
+  border-top: 1px solid var(--line-color);
 }
 
 .route-aside-ledger div {
   padding: 1.3rem 0;
-  border-bottom: 2px solid var(--ink);
+  border-bottom: 1px solid var(--line-color);
 }
 
 .route-aside-ledger span {
   color: var(--orange);
   font-family: var(--font-mono);
   font-size: 0.75rem;
-  font-weight: 800;
+  font-weight: 600;
   text-transform: uppercase;
 }
 
@@ -587,11 +588,11 @@
 }
 
 .route-disclosure {
-  border-top: 2px solid var(--ink);
+  border-top: 1px solid var(--line-color);
 }
 
 .route-disclosure details {
-  border-bottom: 2px solid var(--ink);
+  border-bottom: 1px solid var(--line-color);
 }
 
 .route-disclosure summary {
@@ -601,7 +602,7 @@
   padding: 1rem 0;
   cursor: pointer;
   font-size: 1.25rem;
-  font-weight: 900;
+  font-weight: 600;
   grid-template-columns: 1fr auto;
   gap: 1rem;
 }
@@ -647,14 +648,14 @@
   max-width: 16ch;
   margin: 0;
   font-size: clamp(2.8rem, 5vw, 5rem);
-  letter-spacing: -0.04em;
+  letter-spacing: -0.035em;
   line-height: 0.95;
 }
 
 .route-closing p {
   margin: 0 0 1rem;
   font-family: var(--font-mono);
-  font-weight: 800;
+  font-weight: 600;
   text-transform: uppercase;
 }
 
@@ -664,7 +665,7 @@
 
 .route-closing .button-primary {
   background: var(--ink);
-  box-shadow: 5px 5px 0 var(--white);
+  box-shadow: var(--shadow);
   color: var(--white);
 }
 
@@ -726,7 +727,7 @@
   .route-proof-world {
     min-height: auto;
     padding: 1rem;
-    box-shadow: 7px 7px 0 var(--ink);
+    box-shadow: var(--shadow);
   }
 
   .route-proof-stage {
@@ -825,4 +826,46 @@
   .route-ledger-row {
     transition-duration: 0.01ms !important;
   }
+}
+
+/* Soft-surface overrides for the lifecycle-shell system */
+.route-proof,
+.route-ledger,
+.route-table-wrap,
+.route-form,
+.route-quote,
+.route-closing,
+.route-state,
+.roadmap-controls {
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.route-proof {
+  background: var(--white);
+}
+
+.route-field input,
+.route-field textarea,
+.route-field select {
+  border-radius: 10px;
+}
+
+.route-hero h1 span,
+.route-signal {
+  color: var(--ink);
+}
+
+.route-hero h1 span {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-weight: 400;
+}
+
+.route-signal {
+  color: var(--ink3);
+}
+
+.route-section-orange {
+  background: var(--bg);
 }

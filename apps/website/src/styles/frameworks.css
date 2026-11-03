@@ -42,7 +42,7 @@
 .fw-reqs {
   display: grid;
   margin: 0;
-  border: var(--line-heavy);
+  border: var(--line);
 }
 
 .fw-reqs > div {
@@ -98,7 +98,7 @@
   padding: 1.1rem 1.25rem 1.1rem 3.25rem;
   border: var(--line);
   background: var(--white);
-  box-shadow: 4px 4px 0 var(--ink);
+  box-shadow: var(--shadow);
   font-weight: 600;
   position: relative;
 }
@@ -110,7 +110,7 @@
   left: 1.25rem;
   width: 1rem;
   height: 1rem;
-  border: 3px solid var(--ink);
+  border: 1px solid var(--line-color);
   background: var(--teal);
 }
 
@@ -133,7 +133,7 @@
   padding: 0.6rem 1rem;
   border: var(--line);
   background: var(--white);
-  box-shadow: 3px 3px 0 var(--ink);
+  box-shadow: var(--shadow);
   font-weight: 700;
   text-decoration: none;
 }
@@ -152,4 +152,22 @@
   .fw-split {
     gap: 2rem;
   }
+}
+
+.fw-reqs,
+.fw-evidence li,
+.fw-related a {
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.fw-evidence li::before {
+  border: 0;
+  border-radius: 50%;
+}
+
+.fw-note {
+  border-left: 0;
+  border-radius: var(--radius);
+  background: var(--bg);
 }
