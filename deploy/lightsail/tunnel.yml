@@ -1,6 +1,6 @@
 ingress:
   - hostname: fairmind.axonome.xyz
-    service: http://website:80
+    service: http://redirect:80
   - hostname: fairmind-app.axonome.xyz
     service: http://frontend:3000
   - hostname: fairmind-demo.axonome.xyz
