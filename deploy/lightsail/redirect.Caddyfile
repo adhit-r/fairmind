@@ -1,0 +1,3 @@
+:80 {
+	redir https://fairmind.xyz{uri} permanent
+}
