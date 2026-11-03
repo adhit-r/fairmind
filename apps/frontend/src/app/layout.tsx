@@ -1,8 +1,6 @@
 import type { Metadata } from "next"
 import { Inter } from "next/font/google"
-import { MantineProvider } from '@mantine/core';
 import "./globals.css"
-import "@mantine/core/styles.css";
 import { Toaster } from "@/components/ui/toaster"
 import { ErrorBoundary } from "@/components/ErrorBoundary"
 
@@ -60,12 +58,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${inter.variable} font-sans`}>
-        <MantineProvider>
-          <ErrorBoundary>
-            {children}
-            <Toaster />
-          </ErrorBoundary>
-        </MantineProvider>
+        <ErrorBoundary>
+          {children}
+          <Toaster />
+        </ErrorBoundary>
       </body>
     </html>
   )
