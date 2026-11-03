@@ -14,12 +14,21 @@ from .connection import Base
 
 
 class TextUUID(TypeDecorator):
-    """UUID values kept in a varchar column (users.id is varchar in the database); binds str(value)."""
+    """A user id kept as text on Postgres, where users.id is varchar; binds str(value) and returns it as stored.
+
+    Elsewhere (SQLite development databases and tests) it stays a UUID column so it
+    matches users.id there and SQLite's foreign-key checks accept it.
+    """
 
     impl = String
     cache_ok = True
 
+    def load_dialect_impl(self, dialect):
+        return dialect.type_descriptor(String() if dialect.name == "postgresql" else UUID())
+
     def process_bind_param(self, value, dialect):
+        if dialect.name != "postgresql":
+            return value
         return None if value is None else str(value)
 
 
