@@ -16,6 +16,8 @@ const KIND_LABEL: Record<DiscoveredAsset['kind'], string> = {
   llm_app: 'LLM application',
   ai_assisted_dev: 'AI-assisted development',
 }
+const KIND_NAME: Record<IntegrationKind, string> = { mlflow: 'MLflow registry', github: 'GitHub org', huggingface: 'Hugging Face' }
+const SOURCE_LABEL: Record<IntegrationKind, string> = { mlflow: 'MLflow', github: 'GitHub', huggingface: 'Hugging Face' }
 const STAGE_LABEL = Object.fromEntries(STAGES.map((s) => [s.key, s.label]))
 
 function when(iso: string | null) {
@@ -38,7 +40,12 @@ function AddConnector({ onCreate }: { onCreate: (b: { kind: IntegrationKind; nam
       await onCreate({
         kind,
         name: v('name'),
-        config: kind === 'mlflow' ? { tracking_uri: v('tracking_uri') } : { owner: v('owner'), repos: v('repos') },
+        config:
+          kind === 'mlflow'
+            ? { tracking_uri: v('tracking_uri') }
+            : kind === 'github'
+              ? { owner: v('owner'), repos: v('repos') }
+              : { owner: v('owner'), name_contains: v('name_contains'), pipeline_tag: v('pipeline_tag'), library: v('library') },
         token: v('token') || undefined,
       })
       form.reset()
@@ -52,14 +59,14 @@ function AddConnector({ onCreate }: { onCreate: (b: { kind: IntegrationKind; nam
   return (
     <form onSubmit={submit} className="grid gap-3 border-t border-[var(--fm-line)] pt-4">
       <div className="flex gap-1 rounded-full bg-[var(--fm-bg)] p-1 text-[12.5px] font-medium">
-        {(['mlflow', 'github'] as IntegrationKind[]).map((k) => (
+        {(Object.keys(KIND_NAME) as IntegrationKind[]).map((k) => (
           <button
             key={k}
             type="button"
             onClick={() => setKind(k)}
             className={cn('h-7 flex-1 rounded-full text-[var(--fm-ink2)]', kind === k && 'bg-[var(--fm-ink)] text-white')}
           >
-            {k === 'mlflow' ? 'MLflow registry' : 'GitHub org'}
+            {KIND_NAME[k]}
           </button>
         ))}
       </div>
@@ -72,6 +79,27 @@ function AddConnector({ onCreate }: { onCreate: (b: { kind: IntegrationKind; nam
           <label className={label} htmlFor="tracking_uri">Tracking URI</label>
           <input id="tracking_uri" name="tracking_uri" required className={field} inputMode="url" autoComplete="off" />
         </div>
+      ) : kind === 'huggingface' ? (
+        <>
+          <div>
+            <label className={label} htmlFor="owner">User or organisation on the Hub</label>
+            <input id="owner" name="owner" required className={field} autoComplete="off" />
+          </div>
+          <div>
+            <label className={label} htmlFor="name_contains">Name contains (optional)</label>
+            <input id="name_contains" name="name_contains" className={field} autoComplete="off" />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className={label} htmlFor="pipeline_tag">Pipeline tag (optional)</label>
+              <input id="pipeline_tag" name="pipeline_tag" className={field} autoComplete="off" />
+            </div>
+            <div>
+              <label className={label} htmlFor="library">Library (optional)</label>
+              <input id="library" name="library" className={field} autoComplete="off" />
+            </div>
+          </div>
+        </>
       ) : (
         <>
           <div>
@@ -85,7 +113,11 @@ function AddConnector({ onCreate }: { onCreate: (b: { kind: IntegrationKind; nam
         </>
       )}
       <div>
-        <label className={label} htmlFor="token">{kind === 'github' ? 'Token (optional; without one, public repos only, 12 per sync)' : 'Token (optional)'}</label>
+        <label className={label} htmlFor="token">{kind === 'github'
+            ? 'Token (optional; without one, public repos only, 12 per sync)'
+            : kind === 'huggingface'
+              ? 'Token (optional; without one, public models only, 12 per sync)'
+              : 'Token (optional)'}</label>
         <input id="token" name="token" type="password" className={field} autoComplete="off" />
       </div>
       {err && <p className="rounded-[10px] bg-[#fde9ea] px-3 py-2 text-[12.5px] text-[#b4232c]">{err}</p>}
@@ -102,8 +134,23 @@ function AssetRow({ a, onPromote, onIgnore }: { a: DiscoveredAsset; onPromote: (
   const [line, setLine] = useState<string>(a.metadata.business_line || '')
   const [busy, setBusy] = useState(false)
   const sig = a.metadata.signals as { llm_sdks?: string[]; ml_libraries?: string[]; agent_configs?: string[]; model_files?: string[] } | undefined
+  const m = a.metadata
   const detail =
-    a.source === 'mlflow'
+    a.source === 'huggingface'
+      ? [
+          m.pipeline_tag,
+          m.library,
+          m.license && `licence ${m.license}`,
+          typeof m.downloads === 'number' && `${m.downloads.toLocaleString('en-GB')} downloads`,
+          m.last_modified && `updated ${when(m.last_modified)}`,
+          m.datasets?.length > 0 && `datasets ${m.datasets.slice(0, 3).join(', ')}`,
+          m.languages?.length > 0 && `languages ${m.languages.slice(0, 4).join(', ')}`,
+          m.gated && 'gated',
+          m.private && 'private',
+        ]
+          .filter(Boolean)
+          .join(' · ')
+      : a.source === 'mlflow'
       ? `${(a.metadata.versions?.length ?? 0) as number} version${a.metadata.versions?.length === 1 ? '' : 's'}${a.metadata.description ? ` · ${a.metadata.description}` : ''}`
       : [...(sig?.llm_sdks ?? []), ...(sig?.ml_libraries ?? []), ...(sig?.agent_configs ?? []), ...(sig?.model_files ?? [])].slice(0, 6).join(' · ')
 
@@ -115,7 +162,12 @@ function AssetRow({ a, onPromote, onIgnore }: { a: DiscoveredAsset; onPromote: (
           <span className="rounded-full bg-[var(--fm-bg)] px-2 py-0.5 text-[11px] font-medium text-[var(--fm-ink2)]">{KIND_LABEL[a.kind]}</span>
         </div>
         <div className="truncate text-[12px] text-[var(--fm-ink2)]">
-          {a.source === 'mlflow' ? 'MLflow' : 'GitHub'} · {a.externalId}
+          {m.url ? (
+            <a href={m.url} target="_blank" rel="noreferrer" className="hover:text-[var(--fm-ink)] hover:underline">{SOURCE_LABEL[a.source]}</a>
+          ) : (
+            SOURCE_LABEL[a.source]
+          )}{' '}
+          · {a.externalId}
           {detail && ` · ${detail}`}
         </div>
       </div>
@@ -182,7 +234,9 @@ export default function IntegrationsPage() {
                 <div className="min-w-0">
                   <div className="truncate text-[13.5px] font-semibold">{i.name}</div>
                   <div className="truncate text-[12px] text-[var(--fm-ink2)]">
-                    {i.kind === 'mlflow' ? String(i.config.tracking_uri ?? '') : `github.com/${String(i.config.owner ?? '')}`}
+                    {i.kind === 'mlflow'
+                      ? String(i.config.tracking_uri ?? '')
+                      : `${i.kind === 'github' ? 'github.com' : 'huggingface.co'}/${String(i.config.owner ?? '')}`}
                   </div>
                 </div>
                 <button
@@ -207,7 +261,7 @@ export default function IntegrationsPage() {
               <div className="mt-2 flex items-center justify-between text-[11.5px] text-[var(--fm-ink3)]">
                 <span>
                   Last sync {when(i.lastSyncedAt)}
-                  {i.lastSync && ` · ${i.lastSync.found} found, ${i.lastSync.created} new`}
+                  {i.lastSync?.error ? ` · failed: ${i.lastSync.error}` : i.lastSync && ` · ${i.lastSync.found} found, ${i.lastSync.created} new`}
                 </span>
                 <button type="button" onClick={() => remove(i.id)} className="hover:text-[var(--fm-ink)]">Remove</button>
               </div>
