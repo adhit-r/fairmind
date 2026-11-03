@@ -618,3 +618,19 @@ def test_india_bias_needs_an_india_attribute_and_drift_needs_a_baseline(tmp_data
     drift = client.get(f"{PACKS}/evaluations/EV-FAI-07").json()["results"]
     assert drift["status"] == "insufficient" and drift["systems"][0]["detail"] == "No baseline run to compare against"
     assert client.get(f"{PACKS}/evaluations/EV-TST-01").json()["results"] is None  # no stored results to read yet
+
+
+def test_deciding_on_your_own_proposal_is_recorded_not_blocked(tmp_database):
+    org_id, author = _installed_org(tmp_database)
+    run = _to_gate(author)
+    submitted = [e["payload"]["submittedBy"] for e in run["events"] if e["kind"] == "step.completed" and "submittedBy" in e["payload"]]
+    assert run["proposalBy"] == submitted[-1]
+
+    decided = _decide(author, run, "approve")  # allowed: a one-person organisation must still be able to decide
+    gate = next(e for e in reversed(decided["events"]) if e["kind"] == "gate.decided")
+    assert gate["payload"]["selfReview"] is True
+
+    reviewer = _client(tmp_database, org_id)
+    other = _decide(reviewer, _to_gate(author), "approve")
+    gate = next(e for e in reversed(other["events"]) if e["kind"] == "gate.decided")
+    assert "selfReview" not in gate["payload"]

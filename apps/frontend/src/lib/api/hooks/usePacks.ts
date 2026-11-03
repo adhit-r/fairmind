@@ -275,6 +275,8 @@ export interface Run extends RunSummary {
   systemId: string | null
   approvalRequestId: string | null
   approval: { status: string; decisionNotes: string | null } | null
+  /** Who recorded the step output now up for approval; deciding on your own proposal is allowed but recorded. */
+  proposalBy: string | null
   finishedAt: string | null
   events: RunEvent[]
   chainValid: boolean

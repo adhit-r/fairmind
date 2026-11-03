@@ -1,12 +1,13 @@
 'use client'
 
 import { useParams } from 'next/navigation'
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { GATE_KINDS, decisionsFor, usePackActions, useRun, useWaitingRuns, useWorkflow, versionName, type Decision, type RunEvent } from '@/lib/api/hooks/usePacks'
 import { IsoFigure } from '@/components/packs/IsoFigure'
 import { runFigure } from '@/components/packs/figures'
 import { BTN, BTN_P, Crumbs, ErrorNote, Heading, LABEL, LINE, Loading, MUTED, Num, Pill, StatusPill, cap, when } from '@/components/packs/parts'
 import { cn } from '@/lib/utils'
+import { useAuth } from '@/lib/api/hooks/useAuth'
 
 const DECISION_LABEL: Record<Decision, [string, string]> = {
   approve: ['Approve', 'Approving'],
@@ -20,7 +21,9 @@ function detailOf(e: RunEvent): string {
   if (typeof p.summary === 'string') return typeof p.route === 'string' ? `${p.summary} (${p.route})` : p.summary
   if (typeof p.decision === 'string') {
     const label = DECISION_LABEL[p.decision as Decision]?.[0] ?? p.decision
-    return [label, p.notes, p.escalated ? `Escalated after ${p.escalated}` : null].filter(Boolean).join('. ')
+    return [label, p.notes, p.escalated ? `Escalated after ${p.escalated}` : null, p.selfReview ? 'Decided by the person who recorded the proposal' : null]
+      .filter(Boolean)
+      .join('. ')
   }
   if (typeof p.sealedHeadHash === 'string') return `Sealed events 1 to ${String(p.sealedThroughSeq)}`
   return ''
@@ -28,6 +31,11 @@ function detailOf(e: RunEvent): string {
 
 export default function RunPage() {
   const { runId } = useParams<{ runId: string }>()
+  const { getCurrentUser } = useAuth()
+  const [me, setMe] = useState<string | null>(null)
+  useEffect(() => {
+    getCurrentUser().then((u) => setMe(u?.id ?? null)).catch(() => setMe(null))
+  }, [getCurrentUser])
   const run = useRun(runId)
   const { decideRun, submitStepOutput } = usePackActions()
   const workflow = useWorkflow(run.data?.workflowId)
@@ -227,6 +235,12 @@ export default function RunPage() {
                   className="resize-y rounded-[10px] border border-[var(--fm-line)] bg-white p-2.5 text-sm text-[var(--fm-ink)] focus:border-[var(--fm-ink)] focus:outline-none"
                 />
               </div>
+              {me && r.proposalBy === me && (
+                <p role="note" className="m-0 rounded-[10px] border border-[#f3d38a] bg-[#fff8e6] px-3 py-2.5 text-[13px] leading-snug text-[#7a5200]">
+                  You recorded the proposal this decision is about.
+                  {workflow.data?.separationOfDuties ? ` The workflow asks: ${workflow.data.separationOfDuties.replace(/\.$/, '')}.` : ''} You can still decide; the ledger will show it was a self-review.
+                </p>
+              )}
               {failure && <ErrorNote message={failure} />}
               <div className="flex flex-wrap gap-2.5">
                 {decisions.map((d, i) => (
