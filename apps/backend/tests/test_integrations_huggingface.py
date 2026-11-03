@@ -9,6 +9,9 @@ import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+
+from api.routes import org_scope
+from src.application.services.governance_assurance_service import OrgMembership
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -69,6 +72,10 @@ def client(monkeypatch):
     app = FastAPI()
     app.include_router(integrations.router, prefix="/api/v1")
     app.dependency_overrides[get_db] = override_db
+    # The router now requires an active membership (org_scope); stand in a signed-in owner of ORG.
+    owner = OrgMembership(ORG, "hub-test-owner", "owner", ())
+    app.dependency_overrides[org_scope.org_member] = lambda: owner
+    app.dependency_overrides[org_scope.org_mutator] = lambda: owner
 
     @app.middleware("http")
     async def org(request, call_next):
