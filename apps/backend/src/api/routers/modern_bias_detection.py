@@ -15,9 +15,19 @@ from ..services.modern_llm_bias_service import (
     ExplainabilityMethod
 )
 
+from api.routes.org_scope import org_member
+from config.auth import get_current_active_user, require_admin
+from src.application.services.governance_assurance_service import OrgMembership
+
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/modern-bias", tags=["Modern Bias Detection"])
+# Analysis endpoints are stateless over the request body (sign-in only); the
+# stored-results dashboard read needs an organisation (org_member).
+router = APIRouter(
+    prefix="/modern-bias",
+    tags=["Modern Bias Detection"],
+    dependencies=[Depends(get_current_active_user)],
+)
 
 # Initialize the modern bias detection service
 bias_service = ModernLLMBiasService()
@@ -240,7 +250,9 @@ async def get_available_bias_tests():
         logger.error(f"Error getting bias tests: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get bias tests: {str(e)}")
 
-@router.put("/bias-tests/configure")
+# The test configuration is one process-wide dict shared by every tenant, so only
+# a platform admin may change it.
+@router.put("/bias-tests/configure", dependencies=[Depends(require_admin)])
 async def configure_bias_test(request: BiasTestConfigurationRequest):
     """
     Configure individual bias tests
@@ -381,9 +393,9 @@ async def _log_batch_evaluation(count: int, risk_levels: List[str]):
         logger.error(f"Error logging batch evaluation: {e}")
 
 @router.get("/detection-results")
-async def get_detection_results():
+async def get_detection_results(m: OrgMembership = Depends(org_member)):
     """
-    Get modern bias detection results for dashboard display from database
+    Get this organisation's modern bias detection results for dashboard display from database
     """
     try:
         from database.connection import db_manager
@@ -394,10 +406,11 @@ async def get_detection_results():
             query = text("""
                 SELECT test_name, bias_score, is_biased, confidence, category, created_at
                 FROM bias_test_results
+                WHERE org_id = :org_id
                 ORDER BY created_at DESC
                 LIMIT 10
             """)
-            results = session.execute(query)
+            results = session.execute(query, {"org_id": m.org_id})
             
             bias_tests = []
             total_tests = 0
@@ -431,11 +444,11 @@ async def get_detection_results():
             explainability_query = text("""
                 SELECT DISTINCT explainability_method, insights
                 FROM bias_test_results
-                WHERE explainability_method IS NOT NULL
+                WHERE explainability_method IS NOT NULL AND org_id = :org_id
                 ORDER BY created_at DESC
                 LIMIT 5
             """)
-            explain_results = session.execute(explainability_query)
+            explain_results = session.execute(explainability_query, {"org_id": m.org_id})
             
             explainability_analysis = []
             for row in explain_results:

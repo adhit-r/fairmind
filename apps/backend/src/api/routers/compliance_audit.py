@@ -10,7 +10,9 @@ import logging
 import uuid
 from typing import List
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
+
+from config.auth import get_current_active_user
 
 from src.api.schemas.compliance_audit import (
     ComplianceAuditRequest,
@@ -22,7 +24,13 @@ from src.api.schemas.compliance_audit import (
 from src.application.services.api_boundary_dependencies import ComplianceAuditEngine
 
 logger = logging.getLogger("fairmind.compliance_audit")
-router = APIRouter(prefix="/api/v1/compliance/audit", tags=["compliance-audit"])
+# Stateless: scores the model description in the request against the framework
+# registry; sign-in only.
+router = APIRouter(
+    prefix="/api/v1/compliance/audit",
+    tags=["compliance-audit"],
+    dependencies=[Depends(get_current_active_user)],
+)
 
 _engine = ComplianceAuditEngine()
 

@@ -9,6 +9,7 @@ Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7
 """
 
 from fastapi import APIRouter, HTTPException, Depends, status, Query
+from sqlalchemy.orm import Session
 from typing import Dict, List, Any, Optional
 from pydantic import BaseModel, Field, validator
 from datetime import datetime, timedelta
@@ -52,7 +53,9 @@ from ..middleware.india_compliance_auth import (
     ComplianceRole,
     UserContext,
 )
-from config.auth import get_current_user
+from api.routes.ai_governance import _require_system_access
+from config.auth import TokenData, get_current_active_user, get_current_user
+from database.connection import get_db
 
 logger = logging.getLogger(__name__)
 
@@ -212,7 +215,9 @@ async def list_frameworks(current_user: str = Depends(get_current_user)):
 @router.post("/check", response_model=ComplianceCheckResponse)
 async def check_compliance(
     request: ComplianceCheckRequest,
-    user_context: UserContext = Depends(get_current_user_context)
+    user_context: UserContext = Depends(get_current_user_context),
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
     """
     Check AI system compliance against India-specific frameworks
@@ -247,6 +252,7 @@ async def check_compliance(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Access denied to system: {request.system_id}"
             )
+        _require_system_access(db, request.system_id, current_user)
         
         # Validate request
         is_valid, error_msg = ComplianceCheckValidator.validate(request.dict())
@@ -329,7 +335,9 @@ async def check_compliance(
 @router.get("/evidence/{evidence_id}", response_model=EvidenceResponse)
 async def get_evidence(
     evidence_id: str,
-    user_context: UserContext = Depends(get_current_user_context)
+    user_context: UserContext = Depends(get_current_user_context),
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
     """
     Retrieve specific compliance evidence by ID
@@ -358,6 +366,7 @@ async def get_evidence(
         
         if not evidence:
             raise HTTPException(status_code=404, detail="Evidence not found")
+        _require_system_access(db, str(evidence["system_id"]), current_user)
         
         # Log audit entry
         await AuditLogger.log_evidence_access(
@@ -377,7 +386,9 @@ async def get_evidence(
 @router.post("/bias-detection", response_model=BiasDetectionResponse)
 async def detect_bias(
     request: BiasDetectionRequest,
-    user_context: UserContext = Depends(get_current_user_context)
+    user_context: UserContext = Depends(get_current_user_context),
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
     """
     Detect bias in AI system for Indian demographics
@@ -414,6 +425,7 @@ async def detect_bias(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Access denied to system: {request.system_id}"
             )
+        _require_system_access(db, request.system_id, current_user)
         
         # Validate request
         is_valid, error_msg = BiasDetectionValidator.validate(request.dict())
@@ -490,7 +502,9 @@ async def detect_bias(
 async def generate_report(
     system_id: str = Query(..., description="System identifier"),
     frameworks: List[IndiaFramework] = Query(..., description="Frameworks to include"),
-    user_context: UserContext = Depends(get_current_user_context)
+    user_context: UserContext = Depends(get_current_user_context),
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
     """
     Generate comprehensive India compliance report
@@ -527,6 +541,7 @@ async def generate_report(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Access denied to system: {system_id}"
             )
+        _require_system_access(db, system_id, current_user)
         
         logger.info(f"Generating compliance report for system {system_id} by user {user_context.user_id}")
         
@@ -547,6 +562,8 @@ async def generate_report(
         )
         
         return report
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error generating report: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -557,7 +574,9 @@ async def get_compliance_trends(
     system_id: str = Query(..., description="System identifier"),
     framework: IndiaFramework = Query(..., description="Framework"),
     timeframe: str = Query(default="30d", description="Timeframe (7d, 30d, 90d, 1y)"),
-    user_context: UserContext = Depends(get_current_user_context)
+    user_context: UserContext = Depends(get_current_user_context),
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
     """
     Get compliance trends over time
@@ -590,6 +609,7 @@ async def get_compliance_trends(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Access denied to system: {system_id}"
             )
+        _require_system_access(db, system_id, current_user)
         
         logger.info(f"Retrieving compliance trends for system {system_id}, framework {framework}")
         
@@ -600,6 +620,8 @@ async def get_compliance_trends(
         )
         
         return trends
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error retrieving trends: {e}")
         raise HTTPException(status_code=500, detail=str(e))

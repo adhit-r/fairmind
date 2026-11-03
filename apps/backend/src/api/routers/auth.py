@@ -697,15 +697,23 @@ async def create_user(
 async def list_users(
     current_user: TokenData = Depends(require_admin)
 ):
-    """List all users (admin only). Returns users from DB or cache."""
+    """List the users of the caller's organisation (admin only). Returns users from DB or cache."""
     try:
+        if not current_user.org_id:
+            return {"users": []}
         # Query users from DB if available
         try:
+            from api.routes.org_scope import ORG_MEMBER_USER_IDS, plain_id
             from config.database import get_db
             from sqlalchemy import text
             async with get_db() as db:
                 result = await db.execute(
-                    text("SELECT id, email, username, name, roles, is_active, last_login, created_at FROM users ORDER BY created_at DESC LIMIT 100")
+                    text(
+                        "SELECT id, email, username, name, roles, is_active, last_login, created_at FROM users "
+                        f"WHERE {plain_id('id')} IN ({ORG_MEMBER_USER_IDS}) "
+                        "ORDER BY created_at DESC LIMIT 100"
+                    ),
+                    {"org_id": str(current_user.org_id)},
                 )
                 rows = result.mappings().all()
                 users = [

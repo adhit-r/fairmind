@@ -3,7 +3,8 @@ Real Compliance Check Endpoint
 Uses evidence-based assessment similar to Vanta/PwC GRC tools
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Dict, List, Any, Optional
 from datetime import datetime
@@ -15,8 +16,19 @@ from api.services.evidence_collection_service import (
     TechnicalControl
 )
 from api.services.automated_evidence_collector import AutomatedEvidenceCollector
+from api.routes.org_scope import org_member, refuse_foreign_system
+from config.auth import get_current_active_user
+from database.connection import get_db
+from src.application.services.governance_assurance_service import OrgMembership
 
-router = APIRouter(prefix="/api/v1/compliance", tags=["compliance"])
+# Reference data (frameworks, controls) needs sign-in only. Anything that collects
+# or reads stored evidence needs an organisation (org_member), because the
+# evidence store is one process-wide dict: each record is tagged with its owner.
+router = APIRouter(
+    prefix="/api/v1/compliance",
+    tags=["compliance"],
+    dependencies=[Depends(get_current_active_user)],
+)
 
 # Initialize evidence collection service
 evidence_service = EvidenceCollectionService()
@@ -124,7 +136,11 @@ async def get_technical_controls(framework: Optional[str] = None):
 
 
 @router.post("/check")
-async def check_compliance(request: ComplianceCheckRequest) -> ComplianceCheckResponse:
+async def check_compliance(
+    request: ComplianceCheckRequest,
+    m: OrgMembership = Depends(org_member),
+    db: Session = Depends(get_db),
+) -> ComplianceCheckResponse:
     """
     Perform evidence-based compliance check
     
@@ -134,11 +150,16 @@ async def check_compliance(request: ComplianceCheckRequest) -> ComplianceCheckRe
     3. Identifies gaps and provides recommendations
     """
     
+    if request.model_id:
+        refuse_foreign_system(db, request.model_id, m.org_id)
+
     # Collect evidence for all applicable controls
     evidence_list = await evidence_service.collect_all_evidence(
         system_data=request.system_data,
         framework=request.framework
     )
+    for evidence in evidence_list:
+        evidence.metadata["org_id"] = m.org_id
     
     # Calculate compliance score
     compliance_score = evidence_service.get_compliance_score(evidence_list)
@@ -191,11 +212,11 @@ async def check_compliance(request: ComplianceCheckRequest) -> ComplianceCheckRe
 
 
 @router.get("/evidence/{evidence_id}")
-async def get_evidence(evidence_id: str) -> EvidenceResponse:
-    """Get detailed evidence by ID"""
+async def get_evidence(evidence_id: str, m: OrgMembership = Depends(org_member)) -> EvidenceResponse:
+    """Get detailed evidence by ID (only evidence this organisation collected)"""
     
     evidence = evidence_service.evidence_store.get(evidence_id)
-    if not evidence:
+    if not evidence or evidence.metadata.get("org_id") != m.org_id:
         raise HTTPException(status_code=404, detail="Evidence not found")
     
     control = evidence_service.technical_controls.get(evidence.control_id)
@@ -213,7 +234,12 @@ async def get_evidence(evidence_id: str) -> EvidenceResponse:
 
 
 @router.get("/model/{model_id}/compliance")
-async def get_model_compliance(model_id: str, framework: str = "eu_ai_act"):
+async def get_model_compliance(
+    model_id: str,
+    framework: str = "eu_ai_act",
+    m: OrgMembership = Depends(org_member),
+    db: Session = Depends(get_db),
+):
     """
     Get compliance status for a specific model with AUTOMATED evidence collection
     
@@ -228,6 +254,8 @@ async def get_model_compliance(model_id: str, framework: str = "eu_ai_act"):
     3. Returns detailed compliance report
     """
     
+    refuse_foreign_system(db, model_id, m.org_id)
+
     try:
         # AUTOMATED: Collect evidence from FairMind's existing features
         system_data = await automated_collector.collect_evidence_for_model(
@@ -240,6 +268,8 @@ async def get_model_compliance(model_id: str, framework: str = "eu_ai_act"):
             system_data=system_data,
             framework=framework
         )
+        for evidence in evidence_list:
+            evidence.metadata["org_id"] = m.org_id
         
         # Calculate compliance score
         compliance_score = evidence_service.get_compliance_score(evidence_list)

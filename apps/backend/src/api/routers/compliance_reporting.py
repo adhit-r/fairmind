@@ -5,7 +5,7 @@ Endpoints for regulatory compliance checking, audit report generation,
 and fairness documentation.
 """
 
-from fastapi import APIRouter, HTTPException, Body, Request, Query
+from fastapi import APIRouter, Depends, HTTPException, Body, Request, Query
 from typing import Dict, List, Any, Optional
 from pydantic import BaseModel, Field
 from datetime import datetime
@@ -20,10 +20,18 @@ from ..services.compliance_reporting_service import (
 
 # Import org isolation decorators
 from core.decorators.org_isolation import isolate_by_org
+from api.routes.org_scope import org_member
+from config.auth import get_current_active_user
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/compliance", tags=["Compliance & Reporting"])
+# Stateless over the request body, so sign-in is enough; the two routes that name
+# a system_id also take org_member, which answers 404 for another tenant's system.
+router = APIRouter(
+    prefix="/api/v1/compliance",
+    tags=["Compliance & Reporting"],
+    dependencies=[Depends(get_current_active_user)],
+)
 
 # Initialize service
 compliance_service = ComplianceReportingService()
@@ -178,7 +186,7 @@ async def check_compliance(request: ComplianceCheckRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/audit-report")
+@router.post("/audit-report", dependencies=[Depends(org_member)])
 async def generate_audit_report(request: AuditReportRequest):
     """
     Generate comprehensive audit report
@@ -223,7 +231,7 @@ async def generate_fairness_documentation(request: FairnessDocumentationRequest)
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/stakeholder-dashboard")
+@router.post("/stakeholder-dashboard", dependencies=[Depends(org_member)])
 async def get_stakeholder_dashboard(request: StakeholderDashboardRequest):
     """
     Get stakeholder dashboard data

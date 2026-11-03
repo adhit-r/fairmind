@@ -2,7 +2,7 @@
 Database API Routes - Real data from Supabase/Prisma
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from typing import List, Dict, Any
 import logging
 from datetime import datetime
@@ -11,16 +11,21 @@ import json
 
 # Direct access to database manager instead of broken service
 from database.connection import db_manager
+from api.routes.org_scope import ORG_MEMBER_USER_IDS, org_member, plain_id
+from src.application.services.governance_assurance_service import OrgMembership
 
-router = APIRouter(prefix="/database", tags=["database"])
+# Every read is limited to the caller's organisation (org_id columns, or the
+# organisation's active members for tables that only record a user).
+router = APIRouter(prefix="/database", tags=["database"], dependencies=[Depends(org_member)])
 
 # Additional router for main API endpoints (without /database prefix)
-main_router = APIRouter(tags=["main-api"])
+main_router = APIRouter(tags=["main-api"], dependencies=[Depends(org_member)])
 
 logger = logging.getLogger(__name__)
 
+
 @router.get("/profiles")
-async def get_profiles(limit: int = 10):
+async def get_profiles(limit: int = 10, m: OrgMembership = Depends(org_member)):
     """Get user profiles from database (Using direct SQL on auth.users)"""
     try:
         # Supabase auth.users table is not directly accessible via public schema usually
@@ -34,8 +39,9 @@ async def get_profiles(limit: int = 10):
                 result = session.execute(text(f"""
                     SELECT id, username, full_name, avatar_url, role, created_at
                     FROM profiles
-                    LIMIT {limit}
-                """))
+                    WHERE {plain_id('id')} IN ({ORG_MEMBER_USER_IDS})
+                    LIMIT :limit
+                """), {"org_id": m.org_id, "limit": limit})
                 
                 for row in result:
                     profiles_data.append({
@@ -60,7 +66,7 @@ async def get_profiles(limit: int = 10):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/bias-analyses")
-async def get_bias_analyses(limit: int = 10):
+async def get_bias_analyses(limit: int = 10, m: OrgMembership = Depends(org_member)):
     """Get geographic bias analyses from database"""
     try:
         analyses_data = []
@@ -69,9 +75,10 @@ async def get_bias_analyses(limit: int = 10):
                 result = session.execute(text(f"""
                     SELECT id, model_id, source_country, target_country, bias_score, risk_level, analysis_date
                     FROM geographic_bias_analyses
+                    WHERE org_id = :org_id
                     ORDER BY analysis_date DESC
-                    LIMIT {limit}
-                """))
+                    LIMIT :limit
+                """), {"org_id": m.org_id, "limit": limit})
                 
                 for row in result:
                     analyses_data.append({
@@ -96,7 +103,7 @@ async def get_bias_analyses(limit: int = 10):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/audit-logs")
-async def get_audit_logs(limit: int = 10):
+async def get_audit_logs(limit: int = 10, m: OrgMembership = Depends(org_member)):
     """Get audit logs from database"""
     try:
         logs_data = []
@@ -106,9 +113,10 @@ async def get_audit_logs(limit: int = 10):
                 result = session.execute(text(f"""
                     SELECT id, user_id, action, resource_type, resource_id, details, ip_address, created_at
                     FROM audit_logs
+                    WHERE {plain_id('user_id')} IN ({ORG_MEMBER_USER_IDS})
                     ORDER BY created_at DESC
-                    LIMIT {limit}
-                """))
+                    LIMIT :limit
+                """), {"org_id": m.org_id, "limit": limit})
                 
                 for row in result:
                     details = row.details
@@ -142,7 +150,7 @@ async def get_audit_logs(limit: int = 10):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/country-metrics")
-async def get_country_metrics(limit: int = 10):
+async def get_country_metrics(limit: int = 10, m: OrgMembership = Depends(org_member)):
     """Get country performance metrics from database"""
     try:
         # Stub for now as table might be complex
@@ -156,7 +164,7 @@ async def get_country_metrics(limit: int = 10):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/dashboard-stats")
-async def get_dashboard_stats():
+async def get_dashboard_stats(m: OrgMembership = Depends(org_member)):
     """Get dashboard statistics using Direct SQL - matches frontend DashboardStats interface"""
     try:
         stats = {
@@ -174,7 +182,10 @@ async def get_dashboard_stats():
         with db_manager.get_session() as session:
             # Count models
             try:
-                result = session.execute(text("SELECT COUNT(*) FROM models WHERE status = 'active'"))
+                result = session.execute(
+                    text("SELECT COUNT(*) FROM models WHERE status = 'active' AND org_id = :org_id"),
+                    {"org_id": m.org_id},
+                )
                 stats["totalModels"] = result.scalar() or 0
             except Exception as e:
                 logger.warning(f"Error counting models: {e}")
@@ -182,7 +193,9 @@ async def get_dashboard_stats():
                 
             # Count datasets
             try:
-                result = session.execute(text("SELECT COUNT(*) FROM datasets"))
+                result = session.execute(
+                    text("SELECT COUNT(*) FROM datasets WHERE org_id = :org_id"), {"org_id": m.org_id}
+                )
                 stats["totalDatasets"] = result.scalar() or 0
             except Exception as e:
                 logger.warning(f"Error counting datasets (table may not exist): {e}")
@@ -192,8 +205,9 @@ async def get_dashboard_stats():
             try:
                 result = session.execute(text("""
                     SELECT COUNT(*) FROM geographic_bias_analyses 
-                    WHERE compliance_status != 'completed' OR compliance_status IS NULL
-                """))
+                    WHERE org_id = :org_id
+                    AND (compliance_status != 'completed' OR compliance_status IS NULL)
+                """), {"org_id": m.org_id})
                 stats["activeScans"] = result.scalar() or 0
             except Exception as e:
                 logger.warning(f"Error counting active scans: {e}")
@@ -201,12 +215,13 @@ async def get_dashboard_stats():
                 
             # Get recent activity - format as ActivityItem[]
             try:
-                result = session.execute(text("""
+                result = session.execute(text(f"""
                     SELECT id, action, resource_type, resource_id, created_at, user_id
                     FROM audit_logs
+                    WHERE {plain_id('user_id')} IN ({ORG_MEMBER_USER_IDS})
                     ORDER BY created_at DESC
                     LIMIT 5
-                """))
+                """), {"org_id": m.org_id})
                 activity = []
                 for row in result:
                     # Format to match ActivityItem interface: {id, type, description, timestamp, user}
@@ -232,8 +247,8 @@ async def get_dashboard_stats():
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/models")
-async def get_models():
-    """Get models for frontend display from database"""
+async def get_models(m: OrgMembership = Depends(org_member)):
+    """Get this organisation's models for frontend display from database"""
     try:
         models_data = []
         
@@ -242,9 +257,9 @@ async def get_models():
                 SELECT id, name, description, model_type, version, status,
                        tags, metadata, upload_date, updated_at
                 FROM models
-                WHERE status = 'active'
+                WHERE status = 'active' AND org_id = :org_id
                 ORDER BY upload_date DESC
-            """))
+            """), {"org_id": m.org_id})
             
             for row in result:
                 # Parse JSON fields
@@ -293,7 +308,7 @@ async def get_models():
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/reports")
-async def get_reports():
+async def get_reports(m: OrgMembership = Depends(org_member)):
     """Get reports for frontend display"""
     # Placeholder for now
     return {
@@ -303,7 +318,7 @@ async def get_reports():
     }
 
 @router.get("/monitoring-metrics")
-async def get_monitoring_metrics():
+async def get_monitoring_metrics(m: OrgMembership = Depends(org_member)):
     """Get monitoring metrics for frontend display"""
     # Placeholder
     return {
@@ -336,13 +351,13 @@ async def database_health():
 
 # Main API endpoints (accessible at /api/v1/*)
 @main_router.get("/models")
-async def get_models_main():
-    return await get_models()
+async def get_models_main(m: OrgMembership = Depends(org_member)):
+    return await get_models(m)
 
 @main_router.get("/reports") 
-async def get_reports_main():
-    return await get_reports()
+async def get_reports_main(m: OrgMembership = Depends(org_member)):
+    return await get_reports(m)
 
 @main_router.get("/monitoring/metrics")
-async def get_monitoring_metrics_main():
-    return await get_monitoring_metrics()
+async def get_monitoring_metrics_main(m: OrgMembership = Depends(org_member)):
+    return await get_monitoring_metrics(m)
