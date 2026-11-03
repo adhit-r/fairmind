@@ -5,7 +5,7 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { GATE_KINDS, decisionsFor, usePackActions, useRun, useWaitingRuns, useWorkflow, versionName, type Decision, type RunEvent } from '@/lib/api/hooks/usePacks'
 import { IsoFigure } from '@/components/packs/IsoFigure'
 import { runFigure } from '@/components/packs/figures'
-import { BTN, BTN_P, Crumbs, ErrorNote, Heading, LABEL, LINE, Loading, MUTED, Num, Pill, StatusPill, cap, when } from '@/components/packs/parts'
+import { BTN, BTN_P, Crumbs, ErrorNote, Heading, LABEL, LINE, Loading, MUTED, Num, Pill, StatusPill, lifecycleStage, cap, when } from '@/components/packs/parts'
 import { cn } from '@/lib/utils'
 
 const DECISION_LABEL: Record<Decision, [string, string]> = {
@@ -107,7 +107,7 @@ export default function RunPage() {
   const isWaiting = r.status === 'waiting'
   const branches = view.current && view.current.next.length > 1 ? view.current.next : []
   const decisions = view.current ? decisionsFor(view.current) : []
-  const stage = workflow.data ? cap(workflow.data.stage) : null
+  const stage = workflow.data ? lifecycleStage(workflow.data.stage) : null
   const stepsTotal = r.steps.length
 
   return (

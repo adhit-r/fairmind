@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useCatalogue, useInstaller, usePackDetail } from '@/lib/api/hooks/usePacks'
-import { BTN, BTN_P, Crumbs, EnginePill, ErrorNote, Heading, Loading, MUTED, Pill, StatusPill, cap } from '@/components/packs/parts'
+import { BTN, BTN_P, Crumbs, EnginePill, ErrorNote, Heading, Loading, MUTED, Pill, StatusPill, StagePill, cap } from '@/components/packs/parts'
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 
@@ -82,7 +82,7 @@ export default function PackPage() {
                             {w.name}
                           </Link>
                           <span title={w.autonomy}><Pill>Autonomy {w.autonomy.split(/\s/)[0]}</Pill></span>
-                          <Pill>{cap(w.stage)}</Pill>
+                          <StagePill stage={w.stage} />
                           <StatusPill status={w.latestRun?.status} />
                         </li>
                       ))}
