@@ -5,7 +5,7 @@ import { apiClient, type ApiResponse } from '../api-client'
 
 const BASE = '/api/v1/integrations'
 
-export type IntegrationKind = 'mlflow' | 'github'
+export type IntegrationKind = 'mlflow' | 'github' | 'huggingface'
 
 export interface Integration {
   id: string
@@ -14,7 +14,7 @@ export interface Integration {
   config: Record<string, unknown>
   hasToken: boolean
   lastSyncedAt: string | null
-  lastSync: { found: number; created: number; updated: number; at: string } | null
+  lastSync: { found?: number; created?: number; updated?: number; error?: string; at: string } | null
   createdAt: string
 }
 
@@ -73,9 +73,11 @@ export function useIntegrations() {
     await refresh()
   }
   const sync = async (id: string) => {
-    const summary = unwrap(await apiClient.post<Integration['lastSync']>(`${BASE}/${id}/sync`, {}))
-    await refresh()
-    return summary
+    try {
+      return unwrap(await apiClient.post<Integration['lastSync']>(`${BASE}/${id}/sync`, {}))
+    } finally {
+      await refresh()
+    }
   }
   const promote = async (
     id: string,

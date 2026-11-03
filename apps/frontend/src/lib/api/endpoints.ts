@@ -331,7 +331,6 @@ export const API_ENDPOINTS = {
     check: '/api/v1/compliance/check',
     auditReport: '/api/v1/compliance/audit-report',
     fairnessDocumentation: '/api/v1/compliance/fairness-documentation',
-    stakeholderDashboard: '/api/v1/compliance/stakeholder-dashboard',
     riskLevels: '/api/v1/compliance/risk-levels',
     assessRisk: '/api/v1/compliance/assess-risk',
     templates: '/api/v1/compliance/compliance-templates',
@@ -342,14 +341,6 @@ export const API_ENDPOINTS = {
     logTest: '/api/v1/mlops/log-test',
     runUrl: (provider: string, runId: string) => `/api/v1/mlops/run-url/${provider}/${runId}`,
   },
-  // Marketplace
-  marketplace: {
-    models: '/api/v1/marketplace/models',
-    model: (modelId: string) => `/api/v1/marketplace/models/${modelId}`,
-    publish: '/api/v1/marketplace/models',
-    reviews: (modelId: string) => `/api/v1/marketplace/models/${modelId}/reviews`,
-  },
-
   // Agentic packs
   packs: {
     catalogue: '/api/v1/packs/catalogue',

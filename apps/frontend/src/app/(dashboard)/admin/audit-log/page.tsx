@@ -56,7 +56,7 @@ export default function AdminAuditLogPage() {
         setLogs(response.data?.logs || []);
         setError(null);
       } catch (err) {
-        // If API endpoint doesn't exist yet, show placeholder data
+        // Endpoint unavailable: show an empty list
         console.warn("Audit logs API not yet implemented:", err);
         setLogs([]);
       } finally {

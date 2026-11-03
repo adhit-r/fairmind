@@ -26,10 +26,14 @@ CHECK_CONTROLS: Dict[str, str] = {
 }
 
 # legacy framework ids used by the report request -> catalogue framework keys
-FRAMEWORK_ALIASES: Dict[str, str] = {"eu_ai_act": "EUAIA", "iso_42001": "ISO42001", "nist_ai_rmf": "NISTRMF", "india_ai": "INDAI"}
+# (the audit-reports picker sends its display names, so those resolve too)
+FRAMEWORK_ALIASES: Dict[str, str] = {
+    "eu_ai_act": "EUAIA", "iso_42001": "ISO42001", "nist_ai_rmf": "NISTRMF", "india_ai": "INDAI", "rbi_free_ai": "RBIFREEAI",
+    "EU AI Act": "EUAIA", "ISO 42001": "ISO42001", "NIST AI RMF": "NISTRMF", "RBI FREE-AI": "RBIFREEAI",
+}
 
 # the frameworks a decision record is usually read against, in display order; the rest follow alphabetically
-LEAD_FRAMEWORKS = ("EUAIA", "ISO42001", "NISTRMF", "INDAI")
+LEAD_FRAMEWORKS = ("EUAIA", "ISO42001", "NISTRMF", "INDAI", "RBIFREEAI")
 
 RELATION_RANK = {"Satisfies": 0, "Partially satisfies": 1, "Supports": 2, "Aligns with": 3}
 
