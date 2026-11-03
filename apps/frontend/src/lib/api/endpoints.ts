@@ -351,6 +351,7 @@ export const API_ENDPOINTS = {
     installBundle: (bundleId: string) => `/api/v1/packs/bundles/${encodeURIComponent(bundleId)}/install`,
     journeys: '/api/v1/packs/journeys',
     journey: (frameworkKey: string) => `/api/v1/packs/journeys/${encodeURIComponent(frameworkKey)}`,
+    installFramework: (frameworkKey: string) => `/api/v1/packs/journeys/${encodeURIComponent(frameworkKey)}/install`,
     evaluations: '/api/v1/packs/evaluations',
     evaluation: (evaluationId: string) => `/api/v1/packs/evaluations/${encodeURIComponent(evaluationId)}`,
     workflow: (workflowId: string) => `/api/v1/packs/workflows/${workflowId}`,

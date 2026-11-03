@@ -527,6 +527,8 @@ async def install_bundle(bundle_id: str, m: OrgMembership = Depends(_manager), d
 async def list_journeys(m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     _ensure_tables(db)
     org = _org_coverage(db, m.org_id, _installed_ids(db, m.org_id))
+    installed = set(_installed_ids(db, m.org_id))
+    latest = _latest_runs(db, m.org_id, set(WORKFLOWS))
     rows = [
         {
             "key": fk,
@@ -536,11 +538,35 @@ async def list_journeys(m: OrgMembership = Depends(_member), db: Session = Depen
             "coveredAll": EVERY_PACK.count(fk),
             "coveredInstalled": org.count(fk),
             "contributingPacks": [p for p in PACKS if FRAMEWORK_KEYS[fk] & cat.PACK_DONE[p]],
+            "binding": fw.binding,
+            **_framework_workflows(fk, installed, latest),
         }
         for fk, fw in FRAMEWORKS.items()
         if len(FRAMEWORK_KEYS[fk]) >= 5
     ]
     return sorted(rows, key=lambda r: r["name"])
+
+
+def _framework_workflows(framework_key: str, installed: set, latest: Dict[str, Any]) -> dict:
+    """Workflows of installed packs that map to the framework, each with its latest run status, and how many wait for a person."""
+    ids = sorted({w for k in FRAMEWORK_KEYS[framework_key] for w, _ in cat.REQUIREMENT_WORKFLOWS.get(k, []) if cat.WORKFLOW_PACK[w] in installed})
+    workflows = [
+        {"id": w, "name": WORKFLOWS[w].name, "stage": WORKFLOWS[w].stage, "status": latest[w]["status"] if w in latest else None}
+        for w in ids
+    ]
+    return {"workflows": workflows, "waiting": sum(1 for w in workflows if w["status"] == "waiting")}
+
+
+@router.post("/journeys/{framework_key}/install")
+async def install_framework(framework_key: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+    """Add a framework: install every pack that covers or tests one of its requirements."""
+    if framework_key not in FRAMEWORKS:
+        raise HTTPException(status_code=404, detail="Journey not found")
+    _ensure_tables(db)
+    for pack_id in PACKS:
+        if FRAMEWORK_KEYS[framework_key] & cat.PACK_DONE[pack_id]:
+            _install(db, m, pack_id)
+    return {"installed": _installed_ids(db, m.org_id)}
 
 
 @router.get("/journeys/{framework_key}")
@@ -569,6 +595,7 @@ async def get_journey(framework_key: str, m: OrgMembership = Depends(_member), d
                         "id": wid,
                         "name": WORKFLOWS[wid].name,
                         "relation": relation,
+                        "stage": WORKFLOWS[wid].stage,
                         "pack": cat.WORKFLOW_PACK[wid],
                         "installed": cat.WORKFLOW_PACK[wid] in installed,
                         "latestRun": _summary(db, latest[wid]) if wid in latest else None,

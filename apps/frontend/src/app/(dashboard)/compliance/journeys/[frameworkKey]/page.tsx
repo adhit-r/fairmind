@@ -6,7 +6,7 @@ import { useMemo, useState } from 'react'
 import { useInstaller, useJourney, usePackNames, type ReqStatus } from '@/lib/api/hooks/usePacks'
 import { IsoFigure } from '@/components/packs/IsoFigure'
 import { journeyFigure, type FigWorkflow } from '@/components/packs/figures'
-import { BTN, BTN_P, CoverageBar, Crumbs, EnginePill, ErrorNote, Heading, LABEL, LINE, Loading, MUTED, Pill, REQ_ORDER, ReqPill, ResultPill, reqHint, reqLabel } from '@/components/packs/parts'
+import { BTN, BTN_P, CoverageBar, Crumbs, EnginePill, ErrorNote, Heading, LABEL, LINE, Loading, MUTED, Pill, REQ_ORDER, ReqPill, ResultPill, StatusPill, cap, reqHint, reqLabel } from '@/components/packs/parts'
 import { cn } from '@/lib/utils'
 
 const TILE: Record<ReqStatus, FigWorkflow['status']> = { covered: 'done', tested: 'tested', available: null, supported: 'supported', gap: 'gap' }
@@ -40,7 +40,17 @@ export default function JourneyPage() {
         workflows: g.requirements.map((r) => r.status).sort((a, b) => REQ_ORDER.indexOf(a) - REQ_ORDER.indexOf(b)).map((s) => ({ status: TILE[s] })),
       })),
     )
-    return { groups, counts, figure, total: groups.reduce((n, g) => n + g.requirements.length, 0) }
+    // Installed workflows per requirement group, each once; the same workflow can serve several groups.
+    const byGroup = groups
+      .map((g) => {
+        const seen = new Map<string, (typeof g.requirements)[number]['workflows'][number]>()
+        for (const r of g.requirements) for (const w of r.workflows) if (w.installed && !seen.has(w.id)) seen.set(w.id, w)
+        return { name: g.name, workflows: [...seen.values()] }
+      })
+      .filter((g) => g.workflows.length > 0)
+    const waiting = new Map<string, { run: NonNullable<(typeof byGroup)[number]['workflows'][number]['latestRun']>; name: string; group: string }>()
+    for (const g of byGroup) for (const w of g.workflows) if (w.latestRun?.status === 'waiting' && !waiting.has(w.latestRun.id)) waiting.set(w.latestRun.id, { run: w.latestRun, name: w.name, group: g.name })
+    return { groups, counts, figure, total: groups.reduce((n, g) => n + g.requirements.length, 0), byGroup, waiting: [...waiting.values()] }
   }, [journey.data])
 
   if (journey.loading && !journey.data) return <Loading label="Loading journey" />
@@ -63,8 +73,16 @@ export default function JourneyPage() {
   return (
     <div className="flex flex-col gap-[22px]">
       <Crumbs items={[{ label: 'Frameworks', href: '/compliance' }, { label: j.name }]} />
-      <Heading title={j.name} lead="Readiness against this framework from the packs you have installed, and what each remaining pack would add.">
+      <Heading
+        title={j.name}
+        lead={`Readiness against this framework from the packs you have installed.${view.waiting.length ? ` ${view.waiting.length} ${view.waiting.length === 1 ? 'run is' : 'runs are'} waiting for you.` : ''}`}
+      >
         <Link href="/compliance/evaluations" className={BTN}>Browse evaluations</Link>
+        {view.waiting.length > 0 && (
+          <Link href={`/compliance/runs/${view.waiting[0].run.id}`} className={BTN_P}>
+            Review {view.waiting.length} {view.waiting.length === 1 ? 'decision' : 'decisions'}
+          </Link>
+        )}
       </Heading>
       {meta.length > 0 && (
         <div className="-mt-3 flex flex-wrap gap-2">
@@ -122,6 +140,59 @@ export default function JourneyPage() {
           )}
         </div>
       </section>
+
+      <div className="flex flex-wrap items-start gap-[22px]">
+        <section aria-labelledby="wait-h" className="pk-card flex min-w-0 flex-[1_1_300px] flex-col gap-3 px-6 py-5">
+          <div className="flex flex-col gap-1">
+            <h2 id="wait-h" className="m-0 text-base font-semibold text-[var(--fm-ink)]">Waiting for you</h2>
+            <p className={cn('m-0 text-[13px]', MUTED)}>The numbers match the agents on the Frameworks board.</p>
+          </div>
+          {view.waiting.length === 0 ? (
+            <p className={cn('m-0 text-[13px]', MUTED)}>Nothing is waiting. Runs pause here when a step needs your input or approval.</p>
+          ) : (
+            <ol className="m-0 flex list-none flex-col gap-2.5 p-0">
+              {view.waiting.map((w, i) => (
+                <li key={w.run.id}>
+                  <Link href={`/compliance/runs/${w.run.id}`} className="flex items-start gap-3 rounded-xl border border-[#ffd9c4] bg-[#fff7f2] p-3 no-underline">
+                    <span className="inline-flex h-[22px] w-[22px] flex-none items-center justify-center rounded-full bg-[var(--fm-brand)] text-xs font-bold text-[var(--fm-ink)]">{i + 1}</span>
+                    <span className="flex flex-col gap-0.5">
+                      <b className="font-semibold text-[var(--fm-ink)]">{w.name}</b>
+                      <span className={cn('text-[13px] leading-snug', MUTED)}>
+                        {w.group}. {w.run.waitingFor === 'approval' ? 'Waiting for your approval.' : 'Waiting for you to record a step.'} Nothing changes until you answer.
+                      </span>
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ol>
+          )}
+        </section>
+
+        <section aria-labelledby="clause-h" className="pk-card min-w-0 flex-[2_1_480px] px-6 py-5">
+          <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2.5">
+            <h2 id="clause-h" className="m-0 text-base font-semibold text-[var(--fm-ink)]">Workflows by clause</h2>
+            <span className={cn('text-[12.5px]', MUTED)}>Stage as the catalogue names it, and the latest run</span>
+          </div>
+          {view.byGroup.length === 0 ? (
+            <p className={cn('m-0 mt-2 text-[13px]', MUTED)}>No installed workflow covers this framework yet. Install a pack from the list below.</p>
+          ) : (
+            <ul className="m-0 list-none p-0">
+              {view.byGroup.map((g) =>
+                g.workflows.map((w, k) => (
+                  <li key={`${g.name}-${w.id}`} className={cn('flex flex-wrap items-center gap-x-3.5 gap-y-1.5 py-2.5', 'border-t', LINE)}>
+                    <span className={cn('w-[120px] flex-none text-[12.5px]', MUTED)}>{k === 0 ? g.name : ''}</span>
+                    <Link href={`/compliance/workflows/${w.id}`} className="min-w-0 flex-[999_1_200px] font-semibold text-[var(--fm-ink)] hover:underline">
+                      {w.name}
+                    </Link>
+                    <Pill>{cap(w.stage)}</Pill>
+                    <StatusPill status={w.latestRun?.status ?? null} />
+                  </li>
+                )),
+              )}
+            </ul>
+          )}
+        </section>
+      </div>
 
       <section aria-labelledby="steps-h" className="pk-card px-6 py-5">
         <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2.5">

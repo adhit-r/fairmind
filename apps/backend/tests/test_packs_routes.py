@@ -501,6 +501,32 @@ def test_draft_rules(tmp_database):
     assert client.get(f"{url}/draft").status_code == 404
 
 
+def test_adding_a_framework_installs_its_packs_and_journeys_show_waiting_runs(tmp_database):
+    _, client = _org(tmp_database)
+    before = next(j for j in client.get(f"{PACKS}/journeys").json() if j["key"] == "ISO42001")
+    assert before["workflows"] == [] and before["waiting"] == 0
+
+    assert client.post(f"{PACKS}/journeys/ISO42001/install").status_code == 200
+    installed = {p["id"] for p in client.get(PACKS).json() if p["installed"]}
+    assert installed == set(before["contributingPacks"])
+
+    run = _start(client)  # the AI policy review waits for its collect step
+    after = next(j for j in client.get(f"{PACKS}/journeys").json() if j["key"] == "ISO42001")
+    policy = next(w for w in after["workflows"] if w["id"] == WORKFLOW)
+    assert policy["status"] == "waiting" and policy["stage"] and after["waiting"] == 1
+    # Installed packs cover through their workflows; their evaluations count only once a result passes.
+    assert after["coveredInstalled"] == pack_catalogue.Coverage(before["contributingPacks"], tested_by=[]).count("ISO42001")
+
+    journey = client.get(f"{PACKS}/journeys/ISO42001").json()
+    assert all(w["stage"] for g in journey["groups"] for r in g["requirements"] for w in r["workflows"])
+    assert client.post(f"{PACKS}/journeys/NOPE/install").status_code == 404
+    assert run["status"] == "waiting"
+
+
+def test_a_plain_member_cannot_add_a_framework(tmp_database):
+    org_id = _new_org(tmp_database)
+    member = _client(tmp_database, org_id, role="member", token_role=UserRole.ANALYST)
+    assert member.post(f"{PACKS}/journeys/ISO42001/install").status_code == 403
 # --- evaluation results ----------------------------------------------------
 # Runs are produced by the real fairness engine and stored the way its router stores them.
 
