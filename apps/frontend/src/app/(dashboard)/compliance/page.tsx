@@ -14,7 +14,7 @@ import {
 } from '@/lib/api/hooks/usePacks'
 import { IsoFigure } from '@/components/packs/IsoFigure'
 import { packsFigure } from '@/components/packs/figures'
-import { BTN, BTN_P, CoverageBar, Empty, ErrorNote, Heading, LABEL, Loading, MUTED, Pill, StatusPill, cap } from '@/components/packs/parts'
+import { BTN, BTN_P, CoverageBar, Empty, ErrorNote, Heading, LABEL, Loading, MUTED, Pill, StatusPill, StagePill, cap } from '@/components/packs/parts'
 import { cn } from '@/lib/utils'
 
 type View = 'installed' | 'add' | 'packs' | 'workflows'
@@ -376,7 +376,7 @@ export default function CompliancePage() {
         <section id="panel-workflows" role="tabpanel" aria-labelledby="tab-workflows" className="pk-card px-6 py-5">
           <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2.5">
             <h2 className="m-0 text-base font-semibold">Workflows of your installed packs</h2>
-            <span className={cn('text-[12.5px]', MUTED)}>Waiting and running first.</span>
+            <span className={cn('text-[12.5px]', MUTED)}>Waiting and running first. Stage is where it runs in the lifecycle.</span>
           </div>
           {workflows.length === 0 ? (
             <Empty>Install a pack or add a framework to get workflows.</Empty>
@@ -397,7 +397,7 @@ export default function CompliancePage() {
                       <td className="py-2.5 pr-3">
                         <Link href={`/compliance/workflows/${w.id}`} className="font-semibold hover:underline">{w.name}</Link>
                       </td>
-                      <td className="py-2.5 pr-3"><Pill>{cap(w.stage)}</Pill></td>
+                      <td className="py-2.5 pr-3"><StagePill stage={w.stage} /></td>
                       <td className="py-2.5 pr-3"><StatusPill status={w.status} /></td>
                       <td className={cn('py-2.5 text-[12.5px]', MUTED)}>{w.frameworks.join(', ')}</td>
                     </tr>
