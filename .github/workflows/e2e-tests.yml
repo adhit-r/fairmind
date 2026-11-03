@@ -15,7 +15,7 @@ env:
 
 jobs:
   e2e-tests:
-    runs-on: ubuntu-24.04  # Playwright 1.60 cannot install chromium on ubuntu-latest (26.04)
+    runs-on: ubuntu-24.04  # Playwright cannot install chromium on ubuntu-latest (26.04) yet
     timeout-minutes: 30
     permissions:
       contents: read
@@ -113,7 +113,7 @@ jobs:
         if-no-files-found: ignore
 
   e2e-smoke-tests:
-    runs-on: ubuntu-24.04  # Playwright 1.60 cannot install chromium on ubuntu-latest (26.04)
+    runs-on: ubuntu-24.04  # Playwright cannot install chromium on ubuntu-latest (26.04) yet
     timeout-minutes: 15
     permissions:
       contents: read
