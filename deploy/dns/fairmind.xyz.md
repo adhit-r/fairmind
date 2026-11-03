@@ -16,6 +16,7 @@ Netlify; only the nameservers change.
 | `app-demo` | A | `75.2.60.5` | DNS only | Netlify, fairmind-demo-app |
 | `api` | A | `75.2.60.5` | DNS only | Netlify (api.fairmind.xyz zone exists in Netlify DNS) |
 | `www` | CNAME | `8b7yg0t0.up.railway.app` | | Stale Railway deploy. Replace with a redirect to the apex (see below). |
+| `blog` | CNAME | `fairmind-website-t41tz.netlify.app` | DNS only | Netlify alias on the website site; netlify.toml 301s every path to `fairmind.xyz/blog/` |
 | `docs` | none | | | Missing. The site links to docs.fairmind.xyz; add `docs CNAME fairmind-docs.netlify.app`, DNS only. |
 
 Not present today and worth adding: `_dmarc TXT "v=DMARC1; p=none; rua=mailto:support@fairmind.xyz"`.
