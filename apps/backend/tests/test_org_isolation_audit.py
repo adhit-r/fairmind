@@ -5,9 +5,9 @@ Every router fixed by the isolation audit gets a test that signs in as one
 tenant and tries to read or change the other tenant's data, and a test that an
 unsigned request is refused.
 
-Routers that cannot be imported in a fresh checkout (their imports hit modules
-that are git-ignored or undeclared dependencies) are loaded here with those
-imports stubbed, and mounted on a bare app at the prefix api/main.py gives them.
+Routers are mounted on a bare app at the prefix api/main.py gives them. The
+modern bias router's torch-backed service is not a declared dependency, so it
+is stubbed.
 """
 
 from __future__ import annotations
@@ -18,13 +18,10 @@ import types
 import uuid
 from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timedelta, timezone
-from typing import Any
-from unittest.mock import MagicMock
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from pydantic import BaseModel
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -176,37 +173,13 @@ def client(db):
         yield test_client
 
 
-# --------------------------------------------------------------------------- stubs for routers that do not import here
+# --------------------------------------------------------------------------- stub for the torch-backed router
 
 
 @pytest.fixture(scope="module")
 def stubbed_modules():
-    """Stand-ins for modules missing from a fresh checkout, removed again afterwards."""
-    from core.container import ServiceLifetime, service
-
+    """Stand-in for the torch-backed bias service, which this test env does not install."""
     patch = pytest.MonkeyPatch()
-    patch.setitem(sys.modules, "jinja2", MagicMock())
-    for name in ("domain.models", "domain.models.services"):
-        patch.setitem(sys.modules, name, types.ModuleType(name))
-    model_tests = types.ModuleType("domain.models.services.model_test_service")
-
-    @service(lifetime=ServiceLifetime.SINGLETON)
-    class ModelTestService:
-        pass
-
-    model_tests.ModelTestService = ModelTestService
-    patch.setitem(sys.modules, model_tests.__name__, model_tests)
-
-    core = types.ModuleType("api.models.core")
-
-    class BaseResponse(BaseModel):
-        success: bool
-        message: str = ""
-        data: Any = None
-
-    core.BaseResponse = BaseResponse
-    patch.setitem(sys.modules, core.__name__, core)
-
     modern = types.ModuleType("api.services.modern_llm_bias_service")
 
     class BiasCategory(str, enum.Enum):
@@ -743,7 +716,7 @@ def test_user_listing_is_limited_to_the_admins_organisation(client, monkeypatch)
 
 
 @pytest.fixture
-def monitoring(db, stubbed_modules):
+def monitoring(db):
     from api.routes import monitoring as monitoring_routes
 
     for store in (
@@ -853,13 +826,13 @@ def test_monitoring_websocket_needs_a_member_token_for_that_user(monitoring):
 # --------------------------------------------------------------------------- compliance_audit, settings, modern bias, compliance automation
 
 
-def test_compliance_audit_engine_needs_sign_in(db, stubbed_modules):
+def test_compliance_audit_engine_needs_sign_in(db):
     with _mini_app(db, "api.routes.compliance_audit", prefix="") as mini:
         assert mini.get("/api/v1/compliance/audit/frameworks").status_code == 401
         assert mini.get("/api/v1/compliance/audit/frameworks", headers=A).status_code == 200
 
 
-def test_settings_need_sign_in_and_belong_to_the_user(db, stubbed_modules, monkeypatch):
+def test_settings_need_sign_in_and_belong_to_the_user(db, monkeypatch):
     with _mini_app(db, "api.routes.settings") as mini:
         assert mini.get("/api/v1/settings/").status_code == 401
         mine = mini.get("/api/v1/settings/", headers=A).json()["data"]
@@ -909,7 +882,7 @@ def test_modern_bias_results_are_per_organisation_and_configuration_is_admin_onl
 
 
 @pytest.fixture
-def automation(db, stubbed_modules, monkeypatch):
+def automation(db, monkeypatch):
     from api.routes import compliance_automation as automation_routes
     from database.models import ComplianceSchedule, ComplianceViolation
 
