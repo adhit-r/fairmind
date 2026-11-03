@@ -31,6 +31,8 @@ def test_sqlite_is_unchanged():
     users = _ddl(User, sqlite.dialect())
     assert "id UUID NOT NULL" in users  # as before UserId existed
     assert "FOREIGN KEY(org_id) REFERENCES organizations (id)" in users  # SQLite cannot ALTER, so the key stays inline
+    # Member ids match users.id on SQLite, so its foreign-key checks accept them (text only on Postgres).
+    assert "user_id UUID NOT NULL" in _ddl(OrganizationMember, sqlite.dialect())
 
 
 def test_user_id_round_trips_as_uuid_on_postgres():
