@@ -298,6 +298,17 @@ def _verify_chain(events) -> bool:
     return True
 
 
+def _proposal_by(events) -> Optional[str]:
+    """Who recorded the last step output before the latest gate opened: the author of what is up for approval."""
+    author, proposal = None, None
+    for e in events:
+        if e["kind"] == "step.completed":
+            author = json.loads(e["payload_json"]).get("submittedBy") or author
+        elif e["kind"] == "gate.opened":
+            proposal = author
+    return proposal
+
+
 def _run_json(db: Session, run_id: str) -> dict:
     run = db.execute(text("SELECT * FROM workflow_runs WHERE id = :id"), {"id": run_id}).mappings().fetchone()
     events = (
@@ -319,6 +330,8 @@ def _run_json(db: Session, run_id: str) -> dict:
         "systemId": run["ai_system_id"],
         "approvalRequestId": run["approval_request_id"],
         "approval": approval,
+        # Separation of duties is warned, not enforced: one-person organisations must still be able to decide.
+        "proposalBy": _proposal_by(events),
         "finishedAt": run["finished_at"],
         "events": [
             {
@@ -1060,6 +1073,11 @@ async def decide_run(
         },
     )
     payload = {"decision": body.decision, "notes": body.notes, "decidedBy": m.user_id}
+    events = db.execute(
+        text("SELECT kind, payload_json FROM workflow_run_events WHERE run_id = :id ORDER BY seq"), {"id": run_id}
+    ).mappings().all()
+    if _proposal_by(events) == m.user_id:
+        payload["selfReview"] = True  # the decider also recorded the proposal; kept on the ledger for the audit
     if escalated:
         payload["escalated"] = f"more than {MAX_REVISIONS} rounds of changes"
     _append(db, run_id, "gate.decided", step.id, payload)
