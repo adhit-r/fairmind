@@ -90,9 +90,9 @@
   transition: transform 500ms var(--ease-out), box-shadow 500ms var(--ease-out);
 }
 
-.route-proof:nth-child(1) { transform: translateZ(40px); }
-.route-proof:nth-child(2) { transform: translateZ(20px) translateX(1.25rem); }
-.route-proof:nth-child(3) { transform: translateZ(0) translateX(2.5rem); }
+.route-proof:nth-child(1) { transform: translateZ(0); }
+.route-proof:nth-child(2) { transform: translateZ(-20px) translateX(-1.25rem); }
+.route-proof:nth-child(3) { transform: translateZ(-40px) translateX(-2.5rem); }
 
 .route-proof:hover {
   box-shadow: var(--shadow-lg);

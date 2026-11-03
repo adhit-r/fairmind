@@ -16,7 +16,12 @@ const columns = [
   },
   {
     title: 'Frameworks',
-    links: frameworks.map((f) => ({ label: f.shortName, href: `/frameworks/${f.slug}/` })),
+    links: [
+      ...frameworks
+        .filter((f) => ['eu-ai-act', 'iso-42001', 'nist-ai-rmf', 'gdpr'].includes(f.slug))
+        .map((f) => ({ label: f.shortName, href: `/frameworks/${f.slug}/` })),
+      { label: 'All 50 frameworks', href: '/frameworks/' },
+    ],
   },
   {
     title: 'Company',

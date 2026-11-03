@@ -1,20 +1,23 @@
 ---
 import Layout from '../layouts/Layout.astro';
+import PageHero from '../components/marketing/PageHero.astro';
 import '../styles/pages.css';
 ---
 
 <Layout title="404 | Evidence not found" description="The requested FairMind page could not be found." noindex={true}>
   <div class="route-page">
-    <section class="route-section route-section-dark" style="min-height: 72vh; display: grid; align-items: center;">
-      <div class="route-split">
-        <div class="route-split-copy">
-          <p class="route-signal">404 · evidence not found</p>
-          <h1 style="font-size: clamp(4rem, 10vw, 8rem); line-height: .88; letter-spacing: -.04em; margin: 0;">This route has insufficient data.</h1>
-          <p style="color: rgba(255,255,255,.78);">We refuse to convert a missing page into a pass. Return to the product, inspect the roadmap, or ask a precise question.</p>
-          <div class="route-actions"><a class="button button-primary" href="/">Return home</a><a class="button" href="/features/">See the platform</a></div>
-        </div>
-        <div class="route-quote"><blockquote>Missing route. No invented result.</blockquote></div>
-      </div>
-    </section>
+    <PageHero
+      signal="404"
+      title="This route has"
+      accent="insufficient data."
+      description="We refuse to turn a missing page into a pass. Return to the product, or ask a precise question."
+      proofs={[
+        { label: 'Status', value: 'No record', note: 'Nothing at this address, and nothing invented to fill it.' },
+        { label: 'Next', value: 'Platform', note: 'The system file, packs, the release gate and the evidence ledger.' },
+      ]}
+      primary={{ label: 'Return home', href: '/' }}
+      secondary={{ label: 'See the platform', href: '/features/' }}
+      dark={true}
+    />
   </div>
 </Layout>

@@ -41,12 +41,19 @@ const registry = [
   { b: 'NIST AI RMF', s: '', href: '/frameworks/nist-ai-rmf/' },
   { b: 'OWASP', s: 'Agentic Top 10', href: '/frameworks/' },
   { b: 'AIUC-1', s: '', href: '/frameworks/' },
-  { b: 'DPDP Act', s: '2023', href: '/frameworks/dpdp-act/' },
+  { b: 'OWASP', s: 'LLM Top 10', href: '/frameworks/' },
   { b: 'MITRE ATLAS', s: '', href: '/frameworks/' },
   { b: 'NIST AI 600-1', s: '', href: '/frameworks/nist-ai-rmf/' },
-  { b: 'NITI Aayog', s: 'RAI', href: '/frameworks/niti-aayog/' },
-  { b: 'RBI', s: 'FREE-AI', href: '/frameworks/rbi-free-ai/' },
-  { b: 'GDPR', s: '', href: '/frameworks/gdpr/' },
+  { b: 'ISO/IEC 42005', s: '', href: '/frameworks/iso-42001/' },
+  { b: 'CSA', s: 'MAESTRO', href: '/frameworks/' },
+  { b: 'OWASP', s: 'MCP Top 10', href: '/frameworks/' },
+];
+
+const evaluations = [
+  { name: 'Agents', title: 'Can it only do what it was allowed to?', body: 'Tool least privilege, out-of-scope actions blocked, MCP server permission audit, excessive agency, kill-switch time to stop, runaway containment.' },
+  { name: 'LLM apps and RAG', title: 'Does it hold under attack?', body: 'Direct and indirect prompt injection, jailbreak resistance, system prompt leakage, groundedness, harmful content, over-refusal, knowledge-base poisoning.' },
+  { name: 'Models and data', title: 'Is it still the model you tested?', body: 'Task accuracy, calibration, robustness, data drift, out-of-distribution detection, membership inference, backdoor detection, label quality.' },
+  { name: 'Decision systems', title: 'Is it fair, with the statistics shown?', body: 'Selection-rate parity at the four-fifths rule, error-rate parity, intersectional slices, fairness drift. Suites for hiring, credit, insurance, benefits and education.' },
 ];
 
 const faqs = [
@@ -59,12 +66,16 @@ const faqs = [
     a: 'It runs a workflow made of seven step types: collect, check, suggest, ask a person, act, verify, and file evidence. Today the trigger, escalate and file steps run themselves, the gate steps open an approval request, and a person completes the collect, check, suggest, act and verify steps, which the ledger records as manual. Agent-executed steps arrive workflow by workflow, behind the same gates, with scoped read-only credentials, rules before model judgement, and a citation for every finding.',
   },
   {
+    q: 'What does FairMind evaluate?',
+    a: 'The catalogue defines 109 evaluations: 53 for security, 46 for behaviour and fairness, and 10 for governance and compliance. They cover agents (tool least privilege, out-of-scope actions, MCP permissions, kill switches), LLM apps and RAG (prompt injection, jailbreaks, prompt leakage, groundedness, harmful content), models and data (accuracy, calibration, drift, membership inference, backdoors) and decision systems (selection-rate parity, error-rate parity, intersectional slices). Each one names its metric, its threshold and where that threshold comes from, and every evaluator declares whether it is validated, runs through an external provider, reads metadata only, or is not yet available.',
+  },
+  {
     q: 'Can the agent change things on its own?',
     a: 'Only inside FairMind, and only if you set that workflow to autonomy level A3. The default is A2: the agent proposes and a person approves. External systems are never written without an approval. If an approver is unreachable or no policy covers the action, nothing happens.',
   },
   {
     q: 'Which frameworks does FairMind cover?',
-    a: 'The registry holds 50 frameworks, including the EU AI Act, ISO/IEC 42001, NIST AI RMF and AI 600-1, the OWASP Top 10 for LLM and Agentic applications, AIUC-1, MITRE ATLAS, India’s DPDP Act and NITI Aayog principles, RBI FREE-AI, and GDPR. One workflow run counts toward every requirement it maps to.',
+    a: 'The registry holds 50 frameworks, including the EU AI Act, ISO/IEC 42001, NIST AI RMF and AI 600-1, the OWASP Top 10 for LLM and Agentic applications, AIUC-1, MITRE ATLAS, the OWASP MCP Top 10, CSA MAESTRO, Singapore’s Model AI Governance Framework, and national rules from India, Japan, Korea, China and US states. One workflow run counts toward every requirement it maps to.',
   },
   {
     q: 'How is FairMind’s own agent governed?',
@@ -85,7 +96,7 @@ const structuredData = [
     operatingSystem: 'Web',
     url: 'https://fairmind.xyz',
     description:
-      'Agentic AI governance platform. Governance runs as agent workflows mapped to 50 frameworks, with a human gate in every workflow and a hash-chained record of each run. Covers EU AI Act, ISO/IEC 42001, NIST AI RMF, OWASP Agentic, AIUC-1, and DPDP.',
+      'Agentic AI governance platform: 90 governance workflows, 109 evaluations and 50 frameworks, with a human gate in every workflow and a hash-chained record of each run. Covers EU AI Act, ISO/IEC 42001, NIST AI RMF, OWASP LLM and Agentic Top 10, MITRE ATLAS and AIUC-1.',
     publisher: { '@id': 'https://fairmind.xyz/#organization' },
   },
   {
@@ -102,7 +113,7 @@ const structuredData = [
 
 <Layout
   title="FairMind: agentic AI governance platform"
-  description="Governance as agent workflows across 50 frameworks, with a human gate in every one. EU AI Act, ISO/IEC 42001, NIST AI RMF, OWASP Agentic, AIUC-1, DPDP."
+  description="Agentic AI governance: 90 workflows, 109 evaluations and 50 frameworks, with a human gate in every workflow. EU AI Act, ISO/IEC 42001, NIST AI RMF, OWASP Agentic, MITRE ATLAS, AIUC-1."
   structuredData={structuredData}
 >
   <div class="story" data-story>
@@ -209,6 +220,25 @@ const structuredData = [
             <p class="label">{p.name}</p>
             <h3>{p.title}</h3>
             <p>{p.body}</p>
+          </article>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <section class="section section-grey" id="evaluations">
+    <div class="wrap">
+      <header class="section-heading">
+        <p class="label reveal">109 evaluations</p>
+        <h2 class="reveal">Tests for the systems you actually run. <em>Thresholds declared first.</em></h2>
+        <p class="reveal">Each evaluation names its metric, its threshold and where that threshold comes from. Each evaluator says whether it is validated, external, metadata only, or not yet available.</p>
+      </header>
+      <div class="grid-4">
+        {evaluations.map((e, i) => (
+          <article class="card tilt reveal" style={`transition-delay: ${i * 80}ms`}>
+            <p class="label">{e.name}</p>
+            <h3>{e.title}</h3>
+            <p>{e.body}</p>
           </article>
         ))}
       </div>
