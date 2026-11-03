@@ -1,7 +1,7 @@
 {
   "name": "FairMind: agentic AI governance",
   "short_name": "FairMind",
-  "description": "Agents collect evidence, check it against 50 frameworks, and propose what to do next. People decide.",
+  "description": "Agentic AI governance. Governance runs as agent workflows across 50 frameworks, and a person decides at every gate.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
