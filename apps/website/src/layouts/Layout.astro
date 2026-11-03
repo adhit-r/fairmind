@@ -57,7 +57,8 @@ const siteSchema = [
   },
 ];
 const pageSchema = structuredData ? [structuredData].flat() : [];
-const appUrl = import.meta.env.PUBLIC_APP_URL;
+// Sign in target. fairmind.xyz is the marketing site; the app lives at app.fairmind.xyz.
+const appUrl = import.meta.env.PUBLIC_APP_URL ?? 'https://app.fairmind.xyz';
 ---
 
 <!doctype html>
