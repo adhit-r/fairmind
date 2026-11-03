@@ -1,0 +1,22 @@
+[project]
+name = "fairmind"
+version = "0.1.0"
+description = "Typed Python client for FairMind: release gate, fairness tests, monitoring and attestations."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Adhithya Rajasekaran", email = "adhithya@axonome.xyz" }]
+dependencies = ["httpx>=0.27"]
+
+[dependency-groups]
+dev = ["pytest>=7.4"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fairmind"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
