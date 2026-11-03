@@ -3,6 +3,8 @@
 POST /systems/{id}/fairness-runs/inspect   columns and a suggested mapping for a CSV
 POST /systems/{id}/fairness-runs           run the metrics, store measured evidence
 POST /systems/{id}/monitoring-runs         current scores against the last run; drift as measured evidence
+GET  /systems/{id}/monitoring-policy       expected snapshot cadence and the drift window (defaults when none stored)
+PUT  /systems/{id}/monitoring-policy       set them; stale monitoring stops counting as proven, sustained drift opens a finding
 POST /systems/{id}/attestations            a person states a check is satisfied; manual evidence
 GET  /systems/{id}/gate                    verdict, confidence and check states
 
@@ -18,7 +20,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
 from api.routes.ai_governance import (
@@ -27,6 +29,7 @@ from api.routes.ai_governance import (
     _enforce_org_scope,
     _ensure_tables,
     _fetch_evidence_records,
+    _risk_score,
     _require_system_access,
 )
 from config.auth import TokenData, get_current_active_user
@@ -79,9 +82,26 @@ def _environmental_assessed(db: Session, system_id: str) -> bool:
         return False
 
 
+DEFAULT_CADENCE_HOURS = 168
+DEFAULT_DRIFT_WINDOW = 3
+WATCH_SOURCE = "fairmind.watch"
+CLOSED_RISK_STATUSES = ("accepted", "closed", "resolved", "mitigated")
+
+
+def _monitoring_policy(db: Session, system_id: str) -> Dict[str, Any]:
+    row = db.execute(
+        text("SELECT cadence_hours, drift_window, updated_by, updated_at FROM governance_monitoring_policies WHERE system_id = :id"),
+        {"id": system_id},
+    ).fetchone()
+    if not row:
+        return {"cadenceHours": DEFAULT_CADENCE_HOURS, "driftWindow": DEFAULT_DRIFT_WINDOW, "updatedBy": None, "updatedAt": None, "isDefault": True}
+    return {"cadenceHours": row[0], "driftWindow": row[1], "updatedBy": row[2], "updatedAt": row[3], "isDefault": False}
+
+
 def _gate_payload(db: Session, system_id: str, risk_tier: str) -> Dict[str, Any]:
     records = _fetch_evidence_records(db, system_id)
-    gate = release_gate(risk_tier, records, environmental_assessed=_environmental_assessed(db, system_id))
+    cadence = _monitoring_policy(db, system_id)["cadenceHours"]
+    gate = release_gate(risk_tier, records, environmental_assessed=_environmental_assessed(db, system_id), monitoring_cadence_hours=cadence)
     gate["systemId"] = system_id
     gate["riskTier"] = risk_tier
     return gate
@@ -318,7 +338,112 @@ async def create_monitoring_run(
         evidence_type="monitoring", title=title, source="fairmind.monitoring", content=result, confidence=result["evidence_confidence"],
         metadata={"provenance_class": "measured", "file_name": file.filename, "mapping": result["mapping"], "baseline_evidence_id": (baseline or {}).get("_evidence_id")},
     )
-    return {"evidenceId": evidence_id, "systemId": system_id, "title": title, "result": result, "gate": _gate_payload(db, system_id, system.risk_tier)}
+    watch = _watch(db, system_id)
+    return {"evidenceId": evidence_id, "systemId": system_id, "title": title, "result": result, "watch": watch, "gate": _gate_payload(db, system_id, system.risk_tier)}
+
+
+def _watch(db: Session, system_id: str) -> Dict[str, Any]:
+    """Count consecutive drifting snapshots; open one finding when they reach the policy window.
+
+    Never opens a second finding while one from the watch is still open, and never closes one.
+    """
+    policy = _monitoring_policy(db, system_id)
+    rows = db.execute(
+        text("SELECT id, content_json FROM governance_evidence WHERE system_id = :id AND evidence_type = 'monitoring' AND source = 'fairmind.monitoring' ORDER BY created_at DESC LIMIT 50"),
+        {"id": system_id},
+    ).fetchall()
+    snapshots = [(row[0], json.loads(row[1] or "{}")) for row in rows]
+    consecutive = 0
+    for _, content in snapshots:
+        if content.get("all_checks_pass") is not False:
+            break
+        consecutive += 1
+    open_finding = db.execute(
+        text("SELECT id FROM governance_risks WHERE system_id = :id AND source = :source AND status NOT IN :closed ORDER BY created_at DESC LIMIT 1").bindparams(bindparam("closed", expanding=True)),
+        {"id": system_id, "source": WATCH_SOURCE, "closed": list(CLOSED_RISK_STATUSES)},
+    ).fetchone()
+    finding_id, opened = (open_finding[0] if open_finding else None), False
+    if finding_id is None and consecutive >= policy["driftWindow"]:
+        latest_id, latest = snapshots[0]
+        failing = [a for a in latest.get("attributes", []) if not all((a.get("checks") or {}).values())]
+        names = ", ".join(a.get("attribute", "") for a in failing) or "monitored attributes"
+        metrics = "; ".join(
+            f"{a.get('attribute')}: impact ratio {_fmt(a.get('disparate_impact_ratio'))}, max rate drift {_fmt(a.get('max_rate_drift'))}, worst PSI {_fmt(a.get('worst_psi'))}"
+            for a in failing
+        )
+        now = datetime.now(timezone.utc).isoformat()
+        finding_id, opened = str(uuid.uuid4()), True
+        db.execute(
+            text(
+                "INSERT INTO governance_risks "
+                "(id, system_id, title, severity, status, description, mitigation, likelihood, risk_score, source, categories_json, metadata_json, created_at, updated_at) "
+                "VALUES (:id, :system_id, :title, :severity, :status, :description, :mitigation, :likelihood, :risk_score, :source, :categories_json, :metadata_json, :created_at, :updated_at)"
+            ),
+            {
+                "id": finding_id, "system_id": system_id, "title": f"Sustained drift on {names}", "severity": "high", "status": "open",
+                "description": f"The last {consecutive} monitoring snapshots all fall outside thresholds. Latest: {metrics}.",
+                "mitigation": "Find what changed in the production population or the model, retrain or recalibrate, then record a fresh fairness run and monitoring snapshot.",
+                "likelihood": "likely", "risk_score": _risk_score("high", "likely"), "source": WATCH_SOURCE,
+                "categories_json": json.dumps(["monitoring", "drift"]),
+                "metadata_json": json.dumps({"watch": True, "window": policy["driftWindow"], "snapshot_ids": [sid for sid, _ in snapshots[:consecutive]], "latest_snapshot_id": latest_id}),
+                "created_at": now, "updated_at": now,
+            },
+        )
+        db.commit()
+    return {"policy": policy, "consecutiveDrifting": consecutive, "findingId": finding_id, "findingOpened": opened}
+
+
+def _fmt(value: Any) -> str:
+    return "n/a" if value is None else f"{float(value):.3f}"
+
+
+class MonitoringPolicyRequest(BaseModel):
+    cadenceHours: Optional[int] = Field(default=None, ge=1, le=2160)
+    driftWindow: Optional[int] = Field(default=None, ge=2, le=10)
+
+
+@router.get("/systems/{system_id}/monitoring-policy")
+async def get_monitoring_policy(
+    system_id: str,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_tables(db)
+    _require_system_access(db, system_id, current_user)
+    return _monitoring_policy(db, system_id)
+
+
+@router.put("/systems/{system_id}/monitoring-policy")
+async def put_monitoring_policy(
+    system_id: str,
+    body: MonitoringPolicyRequest,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Cadence 1 to 2160 hours, drift window 2 to 10 snapshots; an omitted field keeps its current value."""
+    _ensure_tables(db)
+    _require_system_access(db, system_id, current_user, mutate=True)
+    _system_row(db, system_id)
+    current = _monitoring_policy(db, system_id)
+    values = {
+        "id": system_id,
+        "cadence": body.cadenceHours if body.cadenceHours is not None else current["cadenceHours"],
+        "window": body.driftWindow if body.driftWindow is not None else current["driftWindow"],
+        "by": _authenticated_actor(current_user),
+        "at": datetime.now(timezone.utc).isoformat(),
+    }
+    if current["isDefault"]:
+        db.execute(
+            text("INSERT INTO governance_monitoring_policies (system_id, cadence_hours, drift_window, updated_by, updated_at) VALUES (:id, :cadence, :window, :by, :at)"),
+            values,
+        )
+    else:
+        db.execute(
+            text("UPDATE governance_monitoring_policies SET cadence_hours = :cadence, drift_window = :window, updated_by = :by, updated_at = :at WHERE system_id = :id"),
+            values,
+        )
+    db.commit()
+    return _monitoring_policy(db, system_id)
 
 
 @router.get("/systems/{system_id}/monitoring-runs")
