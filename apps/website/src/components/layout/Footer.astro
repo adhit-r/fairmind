@@ -1,4 +1,5 @@
 ---
+import { registryTotals } from '../../lib/registry';
 import { frameworks } from '../../lib/frameworks';
 
 const currentYear = new Date().getFullYear();
@@ -20,7 +21,7 @@ const columns = [
       ...frameworks
         .filter((f) => ['eu-ai-act', 'iso-42001', 'nist-ai-rmf', 'gdpr'].includes(f.slug))
         .map((f) => ({ label: f.shortName, href: `/frameworks/${f.slug}/` })),
-      { label: 'All 50 frameworks', href: '/frameworks/' },
+      { label: `All ${registryTotals.frameworks} frameworks`, href: '/frameworks/' },
     ],
   },
   {

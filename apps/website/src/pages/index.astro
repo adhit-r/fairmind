@@ -1,10 +1,11 @@
 ---
+import { registryTotals } from '../lib/registry';
 import Layout from '../layouts/Layout.astro';
 import { frameworks } from '../lib/frameworks';
 import '../styles/home.css';
 
 const stats = [
-  { n: '50', t: 'Frameworks in the registry, EU AI Act to OWASP Agentic' },
+  { n: String(registryTotals.frameworks), t: 'Frameworks in the registry, EU AI Act to OWASP Agentic' },
   { n: '90', t: 'Governance workflows agents can run' },
   { n: '109', t: 'Evaluations mapped to requirement IDs' },
   { n: '21', t: 'Packs across Govern, Evaluate, Secure, Comply' },
@@ -12,13 +13,19 @@ const stats = [
 ];
 
 const steps = [
-  { n: '01', title: 'Collect', body: 'Pull policies, tickets, model cards, logs. Read-only scopes.' },
+  { n: '01', title: 'Collect', body: 'Policies, tickets, model cards, logs. Read-only scopes.' },
   { n: '02', title: 'Check', body: 'Rules first, model second. Every finding cites its source.' },
-  { n: '03', title: 'Suggest', body: 'Propose the record, mapping, or fix. Confidence stated.' },
-  { n: '04 · Gate', title: 'Ask a person', body: 'Approve, edit, request changes, reject, or accept the risk. Deny by default.', gate: true },
+  { n: '03', title: 'Suggest', body: 'The record, mapping, or fix, with its confidence stated.' },
+  {
+    n: '04 · Gate', title: 'You', body: 'Approve, edit, or reject. Deny by default.', gate: true,
+    who: 'Waiting on a person', approved: { body: 'Decision recorded.', who: 'Approved by you' }, rejected: { body: 'Nothing changed.', who: 'Rejected by you' },
+  },
   { n: '05', title: 'Act', body: 'Dry run, blast radius, rollback plan. Then the change.' },
   { n: '06', title: 'Verify', body: 'Re-read the target. A mismatch rolls back and escalates.' },
-  { n: '07', title: 'File evidence', body: 'Hash-chained trace, mapped to every requirement it satisfies.' },
+  {
+    n: '07', title: 'File evidence', body: 'Hash-chained trace, mapped to every requirement it satisfies.',
+    approved: { body: 'Chained to the previous run and mapped to its requirement.' }, rejected: { body: 'The rejection is filed too, with the reason.' },
+  },
 ];
 
 const autonomy = [
@@ -75,7 +82,7 @@ const faqs = [
   },
   {
     q: 'Which frameworks does FairMind cover?',
-    a: 'The registry holds 50 frameworks, including the EU AI Act, ISO/IEC 42001, NIST AI RMF and AI 600-1, the OWASP Top 10 for LLM and Agentic applications, AIUC-1, MITRE ATLAS, the OWASP MCP Top 10, CSA MAESTRO, Singapore’s Model AI Governance Framework, and national rules from India, Japan, Korea, China and US states. One workflow run counts toward every requirement it maps to.',
+    a: `The registry holds ${registryTotals.frameworks} frameworks, including the EU AI Act, ISO/IEC 42001, NIST AI RMF and AI 600-1, the OWASP Top 10 for LLM and Agentic applications, AIUC-1, MITRE ATLAS, the OWASP MCP Top 10, CSA MAESTRO, Singapore’s Model AI Governance Framework, and national rules from India, Japan, Korea, China and US states. One workflow run counts toward every requirement it maps to.`,
   },
   {
     q: 'How is FairMind’s own agent governed?',
@@ -96,7 +103,7 @@ const structuredData = [
     operatingSystem: 'Web',
     url: 'https://fairmind.xyz',
     description:
-      'Agentic AI governance platform: 90 governance workflows, 109 evaluations and 50 frameworks, with a human gate in every workflow and a hash-chained record of each run. Covers EU AI Act, ISO/IEC 42001, NIST AI RMF, OWASP LLM and Agentic Top 10, MITRE ATLAS and AIUC-1.',
+      `Agentic AI governance platform: 90 governance workflows, 109 evaluations and ${registryTotals.frameworks} frameworks, with a human gate in every workflow and a hash-chained record of each run. Covers EU AI Act, ISO/IEC 42001, NIST AI RMF, OWASP LLM and Agentic Top 10, MITRE ATLAS and AIUC-1.`,
     publisher: { '@id': 'https://fairmind.xyz/#organization' },
   },
   {
@@ -113,7 +120,7 @@ const structuredData = [
 
 <Layout
   title="FairMind: agentic AI governance platform"
-  description="Agentic AI governance: 90 workflows, 109 evaluations and 50 frameworks, with a human gate in every workflow. EU AI Act, ISO/IEC 42001, NIST AI RMF, OWASP Agentic, MITRE ATLAS, AIUC-1."
+  description={`Agentic AI governance: 90 workflows, 109 evaluations and ${registryTotals.frameworks} frameworks, with a human gate in every workflow. EU AI Act, ISO/IEC 42001, NIST AI RMF, OWASP Agentic, MITRE ATLAS, AIUC-1.`}
   structuredData={structuredData}
 >
   <div class="story" data-story>
@@ -177,19 +184,30 @@ const structuredData = [
     <div class="wrap">
       <header class="section-heading">
         <p class="label reveal">How a run works</p>
-        <h2 class="reveal">Seven step types. One of them is always a <em>person.</em></h2>
+        <h2 class="reveal">The agent stops at you. <em>Nothing moves until you decide.</em></h2>
       </header>
-      <ol class="steps">
-        {steps.map((s) => (
-          <li class:list={[s.gate && 'gate']}>
-            <div>
+      <div class="run" data-run data-state="waiting">
+        <div class="run-track" aria-hidden="true"><i></i></div>
+        <ol class="run-steps">
+          {steps.map((s, i) => (
+            <li class:list={['run-step', s.gate && 'gate', i > 3 && 'after', i === 6 && 'filed']}>
+              <span class="run-dot" aria-hidden="true"></span>
               <p class="label">{s.n}</p>
               <b>{s.title}</b>
-              <span>{s.body}</span>
-            </div>
-          </li>
-        ))}
-      </ol>
+              <span class="run-body" data-waiting={s.body} data-approved={s.approved?.body} data-rejected={s.rejected?.body}>{s.body}</span>
+              <span class="run-who" data-waiting={s.who ?? 'Agent'} data-approved={s.approved?.who} data-rejected={s.rejected?.who}>{s.who ?? 'Agent'}</span>
+            </li>
+          ))}
+        </ol>
+        <div class="run-decision">
+          <p aria-live="polite" data-waiting="The agent suggests mapping this fairness run to EU AI Act Article 10(2)(f)." data-approved="Applied, verified, filed. Steps 05 to 07 ran because you approved." data-rejected="Steps 05 and 06 never ran. The trail shows why.">The agent suggests mapping this fairness run to EU AI Act Article 10(2)(f).</p>
+          <div class="run-actions">
+            <button type="button" class="button button-primary button-compact" data-run-to="approved">Approve</button>
+            <button type="button" class="button button-compact" data-run-to="rejected">Reject</button>
+            <button type="button" class="button button-compact" data-run-to="waiting" hidden>Run again</button>
+          </div>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -305,6 +323,21 @@ const structuredData = [
     </div>
   </section>
 
+  <script>
+    const run = document.querySelector<HTMLElement>('[data-run]');
+    if (run) {
+      const texts = run.querySelectorAll<HTMLElement>('[data-waiting]');
+      run.addEventListener('click', (event) => {
+        const to = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-run-to]')?.dataset.runTo;
+        if (!to) return;
+        run.dataset.state = to;
+        texts.forEach((el) => (el.textContent = el.dataset[to] ?? el.dataset.waiting ?? ''));
+        run.querySelectorAll<HTMLButtonElement>('[data-run-to]').forEach((b) => {
+          b.hidden = to === 'waiting' ? b.dataset.runTo === 'waiting' : b.dataset.runTo !== 'waiting';
+        });
+      });
+    }
+  </script>
   <script>
     import { mountTunnel } from '../scripts/tunnel';
     const story = document.querySelector<HTMLElement>('[data-story]');
