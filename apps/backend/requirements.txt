@@ -22,7 +22,7 @@ annotated-doc==0.0.4
     # via fastapi
 annotated-types==0.7.0
     # via pydantic
-anyio==4.13.0
+anyio==4.14.2
     # via
     #   httpx
     #   starlette
@@ -52,7 +52,7 @@ botocore==1.43.24
     # via
     #   boto3
     #   s3transfer
-certifi==2026.5.20
+certifi==2026.10.18
     # via
     #   httpcore
     #   httpx
@@ -206,7 +206,7 @@ pandas==3.0.3
     #   aif360
 passlib==1.7.4
     # via fairmind-backend (pyproject.toml)
-pillow==12.2.0
+pillow==13.0.0
     # via
     #   matplotlib
     #   reportlab
@@ -233,7 +233,7 @@ pydantic-settings==2.14.1
     # via fairmind-backend (pyproject.toml)
 pygments==2.20.0
     # via rich
-pyjwt==2.13.0
+pyjwt==2.14.0
     # via fairmind-backend (pyproject.toml)
 pyparsing==3.3.2
     # via matplotlib
