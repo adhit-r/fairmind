@@ -3047,6 +3047,8 @@ class GovernancePolicy(Base):
     __tablename__ = "governance_policies"
 
     id = Column(String, primary_key=True, default=_new_id)
+    # Owning organisation; rows without one are visible to nobody.
+    org_id = Column(String, nullable=True, index=True)
     name = Column(String, nullable=False)
     framework = Column(String, nullable=False)
     description = Column(Text, nullable=True)

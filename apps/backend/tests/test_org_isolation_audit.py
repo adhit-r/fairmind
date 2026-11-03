@@ -113,7 +113,7 @@ def db():
             "columns TEXT, upload_date TEXT, tags TEXT, file_path TEXT, file_type TEXT, file_size INTEGER, "
             "created_by TEXT, org_id TEXT)",
             "CREATE TABLE audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, action TEXT, "
-            "resource_type TEXT, resource_id TEXT, details TEXT, ip_address TEXT, created_at TEXT)",
+            "resource_type TEXT, resource_id TEXT, details TEXT, ip_address TEXT, user_agent TEXT, created_at TEXT)",
             "CREATE TABLE geographic_bias_analyses (id TEXT PRIMARY KEY, model_id TEXT, source_country TEXT, "
             "target_country TEXT, bias_score REAL, risk_level TEXT, compliance_status TEXT, analysis_date TEXT, "
             "org_id TEXT)",
