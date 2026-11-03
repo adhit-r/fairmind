@@ -7,6 +7,15 @@ from fastapi.testclient import TestClient
 from src.domain.environmental import run_assessment
 
 
+def _set_low_tier(fixture, system_id: str) -> None:
+    """The org-scoped create route ignores risk_tier; a low tier lets the release gate read conditional go so the environmental rule is what blocks."""
+    from sqlalchemy import text
+
+    with fixture.session_factory() as session:
+        session.execute(text("UPDATE governance_ai_systems SET risk_tier = 'low' WHERE id = :id"), {"id": system_id})
+        session.commit()
+
+
 def _create_system(client: TestClient, org_id: str) -> str:
     workspace_resp = client.post(
         f"/api/v1/ai-governance/organizations/{org_id}/workspaces",
@@ -154,6 +163,7 @@ def test_evidence_ingest_creates_no_go_risk_remediation_and_blocks_approval(
 ):
     client, org_id = environmental_governance_client
     system_id = _create_system(client, org_id)
+    _set_low_tier(environmental_governance_client, system_id)
     ingest = client.post(
         f"{_environmental_base(org_id, system_id)}/evidence",
         json={
@@ -198,10 +208,17 @@ def test_approval_blocks_missing_environmental_evidence_for_registered_system(
 ):
     client, org_id = environmental_governance_client
     system_id = _create_system(client, org_id)
+    _set_low_tier(environmental_governance_client, system_id)
     approval_req = client.post(
         f"/api/v1/ai-governance/approval/system/{system_id}/request",
         json={"requested_by": "owner@fairmind.ai"},
     )
+    # Any evidence on file lifts the gate off no go, so the missing environmental assessment is what blocks.
+    attested = client.post(
+        f"/api/v1/ai-governance/systems/{system_id}/attestations",
+        json={"check": "data_governance", "statement": "Training data comes from the licensed 2024 corpus."},
+    )
+    assert attested.status_code == 200, attested.text
     assert approval_req.status_code == 200
     decision = client.post(
         f"/api/v1/ai-governance/approval-requests/{approval_req.json()['request']['id']}/decision",
@@ -218,6 +235,7 @@ def test_approval_blocks_missing_environmental_evidence_for_registered_system(
 def test_documented_conditional_go_allows_system_approval(environmental_governance_client):
     client, org_id = environmental_governance_client
     system_id = _create_system(client, org_id)
+    _set_low_tier(environmental_governance_client, system_id)
     assessed = client.post(
         f"{_environmental_base(org_id, system_id)}/assess",
         json={"assessment": _assessment()},
