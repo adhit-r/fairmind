@@ -156,7 +156,7 @@ export function mountTunnel(story: HTMLElement, stage: HTMLElement, canvas: HTML
     uniforms.uRadius.value = hasPointer ? 1.5 : 0;
 
     // Remember approvals: tiles the cursor ray actually touched stay teal.
-    if (hasPointer && !reduceMotion) {
+    if (hasPointer) {
       const o = ray.ray.origin;
       const d = ray.ray.direction;
       const r2 = 0.81;
@@ -188,11 +188,7 @@ export function mountTunnel(story: HTMLElement, stage: HTMLElement, canvas: HTML
     renderer.render(scene, camera);
   };
 
-  if (reduceMotion) {
-    render();
-    addEventListener('scroll', render, { passive: true });
-    return;
-  }
+  // Reduced motion keeps the interaction and the scroll-linked camera; only the idle sway and breathing go (t stays 0).
   const frame = () => {
     requestAnimationFrame(frame);
     if (visible) render();

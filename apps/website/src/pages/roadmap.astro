@@ -5,138 +5,81 @@ import '../styles/pages.css';
 
 const phases = [
   {
-    category: 'current',
-    state: 'Observed checkpoint',
-    title: 'Useful evidence paths exist, but the assurance spine is incomplete.',
+    when: 'Shipped',
     items: [
-      'Environmental governance is the strongest bounded vertical slice.',
-      'Governance records, approvals, risks, remediation, and evidence exist across overlapping models.',
-      'The LLM judge depends on a named external provider; AI BOM is a metadata transformation.',
-      'Workbench evidence records are still mutable and are not yet immutable Evidence Passports.',
+      { title: 'System file and six-stage journey', body: 'Derived stage, one next action per stage, decision recorded and evidence sealed.' },
+      { title: 'Packs catalogue v2.3', body: '50 frameworks, 21 packs, 90 workflows, 109 evaluations, 8 bundles, 28 framework journeys.' },
+      { title: 'Workflow builder and run engine', body: 'Drafts, immutable published versions, validation that keeps a human gate, hash-chained run ledger.' },
+      { title: 'Release gate, CLI, GitHub Action', body: 'Five checks, confidence-weighted verdict, exit codes a pipeline can act on.' },
+      { title: 'Fairness test and environmental evaluation', body: 'Measured evidence with confidence intervals; FairMind-E measurement path.' },
+      { title: 'MLflow and GitHub connectors', body: 'Suggested tier and stage; a person promotes assets into governance.' },
     ],
   },
   {
-    category: 'p0',
-    state: 'P0 · claim safety',
-    title: 'Make every visible result tell the truth about its evidence.',
+    when: 'Next',
     items: [
-      'Enforce organization scope across systems, evidence, mappings, approvals, and reports.',
-      'Add immutable framework versions, source hashes, evidence-run identities, and reviewed mappings.',
-      'Remove mock-pass and browser-generated results; unavailable means unavailable.',
-      'Make artifacts integrity-aware and produce reports from a pinned canonical manifest.',
+      { title: 'Agent-executed steps', body: 'Collect, check and suggest steps run by the FairMind agent, behind the same gates, with citations required and abstain-over-guess. Starting with workflows whose inputs are already connected.' },
+      { title: 'Producers for the attest-only gate checks', body: 'Data governance and human oversight evidence from workflows and connectors rather than attestations alone.' },
+      { title: 'Autonomy levels enforced in the engine', body: 'A1 to A3 as runtime policy per workflow, not catalogue labels.' },
+      { title: 'More connectors', body: 'Model registries and experiment trackers beyond MLflow; agent frameworks and MCP server inventories.' },
     ],
   },
   {
-    category: 'p1',
-    state: 'P1 · reliable foundation',
-    title: 'Close one complete evaluation-to-decision loop.',
+    when: 'Later',
     items: [
-      'Make the assurance router required and consolidate the active governance data path.',
-      'Connect environmental evidence and one real tabular or LLM adapter to a canonical ingestion port.',
-      'Derive readiness from applicability, accepted mappings, freshness, findings, policies, and approvals.',
-      'Preserve compatibility gates until the replacement path proves closure.',
-    ],
-  },
-  {
-    category: 'p2',
-    state: 'P2 · coherence',
-    title: 'Reduce surface area and widen the adapter ecosystem.',
-    items: [
-      'Consolidate the dashboard into six assurance tasks with tested redirects.',
-      'Add artifact adapters for Giskard, MLflow, Fairlearn/AIF360, ModelScan, and garak/PyRIT.',
-      'Connect AI BOM and environmental exports to the same canonical manifest.',
-      'Retire mock provenance, duplicate endpoint families, and placeholder services after closure tests.',
+      { title: 'Evidence Passport v2', body: 'Admission, trust and signing routes; cross-tenant portability of sealed evidence.' },
+      { title: 'External anchoring of the ledger', body: 'The run ledger is tamper-evident today; anchoring makes it independently verifiable.' },
+      { title: 'Python SDK and MCP server', body: 'Gate, test and systems as library calls and as tools an agent can use.' },
+      { title: 'Separation of duties in code', body: 'The catalogue declares it for 32 workflows; the engine should refuse the same person on both sides.' },
     ],
   },
 ];
+
+const structuredData = {
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: [
+    { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://fairmind.xyz/' },
+    { '@type': 'ListItem', position: 2, name: 'Roadmap', item: 'https://fairmind.xyz/roadmap/' },
+  ],
+};
 ---
 
 <Layout
-  title="FairMind product roadmap | AI assurance evidence"
-  description="The FairMind recovery sequence: truthful capability states, immutable evidence, human-reviewed mappings, findings, retests, and reproducible assurance packages."
+  title="FairMind roadmap: shipped, next, later"
+  description="What FairMind has shipped, what is next, and what comes later: agent-executed workflow steps behind human gates, producers for every gate check, enforced autonomy levels, Evidence Passport v2, ledger anchoring, SDK and MCP server."
+  structuredData={structuredData}
 >
   <div class="route-page">
     <PageHero
-      signal="Public recovery sequence · evidence before claims"
-      title="A roadmap with"
-      accent="acceptance criteria."
-      description="This is not a feature wish list. It is the sequence for turning the current FairMind workbench into a defensible assurance system without allowing mock, missing, or insufficient evidence to look complete."
+      signal="Roadmap"
+      title="Shipped, next,"
+      accent="later."
+      description="We publish the state of the product rather than a wish list. If a capability is listed under Shipped, it is on main and in the walkthrough. If it is under Next, it is being built behind the same human gates."
       proofs={[
-        { label: 'Observed today', value: 'Bounded evidence paths', note: 'Environmental evidence is the strongest implemented vertical slice.' },
-        { label: 'Recovery contract', value: 'Immutable Evidence Passport', note: 'Subject, threshold, artifact, limitation, reviewer, remediation, and rerun.' },
-        { label: 'Exit condition', value: 'Same input. Same manifest.', note: 'Changed content under the same run identity must be rejected.' },
+        { label: 'Principle', value: 'Evidence before claims', note: 'Nothing moves to Shipped without a test behind it.' },
+        { label: 'Constant', value: 'A person at every gate', note: 'Automation widens what the agent prepares, never what it decides.' },
+        { label: 'Cadence', value: 'Monthly', note: 'This page is updated with each release.' },
       ]}
-      primary={{ label: 'Inspect the recovery sequence', href: '#recovery-sequence' }}
-      secondary={{ label: 'Read capability truth', href: '/#capabilities' }}
+      primary={{ label: 'Request access', href: '/request-access/' }}
+      secondary={{ label: 'Research notes', href: '/blog/' }}
     />
 
-    <section class="route-section" id="recovery-sequence" aria-labelledby="roadmap-title">
-      <header class="route-section-heading">
-        <h2 id="roadmap-title">Current state and recovery priority are different things.</h2>
-        <p>The labels below describe the July 2026 recovery decision record. They do not silently promote a planned capability into a shipped one.</p>
-      </header>
-
-      <div class="roadmap-controls" role="group" aria-label="Filter recovery roadmap">
-        <button type="button" class="is-active" data-roadmap-filter="all" aria-pressed="true">Entire sequence</button>
-        <button type="button" data-roadmap-filter="current" aria-pressed="false">Observed checkpoint</button>
-        <button type="button" data-roadmap-filter="p0" aria-pressed="false">P0 · claim safety</button>
-        <button type="button" data-roadmap-filter="p1" aria-pressed="false">P1 · foundation</button>
-        <button type="button" data-roadmap-filter="p2" aria-pressed="false">P2 · coherence</button>
-      </div>
-
-      <div data-roadmap-list>
-        {phases.map((phase) => (
-          <article class="roadmap-phase" data-roadmap-category={phase.category}>
-            <span class:list={['route-state', phase.category === 'p0' && 'route-state-orange', phase.category === 'current' && 'route-state-dark']}>{phase.state}</span>
-            <h2>{phase.title}</h2>
-            <ul>
-              {phase.items.map((item) => <li>{item}</li>)}
-            </ul>
-          </article>
-        ))}
-      </div>
-    </section>
-
-    <section class="route-section route-section-dark" aria-labelledby="acceptance-title">
-      <div class="route-split">
-        <div class="route-split-copy">
-          <h2 id="acceptance-title">The recovery is credible when one real run closes the loop.</h2>
-          <p>Run or import a real evaluation, preserve its identity and artifacts, expose the limitation, route the mapping to an independent reviewer, retain the failure, link remediation and a clean retest, then reproduce the same framework-pinned manifest at the same evidence cutoff.</p>
+    {phases.map((p) => (
+      <section class:list={['route-section', p.when === 'Next' && 'route-section-dark']} aria-labelledby={`phase-${p.when}`}>
+        <header class="route-section-heading"><h2 id={`phase-${p.when}`}>{p.when}</h2></header>
+        <div class="route-ledger">
+          {p.items.map((it) => (
+            <article class="route-ledger-row"><span>{p.when}</span><h3>{it.title}</h3><p>{it.body}</p></article>
+          ))}
         </div>
-        <div class="route-quote">
-          <blockquote>Missing evidence never becomes a pass.</blockquote>
-        </div>
-      </div>
-    </section>
+      </section>
+    ))}
 
     <section class="route-closing" aria-labelledby="roadmap-closing-title">
-      <div>
-        <p>Bring the evaluation output you already have</p>
-        <h2 id="roadmap-closing-title">Help close a real evidence path.</h2>
-      </div>
-      <div class="route-actions">
-        <a class="button button-primary" href="/request-access">Request access</a>
-        <a class="button button-secondary" href="https://github.com/adhit-r/fairmind">Inspect the source</a>
-      </div>
+      <h2 id="roadmap-closing-title">Want something moved up?</h2>
+      <p>Tell us the framework, the workflow, or the connector. Design partners shape the order.</p>
+      <div class="route-actions"><a class="button button-primary" href="/contact/">Contact us</a><a class="button" href="/features/">See what shipped</a></div>
     </section>
   </div>
 </Layout>
-
-<script>
-  document.querySelectorAll('[data-roadmap-filter]').forEach((filter) => {
-    filter.addEventListener('click', () => {
-      if (!(filter instanceof HTMLButtonElement)) return;
-      const selected = filter.dataset.roadmapFilter || 'all';
-      document.querySelectorAll('[data-roadmap-filter]').forEach((item) => {
-        if (!(item instanceof HTMLButtonElement)) return;
-        const active = item === filter;
-        item.classList.toggle('is-active', active);
-        item.setAttribute('aria-pressed', String(active));
-      });
-      document.querySelectorAll('[data-roadmap-category]').forEach((phase) => {
-        if (!(phase instanceof HTMLElement)) return;
-        phase.hidden = selected !== 'all' && phase.dataset.roadmapCategory !== selected;
-      });
-    });
-  });
-</script>

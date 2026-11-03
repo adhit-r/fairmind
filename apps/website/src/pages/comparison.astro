@@ -4,44 +4,56 @@ import PageHero from '../components/marketing/PageHero.astro';
 import '../styles/pages.css';
 
 const rows = [
-  ['Primary job', 'Run a technical evaluation', 'Manage program, policy, or inventory', 'Preserve evaluator output through review and decision'],
-  ['System identity', 'Often local to the run', 'Usually an inventory record', 'Bound to the evidence subject, version, owner, and deployment'],
-  ['Threshold', 'Metric or suite configuration', 'May live in policy text', 'Pre-registered and stored beside the result'],
-  ['Raw artifact', 'Native output', 'Often linked or summarized', 'Indexed with provenance and integrity information'],
-  ['Framework mapping', 'Usually outside scope', 'Often manual or workflow-specific', 'Candidate mapping with independent reviewer decision'],
-  ['Failure history', 'Reruns may replace the working view', 'Tracked as issue or action', 'Finding, remediation, exception, and superseding retest stay linked'],
-  ['Final claim', 'Technical result', 'Governance program state', 'Decision support; never automatic compliance or certification'],
+  { need: 'Run a fairness or safety test', evaluators: 'Yes, deeply', grc: 'No', fairmind: 'Yes for fairness, environmental, LLM judge. Imports the rest as Evidence Passports.' },
+  { need: 'Map evidence to framework requirements', evaluators: 'No', grc: 'Yes, by questionnaire', fairmind: 'Yes, by workflow run. 50 frameworks, 888 crosswalk links, human-accepted mappings.' },
+  { need: 'Human approval before anything changes', evaluators: 'Not in scope', grc: 'Sign-off on documents', fairmind: 'A gate step in every workflow. Deny by default; three change rounds escalate.' },
+  { need: 'Tamper-evident record of what happened', evaluators: 'Logs', grc: 'Audit log', fairmind: 'Hash-chained run ledger, sealed by the file step, chain state shown on the run page.' },
+  { need: 'A verdict your pipeline can read', evaluators: 'Thresholds in code', grc: 'No', fairmind: 'fairmind gate in the CLI and GitHub Actions. Measured failures never give a plain go.' },
+  { need: 'Govern agents, tools, and MCP servers', evaluators: 'Some red-teaming', grc: 'Rarely', fairmind: 'Agentic bundle covering OWASP Agentic and MCP Top 10, AIUC-1, and ten agent-risk codes.' },
+  { need: 'Certification', evaluators: 'No', grc: 'No', fairmind: 'No. Readiness and evidence only.' },
 ];
+
+const structuredData = {
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: [
+    { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://fairmind.xyz/' },
+    { '@type': 'ListItem', position: 2, name: 'Compare', item: 'https://fairmind.xyz/comparison/' },
+  ],
+};
 ---
 
 <Layout
-  title="FairMind vs AI evaluation and AI governance tools | FairMind"
-  description="How FairMind compares with AI evaluation tools and AI governance suites, and why it links test results to human-reviewed compliance evidence."
+  title="FairMind vs AI evaluation tools and GRC suites | FairMind"
+  description="Where FairMind sits next to evaluation tools and governance (GRC) suites: it runs some tests, imports the rest, maps evidence to 50 frameworks through workflows with human gates, and gives CI a verdict."
+  structuredData={structuredData}
 >
   <div class="route-page">
     <PageHero
-      signal="Compare the job, not the logo wall"
-      title="Evaluators test. Governance manages."
-      accent="FairMind binds evidence."
-      description="FairMind is most useful between the tools that produce technical results and the processes that need defensible, reviewable evidence. It complements both categories instead of pretending to replace them."
+      signal="Compare"
+      title="Evaluators test. GRC suites file."
+      accent="FairMind decides, with people."
+      description="Keep the evaluators you trust. Keep the GRC suite your auditors know. FairMind is the layer between them: the workflow that turns a test result into an approved, mapped, sealed record, and the gate that tells your pipeline what to do."
       proofs={[
-        { label: 'Evaluator', value: 'Produces a result', note: 'Metrics, suites, scans, artifacts, and reruns.' },
-        { label: 'FairMind', value: 'Preserves meaning', note: 'Subject, threshold, limitation, review, finding, and retest.' },
-        { label: 'Governance', value: 'Owns the decision', note: 'Frameworks, policies, approvals, reports, and accountability.' },
+        { label: 'Evidence in', value: 'Any evaluator', note: 'Run ours or ingest an Evidence Passport.' },
+        { label: 'Decisions', value: 'Always a person', note: 'No evaluator changes compliance state on its own.' },
+        { label: 'Evidence out', value: 'Versioned, sealed', note: 'Pinned framework versions, hash-chained runs, auditor mode.' },
       ]}
-      primary={{ label: 'Compare the handoffs', href: '#comparison-table' }}
-      secondary={{ label: 'See adapter targets', href: '/roadmap' }}
+      primary={{ label: 'Request access', href: '/request-access/' }}
+      secondary={{ label: 'See the platform', href: '/features/' }}
     />
 
     <section class="route-section" id="comparison-table" aria-labelledby="comparison-title">
       <header class="route-section-heading">
-        <h2 id="comparison-title">The missing layer is evidence continuity.</h2>
-        <p>This category comparison is deliberately vendor-neutral. Products vary; the handoff failure is consistent.</p>
+        <h2 id="comparison-title">Side by side.</h2>
+        <p>Generalised across categories. Your tools may differ; the point is where the gaps usually are.</p>
       </header>
       <div class="route-table-wrap">
         <table class="route-table">
-          <thead><tr><th>Concern</th><th>Evaluator tools</th><th>Governance platforms</th><th>FairMind evidence layer</th></tr></thead>
-          <tbody>{rows.map((row) => <tr>{row.map((cell, index) => <td><strong>{index === 0 ? cell : ''}</strong>{index === 0 ? '' : cell}</td>)}</tr>)}</tbody>
+          <thead><tr><th>Need</th><th>Evaluation tools</th><th>GRC suites</th><th>FairMind</th></tr></thead>
+          <tbody>
+            {rows.map((r) => (<tr><td>{r.need}</td><td>{r.evaluators}</td><td>{r.grc}</td><td>{r.fairmind}</td></tr>))}
+          </tbody>
         </table>
       </div>
     </section>
@@ -49,16 +61,20 @@ const rows = [
     <section class="route-section route-section-dark" aria-labelledby="adapter-title">
       <div class="route-split">
         <div class="route-split-copy">
-          <h2 id="adapter-title">Bring the evaluator you already trust.</h2>
-          <p>The roadmap prioritizes artifact adapters for Giskard, MLflow, Fairlearn/AIF360, ModelScan, and garak/PyRIT before adding more evaluator engines. Those are adapter targets, not claimed live integrations.</p>
+          <h2 id="adapter-title">Bring your own evaluator.</h2>
+          <p>An Evidence Passport carries the subject, evaluator and metric versions, threshold, artifact digest, result, and limitations. Ingest one and it enters the same review, mapping, and gate as a test FairMind ran itself.</p>
+          <p>Evaluators FairMind does not run are marked as such. Nothing is presented as measured unless it was.</p>
         </div>
-        <div class="route-quote"><blockquote>The evaluator is not the governance decision.</blockquote></div>
+        <div class="route-quote">
+          <blockquote>The evaluator is not the governance decision.</blockquote>
+          <p>A result becomes evidence when a person accepts what it supports, and the record keeps both.</p>
+        </div>
       </div>
     </section>
 
     <section class="route-closing" aria-labelledby="comparison-closing-title">
-      <div><p>Keep your current test stack</p><h2 id="comparison-closing-title">Add the evidence chain it is missing.</h2></div>
-      <div class="route-actions"><a class="button button-primary" href="/request-access">Discuss an adapter path</a><a class="button button-secondary" href="/features">Inspect FairMind</a></div>
+      <h2 id="comparison-closing-title">Already running tests? Start by gating one.</h2>
+      <div class="route-actions"><a class="button button-primary" href="/request-access/">Request access</a><a class="button" href="/demo/">Watch the walkthrough</a></div>
     </section>
   </div>
 </Layout>
