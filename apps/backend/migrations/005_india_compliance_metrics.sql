@@ -2,7 +2,7 @@
 -- Stores metrics for monitoring and observability
 
 CREATE TABLE IF NOT EXISTS india_compliance_metrics (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     
     -- Metric identification
     metric_type VARCHAR(100) NOT NULL,
