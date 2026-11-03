@@ -1,4 +1,5 @@
 # Single-box production stack for Lightsail. Database, auth and realtime stay on Neon.
+# Cloudflare Tunnel -> Next.js; Next.js forwards /api/proxy/* to the backend.
 services:
   backend:
     build: ../../apps/backend
@@ -23,15 +24,13 @@ services:
     depends_on: [backend]
     restart: unless-stopped
 
-  caddy:
-    image: caddy:2.10-alpine
-    ports: ["443:443"]
-    environment:
-      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+  # Outbound-only Cloudflare Tunnel: no inbound ports, TLS ends at Cloudflare
+  cloudflared:
+    image: cloudflare/cloudflared:2026.10.7
+    command: tunnel --no-autoupdate --cred-file /etc/cloudflared/creds.json run --url http://frontend:3000 ${TUNNEL_ID:?set TUNNEL_ID in .env}
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - ./certs:/etc/caddy/certs:ro
-    depends_on: [frontend, backend]
+      - ./tunnel.json:/etc/cloudflared/creds.json:ro
+    depends_on: [frontend]
     restart: unless-stopped
 
 volumes:

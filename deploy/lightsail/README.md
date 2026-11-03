@@ -1,12 +1,11 @@
-# FairMind on Lightsail + Cloudflare
+# FairMind on Lightsail + Cloudflare Tunnel
 
-One Lightsail instance (us-east-1, next to the Neon database; 2 GB, $12/mo) runs the backend, frontend and Caddy.
-Postgres, auth and realtime stay on Neon. Cloudflare (free plan) handles DNS, TLS at the edge and caching.
+One Lightsail instance (us-east-1, next to the Neon database; 2 GB, $12/mo) runs the backend, frontend and cloudflared.
+Postgres, auth and realtime stay on Neon. The instance takes no inbound web traffic: cloudflared dials out to Cloudflare.
 
 ```
-browser -> Cloudflare (fairmind.axonome.xyz) -> Caddy :443
-             /api/proxy/*  -> backend:8000 (FastAPI)
-             everything else -> frontend:3000 (Next.js)
+browser -> Cloudflare (fairmind.axonome.xyz) -> tunnel -> frontend:3000 (Next.js)
+                                                            /api/proxy/* -> backend:8000 (FastAPI)
 ```
 
 ## 1. Instance
@@ -22,12 +21,10 @@ aws lightsail enable-add-on --region us-east-1 --resource-name fairmind-app \
   --add-on-request addOnType=AutoSnapshot,autoSnapshotAddOnRequest={snapshotTimeOfDay=21:00}
 ```
 
-Firewall: 443 from Cloudflare only, 22 from your IP.
+Firewall: SSH from your IP only, nothing else.
 
 ```bash
-CF=$(curl -s https://www.cloudflare.com/ips-v4 | paste -sd, -)
 aws lightsail put-instance-public-ports --region us-east-1 --instance-name fairmind-app --port-infos \
-  "fromPort=443,toPort=443,protocol=tcp,cidrs=[$CF]" \
   "fromPort=22,toPort=22,protocol=tcp,cidrs=[$(curl -s https://checkip.amazonaws.com)/32]"
 ```
 
@@ -39,21 +36,21 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 curl -fsSL https://get.docker.com | sudo sh && sudo usermod -aG docker ubuntu
 ```
 
-## 2. Cloudflare
+## 2. Tunnel (on your machine, after `cloudflared tunnel login`)
 
-1. DNS: `A fairmind -> <static IP>`, proxied (orange cloud).
-2. SSL/TLS: mode **Full (strict)**.
-3. SSL/TLS > Origin Server > Create certificate for `fairmind.axonome.xyz`.
-   Save it on the instance as `deploy/lightsail/certs/origin.pem` and `origin-key.pem`.
+```bash
+cloudflared tunnel create fairmind
+cloudflared tunnel route dns fairmind fairmind.axonome.xyz
+scp ~/.cloudflared/<tunnel-id>.json ubuntu@<static-ip>:fairmind/deploy/lightsail/tunnel.json
+```
 
-Use a single-level subdomain: the free certificate covers `*.axonome.xyz` only.
+On the instance: `chmod 644 tunnel.json` (cloudflared runs as a non-root user in its container).
 
 ## 3. Config (on the instance, in `deploy/lightsail/`; all gitignored)
 
-- `.env`: `DOMAIN=fairmind.axonome.xyz`, plus the build-time `NEXT_PUBLIC_NEON_REALTIME_URL`
-  and `NEXT_PUBLIC_AUTHENTIK_*` if used.
+- `.env`: `TUNNEL_ID=<tunnel-id>`, plus build-time `NEXT_PUBLIC_*` values if used.
 - `backend.env`: the keys in `apps/backend/.env.example` with real values. Required:
-  `NODE_ENV=production`, `DATABASE_URL` (Neon), `SECRET_KEY`, `JWT_SECRET`, `NEON_*`,
+  `ENVIRONMENT=production`, `DATABASE_URL` (Neon), `SECRET_KEY`, `JWT_SECRET`,
   `ALLOWED_ORIGINS=https://fairmind.axonome.xyz`. Leave `REDIS_URL` unset.
 - `frontend.env`: server-side frontend keys (`DATABASE_URL`, `NEON_REALTIME_SECRET`, `NEON_REALTIME_URL`).
 
