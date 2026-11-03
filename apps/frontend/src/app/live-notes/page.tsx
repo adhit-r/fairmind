@@ -5,8 +5,13 @@ import { createRealtimeClient, type SealedLiveQuery } from "@neon/realtime/clien
 import { RealtimeProvider, useLiveQuery } from "@neon/realtime-react"
 import type { LiveNote } from "../api/live-notes/route"
 
-const fetchSealed = (): Promise<SealedLiveQuery<LiveNote>> =>
-  fetch("/api/live-notes", { method: "POST" }).then((r) => r.json())
+const realtimeUrl = process.env.NEXT_PUBLIC_NEON_REALTIME_URL
+
+async function fetchSealed(): Promise<SealedLiveQuery<LiveNote>> {
+  const response = await fetch("/api/live-notes", { method: "POST" })
+  if (!response.ok) throw new Error(`Could not get a live query (${response.status})`)
+  return response.json()
+}
 
 function Notes({ sealedQuery }: { sealedQuery: SealedLiveQuery<LiveNote> }) {
   const { data, status, error } = useLiveQuery(sealedQuery, { refreshQuery: fetchSealed })
@@ -24,20 +29,28 @@ function Notes({ sealedQuery }: { sealedQuery: SealedLiveQuery<LiveNote> }) {
   )
 }
 
-export default function LiveNotesPage() {
-  const [client] = useState(() => createRealtimeClient({ url: process.env.NEXT_PUBLIC_NEON_REALTIME_URL! }))
+function LiveNotes({ url }: { url: string }) {
+  const [client] = useState(() => createRealtimeClient({ url }))
   const [sealedQuery, setSealedQuery] = useState<SealedLiveQuery<LiveNote>>()
+  const [error, setError] = useState<string>()
 
   useEffect(() => {
-    fetchSealed().then(setSealedQuery)
+    fetchSealed().then(setSealedQuery, (e: Error) => setError(e.message))
   }, [])
 
+  if (error) return <p role="alert">{error}</p>
   return (
     <RealtimeProvider client={client}>
-      <main className="mx-auto max-w-xl p-8">
-        <h1 className="mb-4 text-xl font-semibold tracking-tight text-[var(--fm-ink)]">Live notes</h1>
-        {sealedQuery ? <Notes sealedQuery={sealedQuery} /> : <p>Loading notes</p>}
-      </main>
+      {sealedQuery ? <Notes sealedQuery={sealedQuery} /> : <p>Loading notes</p>}
     </RealtimeProvider>
+  )
+}
+
+export default function LiveNotesPage() {
+  return (
+    <main className="mx-auto max-w-xl p-8">
+      <h1 className="mb-4 text-xl font-semibold tracking-tight text-[var(--fm-ink)]">Live notes</h1>
+      {realtimeUrl ? <LiveNotes url={realtimeUrl} /> : <p role="alert">Realtime is not configured</p>}
+    </main>
   )
 }
