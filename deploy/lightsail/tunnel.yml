@@ -3,6 +3,8 @@ ingress:
     service: http://website:80
   - hostname: fairmind-app.axonome.xyz
     service: http://frontend:3000
+  - hostname: app.fairmind.xyz
+    service: http://frontend:3000
   - hostname: fairmind-demo.axonome.xyz
     service: http://frontend-demo:3000
   - service: http_status:404
