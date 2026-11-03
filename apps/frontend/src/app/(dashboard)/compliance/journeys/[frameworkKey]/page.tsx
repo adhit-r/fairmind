@@ -171,7 +171,7 @@ export default function JourneyPage() {
         <section aria-labelledby="clause-h" className="pk-card min-w-0 flex-[2_1_480px] px-6 py-5">
           <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2.5">
             <h2 id="clause-h" className="m-0 text-base font-semibold text-[var(--fm-ink)]">Workflows by clause</h2>
-            <span className={cn('text-[12.5px]', MUTED)}>Each runs in a lifecycle stage</span>
+            <span className={cn('text-[12.5px]', MUTED)}>Stage as the catalogue names it, and the latest run</span>
           </div>
           {view.byGroup.length === 0 ? (
             <p className={cn('m-0 mt-2 text-[13px]', MUTED)}>No installed workflow covers this framework yet. Install a pack from the list below.</p>

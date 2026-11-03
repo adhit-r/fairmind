@@ -65,7 +65,7 @@ export default function RunsPage() {
                     </td>
                     <td className="py-2.5 pr-3"><StatusPill status={r.status} /></td>
                     <td className="py-2.5 pr-3">
-                      {r.waitingFor === 'approval' ? <Pill tone="you">Your approval</Pill> : r.waitingFor === 'input' ? <Pill tone="you">A step recorded</Pill> : <span className={MUTED}>Nothing</span>}
+                      {r.waitingFor === 'approval' ? <Pill tone="you">Your approval</Pill> : r.waitingFor === 'input' ? <Pill tone="you">A step to record</Pill> : <span className={MUTED}>Nothing</span>}
                     </td>
                     <td className={cn('whitespace-nowrap py-2.5', MUTED)}>{when(r.updatedAt)}</td>
                   </tr>

@@ -27,6 +27,8 @@ const VIEWS: Array<{ id: View; label: string }> = [
 /** The board has room for eight slots; plugged-in frameworks come first, then a few suggestions as empty slots. */
 const BOARD_SLOTS = 8
 const SUGGESTED_SLOTS = 2
+/** Plugged-in cards shown before "Show all"; one pack serves many frameworks, so the full list can be long. */
+const PLUGGED_SHOWN = 6
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 const pct = (n: number, total: number) => (total > 0 ? Math.min(100, (n / total) * 100) : 0)
@@ -149,6 +151,7 @@ export default function CompliancePage() {
   const journeys = useJourneys()
   const [view, setView] = useState<View>('installed')
   const [pillar, setPillar] = useState<string>('')
+  const [allPlugged, setAllPlugged] = useState(false)
   const installer = useInstaller(() => {
     packs.reload()
     bundles.reload()
@@ -163,16 +166,21 @@ export default function CompliancePage() {
   const journeyKeys = useMemo(() => new Set(allJourneys.map((j) => j.key)), [allJourneys])
 
   const board = useMemo(() => {
-    const plugged = allJourneys.filter((j) => j.coveredInstalled > 0).sort((a, b) => pct(b.coveredInstalled, b.active) - pct(a.coveredInstalled, a.active))
+    // Frameworks with runs waiting for you first, then the most covered.
+    const plugged = allJourneys
+      .filter((j) => j.coveredInstalled > 0)
+      .sort((a, b) => b.waiting - a.waiting || pct(b.coveredInstalled, b.active) - pct(a.coveredInstalled, a.active))
     const open = allJourneys.filter((j) => j.coveredInstalled === 0).sort((a, b) => b.coveredAll - a.coveredAll)
     const shown = plugged.slice(0, BOARD_SLOTS - Math.min(SUGGESTED_SLOTS, open.length))
     const suggested = open.slice(0, BOARD_SLOTS - shown.length).slice(0, SUGGESTED_SLOTS)
-    let waitNo = 0
+    // A workflow serves several frameworks, so its waiting run keeps one number wherever it appears.
+    const waitNo = new Map<string, number>()
+    for (const j of shown) for (const w of j.workflows) if (w.status === 'waiting' && !waitNo.has(w.id)) waitNo.set(w.id, waitNo.size + 1)
     const figure = packsFigure([
       ...shown.map((j) => ({
         label: j.name,
         installed: true,
-        workflows: j.workflows.slice(0, 12).map((w) => ({ status: w.status, waitNo: w.status === 'waiting' ? ++waitNo : undefined })),
+        workflows: j.workflows.slice(0, 12).map((w) => ({ status: w.status, waitNo: waitNo.get(w.id) })),
       })),
       ...suggested.map((j) => ({ label: j.name, installed: false, workflows: [] })),
     ])
@@ -250,9 +258,14 @@ export default function CompliancePage() {
               </>
             ) : (
               <>
-                {board.plugged.map((j, i) => (
+                {(allPlugged ? board.plugged : board.plugged.slice(0, PLUGGED_SHOWN)).map((j, i) => (
                   <PluggedCard key={j.key} j={j} primary={i === 0} />
                 ))}
+                {board.plugged.length > PLUGGED_SHOWN && (
+                  <button type="button" className={cn(BTN, 'self-start')} onClick={() => setAllPlugged(!allPlugged)} aria-expanded={allPlugged}>
+                    {allPlugged ? 'Show fewer' : `Show all ${board.plugged.length}`}
+                  </button>
+                )}
                 <p className={cn('m-0 text-[13px]', MUTED)}>
                   {plural(board.open.length, 'framework')} not started.{' '}
                   <button type="button" onClick={() => setView('add')} className="font-semibold text-[var(--fm-ink)] underline">
@@ -363,7 +376,7 @@ export default function CompliancePage() {
         <section id="panel-workflows" role="tabpanel" aria-labelledby="tab-workflows" className="pk-card px-6 py-5">
           <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2.5">
             <h2 className="m-0 text-base font-semibold">Workflows of your installed packs</h2>
-            <span className={cn('text-[12.5px]', MUTED)}>Waiting and running first. Each runs in a lifecycle stage.</span>
+            <span className={cn('text-[12.5px]', MUTED)}>Waiting and running first.</span>
           </div>
           {workflows.length === 0 ? (
             <Empty>Install a pack or add a framework to get workflows.</Empty>
