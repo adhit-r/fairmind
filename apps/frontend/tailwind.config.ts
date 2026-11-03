@@ -42,26 +42,6 @@ const config: Config = {
 				card: {
 					DEFAULT: 'var(--card)',
 					foreground: 'var(--card-foreground)'
-				},
-				main: 'var(--main)',
-				'main-foreground': 'var(--main-foreground)',
-				'secondary-background': 'var(--secondary-background)',
-				orange: {
-					DEFAULT: '#FF6B35',
-					dark: '#E55A2B'
-				},
-				black: {
-					DEFAULT: '#000000'
-				},
-				sidebar: {
-					DEFAULT: 'var(--sidebar-background)',
-					foreground: 'var(--sidebar-foreground)',
-					primary: 'var(--sidebar-primary)',
-					'primary-foreground': 'var(--sidebar-primary-foreground)',
-					accent: 'var(--sidebar-accent)',
-					'accent-foreground': 'var(--sidebar-accent-foreground)',
-					border: 'var(--sidebar-border)',
-					ring: 'var(--sidebar-ring)'
 				}
 			},
 			borderRadius: {
@@ -70,13 +50,7 @@ const config: Config = {
 				sm: 'calc(var(--radius) - 4px)'
 			},
 			fontFamily: {
-				sans: ['var(--font-raleway)', 'sans-serif'],
-			},
-			boxShadow: {
-				brutal: 'var(--shadow)',
-				shadow: 'var(--shadow)',
-				'brutal-lg': '8px 8px 0px 0px #000',
-				'brutal-xl': '12px 12px 0px 0px #000'
+				sans: ['var(--font-inter)', 'sans-serif'],
 			},
 			keyframes: {
 				'accordion-down': {

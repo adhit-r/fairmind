@@ -72,8 +72,8 @@ export default function AssuranceEvaluationDetailPage({ params }: PageProps) {
   ))
 
   return (
-    <div className="mx-auto w-full max-w-[1320px] space-y-5 text-[#0F1412]">
-      <header className="border-b-4 border-[#0F1412] pb-4 pt-1">
+    <div className="mx-auto w-full max-w-[1320px] space-y-5 text-[var(--fm-ink)]">
+      <header className="border-b border-[var(--fm-line)] pb-4 pt-1">
         <FramedIcon
           href="/tests"
           icon={IconArrowLeft}
@@ -82,41 +82,41 @@ export default function AssuranceEvaluationDetailPage({ params }: PageProps) {
           className="mb-4 w-auto"
         />
         <div className="flex items-start gap-3">
-          <span aria-hidden="true" className="mt-1 flex h-11 w-11 shrink-0 items-center justify-center border-2 border-[#0F1412] bg-[#FF6B35] shadow-[3px_3px_0_0_#0F1412]">
+          <span aria-hidden="true" className="mt-1 flex h-11 w-11 shrink-0 items-center justify-center bg-[#FF6B35] rounded-[14px] shadow-[var(--fm-shadow)]">
             <IconShieldCheck className="h-5 w-5" />
           </span>
           <div>
-            <p className="text-xs font-black uppercase tracking-wide text-[#59615D]">Assurance preview</p>
-            <h1 className="text-3xl font-black tracking-[-0.02em]">Evidence trust panel</h1>
-            <p className="mt-1 break-all font-mono text-xs font-bold text-[#59615D]">{runId}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--fm-ink2)]">Assurance preview</p>
+            <h1 className="text-3xl font-semibold tracking-[-0.02em]">Evidence trust panel</h1>
+            <p className="mt-1 break-all font-mono text-xs font-bold text-[var(--fm-ink2)]">{runId}</p>
           </div>
         </div>
       </header>
 
-      <section className="border-2 border-[#0F1412] bg-[#FFF1D6] p-4 text-sm font-semibold text-[#5B492E]">
+      <section className="border border-[var(--fm-line)] bg-[#FFF1D6] p-4 text-sm font-semibold text-[#5B492E]">
         This preview is read-only and default-off at the API. It renders only a validated, scope-matched v2 run response; unavailable or denied data is never replaced with legacy or fixture evidence.
       </section>
 
       {!ASSURANCE_V2_UI_ENABLED ? (
-        <section className="border-4 border-[#0F1412] bg-[#F3F5F0] p-6">
-          <h2 className="text-xl font-black">Assurance preview disabled</h2>
-          <p className="mt-2 text-sm font-semibold text-[#59615D]">Set <code className="font-mono font-black">NEXT_PUBLIC_ASSURANCE_V2_UI_ENABLED=true</code> only in an allowlisted environment. The API must independently enable <code className="font-mono font-black">assurance_v2_enabled</code> before any v2 response can render.</p>
+        <section className="border border-[var(--fm-line)] bg-[var(--fm-bg)] p-6">
+          <h2 className="text-xl font-semibold">Assurance preview disabled</h2>
+          <p className="mt-2 text-sm font-semibold text-[var(--fm-ink2)]">Set <code className="font-mono font-semibold">NEXT_PUBLIC_ASSURANCE_V2_UI_ENABLED=true</code> only in an allowlisted environment. The API must independently enable <code className="font-mono font-semibold">assurance_v2_enabled</code> before any v2 response can render.</p>
         </section>
       ) : !selectedOrg && !initialLoading ? (
-        <section className="border-4 border-[#0F1412] bg-[#FCFDF8] p-6">
-          <h2 className="text-xl font-black">Choose an organization</h2>
-          <p className="mt-2 text-sm font-semibold text-[#59615D]">An organization is required before this scoped run can be retrieved.</p>
+        <section className="border border-[var(--fm-line)] bg-white p-6">
+          <h2 className="text-xl font-semibold">Choose an organization</h2>
+          <p className="mt-2 text-sm font-semibold text-[var(--fm-ink2)]">An organization is required before this scoped run can be retrieved.</p>
         </section>
       ) : !realSystem?.workspaceId && !initialLoading ? (
-        <section className="border-4 border-[#0F1412] bg-[#FCFDF8] p-6">
-          <h2 className="text-xl font-black">Choose an AI system</h2>
-          <p className="mt-2 text-sm font-semibold text-[#59615D]">A real selected system with a workspace binding is required before this run can be retrieved.</p>
+        <section className="border border-[var(--fm-line)] bg-white p-6">
+          <h2 className="text-xl font-semibold">Choose an AI system</h2>
+          <p className="mt-2 text-sm font-semibold text-[var(--fm-ink2)]">A real selected system with a workspace binding is required before this run can be retrieved.</p>
         </section>
       ) : initialLoading ? (
-        <section aria-label="Loading evaluation evidence" className="space-y-3 border-4 border-[#0F1412] bg-[#FCFDF8] p-6">
-          <div className="h-11 w-full animate-pulse bg-[#E5E9E3] motion-reduce:animate-none" />
-          <div className="h-28 w-full animate-pulse bg-[#E5E9E3] motion-reduce:animate-none" />
-          <div className="h-40 w-full animate-pulse bg-[#E5E9E3] motion-reduce:animate-none" />
+        <section aria-label="Loading evaluation evidence" className="space-y-3 border border-[var(--fm-line)] bg-white p-6">
+          <div className="h-11 w-full animate-pulse bg-[var(--fm-bg)] motion-reduce:animate-none" />
+          <div className="h-28 w-full animate-pulse bg-[var(--fm-bg)] motion-reduce:animate-none" />
+          <div className="h-40 w-full animate-pulse bg-[var(--fm-bg)] motion-reduce:animate-none" />
         </section>
       ) : detailError ? (
         <EvaluationWorkbenchStatusNotice
@@ -134,7 +134,7 @@ export default function AssuranceEvaluationDetailPage({ params }: PageProps) {
         <EvidenceTrustPanel run={run} />
       ) : (
         <section role="alert" className="border-4 border-[#D83A2E] bg-red-50 p-6">
-          <h2 className="text-xl font-black text-[#8F2019]">Evaluation evidence unavailable</h2>
+          <h2 className="text-xl font-semibold text-[#8F2019]">Evaluation evidence unavailable</h2>
           <p className="mt-2 text-sm font-semibold text-[#5B211D]">The scoped v2 run did not return a response. No legacy result was substituted.</p>
         </section>
       )}

@@ -1,11 +1,18 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from typing import Dict, Any, Optional
 from pydantic import BaseModel
 import logging
 
+from api.routes.org_scope import org_mutator
+from config.auth import get_current_active_user
 from services.mlops_integration import mlops_integration
+from src.application.services.governance_assurance_service import OrgMembership
 
-router = APIRouter(prefix="/mlops", tags=["MLOps Integration"])
+router = APIRouter(
+    prefix="/mlops",
+    tags=["MLOps Integration"],
+    dependencies=[Depends(get_current_active_user)],
+)
 logger = logging.getLogger(__name__)
 
 
@@ -35,7 +42,7 @@ async def get_mlops_status():
 
 
 @router.post("/log-test")
-async def log_test_results(request: LogTestRequest):
+async def log_test_results(request: LogTestRequest, m: OrgMembership = Depends(org_mutator)):
     """
     Log bias test results to configured MLOps platforms
     """
@@ -51,7 +58,8 @@ async def log_test_results(request: LogTestRequest):
             model_id=request.model_id,
             test_type=request.test_type,
             results=request.results,
-            metadata=request.metadata
+            # One tracker project serves every tenant, so each run says whose it is.
+            metadata={**(request.metadata or {}), "org_id": m.org_id},
         )
         return {
             "success": True,

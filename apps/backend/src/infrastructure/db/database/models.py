@@ -129,6 +129,7 @@ class ComplianceSchedule(Base):
     next_run = Column(DateTime, nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=func.now())
+    org_id = Column(String, nullable=True, index=True)  # owning organisation; NULL rows are invisible to every tenant
 
 class ComplianceViolation(Base):
     """Compliance Violation model"""
@@ -143,6 +144,7 @@ class ComplianceViolation(Base):
     detected_at = Column(DateTime, default=func.now())
     resolved = Column(Boolean, default=False)
     resolved_at = Column(DateTime, nullable=True)
+    org_id = Column(String, nullable=True, index=True)  # owning organisation; NULL rows are invisible to every tenant
 
 
 class User(Base):
@@ -159,6 +161,12 @@ class User(Base):
     roles = Column(JSON, default=list)  # ["admin", "analyst", "viewer"]
     groups = Column(JSON, default=list)  # Authentik groups
     permissions = Column(JSON, default=list)  # Computed permissions
+
+    # Password sign-in (config.auth reads these; the register route writes them).
+    # Present in the Postgres schema already; declared here so SQLite dev and
+    # test databases built from this model carry the same columns.
+    role = Column(String(50), nullable=True)
+    password_hash = Column(String(255), nullable=True)
 
     # Account status
     is_active = Column(Boolean, default=True)
@@ -181,7 +189,16 @@ class User(Base):
     # Relationships
     audit_logs = relationship("AuditLog", back_populates="user", cascade="all, delete-orphan")
     primary_organization = relationship("Organization", foreign_keys=[primary_org_id], back_populates="primary_users")
-    organizations = relationship("Organization", secondary="org_members", back_populates="users")
+    # org_members carries two foreign keys to users (user_id and invited_by), so
+    # the join has to be spelled out; without it configuring the mappers raises
+    # AmbiguousForeignKeysError as soon as any mapped class is instantiated.
+    organizations = relationship(
+        "Organization",
+        secondary="org_members",
+        primaryjoin="User.id == OrganizationMember.user_id",
+        secondaryjoin="Organization.id == OrganizationMember.org_id",
+        back_populates="users",
+    )
 
 
 class AuditLog(Base):
@@ -274,7 +291,13 @@ class Organization(Base):
     roles = relationship("OrganizationRole", back_populates="organization", cascade="all, delete-orphan")
     audit_logs = relationship("OrganizationAuditLog", back_populates="organization", cascade="all, delete-orphan")
     primary_users = relationship("User", foreign_keys="User.primary_org_id", back_populates="primary_organization")
-    users = relationship("User", secondary="org_members", back_populates="organizations")
+    users = relationship(
+        "User",
+        secondary="org_members",
+        primaryjoin="Organization.id == OrganizationMember.org_id",
+        secondaryjoin="User.id == OrganizationMember.user_id",
+        back_populates="organizations",
+    )
 
 
 class OrganizationMember(Base):
@@ -297,7 +320,7 @@ class OrganizationMember(Base):
 
     # Relationships
     organization = relationship("Organization", back_populates="members")
-    user = relationship("User")
+    user = relationship("User", foreign_keys=[user_id])
     inviter = relationship("User", foreign_keys=[invited_by])
 
 

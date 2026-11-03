@@ -1,0 +1,85 @@
+---
+title: Quickstart
+description: Run FairMind locally, connect the dashboard, and reach your first evidence workflow.
+---
+
+This guide starts the backend and dashboard, connects them directly, and takes you to a system-scoped workspace. Local SQLite is enough for the first run.
+
+<figure className="product-capture">
+  <video controls muted playsInline preload="metadata" poster="/media/product/v1/environmental-gate-decision.png">
+    <source src="/media/product/v1/fairmind-governance-loop.mp4" type="video/mp4" />
+    <track kind="captions" src="/media/product/v1/fairmind-governance-loop.vtt" srcLang="en" label="English" default />
+  </video>
+  <figcaption>Fixture-only walkthrough: register, assess, link evidence, hold the gate, remediate, and report. Captions are burned into the video and also provided as a WebVTT track.</figcaption>
+</figure>
+
+## Prerequisites
+
+- Python 3.11 or later
+- `uv`
+- Node.js and npm
+
+## 1. Start the backend
+
+```bash
+cd apps/backend
+uv sync
+uv run python -m uvicorn api.main:app --reload --port 8000
+```
+
+Verify the process from another terminal:
+
+```bash
+curl http://localhost:8000/health
+curl http://localhost:8000/health/ready
+```
+
+The API explorer is available at `http://localhost:8000/docs` in development. It is intentionally disabled in production.
+
+## 2. Start the dashboard
+
+```bash
+cd apps/frontend
+npm install
+NEXT_PUBLIC_API_URL=http://localhost:8000 npm run dev
+```
+
+Open `http://localhost:1111`.
+
+<Callout type="info" title="Same-origin proxy option">
+Leave `NEXT_PUBLIC_API_URL` unset and start the frontend with `BACKEND_INTERNAL_URL=http://localhost:8000` when you want browser requests to use the Next.js proxy.
+</Callout>
+
+## 3. Create system context
+
+After authentication:
+
+1. Select an organization.
+2. Open **Systems > Register System**.
+3. Record the system name, owner, risk tier, and workspace.
+4. Select the governance frameworks that apply to the review.
+5. Confirm the record and enter the lifecycle.
+
+Skip the optional tabular bias branch in the current release. The interface exists, but its evaluator endpoint is not an evidence-grade path.
+
+## 4. Reach first evidence
+
+Open **Evidence & Controls > Evidence Workbench**. A defensible record should identify:
+
+- the governed subject and version;
+- the evaluator or source;
+- the metric, method, and threshold;
+- the raw artifact or external reference;
+- limitations and recorded confidence;
+- the reviewer state;
+- any linked risk, control, remediation, or rerun.
+
+## Next steps
+
+- [Register a system](/docs/workflows/register-system)
+- [Assess environmental impact](/docs/workflows/environmental-evaluation)
+- [Review and link evidence](/docs/workflows/evidence-review)
+
+## Evidence basis
+
+Commands come from `apps/backend/pyproject.toml`, `apps/backend/api/main.py`, and `apps/frontend/package.json`. API routing behavior is implemented in `apps/frontend/src/lib/api/api-client.ts` and `apps/frontend/src/app/api/proxy/[...path]/route.ts`.

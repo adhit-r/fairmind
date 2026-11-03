@@ -15,7 +15,7 @@ export default function AutomationDashboard() {
                     <IconRobot size={32} />
                 </div>
                 <div>
-                    <h2 className="text-3xl font-bold tracking-tight">Compliance Automation</h2>
+                    <h2 className="text-[24px] font-semibold tracking-tight">Compliance Automation</h2>
                     <p className="text-muted-foreground">
                         Automate regulatory reporting, schedule audits, and track compliance violations.
                     </p>
@@ -26,17 +26,17 @@ export default function AutomationDashboard() {
                 {/* Left Column: Schedules & Reports */}
                 <div className="lg:col-span-2 space-y-6">
                     <Tabs defaultValue="schedules" className="space-y-4">
-                        <TabsList className="border-2 border-black p-0 h-auto bg-transparent gap-2">
+                        <TabsList className="border border-[var(--fm-line)] p-0 h-auto bg-transparent gap-2">
                             <TabsTrigger
                                 value="schedules"
-                                className="data-[state=active]:bg-black data-[state=active]:text-white border-2 border-transparent data-[state=active]:border-black rounded-none px-4 py-2"
+                                className="data-[state=active]:bg-[var(--fm-ink)] data-[state=active]:text-white border border-transparent data-[state=active]:border-[var(--fm-line)] px-4 py-2"
                             >
                                 <IconCalendar size={18} className="mr-2" />
                                 Schedules
                             </TabsTrigger>
                             <TabsTrigger
                                 value="reports"
-                                className="data-[state=active]:bg-black data-[state=active]:text-white border-2 border-transparent data-[state=active]:border-black rounded-none px-4 py-2"
+                                className="data-[state=active]:bg-[var(--fm-ink)] data-[state=active]:text-white border border-transparent data-[state=active]:border-[var(--fm-line)] px-4 py-2"
                             >
                                 <IconFileText size={18} className="mr-2" />
                                 Report History

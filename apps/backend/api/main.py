@@ -76,6 +76,15 @@ async def lifespan(app: FastAPI):
         logger.error(f"Failed to initialize database: {e}")
         raise
 
+    # ORM-managed tables (users, organisations, governance). Table by table,
+    # so one definition the local SQLite cannot parse does not block the rest.
+    try:
+        from database.connection import db_manager as orm_db_manager
+
+        orm_db_manager.create_tables()
+    except Exception as e:
+        logger.warning(f"ORM table creation incomplete: {e}")
+
     # Initialize cache connections
     try:
         await init_cache()
@@ -246,12 +255,13 @@ See the request/response examples in each endpoint for code samples in Python, J
 # CORS must be before other middleware to handle preflight OPTIONS requests
 # In development, allow all localhost origins
 cors_origins = settings.get_allowed_origins()
-if settings.is_development:
-    cors_origins = ["http://localhost:1111", "http://localhost:3000", "http://127.0.0.1:1111", "http://127.0.0.1:3000"]
+# Development: any loopback origin, whatever port the dev server picked.
+cors_origin_regex = r"^https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$" if settings.is_development else None
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
+    allow_origin_regex=cors_origin_regex,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["*"],
@@ -387,6 +397,9 @@ _include_router("api.routes.core", prefix="/api/v1", tags=["core"], required=Tru
 _include_router("api.routes.database", prefix="/api/v1", tags=["database"], attr="router", required=True)
 _include_router("api.routes.database", prefix="/api/v1", tags=["main-api"], attr="main_router", required=True)
 _include_router("api.routes.ai_governance", prefix="/api/v1/ai-governance", tags=["ai-governance"], required=True)
+_include_router("api.routes.fairness_runs", prefix="/api/v1/ai-governance", tags=["fairness"], required=False)
+_include_router("api.routes.evidence_packs", prefix="/api/v1/ai-governance", tags=["evidence-packs"], required=True)
+_include_router("api.routes.evidence_packs", prefix="/api/v1/public", tags=["evidence-packs-public"], attr="public_router", required=True)
 _include_router("api.routes.governance_assurance", prefix="/api/v1/ai-governance", tags=["governance-assurance"], required=True)
 if settings.assurance_v2_enabled:
     _include_router(
@@ -470,6 +483,7 @@ if settings.assurance_v2_enabled:
         logger.info("Trust administration route is disabled")
 else:
     logger.info("Assurance-contract v2 routes are disabled")
+_include_router("api.routes.packs", prefix="/api/v1/packs", tags=["packs"], required=True)
 _include_router("api.routes.environmental", tags=["environmental"], required=False)
 _include_router("api.routes.settings", prefix="/api/v1", tags=["settings"], required=False)
 
@@ -482,6 +496,7 @@ _include_router("api.routes.datasets", tags=["datasets"], required=False)
 _include_router("api.routes.india_compliance", prefix="/api/v1", tags=["india-compliance"], required=False)
 _include_router("api.routes.llm_judge", prefix="/api/v1", tags=["llm-judge"], required=False)
 _include_router("api.routes.mlops", prefix="/api/v1", tags=["mlops"], required=False)
+_include_router("api.routes.integrations", prefix="/api/v1", tags=["integrations"], required=False)
 _include_router("api.routes.modern_bias_detection", prefix="/api/v1", tags=["modern-bias-detection"], required=False)
 _include_router("api.routes.monitoring", prefix="/api/v1", tags=["monitoring"], required=False)
 _include_router("api.routes.multimodal_bias_detection", prefix="/api/v1", tags=["multimodal-bias-detection"], required=False)

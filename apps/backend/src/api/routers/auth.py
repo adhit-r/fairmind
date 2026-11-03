@@ -10,7 +10,9 @@ from typing import Optional
 from datetime import datetime, timedelta
 import logging
 import httpx
+import re
 import secrets
+import uuid
 
 from config.auth import (
     auth_manager, 
@@ -169,33 +171,8 @@ async def login(login_data: LoginRequest):
     - `500 Internal Server Error`: Server error during authentication
     """
     try:
-        # In production, verify credentials against database
-        # This is a simplified example
-        if login_data.email == "admin@fairmind.ai" and login_data.password == "admin123":
-            user = User(
-                id="admin",
-                email=login_data.email,
-                username="admin",
-                role=UserRole.ADMIN,
-                is_active=True,
-                created_at=datetime.utcnow(),
-                permissions=["*"]
-            )
-        elif login_data.email == "analyst@fairmind.ai" and login_data.password == "analyst123":
-            user = User(
-                id="analyst",
-                email=login_data.email,
-                username="analyst",
-                role=UserRole.ANALYST,
-                is_active=True,
-                created_at=datetime.utcnow(),
-                permissions=[
-                    "model:read", "model:write",
-                    "dataset:read", "dataset:write",
-                    "analysis:run", "analysis:read"
-                ]
-            )
-        else:
+        user = await auth_manager.authenticate(login_data.email, login_data.password)
+        if not user:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid email or password"
@@ -235,16 +212,9 @@ async def login(login_data: LoginRequest):
                 "email": user.email,
                 "username": user.username,
                 "role": user.role.value,
+                "org_id": user.org_id,
             }
         }
-        logger.info(f"Login Response Data Types: access_token={type(access_token)}, refresh_token={type(refresh_token)}")
-        import json
-        try:
-            json.dumps(response_data)
-            logger.info("Login Response is JSON serializable")
-        except Exception as e:
-            logger.error(f"Login Response JSON serialization failed: {e}")
-
         return LoginResponse(**response_data)
         
     except HTTPException:
@@ -261,6 +231,69 @@ async def login(login_data: LoginRequest):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Login failed"
         )
+
+
+class SignupRequest(BaseModel):
+    email: EmailStr
+    password: str
+    name: str
+    org_name: str
+
+
+@router.post("/register", response_model=LoginResponse, status_code=status.HTTP_201_CREATED)
+async def signup(payload: SignupRequest):
+    """Self-serve signup: creates a new organization owned by the new user."""
+    from config.database import get_db_transaction
+
+    if not 12 <= len(payload.password.encode("utf-8")) <= 72:
+        raise HTTPException(status_code=422, detail="Password must be 12 to 72 bytes long")
+    name, org_name = payload.name.strip(), payload.org_name.strip()
+    if not name or not org_name:
+        raise HTTPException(status_code=422, detail="Name and organization are required")
+
+    user_id = str(uuid.uuid4())
+    org_id = str(uuid.uuid4())
+    slug_base = re.sub(r"[^a-z0-9]+", "-", org_name.lower()).strip("-") or "org"
+    try:
+        async with get_db_transaction() as db:
+            if await db.fetch_one("SELECT id FROM users WHERE lower(email) = lower(:e)", {"e": payload.email}):
+                raise HTTPException(status_code=409, detail="An account with this email already exists")
+            # users and organizations reference each other, so create the user first,
+            # then the organization it owns, then point the user at it.
+            await db.execute(
+                "INSERT INTO users (id, email, username, name, password_hash, role, roles, is_active) "
+                "VALUES (:id, :email, :username, :name, :pw, 'admin', CAST(:roles AS jsonb), TRUE)",
+                {
+                    "id": user_id,
+                    "email": payload.email,
+                    "username": f"{payload.email.split('@')[0]}-{secrets.token_hex(3)}",
+                    "name": name,
+                    "pw": auth_manager.get_password_hash(payload.password),
+                    "roles": '["admin"]',
+                },
+            )
+            await db.execute(
+                "INSERT INTO organizations (id, name, slug, owner_id, is_active) "
+                "VALUES (:id, :name, :slug, :owner, TRUE)",
+                {"id": org_id, "name": org_name, "slug": f"{slug_base}-{secrets.token_hex(3)}", "owner": user_id},
+            )
+            await db.execute(
+                "UPDATE users SET org_id = :org, primary_org_id = :org WHERE id = :id",
+                {"org": org_id, "id": user_id},
+            )
+            await db.execute(
+                "INSERT INTO org_members (id, org_id, user_id, role, status, joined_at) "
+                "VALUES (:id, :org, :user, 'owner', 'active', now())",
+                {"id": str(uuid.uuid4()), "org": org_id, "user": user_id},
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Signup error: {e}")
+        raise HTTPException(status_code=500, detail="Signup failed")
+
+    logger.info(f"Self-serve signup: user={user_id} org={org_id}")
+    return await login(LoginRequest(email=payload.email, password=payload.password))
 
 
 @router.post("/refresh", response_model=RefreshResponse)
@@ -664,15 +697,23 @@ async def create_user(
 async def list_users(
     current_user: TokenData = Depends(require_admin)
 ):
-    """List all users (admin only). Returns users from DB or cache."""
+    """List the users of the caller's organisation (admin only). Returns users from DB or cache."""
     try:
+        if not current_user.org_id:
+            return {"users": []}
         # Query users from DB if available
         try:
+            from api.routes.org_scope import ORG_MEMBER_USER_IDS, plain_id
             from config.database import get_db
             from sqlalchemy import text
             async with get_db() as db:
                 result = await db.execute(
-                    text("SELECT id, email, username, name, roles, is_active, last_login, created_at FROM users ORDER BY created_at DESC LIMIT 100")
+                    text(
+                        "SELECT id, email, username, name, roles, is_active, last_login, created_at FROM users "
+                        f"WHERE {plain_id('id')} IN ({ORG_MEMBER_USER_IDS}) "
+                        "ORDER BY created_at DESC LIMIT 100"
+                    ),
+                    {"org_id": str(current_user.org_id)},
                 )
                 rows = result.mappings().all()
                 users = [

@@ -11,25 +11,111 @@ Provides practical governance primitives:
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from config.auth import TokenData, UserRole, get_current_active_user
+from config.settings import settings
+
+logger = logging.getLogger(__name__)
 from database.connection import get_db
+from database.models import OrganizationMember
 from src.application.services.governance_assurance_service import (
     GovernanceAssuranceService,
     OrgMembership,
 )
 
 
-router = APIRouter(tags=["ai-governance"])
+def _caller_org(request: Request) -> str:
+    org_id = getattr(request.state, "org_id", None)
+    if not org_id:
+        raise HTTPException(status_code=403, detail="Your account is not assigned to an organization")
+    return org_id
+
+
+def _resolve_caller_org(request: Request, db: Session) -> None:
+    """Fill request.state.org_id when the token carried no org claim.
+
+    An explicit ?org_id= wins when the caller is an active member of it;
+    otherwise the caller's first active membership is used. Tokens with an
+    org claim are already resolved by OrgIsolationMiddleware.
+    """
+    if getattr(request.state, "org_id", None):
+        return
+    user_id = getattr(getattr(request.state, "user", None), "user_id", None)
+    try:
+        user_uuid = uuid.UUID(str(user_id))
+    except (TypeError, ValueError):
+        return
+    requested = request.query_params.get("org_id")
+    if requested:
+        if GovernanceAssuranceService(db).membership(requested, str(user_id)):
+            request.state.org_id = requested
+        return
+    members = OrganizationMember.__table__.c
+    org = db.execute(
+        select(members.org_id)
+        .where(members.user_id == user_uuid, members.status == "active")
+        .order_by(members.created_at)
+        .limit(1)
+    ).scalar_one_or_none()
+    if org:
+        request.state.org_id = str(org)
+
+
+_SCOPED_IDS = {
+    "system_id": "governance_ai_systems",
+    "systemId": "governance_ai_systems",
+    "workspace_id": "governance_workspaces",
+    "workspaceId": "governance_workspaces",
+}
+
+
+async def _enforce_org_scope(request: Request, db: Session = Depends(get_db)) -> None:
+    """Every system or workspace id a request names must belong to the caller's org.
+
+    Checked once here for path, query and JSON body ids, so individual routes
+    cannot forget it. A foreign id answers 404, never 403, to avoid confirming
+    that it exists.
+    """
+    _resolve_caller_org(request, db)
+    org_id = _caller_org(request)
+    sources = [request.path_params, request.query_params]
+    if request.method in ("POST", "PUT", "PATCH") and "json" in request.headers.get("content-type", ""):
+        try:
+            body = await request.json()
+        except ValueError:
+            body = None
+        if isinstance(body, dict):
+            sources.append(body)
+    for source in sources:
+        for key, table in _SCOPED_IDS.items():
+            value = source.get(key)
+            if not value:
+                continue
+            _ensure_tables(db)
+            row = db.execute(
+                text(f"SELECT org_id FROM {table} WHERE id = :id"), {"id": str(value)}
+            ).fetchone()
+            # Unknown ids pass through: risk and remediation records may name
+            # systems that were never registered, and the route answers for them.
+            # A registered id must belong to the caller's org.
+            if row is not None and str(row[0] or "") != str(org_id):
+                raise HTTPException(status_code=404, detail="Not found")
+
+
+# ponytail: policies, approval workflows/requests, evidence items, remediation
+# and reports addressed by their own ids are not org-scoped yet; their tables
+# carry no org_id. Add the column and extend _SCOPED_IDS when they do.
+router = APIRouter(tags=["ai-governance"], dependencies=[Depends(_enforce_org_scope)])
 
 SYSTEM_APPROVAL_WORKFLOW_ID = "fairmind-system-release-v1"
 SYSTEM_APPROVAL_WORKFLOW_STEPS = [
@@ -207,7 +293,8 @@ def _ensure_tables(db: Session) -> None:
     import database.governance_models  # noqa: F401
     from database.connection import Base, db_manager
 
-    Base.metadata.create_all(bind=db_manager.engine)
+    db_manager.create_tables()  # every registry, table by table; see connection.create_tables
+    _ensure_model_link_column(db)
     _tables_ready = True
 
 
@@ -276,6 +363,11 @@ def _require_system_access(
         raise HTTPException(status_code=404, detail="AI system not found")
     service = GovernanceAssuranceService(db)
     membership = service.membership(str(row[0]), current_user.user_id)
+    if not membership and settings.is_development and current_user.org_id and str(current_user.org_id) == str(row[0]):
+        # Local development keeps governance in SQLite while memberships live in
+        # the users database, so the lookup above finds nothing. The token's org
+        # claim was issued from that same membership table; trust it here only.
+        membership = OrgMembership(str(row[0]), current_user.user_id, current_user.role.value, tuple(current_user.permissions))
     if not membership:
         raise HTTPException(status_code=404, detail="AI system not found")
     if mutate and not service.may_mutate(membership):
@@ -326,6 +418,49 @@ def _require_report_access(
         raise HTTPException(status_code=404, detail="Report not found")
     _require_system_access(db, str(row.system_id), current_user)
     return row
+# Columns added after the tables first shipped. create_all() does not alter
+# existing tables, so this runtime patch keeps already-provisioned dev and test
+# databases usable without running the org-scoping migration by hand.
+_LATE_COLUMNS = (
+    ("governance_ai_systems", "org_id"),
+    ("governance_workspaces", "org_id"),
+)
+
+
+def _ensure_model_link_column(db: Session) -> None:
+    """Add late columns to databases created before them.
+
+    SQLite (local development and tests): every column the governance models
+    declare but the file lacks is added, so a dev database survives model
+    changes without being recreated. Postgres: only _LATE_COLUMNS, the rest is
+    for migrations.
+    """
+    dialect = db.bind.dialect.name if db.bind is not None else "sqlite"
+    try:
+        if dialect == "sqlite":
+            import database.governance_models as governance_models  # noqa: F401
+            from database.connection import Base
+
+            for table in Base.metadata.sorted_tables:
+                if not table.name.startswith("governance_"):
+                    continue
+                existing = {row[1] for row in db.execute(text(f"PRAGMA table_info({table.name})")).fetchall()}
+                if not existing:
+                    continue  # create_all handles tables that do not exist yet
+                for column in table.columns:
+                    if column.name in existing:
+                        continue
+                    col_type = column.type.compile(dialect=db.bind.dialect)
+                    db.execute(text(f"ALTER TABLE {table.name} ADD COLUMN {column.name} {col_type}"))
+                    if column.index:
+                        db.execute(text(f"CREATE INDEX IF NOT EXISTS idx_{table.name}_{column.name} ON {table.name} ({column.name})"))
+        else:
+            for table, column in _LATE_COLUMNS:
+                db.execute(text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} VARCHAR(255)"))
+                db.execute(text(f"CREATE INDEX IF NOT EXISTS idx_{table}_{column} ON {table} ({column})"))
+        db.commit()
+    except Exception:  # pragma: no cover - never block startup on a patch attempt
+        db.rollback()
 
 
 class PolicyCreateRequest(BaseModel):
@@ -979,17 +1114,19 @@ async def governance_status(db: Session = Depends(get_db)):
 
 
 @router.post("/workspaces")
-async def create_workspace(request: WorkspaceCreateRequest, db: Session = Depends(get_db)):
+async def create_workspace(request: WorkspaceCreateRequest, http: Request, db: Session = Depends(get_db)):
     _ensure_tables(db)
+    org_id = _caller_org(http)
     workspace_id = str(uuid.uuid4())
     now = _utc_now_iso()
     db.execute(
         text(
-            "INSERT INTO governance_workspaces (id, name, owner, created_at, updated_at) "
-            "VALUES (:id, :name, :owner, :created_at, :updated_at)"
+            "INSERT INTO governance_workspaces (id, org_id, name, owner, created_at, updated_at) "
+            "VALUES (:id, :org_id, :name, :owner, :created_at, :updated_at)"
         ),
         {
             "id": workspace_id,
+            "org_id": org_id,
             "name": request.name,
             "owner": request.owner,
             "created_at": now,
@@ -1007,19 +1144,20 @@ async def create_workspace(request: WorkspaceCreateRequest, db: Session = Depend
 
 
 @router.get("/workspaces")
-async def list_workspaces(db: Session = Depends(get_db)):
+async def list_workspaces(http: Request, db: Session = Depends(get_db)):
     _ensure_tables(db)
     rows = db.execute(
         text(
             "SELECT id, name, owner, created_at, updated_at "
-            "FROM governance_workspaces ORDER BY created_at DESC"
-        )
+            "FROM governance_workspaces WHERE org_id = :org_id ORDER BY created_at DESC"
+        ),
+        {"org_id": _caller_org(http)},
     ).fetchall()
     return [_serialize_workspace_row(row) for row in rows]
 
 
 @router.post("/systems")
-async def create_ai_system(request: AISystemCreateRequest, db: Session = Depends(get_db)):
+async def create_ai_system(request: AISystemCreateRequest, http: Request, db: Session = Depends(get_db)):
     _ensure_tables(db)
     workspace = db.execute(
         text("SELECT id FROM governance_workspaces WHERE id = :id"),
@@ -1032,11 +1170,12 @@ async def create_ai_system(request: AISystemCreateRequest, db: Session = Depends
     now = _utc_now_iso()
     db.execute(
         text(
-            "INSERT INTO governance_ai_systems (id, workspace_id, name, owner, risk_tier, lifecycle_stage, metadata_json, created_at, updated_at) "
-            "VALUES (:id, :workspace_id, :name, :owner, :risk_tier, :lifecycle_stage, :metadata_json, :created_at, :updated_at)"
+            "INSERT INTO governance_ai_systems (id, org_id, workspace_id, name, owner, risk_tier, lifecycle_stage, metadata_json, created_at, updated_at) "
+            "VALUES (:id, :org_id, :workspace_id, :name, :owner, :risk_tier, :lifecycle_stage, :metadata_json, :created_at, :updated_at)"
         ),
         {
             "id": system_id,
+            "org_id": _caller_org(http),
             "workspace_id": request.workspace_id,
             "name": request.name,
             "owner": request.owner,
@@ -1063,24 +1202,27 @@ async def create_ai_system(request: AISystemCreateRequest, db: Session = Depends
 
 @router.get("/systems")
 async def list_ai_systems(
+    http: Request,
     workspace_id: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
 ):
     _ensure_tables(db)
+    org_id = _caller_org(http)
     if workspace_id:
         rows = db.execute(
             text(
                 "SELECT id, workspace_id, name, owner, risk_tier, lifecycle_stage, metadata_json, created_at, updated_at "
-                "FROM governance_ai_systems WHERE workspace_id = :workspace_id ORDER BY created_at DESC"
+                "FROM governance_ai_systems WHERE workspace_id = :workspace_id AND org_id = :org_id ORDER BY created_at DESC"
             ),
-            {"workspace_id": workspace_id},
+            {"workspace_id": workspace_id, "org_id": org_id},
         ).fetchall()
     else:
         rows = db.execute(
             text(
                 "SELECT id, workspace_id, name, owner, risk_tier, lifecycle_stage, metadata_json, created_at, updated_at "
-                "FROM governance_ai_systems ORDER BY created_at DESC"
-            )
+                "FROM governance_ai_systems WHERE org_id = :org_id ORDER BY created_at DESC"
+            ),
+            {"org_id": org_id},
         ).fetchall()
     return [_build_ai_system_payload(db, row) for row in rows]
 
@@ -1835,6 +1977,29 @@ async def create_approval_request(
     }
 
 
+def _gate_decision_block(gate: dict, notes: Optional[str]):
+    """Return None when approval may proceed, else (status_code, detail)."""
+    verdict = gate.get("verdict")
+    if verdict == "no_go":
+        open_checks = [c.get("label") for c in gate.get("checks", []) if c.get("state") == "open"]
+        reasons = gate.get("reasons") or []
+        return 409, {
+            "message": "The release gate says no go: " + ("; ".join(reasons) if reasons else "required evidence is missing") + ".",
+            "gate": {
+                "verdict": verdict,
+                "confidence": gate.get("confidence"),
+                "reasons": reasons,
+                "openChecks": open_checks,
+            },
+        }
+    if verdict == "conditional_go" and not (notes or "").strip():
+        return 422, {
+            "message": "The release gate is conditional go. State the conditions you accept in the notes to approve.",
+            "gate": {"verdict": verdict, "confidence": gate.get("confidence"), "reasons": gate.get("reasons") or []},
+        }
+    return None
+
+
 @router.post("/approval-requests/{request_id}/decision")
 async def make_approval_decision(
     request_id: str,
@@ -1859,6 +2024,16 @@ async def make_approval_decision(
     ).fetchone()
     if not existing:
         raise HTTPException(status_code=404, detail="Approval request not found")
+    gate = None
+    if existing.entity_type == "ai_system" and approval_system_id:
+        from api.routes.fairness_runs import _gate_payload  # function-level: that router imports this one
+
+        system = db.execute(text("SELECT risk_tier FROM governance_ai_systems WHERE id = :id"), {"id": approval_system_id}).fetchone()
+        gate = _gate_payload(db, approval_system_id, system[0] if system else "medium")
+        if new_status == "approved":
+            blocked = _gate_decision_block(gate, request.notes)
+            if blocked:
+                raise HTTPException(status_code=blocked[0], detail=blocked[1])
     if new_status == "approved" and existing.entity_type == "ai_system":
         from src.application.services.environmental_service import env_gate_status
 
@@ -1909,13 +2084,14 @@ async def make_approval_decision(
             detail=f"Request is already '{current[0]}'; only pending requests can be decided",
         )
 
+    decision_id = str(uuid.uuid4())
     db.execute(
         text(
             "INSERT INTO governance_approval_decisions (id, request_id, decision, notes, decided_by, created_at) "
             "VALUES (:id, :request_id, :decision, :notes, :decided_by, :created_at)"
         ),
         {
-            "id": str(uuid.uuid4()),
+            "id": decision_id,
             "request_id": request_id,
             "decision": new_status,
             "notes": request.notes,
@@ -1923,6 +2099,19 @@ async def make_approval_decision(
             "created_at": now,
         },
     )
+    seal = None
+    if existing.entity_type == "ai_system" and approval_system_id:
+        from src.application.services.decision_seal_service import seal_decision
+
+        seal = seal_decision(
+            db,
+            system_id=approval_system_id,
+            request_id=request_id,
+            decision_id=decision_id,
+            decision=new_status,
+            sealed_by=actor,
+            gate=gate,
+        )
 
     db.commit()
     return {
@@ -1930,6 +2119,7 @@ async def make_approval_decision(
         "status": new_status,
         "notes": request.notes,
         "updatedAt": now,
+        "seal": seal,
     }
 
 
@@ -1962,10 +2152,10 @@ async def list_approval_requests(
     db: Session = Depends(get_db),
 ):
     _ensure_tables(db)
-    if entity_type != "ai_system" or not entity_id:
+    if entity_type != "ai_system":
         raise HTTPException(status_code=404, detail="Approval requests not found")
-    _require_system_access(db, entity_id, current_user)
     if entity_id:
+        _require_system_access(db, entity_id, current_user)
         rows = db.execute(
             text(
                 "SELECT id, workflow_id, entity_type, entity_id, requested_by, status, current_step, decision_notes, created_at, updated_at "
@@ -1984,9 +2174,16 @@ async def list_approval_requests(
             {"entity_type": entity_type},
         ).fetchall()
 
+    visible = []
     for row in rows:
-        _require_approval_request_access(db, str(row[0]), current_user)
-    return [_serialize_approval_request_row(row) for row in rows]
+        try:
+            _require_approval_request_access(db, str(row[0]), current_user)
+        except HTTPException:
+            if entity_id:
+                raise
+            continue  # ponytail: one access check per row; a join on org membership if the list grows
+        visible.append(row)
+    return [_serialize_approval_request_row(row) for row in visible]
 
 
 @router.get("/approval-requests/{request_id}/decisions")
@@ -2888,12 +3085,18 @@ async def generate_audit_report(
             "readiness": None,
         }
 
+    from api.routes.fairness_runs import _gate_payload  # function-level: that router imports this one
+    from src.application.services.clause_map_service import clause_map, framework_keys
+
+    gate = _gate_payload(db, system_id, sys_row.risk_tier if sys_row else "medium")
     data_snapshot = {
         "system": system_data,
         "risks": risks_data,
         "evidence": evidence_data,
         "remediation": remediation_data,
         "approvals": approvals_data,
+        "gate": {"verdict": gate.get("verdict"), "confidence": gate.get("confidence"), "checks": gate.get("checks", []), "reasons": gate.get("reasons", [])},
+        "clauseMap": clause_map(gate, frameworks=framework_keys(request.frameworks)),
         "generatedAt": _utc_now_iso(),
     }
 

@@ -7,9 +7,15 @@ on:
     branches: [ main, dev ]
   workflow_dispatch:
 
+# The backend signs this account in without a users table (development only;
+# see config.auth._e2e_admin). The same values drive the Playwright login.
+env:
+  E2E_ADMIN_EMAIL: e2e-admin@fairmind.ai
+  E2E_ADMIN_PASSWORD: e2e-only-never-a-real-account
+
 jobs:
   e2e-tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # Playwright cannot install chromium on ubuntu-latest (26.04) yet
     timeout-minutes: 30
     permissions:
       contents: read
@@ -39,11 +45,13 @@ jobs:
     - name: Start backend server
       working-directory: apps/backend
       run: |
-        uv run uvicorn api.main:app --host 0.0.0.0 --port 8000 &
+        uv run uvicorn api.main:app --host 0.0.0.0 --port 8000 > backend.log 2>&1 &
         sleep 5
       env:
         APP_ENV: development
-        DATABASE_URL: sqlite:///./test.db
+        # Not test.db: tests/conftest.py deletes that file after every test, and the
+        # e2e suite runs under that conftest while this server is still using it.
+        DATABASE_URL: sqlite:///./e2e-backend.db
         RATE_LIMIT_REQUESTS: "10000"
 
     - name: Start frontend server
@@ -65,6 +73,28 @@ jobs:
         E2E_BASE_URL: http://localhost:1111
         E2E_API_URL: http://localhost:8000
         E2E_HEADLESS: "true"
+
+    - name: Backend log
+      if: always()
+      working-directory: apps/backend
+      run: |
+        grep -v -E '"name": "(aiosqlite|databases)"' backend.log > backend.filtered.log || true
+        echo '::group::key lines'; grep -E 'Database identities|Database tables ready|Could not create table|Login error|table creation failed|Failed to initialize|ORM table creation' backend.log | head -n 60; echo '::endgroup::'
+        echo '::group::database files'; find . -maxdepth 2 -name '*.db*' -newer pyproject.toml -exec ls -la {} \; ; uv run --no-sync python - <<'PY'
+        import sqlite3, glob
+        print("sqlite", sqlite3.sqlite_version)
+        for path in sorted(glob.glob("*.db")):
+            con = sqlite3.connect(path)
+            try:
+                names = sorted(r[0] for r in con.execute("select name from sqlite_master where type='table'"))
+                print(path, len(names), "tables; users:", "users" in names, "; governance_ai_systems:", "governance_ai_systems" in names)
+            except Exception as e:
+                print(path, "ERROR", e)
+        PY
+        echo '::endgroup::'
+        echo '::group::startup'; head -n 200 backend.filtered.log; echo '::endgroup::'
+        echo '::group::tail'; tail -n 300 backend.filtered.log; echo '::endgroup::'
+
     
     - name: Upload test artifacts
       if: always()
@@ -83,7 +113,7 @@ jobs:
         if-no-files-found: ignore
 
   e2e-smoke-tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # Playwright cannot install chromium on ubuntu-latest (26.04) yet
     timeout-minutes: 15
     permissions:
       contents: read
@@ -113,11 +143,13 @@ jobs:
     - name: Start backend server
       working-directory: apps/backend
       run: |
-        uv run uvicorn api.main:app --host 0.0.0.0 --port 8000 &
+        uv run uvicorn api.main:app --host 0.0.0.0 --port 8000 > backend.log 2>&1 &
         sleep 5
       env:
         APP_ENV: development
-        DATABASE_URL: sqlite:///./test.db
+        # Not test.db: tests/conftest.py deletes that file after every test, and the
+        # e2e suite runs under that conftest while this server is still using it.
+        DATABASE_URL: sqlite:///./e2e-backend.db
         RATE_LIMIT_REQUESTS: "10000"
 
     - name: Start frontend server
@@ -140,4 +172,24 @@ jobs:
         E2E_API_URL: http://localhost:8000
         E2E_HEADLESS: "true"
 
+    - name: Backend log
+      if: always()
+      working-directory: apps/backend
+      run: |
+        grep -v -E '"name": "(aiosqlite|databases)"' backend.log > backend.filtered.log || true
+        echo '::group::key lines'; grep -E 'Database identities|Database tables ready|Could not create table|Login error|table creation failed|Failed to initialize|ORM table creation' backend.log | head -n 60; echo '::endgroup::'
+        echo '::group::database files'; find . -maxdepth 2 -name '*.db*' -newer pyproject.toml -exec ls -la {} \; ; uv run --no-sync python - <<'PY'
+        import sqlite3, glob
+        print("sqlite", sqlite3.sqlite_version)
+        for path in sorted(glob.glob("*.db")):
+            con = sqlite3.connect(path)
+            try:
+                names = sorted(r[0] for r in con.execute("select name from sqlite_master where type='table'"))
+                print(path, len(names), "tables; users:", "users" in names, "; governance_ai_systems:", "governance_ai_systems" in names)
+            except Exception as e:
+                print(path, "ERROR", e)
+        PY
+        echo '::endgroup::'
+        echo '::group::startup'; head -n 200 backend.filtered.log; echo '::endgroup::'
+        echo '::group::tail'; tail -n 300 backend.filtered.log; echo '::endgroup::'
 

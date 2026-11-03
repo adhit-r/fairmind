@@ -4,6 +4,7 @@ Exposes LLM-as-Judge bias evaluation endpoints
 """
 
 from fastapi import APIRouter, HTTPException, Depends
+from config.auth import get_current_active_user
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 import logging
@@ -18,7 +19,13 @@ from ..services.llm_as_judge_service import (
 )
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/bias/llm-judge", tags=["llm-judge"])
+# Stateless: scores the text in the request. It spends the platform's judge-model
+# API budget, so the caller must be signed in.
+router = APIRouter(
+    prefix="/bias/llm-judge",
+    tags=["llm-judge"],
+    dependencies=[Depends(get_current_active_user)],
+)
 
 # Initialize service
 llm_judge_service = LLMAsJudgeService()

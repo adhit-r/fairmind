@@ -26,7 +26,7 @@ export function EvidenceFolderTree({ evidence, activeFolder, onFolderChange }: E
 
   return (
     <div className="space-y-1">
-      <p className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">
+      <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
         Folders
       </p>
 
@@ -35,13 +35,13 @@ export function EvidenceFolderTree({ evidence, activeFolder, onFolderChange }: E
         onClick={() => onFolderChange(null)}
         className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-bold transition-colors ${
           activeFolder === null
-            ? 'bg-black text-white'
+            ? 'bg-[var(--fm-ink)] text-white'
             : 'hover:bg-slate-100'
         }`}
       >
         <IconStack2 className="h-4 w-4 shrink-0" />
         <span className="flex-1 text-left">All evidence</span>
-        <Badge className={`border border-black/20 px-1.5 py-0 text-[10px] font-bold ${activeFolder === null ? 'bg-white/20 text-white' : 'bg-slate-200 text-black'}`}>
+        <Badge className={`border border-[var(--fm-line)] px-1.5 py-0 text-[10px] font-bold ${activeFolder === null ? 'bg-white/20 text-white' : 'bg-slate-200 text-black'}`}>
           {evidence.length}
         </Badge>
       </button>
@@ -52,13 +52,13 @@ export function EvidenceFolderTree({ evidence, activeFolder, onFolderChange }: E
           onClick={() => onFolderChange('__uncategorized__')}
           className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-bold transition-colors ${
             activeFolder === '__uncategorized__'
-              ? 'bg-black text-white'
+              ? 'bg-[var(--fm-ink)] text-white'
               : 'hover:bg-slate-100'
           }`}
         >
           <IconFolder className="h-4 w-4 shrink-0" />
           <span className="flex-1 text-left">Uncategorized</span>
-          <Badge className={`border border-black/20 px-1.5 py-0 text-[10px] font-bold ${activeFolder === '__uncategorized__' ? 'bg-white/20 text-white' : 'bg-slate-200 text-black'}`}>
+          <Badge className={`border border-[var(--fm-line)] px-1.5 py-0 text-[10px] font-bold ${activeFolder === '__uncategorized__' ? 'bg-white/20 text-white' : 'bg-slate-200 text-black'}`}>
             {uncategorized}
           </Badge>
         </button>
@@ -72,7 +72,7 @@ export function EvidenceFolderTree({ evidence, activeFolder, onFolderChange }: E
             type="button"
             onClick={() => onFolderChange(folder)}
             className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-bold transition-colors ${
-              isActive ? 'bg-black text-white' : 'hover:bg-slate-100'
+              isActive ? 'bg-[var(--fm-ink)] text-white' : 'hover:bg-slate-100'
             }`}
           >
             {isActive ? (
@@ -81,7 +81,7 @@ export function EvidenceFolderTree({ evidence, activeFolder, onFolderChange }: E
               <IconFolder className="h-4 w-4 shrink-0" />
             )}
             <span className="flex-1 truncate text-left">{folder}</span>
-            <Badge className={`border border-black/20 px-1.5 py-0 text-[10px] font-bold ${isActive ? 'bg-white/20 text-white' : 'bg-slate-200 text-black'}`}>
+            <Badge className={`border border-[var(--fm-line)] px-1.5 py-0 text-[10px] font-bold ${isActive ? 'bg-white/20 text-white' : 'bg-slate-200 text-black'}`}>
               {count}
             </Badge>
           </button>

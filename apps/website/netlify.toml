@@ -1,15 +1,9 @@
 [build]
   publish = "dist"
-  command = "bun run build"
+  command = "npm run build"
 
 [build.environment]
   NODE_VERSION = "22.12.0"
-
-# Redirects for SPA routing
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
 
 # Redirects for old URLs
 [[redirects]]
@@ -32,7 +26,7 @@
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
     Permissions-Policy = "camera=(), microphone=(), geolocation=()"
-    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://www.googletagmanager.com https://static.hotjar.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://unpkg.com https://www.google-analytics.com; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://us.i.posthog.com https://eu.i.posthog.com; worker-src 'self' blob: data:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self' https://formspree.io;"
 
 # Cache static assets
 [[headers]]
@@ -71,10 +65,6 @@
   [headers.values]
     Cache-Control = "public, max-age=0, must-revalidate"
 
-# Functions for form handling
-[functions]
-  directory = "functions"
-
 # Environment variables
 [context.production.environment]
   NODE_ENV = "production"
@@ -82,8 +72,8 @@
 
 [context.deploy-preview.environment]
   NODE_ENV = "preview"
-  SITE_URL = "https://deploy-preview-{id}--docs-fairmind.netlify.app"
+  SITE_URL = "https://deploy-preview-{id}--fairmind-website-t41tz.netlify.app"
 
 [context.branch-deploy.environment]
   NODE_ENV = "development"
-  SITE_URL = "https://{branch}--docs-fairmind.netlify.app"
+  SITE_URL = "https://{branch}--fairmind-website-t41tz.netlify.app"

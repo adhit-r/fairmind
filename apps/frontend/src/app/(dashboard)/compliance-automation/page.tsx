@@ -56,10 +56,10 @@ export default function ComplianceAutomationPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background p-8">
+      <div className="min-w-0">
         <div className="mx-auto max-w-7xl">
           <div className="flex justify-center">
-            <div className="h-12 w-12 animate-spin rounded-full border-4 border-gray-300 border-t-black" />
+            <div className="h-12 w-12 animate-spin rounded-full border-2 border-[var(--fm-line)] border-t-[var(--fm-ink)]" />
           </div>
         </div>
       </div>
@@ -67,13 +67,13 @@ export default function ComplianceAutomationPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background p-8">
+    <div className="min-w-0">
       <div className="mx-auto max-w-7xl">
         {/* Header */}
-        <div className="mb-8 border-b-4 border-black pb-6">
+        <div className="mb-8 border-b border-[var(--fm-line)] pb-6">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-4xl font-bold text-black">Compliance Automation</h1>
+              <h1 className="text-[30px] font-semibold tracking-[-.03em] text-black">Compliance Automation</h1>
               <p className="mt-2 text-gray-600">
                 Automated compliance checking, violation tracking, and remediation planning
               </p>
@@ -81,7 +81,7 @@ export default function ComplianceAutomationPage() {
             <button
               onClick={handleRefresh}
               disabled={refreshing}
-              className="flex items-center gap-2 rounded-lg border-2 border-black bg-white px-4 py-2 font-bold text-black hover:shadow-brutal-lg disabled:opacity-50"
+              className="flex items-center gap-2 rounded-lg border border-[var(--fm-line)] bg-white px-4 py-2 font-bold text-black disabled:opacity-50"
             >
               <IconRefresh size={20} />
               {refreshing ? "Refreshing..." : "Refresh"}
@@ -93,8 +93,8 @@ export default function ComplianceAutomationPage() {
         <div className="mb-8 grid gap-4 md:grid-cols-4">
           {status && (
             <>
-              <div className="rounded-lg border-4 border-black bg-white p-6 shadow-brutal-lg">
-                <div className="text-3xl font-bold text-black">{status.active_schedules}</div>
+              <div className="p-6 fm-card">
+                <div className="text-[24px] font-semibold tracking-tight text-black">{status.active_schedules}</div>
                 <div className="mt-2 text-sm font-semibold text-gray-600">Active Schedules</div>
                 <div className="mt-1 text-xs text-gray-500">
                   {status.scheduler_running ? (
@@ -105,8 +105,8 @@ export default function ComplianceAutomationPage() {
                 </div>
               </div>
 
-              <div className="rounded-lg border-4 border-black bg-white p-6 shadow-brutal-lg">
-                <div className="text-3xl font-bold text-black">{status.total_violations}</div>
+              <div className="p-6 fm-card">
+                <div className="text-[24px] font-semibold tracking-tight text-black">{status.total_violations}</div>
                 <div className="mt-2 text-sm font-semibold text-gray-600">Total Violations</div>
                 <div className="mt-1 text-xs text-gray-500">
                   {status.critical_violations > 0 && (
@@ -115,14 +115,14 @@ export default function ComplianceAutomationPage() {
                 </div>
               </div>
 
-              <div className="rounded-lg border-4 border-black bg-white p-6 shadow-brutal-lg">
-                <div className="text-3xl font-bold text-black">{status.pending_jobs}</div>
+              <div className="p-6 fm-card">
+                <div className="text-[24px] font-semibold tracking-tight text-black">{status.pending_jobs}</div>
                 <div className="mt-2 text-sm font-semibold text-gray-600">Pending Jobs</div>
                 <div className="mt-1 text-xs text-gray-500">In queue</div>
               </div>
 
-              <div className="rounded-lg border-4 border-black bg-white p-6 shadow-brutal-lg">
-                <div className="text-3xl font-bold text-black">{status.reports_generated_today}</div>
+              <div className="p-6 fm-card">
+                <div className="text-[24px] font-semibold tracking-tight text-black">{status.reports_generated_today}</div>
                 <div className="mt-2 text-sm font-semibold text-gray-600">Reports Today</div>
                 <div className="mt-1 text-xs text-gray-500">Generated</div>
               </div>
@@ -138,13 +138,13 @@ export default function ComplianceAutomationPage() {
         )}
 
         {/* Tabs */}
-        <div className="mb-6 flex gap-2 border-b-4 border-black">
+        <div className="mb-6 flex gap-2 border-b border-[var(--fm-line)]">
           <button
             onClick={() => setActiveTab("schedules")}
             className={`px-6 py-3 font-bold transition-all ${
               activeTab === "schedules"
-                ? "border-b-4 border-black bg-black text-white"
-                : "border-b-4 border-gray-300 hover:border-black"
+                ? "border-b border-[var(--fm-line)] bg-[var(--fm-ink)] text-white"
+                : "border-b-4 border-gray-300 hover:border-[var(--fm-ink)]"
             }`}
           >
             Schedules
@@ -153,8 +153,8 @@ export default function ComplianceAutomationPage() {
             onClick={() => setActiveTab("violations")}
             className={`flex items-center gap-2 px-6 py-3 font-bold transition-all ${
               activeTab === "violations"
-                ? "border-b-4 border-black bg-black text-white"
-                : "border-b-4 border-gray-300 hover:border-black"
+                ? "border-b border-[var(--fm-line)] bg-[var(--fm-ink)] text-white"
+                : "border-b-4 border-gray-300 hover:border-[var(--fm-ink)]"
             }`}
           >
             Violations
@@ -168,8 +168,8 @@ export default function ComplianceAutomationPage() {
             onClick={() => setActiveTab("remediation")}
             className={`px-6 py-3 font-bold transition-all ${
               activeTab === "remediation"
-                ? "border-b-4 border-black bg-black text-white"
-                : "border-b-4 border-gray-300 hover:border-black"
+                ? "border-b border-[var(--fm-line)] bg-[var(--fm-ink)] text-white"
+                : "border-b-4 border-gray-300 hover:border-[var(--fm-ink)]"
             }`}
           >
             Remediation
@@ -178,8 +178,8 @@ export default function ComplianceAutomationPage() {
             onClick={() => setActiveTab("reports")}
             className={`px-6 py-3 font-bold transition-all ${
               activeTab === "reports"
-                ? "border-b-4 border-black bg-black text-white"
-                : "border-b-4 border-gray-300 hover:border-black"
+                ? "border-b border-[var(--fm-line)] bg-[var(--fm-ink)] text-white"
+                : "border-b-4 border-gray-300 hover:border-[var(--fm-ink)]"
             }`}
           >
             Reports
@@ -187,7 +187,7 @@ export default function ComplianceAutomationPage() {
         </div>
 
         {/* Tab Content */}
-        <div className="rounded-lg border-4 border-black bg-white p-8 shadow-brutal-lg">
+        <div className="p-8 fm-card">
           {activeTab === "schedules" && <SchedulesSection />}
           {activeTab === "violations" && <ViolationsSection />}
           {activeTab === "remediation" && <RemediationSection />}
@@ -195,7 +195,7 @@ export default function ComplianceAutomationPage() {
         </div>
 
         {/* Info Box */}
-        <div className="mt-8 rounded-lg border-2 border-black bg-white p-6">
+        <div className="mt-8 rounded-lg border border-[var(--fm-line)] bg-white p-6">
           <h3 className="mb-2 font-bold text-black">About Compliance Automation</h3>
           <p className="text-gray-600">
             Compliance Automation automatically checks your AI systems against regulatory frameworks
@@ -238,7 +238,7 @@ function SchedulesSection() {
         <h2 className="text-2xl font-bold text-black">Compliance Schedules</h2>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="flex items-center gap-2 rounded-lg bg-black px-4 py-2 font-bold text-white hover:shadow-brutal-lg"
+          className="flex items-center gap-2 rounded-full bg-[var(--fm-ink)] px-4 py-2 font-semibold text-white"
         >
           <IconPlus size={20} />
           New Schedule
@@ -246,7 +246,7 @@ function SchedulesSection() {
       </div>
 
       {showForm && (
-        <div className="mb-6 rounded-lg border-4 border-black bg-gray-50 p-6">
+        <div className="mb-6 rounded-lg border border-[var(--fm-line)] bg-gray-50 p-6">
           <h3 className="mb-4 text-xl font-bold">Create New Schedule</h3>
           <p className="text-gray-600">Schedule creation form integrated with backend API.</p>
         </div>
@@ -259,7 +259,7 @@ function SchedulesSection() {
       ) : (
         <div className="space-y-4">
           {schedules.map((schedule) => (
-            <div key={schedule.id} className="rounded-lg border-2 border-black p-4">
+            <div key={schedule.id} className="rounded-lg border border-[var(--fm-line)] p-4">
               <div className="flex items-start justify-between">
                 <div>
                   <h4 className="font-bold text-black">{schedule.framework}</h4>
@@ -269,10 +269,10 @@ function SchedulesSection() {
                   </p>
                 </div>
                 <div className="flex gap-2">
-                  <button className="rounded px-3 py-1 text-xs font-bold text-white bg-blue-600 hover:shadow-brutal">
+                  <button className="rounded px-3 py-1 text-xs font-bold text-white bg-blue-600">
                     Edit
                   </button>
-                  <button className="rounded px-3 py-1 text-xs font-bold text-white bg-green-600 hover:shadow-brutal">
+                  <button className="rounded px-3 py-1 text-xs font-bold text-white bg-green-600">
                     Run Now
                   </button>
                 </div>
@@ -345,7 +345,7 @@ function ViolationsSection() {
                   {violation.framework} • {violation.status.toUpperCase()}
                 </p>
               </div>
-              <button className="rounded px-3 py-1 text-xs font-bold text-white bg-black hover:shadow-brutal">
+              <button className="rounded px-3 py-1 text-xs font-bold text-white bg-[var(--fm-ink)]">
                 View
               </button>
             </div>
@@ -401,9 +401,9 @@ function ReportsSection() {
           <p className="text-gray-600">No reports generated yet. Create a schedule to get started.</p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border-4 border-black">
+        <div className="overflow-x-auto rounded-lg border border-[var(--fm-line)]">
           <table className="w-full">
-            <thead className="border-b-4 border-black bg-gray-100">
+            <thead className="border-b border-[var(--fm-line)] bg-gray-100">
               <tr>
                 <th className="px-6 py-4 text-left font-bold text-black">Framework</th>
                 <th className="px-6 py-4 text-left font-bold text-black">Status</th>

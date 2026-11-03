@@ -32,7 +32,7 @@ export default function SecurityPage() {
       failed: { variant: 'destructive', label: 'Failed' },
     }
     const config = variants[status] || variants.pending
-    return <Badge variant={config.variant} className="border-2 border-black">{config.label}</Badge>
+    return <Badge variant={config.variant} className="border border-[var(--fm-line)]">{config.label}</Badge>
   }
 
   const handleRunScan = () => {
@@ -61,7 +61,7 @@ export default function SecurityPage() {
 
   if (error) {
     return (
-      <Alert className="border-2 border-red-500 shadow-brutal">
+      <Alert className="border-2 border-red-500">
         <IconAlertTriangle className="h-4 w-4" />
         <AlertDescription>{error.message}</AlertDescription>
       </Alert>
@@ -73,14 +73,14 @@ export default function SecurityPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold">Security Scans</h1>
+          <h1 className="text-[30px] font-semibold tracking-[-.03em]">Security Scans</h1>
           <p className="text-muted-foreground mt-1">
             Scan containers, LLMs, and models for security vulnerabilities
           </p>
         </div>
         <div className="flex gap-2">
           <Select value={scanType} onValueChange={setScanType}>
-            <SelectTrigger className="w-48 border-2 border-black">
+            <SelectTrigger className="w-48 border border-[var(--fm-line)]">
               <SelectValue placeholder="Select scan type" />
             </SelectTrigger>
             <SelectContent>
@@ -98,23 +98,23 @@ export default function SecurityPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="p-4 border-2 border-black shadow-brutal">
+        <Card className="p-4 fm-card">
           <p className="text-sm text-muted-foreground">Total Scans</p>
           <p className="text-2xl font-bold">{scans.length}</p>
         </Card>
-        <Card className="p-4 border-2 border-black shadow-brutal">
+        <Card className="p-4 fm-card">
           <p className="text-sm text-muted-foreground">Completed</p>
           <p className="text-2xl font-bold text-green-600">
             {scans.filter(s => s.status === 'completed').length}
           </p>
         </Card>
-        <Card className="p-4 border-2 border-black shadow-brutal">
+        <Card className="p-4 fm-card">
           <p className="text-sm text-muted-foreground">Running</p>
           <p className="text-2xl font-bold text-blue-600">
             {scans.filter(s => s.status === 'running').length}
           </p>
         </Card>
-        <Card className="p-4 border-2 border-black shadow-brutal">
+        <Card className="p-4 fm-card">
           <p className="text-sm text-muted-foreground">Failed</p>
           <p className="text-2xl font-bold text-red-600">
             {scans.filter(s => s.status === 'failed').length}
@@ -123,7 +123,7 @@ export default function SecurityPage() {
       </div>
 
       {/* Scans Table */}
-      <Card className="p-6 border-2 border-black shadow-brutal">
+      <Card className="p-6 fm-card">
         {scans.length === 0 ? (
           <div className="text-center py-12">
             <IconShield className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
@@ -139,7 +139,7 @@ export default function SecurityPage() {
         ) : (
           <Table>
             <TableHeader>
-              <TableRow className="border-2 border-black">
+              <TableRow className="border border-[var(--fm-line)]">
                 <TableHead className="font-bold">Scan ID</TableHead>
                 <TableHead className="font-bold">Status</TableHead>
                 <TableHead className="font-bold">Risk Score</TableHead>
@@ -150,7 +150,7 @@ export default function SecurityPage() {
             </TableHeader>
             <TableBody>
               {scans.map((scan) => (
-                <TableRow key={scan.scanId} className="border-b-2 border-black">
+                <TableRow key={scan.scanId} className="border-b border-[var(--fm-line)]">
                   <TableCell className="font-mono text-sm">{scan.scanId.slice(0, 8)}...</TableCell>
                   <TableCell>{getStatusBadge(scan.status)}</TableCell>
                   <TableCell>

@@ -110,18 +110,18 @@ interface SelectedSystemStatus {
   activeRemediation: number
 }
 
-const FALLBACK_SYSTEMS: AISystemSummary[] = [
-  {
-    id: "acme-pricing-lab",
-    name: "Acme Pricing Lab",
-    owner: "ml-platform@acme.ai",
-    riskTier: "medium",
-    readiness: 18,
-    stage: "onboard",
-    workspaceId: "fallback-workspace",
-    metadata: { source: "fallback" },
-  },
-]
+// Empty state, not a system: shown until the org registers its first AI system.
+// Consumers detect it through metadata.source === "fallback".
+const NO_SYSTEM: AISystemSummary = {
+  id: "",
+  name: "No system registered",
+  owner: "unassigned",
+  riskTier: "low",
+  readiness: 0,
+  stage: "onboard",
+  workspaceId: "",
+  metadata: { source: "fallback" },
+}
 
 type SystemContextValue = {
   systems: AISystemSummary[]
@@ -139,6 +139,7 @@ type SystemContextValue = {
     stage: AISystemSummary["stage"]
     systemType?: string
     systemVersion?: string
+    businessLine?: string
     complianceFrameworks?: string[]
   }) => Promise<AISystemSummary>
 }
@@ -302,11 +303,11 @@ function normalizeSystem(record: AISystemRecord): AISystemSummary {
 }
 
 export function SystemContextProvider({ children }: { children: React.ReactNode }) {
-  const [systems, setSystems] = useState<AISystemSummary[]>(FALLBACK_SYSTEMS)
-  const [selectedSystemId, setSelectedSystemId] = useState<string>(FALLBACK_SYSTEMS[0].id)
+  const [systems, setSystems] = useState<AISystemSummary[]>([])
+  const [selectedSystemId, setSelectedSystemId] = useState<string>("")
   const [loading, setLoading] = useState(true)
   const [selectedSystemStatus, setSelectedSystemStatus] = useState<SelectedSystemStatus>(
-    emptyDerivedStatus(FALLBACK_SYSTEMS[0])
+    emptyDerivedStatus(NO_SYSTEM)
   )
 
   const refreshSystems = async () => {
@@ -324,12 +325,12 @@ export function SystemContextProvider({ children }: { children: React.ReactNode 
           )
         })
       } else {
-        setSystems(FALLBACK_SYSTEMS)
-        setSelectedSystemId(getStoredSystemId() || FALLBACK_SYSTEMS[0].id)
+        setSystems([])
+        setSelectedSystemId("")
       }
     } catch {
-      setSystems(FALLBACK_SYSTEMS)
-      setSelectedSystemId(getStoredSystemId() || FALLBACK_SYSTEMS[0].id)
+      setSystems([])
+      setSelectedSystemId("")
     } finally {
       setLoading(false)
     }
@@ -355,6 +356,7 @@ export function SystemContextProvider({ children }: { children: React.ReactNode 
     stage: AISystemSummary["stage"]
     systemType?: string
     systemVersion?: string
+    businessLine?: string
     complianceFrameworks?: string[]
   }) => {
     const workspaceResponse: ApiResponse<WorkspaceRecord> = await apiClient.post(
@@ -382,6 +384,7 @@ export function SystemContextProvider({ children }: { children: React.ReactNode 
           workspace_name: params.workspaceName,
           ...(params.systemType && { system_type: params.systemType }),
           ...(params.systemVersion && { system_version: params.systemVersion }),
+          ...(params.businessLine && { business_line: params.businessLine }),
           ...(params.complianceFrameworks && { compliance_frameworks: params.complianceFrameworks }),
         },
       }
@@ -401,12 +404,12 @@ export function SystemContextProvider({ children }: { children: React.ReactNode 
   }
 
   const selectedSystem = useMemo(() => {
-    return systems.find((system) => system.id === selectedSystemId) || systems[0] || FALLBACK_SYSTEMS[0]
+    return systems.find((system) => system.id === selectedSystemId) || systems[0] || NO_SYSTEM
   }, [selectedSystemId, systems])
 
   useEffect(() => {
     if (!selectedSystem || selectedSystem.metadata?.source === "fallback") {
-      setSelectedSystemStatus(emptyDerivedStatus(selectedSystem || FALLBACK_SYSTEMS[0]))
+      setSelectedSystemStatus(emptyDerivedStatus(selectedSystem || NO_SYSTEM))
       return
     }
 
@@ -472,27 +475,27 @@ export function SystemContextBar() {
   const realSystems = systems.filter((system) => system.metadata?.source !== "fallback")
 
   return (
-    <section aria-label="Selected AI system context" className="mb-6 border-4 border-[#0F1412] bg-[#FCFDF8] p-4">
+    <section aria-label="Selected AI system context" className="mb-6 border border-[var(--fm-line)] bg-white p-4">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-start gap-3">
-          <div className="border-2 border-black bg-black p-3 text-white shadow-[4px_4px_0px_0px_#FF6B35]">
+          <div className="bg-[var(--fm-ink)] p-3 text-white rounded-[14px] shadow-[var(--fm-shadow)]">
             <IconBuildingSkyscraper className="h-5 w-5" />
           </div>
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
               Current AI System
             </p>
-            <h2 className="text-xl font-black uppercase">{selectedSystem.name}</h2>
+            <h2 className="text-xl font-semibold">{selectedSystem.name}</h2>
             <p className="text-sm text-muted-foreground">{selectedSystem.owner}</p>
           </div>
         </div>
 
         <div className="grid gap-3 md:grid-cols-4 lg:min-w-[720px]">
           <div className="space-y-1">
-            <p className="text-xs font-bold uppercase text-muted-foreground">System Scope</p>
+            <p className="text-xs font-semibold uppercase text-muted-foreground">System Scope</p>
             {realSystems.length > 0 ? (
               <Select onValueChange={setSelectedSystemId} value={selectedSystem.id}>
-                <SelectTrigger aria-label="System scope" className="border-2 border-black bg-white font-bold">
+                <SelectTrigger aria-label="System scope" className="border border-[var(--fm-line)] bg-white font-bold">
                   <SelectValue placeholder={loading ? "Loading systems..." : "Select system"} />
                 </SelectTrigger>
                 <SelectContent>
@@ -504,7 +507,7 @@ export function SystemContextBar() {
                 </SelectContent>
               </Select>
             ) : (
-              <Button asChild variant="neutral" className="w-full border-2 border-black font-bold">
+              <Button asChild variant="neutral" className="w-full border border-[var(--fm-line)] font-bold">
                 <a href="/onboard">
                   <IconPlus className="mr-2 h-4 w-4" />
                   Create system
@@ -514,24 +517,24 @@ export function SystemContextBar() {
           </div>
 
           <div className="space-y-1">
-            <p className="text-xs font-bold uppercase text-muted-foreground">Risk Tier</p>
-            <Badge className={`border-2 px-3 py-2 font-black uppercase ${riskTierClassName(selectedSystem.riskTier)}`}>
+            <p className="text-xs font-semibold uppercase text-muted-foreground">Risk Tier</p>
+            <Badge className={`border-2 px-3 py-2 font-semibold ${riskTierClassName(selectedSystem.riskTier)}`}>
               <IconShieldCheck className="mr-2 h-4 w-4" />
               {selectedSystem.riskTier}
             </Badge>
           </div>
 
           <div className="space-y-1">
-            <p className="text-xs font-bold uppercase text-muted-foreground">Readiness</p>
-            <div className="border-2 border-black bg-white px-3 py-2 font-black">
+            <p className="text-xs font-semibold uppercase text-muted-foreground">Readiness</p>
+            <div className="border border-[var(--fm-line)] bg-white px-3 py-2 font-semibold">
               {selectedSystemStatus.readiness}%
             </div>
           </div>
 
           <div className="space-y-1">
-            <p className="text-xs font-bold uppercase text-muted-foreground">Lifecycle Stage</p>
-            <Badge className="border-2 border-black bg-black px-3 py-2 font-black uppercase text-white">
-              <IconRouteAltLeft className="mr-2 h-4 w-4 text-orange" />
+            <p className="text-xs font-semibold uppercase text-muted-foreground">Lifecycle Stage</p>
+            <Badge className="border border-[var(--fm-line)] bg-[var(--fm-ink)] px-3 py-2 font-semibold text-white">
+              <IconRouteAltLeft className="mr-2 h-4 w-4 text-[var(--fm-brand)]" />
               {selectedSystemStatus.stage}
             </Badge>
           </div>

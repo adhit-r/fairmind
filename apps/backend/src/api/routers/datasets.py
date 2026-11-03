@@ -16,9 +16,12 @@ from ..services.dataset_service import dataset_service
 
 # Import org isolation decorators
 from core.decorators.org_isolation import isolate_by_org
+from api.routes.org_scope import org_member, org_mutator
+from config.auth import require_admin
+from src.application.services.governance_assurance_service import OrgMembership
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/v1/datasets", tags=["datasets"])
+router = APIRouter(prefix="/api/v1/datasets", tags=["datasets"], dependencies=[Depends(org_member)])
 
 # Pydantic Models
 class DatasetUploadRequest(BaseModel):
@@ -43,7 +46,8 @@ class DatasetResponse(BaseModel):
 async def upload_dataset(
     file: UploadFile = File(...),
     name: Optional[str] = Form(None),
-    description: Optional[str] = Form(None)
+    description: Optional[str] = Form(None),
+    m: OrgMembership = Depends(org_mutator),
 ):
     """
     Upload a new dataset (CSV/Parquet file)
@@ -61,7 +65,8 @@ async def upload_dataset(
         result = await dataset_service.upload_dataset(
             file=file,
             name=name,
-            description=description
+            description=description,
+            owner_id=m.user_id,
         )
         
         if result["success"]:
@@ -101,64 +106,8 @@ async def list_datasets(
     - Includes basic metadata
     - Org isolation enforced at decorator level
     """
-    try:
-        # Org context automatically injected by @isolate_by_org decorator
-        logger.info(f"Listing datasets for org: {org_id}, user: {user_id}")
+    raise HTTPException(status_code=501, detail="Dataset storage is not available yet.")
 
-        # For now, return mock data since we don't have database integration yet
-        # In production, this will query the database with org_id filtering:
-        # SELECT * FROM datasets WHERE org_id = :org_id ORDER BY created_at DESC
-
-        mock_datasets = [
-            {
-                "id": "sample-1",
-                "org_id": org_id,
-                "name": "Sample Dataset 1",
-                "description": "A sample dataset for testing",
-                "file_type": "csv",
-                "row_count": 1000,
-                "column_count": 5,
-                "created_at": datetime.now().isoformat()
-            },
-            {
-                "id": "sample-2",
-                "org_id": org_id,
-                "name": "Sample Dataset 2",
-                "description": "Another sample dataset",
-                "file_type": "parquet",
-                "row_count": 500,
-                "column_count": 3,
-                "created_at": datetime.now().isoformat()
-            }
-        ]
-
-        # Apply filters
-        if search:
-            mock_datasets = [d for d in mock_datasets if search.lower() in d["name"].lower()]
-
-        if file_type:
-            mock_datasets = [d for d in mock_datasets if d["file_type"] == file_type.lower()]
-
-        # Apply pagination
-        total = len(mock_datasets)
-        start_idx = (page - 1) * limit
-        end_idx = start_idx + limit
-        paginated_datasets = mock_datasets[start_idx:end_idx]
-
-        return DatasetListResponse(
-            success=True,
-            datasets=paginated_datasets,
-            pagination={
-                "page": page,
-                "limit": limit,
-                "total": total,
-                "pages": (total + limit - 1) // limit
-            }
-        )
-
-    except Exception as e:
-        logger.error(f"Dataset listing failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/{dataset_id}", response_model=DatasetResponse)
 async def get_dataset(dataset_id: str):
@@ -170,66 +119,8 @@ async def get_dataset(dataset_id: str):
     - Includes schema information
     - Shows sample data
     """
-    try:
-        # For now, return mock data
-        # This will be replaced with actual database queries
-        
-        mock_dataset = {
-            "id": dataset_id,
-            "name": f"Dataset {dataset_id}",
-            "description": "A detailed dataset description",
-            "file_path": f"/uploads/datasets/{dataset_id}.csv",
-            "file_size": 1024000,
-            "file_type": "csv",
-            "schema_json": {
-                "columns": [
-                    {
-                        "name": "age",
-                        "type": "int64",
-                        "min": 18,
-                        "max": 65,
-                        "mean": 35.2,
-                        "null_count": 0,
-                        "unique_count": 48
-                    },
-                    {
-                        "name": "income",
-                        "type": "int64", 
-                        "min": 20000,
-                        "max": 150000,
-                        "mean": 75000.0,
-                        "null_count": 0,
-                        "unique_count": 100
-                    },
-                    {
-                        "name": "gender",
-                        "type": "object",
-                        "null_count": 0,
-                        "unique_count": 2,
-                        "sample_values": ["M", "F"]
-                    }
-                ],
-                "row_count": 1000,
-                "column_count": 3,
-                "sample_data": [
-                    {"age": 25, "income": 50000, "gender": "M"},
-                    {"age": 30, "income": 75000, "gender": "F"}
-                ]
-            },
-            "row_count": 1000,
-            "column_count": 3,
-            "created_at": datetime.now().isoformat(),
-            "updated_at": datetime.now().isoformat()
-        }
-        
-        return DatasetResponse(
-            success=True,
-            dataset=mock_dataset
-        )
-        
-    except Exception as e:
-        logger.error(f"Dataset retrieval failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    raise HTTPException(status_code=501, detail="Dataset storage is not available yet.")
+
 
 @router.delete("/{dataset_id}", response_model=DatasetResponse)
 async def delete_dataset(dataset_id: str):
@@ -241,20 +132,8 @@ async def delete_dataset(dataset_id: str):
     - Deletes associated files
     - Cleans up storage
     """
-    try:
-        # For now, return success
-        # This will be replaced with actual database operations
-        
-        logger.info(f"Dataset deletion requested: {dataset_id}")
-        
-        return DatasetResponse(
-            success=True,
-            message=f"Dataset {dataset_id} deleted successfully"
-        )
-        
-    except Exception as e:
-        logger.error(f"Dataset deletion failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    raise HTTPException(status_code=501, detail="Dataset storage is not available yet.")
+
 
 @router.post("/{dataset_id}/validate", response_model=DatasetResponse)
 async def validate_dataset_columns(
@@ -271,29 +150,8 @@ async def validate_dataset_columns(
     - Validates column types
     - Returns validation results
     """
-    try:
-        # For now, return mock validation
-        # This will be replaced with actual validation logic
-        
-        logger.info(f"Column validation requested for dataset: {dataset_id}")
-        
-        return DatasetResponse(
-            success=True,
-            message="All columns validated successfully",
-            dataset={
-                "id": dataset_id,
-                "validation": {
-                    "target_column": target_column,
-                    "feature_columns": feature_columns,
-                    "protected_attributes": protected_attributes,
-                    "status": "valid"
-                }
-            }
-        )
-        
-    except Exception as e:
-        logger.error(f"Column validation failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    raise HTTPException(status_code=501, detail="Dataset storage is not available yet.")
+
 
 @router.get("/{dataset_id}/schema")
 async def get_dataset_schema(dataset_id: str):
@@ -305,57 +163,11 @@ async def get_dataset_schema(dataset_id: str):
     - Shows data types and statistics
     - Includes sample data
     """
-    try:
-        # For now, return mock schema
-        # This will be replaced with actual schema extraction
-        
-        mock_schema = {
-            "columns": [
-                {
-                    "name": "age",
-                    "type": "int64",
-                    "min": 18,
-                    "max": 65,
-                    "mean": 35.2,
-                    "null_count": 0,
-                    "unique_count": 48
-                },
-                {
-                    "name": "income",
-                    "type": "int64",
-                    "min": 20000,
-                    "max": 150000,
-                    "mean": 75000.0,
-                    "null_count": 0,
-                    "unique_count": 100
-                },
-                {
-                    "name": "gender",
-                    "type": "object",
-                    "null_count": 0,
-                    "unique_count": 2,
-                    "sample_values": ["M", "F"]
-                }
-            ],
-            "row_count": 1000,
-            "column_count": 3,
-            "sample_data": [
-                {"age": 25, "income": 50000, "gender": "M"},
-                {"age": 30, "income": 75000, "gender": "F"}
-            ]
-        }
-        
-        return {
-            "success": True,
-            "dataset_id": dataset_id,
-            "schema": mock_schema
-        }
-        
-    except Exception as e:
-        logger.error(f"Schema retrieval failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    raise HTTPException(status_code=501, detail="Dataset storage is not available yet.")
 
-@router.post("/cleanup")
+
+# Cleanup walks the one shared upload directory, so it is a platform-admin job.
+@router.post("/cleanup", dependencies=[Depends(require_admin)])
 async def cleanup_old_datasets(max_age_days: int = 30):
     """
     Clean up old dataset files

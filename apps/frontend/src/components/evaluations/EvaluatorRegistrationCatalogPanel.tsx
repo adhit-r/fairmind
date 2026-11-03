@@ -22,7 +22,7 @@ const statusStyle: Record<EvaluatorRegistrationStatus, string> = {
   pending: 'border-[#D36B1F] bg-[#FFF1D6] text-[#5B492E]',
   approved: 'border-[#0B7659] bg-[#DDF4EA] text-[#0B503D]',
   rejected: 'border-[#D83A2E] bg-[#FDE7E4] text-[#8F2019]',
-  revoked: 'border-[#59615D] bg-[#F3F5F0] text-[#303633]',
+  revoked: 'border-[rgba(21,23,26,.14)] bg-[var(--fm-bg)] text-[#303633]',
 }
 
 function formatStatus(status: EvaluatorRegistrationStatus) {
@@ -46,8 +46,8 @@ function formatTimestamp(value: string | null) {
 function Field({ label, value }: { label: string; value: string }) {
   return (
     <div className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-2 text-xs">
-      <dt className="font-black uppercase tracking-[0.12em] text-[#59615D]">{label}</dt>
-      <dd className="min-w-0 break-all font-mono font-bold text-[#0F1412]">{value}</dd>
+      <dt className="font-semibold tracking-[0.12em] text-[var(--fm-ink2)]">{label}</dt>
+      <dd className="min-w-0 break-all font-mono font-bold text-[var(--fm-ink)]">{value}</dd>
     </div>
   )
 }
@@ -64,19 +64,19 @@ function ReviewAndRevocation({ registration }: { registration: EvaluatorRegistra
   return (
     <div className="space-y-3 text-xs leading-5 text-[#303633]">
       <div>
-        <p className="font-black uppercase tracking-[0.12em] text-[#0F1412]">Review</p>
+        <p className="font-semibold tracking-[0.12em] text-[var(--fm-ink)]">Review</p>
         {hasReview ? (
           <dl className="mt-1 space-y-1">
             {registration.reviewedBy ? <Field label="By" value={registration.reviewedBy} /> : null}
             {registration.reviewedAt ? (
               <div className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-2">
-                <dt className="font-black uppercase tracking-[0.12em] text-[#59615D]">At</dt>
+                <dt className="font-semibold tracking-[0.12em] text-[var(--fm-ink2)]">At</dt>
                 <dd><Timestamp value={registration.reviewedAt} /></dd>
               </div>
             ) : null}
             {registration.reviewRationale ? (
               <div>
-                <dt className="font-black uppercase tracking-[0.12em] text-[#59615D]">Note</dt>
+                <dt className="font-semibold tracking-[0.12em] text-[var(--fm-ink2)]">Note</dt>
                 <dd className="mt-0.5 break-words">{registration.reviewRationale}</dd>
               </div>
             ) : null}
@@ -86,20 +86,20 @@ function ReviewAndRevocation({ registration }: { registration: EvaluatorRegistra
         )}
       </div>
 
-      <div className="border-t border-[#0F1412]/20 pt-2">
-        <p className="font-black uppercase tracking-[0.12em] text-[#0F1412]">Revocation</p>
+      <div className="border-t border-[var(--fm-line)] pt-2">
+        <p className="font-semibold tracking-[0.12em] text-[var(--fm-ink)]">Revocation</p>
         {hasRevocation ? (
           <dl className="mt-1 space-y-1">
             {registration.revokedBy ? <Field label="By" value={registration.revokedBy} /> : null}
             {registration.revokedAt ? (
               <div className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-2">
-                <dt className="font-black uppercase tracking-[0.12em] text-[#59615D]">At</dt>
+                <dt className="font-semibold tracking-[0.12em] text-[var(--fm-ink2)]">At</dt>
                 <dd><Timestamp value={registration.revokedAt} /></dd>
               </div>
             ) : null}
             {registration.revocationRationale ? (
               <div>
-                <dt className="font-black uppercase tracking-[0.12em] text-[#59615D]">Note</dt>
+                <dt className="font-semibold tracking-[0.12em] text-[var(--fm-ink2)]">Note</dt>
                 <dd className="mt-0.5 break-words">{registration.revocationRationale}</dd>
               </div>
             ) : null}
@@ -115,9 +115,9 @@ function ReviewAndRevocation({ registration }: { registration: EvaluatorRegistra
 function LoadingRows() {
   return (
     <div aria-busy="true" aria-live="polite" className="space-y-2 p-4" role="status">
-      <p className="text-sm font-black uppercase text-[#0F1412]">Loading evaluator registrations</p>
+      <p className="text-sm font-semibold text-[var(--fm-ink)]">Loading evaluator registrations</p>
       {[0, 1, 2].map((row) => (
-        <div key={row} className="h-12 animate-pulse border-2 border-[#0F1412] bg-[#F3F5F0] motion-reduce:animate-none" />
+        <div key={row} className="h-12 animate-pulse border border-[var(--fm-line)] bg-[var(--fm-bg)] motion-reduce:animate-none" />
       ))}
     </div>
   )
@@ -138,10 +138,10 @@ function StateNotice({
     ? 'border-[#D83A2E] bg-[#FDE7E4] text-[#8F2019]'
     : tone === 'warning'
       ? 'border-[#D36B1F] bg-[#FFF1D6] text-[#5B492E]'
-      : 'border-[#0F1412] bg-[#F3F5F0] text-[#303633]'
+      : 'border-[var(--fm-line)] bg-[var(--fm-bg)] text-[#303633]'
   return (
     <div className={`border-4 p-4 ${toneClass}`} role={role}>
-      <h3 className="text-base font-black uppercase text-[#0F1412]">{title}</h3>
+      <h3 className="text-base font-semibold text-[var(--fm-ink)]">{title}</h3>
       <div className="mt-1 max-w-[78ch] text-sm font-semibold">{children}</div>
     </div>
   )
@@ -152,10 +152,10 @@ function CatalogTable({ registrations }: { registrations: EvaluatorRegistration[
     <div className="overflow-x-auto">
       <table className="w-full min-w-[1040px] border-collapse text-left">
         <caption className="sr-only">Evaluator registration identity bindings and lifecycle state.</caption>
-        <thead className="bg-[#0F1412] text-[#FCFDF8]">
+        <thead className="bg-[var(--fm-ink)] text-white">
           <tr>
             {['Evaluator binding', 'Binding hash', 'Signer / source', 'Review / revocation', 'Registration status'].map((heading) => (
-              <th key={heading} scope="col" className="border-r-2 border-[#FCFDF8]/40 px-3 py-3 text-xs font-black uppercase tracking-[0.08em] last:border-r-0">
+              <th key={heading} scope="col" className="border-r border-white/40 px-3 py-3 text-xs font-semibold uppercase tracking-[0.08em] last:border-r-0">
                 {heading}
               </th>
             ))}
@@ -163,38 +163,38 @@ function CatalogTable({ registrations }: { registrations: EvaluatorRegistration[
         </thead>
         <tbody>
           {registrations.map((registration) => (
-            <tr key={registration.id} className="border-t-2 border-[#0F1412] align-top bg-[#FCFDF8] even:bg-[#F3F5F0]">
-              <td className="border-r-2 border-[#0F1412] p-3 last:border-r-0">
-                <p className="break-all font-mono text-sm font-black text-[#0F1412]">{registration.evaluatorId}</p>
+            <tr key={registration.id} className="border-t border-[var(--fm-line)] align-top bg-white even:bg-[var(--fm-bg)]">
+              <td className="border-r border-[var(--fm-line)] p-3 last:border-r-0">
+                <p className="break-all font-mono text-sm font-semibold text-[var(--fm-ink)]">{registration.evaluatorId}</p>
                 <dl className="mt-3 space-y-1.5">
                   <Field label="Adapter" value={`${registration.adapterName} ${registration.adapterVersion}`} />
                   <Field label="Contract" value={registration.resultContractVersion} />
                   <Field label="Registration" value={registration.id} />
                 </dl>
               </td>
-              <td className="border-r-2 border-[#0F1412] p-3 last:border-r-0">
-                <code className="block break-all border-2 border-[#0F1412] bg-[#FCFDF8] p-2 text-xs font-bold text-[#0F1412]">
+              <td className="border-r border-[var(--fm-line)] p-3 last:border-r-0">
+                <code className="block break-all border border-[var(--fm-line)] bg-white p-2 text-xs font-bold text-[var(--fm-ink)]">
                   {registration.bindingHash}
                 </code>
               </td>
-              <td className="border-r-2 border-[#0F1412] p-3 last:border-r-0">
+              <td className="border-r border-[var(--fm-line)] p-3 last:border-r-0">
                 <dl className="space-y-1.5">
                   <Field label="Source" value={registration.sourceType} />
                   <Field label="Issuer" value={registration.issuerId} />
                   <Field label="Key" value={registration.signingKeyId} />
                 </dl>
               </td>
-              <td className="border-r-2 border-[#0F1412] p-3 last:border-r-0">
+              <td className="border-r border-[var(--fm-line)] p-3 last:border-r-0">
                 <ReviewAndRevocation registration={registration} />
               </td>
               <td className="p-3">
-                <span className={`inline-flex border-2 px-2 py-1 text-xs font-black uppercase ${statusStyle[registration.status]}`}>
+                <span className={`inline-flex border-2 px-2 py-1 text-xs font-semibold uppercase ${statusStyle[registration.status]}`}>
                   {formatStatus(registration.status)}
                 </span>
                 <dl className="mt-3 space-y-1.5 text-xs">
                   <Field label="Submitted by" value={registration.submittedBy} />
                   <div className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-2">
-                    <dt className="font-black uppercase tracking-[0.12em] text-[#59615D]">Submitted</dt>
+                    <dt className="font-semibold tracking-[0.12em] text-[var(--fm-ink2)]">Submitted</dt>
                     <dd className="text-[#303633]"><Timestamp value={registration.submittedAt} /></dd>
                   </div>
                 </dl>
@@ -216,7 +216,7 @@ function CatalogPageNavigation({ catalog }: { catalog: EvaluatorCatalogPanelMode
   const lastRecord = page.offset + catalog.registrations.length
 
   return (
-    <footer aria-label="Evaluator catalog page navigation" className="flex flex-col gap-3 border-t-4 border-[#0F1412] bg-[#F3F5F0] p-4 sm:flex-row sm:items-center sm:justify-between">
+    <footer aria-label="Evaluator catalog page navigation" className="flex flex-col gap-3 border-t border-[var(--fm-line)] bg-[var(--fm-bg)] p-4 sm:flex-row sm:items-center sm:justify-between">
       <p className="max-w-[66ch] text-sm font-semibold leading-6 text-[#303633]" aria-live="polite">
         {hasRecords
           ? `Showing registration records ${firstRecord}–${lastRecord} from offset ${page.offset}.`
@@ -230,7 +230,7 @@ function CatalogPageNavigation({ catalog }: { catalog: EvaluatorCatalogPanelMode
           type="button"
           disabled={page.offset === 0 || !catalog.previousPage}
           onClick={() => { void catalog.previousPage?.() }}
-          className="inline-flex min-h-11 items-center border-2 border-[#0F1412] bg-[#FCFDF8] px-4 text-sm font-black uppercase text-[#0F1412] shadow-[3px_3px_0_0_#0F1412] outline-none transition-[transform,box-shadow] duration-150 hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none focus-visible:ring-2 focus-visible:ring-[#0B7659] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:border-[#59615D] disabled:bg-[#E3E6E1] disabled:text-[#59615D] disabled:shadow-none disabled:hover:translate-x-0 disabled:hover:translate-y-0 motion-reduce:transform-none motion-reduce:transition-none"
+          className="inline-flex min-h-11 items-center px-4 text-sm font-semibold text-[var(--fm-ink)] outline-none transition-[transform,box-shadow] duration-150 focus-visible:ring-2 focus-visible:ring-[#0B7659] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:border-[rgba(21,23,26,.14)] disabled:bg-[#E3E6E1] disabled:text-[var(--fm-ink2)] disabled:shadow-none disabled:hover:translate-x-0 disabled:hover:translate-y-0 motion-reduce:transform-none motion-reduce:transition-none fm-card"
         >
           Previous page
         </button>
@@ -238,7 +238,7 @@ function CatalogPageNavigation({ catalog }: { catalog: EvaluatorCatalogPanelMode
           type="button"
           disabled={!page.hasMore || !catalog.nextPage}
           onClick={() => { void catalog.nextPage?.() }}
-          className="inline-flex min-h-11 items-center border-2 border-[#0F1412] bg-[#0B7659] px-4 text-sm font-black uppercase text-[#FCFDF8] shadow-[3px_3px_0_0_#0F1412] outline-none transition-[transform,box-shadow] duration-150 hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none focus-visible:ring-2 focus-visible:ring-[#0B7659] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:border-[#59615D] disabled:bg-[#E3E6E1] disabled:text-[#59615D] disabled:shadow-none disabled:hover:translate-x-0 disabled:hover:translate-y-0 motion-reduce:transform-none motion-reduce:transition-none"
+          className="inline-flex min-h-11 items-center bg-[#0B7659] px-4 text-sm font-semibold text-white outline-none transition-[transform,box-shadow] duration-150 focus-visible:ring-2 focus-visible:ring-[#0B7659] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:border-[rgba(21,23,26,.14)] disabled:bg-[#E3E6E1] disabled:text-[var(--fm-ink2)] disabled:shadow-none disabled:hover:translate-x-0 disabled:hover:translate-y-0 motion-reduce:transform-none motion-reduce:transition-none rounded-[14px] shadow-[var(--fm-shadow)]"
         >
           Next page
         </button>
@@ -253,10 +253,10 @@ export function EvaluatorRegistrationCatalogPanel({ catalog }: { catalog: Evalua
     : undefined
 
   return (
-    <section aria-labelledby="evaluator-registration-catalog-title" className="border-4 border-[#0F1412] bg-[#FCFDF8] shadow-[6px_6px_0_0_#0F1412]">
-      <div className="border-b-4 border-[#0F1412] px-4 py-4 sm:px-5">
-        <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#0B7659]">Organization catalog</p>
-        <h2 id="evaluator-registration-catalog-title" className="mt-1 text-xl font-black uppercase tracking-tight text-[#0F1412]">
+    <section aria-labelledby="evaluator-registration-catalog-title" className="fm-card">
+      <div className="border-b border-[var(--fm-line)] px-4 py-4 sm:px-5">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#0B7659]">Organization catalog</p>
+        <h2 id="evaluator-registration-catalog-title" className="mt-1 text-xl font-semibold tracking-tight text-[var(--fm-ink)]">
           Evaluator registration catalog
         </h2>
         <p className="mt-2 max-w-[80ch] text-sm font-semibold leading-6 text-[#303633]">
@@ -296,7 +296,7 @@ export function EvaluatorRegistrationCatalogPanel({ catalog }: { catalog: Evalua
             <button
               type="button"
               onClick={() => { void catalog.refresh?.() }}
-              className="mt-4 inline-flex min-h-11 items-center border-2 border-[#0F1412] bg-[#FCFDF8] px-4 text-sm font-black uppercase text-[#0F1412] shadow-[3px_3px_0_0_#0F1412] outline-none transition-[transform,box-shadow] duration-150 hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none focus-visible:ring-2 focus-visible:ring-[#0B7659] focus-visible:ring-offset-2 motion-reduce:transform-none motion-reduce:transition-none"
+              className="mt-4 inline-flex min-h-11 items-center px-4 text-sm font-semibold text-[var(--fm-ink)] outline-none transition-[transform,box-shadow] duration-150 focus-visible:ring-2 focus-visible:ring-[#0B7659] focus-visible:ring-offset-2 motion-reduce:transform-none motion-reduce:transition-none fm-card"
             >
               Retry catalog request
             </button>

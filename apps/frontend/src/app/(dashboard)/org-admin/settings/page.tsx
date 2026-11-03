@@ -103,10 +103,10 @@ export default function OrgSettingsPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background p-8">
+      <div className="min-w-0">
         <div className="mx-auto max-w-2xl">
           <div className="flex justify-center">
-            <div className="h-12 w-12 animate-spin rounded-full border-4 border-gray-300 border-t-black" />
+            <div className="h-12 w-12 animate-spin rounded-full border-2 border-[var(--fm-line)] border-t-[var(--fm-ink)]" />
           </div>
         </div>
       </div>
@@ -114,11 +114,11 @@ export default function OrgSettingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background p-8">
+    <div className="min-w-0">
       <div className="mx-auto max-w-2xl">
         {/* Header */}
-        <div className="mb-8 border-b-4 border-black pb-6">
-          <h1 className="text-4xl font-bold text-black">Organization Settings</h1>
+        <div className="mb-8 border-b border-[var(--fm-line)] pb-6">
+          <h1 className="text-[30px] font-semibold tracking-[-.03em] text-black">Organization Settings</h1>
           <p className="mt-2 text-gray-600">Manage your organization's information</p>
         </div>
 
@@ -138,7 +138,7 @@ export default function OrgSettingsPage() {
         )}
 
         {/* Settings Form */}
-        <form onSubmit={handleSave} className="rounded-lg border-4 border-black bg-white p-8 shadow-brutal-lg">
+        <form onSubmit={handleSave} className="p-8 fm-card">
           {/* Organization Name */}
           <div className="mb-6">
             <label className="mb-2 block font-bold text-black">Organization Name</label>
@@ -146,7 +146,7 @@ export default function OrgSettingsPage() {
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full rounded border-2 border-black px-4 py-2 text-black placeholder-gray-400"
+              className="w-full rounded border border-[var(--fm-line)] px-4 py-2 text-black placeholder-gray-400"
               placeholder="My Organization"
               required
             />
@@ -159,7 +159,7 @@ export default function OrgSettingsPage() {
               type="text"
               value={slug}
               onChange={(e) => setSlug(e.target.value)}
-              className="w-full rounded border-2 border-black px-4 py-2 font-mono text-black placeholder-gray-400"
+              className="w-full rounded border border-[var(--fm-line)] px-4 py-2 font-mono text-black placeholder-gray-400"
               placeholder="my-organization"
               required
             />
@@ -173,7 +173,7 @@ export default function OrgSettingsPage() {
               type="text"
               value={domain}
               onChange={(e) => setDomain(e.target.value)}
-              className="w-full rounded border-2 border-black px-4 py-2 text-black placeholder-gray-400"
+              className="w-full rounded border border-[var(--fm-line)] px-4 py-2 text-black placeholder-gray-400"
               placeholder="example.com"
             />
             <p className="mt-1 text-xs text-gray-600">For email domain verification</p>
@@ -185,7 +185,7 @@ export default function OrgSettingsPage() {
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full rounded border-2 border-black px-4 py-2 text-black placeholder-gray-400"
+              className="w-full rounded border border-[var(--fm-line)] px-4 py-2 text-black placeholder-gray-400"
               placeholder="Organization description"
               rows={4}
             />
@@ -198,7 +198,7 @@ export default function OrgSettingsPage() {
               type="email"
               value={billingEmail}
               onChange={(e) => setBillingEmail(e.target.value)}
-              className="w-full rounded border-2 border-black px-4 py-2 text-black placeholder-gray-400"
+              className="w-full rounded border border-[var(--fm-line)] px-4 py-2 text-black placeholder-gray-400"
               placeholder="billing@example.com"
             />
           </div>
@@ -210,7 +210,7 @@ export default function OrgSettingsPage() {
               id="isPublic"
               checked={isPublic}
               onChange={(e) => setIsPublic(e.target.checked)}
-              className="h-5 w-5 cursor-pointer border-2 border-black"
+              className="h-5 w-5 cursor-pointer border border-[var(--fm-line)]"
             />
             <label htmlFor="isPublic" className="cursor-pointer flex-1 font-bold text-black">
               Make organization publicly discoverable
@@ -235,14 +235,14 @@ export default function OrgSettingsPage() {
             <button
               type="submit"
               disabled={isSaving}
-              className="rounded-lg bg-black px-6 py-2 font-bold text-white transition-all hover:shadow-brutal-lg disabled:opacity-50 active:translate-y-1"
+              className="rounded-full bg-[var(--fm-ink)] px-6 py-2 font-semibold text-white transition-all disabled:opacity-50"
             >
               {isSaving ? 'Saving...' : 'Save Settings'}
             </button>
             <button
               type="button"
               onClick={() => fetchSettings()}
-              className="rounded-lg border-2 border-black px-6 py-2 font-bold text-black transition-all hover:bg-gray-50"
+              className="rounded-lg border border-[var(--fm-line)] px-6 py-2 font-bold text-black transition-all hover:bg-gray-50"
             >
               Reset
             </button>
@@ -250,7 +250,7 @@ export default function OrgSettingsPage() {
         </form>
 
         {/* Organization Info Box */}
-        <div className="mt-8 rounded-lg border-4 border-black bg-white p-6 shadow-brutal-lg">
+        <div className="mt-8 p-6 fm-card">
           <h3 className="mb-4 font-bold text-black">Organization Information</h3>
           <div className="space-y-3 text-sm">
             <div className="flex justify-between border-b border-gray-200 pb-2">

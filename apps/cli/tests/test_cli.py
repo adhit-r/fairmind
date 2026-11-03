@@ -1,0 +1,185 @@
+"""The CLI's contract: exit codes follow the gate, uploads carry the mapping, errors are named."""
+
+import json
+
+import httpx
+import pytest
+
+from fairmind_cli.main import EXIT_CONDITIONAL, EXIT_ERROR, EXIT_GO, EXIT_NO_GO, main
+
+GATE = {
+    "verdict": "conditional_go",
+    "confidence": 0.58,
+    "band": "estimated",
+    "proven": 1,
+    "attested": 2,
+    "open": 2,
+    "checks": [
+        {"key": "fairness", "label": "Fairness measured", "state": "proven", "confidence": 0.95, "evidenceId": "e1", "detail": None},
+        {"key": "monitoring", "label": "Monitoring in place", "state": "open", "confidence": 0.0, "evidenceId": None, "detail": None},
+    ],
+    "reasons": ["Nothing on file for: Monitoring in place"],
+}
+
+
+def factory_for(handler, seen):
+    def factory(base_url, headers):
+        seen["base_url"] = base_url
+        seen["headers"] = headers
+        return httpx.Client(base_url=base_url, headers=headers, transport=httpx.MockTransport(handler))
+    return factory
+
+
+def run_cli(argv, handler, env=None, monkeypatch=None):
+    seen = {}
+    printed = []
+    if monkeypatch is not None:
+        for key in ("FAIRMIND_API_URL", "FAIRMIND_API_KEY"):
+            monkeypatch.delenv(key, raising=False)
+        for key, value in (env or {}).items():
+            monkeypatch.setenv(key, value)
+    code = main(argv, client_factory=factory_for(handler, seen), out=printed.append)
+    return code, "\n".join(printed), seen
+
+
+@pytest.mark.parametrize("verdict,allow,expected", [
+    ("go", False, EXIT_GO),
+    ("conditional_go", False, EXIT_CONDITIONAL),
+    ("conditional_go", True, EXIT_GO),
+    ("no_go", True, EXIT_NO_GO),
+])
+def test_gate_exit_codes(verdict, allow, expected, monkeypatch):
+    def handler(request):
+        assert request.url.path == "/api/v1/ai-governance/systems/sys-1/gate"
+        assert request.headers["Authorization"] == "Bearer key-123"
+        return httpx.Response(200, json={**GATE, "verdict": verdict})
+    argv = ["gate", "--system", "sys-1"] + (["--allow-conditional"] if allow else [])
+    code, text, seen = run_cli(argv, handler, env={"FAIRMIND_API_KEY": "key-123", "FAIRMIND_API_URL": "https://fm.example"}, monkeypatch=monkeypatch)
+    assert code == expected
+    assert seen["base_url"] == "https://fm.example"
+    assert "Fairness measured" in text and "Monitoring in place" in text
+
+
+def test_gate_json_and_auth_errors(monkeypatch, capsys):
+    code, text, _ = run_cli(["gate", "--system", "sys-1", "--json", "--api-key", "k"], lambda r: httpx.Response(200, json=GATE), monkeypatch=monkeypatch)
+    assert code == EXIT_CONDITIONAL and json.loads(text)["verdict"] == "conditional_go"
+    code, _, _ = run_cli(["gate", "--system", "sys-1"], lambda r: httpx.Response(401, json={"detail": "nope"}), monkeypatch=monkeypatch)
+    assert code == EXIT_ERROR and "FAIRMIND_API_KEY" in capsys.readouterr().err
+    code, _, _ = run_cli(["gate", "--system", "missing", "--api-key", "k"], lambda r: httpx.Response(404, json={"detail": "AI system not found"}), monkeypatch=monkeypatch)
+    assert code == EXIT_ERROR
+
+
+def test_test_uploads_the_mapping_and_follows_the_gate(tmp_path, monkeypatch):
+    csv = tmp_path / "preds.csv"
+    csv.write_text("gender,repaid,approved\nF,1,1\nM,0,0\n")
+    captured = {}
+
+    def handler(request):
+        captured["path"] = request.url.path
+        body = request.read()
+        captured["body"] = body
+        run = {
+            "runId": "r1", "evidenceId": "e1", "systemId": "sys-1", "title": "t",
+            "result": {
+                "rows": 2, "all_checks_pass": False, "evidence_confidence": 0.85, "smallest_group": 1,
+                "thresholds": {"disparate_impact_ratio": 0.8, "gap": 0.05},
+                "attributes": [{
+                    "attribute": "gender", "groups": {"F": 1, "M": 1}, "selection_rates": {"F": 1.0, "M": 0.0},
+                    "disparate_impact_ratio": 0.0,
+                    "demographic_parity": {"value": 1.0, "confidence_interval": [1, 1], "is_fair": False},
+                    "equal_opportunity": {"value": 0.0, "confidence_interval": [0, 0], "is_fair": True},
+                    "equalized_odds": {"value": 0.0, "confidence_interval": [0, 0], "is_fair": True},
+                    "calibration": None,
+                    "checks": {"disparate_impact": False, "equal_opportunity": True, "equalized_odds": True},
+                    "small_groups": ["F", "M"],
+                }],
+            },
+            "gate": {**GATE, "verdict": "no_go"},
+        }
+        return httpx.Response(200, json=run)
+
+    argv = ["test", "--system", "sys-1", "--file", str(csv), "--outcome", "repaid", "--prediction", "approved", "--attributes", "gender", "--api-key", "k"]
+    code, text, _ = run_cli(argv, handler, monkeypatch=monkeypatch)
+    assert code == EXIT_NO_GO
+    assert captured["path"] == "/api/v1/ai-governance/systems/sys-1/fairness-runs"
+    for part in (b'name="outcome"\r\n\r\nrepaid', b'name="attributes"\r\n\r\ngender', b'name="prediction"\r\n\r\napproved', b'filename="preds.csv"'):
+        assert part in captured["body"]
+    assert "0.000!" in text and "small groups: F, M" in text
+    code, _, _ = run_cli(argv + ["--gate"], handler, monkeypatch=monkeypatch)
+    assert code == EXIT_NO_GO
+
+
+def test_test_requires_a_prediction_or_score(tmp_path, monkeypatch, capsys):
+    csv = tmp_path / "p.csv"; csv.write_text("a,b\n1,2\n")
+    code, _, _ = run_cli(["test", "--system", "s", "--file", str(csv), "--outcome", "a", "--attributes", "b", "--api-key", "k"], lambda r: httpx.Response(500), monkeypatch=monkeypatch)
+    assert code == EXIT_ERROR and "--prediction" in capsys.readouterr().err
+
+
+def test_systems_lists_what_the_key_can_see(monkeypatch):
+    systems = [{"id": "s1", "name": "Loan scoring", "riskTier": "high", "lifecycleStage": "assess"}]
+    code, text, _ = run_cli(["systems", "--api-key", "k"], lambda r: httpx.Response(200, json=systems), monkeypatch=monkeypatch)
+    assert code == EXIT_GO and "Loan scoring" in text and "s1" in text
+
+
+def test_monitor_posts_the_snapshot_and_reports_drift(tmp_path, monkeypatch):
+    csv = tmp_path / "d.csv"; csv.write_text("gender,approved,score\nF,1,0.7\nM,0,0.2\n")
+    seen = {}
+    def handler(request):
+        seen["path"] = request.url.path; seen["body"] = request.read()
+        run = {"evidenceId": "m1", "systemId": "s", "title": "t", "gate": {**GATE, "verdict": "no_go"}, "result": {
+            "rows": 2, "all_checks_pass": False, "overall_psi": 0.31, "evidence_confidence": 0.9, "baseline": {"present": True, "rows": 600},
+            "thresholds": {"disparate_impact_ratio": 0.8, "rate_drift": 0.05, "psi_moderate": 0.1, "psi_significant": 0.25},
+            "attributes": [{"attribute": "gender", "groups": {"F": 1, "M": 1}, "selection_rates": {"F": 1.0, "M": 0.0}, "baseline_selection_rates": {"F": 0.5, "M": 0.5},
+                            "rate_drift": {"F": 0.5, "M": 0.5}, "max_rate_drift": 0.5, "disparate_impact_ratio": 0.0, "psi_by_group": {"F": 0.31}, "worst_psi": 0.31,
+                            "checks": {"disparate_impact": False, "selection_rate_stable": False, "score_stable": False}}]}}
+        return httpx.Response(200, json=run)
+    code, text, _ = run_cli(["monitor", "--system", "s", "--file", str(csv), "--attributes", "gender", "--prediction", "approved", "--score", "score", "--api-key", "k"], handler, monkeypatch=monkeypatch)
+    assert code == EXIT_NO_GO and seen["path"].endswith("/systems/s/monitoring-runs") and b'name="score"' in seen["body"]
+    assert "0.500!" in text and "0.310!" in text and "baseline present" in text
+
+
+def _pack_document():
+    import hashlib
+
+    entries = [{"id": "e1", "type": "fairness_test", "hash": "a" * 64, "createdAt": "2026-01-01"}, {"id": "e2", "type": "attestation", "hash": "b" * 64, "createdAt": "2026-01-02"}]
+    head = hashlib.sha256(b"fairmind-evidence-chain-v1").hexdigest()
+    for entry in entries:
+        head = hashlib.sha256(f"{head}:{entry['hash']}".encode()).hexdigest()
+    manifest = {"version": 1, "title": "Q3 inspection", "frameworks": ["EUAIA"], "createdAt": "2026-01-03", "createdBy": "a", "systems": [
+        {"system": {"id": "s1", "name": "Loan scoring", "riskTier": "high"}, "gate": {"verdict": "go"}, "evidence": entries, "chainHead": head, "seals": []}]}
+    digest = hashlib.sha256(json.dumps(manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+    return {"manifest": manifest, "manifestHash": digest}
+
+
+def _no_network(request):
+    raise AssertionError("verify must not touch the network")
+
+
+def _write(tmp_path, doc):
+    path = tmp_path / "pack.json"
+    path.write_text(json.dumps(doc))
+    return str(path)
+
+
+def test_verify_accepts_an_intact_pack_offline(tmp_path):
+    code, text, _ = run_cli(["verify", _write(tmp_path, _pack_document())], _no_network)
+    assert code == EXIT_GO and "Pack intact" in text and "Loan scoring" in text
+
+
+def test_verify_catches_a_tampered_evidence_hash(tmp_path):
+    doc = _pack_document()
+    doc["manifest"]["systems"][0]["evidence"][0]["hash"] = "c" * 64
+    code, text, _ = run_cli(["verify", _write(tmp_path, doc)], _no_network)
+    assert code == EXIT_NO_GO and "BROKEN" in text and "MISMATCH" in text
+
+
+def test_verify_catches_a_tampered_manifest_field(tmp_path):
+    doc = _pack_document()
+    doc["manifest"]["systems"][0]["gate"]["verdict"] = "no_go"
+    code, text, _ = run_cli(["verify", _write(tmp_path, doc)], _no_network)
+    assert code == EXIT_NO_GO and "MISMATCH" in text and "does NOT verify" in text
+
+
+def test_verify_rejects_a_file_that_is_not_a_pack(tmp_path, capsys):
+    code, _, _ = run_cli(["verify", _write(tmp_path, {"hello": 1})], _no_network)
+    assert code == EXIT_ERROR and "Not an inspection pack" in capsys.readouterr().err

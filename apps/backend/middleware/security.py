@@ -35,34 +35,10 @@ _PUBLIC_ROUTES = frozenset(
         ("POST", "/api/v1/auth/oauth2/sync-user"),
         ("POST", "/api/v1/auth/oauth2/validate"),
         ("POST", "/api/v1/auth/refresh"),
+        ("POST", "/api/v1/auth/register"),
         ("POST", "/api/v1/register"),
     }
 )
-
-_DEVELOPMENT_PUBLIC_PATH_PREFIXES = (
-    "/api/v1/ai-bom",
-    "/api/v1/analytics",
-    "/api/v1/bias-detection",
-    "/api/v1/bias/llm-judge",
-    "/api/v1/compliance",
-    "/api/v1/core",
-    "/api/v1/database",
-    "/api/v1/datasets",
-    "/api/v1/marketplace",
-    "/api/v1/mlops",
-    "/api/v1/modern-bias-detection",
-    "/api/v1/monitoring",
-    "/api/v1/multimodal-bias-detection",
-    "/api/v1/remediation",
-    "/api/v1/reports",
-    "/api/v1/settings",
-)
-
-
-def _matches_path_family(path: str, prefix: str) -> bool:
-    """Match one route family without making similarly named siblings public."""
-
-    return path == prefix or path.startswith(f"{prefix}/")
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -118,6 +94,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return JSONResponse(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 content={
+                    "detail": "Rate limit exceeded",
                     "error": "Rate limit exceeded",
                     "message": f"Maximum {self.requests_per_minute} requests per minute allowed",
                     "retry_after": int(reset_time - current_time)
@@ -335,6 +312,7 @@ class ErrorHandlingMiddleware(BaseHTTPMiddleware):
                 return JSONResponse(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     content={
+                        "detail": "Internal server error",
                         "error": "Internal server error",
                         "message": "An unexpected error occurred. Please try again later.",
                     }
@@ -343,6 +321,7 @@ class ErrorHandlingMiddleware(BaseHTTPMiddleware):
                 return JSONResponse(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     content={
+                        "detail": "Internal server error",
                         "error": "Internal server error",
                         "message": str(e),
                         "type": type(e).__name__,
@@ -363,6 +342,23 @@ class ErrorHandlingMiddleware(BaseHTTPMiddleware):
 
 
 # JWT Authentication Middleware
+# Exact paths that need no token. Prefix matching is reserved for the few
+# trees below; a bare "/" prefix would make every route public.
+_PUBLIC_EXACT = {
+    "/", "/api", "/docs", "/redoc", "/openapi.json",
+    "/auth/login", "/auth/refresh", "/auth/health",
+    "/api/v1/auth/login", "/api/v1/auth/register", "/api/v1/auth/refresh",
+    "/api/v1/auth/callback", "/api/v1/auth/health",
+    "/api/v1/auth/oauth2/validate", "/api/v1/auth/oauth2/refresh",
+    "/api/v1/register",
+}
+_PUBLIC_PREFIXES = ("/health", "/docs/", "/static/", "/api/v1/public/packs/")
+
+
+def _is_public_path(path: str) -> bool:
+    return path in _PUBLIC_EXACT or path.startswith(_PUBLIC_PREFIXES)
+
+
 class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
     """JWT authentication middleware using new secure JWT infrastructure."""
     
@@ -381,6 +377,38 @@ class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
         self.InvalidTokenException = InvalidTokenException
         self.TokenMissingException = TokenMissingException
         self.log_jwt_security_event = log_jwt_security_event
+        # Local development only: sign loopback requests that carry no token in
+        # as this existing user. Never active outside ENVIRONMENT=development.
+        self.dev_login_email = (
+            settings.fairmind_dev_login_email if settings.is_development else None
+        )
+
+    async def _dev_login(self, request: Request):
+        """TokenData for the configured local user, or None when not applicable."""
+        if not self.dev_login_email:
+            return None
+        host = request.client.host if request.client else None
+        if host not in ("127.0.0.1", "::1", "localhost"):
+            return None
+        from datetime import datetime, timedelta, timezone
+        from config.auth import TokenData, TokenType
+
+        user = await self.auth_manager.get_user_by_email(self.dev_login_email)
+        if not user or not user.is_active:
+            return None
+        permissions = list(user.permissions)  # org owners and admins already carry model:write
+        now = datetime.now(timezone.utc)
+        return TokenData(
+            user_id=user.id,
+            email=user.email,
+            role=user.role,
+            token_type=TokenType.ACCESS,
+            exp=now + timedelta(hours=1),
+            iat=now,
+            permissions=permissions,
+            org_id=user.org_id,
+        )
+
     
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         # Always allow OPTIONS requests (CORS preflight)
@@ -391,14 +419,29 @@ class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
         if route_key in _PUBLIC_ROUTES:
             return await call_next(request)
 
-        if settings.environment == "development" and any(
-            _matches_path_family(request.url.path, prefix)
-            for prefix in _DEVELOPMENT_PUBLIC_PATH_PREFIXES
-        ):
+        # Auditor pack links carry their own token; the route checks it.
+        if request.method == "GET" and request.url.path.startswith("/api/v1/public/packs/"):
             return await call_next(request)
-        
+
         # Extract JWT token from Authorization header
         auth_header = request.headers.get("Authorization")
+
+        dev_user = await self._dev_login(request)
+        if dev_user is not None:
+            # Local development: a valid token still wins; a missing, stale or
+            # foreign token falls back to the configured local user instead of 401.
+            if auth_header and auth_header.startswith("Bearer "):
+                try:
+                    token_data = await self.auth_manager.verify_token(auth_header.split(" ")[1])
+                    if token_data.token_type.value != "refresh":
+                        request.state.user = token_data
+                        request.state.authenticated = True
+                        return await call_next(request)
+                except Exception:
+                    pass
+            request.state.user = dev_user
+            request.state.authenticated = True
+            return await call_next(request)
         
         if not auth_header or not auth_header.startswith("Bearer "):
             # Log security event
@@ -428,6 +471,8 @@ class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
             # In Supabase, we might want to verify against Supabase's JWT secret
             # For now, we'll use our internal auth manager which should be configured with the same secret
             token_data = await self.auth_manager.verify_token(token)
+            if token_data.token_type.value == "refresh":
+                raise self.InvalidTokenException("Refresh tokens cannot authorize requests")
             
             # Add user information to request state
             request.state.user = token_data
@@ -495,6 +540,7 @@ class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
             return JSONResponse(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 content={
+                    "detail": "Authentication service error",
                     "error": "Authentication service error",
                     "message": "Unable to verify authentication. Please try again."
                 }

@@ -2810,9 +2810,7 @@ class GovernanceAISystem(Base):
     __tablename__ = "governance_ai_systems"
 
     id = Column(String, primary_key=True, default=_new_id)
-    workspace_id = Column(
-        String, ForeignKey("governance_workspaces.id"), nullable=False, index=True
-    )
+    workspace_id = Column(String, ForeignKey("governance_workspaces.id"), nullable=False, index=True)
     org_id = Column(String, nullable=True, index=True)
     name = Column(String, nullable=False)
     system_type = Column(String, nullable=True)
@@ -3173,6 +3171,46 @@ class GovernanceApprovalDecision(Base):
         return f"<GovernanceApprovalDecision(id={self.id}, decision={self.decision})>"
 
 
+class GovernanceDecisionSeal(Base):
+    """Hash chain over a system's evidence, frozen at the moment a release decision is recorded.
+
+    ``chain_head`` folds the per-record hashes in creation order; ``entries_json`` keeps each
+    record's id and hash so a later verification can say which record changed or vanished.
+    """
+
+    __tablename__ = "governance_decision_seals"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    system_id = Column(String, nullable=False, index=True)
+    request_id = Column(String, nullable=False, index=True)
+    decision_id = Column(String, nullable=False)
+    decision = Column(String, nullable=False)
+    chain_head = Column(String, nullable=False)
+    evidence_count = Column(Integer, nullable=False, default=0)
+    entries_json = Column(Text, nullable=False, default="[]")
+    gate_json = Column(Text, nullable=False, default="{}")
+    sealed_by = Column(String, nullable=True)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+    def __repr__(self) -> str:
+        return f"<GovernanceDecisionSeal(id={self.id}, chain_head={self.chain_head[:12]})>"
+
+
+class GovernanceMonitoringPolicy(Base):
+    """How often a system's monitoring snapshots are expected, and how many drifting ones open a finding."""
+
+    __tablename__ = "governance_monitoring_policies"
+
+    system_id = Column(String, primary_key=True)
+    cadence_hours = Column(Integer, nullable=False, default=168)
+    drift_window = Column(Integer, nullable=False, default=3)
+    updated_by = Column(String, nullable=True)
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+    def __repr__(self) -> str:
+        return f"<GovernanceMonitoringPolicy(system_id={self.system_id}, cadence_hours={self.cadence_hours})>"
+
+
 class GovernanceRisk(Base):
     """Risk record linked to an AI system."""
 
@@ -3316,3 +3354,147 @@ class GovernanceAuditReport(Base):
 
     def __repr__(self) -> str:
         return f"<GovernanceAuditReport(id={self.id}, type={self.report_type})>"
+
+
+class GovernanceIntegration(Base):
+    """A connected inventory source (MLflow registry, GitHub org) that discovers AI systems."""
+
+    __tablename__ = "governance_integrations"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    kind = Column(String, nullable=False)  # mlflow | github
+    name = Column(String, nullable=False)
+    config_json = Column(Text, nullable=False, default="{}")
+    # ponytail: token stored at rest as-is in the local store; encrypt with an app key before production
+    token = Column(Text, nullable=True)
+    last_synced_at = Column(String, nullable=True)
+    last_sync_summary = Column(Text, nullable=True)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+
+class GovernanceDiscoveredAsset(Base):
+    """Something an integration found that may become a governed system."""
+
+    __tablename__ = "governance_discovered_assets"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    integration_id = Column(String, ForeignKey("governance_integrations.id"), nullable=False, index=True)
+    source = Column(String, nullable=False)  # mlflow | github
+    external_id = Column(String, nullable=False)
+    name = Column(String, nullable=False)
+    kind = Column(String, nullable=False)  # ml_model | llm_app | ai_assisted_dev
+    metadata_json = Column(Text, nullable=False, default="{}")
+    suggested_tier = Column(String, nullable=False, default="medium")
+    suggested_stage = Column(String, nullable=False, default="onboard")
+    status = Column(String, nullable=False, default="new")  # new | promoted | ignored
+    system_id = Column(String, nullable=True)
+    discovered_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+    __table_args__ = (
+        Index("idx_governance_discovered_assets_ext", "integration_id", "external_id", unique=True),
+    )
+
+
+class PackInstall(Base):
+    """An agentic pack an organization has switched on."""
+
+    __tablename__ = "pack_installs"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    pack_id = Column(String, nullable=False)
+    installed_by = Column(String, nullable=True)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+    __table_args__ = (
+        Index("idx_pack_installs_org_pack", "org_id", "pack_id", unique=True),
+    )
+
+
+class WorkflowRun(Base):
+    """One execution of a pack workflow for an organization."""
+
+    __tablename__ = "workflow_runs"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    workflow_id = Column(String, nullable=False, index=True)
+    workflow_version = Column(String, nullable=False)
+    ai_system_id = Column(String, nullable=True)
+    status = Column(String, nullable=False, default="queued")  # queued | running | waiting | blocked | done | failed
+    current_step = Column(String, nullable=True)
+    approval_request_id = Column(String, nullable=True)
+    started_by = Column(String, nullable=True)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    finished_at = Column(String, nullable=True)
+
+
+class WorkflowRunEvent(Base):
+    """Append-only, hash-chained event of a workflow run."""
+
+    __tablename__ = "workflow_run_events"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    run_id = Column(String, nullable=False, index=True)
+    seq = Column(Integer, nullable=False)
+    kind = Column(String, nullable=False)
+    step_id = Column(String, nullable=True)
+    payload_json = Column(Text, nullable=False, default="{}")
+    canonical_json = Column(Text, nullable=False)
+    prev_hash = Column(String, nullable=False)
+    hash = Column(String, nullable=False)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+    __table_args__ = (
+        Index("idx_workflow_run_events_run_seq", "run_id", "seq", unique=True),
+    )
+
+
+class WorkflowVersion(Base):
+    """An organization's edited copy of a pack workflow: one draft, then numbered published versions."""
+
+    __tablename__ = "workflow_versions"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    workflow_id = Column(String, nullable=False)
+    version = Column(Integer, nullable=False)
+    status = Column(String, nullable=False, default="draft")  # draft | published
+    base_version = Column(String, nullable=False)  # the version the draft started from
+    steps_json = Column(Text, nullable=False)
+    created_by = Column(String, nullable=True)
+    updated_by = Column(String, nullable=True)
+    published_by = Column(String, nullable=True)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    published_at = Column(String, nullable=True)
+
+    __table_args__ = (
+        Index("idx_workflow_versions_org_wf_version", "org_id", "workflow_id", "version", unique=True),
+    )
+
+
+class GovernanceEvidencePack(Base):
+    """An inspection pack: a frozen, hashed manifest of chosen systems and frameworks.
+
+    ``manifest_hash`` is SHA-256 over the canonical manifest bytes, so anyone holding the
+    JSON can recompute it. Only the SHA-256 of the auditor share token is stored.
+    """
+
+    __tablename__ = "governance_evidence_packs"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    title = Column(String, nullable=False)
+    frameworks_json = Column(Text, nullable=False, default="[]")
+    system_ids_json = Column(Text, nullable=False, default="[]")
+    manifest_json = Column(Text, nullable=False)
+    manifest_hash = Column(String, nullable=False)
+    created_by = Column(String, nullable=True)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    share_token_hash = Column(String, nullable=True)
+    share_expires_at = Column(String, nullable=True)

@@ -36,7 +36,7 @@ import {
   type TechnicalStatus,
 } from '@/lib/api/hooks/useEvaluationRuns'
 
-const fieldClass = 'min-h-11 w-full rounded-none border-2 border-[#0F1412] bg-[#FCFDF8] px-3 py-2 text-sm font-semibold text-[#0F1412] outline outline-0 outline-offset-2 focus:outline-2 focus:outline-[#0F1412] disabled:cursor-not-allowed disabled:bg-[#E5E9E3]'
+const fieldClass = 'min-h-11 w-full border border-[var(--fm-line)] bg-white px-3 py-2 text-sm font-semibold text-[var(--fm-ink)] outline outline-0 outline-offset-2 focus:outline-2 focus:outline-[var(--fm-ink)] disabled:cursor-not-allowed disabled:bg-[var(--fm-bg)]'
 const suitePattern = /^[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9._-]*$/
 
 const targetKindLabels: Record<EvaluationTargetKind, string> = {
@@ -103,16 +103,16 @@ function timestampLabel(value: string) {
 function technicalStatusClass(status: TechnicalStatus) {
   if (status === 'failed' || status === 'cancelled') return 'border-[#D83A2E] bg-red-50 text-[#A4231B]'
   if (status === 'running') return 'border-[#2E8266] bg-emerald-50 text-[#155D46]'
-  if (status === 'succeeded') return 'border-[#0F1412] bg-[#0F1412] text-white'
-  return 'border-[#59615D] bg-[#F3F5F0] text-[#303834]'
+  if (status === 'succeeded') return 'border-[var(--fm-line)] bg-[var(--fm-ink)] text-white'
+  return 'border-[rgba(21,23,26,.14)] bg-[var(--fm-bg)] text-[var(--fm-ink2)]'
 }
 
 function verdictClass(verdict: GovernanceVerdict) {
   if (verdict === 'blocked') return 'border-[#D83A2E] bg-[#D83A2E] text-white'
   if (verdict === 'approved') return 'border-[#155D46] bg-[#DFF4EA] text-[#155D46]'
   if (verdict === 'conditional') return 'border-[#9A5B14] bg-[#FFF1D6] text-[#73420B]'
-  if (verdict === 'review') return 'border-[#0F1412] bg-[#FF6B35] text-[#0F1412]'
-  return 'border-[#59615D] bg-[#F3F5F0] text-[#303834]'
+  if (verdict === 'review') return 'border-[var(--fm-line)] bg-[#FF6B35] text-[var(--fm-ink)]'
+  return 'border-[rgba(21,23,26,.14)] bg-[var(--fm-bg)] text-[var(--fm-ink2)]'
 }
 
 function preflightPresentation(plan: EvaluationPlan, preflight: EvaluationPreflight) {
@@ -143,7 +143,7 @@ function preflightPresentation(plan: EvaluationPlan, preflight: EvaluationPrefli
 
 function StateLabel({ children, className }: { children: React.ReactNode; className: string }) {
   return (
-    <span className={`inline-flex min-h-8 items-center border-2 px-2.5 py-1 text-xs font-black uppercase ${className}`}>
+    <span className={`inline-flex min-h-8 items-center border-2 px-2.5 py-1 text-xs font-semibold uppercase ${className}`}>
       {children}
     </span>
   )
@@ -169,7 +169,7 @@ function ActionAlert({
       <div className="flex items-start gap-3">
         <IconAlertTriangle aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 text-[#D83A2E]" />
         <div>
-          <p className="font-black text-[#8F2019]">{title}</p>
+          <p className="font-semibold text-[#8F2019]">{title}</p>
           <p className="mt-1 text-sm font-semibold text-[#5B211D]">{error.message}</p>
           {nextAction && <p className="mt-2 text-sm font-bold text-[#5B211D]">Next action: {nextAction}</p>}
         </div>
@@ -231,7 +231,7 @@ function EvaluationPlanForm({ onCreate, submitting }: PlanFormProps) {
   return (
     <form aria-label="Create evaluation plan" onSubmit={handleSubmit} className="space-y-4">
       <div className="flex flex-col gap-1">
-        <label htmlFor="evaluation-plan-name" className="text-xs font-black uppercase tracking-wide">Plan name</label>
+        <label htmlFor="evaluation-plan-name" className="text-xs font-semibold uppercase tracking-wide">Plan name</label>
         <input
           id="evaluation-plan-name"
           value={name}
@@ -244,13 +244,13 @@ function EvaluationPlanForm({ onCreate, submitting }: PlanFormProps) {
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="flex flex-col gap-1">
-          <label htmlFor="evaluation-target-kind" className="text-xs font-black uppercase tracking-wide">Target kind</label>
+          <label htmlFor="evaluation-target-kind" className="text-xs font-semibold uppercase tracking-wide">Target kind</label>
           <select id="evaluation-target-kind" value={targetKind} onChange={(event) => setTargetKind(event.target.value as EvaluationTargetKind)} className={fieldClass} disabled={submitting}>
             {Object.entries(targetKindLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
         </div>
         <div className="flex flex-col gap-1">
-          <label htmlFor="evaluation-depth" className="text-xs font-black uppercase tracking-wide">Execution depth</label>
+          <label htmlFor="evaluation-depth" className="text-xs font-semibold uppercase tracking-wide">Execution depth</label>
           <select id="evaluation-depth" value={executionDepth} onChange={(event) => setExecutionDepth(event.target.value as ExecutionDepth)} className={fieldClass} disabled={submitting}>
             <option value="inline">Inline</option>
             <option value="deep">Deep</option>
@@ -258,15 +258,15 @@ function EvaluationPlanForm({ onCreate, submitting }: PlanFormProps) {
           </select>
         </div>
         <div className="flex flex-col gap-1">
-          <label htmlFor="evaluation-enforcement" className="text-xs font-black uppercase tracking-wide">Enforcement mode</label>
+          <label htmlFor="evaluation-enforcement" className="text-xs font-semibold uppercase tracking-wide">Enforcement mode</label>
           <select id="evaluation-enforcement" value={enforcementMode} onChange={(event) => setEnforcementMode(event.target.value as EnforcementMode)} className={fieldClass} disabled={submitting}>
             {enabledEnforcementModes.map((mode) => <option key={mode} value={mode}>{enforcementModeLabels[mode]}</option>)}
           </select>
         </div>
       </div>
 
-      <fieldset className="border-2 border-[#0F1412] p-3">
-        <legend className="px-1 text-xs font-black uppercase tracking-wide">Lifecycle phases</legend>
+      <fieldset className="border border-[var(--fm-line)] p-3">
+        <legend className="px-1 text-xs font-semibold uppercase tracking-wide">Lifecycle phases</legend>
         <div className="flex flex-wrap gap-x-5 gap-y-2">
           {(Object.entries(lifecycleLabels) as Array<[LifecyclePhase, string]>).map(([phase, label]) => (
             <label key={phase} className="flex min-h-11 cursor-pointer items-center gap-2 text-sm font-bold">
@@ -274,7 +274,7 @@ function EvaluationPlanForm({ onCreate, submitting }: PlanFormProps) {
                 type="checkbox"
                 checked={lifecyclePhases.includes(phase)}
                 onChange={() => togglePhase(phase)}
-                className="h-5 w-5 rounded-none border-2 border-[#0F1412] accent-[#FF6B35]"
+                className="h-5 w-5 border border-[var(--fm-line)] accent-[#FF6B35]"
                 disabled={submitting}
               />
               {label}
@@ -285,13 +285,13 @@ function EvaluationPlanForm({ onCreate, submitting }: PlanFormProps) {
 
       <div className="grid gap-4 lg:grid-cols-[minmax(220px,0.6fr)_minmax(320px,1.4fr)]">
         <div className="flex flex-col gap-1">
-          <label htmlFor="evaluation-delivery" className="text-xs font-black uppercase tracking-wide">Delivery mode</label>
+          <label htmlFor="evaluation-delivery" className="text-xs font-semibold uppercase tracking-wide">Delivery mode</label>
           <select id="evaluation-delivery" value={deliveryMode} onChange={(event) => setDeliveryMode(event.target.value as DeliveryMode)} className={fieldClass} disabled={submitting}>
             {enabledDeliveryModes.map((mode) => <option key={mode} value={mode}>{deliveryModeLabels[mode]}</option>)}
           </select>
         </div>
         <div className="flex flex-col gap-1">
-          <label htmlFor="evaluation-suite-refs" className="text-xs font-black uppercase tracking-wide">Versioned suite references</label>
+          <label htmlFor="evaluation-suite-refs" className="text-xs font-semibold uppercase tracking-wide">Versioned suite references</label>
           <textarea
             id="evaluation-suite-refs"
             value={suiteRefsText}
@@ -301,13 +301,13 @@ function EvaluationPlanForm({ onCreate, submitting }: PlanFormProps) {
             className={`${fieldClass} min-h-[88px] resize-y font-mono`}
             disabled={submitting}
           />
-          <p className="text-xs font-semibold text-[#59615D]">One immutable namespace/name@version reference per line.</p>
+          <p className="text-xs font-semibold text-[var(--fm-ink2)]">One immutable namespace/name@version reference per line.</p>
         </div>
       </div>
 
       {(!legacyEvaluationFeatureGates.automaticEnforcement || !legacyEvaluationFeatureGates.fairmindWorkerDelivery || !legacyEvaluationFeatureGates.legacyEvidenceLinking) && (
-        <aside data-testid="legacy-evaluation-capability-notice" className="border-2 border-[#0F1412] bg-[#F3F5F0] p-3 text-sm font-semibold text-[#303834]">
-          <p className="font-black">Release-gated capabilities are unavailable in this legacy workflow.</p>
+        <aside data-testid="legacy-evaluation-capability-notice" className="border border-[var(--fm-line)] bg-[var(--fm-bg)] p-3 text-sm font-semibold text-[var(--fm-ink2)]">
+          <p className="font-semibold">Release-gated capabilities are unavailable in this legacy workflow.</p>
           <ul className="mt-2 list-disc space-y-1 pl-5">
             {!legacyEvaluationFeatureGates.automaticEnforcement && <li>Automatic enforcement is unavailable; use advisory or human approval.</li>}
             {!legacyEvaluationFeatureGates.fairmindWorkerDelivery && <li>FairMind worker delivery is unavailable; use an external provider or imported report.</li>}
@@ -322,7 +322,7 @@ function EvaluationPlanForm({ onCreate, submitting }: PlanFormProps) {
         </p>
       )}
 
-      <Button type="submit" disabled={submitting} className="rounded-none border-[#0F1412] bg-[#FF6B35] font-black">
+      <Button type="submit" disabled={submitting} className="border-[var(--fm-line)] bg-[#FF6B35] font-semibold">
         <IconPlus aria-hidden="true" />
         {submitting ? 'Creating plan' : 'Create evaluation plan'}
       </Button>
@@ -334,9 +334,9 @@ function RunsTable({ runs, plans }: { runs: EvaluationRun[]; plans: EvaluationPl
   const planNames = useMemo(() => new Map(plans.map((plan) => [plan.id, plan.name])), [plans])
   if (runs.length === 0) {
     return (
-      <div className="border-2 border-dashed border-[#59615D] bg-[#F3F5F0] p-6">
-        <h3 className="text-base font-black">No evaluation runs yet</h3>
-        <p className="mt-1 max-w-[70ch] text-sm font-semibold text-[#59615D]">
+      <div className="border-2 border-dashed border-[rgba(21,23,26,.14)] bg-[var(--fm-bg)] p-6">
+        <h3 className="text-base font-semibold">No evaluation runs yet</h3>
+        <p className="mt-1 max-w-[70ch] text-sm font-semibold text-[var(--fm-ink2)]">
           Activate a plan, check preflight, then prepare a run. External and imported runs remain awaiting evidence until an exact Passport revision is linked.
         </p>
       </div>
@@ -344,33 +344,33 @@ function RunsTable({ runs, plans }: { runs: EvaluationRun[]; plans: EvaluationPl
   }
 
   return (
-    <div className="max-w-full overflow-x-auto border-2 border-[#0F1412]">
+    <div className="max-w-full overflow-x-auto border border-[var(--fm-line)]">
       <table aria-label="Recent evaluation runs" className="w-full min-w-[840px] border-collapse text-left text-sm">
-        <thead className="bg-[#0F1412] text-white">
+        <thead className="bg-[var(--fm-ink)] text-white">
           <tr>
-            <th scope="col" className="px-3 py-3 font-black">Run</th>
-            <th scope="col" className="px-3 py-3 font-black">Plan</th>
-            <th scope="col" className="px-3 py-3 font-black">Technical status</th>
-            <th scope="col" className="px-3 py-3 font-black">Overall verdict</th>
-            <th scope="col" className="px-3 py-3 font-black">Trigger</th>
-            <th scope="col" className="px-3 py-3 font-black">Created</th>
+            <th scope="col" className="px-3 py-3 font-semibold">Run</th>
+            <th scope="col" className="px-3 py-3 font-semibold">Plan</th>
+            <th scope="col" className="px-3 py-3 font-semibold">Technical status</th>
+            <th scope="col" className="px-3 py-3 font-semibold">Overall verdict</th>
+            <th scope="col" className="px-3 py-3 font-semibold">Trigger</th>
+            <th scope="col" className="px-3 py-3 font-semibold">Created</th>
             <th scope="col" className="px-3 py-3"><span className="sr-only">Open run</span></th>
           </tr>
         </thead>
         <tbody>
           {runs.map((run) => (
-            <tr key={run.id} className="border-t-2 border-[#0F1412] bg-[#FCFDF8] hover:bg-[#F3F5F0]">
+            <tr key={run.id} className="border-t border-[var(--fm-line)] bg-white hover:bg-[var(--fm-bg)]">
               <td className="px-3 py-3 font-mono text-xs font-bold">{run.id}</td>
               <td className="px-3 py-3 font-bold">{planNames.get(run.planId) ?? run.planId}</td>
               <td className="px-3 py-3"><StateLabel className={technicalStatusClass(run.technicalStatus)}>{statusLabels[run.technicalStatus]}</StateLabel></td>
               <td className="px-3 py-3"><StateLabel className={verdictClass(run.overallVerdict)}>{verdictLabels[run.overallVerdict]}</StateLabel></td>
               <td className="px-3 py-3 font-semibold">{sentenceLabel(run.trigger)}</td>
-              <td className="px-3 py-3 font-semibold text-[#59615D]">{timestampLabel(run.createdAt)}</td>
+              <td className="px-3 py-3 font-semibold text-[var(--fm-ink2)]">{timestampLabel(run.createdAt)}</td>
               <td className="px-3 py-3 text-right">
                 <Link
                   href={`/tests/${run.id}`}
                   aria-label={`Open run ${run.id}`}
-                  className="inline-flex min-h-11 items-center gap-2 border-2 border-[#0F1412] bg-[#FCFDF8] px-3 font-black shadow-[3px_3px_0_0_#0F1412] outline outline-0 outline-offset-2 transition-[transform,box-shadow] duration-150 hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none focus:outline-2 focus:outline-[#0F1412] motion-reduce:transition-none motion-reduce:transform-none"
+                  className="inline-flex min-h-11 items-center gap-2 px-3 font-semibold outline outline-0 outline-offset-2 transition-[transform,box-shadow] duration-150 focus:outline-2 focus:outline-[var(--fm-ink)] motion-reduce:transition-none motion-reduce:transform-none fm-card"
                 >
                   Open <IconArrowRight aria-hidden="true" className="h-4 w-4" />
                 </Link>
@@ -476,15 +476,15 @@ export default function EvaluationRunsPage() {
   const initialLoading = (orgLoading || systemLoading) || (evaluations.loading && evaluations.plans.length === 0 && evaluations.runs.length === 0)
 
   return (
-    <div data-testid="evaluation-runs-workbench" className="mx-auto w-full max-w-[1500px] space-y-5 text-[#0F1412]">
-      <header className="border-b-4 border-[#0F1412] pb-4 pt-1">
+    <div data-testid="evaluation-runs-workbench" className="mx-auto w-full max-w-[1500px] space-y-5 text-[var(--fm-ink)]">
+      <header className="border-b border-[var(--fm-line)] pb-4 pt-1">
         <div className="flex items-start gap-3">
-          <span className="mt-1 flex h-11 w-11 shrink-0 items-center justify-center border-2 border-[#0F1412] bg-[#FF6B35] shadow-[3px_3px_0_0_#0F1412]" aria-hidden="true">
+          <span className="mt-1 flex h-11 w-11 shrink-0 items-center justify-center bg-[#FF6B35] rounded-[14px] shadow-[var(--fm-shadow)]" aria-hidden="true">
             <IconShieldCheck className="h-5 w-5" />
           </span>
           <div>
-            <h1 className="text-3xl font-black tracking-[-0.02em]">Evaluation Runs</h1>
-            <p className="mt-1 max-w-[72ch] text-sm font-semibold text-[#59615D]">
+            <h1 className="text-3xl font-semibold tracking-[-0.02em]">Evaluation Runs</h1>
+            <p className="mt-1 max-w-[72ch] text-sm font-semibold text-[var(--fm-ink2)]">
               Plan multi-modal evaluations, verify execution readiness, and connect exact evidence revisions without turning technical success into a governance approval.
             </p>
           </div>
@@ -492,32 +492,32 @@ export default function EvaluationRunsPage() {
       </header>
 
       {!selectedOrg && !initialLoading ? (
-        <section className="border-4 border-[#0F1412] bg-[#FCFDF8] p-6">
-          <h2 className="text-xl font-black">Choose an organization</h2>
-          <p className="mt-2 max-w-[70ch] text-sm font-semibold text-[#59615D]">
+        <section className="border border-[var(--fm-line)] bg-white p-6">
+          <h2 className="text-xl font-semibold">Choose an organization</h2>
+          <p className="mt-2 max-w-[70ch] text-sm font-semibold text-[var(--fm-ink2)]">
             Select or create an organization before loading scoped plans, runs, or governance evidence.
           </p>
-          <Link href="/org-admin" className="mt-4 inline-flex min-h-11 items-center border-2 border-[#0F1412] bg-[#FF6B35] px-4 font-black shadow-[4px_4px_0_0_#0F1412] outline outline-0 outline-offset-2 focus:outline-2 focus:outline-[#0F1412]">
+          <Link href="/org-admin" className="mt-4 inline-flex min-h-11 items-center bg-[#FF6B35] px-4 font-semibold outline outline-0 outline-offset-2 focus:outline-2 focus:outline-[var(--fm-ink)] rounded-[14px] shadow-[var(--fm-shadow)]">
             Manage organizations
           </Link>
         </section>
       ) : !realSystem && !initialLoading ? (
-        <section className="border-4 border-[#0F1412] bg-[#FCFDF8] p-6">
-          <h2 className="text-xl font-black">Choose an AI system</h2>
-          <p className="mt-2 max-w-[70ch] text-sm font-semibold text-[#59615D]">
+        <section className="border border-[var(--fm-line)] bg-white p-6">
+          <h2 className="text-xl font-semibold">Choose an AI system</h2>
+          <p className="mt-2 max-w-[70ch] text-sm font-semibold text-[var(--fm-ink2)]">
             Select or register a real AI system before loading plans or evaluation evidence. Placeholder systems are never evaluated.
           </p>
-          <Link href="/onboard" className="mt-4 inline-flex min-h-11 items-center border-2 border-[#0F1412] bg-[#FF6B35] px-4 font-black shadow-[4px_4px_0_0_#0F1412] outline outline-0 outline-offset-2 focus:outline-2 focus:outline-[#0F1412]">
+          <Link href="/onboard" className="mt-4 inline-flex min-h-11 items-center bg-[#FF6B35] px-4 font-semibold outline outline-0 outline-offset-2 focus:outline-2 focus:outline-[var(--fm-ink)] rounded-[14px] shadow-[var(--fm-shadow)]">
             Register an AI system
           </Link>
         </section>
       ) : (
-        <section className="border-4 border-[#0F1412] bg-[#FCFDF8]">
+        <section className="border border-[var(--fm-line)] bg-white">
           {initialLoading ? (
             <div aria-label="Loading evaluation workspace" className="space-y-3 p-6">
               <div className="h-5 w-48 animate-pulse bg-[#D6DBD4] motion-reduce:animate-none" />
-              <div className="h-11 w-full animate-pulse bg-[#E5E9E3] motion-reduce:animate-none" />
-              <div className="h-28 w-full animate-pulse bg-[#E5E9E3] motion-reduce:animate-none" />
+              <div className="h-11 w-full animate-pulse bg-[var(--fm-bg)] motion-reduce:animate-none" />
+              <div className="h-28 w-full animate-pulse bg-[var(--fm-bg)] motion-reduce:animate-none" />
             </div>
           ) : (
             <>
@@ -525,10 +525,10 @@ export default function EvaluationRunsPage() {
                 <div role="alert" className="border-b-4 border-[#D83A2E] bg-red-50 p-4">
                   <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
                     <div>
-                      <p className="font-black text-[#8F2019]">Evaluation data unavailable</p>
+                      <p className="font-semibold text-[#8F2019]">Evaluation data unavailable</p>
                       <p className="mt-1 text-sm font-semibold text-[#5B211D]">{evaluations.error.message}</p>
                     </div>
-                    <Button variant="neutral" onClick={() => void evaluations.refresh()} className="rounded-none border-[#0F1412] font-black">
+                    <Button variant="neutral" onClick={() => void evaluations.refresh()} className="border-[var(--fm-line)] font-semibold">
                       Retry loading evaluations
                     </Button>
                   </div>
@@ -537,16 +537,16 @@ export default function EvaluationRunsPage() {
 
               {actionError && <ActionAlert title="Evaluation action failed" error={actionError} alertRef={actionAlertRef} />}
               {actionMessage && (
-                <p role="status" className="border-b-2 border-[#0F1412] bg-[#DFF4EA] p-3 text-sm font-bold text-[#155D46]">
+                <p role="status" className="border-b border-[var(--fm-line)] bg-[#DFF4EA] p-3 text-sm font-bold text-[#155D46]">
                   {actionMessage}
                 </p>
               )}
 
-              <section aria-labelledby="evaluation-plan-heading" className="border-b-4 border-[#0F1412] p-4 sm:p-5">
+              <section aria-labelledby="evaluation-plan-heading" className="border-b border-[var(--fm-line)] p-4 sm:p-5">
                 <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
                   <div>
-                    <h2 id="evaluation-plan-heading" className="text-lg font-black">Evaluation plan</h2>
-                    <p className="text-sm font-semibold text-[#59615D]">Version the target, lifecycle coverage, delivery route, and suites before collecting evidence.</p>
+                    <h2 id="evaluation-plan-heading" className="text-lg font-semibold">Evaluation plan</h2>
+                    <p className="text-sm font-semibold text-[var(--fm-ink2)]">Version the target, lifecycle coverage, delivery route, and suites before collecting evidence.</p>
                   </div>
                   {evaluations.plansLoaded && evaluations.plans.length > 0 && (
                     <FramedIcon
@@ -560,9 +560,9 @@ export default function EvaluationRunsPage() {
                 </div>
 
                 {planListUnconfirmed ? (
-                  <div role="status" className="border-2 border-[#0F1412] bg-[#F3F5F0] p-4">
-                    <p className="font-black">Plan availability is unconfirmed</p>
-                    <p className="mt-1 max-w-[70ch] text-sm font-semibold text-[#59615D]">
+                  <div role="status" className="border border-[var(--fm-line)] bg-[var(--fm-bg)] p-4">
+                    <p className="font-semibold">Plan availability is unconfirmed</p>
+                    <p className="mt-1 max-w-[70ch] text-sm font-semibold text-[var(--fm-ink2)]">
                       Retry loading evaluations before creating a plan so an existing version is not duplicated.
                     </p>
                   </div>
@@ -572,25 +572,25 @@ export default function EvaluationRunsPage() {
                   <div className="space-y-4">
                     <div className="grid gap-4 lg:grid-cols-[minmax(260px,1fr)_2fr]">
                       <div className="flex flex-col gap-1">
-                        <label htmlFor="evaluation-plan-selector" className="text-xs font-black uppercase tracking-wide">Selected plan</label>
+                        <label htmlFor="evaluation-plan-selector" className="text-xs font-semibold uppercase tracking-wide">Selected plan</label>
                         <select id="evaluation-plan-selector" value={selectedPlanId ?? ''} onChange={(event) => setSelectedPlanId(event.target.value)} className={fieldClass}>
                           {evaluations.plans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name}</option>)}
                         </select>
                       </div>
                       {selectedPlan && (
-                        <dl className="grid grid-cols-2 gap-x-4 gap-y-3 border-2 border-[#0F1412] bg-[#F3F5F0] p-3 text-sm sm:grid-cols-4">
-                          <div><dt className="text-xs font-black uppercase text-[#59615D]">Status</dt><dd className="mt-1 font-black">{sentenceLabel(selectedPlan.status)}</dd></div>
-                          <div><dt className="text-xs font-black uppercase text-[#59615D]">Target</dt><dd className="mt-1 font-bold">{targetKindLabels[selectedPlan.targetKind]}</dd></div>
-                          <div><dt className="text-xs font-black uppercase text-[#59615D]">Depth</dt><dd className="mt-1 font-bold">{sentenceLabel(selectedPlan.executionDepth)}</dd></div>
-                          <div><dt className="text-xs font-black uppercase text-[#59615D]">Delivery</dt><dd className="mt-1 font-bold">{sentenceLabel(selectedPlan.deliveryMode)}</dd></div>
-                          <div className="col-span-2 sm:col-span-4"><dt className="text-xs font-black uppercase text-[#59615D]">Suites</dt><dd className="mt-1 break-all font-mono text-xs font-bold">{selectedPlan.suiteRefs.join(', ')}</dd></div>
+                        <dl className="grid grid-cols-2 gap-x-4 gap-y-3 border border-[var(--fm-line)] bg-[var(--fm-bg)] p-3 text-sm sm:grid-cols-4">
+                          <div><dt className="text-xs font-semibold uppercase text-[var(--fm-ink2)]">Status</dt><dd className="mt-1 font-semibold">{sentenceLabel(selectedPlan.status)}</dd></div>
+                          <div><dt className="text-xs font-semibold uppercase text-[var(--fm-ink2)]">Target</dt><dd className="mt-1 font-bold">{targetKindLabels[selectedPlan.targetKind]}</dd></div>
+                          <div><dt className="text-xs font-semibold uppercase text-[var(--fm-ink2)]">Depth</dt><dd className="mt-1 font-bold">{sentenceLabel(selectedPlan.executionDepth)}</dd></div>
+                          <div><dt className="text-xs font-semibold uppercase text-[var(--fm-ink2)]">Delivery</dt><dd className="mt-1 font-bold">{sentenceLabel(selectedPlan.deliveryMode)}</dd></div>
+                          <div className="col-span-2 sm:col-span-4"><dt className="text-xs font-semibold uppercase text-[var(--fm-ink2)]">Suites</dt><dd className="mt-1 break-all font-mono text-xs font-bold">{selectedPlan.suiteRefs.join(', ')}</dd></div>
                         </dl>
                       )}
                     </div>
                     {selectedPlan?.status === 'draft' && (
-                      <div className="flex flex-col gap-2 border-2 border-[#0F1412] bg-[#FFF1D6] p-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex flex-col gap-2 border border-[var(--fm-line)] bg-[#FFF1D6] p-3 sm:flex-row sm:items-center sm:justify-between">
                         <p className="text-sm font-bold">Draft plans cannot prepare runs. Activate this version after review.</p>
-                        <Button onClick={() => void activateSelectedPlan()} disabled={actionBusy} className="rounded-none border-[#0F1412] bg-[#FF6B35] font-black">Activate plan</Button>
+                        <Button onClick={() => void activateSelectedPlan()} disabled={actionBusy} className="border-[var(--fm-line)] bg-[#FF6B35] font-semibold">Activate plan</Button>
                       </div>
                     )}
                   </div>
@@ -598,29 +598,29 @@ export default function EvaluationRunsPage() {
               </section>
 
               {selectedPlan && !showCreatePlan && (
-                <section role="region" aria-label="Evaluation preflight" className="border-b-4 border-[#0F1412] p-4 sm:p-5">
-                  <h2 className="text-lg font-black">Preflight and run preparation</h2>
+                <section role="region" aria-label="Evaluation preflight" className="border-b border-[var(--fm-line)] p-4 sm:p-5">
+                  <h2 className="text-lg font-semibold">Preflight and run preparation</h2>
                   {preflightLoading ? (
-                    <p aria-label="Loading evaluation preflight" className="mt-3 min-h-11 animate-pulse bg-[#E5E9E3] p-3 text-sm font-bold motion-reduce:animate-none">Checking execution and evidence requirements</p>
+                    <p aria-label="Loading evaluation preflight" className="mt-3 min-h-11 animate-pulse bg-[var(--fm-bg)] p-3 text-sm font-bold motion-reduce:animate-none">Checking execution and evidence requirements</p>
                   ) : preflightError ? (
                     <p role="alert" className="mt-3 border-2 border-[#D83A2E] bg-red-50 p-3 text-sm font-bold text-[#8F2019]">{preflightError.message}</p>
                   ) : preflight && selectedPreflight ? (
                     <div className="mt-3 grid gap-4 lg:grid-cols-[1fr_auto] lg:items-end">
-                      <div className="border-2 border-[#0F1412] bg-[#F3F5F0] p-4">
+                      <div className="border border-[var(--fm-line)] bg-[var(--fm-bg)] p-4">
                         <div className="flex flex-wrap items-center gap-2">
                           <StateLabel className={selectedPreflight.canPrepareRun ? 'border-[#155D46] bg-[#DFF4EA] text-[#155D46]' : 'border-[#D83A2E] bg-red-50 text-[#8F2019]'}>
                             {selectedPreflight.stateLabel}
                           </StateLabel>
-                          <span className="text-xs font-black uppercase text-[#59615D]">{selectedPreflight.canPrepareRun ? 'Run preparation: allowed' : 'Run preparation: blocked'}</span>
-                          <span className="text-xs font-black uppercase text-[#59615D]">FairMind execution: {preflight.fairmindExecutionAvailable ? 'available' : 'unavailable'}</span>
+                          <span className="text-xs font-semibold uppercase text-[var(--fm-ink2)]">{selectedPreflight.canPrepareRun ? 'Run preparation: allowed' : 'Run preparation: blocked'}</span>
+                          <span className="text-xs font-semibold uppercase text-[var(--fm-ink2)]">FairMind execution: {preflight.fairmindExecutionAvailable ? 'available' : 'unavailable'}</span>
                         </div>
                         <p className="mt-3 text-sm font-semibold">{selectedPreflight.message}</p>
-                        <p className="mt-2 text-sm font-black">Next action: {selectedPreflight.nextAction}</p>
+                        <p className="mt-2 text-sm font-semibold">Next action: {selectedPreflight.nextAction}</p>
                       </div>
                       <Button
                         onClick={() => void prepareRun()}
                         disabled={actionBusy || !selectedPreflight.canPrepareRun}
-                        className="rounded-none border-[#0F1412] bg-[#FF6B35] font-black"
+                        className="border-[var(--fm-line)] bg-[#FF6B35] font-semibold"
                       >
                         <IconPlayerPlay aria-hidden="true" />
                         {actionBusy ? 'Preparing run' : 'Prepare evidence run'}
@@ -633,8 +633,8 @@ export default function EvaluationRunsPage() {
               <section aria-labelledby="recent-runs-heading" className="p-4 sm:p-5">
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <div>
-                    <h2 id="recent-runs-heading" className="text-lg font-black">Recent runs</h2>
-                    <p className="text-sm font-semibold text-[#59615D]">Technical execution and governance judgment stay separate.</p>
+                    <h2 id="recent-runs-heading" className="text-lg font-semibold">Recent runs</h2>
+                    <p className="text-sm font-semibold text-[var(--fm-ink2)]">Technical execution and governance judgment stay separate.</p>
                   </div>
                   <FramedIcon icon={IconRefresh} label="Refresh evaluations" onClick={() => void evaluations.refresh()} />
                 </div>

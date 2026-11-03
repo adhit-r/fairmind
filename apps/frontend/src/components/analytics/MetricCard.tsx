@@ -24,7 +24,7 @@ export default function MetricCard({ title, value, trend, description, icon }: M
     }
 
     return (
-        <Card className="border-2 border-black shadow-brutal">
+        <Card className="fm-card">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
                     {title}

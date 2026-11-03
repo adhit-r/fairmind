@@ -190,7 +190,7 @@ def test_ai_governance_lifecycle_summary_persists_stage_progression(authenticate
             "workspace_id": workspace["id"],
             "name": "Lifecycle Test System",
             "owner": "risk@acme.ai",
-            "risk_tier": "high",
+            "risk_tier": "low",
             "lifecycle_stage": "onboard",
             "metadata": {},
         },

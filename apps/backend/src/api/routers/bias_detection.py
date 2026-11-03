@@ -5,6 +5,7 @@ Comprehensive bias detection endpoints for text and image models
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
 from typing import List, Dict, Any, Optional
+from dataclasses import asdict, is_dataclass
 from datetime import datetime
 import logging
 import json
@@ -14,9 +15,19 @@ from pydantic import BaseModel
 # Import bias detection services
 from ..services.llm_bias_detection_service import llm_bias_service, BiasCategory, BiasType
 from ..services.bias_testing_library import bias_testing_library, TestingLibrary
+from api.routes.org_scope import org_member
+from config.auth import get_current_active_user, require_admin
+from src.application.services.governance_assurance_service import OrgMembership
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/bias-detection", tags=["bias-detection"])
+# Every route needs a signed-in caller. Most of them are stateless compute over
+# the request body; /detect, /history and /export touch the process-wide result
+# history and additionally require an organisation (see org_member below).
+router = APIRouter(
+    prefix="/bias-detection",
+    tags=["bias-detection"],
+    dependencies=[Depends(get_current_active_user)],
+)
 
 # Pydantic Models
 class BiasTestRequest(BaseModel):
@@ -97,7 +108,7 @@ class TemplateResponse(BaseModel):
     templates: Optional[List[Dict[str, Any]]] = None
 
 @router.post("/detect", response_model=BiasTestResponse)
-async def detect_bias(request: BiasTestRequest):
+async def detect_bias(request: BiasTestRequest, m: OrgMembership = Depends(org_member)):
     """
     Detect bias in model outputs using configurable test templates
     
@@ -192,11 +203,18 @@ async def detect_bias(request: BiasTestRequest):
         
         if "error" in results:
             raise HTTPException(status_code=500, detail=results["error"])
+
+        # The service appended this dict to its process-wide history; tag it so
+        # /history and /export only ever return the owning organisation's runs.
+        results["org_id"] = m.org_id
         
+        # The service returns BiasTestResult dataclasses; the response wants plain dicts.
+        test_results = [asdict(r) if is_dataclass(r) else r for r in results["test_results"]]
+
         # Calculate overall confidence
         overall_confidence = 0.0
-        if results.get("test_results"):
-            confidences = [result.get("confidence", 0.0) for result in results["test_results"]]
+        if test_results:
+            confidences = [result.get("confidence", 0.0) for result in test_results]
             overall_confidence = sum(confidences) / len(confidences) if confidences else 0.0
         
         return BiasTestResponse(
@@ -205,7 +223,7 @@ async def detect_bias(request: BiasTestRequest):
             overall_bias_score=results["overall_bias_score"],
             bias_breakdown=results["bias_breakdown"],
             recommendations=results["recommendations"],
-            test_results=results["test_results"],
+            test_results=test_results,
             confidence=overall_confidence,
             metadata={
                 "templates_tested": results["templates_tested"],
@@ -297,25 +315,37 @@ async def run_fairness_metrics(
             if isinstance(values, list):
                 sensitive_attrs_dict[attr] = np.array(values)
         
-        # Run fairness metrics
-        results = await bias_testing_library.run_fairness_metrics(
-            predictions=predictions,
-            true_labels=true_labels,
-            sensitive_attributes=sensitive_attrs_dict
+        from fairness_library.metrics import (
+            demographic_parity_diff,
+            equal_opportunity_diff,
+            equalized_odds_diff,
         )
-        
-        return {
-            "success": True,
-            "results": {
-                library.value: {
-                    "bias_score": result.bias_score,
-                    "confidence": result.confidence,
-                    "p_value": result.p_value,
-                    "effect_size": result.effect_size
-                } for library, result in results.items()
+
+        def _row(result):
+            low, high = result.confidence_interval
+            return {
+                "value": float(result.value),
+                "confidence_interval": [float(low), float(high)],
+                "p_value": float(result.p_value),
+                "is_fair": bool(result.is_fair),
+                "threshold": float(result.threshold),
             }
-        }
-        
+
+        results = {}
+        for attr, groups in sensitive_attrs_dict.items():
+            groups = np.asarray(groups)
+            if len(groups) != len(predictions) or len(true_labels) != len(predictions):
+                raise HTTPException(status_code=422, detail=f"'{attr}' must have one value per prediction")
+            results[attr] = {
+                "demographic_parity": _row(demographic_parity_diff(predictions, groups)),
+                "equalized_odds": _row(equalized_odds_diff(true_labels, predictions, groups)),
+                "equal_opportunity": _row(equal_opportunity_diff(true_labels, predictions, groups)),
+            }
+
+        return {"success": True, "results": results}
+
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error running fairness metrics: {e}")
         raise HTTPException(status_code=500, detail=f"Fairness metrics failed: {str(e)}")
@@ -491,7 +521,7 @@ async def get_available_libraries():
         logger.error(f"Error getting available libraries: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get libraries: {str(e)}")
 
-@router.post("/libraries/{library_name}/install")
+@router.post("/libraries/{library_name}/install", dependencies=[Depends(require_admin)])
 async def install_library(library_name: str):
     """Install a specific bias testing library"""
     try:
@@ -517,12 +547,19 @@ async def install_library(library_name: str):
         logger.error(f"Error installing library {library_name}: {e}")
         raise HTTPException(status_code=500, detail=f"Installation failed: {str(e)}")
 
+def _own(rows, org_id: str) -> list:
+    return [r for r in rows if r.get("org_id") == org_id]
+
+
 @router.get("/history")
-async def get_bias_history(limit: int = 100):
-    """Get bias detection history"""
+async def get_bias_history(limit: int = 100, m: OrgMembership = Depends(org_member)):
+    """Get this organisation's bias detection history"""
     try:
-        history = llm_bias_service.get_bias_history(limit=limit)
-        
+        history = [
+            {k: v for k, v in run.items() if k != "org_id"}
+            for run in _own(llm_bias_service.bias_history, m.org_id)[-limit:]
+        ]
+
         return {
             "success": True,
             "history": history,
@@ -533,17 +570,30 @@ async def get_bias_history(limit: int = 100):
         logger.error(f"Error getting bias history: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get history: {str(e)}")
 
+def _export(rows: list, format: str) -> str:
+    if format == "json":
+        return json.dumps(rows, default=str, indent=2)
+    import pandas as pd
+    return pd.DataFrame(rows).to_csv(index=False)
+
+
 @router.get("/export")
-async def export_bias_results(format: str = "json"):
-    """Export bias detection results"""
+async def export_bias_results(format: str = "json", m: OrgMembership = Depends(org_member)):
+    """Export this organisation's bias detection results"""
     try:
         if format not in ["json", "csv"]:
             raise HTTPException(status_code=400, detail=f"Unsupported format: {format}")
-        
-        # Export from both services
-        llm_results = llm_bias_service.export_results(format)
-        library_results = bias_testing_library.export_results(format)
-        
+
+        # Both services keep process-wide lists; only rows tagged with the caller's organisation leave.
+        llm_results = _export(
+            [{k: v for k, v in run.items() if k != "org_id"} for run in _own(llm_bias_service.bias_history, m.org_id)],
+            format,
+        )
+        library_results = _export(
+            [r.__dict__ for r in bias_testing_library.test_results if getattr(r, "org_id", None) == m.org_id],
+            format,
+        )
+
         return {
             "success": True,
             "format": format,

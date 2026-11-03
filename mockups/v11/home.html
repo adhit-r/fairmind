@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FairMind</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f4f4f2; --ink:#15171a; --ink2:#5a5f68; --ink3:#9096a0; --line:rgba(21,23,26,.08);
+  --brand:#ff6b35; --coral:#ff8a5c;
+  --glass:rgba(255,255,255,.62); --glass2:rgba(255,255,255,.8); --edge:rgba(255,255,255,.9);
+  --sh:0 1px 2px rgba(20,20,30,.04),0 18px 44px -20px rgba(20,20,30,.22);
+  --g-ok:#1f7a45; --g-okbg:#e4f5ea; --g-warn:#c2520f; --g-warnbg:#ffeee4; --g-bad:#b4232c; --g-badbg:#fde9ea; --g-slate:#4a4f63; --g-slatebg:#eceef4;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{background:var(--bg)}
+body{color:var(--ink);font:400 14px/1.5 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-feature-settings:"cv11","ss01","tnum";-webkit-font-smoothing:antialiased;min-height:100vh;overflow-x:hidden}
+button{font:inherit;color:inherit;cursor:pointer;background:none;border:0}
+a{color:inherit;text-decoration:none}
+svg.i{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
+
+.nav{position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:16px;padding:14px 28px;background:linear-gradient(to bottom,rgba(245,243,239,.95),rgba(245,243,239,0))}
+.logo{display:flex;align-items:center;gap:9px;font-weight:700;font-size:15px;letter-spacing:-.01em}
+.logo i{width:22px;height:22px;border-radius:6px;background:var(--brand)}
+.tabs{margin:0 auto;display:flex;padding:4px;border-radius:999px;background:var(--glass);backdrop-filter:blur(16px);border:1px solid var(--edge);box-shadow:var(--sh)}
+.tabs a{display:flex;align-items:center;gap:7px;height:34px;padding:0 16px;border-radius:999px;font-weight:500;font-size:13.5px;color:var(--ink2)}
+.tabs a.on{background:var(--ink);color:#fff}
+.tabs a b{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--brand);color:#fff;font-size:11px;font-weight:600}
+.navr{display:flex;align-items:center;gap:8px}
+.icbtn{width:38px;height:38px;border-radius:999px;background:var(--glass);border:1px solid var(--edge);backdrop-filter:blur(16px);display:grid;place-items:center;box-shadow:var(--sh);color:var(--ink2)}
+.avatar{width:38px;height:38px;border-radius:999px;background:linear-gradient(135deg,#2b2d3a,#4a4f63);color:#fff;display:grid;place-items:center;font-size:12px;font-weight:600;box-shadow:var(--sh)}
+
+main{max-width:1312px;margin:0 auto;padding:6px 28px 64px}
+
+/* hero */
+.hero{position:relative;height:620px;border-radius:20px;overflow:hidden;background:#f1f0ee url(estate.png) 90% 55%/auto 124% no-repeat;box-shadow:var(--sh),inset 0 0 0 1px rgba(255,255,255,.6)}
+.hero::before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(245,243,239,.9) 0%,rgba(245,243,239,.6) 24%,rgba(245,243,239,0) 44%)}
+.hero-copy{position:absolute;left:40px;top:44px;width:440px}
+.eyebrow{font-size:12.5px;font-weight:500;color:var(--ink2)}
+h1{margin-top:6px;font-size:34px;font-weight:600;letter-spacing:-.03em;line-height:1.1}
+.hero-copy p{margin-top:12px;font-size:15px;color:var(--ink2);line-height:1.55}
+.hero-copy p b{color:var(--ink);font-weight:600}
+.ask{margin-top:22px;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px;height:54px;padding:0 8px 0 14px;border-radius:999px;background:var(--glass2);border:1px solid var(--edge);backdrop-filter:blur(18px);box-shadow:var(--sh)}
+.ask .spark{width:26px;height:26px;border-radius:999px;background:var(--brand);display:grid;place-items:center;color:#fff}
+.ask .spark svg{width:13px;height:13px}
+.ask input{border:0;outline:0;background:transparent;font:inherit;font-size:14.5px;color:var(--ink);min-width:0}
+.ask input::placeholder{color:var(--ink3)}
+.ask .go{height:38px;padding:0 16px;border-radius:999px;background:var(--ink);color:#fff;font-weight:600;font-size:13px}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.chips button{height:30px;padding:0 12px;border-radius:999px;background:var(--bg);border:1px solid var(--line);font-size:12.5px;color:var(--ink2);font-weight:500;backdrop-filter:blur(10px)}
+.quick{position:absolute;right:36px;top:40px;display:flex;gap:8px}
+.pillb{display:inline-flex;align-items:center;gap:8px;height:38px;padding:0 14px 0 12px;border-radius:999px;background:var(--glass2);border:1px solid var(--edge);backdrop-filter:blur(16px);box-shadow:var(--sh);font-weight:500;font-size:13.5px}
+.pillb svg{width:15px;height:15px;color:var(--ink2)}
+.pillb.dark{background:var(--ink);color:#fff;border-color:transparent}
+.pillb.dark svg{color:#fff}
+
+.float{position:absolute;padding:14px 16px;border-radius:12px;background:var(--glass2);border:1px solid var(--edge);backdrop-filter:blur(18px);box-shadow:var(--sh)}
+.float .k{font-size:12px;color:var(--ink2);font-weight:500;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.float .v{margin-top:6px;font-size:26px;font-weight:600;letter-spacing:-.025em;line-height:1}
+.float .v small{font-size:12.5px;color:var(--ink3);font-weight:500;letter-spacing:0;margin-left:5px}
+.float .d{margin-top:6px;font-size:12px;color:var(--ink3)}
+.f-cov{right:36px;top:98px;width:236px}
+.gauge{position:relative;width:110px;height:60px;margin:8px auto 0}
+.gauge svg{width:110px;height:60px;overflow:visible}
+.gauge b{position:absolute;left:0;right:0;bottom:-2px;text-align:center;font-size:21px;font-weight:600;letter-spacing:-.02em}
+.f-dec{right:36px;bottom:36px;width:236px}
+.mini{display:flex;align-items:flex-end;gap:3px;height:36px;margin-top:10px}
+.mini i{flex:1;border-radius:2px;background:rgba(23,23,28,.12)}
+.mini i.hi{background:var(--brand)}
+.f-needs{left:40px;bottom:36px;width:350px;padding:12px 14px}
+.f-needs .row{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
+.f-needs .row:first-of-type{border-top:0}
+.f-needs .ic{width:30px;height:30px;border-radius:8px;display:grid;place-items:center}
+.f-needs .ic svg{width:14px;height:14px}
+.ic.warn{background:var(--g-warnbg);color:var(--g-warn)}.ic.bad{background:var(--g-badbg);color:var(--g-bad)}.ic.slate{background:var(--g-slatebg);color:var(--g-slate)}
+.f-needs b{display:block;font-size:13px;font-weight:600;line-height:1.3}
+.f-needs small{display:block;font-size:11.5px;color:var(--ink3)}
+.f-needs .go{height:28px;padding:0 11px;border-radius:999px;background:#fff;box-shadow:inset 0 0 0 1px var(--line);font-size:12px;font-weight:600}
+.f-needs .go.primary{background:var(--ink);color:#fff;box-shadow:none}
+.pin{position:absolute;display:flex;align-items:center;gap:8px;transform:translate(-7px,-7px)}
+.pin i{width:12px;height:12px;border-radius:999px;background:var(--brand);box-shadow:0 0 0 3px #fff,0 0 0 4px rgba(21,23,26,.15);position:relative;flex:none}
+.pin i::after{content:none}
+.pin.held i{background:#3b3f52}
+.pin span{padding:5px 9px;border-radius:999px;background:var(--glass2);border:1px solid var(--edge);backdrop-filter:blur(14px);box-shadow:var(--sh);font-size:11.5px;font-weight:600;white-space:nowrap}
+.pin span small{color:var(--ink3);font-weight:500;margin-left:5px}
+.hero-copy,.floats .float,.quick{z-index:2}.pin{z-index:1}
+
+/* kpis */
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-top:16px}
+.card{background:var(--glass);border:1px solid var(--edge);backdrop-filter:blur(20px);border-radius:14px;box-shadow:var(--sh)}
+.kpi{padding:16px 18px 14px}
+.kpi .k{font-size:12.5px;color:var(--ink2);font-weight:500;display:flex;justify-content:space-between;align-items:center}
+.kpi .v{margin-top:8px;font-size:28px;font-weight:600;letter-spacing:-.03em;line-height:1;display:flex;align-items:baseline;gap:8px}
+.kpi .v small{font-size:13px;color:var(--ink3);font-weight:500;letter-spacing:0}
+.delta{font-size:11.5px;font-weight:600;padding:2px 7px;border-radius:999px}
+.delta.up{background:var(--g-okbg);color:var(--g-ok)}.delta.down{background:var(--g-badbg);color:var(--g-bad)}.delta.flat{background:var(--g-slatebg);color:var(--g-slate)}
+.spark{display:flex;align-items:flex-end;gap:3px;height:32px;margin-top:14px}
+.spark i{flex:1;border-radius:2px;background:rgba(23,23,28,.12)}
+.spark i.hi{background:var(--brand)}
+.kpi .d{margin-top:8px;font-size:11.5px;color:var(--ink3)}
+
+/* bottom */
+.bottom{display:grid;grid-template-columns:minmax(0,1.62fr) minmax(0,1fr);gap:16px;margin-top:16px}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 18px 0}
+.ch h2{font-size:15px;font-weight:600;letter-spacing:-.01em}
+.ch .sub{color:var(--ink3);font-size:12.5px;margin-top:2px}
+table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+th{text-align:left;font-weight:500;font-size:11.5px;color:var(--ink3);padding:8px 18px;border-bottom:1px solid var(--line)}
+td{padding:11px 18px;border-bottom:1px solid var(--line);vertical-align:middle}
+tr:last-child td{border-bottom:0}
+td .n{font-weight:600}
+td .s{display:block;color:var(--ink3);font-size:12px}
+.st{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 9px;border-radius:999px;font-size:11.5px;font-weight:600;white-space:nowrap}
+.st i{width:6px;height:6px;border-radius:999px;background:currentColor}
+.st.ok{background:var(--g-okbg);color:var(--g-ok)}.st.warn{background:var(--g-warnbg);color:var(--g-warn)}.st.bad{background:var(--g-badbg);color:var(--g-bad)}.st.slate{background:var(--g-slatebg);color:var(--g-slate)}
+.evs{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.evs i{width:18px;height:18px;border-radius:6px;display:grid;place-items:center;font-size:9px;font-weight:700;color:#fff;font-style:normal}
+.cov{padding:6px 18px 18px;display:grid;gap:14px}
+.cov .row{display:grid;grid-template-columns:minmax(0,1fr) 44px;gap:12px;align-items:center}
+.cov .l{display:flex;justify-content:space-between;font-size:13px;font-weight:500}
+.cov .l small{color:var(--ink3);font-weight:400}
+.cov .bar{height:8px;border-radius:999px;background:rgba(23,23,28,.08);margin-top:7px;overflow:hidden}
+.cov .bar i{display:block;height:100%;border-radius:999px;background:var(--brand)}
+.cov .bar i.g{background:linear-gradient(90deg,#2aa15f,#5fcf8a)}
+.cov .pct{font-size:14px;font-weight:600;text-align:right}
+.cov .note{font-size:12px;color:var(--ink2);padding:10px 12px;border-radius:12px;background:rgba(255,255,255,.6);border:1px solid var(--edge);display:flex;gap:8px;align-items:flex-start}
+.cov .note .dot{width:16px;height:16px;border-radius:999px;background:var(--brand);flex:none;margin-top:1px}
+.foot{max-width:1312px;margin:0 auto;padding:0 28px 28px;font-size:11.5px;color:var(--ink3)}
+
+@media (max-width:1100px){
+  .hero{height:auto;background-position:50% 0;background-size:auto 480px}
+  .hero::before{background:linear-gradient(180deg,rgba(245,243,239,.95) 0%,rgba(245,243,239,.7) 40%,rgba(245,243,239,.9) 100%)}
+  .hero-copy{position:relative;width:auto;padding:32px 24px 0}
+  .floats{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:270px 24px 0}
+  .float{position:relative;width:auto;inset:auto!important;animation:none}.f-needs{grid-column:1/-1}
+  .quick{position:relative;inset:auto;padding:16px 24px 24px;flex-wrap:wrap;order:3}
+  .pin{display:none}
+  .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.bottom{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:760px){
+  .nav{padding:12px 16px}.tabs{display:none}
+  main{padding:6px 16px 48px}
+  .hero{border-radius:16px;background-size:auto 360px;background-position:50% 200px}
+  .hero-copy{padding:24px 18px 0}h1{font-size:30px}
+  .ask .go{display:none}
+  .floats{padding:330px 16px 0;grid-template-columns:1fr}
+  .quick{padding:14px 16px 20px}
+  .kpis{grid-template-columns:1fr 1fr}
+  table{min-width:560px}.tblw{overflow-x:auto}
+  .foot{padding:0 16px 24px}
+}
+@media (prefers-reduced-motion:no-preference){
+  .float{animation:drift 7s ease-in-out infinite}
+  .f-dec{animation-delay:-2.4s}.f-needs{animation-delay:-4.6s}
+  @keyframes drift{50%{transform:translateY(-5px)}}
+}
+
+/* v11: flat board with a slight lift */
+.hero{height:auto;min-height:0;background:#fff;border-radius:20px;box-shadow:var(--sh),inset 0 0 0 1px rgba(255,255,255,.6);display:grid;grid-template-columns:420px minmax(0,1fr);gap:0}
+.hero::before{content:none}
+.hero-copy{position:static;width:auto;padding:36px 36px 32px;border-right:1px solid var(--line)}
+.stats2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:22px}
+.stat{padding:12px 14px;border-radius:12px;background:var(--bg);border:1px solid var(--line)}
+.stat .k{font-size:12px;color:var(--ink2);font-weight:500}
+.stat .v{margin-top:6px;font-size:24px;font-weight:600;letter-spacing:-.025em;line-height:1}
+.stat .v small{font-size:12px;color:var(--ink3);font-weight:500;letter-spacing:0;margin-left:5px}
+.stat .d{margin-top:6px;font-size:11.5px;color:var(--ink3)}
+.stat .gauge{margin:6px auto 0}
+.stat .mini{height:30px;margin-top:8px}
+.board{padding:28px 32px 28px;display:grid;gap:14px;align-content:start}
+.board-h{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px;font-weight:600;color:var(--ink2)}.board-h>span:first-child{white-space:nowrap}
+.legend{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:11.5px;font-weight:500;color:var(--ink3)}
+.legend i{width:10px;height:10px;border-radius:3px;margin-left:10px;display:inline-block}
+.legend i:first-child{margin-left:0}
+.l-ok{background:#fff;box-shadow:inset 0 0 0 1px rgba(21,23,26,.2)}.l-att{background:repeating-linear-gradient(135deg,#fff 0 2px,rgba(21,23,26,.25) 2px 3px);box-shadow:inset 0 0 0 1px rgba(21,23,26,.2)}.l-open{background:var(--brand)}.l-held{background:#3b3f52}
+.line{display:grid;grid-template-columns:150px minmax(0,1fr);gap:16px;align-items:start;padding-top:14px;border-top:1px solid var(--line)}
+.line:first-of-type{border-top:0;padding-top:0}
+.line .lbl b{display:block;font-size:13px;font-weight:600}
+.line .lbl small{display:block;font-size:11.5px;color:var(--ink3);margin-top:2px}
+.tiles{display:flex;flex-wrap:wrap;gap:8px}
+.tile{position:relative;width:148px;padding:9px 10px 8px;border-radius:10px;background:#fff;border:1px solid rgba(21,23,26,.1);box-shadow:0 2px 0 rgba(21,23,26,.06),0 8px 16px -12px rgba(21,23,26,.25);transition:transform .15s,box-shadow .15s}
+.tile:hover{transform:translateY(-2px);box-shadow:0 4px 0 rgba(21,23,26,.06),0 14px 24px -14px rgba(21,23,26,.3)}
+.tile b{display:block;font-size:12.5px;font-weight:600;line-height:1.25;letter-spacing:-.005em}
+.tile small{display:block;margin-top:3px;font-size:11px;color:var(--ink3)}
+.tile .t{position:absolute;right:8px;top:8px;font-size:9.5px;font-weight:600;color:var(--ink3);letter-spacing:.04em}
+.tile.open{border-color:rgba(255,107,53,.5);box-shadow:0 2px 0 rgba(255,107,53,.35),0 8px 16px -12px rgba(255,107,53,.5)}
+.tile.open::before{content:"";position:absolute;left:10px;top:11px;width:6px;height:6px;border-radius:999px;background:var(--brand)}
+.tile.open b{padding-left:12px}
+.tile.held{background:#2b2e3a;border-color:#2b2e3a;color:#fff;box-shadow:0 2px 0 rgba(21,23,26,.35),0 8px 16px -12px rgba(21,23,26,.5)}
+.tile.held small,.tile.held .t{color:rgba(255,255,255,.6)}
+.tile.att{background:repeating-linear-gradient(135deg,#fff 0 4px,rgba(21,23,26,.04) 4px 7px)}
+@media (max-width:1100px){.hero{grid-template-columns:minmax(0,1fr)}.hero-copy{border-right:0;border-bottom:1px solid var(--line)}.board{padding:22px 24px}.line{grid-template-columns:1fr}}
+@media (max-width:760px){.hero-copy{padding:24px 18px 22px}.board{padding:18px 16px}.tile{width:calc(50% - 4px)}.stats2{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<header class="nav">
+  <span class="logo"><i></i>FairMind</span>
+  <nav class="tabs"><a class="on" href="#">Overview</a><a href="#">Systems</a><a href="#">Evidence</a><a href="#">Findings <b>6</b></a><a href="#">Reports</a></nav>
+  <span class="navr">
+    <button class="icbtn" aria-label="Search"><svg class="i" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg></button>
+    <button class="icbtn" aria-label="Notifications"><svg class="i" viewBox="0 0 16 16"><path d="M4 11V7a4 4 0 0 1 8 0v4l1 1H3z"/><path d="M6.5 14h3"/></svg></button>
+    <span class="avatar">MM</span>
+  </span>
+</header>
+
+<main>
+  <section class="hero" aria-label="Overview">
+    <div class="hero-copy">
+      <div class="eyebrow">Retail Bank · Model risk · Wednesday 3 June 2027</div>
+      <h1>214 AI systems under governance</h1>
+      <p><b>3</b> require a decision before the Model Risk Committee on 18 June. <b>2</b> are held. Evidence coverage for high-tier systems is <b>94%</b>; no revalidation is overdue.</p>
+      <form class="ask" onsubmit="return false">
+        <span class="spark"><svg class="i" viewBox="0 0 16 16"><path d="M8 2l1.6 4.4L14 8l-4.4 1.6L8 14l-1.6-4.4L2 8l4.4-1.6z"/></svg></span>
+        <input placeholder="Ask about any system, finding or regulation">
+        <button class="go">Ask</button>
+      </form>
+      <div class="chips"><button>Is Loan scoring 4.2.0 ready for 18 June?</button><button>Why is Mule detection v2 held?</button></div>
+      <div class="stats2">
+        <div class="stat"><div class="k">Policy coverage, high tier</div><div class="gauge"><svg viewBox="0 0 110 60"><path d="M7 57A48 48 0 0 1 103 57" fill="none" stroke="rgba(21,23,26,.08)" stroke-width="10" stroke-linecap="round"/><path d="M7 57A48 48 0 0 1 103 57" fill="none" stroke="#ff6b35" stroke-width="10" stroke-linecap="round" stroke-dasharray="151" stroke-dashoffset="9"/></svg><b>94%</b></div><div class="d">29 of 31 controls met</div></div>
+        <div class="stat"><div class="k">Automated decisions today</div><div class="v">7.4<small>lakh</small></div><div class="mini"><i style="height:40%"></i><i style="height:52%"></i><i style="height:48%"></i><i style="height:66%"></i><i style="height:72%"></i><i style="height:64%"></i><i style="height:80%"></i><i style="height:86%"></i><i class="hi" style="height:100%"></i></div><div class="d">19 live systems · peak 11:00</div></div>
+      </div>
+    </div>
+    <div class="board" id="board">
+      <div class="board-h"><span>Estate by business line</span><span class="legend"><i class="l-ok"></i>Cleared <i class="l-att"></i>On attestation <i class="l-open"></i>Decision needed <i class="l-held"></i>Held</span></div>
+    </div>
+  </section>
+
+  <div class="kpis">
+    <section class="card kpi"><div class="k">Evidence bound this week<span class="delta up">+18%</span></div><div class="v">1,183</div><div class="spark"><i style="height:40%"></i><i style="height:55%"></i><i style="height:48%"></i><i style="height:70%"></i><i style="height:62%"></i><i style="height:84%"></i><i class="hi" style="height:100%"></i></div><div class="d">Fairlearn 61% · Giskard 22% · FairMind-E 9% · uploads 8%</div></section>
+    <section class="card kpi"><div class="k">In validation<span class="delta flat">5%</span></div><div class="v">11 <small>of 214</small></div><div class="spark"><i style="height:30%"></i><i style="height:36%"></i><i style="height:52%"></i><i style="height:46%"></i><i style="height:58%"></i><i style="height:64%"></i><i class="hi" style="height:62%"></i></div><div class="d">median time in validation 23 days</div></section>
+    <section class="card kpi"><div class="k">Findings past due<span class="delta down">6</span></div><div class="v">6</div><div class="spark"><i style="height:90%"></i><i style="height:82%"></i><i style="height:70%"></i><i style="height:64%"></i><i style="height:60%"></i><i style="height:50%"></i><i class="hi" style="height:42%"></i></div><div class="d">down from 11 a month ago</div></section>
+    <section class="card kpi"><div class="k">Approvals lapsing, 30 days<span class="delta flat">4</span></div><div class="v">4</div><div class="spark"><i style="height:20%"></i><i style="height:20%"></i><i style="height:35%"></i><i style="height:35%"></i><i style="height:50%"></i><i style="height:50%"></i><i class="hi" style="height:70%"></i></div><div class="d">renewals scheduled for 3 of 4</div></section>
+  </div>
+
+  <div class="bottom">
+    <section class="card">
+      <div class="ch"><div><h2>Evidence arriving</h2><div class="sub">Live from your pipelines and evaluators</div></div><span class="st ok"><i></i>Live</span></div>
+      <div class="tblw"><table>
+        <thead><tr><th>System</th><th>Evidence</th><th>Source</th><th>When</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td><span class="n">Card fraud v7</span><span class="s">Fraud &amp; AML</span></td><td>Energy per million decisions, 18 kWh</td><td><span class="evs"><i style="background:#2b8a5b">E</i>FairMind-E</span></td><td>09:36</td><td><span class="st ok"><i></i>Measured</span></td></tr>
+          <tr><td><span class="n">Loan scoring v4</span><span class="s">Retail credit</span></td><td>Fairness suite on 48,210 holdout rows</td><td><span class="evs"><i style="background:#4f6bed">F</i>Fairlearn</span></td><td>09:12</td><td><span class="st ok"><i></i>Measured</span></td></tr>
+          <tr><td><span class="n">Branch assistant</span><span class="s">Customer service</span></td><td>412 judge ratings, provider not recorded</td><td><span class="evs"><i style="background:#8a5cf5">J</i>LLM judge</span></td><td>Yesterday</td><td><span class="st bad"><i></i>Not evidence</span></td></tr>
+          <tr><td><span class="n">KYC document check v3</span><span class="s">Fraud &amp; AML</span></td><td>Vendor robustness report</td><td><span class="evs"><i style="background:#9a9ba6">U</i>Upload</span></td><td>Yesterday</td><td><span class="st slate"><i></i>Attested</span></td></tr>
+          <tr><td><span class="n">Mule detection v2</span><span class="s">Fraud &amp; AML</span></td><td>Drift still above its limit</td><td><span class="evs"><i style="background:#e0566c">G</i>Giskard</span></td><td>Yesterday</td><td><span class="st warn"><i></i>Held</span></td></tr>
+        </tbody>
+      </table></div>
+    </section>
+    <section class="card">
+      <div class="ch"><div><h2>Framework coverage</h2><div class="sub">Controls with evidence, high-tier systems</div></div></div>
+      <div class="cov">
+        <div class="row"><div><div class="l">RBI FREE-AI <small>7 sutras · 52 controls</small></div><div class="bar"><i style="width:94%"></i></div></div><div class="pct">94%</div></div>
+        <div class="row"><div><div class="l">DPDP Act 2023 <small>consent, purpose, rights</small></div><div class="bar"><i class="g" style="width:100%"></i></div></div><div class="pct">100%</div></div>
+        <div class="row"><div><div class="l">EU AI Act, Annex III <small>Art. 9 to 15</small></div><div class="bar"><i style="width:81%"></i></div></div><div class="pct">81%</div></div>
+        <div class="row"><div><div class="l">Internal MRM-POL-07 <small>tier High scope</small></div><div class="bar"><i style="width:89%"></i></div></div><div class="pct">89%</div></div>
+        <div class="note"><span class="dot"></span><span>The Annex III gap is one control on three systems: a named human reviewer for automated declines. Assigning the role closes all three.</span></div>
+      </div>
+    </section>
+  </div>
+</main>
+<footer class="foot">Illustrative data for design review.</footer>
+<script>
+const LINES = [
+  ["Retail credit", "6 systems · 60,500 decisions a day", [["Loan scoring", "4.2.0 · High", "open"], ["Credit limit", "v2 · High", "ok"], ["Pre-approval", "v3 · High", "att"], ["Income estimation", "v2", "ok"], ["BNPL risk", "v1 · High", "open"], ["Collections priority", "v1", "ok"]]],
+  ["Fraud & AML", "6 systems · 17 lakh decisions a day", [["Card fraud", "v7", "ok"], ["Transaction monitoring", "v5", "ok"], ["Mule detection", "v2 · held 12 days", "held"], ["KYC document check", "v3", "att"], ["Sanctions match", "v4", "ok"], ["Device risk", "v1", "ok"]]],
+  ["Customer service", "3 systems · 63,000 interactions a day", [["Branch assistant", "LLM · 0.9", "open"], ["Complaint triage", "v2", "ok"], ["Call summariser", "v1", "att"]]],
+  ["People", "4 systems · internal", [["Resume screening", "v1 · High · held", "held"], ["Attrition risk", "v2 · lapses 12 Jun", "ok"], ["Interview scheduler", "1.3", "ok"], ["Pay equity review", "1.0", "ok"]]],
+];
+const board = document.getElementById("board");
+LINES.forEach(([name, sub, sys]) => {
+  const d = document.createElement("div"); d.className = "line";
+  d.innerHTML = `<div class="lbl"><b>${name}</b><small>${sub}</small></div><div class="tiles">${sys.map(([n, s, st]) => `<a class="tile ${st}" href="#"><b>${n}</b><small>${s}</small></a>`).join("")}</div>`;
+  board.appendChild(d);
+});
+</script>
+</body>
+</html>

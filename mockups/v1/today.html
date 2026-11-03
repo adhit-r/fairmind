@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FairMind · Today</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="fm.css">
+</head>
+<body data-page="today">
+<div class="app">
+<nav class="rail" aria-label="Main"></nav>
+<main>
+  <header class="top">
+    <div>
+      <h1>Today <span class="mono">Fri 4 Jun 2027 · 10:30 IST</span></h1>
+      <p class="sub">One system can ship. Two need you. One is held. Annex III applies in <b class="due">181 days</b>.</p>
+    </div>
+    <span class="find">Search, or ask FairMind <kbd>⌘K</kbd></span>
+  </header>
+
+  <div class="grid">
+    <section>
+      <figure class="fig" style="margin:0">
+        <span class="c c1">Fig. 1</span><span class="c c2">Release gates, 10:30</span>
+        <svg id="bench" role="img" aria-label="Interlock bench with four release gates. Claims triage v7 at the back: all nine pins seated green, bar lifted. Resume screener v2: eight seated, model card held in violet. Loan scoring v4: EO gap and oversight wait for a person with cobalt lamps 1 and 2, calibration and explainability half seated, monitoring open. Collections voice bot v1 at the front: two seated, model card waits with lamp 3, the rest open."></svg>
+        <span class="c c3">Four gates, nine pins each</span><span class="c c4">1 lifted · 3 lamps · 1 held · <span class="due">Annex III 181 d</span></span>
+      </figure>
+      <div class="figcap"><span><b>Gates, back to front:</b> Claims triage, Résumé screener, Loan scoring, Collections bot.</span><span>A pin seats fully only on measured evidence that passes. A blue lamp is waiting for you.</span></div>
+    </section>
+
+    <section>
+      <h2 class="h2">Waiting for you <span>3</span></h2>
+      <ol class="wl">
+        <li><span class="no">1</span><div>
+          <h3>Confirm age band is a protected attribute.</h3>
+          <p>The agent inferred it from <span class="mono">dob</span>. The EO gap test on Loan scoring cannot seat until you confirm.</p>
+          <div class="ctx">Loan scoring v4 · run R-2027-0412 · FREE-AI S3</div>
+          <div class="do"><button class="go">Confirm</button><button class="tl">Change mapping</button></div>
+        </div></li>
+        <li><span class="no">2</span><div>
+          <h3>Name the human reviewer for declines.</h3>
+          <p>Art. 14 oversight needs a named role and a way to override a decline.</p>
+          <div class="ctx">Loan scoring v4 · Art. 14 · due Fri 11 Jun</div>
+          <div class="do"><button class="go">Assign</button><button class="tl">Hold</button></div>
+        </div></li>
+        <li><span class="no">3</span><div>
+          <h3>Accept or reject the vendor model card.</h3>
+          <p>The vendor reports an EO gap of 0.03 with no test data. Accepting seats the pin halfway, as attested.</p>
+          <div class="ctx">Collections voice bot v1 · vendor card VC-118</div>
+          <div class="do"><button class="go">Review card</button><button class="tl">Ask vendor for data</button></div>
+        </div></li>
+      </ol>
+
+      <h2 class="h2">Proven today <span>3 · ledger #3104</span></h2>
+      <div class="seal"><span class="mono">10:12</span><span>Fairness suite passed <small>Claims triage v7</small></span><span class="mono">a91f0c</span></div>
+      <div class="seal"><span class="mono">09:40</span><span>Consent basis confirmed from Olai <small>3 datasets</small></span><span class="mono">4be27d</span></div>
+      <div class="seal"><span class="mono">08:05</span><span>Drift inside bounds <small>Résumé screener v2</small></span><span class="mono">0c5a19</span></div>
+      <p style="margin-top:14px"><a class="tl" href="#">Open the ledger</a></p>
+    </section>
+  </div>
+</main>
+</div>
+<script src="fm.js"></script>
+<script>
+interlock(document.getElementById('bench'), [
+  { name: 'Claims triage v7', go: true, pins: gate('ooooooooo') },
+  { name: 'Résumé screener v2', pins: gate('oooooooho') },
+  { name: 'Loan scoring v4', pins: gate('oonaanoox', { 2: 1, 5: 2 }) },
+  { name: 'Collections voice bot v1', pins: gate('oxxaxxonx', { 7: 3 }) }
+]);
+</script>
+</body>
+</html>

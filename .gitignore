@@ -176,10 +176,13 @@ credentials*
 
 # JSON files (but allow important config files)
 *.json
+# fumadocs section indexes order the docs navigation; they are source, not data.
+!apps/docs/content/**/meta.json
 !package.json
 !package-lock.json
 !research/aibom-fairness-evidence/**/*.json
 !apps/backend/src/domain/assurance/evidence-passport-v2.schema.json
+!apps/backend/src/api/routers/pack_catalogue_data/catalogue.json
 !tsconfig.json
 !next.config.js
 !tailwind.config.ts
@@ -288,6 +291,9 @@ checkpoints/
 *.xml
 *.yaml
 *.yml
+# GitHub workflows and composite actions are source.
+!.github/**/*.yml
+!.github/**/*.yaml
 data/
 datasets/
 *.parquet
@@ -351,3 +357,6 @@ apps/frontend-archive/.next/
 apps/frontend-archive/out/
 apps/frontend-archive/build/
 apps/frontend-archive/dist/
+
+# graft's local graph cache: regenerable, not committed (run `graft build`).
+/graft/

@@ -3,7 +3,7 @@ Advanced Bias Detection API Routes
 Provides endpoints for sophisticated bias detection methods
 """
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from typing import Dict, List, Optional, Any
 from pydantic import BaseModel, Field
 import logging
@@ -15,9 +15,16 @@ from ..services.advanced_bias_detection_service import (
     AnalysisMethod
 )
 
+from config.auth import get_current_active_user
+
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/advanced-bias-detection", tags=["Advanced Bias Detection"])
+# Stateless analysis of the request body; the caller only has to be signed in.
+router = APIRouter(
+    prefix="/advanced-bias-detection",
+    tags=["Advanced Bias Detection"],
+    dependencies=[Depends(get_current_active_user)],
+)
 
 # Initialize service
 advanced_bias_service = AdvancedBiasDetectionService()

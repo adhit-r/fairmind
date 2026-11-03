@@ -23,27 +23,16 @@
     --border: oklch(0.923 0.003 48.717);
     --input: oklch(0.923 0.003 48.717);
     --ring: oklch(0.709 0.01 56.259);
-    --radius: 0;
+    --radius: 10px;
 
-    --sidebar-background: oklch(0.985 0.001 106.423);
-    --sidebar-foreground: oklch(0.147 0.004 49.25);
-    --sidebar-primary: oklch(0.60 0.13 163);
-    --sidebar-primary-foreground: oklch(0.98 0.02 166);
-    --sidebar-accent: oklch(0.60 0.13 163);
-    --sidebar-accent-foreground: oklch(0.98 0.02 166);
-    --sidebar-border: oklch(0.923 0.003 48.717);
-    --sidebar-ring: oklch(0.709 0.01 56.259);
-    
-    /* Neobrutalism variables */
-    --main: #FF6B35;
-    --main-foreground: #000000;
-    --secondary-background: #FFFFFF;
-    /* Redefine border for neobrutalism if used there, but keeping var(--border) standard for shadcn components */
-    --shadow: 6px 6px 0px 0px #000;
-    --boxShadowX: 6px;
-    --boxShadowY: 6px;
-    --reverseBoxShadowX: -6px;
-    --reverseBoxShadowY: -6px;
+    /* Shell tokens (lifecycle-spine layout) */
+    --fm-bg: #f4f4f2;
+    --fm-ink: #15171a;
+    --fm-ink2: #5a5f68;
+    --fm-ink3: #9096a0;
+    --fm-line: rgba(21, 23, 26, 0.08);
+    --fm-brand: #ff6b35;
+    --fm-shadow: 0 1px 2px rgba(20, 20, 30, 0.04), 0 18px 44px -20px rgba(20, 20, 30, 0.22);
   }
 
   .dark {
@@ -66,15 +55,6 @@
     --border: oklch(1 0 0 / 10%);
     --input: oklch(1 0 0 / 15%);
     --ring: oklch(0.553 0.013 58.071);
-
-    --sidebar-background: oklch(0.216 0.006 56.043);
-    --sidebar-foreground: oklch(0.985 0.001 106.423);
-    --sidebar-primary: oklch(0.77 0.15 163);
-    --sidebar-primary-foreground: oklch(0.26 0.05 173);
-    --sidebar-accent: oklch(0.70 0.15 162);
-    --sidebar-accent-foreground: oklch(0.26 0.05 173);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.553 0.013 58.071);
   }
 }
 
@@ -84,45 +64,6 @@
   }
   body {
     @apply bg-background text-foreground;
-  }
-}
-
-/* Neobrutalism styles */
-@layer utilities {
-  .brutal-shadow {
-    box-shadow: 6px 6px 0px 0px #000 !important;
-  }
-  
-  .brutal-shadow-lg {
-    box-shadow: 8px 8px 0px 0px #000 !important;
-  }
-  
-  .brutal-shadow-xl {
-    box-shadow: 12px 12px 0px 0px #000 !important;
-  }
-  
-  .brutal-border {
-    border: 4px solid #000 !important;
-  }
-  
-  .bg-orange {
-    background-color: #FF6B35 !important;
-  }
-  
-  .text-orange {
-    color: #FF6B35 !important;
-  }
-
-  /* Mobile-specific utilities */
-  .touch-target {
-    min-height: 44px;
-    min-width: 44px;
-  }
-
-  .mobile-scroll {
-    -webkit-overflow-scrolling: touch;
-    overflow-x: auto;
-    overflow-y: hidden;
   }
 }
 
@@ -150,4 +91,32 @@ html {
 img {
   max-width: 100%;
   height: auto;
+}
+
+/* Shell */
+body {
+  font-feature-settings: "cv11", "ss01", "tnum";
+  -webkit-font-smoothing: antialiased;
+}
+.fm-sec {
+  margin: 22px 0 6px;
+  padding: 0 10px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fm-ink3);
+}
+.fm-strip { scrollbar-width: none; }
+.fm-strip::-webkit-scrollbar { display: none; }
+.fm-card {
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: var(--fm-shadow), inset 0 0 0 1px rgba(255, 255, 255, 0.6);
+}
+.fm-hatch {
+  background: repeating-linear-gradient(135deg, #fff 0 4px, rgba(21, 23, 26, 0.04) 4px 7px);
+}
+@media (max-width: 767px) {
+  .fm-sec { margin: 12px 0 4px; padding: 0; }
 }

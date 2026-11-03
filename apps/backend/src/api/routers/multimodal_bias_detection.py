@@ -15,9 +15,16 @@ from ..services.multimodal_bias_detection_service import (
     MultimodalBiasType
 )
 
+from config.auth import get_current_active_user
+
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/multimodal-bias", tags=["Multimodal Bias Detection"])
+# Stateless analysis of the request body; the caller only has to be signed in.
+router = APIRouter(
+    prefix="/multimodal-bias",
+    tags=["Multimodal Bias Detection"],
+    dependencies=[Depends(get_current_active_user)],
+)
 
 # Request/Response Models
 

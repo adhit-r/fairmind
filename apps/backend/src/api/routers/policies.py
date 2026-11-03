@@ -16,12 +16,17 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
+from api.routes.org_scope import org_member, org_mutator
 from database.connection import get_db
+from src.application.services.governance_assurance_service import OrgMembership
 
-router = APIRouter(prefix="/api/policies", tags=["policies"])
+# Policies belong to an organisation (governance_policies.org_id). Rows with no
+# org_id (written before the column existed, or by the ai-governance policy
+# routes) are visible to nobody here.
+router = APIRouter(prefix="/api/policies", tags=["policies"], dependencies=[Depends(org_member)])
 
 
 # ---------------------------------------------------------------------------
@@ -41,17 +46,17 @@ def _ensure_tables(db: Session) -> None:
     Base.metadata.create_all(bind=db_manager.engine)
 
     # Add new columns to governance_policies if they don't exist yet.
-    for col_def in [
+    existing = {c["name"] for c in inspect(db.get_bind()).get_columns("governance_policies")}
+    for name, ddl in [
         ("version", "INTEGER NOT NULL DEFAULT 1"),
         ("owner", "TEXT"),
         ("reviewer", "TEXT"),
         ("approver", "TEXT"),
         ("approved_at", "TEXT"),
+        ("org_id", "TEXT"),
     ]:
-        try:
-            db.execute(text(f"ALTER TABLE governance_policies ADD COLUMN {col_def[0]} {col_def[1]}"))
-        except Exception:
-            pass  # Column already exists.
+        if name not in existing:
+            db.execute(text(f"ALTER TABLE governance_policies ADD COLUMN {name} {ddl}"))
 
     # Create the policy_versions table if not yet present.
     db.execute(
@@ -192,6 +197,7 @@ class PolicyUpdateRequest(BaseModel):
 @router.post("")
 async def create_policy(
     request: PolicyCreateRequest,
+    m: OrgMembership = Depends(org_mutator),
     db: Session = Depends(get_db),
 ):
     """Create a new policy in draft status."""
@@ -203,10 +209,11 @@ async def create_policy(
     db.execute(
         text(
             "INSERT INTO governance_policies "
-            "(id, name, framework, description, rules_json, status, version, owner, reviewer, approver, created_at, updated_at) "
-            "VALUES (:id, :name, :framework, :description, :rules_json, 'draft', 1, :owner, :reviewer, :approver, :created_at, :updated_at)"
+            "(id, name, framework, description, rules_json, status, version, owner, reviewer, approver, created_at, updated_at, org_id) "
+            "VALUES (:id, :name, :framework, :description, :rules_json, 'draft', 1, :owner, :reviewer, :approver, :created_at, :updated_at, :org_id)"
         ),
         {
+            "org_id": m.org_id,
             "id": policy_id,
             "name": request.name,
             "framework": request.framework,
@@ -256,13 +263,14 @@ async def create_policy(
 async def list_policies(
     framework: Optional[str] = Query(default=None),
     status: Optional[str] = Query(default=None),
+    m: OrgMembership = Depends(org_member),
     db: Session = Depends(get_db),
 ):
-    """List policies with optional framework and status filters."""
+    """List this organisation's policies with optional framework and status filters."""
     _ensure_tables(db)
 
-    filters: List[str] = []
-    params: Dict[str, Any] = {}
+    filters: List[str] = ["org_id = :org_id"]
+    params: Dict[str, Any] = {"org_id": m.org_id}
 
     if framework:
         filters.append("framework = :framework")
@@ -281,12 +289,12 @@ async def list_policies(
 
 
 @router.get("/{policy_id}")
-async def get_policy(policy_id: str, db: Session = Depends(get_db)):
+async def get_policy(policy_id: str, m: OrgMembership = Depends(org_member), db: Session = Depends(get_db)):
     """Get a single policy by ID."""
     _ensure_tables(db)
     row = db.execute(
-        text(f"SELECT {POLICY_SELECT} FROM governance_policies WHERE id = :id"),
-        {"id": policy_id},
+        text(f"SELECT {POLICY_SELECT} FROM governance_policies WHERE id = :id AND org_id = :org_id"),
+        {"id": policy_id, "org_id": m.org_id},
     ).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Policy not found")
@@ -297,6 +305,7 @@ async def get_policy(policy_id: str, db: Session = Depends(get_db)):
 async def update_policy(
     policy_id: str,
     request: PolicyUpdateRequest,
+    m: OrgMembership = Depends(org_mutator),
     db: Session = Depends(get_db),
 ):
     """
@@ -311,8 +320,8 @@ async def update_policy(
     _ensure_tables(db)
 
     existing = db.execute(
-        text(f"SELECT {POLICY_SELECT} FROM governance_policies WHERE id = :id"),
-        {"id": policy_id},
+        text(f"SELECT {POLICY_SELECT} FROM governance_policies WHERE id = :id AND org_id = :org_id"),
+        {"id": policy_id, "org_id": m.org_id},
     ).fetchone()
     if not existing:
         raise HTTPException(status_code=404, detail="Policy not found")
@@ -369,8 +378,8 @@ async def update_policy(
     set_parts = [f"{key} = :{key}" for key in updates]
     params = {**updates, "id": policy_id}
     db.execute(
-        text(f"UPDATE governance_policies SET {', '.join(set_parts)} WHERE id = :id"),
-        params,
+        text(f"UPDATE governance_policies SET {', '.join(set_parts)} WHERE id = :id AND org_id = :org_id"),
+        {**params, "org_id": m.org_id},
     )
 
     # Snapshot version history.
@@ -391,18 +400,18 @@ async def update_policy(
     db.commit()
 
     # Re-fetch to return accurate state.
-    return await get_policy(policy_id, db)
+    return await get_policy(policy_id, m, db)
 
 
 @router.get("/{policy_id}/versions")
-async def list_policy_versions(policy_id: str, db: Session = Depends(get_db)):
+async def list_policy_versions(policy_id: str, m: OrgMembership = Depends(org_member), db: Session = Depends(get_db)):
     """Return the version history for a policy."""
     _ensure_tables(db)
 
     # Verify the policy exists.
     exists = db.execute(
-        text("SELECT id FROM governance_policies WHERE id = :id"),
-        {"id": policy_id},
+        text("SELECT id FROM governance_policies WHERE id = :id AND org_id = :org_id"),
+        {"id": policy_id, "org_id": m.org_id},
     ).fetchone()
     if not exists:
         raise HTTPException(status_code=404, detail="Policy not found")

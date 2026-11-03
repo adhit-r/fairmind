@@ -77,7 +77,8 @@ class AuditLoggingMiddleware(BaseHTTPMiddleware):
             "timestamp": datetime.utcnow().isoformat(),
             "method": request.method,
             "path": request.url.path,
-            "query_params": dict(request.query_params) if request.query_params else {},
+            # public share links carry their credential in the query string
+            "query_params": {} if request.url.path.startswith("/api/v1/public/") else dict(request.query_params),
             "user_id": user_id,
             "ip_address": ip_address,
             "user_agent": user_agent,

@@ -195,11 +195,11 @@ export default function ExplainabilityStudioPage() {
       {/* ── Page Header ─────────────────────────────────────────────────────── */}
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-4">
-          <div className="p-3 bg-purple-100 border-4 border-black shadow-brutal">
+          <div className="p-3 bg-purple-100 rounded-[14px] shadow-[var(--fm-shadow)]">
             <IconMicroscope className="h-8 w-8 text-purple-700" />
           </div>
           <div>
-            <h1 className="text-4xl font-black tracking-tight">Explainability Studio</h1>
+            <h1 className="text-4xl font-semibold tracking-tight">Explainability Studio</h1>
             <p className="text-muted-foreground mt-1 text-sm">
               Understand <span className="font-bold text-foreground">why</span> your model makes
               decisions — attribution, attention, and counterfactual analysis.
@@ -210,7 +210,7 @@ export default function ExplainabilityStudioPage() {
           <Button
             variant="neutral"
             onClick={handleExportJSON}
-            className="border-2 border-black shadow-brutal hover:shadow-brutal-lg font-bold"
+            className="font-bold fm-card"
           >
             <IconDownload className="h-4 w-4 mr-2" />
             Export JSON
@@ -225,8 +225,8 @@ export default function ExplainabilityStudioPage() {
         <div className="lg:col-span-2 space-y-4">
 
           {/* Model Output Input */}
-          <Card className="border-2 border-black shadow-brutal">
-            <CardHeader className="border-b-2 border-black pb-4">
+          <Card className="fm-card">
+            <CardHeader className="border-b border-[var(--fm-line)] pb-4">
               <CardTitle className="flex items-center gap-2 text-base">
                 <IconBrain className="h-5 w-5 text-purple-600" />
                 Model Output Sample
@@ -237,7 +237,7 @@ export default function ExplainabilityStudioPage() {
             </CardHeader>
             <CardContent className="pt-4">
               <div className="space-y-2">
-                <Label htmlFor="model-output" className="font-bold text-xs uppercase tracking-wider">
+                <Label htmlFor="model-output" className="font-semibold text-xs uppercase tracking-wider">
                   Output Text
                 </Label>
                 <Textarea
@@ -245,7 +245,7 @@ export default function ExplainabilityStudioPage() {
                   value={modelOutput}
                   onChange={e => setModelOutput(e.target.value)}
                   placeholder="Paste the model's output here…&#10;&#10;Example: 'The candidate John Smith is highly qualified for this engineering role. His technical background is impressive.'&#10;&#10;The studio will analyze attribution, attention patterns, and fairness-relevant features."
-                  className="border-2 border-black min-h-[180px] resize-none font-mono text-sm focus-visible:ring-0 focus-visible:border-purple-500"
+                  className="border border-[var(--fm-line)] min-h-[180px] resize-none font-mono text-sm focus-visible:ring-0 focus-visible:border-purple-500"
                 />
                 <p className="text-xs text-muted-foreground">
                   {modelOutput.trim().split(/\s+/).filter(Boolean).length} words
@@ -255,8 +255,8 @@ export default function ExplainabilityStudioPage() {
           </Card>
 
           {/* Method Selection */}
-          <Card className="border-2 border-black shadow-brutal">
-            <CardHeader className="border-b-2 border-black pb-4">
+          <Card className="fm-card">
+            <CardHeader className="border-b border-[var(--fm-line)] pb-4">
               <CardTitle className="flex items-center gap-2 text-base">
                 <IconSparkles className="h-5 w-5 text-orange-500" />
                 Explainability Methods
@@ -275,11 +275,11 @@ export default function ExplainabilityStudioPage() {
                     onClick={() => toggleMethod(method.id)}
                     className={`w-full flex items-start gap-3 p-3 border-2 text-left transition-all ${
                       isSelected
-                        ? 'border-black bg-black text-white shadow-brutal'
-                        : 'border-black bg-white hover:bg-gray-50'
+                        ? 'border-[var(--fm-line)] bg-[var(--fm-ink)] text-white'
+                        : 'border-[var(--fm-line)] bg-white hover:bg-gray-50'
                     }`}
                   >
-                    <div className={`p-1.5 border-2 mt-0.5 ${isSelected ? 'border-white bg-white/10' : 'border-black'}`}>
+                    <div className={`p-1.5 border mt-0.5 ${isSelected ? 'border-white bg-white/10' : 'border-[var(--fm-line)]'}`}>
                       <Icon className={`h-4 w-4 ${isSelected ? 'text-white' : ''}`} />
                     </div>
                     <div className="flex-1 min-w-0">
@@ -298,12 +298,12 @@ export default function ExplainabilityStudioPage() {
               })}
 
               {/* Include visualizations toggle */}
-              <div className="flex items-center gap-3 pt-2 border-t-2 border-dashed border-black/20">
+              <div className="flex items-center gap-3 pt-2 border-t border-dashed border-[var(--fm-line)]">
                 <Checkbox
                   id="viz"
                   checked={includeVisualizations}
                   onCheckedChange={v => setIncludeVisualizations(!!v)}
-                  className="border-2 border-black"
+                  className="border border-[var(--fm-line)]"
                 />
                 <Label htmlFor="viz" className="text-sm font-bold cursor-pointer">
                   Include visualization metadata
@@ -316,7 +316,7 @@ export default function ExplainabilityStudioPage() {
           <Button
             onClick={handleRunAnalysis}
             disabled={loading || selectedMethods.length === 0 || !modelOutput.trim()}
-            className="w-full border-2 border-black shadow-brutal hover:shadow-brutal-lg font-black text-base h-12 bg-black text-white hover:bg-gray-900 disabled:opacity-50"
+            className="w-full font-semibold text-base h-12 bg-[var(--fm-ink)] text-white hover:bg-black disabled:opacity-50 rounded-[14px] shadow-[var(--fm-shadow)]"
           >
             {loading ? (
               <>
@@ -343,12 +343,12 @@ export default function ExplainabilityStudioPage() {
         <div className="lg:col-span-3">
           {!results && !loading ? (
             /* Empty state */
-            <Card className="border-2 border-black shadow-brutal h-full min-h-[500px] flex flex-col items-center justify-center text-center">
+            <Card className="h-full min-h-[500px] flex flex-col items-center justify-center text-center fm-card">
               <CardContent className="pt-12 pb-12">
-                <div className="p-6 border-2 border-dashed border-black/30 inline-block mb-6">
+                <div className="p-6 border border-dashed border-[rgba(21,23,26,.14)] inline-block mb-6">
                   <IconMicroscope className="h-16 w-16 text-purple-300" />
                 </div>
-                <h3 className="text-xl font-black mb-2">No Analysis Yet</h3>
+                <h3 className="text-xl font-semibold mb-2">No Analysis Yet</h3>
                 <p className="text-muted-foreground text-sm max-w-sm">
                   Configure your model output and select explainability methods, then run the
                   analysis to see results here.
@@ -360,7 +360,7 @@ export default function ExplainabilityStudioPage() {
                     'Click Run Analysis',
                   ].map((step, i) => (
                     <div key={i} className="flex items-center gap-3">
-                      <span className="flex-shrink-0 w-6 h-6 border-2 border-black bg-black text-white text-xs font-black flex items-center justify-center">
+                      <span className="flex-shrink-0 w-6 h-6 border border-[var(--fm-line)] bg-[var(--fm-ink)] text-white text-xs font-semibold flex items-center justify-center">
                         {i + 1}
                       </span>
                       <span className="text-sm text-muted-foreground">{step}</span>
@@ -371,12 +371,12 @@ export default function ExplainabilityStudioPage() {
             </Card>
           ) : loading ? (
             /* Loading state */
-            <Card className="border-2 border-black shadow-brutal h-full min-h-[500px] flex flex-col items-center justify-center">
+            <Card className="h-full min-h-[500px] flex flex-col items-center justify-center fm-card">
               <CardContent className="pt-12 text-center">
-                <div className="p-4 bg-purple-100 border-2 border-black inline-block mb-4 animate-pulse">
+                <div className="p-4 bg-purple-100 border border-[var(--fm-line)] inline-block mb-4 animate-pulse">
                   <IconBrain className="h-12 w-12 text-purple-700" />
                 </div>
-                <h3 className="text-xl font-black mb-2">Analyzing Model Behavior</h3>
+                <h3 className="text-xl font-semibold mb-2">Analyzing Model Behavior</h3>
                 <p className="text-muted-foreground text-sm mb-6">
                   Running {selectedMethods.length} explainability method
                   {selectedMethods.length !== 1 ? 's' : ''}…
@@ -401,36 +401,36 @@ export default function ExplainabilityStudioPage() {
             <div className="space-y-4">
               {/* Confidence + Methods summary */}
               <div className="grid grid-cols-3 gap-3">
-                <div className={`border-2 border-black p-3 shadow-brutal ${getConfidenceBg(results.confidence ?? 0)}`}>
-                  <p className="text-xs font-black uppercase tracking-wider text-muted-foreground">
+                <div className={`p-3 ${getConfidenceBg(results.confidence ?? 0)} rounded-[14px] shadow-[var(--fm-shadow)]`}>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     Confidence
                   </p>
-                  <p className={`text-2xl font-black mt-1 ${getConfidenceColor(results.confidence ?? 0)}`}>
+                  <p className={`text-2xl font-semibold mt-1 ${getConfidenceColor(results.confidence ?? 0)}`}>
                     {((results.confidence ?? 0) * 100).toFixed(0)}%
                   </p>
                 </div>
-                <div className="border-2 border-black p-3 bg-gray-50 shadow-brutal">
-                  <p className="text-xs font-black uppercase tracking-wider text-muted-foreground">
+                <div className="p-3 bg-gray-50 rounded-[14px] shadow-[var(--fm-shadow)]">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     Methods Used
                   </p>
-                  <p className="text-2xl font-black mt-1">
+                  <p className="text-2xl font-semibold mt-1">
                     {results.methods_used?.length ?? selectedMethods.length}
                   </p>
                 </div>
-                <div className="border-2 border-black p-3 bg-gray-50 shadow-brutal">
-                  <p className="text-xs font-black uppercase tracking-wider text-muted-foreground">
+                <div className="p-3 bg-gray-50 rounded-[14px] shadow-[var(--fm-shadow)]">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     Insights
                   </p>
-                  <p className="text-2xl font-black mt-1">
+                  <p className="text-2xl font-semibold mt-1">
                     {results.insights?.length ?? 0}
                   </p>
                 </div>
               </div>
 
               {/* Tabs */}
-              <Card className="border-2 border-black shadow-brutal">
+              <Card className="fm-card">
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
-                  <div className="border-b-2 border-black px-4 pt-4">
+                  <div className="border-b border-[var(--fm-line)] px-4 pt-4">
                     <TabsList className="bg-transparent p-0 h-auto gap-1">
                       {[
                         { id: 'overview', label: 'Overview', icon: IconBulb },
@@ -443,7 +443,7 @@ export default function ExplainabilityStudioPage() {
                           <TabsTrigger
                             key={tab.id}
                             value={tab.id}
-                            className="flex items-center gap-1.5 px-3 py-2 text-sm font-bold border-2 border-transparent data-[state=active]:border-black data-[state=active]:bg-black data-[state=active]:text-white rounded-none"
+                            className="flex items-center gap-1.5 px-3 py-2 rounded-full text-[13px] font-medium text-[var(--fm-ink2)] data-[state=active]:bg-[var(--fm-ink)] data-[state=active]:text-white"
                           >
                             <Icon className="h-3.5 w-3.5" />
                             {tab.label}
@@ -457,7 +457,7 @@ export default function ExplainabilityStudioPage() {
                   <TabsContent value="overview" className="p-6 space-y-5 mt-0">
                     {/* Methods used */}
                     <div className="space-y-2">
-                      <h3 className="font-black text-sm uppercase tracking-wider">Methods Applied</h3>
+                      <h3 className="font-semibold text-sm tracking-wider">Methods Applied</h3>
                       <div className="flex flex-wrap gap-2">
                         {(results.methods_used ?? selectedMethods).map(m => {
                           const method = EXPLAINABILITY_METHODS.find(e => e.id === m)
@@ -476,7 +476,7 @@ export default function ExplainabilityStudioPage() {
                     {/* Insights */}
                     {results.insights && results.insights.length > 0 && (
                       <div className="space-y-2">
-                        <h3 className="font-black text-sm uppercase tracking-wider flex items-center gap-2">
+                        <h3 className="font-semibold text-sm tracking-wider flex items-center gap-2">
                           <IconBulb className="h-4 w-4 text-yellow-600" />
                           Key Insights
                         </h3>
@@ -484,9 +484,9 @@ export default function ExplainabilityStudioPage() {
                           {results.insights.map((insight, i) => (
                             <li
                               key={i}
-                              className="flex gap-3 p-3 border-2 border-black bg-yellow-50"
+                              className="flex gap-3 p-3 border border-[var(--fm-line)] bg-yellow-50"
                             >
-                              <span className="flex-shrink-0 font-black text-yellow-700 text-sm">
+                              <span className="flex-shrink-0 font-semibold text-yellow-700 text-sm">
                                 {String(i + 1).padStart(2, '0')}
                               </span>
                               <span className="text-sm">{insight}</span>
@@ -499,14 +499,14 @@ export default function ExplainabilityStudioPage() {
                     {/* Confidence progress */}
                     <div className="space-y-2">
                       <div className="flex justify-between items-center">
-                        <h3 className="font-black text-sm uppercase tracking-wider">Analysis Confidence</h3>
-                        <span className={`font-black text-sm ${getConfidenceColor(results.confidence ?? 0)}`}>
+                        <h3 className="font-semibold text-sm tracking-wider">Analysis Confidence</h3>
+                        <span className={`font-semibold text-sm ${getConfidenceColor(results.confidence ?? 0)}`}>
                           {((results.confidence ?? 0) * 100).toFixed(1)}%
                         </span>
                       </div>
                       <Progress
                         value={(results.confidence ?? 0) * 100}
-                        className="h-3 border-2 border-black"
+                        className="h-3 border border-[var(--fm-line)]"
                       />
                       <p className="text-xs text-muted-foreground">
                         {(results.confidence ?? 0) >= 0.8
@@ -519,7 +519,7 @@ export default function ExplainabilityStudioPage() {
 
                     {/* Visualizations note */}
                     {results.visualizations && results.visualizations.length > 0 && (
-                      <div className="border-2 border-black p-3 bg-blue-50 flex gap-3">
+                      <div className="border border-[var(--fm-line)] p-3 bg-blue-50 flex gap-3">
                         <IconInfoCircle className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
                         <div>
                           <p className="text-sm font-bold text-blue-900">
@@ -535,7 +535,7 @@ export default function ExplainabilityStudioPage() {
 
                   {/* Attribution Tab */}
                   <TabsContent value="attribution" className="p-6 space-y-5 mt-0">
-                    <h3 className="font-black text-sm uppercase tracking-wider flex items-center gap-2">
+                    <h3 className="font-semibold text-sm tracking-wider flex items-center gap-2">
                       <IconChartBar className="h-4 w-4 text-teal-600" />
                       Feature Attribution
                     </h3>
@@ -552,11 +552,11 @@ export default function ExplainabilityStudioPage() {
                               <div key={feature} className="space-y-1">
                                 <div className="flex justify-between items-center text-sm">
                                   <span className="font-bold font-mono">{feature}</span>
-                                  <span className={`font-black text-xs ${value >= 0 ? 'text-teal-700' : 'text-red-700'}`}>
+                                  <span className={`font-semibold text-xs ${value >= 0 ? 'text-teal-700' : 'text-red-700'}`}>
                                     {value >= 0 ? '+' : ''}{value.toFixed(4)}
                                   </span>
                                 </div>
-                                <div className="h-5 bg-gray-100 border-2 border-black relative overflow-hidden">
+                                <div className="h-5 bg-gray-100 border border-[var(--fm-line)] relative overflow-hidden">
                                   <div
                                     className={`h-full ${getAttributionColor(value)} transition-all`}
                                     style={{ width: `${getAttributionWidth(value, maxVal)}%` }}
@@ -568,7 +568,7 @@ export default function ExplainabilityStudioPage() {
                       </div>
                     ) : results.bias_attribution && Object.keys(results.bias_attribution).length > 0 ? (
                       <div className="space-y-2">
-                        <p className="text-xs text-muted-foreground font-bold uppercase tracking-wider mb-3">
+                        <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wider mb-3">
                           Bias-Specific Attribution
                         </p>
                         {(() => {
@@ -580,11 +580,11 @@ export default function ExplainabilityStudioPage() {
                               <div key={attr} className="space-y-1">
                                 <div className="flex justify-between items-center text-sm">
                                   <span className="font-bold capitalize">{attr.replace(/_/g, ' ')}</span>
-                                  <span className={`font-black text-xs ${value >= 0.5 ? 'text-red-700' : 'text-yellow-700'}`}>
+                                  <span className={`font-semibold text-xs ${value >= 0.5 ? 'text-red-700' : 'text-yellow-700'}`}>
                                     {(value * 100).toFixed(1)}% contribution
                                   </span>
                                 </div>
-                                <div className="h-5 bg-gray-100 border-2 border-black relative overflow-hidden">
+                                <div className="h-5 bg-gray-100 border border-[var(--fm-line)] relative overflow-hidden">
                                   <div
                                     className={`h-full ${value >= 0.5 ? 'bg-red-500' : 'bg-yellow-500'} transition-all`}
                                     style={{ width: `${getAttributionWidth(value, maxVal)}%` }}
@@ -595,7 +595,7 @@ export default function ExplainabilityStudioPage() {
                         })()}
                       </div>
                     ) : (
-                      <div className="border-2 border-dashed border-black/30 p-8 text-center">
+                      <div className="border border-dashed border-[rgba(21,23,26,.14)] p-8 text-center">
                         <IconChartBar className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
                         <p className="text-sm text-muted-foreground font-bold">
                           No feature attribution data returned
@@ -609,7 +609,7 @@ export default function ExplainabilityStudioPage() {
 
                   {/* Attention Tab */}
                   <TabsContent value="attention" className="p-6 space-y-5 mt-0">
-                    <h3 className="font-black text-sm uppercase tracking-wider flex items-center gap-2">
+                    <h3 className="font-semibold text-sm tracking-wider flex items-center gap-2">
                       <IconEye className="h-4 w-4 text-blue-600" />
                       Attention Patterns
                     </h3>
@@ -632,7 +632,7 @@ export default function ExplainabilityStudioPage() {
                                 return (
                                   <span
                                     key={token}
-                                    className="px-2 py-1 border-2 border-black text-sm font-mono font-bold"
+                                    className="px-2 py-1 border border-[var(--fm-line)] text-sm font-mono font-bold"
                                     style={{
                                       backgroundColor: `rgba(59, 130, 246, ${opacity})`,
                                       color: intensity > 0.6 ? 'white' : 'black',
@@ -650,7 +650,7 @@ export default function ExplainabilityStudioPage() {
                         </p>
                       </div>
                     ) : (
-                      <div className="border-2 border-dashed border-black/30 p-8 text-center">
+                      <div className="border border-dashed border-[rgba(21,23,26,.14)] p-8 text-center">
                         <IconEye className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
                         <p className="text-sm text-muted-foreground font-bold">
                           No attention pattern data returned
@@ -666,7 +666,7 @@ export default function ExplainabilityStudioPage() {
                   <TabsContent value="counterfactuals" className="p-6 space-y-5 mt-0">
                     <div className="flex items-start justify-between">
                       <div>
-                        <h3 className="font-black text-sm uppercase tracking-wider flex items-center gap-2">
+                        <h3 className="font-semibold text-sm tracking-wider flex items-center gap-2">
                           <IconFlask className="h-4 w-4 text-pink-600" />
                           Counterfactual Examples
                         </h3>
@@ -679,24 +679,24 @@ export default function ExplainabilityStudioPage() {
                     {results.counterfactuals && results.counterfactuals.length > 0 ? (
                       <div className="space-y-4">
                         {results.counterfactuals.map((cf, i) => (
-                          <div key={i} className="border-2 border-black p-4 space-y-3">
+                          <div key={i} className="border border-[var(--fm-line)] p-4 space-y-3">
                             <div className="flex items-center justify-between">
-                              <Badge className="border-2 border-black font-bold bg-pink-100 text-pink-800 border-pink-300">
+                              <Badge className="border border-[var(--fm-line)] font-bold bg-pink-100 text-pink-800 border-pink-300">
                                 {cf.attribute}
                               </Badge>
-                              <span className={`text-sm font-black ${cf.impact >= 0.5 ? 'text-red-700' : 'text-yellow-700'}`}>
+                              <span className={`text-sm font-semibold ${cf.impact >= 0.5 ? 'text-red-700' : 'text-yellow-700'}`}>
                                 Δ {(cf.impact * 100).toFixed(0)}% impact
                               </span>
                             </div>
                             <div className="grid grid-cols-2 gap-3">
-                              <div className="border-2 border-black p-3 bg-gray-50">
-                                <p className="text-xs font-black uppercase tracking-wider text-muted-foreground mb-1">
+                              <div className="border border-[var(--fm-line)] p-3 bg-gray-50">
+                                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
                                   Original
                                 </p>
                                 <p className="text-sm">{cf.original}</p>
                               </div>
-                              <div className="border-2 border-black p-3 bg-pink-50">
-                                <p className="text-xs font-black uppercase tracking-wider text-pink-700 mb-1">
+                              <div className="border border-[var(--fm-line)] p-3 bg-pink-50">
+                                <p className="text-xs font-semibold uppercase tracking-wider text-pink-700 mb-1">
                                   Counterfactual
                                 </p>
                                 <p className="text-sm">{cf.modified}</p>
@@ -706,7 +706,7 @@ export default function ExplainabilityStudioPage() {
                         ))}
                       </div>
                     ) : (
-                      <div className="border-2 border-dashed border-black/30 p-8 text-center">
+                      <div className="border border-dashed border-[rgba(21,23,26,.14)] p-8 text-center">
                         <IconFlask className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
                         <p className="text-sm text-muted-foreground font-bold">
                           No counterfactual examples returned
@@ -721,17 +721,17 @@ export default function ExplainabilityStudioPage() {
               </Card>
 
               {/* Next step CTA */}
-              <div className="border-2 border-black p-4 bg-black text-white flex items-center justify-between shadow-brutal">
+              <div className="p-4 bg-[var(--fm-ink)] text-white flex items-center justify-between rounded-[14px] shadow-[var(--fm-shadow)]">
                 <div>
-                  <p className="font-black">Ready to run a full bias evaluation?</p>
+                  <p className="font-semibold">Ready to run a full bias evaluation?</p>
                   <p className="text-white/70 text-xs mt-0.5">
                     Use the LLM Bias Detection suite for StereoSet, WEAT, BBQ, and more.
                   </p>
                 </div>
-                <a href="/modern-bias">
+                <a href="/llm-testing">
                   <Button
                     variant="noShadow"
-                    className="border-2 border-white bg-transparent text-white hover:bg-white hover:text-black font-bold"
+                    className="border border-white/40 bg-transparent text-white hover:bg-white hover:text-black font-bold"
                   >
                     Run Bias Evaluation
                     <IconArrowRight className="h-4 w-4 ml-2" />

@@ -13,7 +13,7 @@ export default function ReportHistory() {
     ];
 
     return (
-        <Card className="border-2 border-black shadow-brutal h-full">
+        <Card className="h-full fm-card">
             <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                     <IconFileText />

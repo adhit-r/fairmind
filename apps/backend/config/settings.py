@@ -19,6 +19,13 @@ class Settings(BaseSettings):
     
     # Environment
     environment: str = "development"
+    # Local development only: JWTAuthenticationMiddleware signs loopback
+    # requests without a token in as this existing user. Ignored outside development.
+    fairmind_dev_login_email: Optional[str] = None
+    # CI end-to-end runs only: a sign-in that needs no users table. Honoured only
+    # when both values are set and the environment is development; never stored.
+    e2e_admin_email: Optional[str] = None
+    e2e_admin_password: Optional[str] = None
     debug: bool = False
     
     # API Configuration
@@ -45,6 +52,9 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./fairmind.db"
     database_echo: bool = False
     database_pool_size: int = 20
+    # Seconds to wait for a pooled connection at startup. Serverless Postgres
+    # (Neon) can take 10 to 30 seconds to wake a suspended compute.
+    database_connect_timeout: int = 60
     database_max_overflow: int = 30
     database_timeout: int = 30
     assurance_v2_enabled: bool = False
@@ -262,11 +272,34 @@ class ProductionSettings(Settings):
         return v
 
 
+def resolve_environment() -> str:
+    """The environment name both the settings class and the environment field use.
+
+    ENVIRONMENT wins because pydantic fills Settings.environment from it, and an
+    env var beats a subclass default. Picking the class from NODE_ENV alone let
+    the two disagree: NODE_ENV=production with ENVIRONMENT=development built a
+    ProductionSettings whose is_development was True, which skipped the Neon auth
+    middleware despite NEON_AUTH_ENABLED=true and switched on the dev auto-login.
+    NODE_ENV stays supported for start.sh, which already sets it.
+    """
+    return (os.getenv("ENVIRONMENT") or os.getenv("NODE_ENV") or "development").lower()
+
+
 @lru_cache()
 def get_settings() -> Settings:
     """Get application settings based on environment."""
-    env = os.getenv("NODE_ENV", "development").lower()
-    
+    env = resolve_environment()
+
+    node_env = os.getenv("NODE_ENV")
+    if node_env and node_env.lower() != env:
+        # Loud, because the two disagreeing is how a deployment ends up running
+        # development behaviour while believing it is production.
+        print(
+            f"WARNING: NODE_ENV={node_env!r} but ENVIRONMENT resolves to {env!r}; "
+            f"using {env!r}. Set them to the same value.",
+            flush=True,
+        )
+
     if env == "production":
         return ProductionSettings()
     else:

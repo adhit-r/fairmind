@@ -1,30 +1,21 @@
-from fastapi import APIRouter, HTTPException
-from typing import Dict, Any
+from fastapi import APIRouter, Depends, HTTPException
 
-router = APIRouter()
+from config.auth import get_current_active_user
+
+# Both routes answer 501 until lineage is recorded; keep them behind sign-in so
+# the tenant check has a place to land when they do.
+router = APIRouter(dependencies=[Depends(get_current_active_user)])
+
+_NOT_RECORDED = "Model provenance is not recorded yet. Register lineage through the AI-BOM before reading it here."
+
 
 @router.get("/{model_id}")
-async def get_model_provenance(model_id: str) -> Dict[str, Any]:
-    """Get model provenance (Model DNA)."""
-    return {
-        "model_id": model_id,
-        "dna": {
-            "origin": "Training Run #123",
-            "datasets": ["dataset-001", "dataset-002"],
-            "architecture": "Transformer",
-            "parameters": "7B",
-            "training_time": "1000 GPU hours"
-        }
-    }
+async def get_model_provenance(model_id: str):
+    """Model provenance. Returns 501 until real lineage is recorded."""
+    raise HTTPException(status_code=501, detail=_NOT_RECORDED)
+
 
 @router.get("/{model_id}/dna")
-async def get_model_dna(model_id: str) -> Dict[str, Any]:
-    """Get specific Model DNA details."""
-    return {
-        "model_id": model_id,
-        "genes": [
-            {"name": "Architecture", "value": "Transformer"},
-            {"name": "Loss Function", "value": "CrossEntropy"},
-            {"name": "Optimizer", "value": "AdamW"}
-        ]
-    }
+async def get_model_dna(model_id: str):
+    """Model DNA. Returns 501 until real lineage is recorded."""
+    raise HTTPException(status_code=501, detail=_NOT_RECORDED)

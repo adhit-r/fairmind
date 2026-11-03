@@ -81,18 +81,18 @@ export default function OrgRolesPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background p-8">
+    <div className="min-w-0">
       <div className="mx-auto max-w-6xl">
         {/* Header */}
-        <div className="mb-8 border-b-4 border-black pb-6">
-          <h1 className="text-4xl font-bold text-black">Organization Roles</h1>
+        <div className="mb-8 border-b border-[var(--fm-line)] pb-6">
+          <h1 className="text-[30px] font-semibold tracking-[-.03em] text-black">Organization Roles</h1>
           <p className="mt-2 text-gray-600">Manage roles and their permissions</p>
         </div>
 
         {/* Roles List */}
         {isLoading ? (
           <div className="flex justify-center">
-            <div className="h-12 w-12 animate-spin rounded-full border-4 border-gray-300 border-t-black" />
+            <div className="h-12 w-12 animate-spin rounded-full border-2 border-[var(--fm-line)] border-t-[var(--fm-ink)]" />
           </div>
         ) : error ? (
           <div className="rounded-lg border-2 border-red-800 bg-red-50 p-4">
@@ -108,7 +108,7 @@ export default function OrgRolesPage() {
               roles.map((role) => (
                 <div
                   key={role.id}
-                  className="rounded-lg border-4 border-black bg-white p-6 shadow-brutal-lg"
+                  className="p-6 fm-card"
                 >
                   {/* Role Header */}
                   <div className="mb-6 flex items-start justify-between border-b-2 border-gray-200 pb-4">
@@ -133,7 +133,7 @@ export default function OrgRolesPage() {
                     {!role.is_system_role && (
                       <button
                         onClick={() => handleDeleteRole(role.id)}
-                        className="flex items-center gap-2 rounded bg-red-600 px-4 py-2 font-bold text-white transition-all hover:bg-red-700 active:translate-y-1"
+                        className="flex items-center gap-2 rounded bg-red-600 px-4 py-2 font-bold text-white transition-all hover:bg-red-700"
                       >
                         <IconTrash size={18} />
                         Delete
@@ -168,7 +168,7 @@ export default function OrgRolesPage() {
         )}
 
         {/* Info Box */}
-        <div className="mt-12 rounded-lg border-4 border-black bg-white p-6 shadow-brutal-lg">
+        <div className="mt-12 p-6 fm-card">
           <h3 className="mb-4 font-bold text-black">About Organization Roles</h3>
           <div className="space-y-2 text-sm text-gray-600">
             <p>
