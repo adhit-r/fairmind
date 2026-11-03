@@ -9,6 +9,7 @@ import { useEnvironmentalImpact } from '@/lib/api/hooks/useAIGovernance'
 import { useSystemFile, type AttestableCheck, type FairnessRunSummary, type SystemRecord } from '@/lib/api/hooks/useSystemFile'
 import { FairnessRunPanel } from './FairnessRunPanel'
 import { MonitoringRunPanel } from './MonitoringRunPanel'
+import { WatchPanel } from './WatchPanel'
 import { AttestForm } from './AttestForm'
 import { ClauseMapPanel } from './ClauseMapPanel'
 import { cn } from '@/lib/utils'
@@ -115,7 +116,7 @@ export default function SystemFilePage() {
   const router = useRouter()
   const { selectedOrg } = useOrg()
   const { setSelectedSystemId } = useSystemContext()
-  const { system, evidence, approval, remediation, risks, reports, gate, fairnessRuns, monitoringRuns, seals, clauseMap, loading, error, requestDecision, recordDecision, inspectCsv, runFairness, runMonitoring, attest } = useSystemFile(id)
+  const { system, evidence, approval, remediation, risks, reports, gate, fairnessRuns, monitoringRuns, monitoringPolicy, seals, clauseMap, loading, error, requestDecision, recordDecision, inspectCsv, runFairness, runMonitoring, saveMonitoringPolicy, attest } = useSystemFile(id)
   const env = useEnvironmentalImpact(selectedOrg?.id, id)
   const [busy, setBusy] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -341,6 +342,7 @@ export default function SystemFilePage() {
         <Fact label="Audit reports" value={reports.length ? `${reports.length}, latest ${when(latestReport.createdAt)}` : 'None generated'} />
         <Fact label="Monitoring snapshots" value={latestMonitoring ? `${latestMonitoring.allChecksPass ? 'Stable' : 'Drifting'} on ${when(latestMonitoring.createdAt)}${monitoringRuns.length > 1 ? `, ${monitoringRuns.length} snapshots` : ''}` : 'None recorded'} />
         <Fact label="Approved" value={decided?.status === 'approved' ? when(decided.updatedAt) || 'Yes' : 'Not yet'} />
+        <WatchPanel systemId={id} policy={monitoringPolicy} runs={monitoringRuns} save={saveMonitoringPolicy} />
         <MonitoringRunPanel inspect={inspectCsv} run={runMonitoring} hasBaseline={fairnessRuns.length > 0} />
       </Stage>
     </div>
