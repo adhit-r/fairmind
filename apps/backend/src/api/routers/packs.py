@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from api.routes.ai_governance import _ensure_tables, _utc_now_iso
+from api.routes import evaluation_results
 from api.routes import pack_catalogue as cat
 from api.routes.pack_catalogue import (
     BUNDLES,
@@ -385,7 +386,12 @@ async def list_packs(m: OrgMembership = Depends(_member), db: Session = Depends(
     return [_pack_json(pid, pid in installed) for pid in PACKS]
 
 
-def _evaluation_json(ev, installed: set) -> dict:
+def _org_coverage(db: Session, org_id: str, installed: List[str]) -> Coverage:
+    """What the organisation has now: workflows of installed packs, plus evaluations with a passing result."""
+    return Coverage(installed, tested_by=evaluation_results.passed(evaluation_results.results(db, org_id)))
+
+
+def _evaluation_json(ev, installed: set, res: dict) -> dict:
     pattern = PATTERNS[ev.pattern]
     pack_id = cat.EVALUATION_PACK[ev.id]
     return {
@@ -405,6 +411,8 @@ def _evaluation_json(ev, installed: set) -> dict:
             for k in ev.tests
         ],
         "installed": pack_id in installed,
+        # None when FairMind does not read this evaluation's results yet; else its status and latest result per system.
+        "results": res.get(ev.id),
     }
 
 
@@ -418,9 +426,10 @@ async def list_evaluations(
 ):
     _ensure_tables(db)
     installed = set(_installed_ids(db, m.org_id))
+    res = evaluation_results.results(db, m.org_id)
     needle = q.strip().lower() if q else ""
     return [
-        _evaluation_json(ev, installed)
+        _evaluation_json(ev, installed, res)
         for ev in EVALUATIONS.values()
         if (not pillar or ev.pillar == pillar.upper())
         and (not engine or ev.engine == engine)
@@ -434,7 +443,7 @@ async def get_evaluation(evaluation_id: str, m: OrgMembership = Depends(_member)
     if not ev:
         raise HTTPException(status_code=404, detail="Evaluation not found")
     _ensure_tables(db)
-    return _evaluation_json(ev, set(_installed_ids(db, m.org_id)))
+    return _evaluation_json(ev, set(_installed_ids(db, m.org_id)), evaluation_results.results(db, m.org_id))
 
 
 @router.get("/library/{pack_id}")
@@ -473,9 +482,9 @@ async def get_library(pack_id: str, m: OrgMembership = Depends(_member), db: Ses
     return {**_pack_json(pack_id, pack_id in _installed_ids(db, org_id)), "patterns": patterns, "frameworks": frameworks}
 
 
-def _bundle_json(bundle_id: str, installed: List[str]) -> dict:
+def _bundle_json(bundle_id: str, installed: List[str], org: Coverage) -> dict:
     bundle = BUNDLES[bundle_id]
-    own, org = Coverage(bundle.packs), Coverage(installed)
+    own = Coverage(bundle.packs)
     return {
         "id": bundle.id,
         "name": bundle.name,
@@ -499,7 +508,8 @@ def _bundle_json(bundle_id: str, installed: List[str]) -> dict:
 async def list_bundles(m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     _ensure_tables(db)
     installed = _installed_ids(db, m.org_id)
-    return [_bundle_json(b, installed) for b in BUNDLES]
+    org = _org_coverage(db, m.org_id, installed)
+    return [_bundle_json(b, installed, org) for b in BUNDLES]
 
 
 @router.post("/bundles/{bundle_id}/install")
@@ -509,13 +519,14 @@ async def install_bundle(bundle_id: str, m: OrgMembership = Depends(_manager), d
     _ensure_tables(db)
     for pack_id in BUNDLES[bundle_id].packs:
         _install(db, m, pack_id)
-    return _bundle_json(bundle_id, _installed_ids(db, m.org_id))
+    installed = _installed_ids(db, m.org_id)
+    return _bundle_json(bundle_id, installed, _org_coverage(db, m.org_id, installed))
 
 
 @router.get("/journeys")
 async def list_journeys(m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     _ensure_tables(db)
-    org = Coverage(_installed_ids(db, m.org_id))
+    org = _org_coverage(db, m.org_id, _installed_ids(db, m.org_id))
     installed = set(_installed_ids(db, m.org_id))
     latest = _latest_runs(db, m.org_id, set(WORKFLOWS))
     rows = [
@@ -565,7 +576,8 @@ async def get_journey(framework_key: str, m: OrgMembership = Depends(_member), d
         raise HTTPException(status_code=404, detail="Journey not found")
     _ensure_tables(db)
     ids = _installed_ids(db, m.org_id)
-    installed, org = set(ids), Coverage(ids)
+    res = evaluation_results.results(db, m.org_id)
+    installed, org = set(ids), Coverage(ids, tested_by=evaluation_results.passed(res))
     keys = FRAMEWORK_KEYS[framework_key]
     latest = _latest_runs(db, m.org_id, {w for k in keys for w, _ in cat.REQUIREMENT_WORKFLOWS.get(k, [])})
     groups: Dict[str, list] = {}
@@ -597,6 +609,7 @@ async def get_journey(framework_key: str, m: OrgMembership = Depends(_member), d
                         "engine": EVALUATIONS[eid].engine,
                         "pack": cat.EVALUATION_PACK[eid],
                         "installed": cat.EVALUATION_PACK[eid] in installed,
+                        "result": res[eid]["status"] if eid in res else None,
                     }
                     for eid in cat.REQUIREMENT_EVALUATIONS.get(req.key, [])
                 ],

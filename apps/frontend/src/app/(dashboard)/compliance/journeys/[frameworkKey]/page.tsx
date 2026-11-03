@@ -6,7 +6,7 @@ import { useMemo, useState } from 'react'
 import { useInstaller, useJourney, usePackNames, type ReqStatus } from '@/lib/api/hooks/usePacks'
 import { IsoFigure } from '@/components/packs/IsoFigure'
 import { journeyFigure, type FigWorkflow } from '@/components/packs/figures'
-import { BTN, BTN_P, CoverageBar, Crumbs, EnginePill, ErrorNote, Heading, LABEL, LINE, Loading, MUTED, Pill, REQ_ORDER, ReqPill, StatusPill, cap, reqHint, reqLabel } from '@/components/packs/parts'
+import { BTN, BTN_P, CoverageBar, Crumbs, EnginePill, ErrorNote, Heading, LABEL, LINE, Loading, MUTED, Pill, REQ_ORDER, ReqPill, ResultPill, StatusPill, cap, reqHint, reqLabel } from '@/components/packs/parts'
 import { cn } from '@/lib/utils'
 
 const TILE: Record<ReqStatus, FigWorkflow['status']> = { covered: 'done', tested: 'tested', available: null, supported: 'supported', gap: 'gap' }
@@ -334,7 +334,7 @@ export default function JourneyPage() {
                                   >
                                     {e.name}
                                   </Link>
-                                  <EnginePill engine={e.engine} />
+                                  {e.result ? <ResultPill status={e.result} /> : <EnginePill engine={e.engine} />}
                                   {!e.installed && <span className="text-[12px] text-[var(--fm-ink3)]">in {packName(e.pack)}, not installed</span>}
                                 </li>
                               ))}
