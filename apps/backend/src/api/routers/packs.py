@@ -796,7 +796,7 @@ def _open_gate(db: Session, run, requested_by: Optional[str]) -> str:
     workflow_row = db.execute(
         text(
             "SELECT id FROM governance_approval_workflows "
-            "WHERE entity_type = 'workflow_run' AND is_active = 1 LIMIT 1"
+            "WHERE entity_type = 'workflow_run' AND is_active = TRUE LIMIT 1"
         )
     ).fetchone()
     now = _utc_now_iso()
@@ -815,7 +815,7 @@ def _open_gate(db: Session, run, requested_by: Optional[str]) -> str:
                 "name": "Agentic Workflow Approval",
                 "entity_type": "workflow_run",
                 "steps_json": json.dumps([{"step": 1, "name": "Owner Approval", "approver_role": "governance_lead"}]),
-                "is_active": 1,
+                "is_active": True,
                 "created_by": "system",
                 "created_at": now,
                 "updated_at": now,
