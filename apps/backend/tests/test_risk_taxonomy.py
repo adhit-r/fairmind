@@ -116,10 +116,20 @@ def test_seed_categories_cover_required_dimensions():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
 
-    keys = {key for key, _name, _desc, _factors in module.CATEGORIES}
+    ibm_keys = {key for key, _name, _desc, _factors in module.IBM_CATEGORIES}
     for required in (
         "fairness", "explainability", "robustness", "privacy",
-        "security", "accountability", "hallucination",
+        "security", "accountability", "hallucination", "value_alignment",
     ):
-        assert required in keys, f"seed must cover '{required}'"
+        assert required in ibm_keys, f"IBM seed must cover '{required}'"
+
+    mit_keys = {key for key, _name, _desc, _factors in module.MIT_CATEGORIES}
+    for required in (
+        "discrimination_toxicity", "privacy_data_governance", "misinformation",
+        "malicious_actors_misuse", "human_computer_interaction",
+        "socioeconomic_environmental", "ai_safety",
+        "transparency_accountability",
+    ):
+        assert required in mit_keys, f"MIT seed must cover '{required}'"
+
     assert {t["key"] for t in module.TAXONOMIES} >= {"ibm", "mit"}

@@ -12,9 +12,9 @@ CREATE TABLE IF NOT EXISTS risk_taxonomies (
     version TEXT NOT NULL DEFAULT '1.0',
     description TEXT NOT NULL DEFAULT '',
     source_uri TEXT,
-    is_active INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_risk_taxonomies_key ON risk_taxonomies(key);
 
@@ -25,8 +25,8 @@ CREATE TABLE IF NOT EXISTS risk_categories (
     name TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     sort_order INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     CONSTRAINT uq_risk_category_taxonomy_key UNIQUE (taxonomy_id, key)
 );
 CREATE INDEX IF NOT EXISTS idx_risk_categories_taxonomy_id ON risk_categories(taxonomy_id);
@@ -40,8 +40,8 @@ CREATE TABLE IF NOT EXISTS risk_factors (
     description TEXT NOT NULL DEFAULT '',
     guidance_json TEXT NOT NULL DEFAULT '[]',
     sort_order INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     CONSTRAINT uq_risk_factor_category_key UNIQUE (category_id, key)
 );
 CREATE INDEX IF NOT EXISTS idx_risk_factors_category_id ON risk_factors(category_id);
@@ -54,9 +54,9 @@ CREATE TABLE IF NOT EXISTS risk_assessment_templates (
     version TEXT NOT NULL DEFAULT '1.0',
     description TEXT NOT NULL DEFAULT '',
     structure_json TEXT NOT NULL DEFAULT '{"sections": []}',
-    is_active INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     CONSTRAINT uq_risk_template_taxonomy_version UNIQUE (taxonomy_id, version)
 );
 CREATE INDEX IF NOT EXISTS idx_risk_assessment_templates_taxonomy_id

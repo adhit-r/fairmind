@@ -8,8 +8,10 @@ Tables: risk_taxonomies, risk_categories, risk_factors,
 risk_assessment_templates.
 """
 
+import json
 import uuid
 from datetime import datetime, timezone
+from typing import Any
 
 from sqlalchemy import (
     Boolean,
@@ -131,6 +133,11 @@ class RiskFactor(Base):
     # Relationships
     category = relationship("RiskCategory", back_populates="factors")
 
+    @property
+    def guidance(self) -> list[str]:
+        """Parsed guidance list, exposed so Pydantic from_attributes can read it."""
+        return json.loads(self.guidance_json or "[]")
+
     def __repr__(self) -> str:
         return f"<RiskFactor(key={self.key}, category_id={self.category_id})>"
 
@@ -165,6 +172,11 @@ class RiskAssessmentTemplate(Base):
 
     # Relationships
     taxonomy = relationship("RiskTaxonomy", back_populates="templates")
+
+    @property
+    def structure(self) -> dict[str, Any]:
+        """Parsed structure dict, exposed so Pydantic from_attributes can read it."""
+        return json.loads(self.structure_json or '{"sections": []}')
 
     def __repr__(self) -> str:
         return (
