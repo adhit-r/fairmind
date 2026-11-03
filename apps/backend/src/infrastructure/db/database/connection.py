@@ -90,8 +90,8 @@ class DatabaseManager:
         """Create all database tables defined via ORM models."""
         try:
             # Import all model modules so Base.metadata is populated
-            import database.governance_models  # noqa: F401
-            import database.risk_taxonomy_models  # noqa: F401
+            import database.governance_models as governance_models  # noqa: F401
+            import database.risk_taxonomy_models as risk_taxonomy_models  # noqa: F401
 
             Base.metadata.create_all(bind=self.engine)
             logger.info("Database tables created successfully")
