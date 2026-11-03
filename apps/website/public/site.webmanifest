@@ -1,19 +1,19 @@
 {
-  "name": "Fairmind - AI Governance Platform",
-  "short_name": "Fairmind",
-  "description": "Open-source AI governance platform with bias detection and model explainability",
+  "name": "FairMind: agentic AI governance",
+  "short_name": "FairMind",
+  "description": "Agentic AI governance. Governance runs as agent workflows across 50 frameworks, and a person decides at every gate.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0B021D",
-  "theme_color": "#0B021D",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
   "icons": [
     {
-      "src": "/logo.png",
-      "sizes": "192x192",
-      "type": "image/png"
+      "src": "/logo-mark.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
     },
     {
-      "src": "/logo.png",
+      "src": "/logo-mark.png",
       "sizes": "512x512",
       "type": "image/png"
     }

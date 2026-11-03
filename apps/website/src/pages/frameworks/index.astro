@@ -1,0 +1,61 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { frameworks } from '../../lib/frameworks';
+import '../../styles/frameworks.css';
+
+const structuredData = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://fairmind.xyz/' },
+      { '@type': 'ListItem', position: 2, name: 'Frameworks', item: 'https://fairmind.xyz/frameworks/' },
+    ],
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    itemListElement: frameworks.map((f, i) => ({
+      '@type': 'ListItem',
+      position: i + 1,
+      name: f.name,
+      url: `https://fairmind.xyz/frameworks/${f.slug}/`,
+    })),
+  },
+];
+---
+
+<Layout
+  title="AI regulations and frameworks: EU AI Act, ISO/IEC 42001, NIST AI RMF | FairMind"
+  description="Plain-English guides to the AI regulations and frameworks FairMind maps evidence to: EU AI Act, ISO/IEC 42001, NIST AI RMF, GDPR, and national frameworks including India's DPDP Act."
+  structuredData={structuredData}
+>
+  <section class="fw-hero">
+    <div class="wrap">
+      <nav class="breadcrumbs" aria-label="Breadcrumb">
+        <ol><li><a href="/">Home</a></li><li aria-current="page">Frameworks</li></ol>
+      </nav>
+      <p class="kicker">AI compliance frameworks</p>
+      <h1>AI regulations, mapped to evidence you can show</h1>
+      <p class="fw-lead">
+        What each framework asks of AI systems, and the evidence FairMind helps you collect for it.
+        Test once, then let a reviewer map the result to every framework it supports.
+      </p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap">
+      <ul class="fw-index">
+        {frameworks.map((f) => (
+          <li class="card">
+            <p class="kicker">{f.region} · {f.type}</p>
+            <h2><a href={`/frameworks/${f.slug}/`}>{f.shortName}</a></h2>
+            <p>{f.description}</p>
+            <a class="fw-more" href={`/frameworks/${f.slug}/`}>Read the {f.shortName} guide <span aria-hidden="true">→</span></a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  </section>
+</Layout>
