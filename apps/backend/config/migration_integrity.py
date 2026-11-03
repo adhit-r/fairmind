@@ -374,13 +374,27 @@ POSTGRESQL_ASSURANCE_CATALOG_SPEC = PostgreSQLCatalogSpec(
 # PostgreSQL 14 and cross-checked against a direct-payload installation. The
 # PostgreSQL major is part of the canonical catalog payload because PostgreSQL
 # deparser output can change across major versions.
+#
+# PostgreSQL 18 (Neon) was measured from two clean installs that ran
+# upgrade_paths/010_to_011_drift_reconciliation.sql between 010 and 011, and
+# matches the ORM-provisioned Neon production schema after that same script.
+# The reconciliation appends organizations.plan and organizations.settings, so
+# a PostgreSQL 18 install that skips it does not match. The payload includes
+# the role authority graph around the schema owner, and on Neon every project
+# role is a member of neon_superuser: adding or removing a project role changes
+# this digest, and startup then fails closed until it is re-measured.
 FROZEN_POSTGRESQL_ASSURANCE_CATALOGS: Mapping[int, FrozenPostgreSQLCatalog] = MappingProxyType(
     {
         14: FrozenPostgreSQLCatalog(
             spec=POSTGRESQL_ASSURANCE_CATALOG_SPEC,
             postgresql_major=14,
             digest=("c181fd00d2c65009cd17a673c0462d92d557c73dc7976f800a4bcb83ae4c6fd2"),
-        )
+        ),
+        18: FrozenPostgreSQLCatalog(
+            spec=POSTGRESQL_ASSURANCE_CATALOG_SPEC,
+            postgresql_major=18,
+            digest=("ca00ef6d75a35294ac915de43d8f1a188a77a784060065d3947f982e8e6920a4"),
+        ),
     }
 )
 
