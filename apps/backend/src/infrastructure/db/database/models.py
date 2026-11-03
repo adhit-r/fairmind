@@ -4,12 +4,23 @@ Database models for AI BOM system
 
 from sqlalchemy import Column, String, Integer, Float, DateTime, Text, JSON, ForeignKey, Enum, Boolean, UUID
 from sqlalchemy.orm import relationship
+from sqlalchemy.types import TypeDecorator
 from sqlalchemy.sql import func
 from datetime import datetime
 import enum
 import uuid
 
 from .connection import Base
+
+
+class TextUUID(TypeDecorator):
+    """UUID values kept in a varchar column (users.id is varchar in the database); binds str(value)."""
+
+    impl = String
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        return None if value is None else str(value)
 
 class RiskLevel(enum.Enum):
     LOW = "low"
@@ -307,10 +318,10 @@ class OrganizationMember(Base):
 
     id = Column(UUID, primary_key=True, default=uuid.uuid4, index=True)
     org_id = Column(UUID, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
-    user_id = Column(UUID, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(TextUUID, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     role = Column(String(50), nullable=False, default="member", index=True)
     status = Column(String(50), nullable=False, default="active", index=True)
-    invited_by = Column(UUID, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    invited_by = Column(TextUUID, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     joined_at = Column(DateTime, nullable=True, index=True)
     created_at = Column(DateTime, default=func.now())
 
@@ -336,7 +347,7 @@ class OrganizationInvitation(Base):
     token = Column(String(255), nullable=False, unique=True, index=True)
     expires_at = Column(DateTime, nullable=False, index=True)
     status = Column(String(50), nullable=False, default="pending", index=True)
-    invited_by = Column(UUID, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    invited_by = Column(TextUUID, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     accepted_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=func.now())
 
