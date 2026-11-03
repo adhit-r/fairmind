@@ -10,6 +10,7 @@ from __future__ import annotations
 import io
 import json
 import math
+from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional
 
 import numpy as np
@@ -467,13 +468,47 @@ def _provenance(record: Dict[str, Any]) -> str:
     return str(meta.get("provenance_class") or meta.get("provenance") or "manual").lower()
 
 
-def release_gate(risk_tier: str, evidence: List[Dict[str, Any]], *, environmental_assessed: bool = False) -> Dict[str, Any]:
+STALE_AFTER_CADENCES = 1.5  # a snapshot older than this many cadences no longer proves monitoring
+
+
+def _record_time(record: Dict[str, Any]) -> Optional[datetime]:
+    raw = record.get("timestamp") or record.get("createdAt") or record.get("created_at")
+    if isinstance(raw, datetime):
+        parsed = raw
+    else:
+        try:
+            parsed = datetime.fromisoformat(str(raw))
+        except ValueError:
+            return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def _span(hours: float) -> str:
+    """"12 days" or "30 hours": whole days once a span passes two days."""
+    if hours >= 48:
+        n = int(hours // 24)
+        return f"{n} day{'s' if n != 1 else ''}"
+    n = int(hours)
+    return f"{n} hour{'s' if n != 1 else ''}"
+
+
+def release_gate(
+    risk_tier: str,
+    evidence: List[Dict[str, Any]],
+    *,
+    environmental_assessed: bool = False,
+    monitoring_cadence_hours: Optional[int] = None,
+    now: Optional[datetime] = None,
+) -> Dict[str, Any]:
     """Verdict, confidence and the state of each check from the evidence on file.
 
     A check is proven when measured or tool-estimated evidence with confidence
     at or above 0.70 backs it, attested when any other evidence does, open when
     nothing does. The verdict comes from the impact-by-confidence matrix; a
     measured fairness failure never lets a system through as a plain go.
+
+    With ``monitoring_cadence_hours`` the monitoring check is proven only while
+    the newest qualifying snapshot is within 1.5 cadences old; past that it is open.
     """
     checks: List[Dict[str, Any]] = []
     reasons: List[str] = []
@@ -482,7 +517,15 @@ def release_gate(risk_tier: str, evidence: List[Dict[str, Any]], *, environmenta
         if key == "environmental" and environmental_assessed and not matching:
             matching = [{"evidenceType": "environmental", "confidence": 0.85, "metadata": {"provenance_class": "tool_estimated"}}]
         state, confidence, evidence_id, detail = "open", 0.0, None, None
-        for record in sorted(matching, key=lambda r: float(r.get("confidence") or 0.0), reverse=True):
+        stale_for = None
+        if key == "monitoring" and monitoring_cadence_hours:
+            times = [t for r in matching if _provenance(r) in PROVEN_CLASSES and float(r.get("confidence") or 0.0) >= 0.70 for t in [_record_time(r)] if t]
+            if times:
+                age_hours = ((now or datetime.now(timezone.utc)) - max(times)).total_seconds() / 3600
+                if age_hours > STALE_AFTER_CADENCES * monitoring_cadence_hours:
+                    stale_for = age_hours
+                    reasons.append(f"Latest monitoring snapshot is {_span(age_hours)} old; the cadence is {_span(monitoring_cadence_hours)}")
+        for record in ([] if stale_for is not None else sorted(matching, key=lambda r: float(r.get("confidence") or 0.0), reverse=True)):
             prov = _provenance(record)
             conf = cap_confidence_for_provenance(float(record.get("confidence") or 0.0), prov if prov in PROVEN_CLASSES else "manual")
             if prov in PROVEN_CLASSES and conf >= 0.70:
@@ -495,15 +538,16 @@ def release_gate(risk_tier: str, evidence: List[Dict[str, Any]], *, environmenta
                 break
             if state == "open":
                 state, confidence, evidence_id = "attested", conf, record.get("id")
-        checks.append({"key": key, "label": label, "state": state, "confidence": round(confidence, 2), "evidenceId": evidence_id, "detail": detail})
+        checks.append({"key": key, "label": label, "state": state, "confidence": round(confidence, 2), "evidenceId": evidence_id, "detail": detail, **({"stale": True} if stale_for is not None else {})})
 
     overall = round(sum(c["confidence"] for c in checks) / len(checks), 2) if checks else 0.0
     verdict = get_recommendation(TIER_TO_IMPACT.get(str(risk_tier).lower(), "high"), overall)
     if reasons and verdict == "go":
         verdict = "conditional_go"
     open_checks = [c["label"] for c in checks if c["state"] == "open"]
-    if open_checks:
-        reasons.append(f"Nothing on file for: {', '.join(open_checks)}")
+    missing = [c["label"] for c in checks if c["state"] == "open" and not c.get("stale")]
+    if missing:
+        reasons.append(f"Nothing on file for: {', '.join(missing)}")
     return {
         "verdict": verdict,
         "confidence": overall,

@@ -1,0 +1,173 @@
+.fw-hero {
+  padding-block: clamp(3rem, 7vw, 5.5rem);
+  border-bottom: var(--line-heavy);
+}
+
+.fw-hero h1 {
+  max-width: 22ch;
+  margin: 0;
+  font-size: clamp(2.4rem, 5vw, 4rem);
+}
+
+.fw-lead {
+  max-width: 48rem;
+  margin: 1.5rem 0 0;
+  color: var(--ink-78);
+  font-size: clamp(1.05rem, 1.4vw, 1.25rem);
+}
+
+.fw-index {
+  display: grid;
+  gap: 1.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
+}
+
+.fw-index h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.9rem;
+}
+
+.fw-index h2 a {
+  text-decoration: none;
+}
+
+.fw-more {
+  font-weight: 700;
+  text-decoration-color: var(--orange);
+}
+
+.fw-reqs {
+  display: grid;
+  margin: 0;
+  border: var(--line);
+}
+
+.fw-reqs > div {
+  display: grid;
+  gap: 1.5rem;
+  padding: 1.25rem 1.5rem;
+  grid-template-columns: minmax(0, 22rem) minmax(0, 1fr);
+}
+
+.fw-reqs > div + div {
+  border-top: var(--line);
+}
+
+.fw-reqs dt {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.fw-reqs dd {
+  margin: 0;
+  color: var(--ink-78);
+}
+
+.fw-split {
+  display: grid;
+  align-items: start;
+  gap: clamp(2rem, 5vw, 4rem);
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+}
+
+.fw-note {
+  margin: 1.25rem 0 0;
+  padding: 1rem 1.25rem;
+  border-left: 6px solid var(--orange);
+  background: var(--white);
+  color: var(--ink-78);
+}
+
+.fw-evidence {
+  display: grid;
+  gap: 1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fw-evidence li {
+  padding: 1.1rem 1.25rem 1.1rem 3.25rem;
+  border: var(--line);
+  background: var(--white);
+  box-shadow: var(--shadow);
+  font-weight: 600;
+  position: relative;
+}
+
+.fw-evidence li::before {
+  content: '';
+  position: absolute;
+  top: 1.35rem;
+  left: 1.25rem;
+  width: 1rem;
+  height: 1rem;
+  border: 1px solid var(--line-color);
+  background: var(--teal);
+}
+
+.fw-related-title {
+  margin-bottom: 1.5rem;
+  font-size: 1.75rem;
+}
+
+.fw-related {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fw-related a {
+  display: inline-block;
+  padding: 0.6rem 1rem;
+  border: var(--line);
+  background: var(--white);
+  box-shadow: var(--shadow);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.fw-related a:hover {
+  background: var(--teal-tint);
+}
+
+@media (max-width: 52rem) {
+  .fw-reqs > div,
+  .fw-split {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+
+  .fw-split {
+    gap: 2rem;
+  }
+}
+
+.fw-reqs,
+.fw-evidence li,
+.fw-related a {
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.fw-evidence li::before {
+  border: 0;
+  border-radius: 50%;
+}
+
+.fw-note {
+  border-left: 0;
+  border-radius: var(--radius);
+  background: var(--bg);
+}

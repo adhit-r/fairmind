@@ -6,6 +6,9 @@
     "evidence-review",
     "remediation-retest",
     "reports-approvals",
-    "release-gate-in-ci"
+    "release-gate-in-ci",
+    "scheduled-monitoring",
+    "inspection-packs",
+    "sdk-and-mcp"
   ]
 }

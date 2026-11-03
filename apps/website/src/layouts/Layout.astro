@@ -1,6 +1,5 @@
 ---
 import '../styles/global.css';
-import '../styles/site-shell.css';
 import Analytics from '../components/marketing/Analytics.astro';
 import Footer from '../components/layout/Footer.astro';
 
@@ -8,21 +7,56 @@ export interface Props {
   title: string;
   description?: string;
   image?: string;
+  imageAlt?: string;
   canonical?: string;
   noindex?: boolean;
-  structuredData?: object;
+  structuredData?: object | object[];
 }
 
 const {
   title,
-  description = 'FairMind connects AI evaluation, safety findings, remediation, evidence, and human governance decisions in one traceable workflow.',
+  description = 'FairMind is an agentic AI governance platform. Governance runs as agent workflows mapped to 50 frameworks, and a person decides at every gate.',
   image = '/og-image.png',
+  imageAlt = 'FairMind: governance that runs itself, decisions that stay human',
   canonical,
   noindex = false,
   structuredData,
 } = Astro.props;
 
-const canonicalURL = canonical || Astro.url.href;
+const site = Astro.site ?? new URL('https://fairmind.xyz');
+const path = Astro.url.pathname.endsWith('/') ? Astro.url.pathname : `${Astro.url.pathname}/`;
+const canonicalURL = canonical ?? new URL(path, site).href;
+const imageURL = new URL(image, site).href;
+
+const nav = [
+  { label: 'Platform', href: '/features/' },
+  { label: 'Frameworks', href: '/frameworks/' },
+  { label: 'Use cases', href: '/use-cases/' },
+  { label: 'Research', href: '/blog/' },
+];
+const isCurrent = (href: string) => path.startsWith(href);
+
+const siteSchema = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'Organization',
+    '@id': 'https://fairmind.xyz/#organization',
+    name: 'FairMind',
+    url: 'https://fairmind.xyz',
+    logo: 'https://fairmind.xyz/logo-mark.png',
+    parentOrganization: { '@type': 'Organization', name: 'Axonome', url: 'https://axonome.xyz' },
+    sameAs: ['https://github.com/adhit-r/fairmind'],
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    '@id': 'https://fairmind.xyz/#website',
+    name: 'FairMind',
+    url: 'https://fairmind.xyz',
+    publisher: { '@id': 'https://fairmind.xyz/#organization' },
+  },
+];
+const pageSchema = structuredData ? [structuredData].flat() : [];
 const appUrl = import.meta.env.PUBLIC_APP_URL;
 ---
 
@@ -31,90 +65,75 @@ const appUrl = import.meta.env.PUBLIC_APP_URL;
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta name="robots" content={noindex ? 'noindex,nofollow' : 'index,follow,max-image-preview:large'} />
+    <link rel="canonical" href={canonicalURL} />
+    <meta name="theme-color" content="#ffffff" />
+
+    <link rel="icon" href="/logo-mark.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
-
-    <title>{title}</title>
-    <meta name="title" content={title} />
-    <meta name="description" content={description} />
-    <meta name="robots" content={noindex ? 'noindex,nofollow' : 'index,follow'} />
-    <meta name="author" content="FairMind" />
-    <meta name="theme-color" content="#FFFFFF" />
-    <link rel="canonical" href={canonicalURL} />
+    <link rel="sitemap" href="/sitemap-index.xml" />
 
     <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="FairMind" />
     <meta property="og:url" content={canonicalURL} />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
-    <meta property="og:image" content={new URL(image, Astro.url)} />
-    <meta property="og:site_name" content="FairMind" />
+    <meta property="og:image" content={imageURL} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={imageAlt} />
     <meta property="og:locale" content="en_US" />
-
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
-    <meta name="twitter:image" content={new URL(image, Astro.url)} />
+    <meta name="twitter:image" content={imageURL} />
+    <meta name="twitter:image:alt" content={imageAlt} />
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;500;600;700;800;900&display=swap"
       rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Instrument+Serif:ital@1&display=swap"
     />
 
-    <script
-      type="application/ld+json"
-      set:html={JSON.stringify({
-        '@context': 'https://schema.org',
-        '@type': 'Organization',
-        name: 'FairMind',
-        url: 'https://fairmind.xyz',
-        logo: 'https://fairmind.xyz/logo.png',
-        description,
-        sameAs: ['https://github.com/adhit-r/fairmind'],
-      })}
-    />
-    {
-      structuredData && (
-        <script type="application/ld+json" set:html={JSON.stringify(structuredData)} />
-      )
-    }
+    {[...siteSchema, ...pageSchema].map((schema) => (
+      <script type="application/ld+json" set:html={JSON.stringify(schema)} />
+    ))}
     <Analytics />
   </head>
   <body>
     <a class="skip-link" href="#main-content">Skip to content</a>
 
-    <header class="site-header" data-site-header>
-      <div class="site-progress" data-site-progress aria-hidden="true"></div>
-      <div class="site-header-inner">
+    <header class="site-header">
+      <div class="wrap site-header-inner">
         <a class="brand" href="/" aria-label="FairMind home">
-          <img src="/logo.png" alt="" width="40" height="40" />
-          <span>FAIRMIND</span>
+          <img src="/logo-mark.svg" alt="" width="30" height="30" />
+          <span>FairMind</span>
         </a>
 
-        <nav class="desktop-navigation" aria-label="Primary navigation">
-          <a href="/#what-fairmind-does">What it does</a>
-          <a href="/#evidence-graph">Evidence graph</a>
-          <a href="/#capabilities">Capability truth</a>
-          <a href="/#research">Research</a>
+        <nav class="desktop-navigation" aria-label="Primary">
+          {nav.map((item) => (
+            <a href={item.href} aria-current={isCurrent(item.href) ? 'page' : undefined}>{item.label}</a>
+          ))}
+          <a href="https://docs.fairmind.xyz">Docs</a>
         </nav>
 
         <div class="header-actions">
           <a class="header-sign-in" href={`${appUrl}/login`}>Sign in</a>
-          <a class="button button-primary button-compact" href="/request-access">Request access</a>
+          <a class="button button-primary button-compact" href="/request-access/">Request access</a>
         </div>
 
         <details class="mobile-navigation" data-mobile-navigation>
           <summary>Menu</summary>
-          <nav aria-label="Mobile navigation">
-            <a href="/#what-fairmind-does">What it does</a>
-            <a href="/#evidence-graph">Evidence graph</a>
-            <a href="/#capabilities">Capability truth</a>
-            <a href="/#research">Research</a>
+          <nav aria-label="Mobile">
+            {nav.map((item) => <a href={item.href}>{item.label}</a>)}
             <a href="https://docs.fairmind.xyz">Docs</a>
             <a href={`${appUrl}/login`}>Sign in</a>
-            <a href="/request-access">Request access</a>
+            <a href="/request-access/">Request access</a>
           </nav>
         </details>
       </div>
@@ -134,15 +153,36 @@ const appUrl = import.meta.env.PUBLIC_APP_URL;
         });
       });
 
-      const progress = document.querySelector('[data-site-progress]');
-      const updateProgress = () => {
-        if (!(progress instanceof HTMLElement)) return;
-        const scrollable = document.documentElement.scrollHeight - window.innerHeight;
-        const ratio = scrollable > 0 ? window.scrollY / scrollable : 0;
-        progress.style.transform = `scaleX(${Math.min(1, Math.max(0, ratio))})`;
-      };
-      updateProgress();
-      window.addEventListener('scroll', updateProgress, { passive: true });
+      const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const io = new IntersectionObserver(
+        (entries) =>
+          entries.forEach((entry) => {
+            if (!entry.isIntersecting) return;
+            entry.target.classList.add('in');
+            io.unobserve(entry.target);
+          }),
+        { threshold: 0.15 },
+      );
+      document.querySelectorAll('.reveal').forEach((el) => io.observe(el));
+
+      if (!reduceMotion && matchMedia('(pointer: fine)').matches) {
+        document.querySelectorAll<HTMLElement>('[data-magnet]').forEach((el) => {
+          el.addEventListener('pointermove', (e) => {
+            const r = el.getBoundingClientRect();
+            el.style.transform = `translate(${(e.clientX - r.left - r.width / 2) * 0.25}px, ${(e.clientY - r.top - r.height / 2) * 0.35}px)`;
+          });
+          el.addEventListener('pointerleave', () => (el.style.transform = ''));
+        });
+        document.querySelectorAll<HTMLElement>('.tilt').forEach((el) => {
+          el.addEventListener('pointermove', (e) => {
+            const r = el.getBoundingClientRect();
+            const x = (e.clientX - r.left) / r.width - 0.5;
+            const y = (e.clientY - r.top) / r.height - 0.5;
+            el.style.transform = `perspective(1000px) rotateX(${-y * 9}deg) rotateY(${x * 9}deg) translateY(-6px)`;
+          });
+          el.addEventListener('pointerleave', () => (el.style.transform = ''));
+        });
+      }
     </script>
   </body>
 </html>

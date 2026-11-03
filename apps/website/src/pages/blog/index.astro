@@ -6,82 +6,84 @@ import '../../styles/pages.css';
 const notes = [
   {
     type: 'Research program',
-    title: 'FairMind-E environmental evidence',
-    description: 'A measurement and governance path for energy, carbon, water, uncertainty, mitigation, exceptions, review, and export. The path is validated; real hardware evidence is still required for publication claims.',
-    state: 'Measurement path validated',
-    href: '/roadmap',
-    link: 'Read the bounded status',
+    title: 'FairMind-E: environmental evidence for AI systems',
+    description: 'A measurement and governance path for energy, carbon, water and uncertainty, with mitigation, exceptions, review and export. The path is validated; benchmarks are provisional until real hardware evidence is published.',
+    state: 'Validated',
+    href: '/roadmap/',
+    link: 'Read the status',
   },
   {
-    type: 'Evidence profile',
-    title: 'AI BOM fairness evidence',
-    description: 'A reviewer-facing transformation of supplied inventory, bias, remediation, evidence, and unknown metadata. It is a metadata profile, not an independent evaluation.',
-    state: 'metadata_only',
-    href: 'https://github.com/adhit-r/fairmind',
-    link: 'Inspect the source',
+    type: 'Method',
+    title: 'A fairness check fails only when the disparity is not sampling noise',
+    description: 'Why the fairness test reports bootstrap confidence intervals and a permutation test next to each metric, enforces a minimum group size of 30, and treats a measured failure as something attestations cannot outrank.',
+    state: 'Shipped',
+    href: '/features/#release-gate',
+    link: 'See the gate',
   },
   {
-    type: 'Product contract',
-    title: 'Evidence Passport',
-    description: 'The target portable unit for subject identity, evaluator and metric versions, threshold, raw artifact integrity, result, limitation, reviewer decision, remediation, and superseding rerun.',
-    state: 'Recovery target',
-    href: '/features',
-    link: 'Inspect the contract',
+    type: 'Catalogue',
+    title: 'Agentic packs catalogue v2.3',
+    description: '50 frameworks, 506 requirements, 29 common controls and 888 crosswalk links; 21 packs, 90 workflows and 109 evaluations in four pillars. How the crosswalk lets one run count toward every requirement it maps to, and where the gaps still are.',
+    state: 'Published',
+    href: '/frameworks/',
+    link: 'Browse the frameworks',
   },
   {
-    type: 'Assurance architecture',
-    title: 'Human-reviewed framework reuse',
-    description: 'Accepted evidence may support several versioned frameworks. A technical result never accepts its own control mapping or determines conformity.',
-    state: 'Design principle',
-    href: '/comparison',
-    link: 'Compare the roles',
+    type: 'Design note',
+    title: 'Twenty controls on our own agent',
+    description: 'Per-step scoped identity, a deterministic tool allowlist, collected content treated as data, mandatory citations, pinned models and prompts with golden-set evaluations, a hash-chained trace, cost caps and a kill switch. Mapped to AIUC-1, OWASP Agentic, NIST AI RMF and SG MGF.',
+    state: 'Principle',
+    href: '/about/',
+    link: 'Read the principles',
   },
 ];
+
+const structuredData = {
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: [
+    { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://fairmind.xyz/' },
+    { '@type': 'ListItem', position: 2, name: 'Research', item: 'https://fairmind.xyz/blog/' },
+  ],
+};
 ---
 
 <Layout
-  title="FairMind research and field notes | Methods with limitations attached"
-  description="Research programs, evidence contracts, architecture notes, and bounded findings from the FairMind AI assurance workbench."
+  title="FairMind research and design notes | Agentic AI governance"
+  description="Research programs, methods and design notes behind FairMind: environmental evidence (FairMind-E), the statistics behind the fairness gate, the agentic packs catalogue, and the controls on FairMind's own agent."
+  structuredData={structuredData}
 >
   <div class="route-page">
     <PageHero
-      signal="Research and field notes"
-      title="Methods, artifacts,"
+      signal="Research"
+      title="Methods, with their"
       accent="limitations attached."
-      description="This is the working record around FairMind’s research and product thesis—not a pile of generic responsible-AI links. Each item states what kind of evidence exists and what remains unproven."
+      description="The working record behind the product. Each note says what kind of evidence exists and what is still unproven."
       proofs={[
-        { label: 'Research rule', value: 'Observed is not fixture-only', note: 'Smoke runs and ablations prove paths, not real-world claims.' },
-        { label: 'Product rule', value: 'Metadata is not measurement', note: 'A useful transformation keeps the limitation visible.' },
-        { label: 'Governance rule', value: 'Evidence is not conformity', note: 'Framework relationships require accountable human review.' },
+        { label: 'Standard', value: 'Claim follows evidence', note: 'A negative result is published as such.' },
+        { label: 'Venues', value: '2026 and 2027', note: 'LLM4Code at ICSE, AISec at CCS, MSR, ASE.' },
+        { label: 'Preprints', value: 'arXiv, SSRN, Zenodo', note: 'Open by default.' },
       ]}
-      primary={{ label: 'Read the current notes', href: '#research-notes' }}
-      secondary={{ label: 'Inspect the source', href: 'https://github.com/adhit-r/fairmind' }}
-      dark={true}
+      primary={{ label: 'Contact the team', href: '/contact/' }}
     />
 
     <section class="route-section" id="research-notes" aria-labelledby="notes-title">
-      <header class="route-section-heading"><h2 id="notes-title">Current programs and contracts.</h2><p>These are bounded descriptions of active work. They are not publication, certification, or production-readiness claims.</p></header>
+      <header class="route-section-heading"><h2 id="notes-title">Current programs and notes.</h2></header>
       <div class="route-ledger">
         {notes.map((note) => (
           <article class="route-ledger-row">
             <span>{note.type}<br /><span class="route-state">{note.state}</span></span>
             <h3>{note.title}</h3>
-            <p>{note.description}<br /><a href={note.href}>{note.link}</a></p>
+            <p>{note.description} <a href={note.href}>{note.link}</a></p>
           </article>
         ))}
       </div>
     </section>
 
-    <section class="route-section route-section-orange" aria-labelledby="research-standard-title">
-      <div class="route-split">
-        <div class="route-split-copy"><h2 id="research-standard-title">A negative result is still useful evidence.</h2><p>FairMind research should preserve missing measurements, failed hypotheses, incompatible comparisons, provider dependencies, and insufficient data. Deleting those boundaries makes the result less scientific and the product less trustworthy.</p></div>
-        <div class="route-quote"><blockquote>Claim strength follows evidence strength.</blockquote></div>
-      </div>
-    </section>
-
     <section class="route-closing" aria-labelledby="research-closing-title">
-      <div><p>Have an evaluator, dataset, or assurance question?</p><h2 id="research-closing-title">Collaborate on a bounded evidence path.</h2></div>
-      <div class="route-actions"><a class="button button-primary" href="/contact">Contact FairMind</a><a class="button button-secondary" href="/roadmap">Read the recovery roadmap</a></div>
+      <h2 id="research-closing-title">Collaborate on a measurement.</h2>
+      <p>If you run AI systems in production and can share anonymised evaluation data, we would like to compare notes.</p>
+      <div class="route-actions"><a class="button button-primary" href="/contact/">Contact FairMind</a><a class="button" href="https://github.com/adhit-r/fairmind">GitHub</a></div>
     </section>
   </div>
 </Layout>

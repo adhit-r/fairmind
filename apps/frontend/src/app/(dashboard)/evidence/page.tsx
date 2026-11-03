@@ -260,19 +260,24 @@ export default function EvidencePage() {
             </p>
           </div>
 
-          {canReview ? (
-            <Button
-              className="font-semibold fm-card"
-              onClick={() => setUploaderOpen(true)}
-            >
-              <IconPlus className="mr-2 h-4 w-4" />
-              Add evidence
+          <div className="flex flex-wrap items-center gap-2">
+            <Button asChild variant="outline">
+              <Link href="/evidence/packs">Inspection packs</Link>
             </Button>
-          ) : (
-            <Badge variant="outline" className="border border-[var(--fm-line)] bg-[var(--fm-bg)] px-3 py-2 font-semibold">
-              Read-only evidence access
-            </Badge>
-          )}
+            {canReview ? (
+              <Button
+                className="font-semibold fm-card"
+                onClick={() => setUploaderOpen(true)}
+              >
+                <IconPlus className="mr-2 h-4 w-4" />
+                Add evidence
+              </Button>
+            ) : (
+              <Badge variant="outline" className="border border-[var(--fm-line)] bg-[var(--fm-bg)] px-3 py-2 font-semibold">
+                Read-only evidence access
+              </Badge>
+            )}
+          </div>
         </div>
       </Card>
 

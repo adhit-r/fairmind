@@ -98,4 +98,4 @@ class NeonAuthMiddleware(BaseHTTPMiddleware):
         # is_production (api/main.py), and is_development is its negation, so a
         # bypass keyed on is_development could never fire. It read as live, which
         # was worse than useless. Development runs JWTAuthenticationMiddleware.
-        return path in public_paths or path.startswith("/static")
+        return path in public_paths or path.startswith(("/static", "/api/v1/public/packs/"))

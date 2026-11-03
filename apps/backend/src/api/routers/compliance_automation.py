@@ -13,8 +13,9 @@ import uuid
 import asyncio
 
 from config.auth import get_current_user, require_admin
-from core.decorators.org_isolation import isolate_by_org
+from api.routes.org_scope import org_member
 from config.database import db_manager
+from src.application.services.governance_assurance_service import OrgMembership
 from src.application.services.api_boundary_dependencies import (
     ComplianceSchedule,
     ComplianceViolation,
@@ -42,7 +43,9 @@ from src.api.schemas.compliance_automation import (
 )
 
 logger = logging.getLogger("fairmind.compliance_automation")
-router = APIRouter(prefix="/compliance", tags=["compliance-automation"])
+# Schedules and violations carry org_id: every query below filters on the caller's
+# organisation, and an id from another organisation answers 404.
+router = APIRouter(prefix="/compliance", tags=["compliance-automation"], dependencies=[Depends(org_member)])
 
 
 # ============================================================================
@@ -53,6 +56,7 @@ router = APIRouter(prefix="/compliance", tags=["compliance-automation"])
 async def create_compliance_schedule(
     request: ScheduleCreateRequest,
     current_user=Depends(require_admin),
+    m: OrgMembership = Depends(org_member),
 ) -> ScheduleResponse:
     """
     Create a new compliance automation schedule.
@@ -71,6 +75,7 @@ async def create_compliance_schedule(
                 filters=request.filters or {},
                 is_active=request.is_active,
                 created_at=datetime.utcnow(),
+                org_id=m.org_id,
             )
 
             # Calculate next_run based on frequency
@@ -135,6 +140,7 @@ async def list_compliance_schedules(
     framework: Optional[str] = None,
     is_active: Optional[bool] = None,
     current_user=Depends(get_current_user),
+    m: OrgMembership = Depends(org_member),
 ) -> ScheduleListResponse:
     """
     List all compliance automation schedules.
@@ -144,7 +150,7 @@ async def list_compliance_schedules(
     try:
         session = db_manager.get_sync_session()
         try:
-            query = session.query(ComplianceSchedule)
+            query = session.query(ComplianceSchedule).filter(ComplianceSchedule.org_id == m.org_id)
 
             # Apply filters
             if framework:
@@ -194,13 +200,15 @@ async def list_compliance_schedules(
 async def get_compliance_schedule(
     schedule_id: str,
     current_user=Depends(get_current_user),
+    m: OrgMembership = Depends(org_member),
 ) -> ScheduleResponse:
     """Get details of a specific compliance schedule."""
     try:
         session = db_manager.get_sync_session()
         try:
             schedule = session.query(ComplianceSchedule).filter(
-                ComplianceSchedule.id == schedule_id
+                ComplianceSchedule.id == schedule_id,
+                ComplianceSchedule.org_id == m.org_id,
             ).first()
 
             if not schedule:
@@ -240,13 +248,15 @@ async def update_compliance_schedule(
     schedule_id: str,
     request: ScheduleUpdateRequest,
     current_user=Depends(require_admin),
+    m: OrgMembership = Depends(org_member),
 ) -> ScheduleResponse:
     """Update a compliance automation schedule."""
     try:
         session = db_manager.get_sync_session()
         try:
             schedule = session.query(ComplianceSchedule).filter(
-                ComplianceSchedule.id == schedule_id
+                ComplianceSchedule.id == schedule_id,
+                ComplianceSchedule.org_id == m.org_id,
             ).first()
 
             if not schedule:
@@ -307,13 +317,15 @@ async def update_compliance_schedule(
 async def delete_compliance_schedule(
     schedule_id: str,
     current_user=Depends(require_admin),
+    m: OrgMembership = Depends(org_member),
 ):
     """Delete a compliance automation schedule."""
     try:
         session = db_manager.get_sync_session()
         try:
             schedule = session.query(ComplianceSchedule).filter(
-                ComplianceSchedule.id == schedule_id
+                ComplianceSchedule.id == schedule_id,
+                ComplianceSchedule.org_id == m.org_id,
             ).first()
 
             if not schedule:
@@ -348,6 +360,7 @@ async def delete_compliance_schedule(
 async def run_compliance_schedule_now(
     schedule_id: str,
     current_user=Depends(require_admin),
+    m: OrgMembership = Depends(org_member),
 ) -> dict:
     """
     Trigger immediate execution of a compliance schedule.
@@ -359,7 +372,8 @@ async def run_compliance_schedule_now(
         session = db_manager.get_sync_session()
         try:
             schedule = session.query(ComplianceSchedule).filter(
-                ComplianceSchedule.id == schedule_id
+                ComplianceSchedule.id == schedule_id,
+                ComplianceSchedule.org_id == m.org_id,
             ).first()
 
             if not schedule:
@@ -408,6 +422,7 @@ async def run_compliance_schedule_now(
 async def list_violations(
     request: ViolationFilterRequest = Depends(),
     current_user=Depends(get_current_user),
+    m: OrgMembership = Depends(org_member),
 ) -> ViolationListResponse:
     """
     List compliance violations with filtering options.
@@ -417,7 +432,7 @@ async def list_violations(
     try:
         session = db_manager.get_sync_session()
         try:
-            query = session.query(ComplianceViolation)
+            query = session.query(ComplianceViolation).filter(ComplianceViolation.org_id == m.org_id)
 
             # Apply filters
             if request.framework:
@@ -451,6 +466,8 @@ async def list_violations(
                         detected_at=v.detected_at,
                         resolved=v.resolved,
                         resolved_at=v.resolved_at,
+                        acknowledged_at=None,
+                        remediation_plan_id=None,
                     )
                     for v in violations
                 ],
@@ -474,13 +491,15 @@ async def list_violations(
 async def get_violation(
     violation_id: str,
     current_user=Depends(get_current_user),
+    m: OrgMembership = Depends(org_member),
 ) -> ViolationResponse:
     """Get details of a specific compliance violation."""
     try:
         session = db_manager.get_sync_session()
         try:
             violation = session.query(ComplianceViolation).filter(
-                ComplianceViolation.id == violation_id
+                ComplianceViolation.id == violation_id,
+                ComplianceViolation.org_id == m.org_id,
             ).first()
 
             if not violation:
@@ -500,6 +519,8 @@ async def get_violation(
                 detected_at=violation.detected_at,
                 resolved=violation.resolved,
                 resolved_at=violation.resolved_at,
+                acknowledged_at=None,
+                remediation_plan_id=None,
             )
 
         finally:
@@ -520,13 +541,15 @@ async def acknowledge_violation(
     violation_id: str,
     request: ViolationAcknowledgeRequest,
     current_user=Depends(get_current_user),
+    m: OrgMembership = Depends(org_member),
 ) -> ViolationResponse:
     """Acknowledge a compliance violation."""
     try:
         session = db_manager.get_sync_session()
         try:
             violation = session.query(ComplianceViolation).filter(
-                ComplianceViolation.id == violation_id
+                ComplianceViolation.id == violation_id,
+                ComplianceViolation.org_id == m.org_id,
             ).first()
 
             if not violation:
@@ -551,6 +574,8 @@ async def acknowledge_violation(
                 detected_at=violation.detected_at,
                 resolved=violation.resolved,
                 resolved_at=violation.resolved_at,
+                acknowledged_at=None,
+                remediation_plan_id=None,
             )
 
         finally:
@@ -628,13 +653,14 @@ async def get_remediation_plan(
 @router.get("/status", response_model=AutomationStatusResponse)
 async def get_automation_status(
     current_user=Depends(get_current_user),
+    m: OrgMembership = Depends(org_member),
 ) -> AutomationStatusResponse:
     """Get the status of the compliance automation system."""
     try:
         session = db_manager.get_sync_session()
         try:
             # Use service method to get comprehensive status
-            status_data = await compliance_automation_service.get_automation_status(session)
+            status_data = await compliance_automation_service.get_automation_status(session, m.org_id)
 
             return AutomationStatusResponse(
                 scheduler_running=status_data.get("scheduler_running", False),
@@ -662,15 +688,13 @@ async def get_automation_status(
 # ============================================================================
 
 @router.get("/reports", response_model=ComplianceReportListResponse)
-@isolate_by_org
 async def get_compliance_reports(
     request: Request,
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     framework: Optional[str] = None,
     current_user=Depends(get_current_user),
-    org_id: str = None,
-    user_id: str = None,
+    m: OrgMembership = Depends(org_member),
 ) -> ComplianceReportListResponse:
     """
     Get compliance reports generated by scheduled checks.
@@ -684,6 +708,7 @@ async def get_compliance_reports(
     The query should include:
     SELECT * FROM compliance_reports WHERE org_id = :org_id ORDER BY created_at DESC
     """
+    org_id, user_id = m.org_id, m.user_id
     try:
         logger.info(f"Fetching compliance reports for org: {org_id}, user: {user_id}")
 

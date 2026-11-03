@@ -140,6 +140,7 @@ class ComplianceSchedule(Base):
     next_run = Column(DateTime, nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=func.now())
+    org_id = Column(String, nullable=True, index=True)  # owning organisation; NULL rows are invisible to every tenant
 
 class ComplianceViolation(Base):
     """Compliance Violation model"""
@@ -154,6 +155,7 @@ class ComplianceViolation(Base):
     detected_at = Column(DateTime, default=func.now())
     resolved = Column(Boolean, default=False)
     resolved_at = Column(DateTime, nullable=True)
+    org_id = Column(String, nullable=True, index=True)  # owning organisation; NULL rows are invisible to every tenant
 
 
 class User(Base):

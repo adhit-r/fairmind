@@ -3,96 +3,166 @@ import Layout from '../layouts/Layout.astro';
 import PageHero from '../components/marketing/PageHero.astro';
 import '../styles/pages.css';
 
-const workflow = [
-  ['System boundary', 'Define what is actually under review.', 'Organization, workspace, AI system, version, owner, deployment, intended use, and applicable frameworks.'],
-  ['Evaluation run', 'Run or ingest a bounded test.', 'Record evaluator identity, metric version, prompt or dataset scope, threshold, result, and capability state.'],
-  ['Evidence record', 'Preserve the artifact and its limits.', 'Bind provenance, integrity information, raw output, limitations, and the exact subject that produced it.'],
-  ['Reviewer decision', 'Keep technical output separate from governance acceptance.', 'Candidate mappings require an accountable person to accept, reject, or narrow them with rationale.'],
-  ['Finding and retest', 'Retain failure history after remediation.', 'Link finding, risk, owner, remediation, exception, and clean rerun without erasing the earlier failure.'],
-  ['Assurance package', 'Compile decision-ready evidence.', 'Export a framework-pinned index for a stated evidence cutoff—decision support, never certification.'],
+const stages = [
+  { stage: 'Onboard', title: 'Register the system, or let a connector find it', body: 'Register by hand, or sync MLflow and GitHub. Rules suggest a tier and a lifecycle stage; a person promotes each asset into governance.' },
+  { stage: 'Assess', title: 'Produce evidence about behaviour', body: 'Run the fairness test, the LLM judge, or the environmental evaluation. Each result is bound to the exact system version, threshold, and dataset.' },
+  { stage: 'Govern', title: 'Bind evidence to framework controls', body: 'Activate immutable framework versions, review candidate evidence mappings, and watch readiness blockers resolve. Nothing is accepted automatically.' },
+  { stage: 'Remediate', title: 'Close findings before a decision', body: 'Findings carry an owner, a remediation task, and a retest that links back to the original failure. History is kept, never overwritten.' },
+  { stage: 'Decision', title: 'Request and record the release decision', body: 'The release gate turns five checks into a verdict. An approver decides; the evidence is sealed when the decision is recorded.' },
+  { stage: 'Operate', title: 'Watch production and keep the record current', body: 'Monitoring snapshots feed the gate, alerts are tracked, and reports can be opened in a read-only auditor mode.' },
 ];
 
-const capabilities = [
-  ['Environmental evidence', 'validated', 'Energy, carbon, water, uncertainty, mitigation, exception, and reviewer records.', 'Real hardware evidence is still required before paper claims are treated as observed.'],
-  ['Provider-backed LLM judge', 'external_provider', 'Bounded assessment with provider identity and rubric version.', 'Requires a configured provider and preserves that dependency as a limitation.'],
-  ['AI BOM fairness profile', 'metadata_only', 'Transforms inventory, bias, remediation, and unknown metadata.', 'It structures supplied metadata; it does not independently evaluate the system.'],
-  ['Multimodal group analysis', 'metadata_only', 'Distribution analysis over caller-supplied labels.', 'Media content itself is not evaluated.'],
-  ['Tabular bias', 'unavailable', 'No evidence-grade active route.', 'Unavailable must remain unavailable until a real contract closes.'],
-  ['Modern LLM bias', 'unavailable', 'Mock output cannot enter assurance packages.', 'Browser-generated results and pass fallbacks are excluded.'],
+const gateChecks = [
+  { check: 'Fairness', source: 'Measured by the fairness test', state: 'Proven' },
+  { check: 'Monitoring', source: 'Snapshots from the CLI or the system file', state: 'Proven' },
+  { check: 'Environmental', source: 'FairMind-E measurement path', state: 'Proven or tool-estimated' },
+  { check: 'Data governance', source: 'Human attestation, confidence capped at 0.30', state: 'Attested' },
+  { check: 'Human oversight', source: 'Human attestation, confidence capped at 0.30', state: 'Attested' },
 ];
+
+const steps = [
+  { kind: 'trigger, escalate, file', runs: 'Runs itself', note: 'File seals the head hash of the ledger.' },
+  { kind: 'ask, exception, decide', runs: 'Opens an approval request', note: 'Approve, request changes, or reject. Three change rounds escalate the run.' },
+  { kind: 'collect, check, suggest, preflight, act, verify', runs: 'Completed by a person today', note: 'A person records the result and the ledger logs it as manual. Automation lands per workflow, behind the same gates.' },
+];
+
+const evaluators = [
+  { name: 'Fairness test (CSV)', state: 'Validated', detail: 'Disparate impact, demographic parity, equal opportunity, equalized odds, calibration. Bootstrap confidence intervals, permutation test, minimum group size 30, up to 100k rows.' },
+  { name: 'Environmental evaluation', state: 'Validated', detail: 'Energy, carbon, water, and uncertainty records from the FairMind-E path. Benchmarks are provisional.' },
+  { name: 'LLM judge', state: 'External provider', detail: 'Provider-evaluated response assessment. Text leaves your deployment; the provider is recorded.' },
+  { name: 'Multimodal bias, AI BOM', state: 'Metadata only', detail: 'Transforms supplied metadata. Does not inspect the media or verify the subject.' },
+  { name: 'Tabular bias (legacy route)', state: 'Unavailable', detail: 'The interface exists; the evaluator behind it does not. It cannot produce evidence.' },
+];
+
+const structuredData = {
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: [
+    { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://fairmind.xyz/' },
+    { '@type': 'ListItem', position: 2, name: 'Platform', item: 'https://fairmind.xyz/features/' },
+  ],
+};
 ---
 
 <Layout
-  title="FairMind features | The AI assurance evidence layer"
-  description="Define AI systems, ingest evaluation results, preserve evidence boundaries, route human review, retain remediation and retests, and compile assurance packages."
+  title="FairMind platform: agentic governance workflows, release gates, evidence"
+  description="What FairMind does today: a six-stage system journey, packs and workflows with human gates on a hash-chained ledger, a five-check release gate with a CLI and GitHub Action, and evaluators with their capability state stated."
+  structuredData={structuredData}
 >
   <div class="route-page">
     <PageHero
-      signal="AI evaluation · AI safety · AI governance"
-      title="The feature is the"
-      accent="evidence chain."
-      description="FairMind sits between evaluator tools and governance decisions. It gives every result a subject, threshold, artifact, limitation, review state, finding, remediation, and rerun—so a test can become evidence without pretending to become compliance."
+      signal="Platform"
+      title="Every AI system, governed through"
+      accent="one journey."
+      description="FairMind keeps one record per AI system and moves it through six stages. Agent workflows do the repeatable work, a person decides at every gate, and the release gate turns the evidence into a verdict your CI can read."
       proofs={[
-        { label: 'Input', value: 'Evaluator output', note: 'Run a supported path or ingest a result from a tool your team already trusts.' },
-        { label: 'FairMind adds', value: 'Chain of custody', note: 'Identity, threshold, artifacts, limitations, review, findings, and retests.' },
-        { label: 'Output', value: 'Decision-ready package', note: 'Framework-pinned evidence for a stated cutoff and accountable reviewer.' },
+        { label: 'Registry', value: '50 frameworks', note: '506 requirements, 29 common controls, 888 crosswalk links.' },
+        { label: 'Catalogue', value: '90 workflows · 109 evaluations', note: '21 packs in four pillars. Every workflow keeps at least one human gate.' },
+        { label: 'Release gate', value: '5 checks → 1 verdict', note: 'Go, conditional go, or no-go. Readable from the CLI and GitHub Actions.' },
       ]}
-      primary={{ label: 'Follow the workflow', href: '#workflow' }}
-      secondary={{ label: 'Check capability truth', href: '#capability-register' }}
+      primary={{ label: 'Request access', href: '/request-access/' }}
+      secondary={{ label: 'See a walkthrough', href: '/demo/' }}
     />
 
-    <section class="route-section" id="workflow" aria-labelledby="workflow-title">
+    <section class="route-section" id="journey" aria-labelledby="journey-title">
       <header class="route-section-heading">
-        <h2 id="workflow-title">Six jobs, one durable record.</h2>
-        <p>The product is organized around the work required to defend a decision—not a collection of unrelated dashboards.</p>
+        <h2 id="journey-title">The system file: six stages, one next action each.</h2>
+        <p>The stage is derived from the record, not picked by hand. The system file shows the whole journey for one system and the single most useful thing to do next.</p>
       </header>
       <div class="route-ledger">
-        {workflow.map((item, index) => (
+        {stages.map((s, i) => (
           <article class="route-ledger-row">
-            <span>{String(index + 1).padStart(2, '0')} / {item[0]}</span>
-            <h3>{item[1]}</h3>
-            <p>{item[2]}</p>
+            <span>0{i + 1} · {s.stage}</span>
+            <h3>{s.title}</h3>
+            <p>{s.body}</p>
           </article>
         ))}
       </div>
     </section>
 
-    <section class="route-section route-section-dark" aria-labelledby="passport-title">
+    <section class="route-section route-section-dark" id="workflows" aria-labelledby="workflows-title">
       <div class="route-split">
         <div class="route-split-copy">
-          <h2 id="passport-title">The Evidence Passport is the target exchange contract.</h2>
-          <p>FairMind’s novelty is not another universal trust score. It is a portable, reviewable unit that binds technical evidence to the human decisions and later changes that give it governance meaning.</p>
+          <h2 id="workflows-title">Packs, workflows, and runs on a ledger.</h2>
+          <p>Install a pack and you get the workflows that produce evidence for your frameworks. Edit a workflow in the builder, publish an immutable version, and every run pins it.</p>
+          <p>Publishing is blocked unless the graph has one start, every step reachable, named branches, an approve branch on every gate, a file step, and at least one human gate. Up to 60 steps.</p>
+          <p>Each run writes every event to a hash-chained ledger. The run page shows the chain state, whose input is needed, and the decision forms.</p>
         </div>
-        <div class="route-checklist">
-          {['Exact subject and version', 'Evaluator and metric identity', 'Pre-registered threshold', 'Artifact integrity and raw output', 'Limitations and capability state', 'Reviewer decision and rationale', 'Finding, remediation, and exception', 'Superseding rerun without erased history'].map((item, index) => (
-            <div><span>{String(index + 1).padStart(2, '0')}</span><strong>{item}</strong></div>
+        <ul class="route-checklist" aria-label="Step kinds and what runs them">
+          {steps.map((s) => (
+            <li><strong>{s.kind}</strong>{s.runs}. {s.note}</li>
           ))}
+        </ul>
+      </div>
+    </section>
+
+    <section class="route-section" id="release-gate" aria-labelledby="gate-title">
+      <header class="route-section-heading">
+        <h2 id="gate-title">The release gate.</h2>
+        <p>Five checks. Each is proven by measured or tool-estimated evidence with confidence 0.70 or higher, attested by a person with confidence capped at 0.30, or open. The verdict comes from an impact-by-confidence matrix, and a measured fairness failure never gives a plain go.</p>
+      </header>
+      <div class="route-table-wrap">
+        <table class="route-table">
+          <thead><tr><th>Check</th><th>Where the evidence comes from</th><th>Best state today</th></tr></thead>
+          <tbody>
+            {gateChecks.map((g) => (
+              <tr><td>{g.check}</td><td>{g.source}</td><td><span class:list={['route-state', g.state.startsWith('Attested') && 'route-state-orange']}>{g.state}</span></td></tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div class="route-split" style="margin-top: 2.5rem">
+        <div class="route-split-copy">
+          <h2 style="font-size: clamp(1.6rem, 2.6vw, 2.2rem)">In your pipeline.</h2>
+          <p><code>fairmind gate --system &lt;id&gt;</code> exits 0 for go, 2 for conditional, 1 for no-go. <code>fairmind test</code> runs the fairness test on a CSV first. <code>fairmind monitor</code> exits 1 on drift or disparity.</p>
+          <p>The <code>fairmind-gate</code> GitHub Action wraps both: optionally run the test, then read the gate, and fail the job unless the verdict is go, or conditional when you allow it.</p>
+        </div>
+        <div class="route-quote">
+          <blockquote>A measured fairness failure never gives a plain go.</blockquote>
+          <p>The gate reads evidence with its confidence attached. Attestations help, but they cannot outrank a measurement.</p>
         </div>
       </div>
     </section>
 
-    <section class="route-section" id="capability-register" aria-labelledby="capability-title">
+    <section class="route-section route-section-dark" id="evaluators" aria-labelledby="evaluators-title">
       <header class="route-section-heading">
-        <h2 id="capability-title">Capability state travels with the evidence.</h2>
-        <p>These are implementation boundaries, not maturity grades. A route can be useful and still be bounded.</p>
+        <h2 id="evaluators-title">Evaluators, with their state stated.</h2>
+        <p>Every evaluator declares what it can and cannot do. The state travels with the evidence, so a reviewer never mistakes a metadata profile for a measurement.</p>
       </header>
       <div class="route-table-wrap">
         <table class="route-table">
-          <thead><tr><th>Evaluator path</th><th>State</th><th>What it can produce</th><th>Boundary</th></tr></thead>
+          <thead><tr><th>Evaluator</th><th>State</th><th>What it produces</th></tr></thead>
           <tbody>
-            {capabilities.map((row) => (
-              <tr><td><strong>{row[0]}</strong></td><td><span class="route-state">{row[1]}</span></td><td>{row[2]}</td><td>{row[3]}</td></tr>
+            {evaluators.map((e) => (
+              <tr><td>{e.name}</td><td><span class:list={['route-state', e.state === 'Unavailable' && 'route-state-dark', (e.state === 'Metadata only' || e.state === 'External provider') && 'route-state-orange']}>{e.state}</span></td><td>{e.detail}</td></tr>
             ))}
           </tbody>
         </table>
       </div>
     </section>
 
+    <section class="route-section" id="integrations" aria-labelledby="integrations-title">
+      <div class="route-split">
+        <div class="route-split-copy">
+          <h2 id="integrations-title">Connectors and the API.</h2>
+          <p>MLflow brings registered models, versions, aliases, tags, and owners. GitHub brings repositories that use LLM SDKs, ML libraries, model files, or agent configuration. Rules suggest a tier and a stage; a person decides what enters governance.</p>
+          <p>Evidence from other tools arrives as an Evidence Passport through the ingest endpoint. API keys live for 365 days and every route is under <code>/api/v1</code>.</p>
+        </div>
+        <div class="route-ledger">
+          <article class="route-ledger-row"><span>Connector</span><h3>MLflow registry</h3><p>Models, versions, aliases, tags, owner, business line.</p></article>
+          <article class="route-ledger-row"><span>Connector</span><h3>GitHub</h3><p>Repos with LLM SDKs, ML libraries, model files, CLAUDE.md, AGENTS.md, .cursorrules.</p></article>
+          <article class="route-ledger-row"><span>Ingest</span><h3>Evidence Passport v1</h3><p>Subject, evaluator and metric versions, threshold, artifact digest, result, limitations.</p></article>
+          <article class="route-ledger-row"><span>Access</span><h3>Auditor mode</h3><p>The same reports, read-only, for the people who check your work.</p></article>
+        </div>
+      </div>
+    </section>
+
     <section class="route-closing" aria-labelledby="features-closing-title">
-      <div><p>Start with one real evaluator output</p><h2 id="features-closing-title">Make the evidence boundary visible.</h2></div>
+      <h2 id="features-closing-title">Start with one system and one gate.</h2>
+      <p>Register a system, run the fairness test, and read the verdict in CI. The rest of the journey is there when you need it.</p>
       <div class="route-actions">
-        <a class="button button-primary" href="/request-access">Request access</a>
-        <a class="button button-secondary" href="/roadmap">Read the recovery roadmap</a>
+        <a class="button button-primary" href="/request-access/">Request access</a>
+        <a class="button" href="/frameworks/">Browse the frameworks</a>
       </div>
     </section>
   </div>

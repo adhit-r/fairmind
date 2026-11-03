@@ -1977,6 +1977,29 @@ async def create_approval_request(
     }
 
 
+def _gate_decision_block(gate: dict, notes: Optional[str]):
+    """Return None when approval may proceed, else (status_code, detail)."""
+    verdict = gate.get("verdict")
+    if verdict == "no_go":
+        open_checks = [c.get("label") for c in gate.get("checks", []) if c.get("state") == "open"]
+        reasons = gate.get("reasons") or []
+        return 409, {
+            "message": "The release gate says no go: " + ("; ".join(reasons) if reasons else "required evidence is missing") + ".",
+            "gate": {
+                "verdict": verdict,
+                "confidence": gate.get("confidence"),
+                "reasons": reasons,
+                "openChecks": open_checks,
+            },
+        }
+    if verdict == "conditional_go" and not (notes or "").strip():
+        return 422, {
+            "message": "The release gate is conditional go. State the conditions you accept in the notes to approve.",
+            "gate": {"verdict": verdict, "confidence": gate.get("confidence"), "reasons": gate.get("reasons") or []},
+        }
+    return None
+
+
 @router.post("/approval-requests/{request_id}/decision")
 async def make_approval_decision(
     request_id: str,
@@ -2001,6 +2024,16 @@ async def make_approval_decision(
     ).fetchone()
     if not existing:
         raise HTTPException(status_code=404, detail="Approval request not found")
+    gate = None
+    if existing.entity_type == "ai_system" and approval_system_id:
+        from api.routes.fairness_runs import _gate_payload  # function-level: that router imports this one
+
+        system = db.execute(text("SELECT risk_tier FROM governance_ai_systems WHERE id = :id"), {"id": approval_system_id}).fetchone()
+        gate = _gate_payload(db, approval_system_id, system[0] if system else "medium")
+        if new_status == "approved":
+            blocked = _gate_decision_block(gate, request.notes)
+            if blocked:
+                raise HTTPException(status_code=blocked[0], detail=blocked[1])
     if new_status == "approved" and existing.entity_type == "ai_system":
         from src.application.services.environmental_service import env_gate_status
 
@@ -2068,10 +2101,8 @@ async def make_approval_decision(
     )
     seal = None
     if existing.entity_type == "ai_system" and approval_system_id:
-        from api.routes.fairness_runs import _gate_payload  # function-level: that router imports this one
         from src.application.services.decision_seal_service import seal_decision
 
-        system = db.execute(text("SELECT risk_tier FROM governance_ai_systems WHERE id = :id"), {"id": approval_system_id}).fetchone()
         seal = seal_decision(
             db,
             system_id=approval_system_id,
@@ -2079,7 +2110,7 @@ async def make_approval_decision(
             decision_id=decision_id,
             decision=new_status,
             sealed_by=actor,
-            gate=_gate_payload(db, approval_system_id, system[0] if system else "medium"),
+            gate=gate,
         )
 
     db.commit()

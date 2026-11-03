@@ -1,23 +1,18 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
+import sitemap from '@astrojs/sitemap';
 
 // https://astro.build/config
 export default defineConfig({
   site: 'https://fairmind.xyz',
-  base: '/',
   output: 'static',
   trailingSlash: 'ignore',
-  vite: {
-    optimizeDeps: {
-      exclude: ['@resvg/resvg-js']
-    },
-    css: {
-      postcss: './postcss.config.cjs'
-    },
-    build: {
-      cssMinify: true,
-      minify: true,
-      target: 'esnext',
-    }
+  integrations: [
+    sitemap({
+      filter: (page) => !page.includes('/404'),
+    }),
+  ],
+  build: {
+    inlineStylesheets: 'auto',
   },
 });

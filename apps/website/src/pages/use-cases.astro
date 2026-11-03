@@ -5,91 +5,133 @@ import '../styles/pages.css';
 
 const cases = [
   {
-    title: 'Engineering · bind a test to the right subject',
-    problem: 'Evaluator output exists, but the model version, dataset or prompt scope, threshold, and raw artifact are scattered across tools.',
-    result: ['Create the AI-system boundary before interpreting the result.', 'Record evaluator and metric versions plus the pre-registered threshold.', 'Preserve the raw artifact, limitation, and capability state.'],
+    who: 'ML engineer',
+    title: 'Block a release that fails the fairness test',
+    problem: 'A model ships because nobody ran the check, or because the check lived in a notebook no one could audit.',
+    steps: [
+      'Add the fairmind-gate GitHub Action to the deploy workflow.',
+      'It runs the fairness test on your predictions CSV, then reads the release gate.',
+      'The job fails on no-go. Conditional go passes only if you allow it.',
+    ],
+    result: 'Every deploy carries a verdict with the evidence behind it.',
   },
   {
-    title: 'Review · decide whether evidence supports a control',
-    problem: 'A technical pass is being treated like an accepted governance mapping without independent review or rationale.',
-    result: ['Route candidate mappings to an accountable reviewer.', 'Accept, reject, or narrow the mapping with recorded rationale.', 'Reuse accepted evidence across versioned frameworks without inferring conformity.'],
+    who: 'Compliance lead',
+    title: 'Work ISO/IEC 42001 requirement by requirement',
+    problem: 'A spreadsheet of clauses, a folder of screenshots, and no way to tell which requirements are actually covered.',
+    steps: [
+      'Install the ISO 42001 bundle. The journey lists all 65 active requirements in clause order.',
+      'Each requirement shows the workflows that satisfy or support it. Gaps are shown, not hidden.',
+      'Run the workflows; a person approves at each gate; the file step maps the evidence to the clause.',
+    ],
+    result: 'Coverage you can show, with the trail behind each tick.',
   },
   {
-    title: 'Safety · retain findings through remediation and retest',
-    problem: 'A clean rerun replaces the failed result, leaving no durable history of what happened or why the change was accepted.',
-    result: ['Create a finding and risk from the bounded result.', 'Assign remediation, owner, exception, and due state.', 'Link the clean retest to the failure instead of overwriting it.'],
+    who: 'Approver',
+    title: 'Decide with the evidence in front of you',
+    problem: 'Approvals arrive as a Slack message with a link to a dashboard that was green yesterday.',
+    steps: [
+      'A gate step opens an approval request on the run page.',
+      'You see the step output, the ledger up to this point, and the chain state.',
+      'Approve, request changes, or reject. After three rounds the run escalates instead of looping.',
+    ],
+    result: 'Your decision, your rationale, and the state you saw, sealed into the record.',
   },
   {
-    title: 'Assurance · compile a package for a real decision',
-    problem: 'Evidence is assembled manually at review time, with unclear freshness, framework version, exclusions, and unresolved blockers.',
-    result: ['Pin framework and catalog versions.', 'Compile the evidence index at a stated cutoff.', 'Expose limitations, unresolved findings, policies, approvals, and missing evidence.'],
+    who: 'Security and platform',
+    title: 'Govern agents, tools, and MCP servers',
+    problem: 'Agents with tool access are in production and the OWASP Agentic Top 10 is a PDF nobody has mapped.',
+    steps: [
+      'Install the Agentic automation bundle: LLM security, agent security, supply chain, adversarial.',
+      'The journey covers all ten OWASP Agentic and all ten OWASP MCP requirements, and 34 of 50 AIUC-1.',
+      'Run the workflows, record findings against the ten agent-risk codes, and track remediation.',
+    ],
+    result: 'An agent estate with named owners and a documented threat posture.',
   },
   {
-    title: 'Research · keep methods and claim limits attached',
-    problem: 'A smoke run, fixture, or metadata transformation is easy to overstate after it leaves the experiment notebook.',
-    result: ['Preserve method, environment, measurement status, and uncertainty.', 'Label fixture-only and metadata-only outputs precisely.', 'Require observed evidence before promoting a research claim.'],
+    who: 'Auditor',
+    title: 'Read the trail without taking anyone’s word for it',
+    problem: 'Evidence arrives as a deck. You cannot tell what was measured, what was asserted, and when.',
+    steps: [
+      'Open reports in auditor mode: the same tenant data, read-only.',
+      'Each check is marked proven, attested, or open, with its confidence.',
+      'Follow any item back to the run, the step, the approver, and the hash.',
+    ],
+    result: 'Less time asking for screenshots. More time on the judgement calls.',
   },
 ];
+
+const notFit = [
+  { strong: 'You want a score.', text: 'FairMind produces evidence and decisions, not a readiness percentage.' },
+  { strong: 'You want certification.', text: 'Readiness is never certification. Accredited bodies and your own assessment decide conformity.' },
+  { strong: 'You want the agent to act on your systems unattended.', text: 'External writes always wait for a person. That is the product, not a limitation we plan to remove.' },
+];
+
+const structuredData = {
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: [
+    { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://fairmind.xyz/' },
+    { '@type': 'ListItem', position: 2, name: 'Use cases', item: 'https://fairmind.xyz/use-cases/' },
+  ],
+};
 ---
 
 <Layout
-  title="FairMind use cases | From evaluator output to accountable decision"
-  description="Use FairMind to bind tests to AI systems, review evidence mappings, retain findings and retests, and compile decision-ready assurance packages."
+  title="AI governance use cases: release gates, ISO 42001 journeys, agent security | FairMind"
+  description="How ML engineers, compliance leads, approvers, security teams and auditors use FairMind: a release gate in CI, framework journeys requirement by requirement, approval gates with the ledger in view, and read-only auditor reports."
+  structuredData={structuredData}
 >
   <div class="route-page">
     <PageHero
-      signal="Use cases follow responsibility, not industry theater"
-      title="Different teams."
-      accent="One evidence record."
-      description="Engineering produces results. Reviewers decide what those results support. Assurance owners carry findings, limits, and approvals into the decision. FairMind keeps those handoffs in one system-scoped chain."
+      signal="Use cases"
+      title="Five people. One record they can"
+      accent="all trust."
+      description="Engineers need the gate in CI. Compliance needs requirement-level coverage. Approvers need the evidence in front of them. Auditors need the trail. FairMind gives each of them the same record, read for their job."
       proofs={[
-        { label: 'Engineering asks', value: 'What exactly did we test?', note: 'Subject, version, scope, evaluator, threshold, artifact.' },
-        { label: 'Review asks', value: 'What does this evidence support?', note: 'Candidate mapping, decision, rationale, limitations.' },
-        { label: 'Assurance asks', value: 'What remains unresolved?', note: 'Findings, remediation, exceptions, retests, approvals.' },
+        { label: 'In CI', value: 'fairmind gate', note: 'Exit 0 go · 2 conditional · 1 no-go.' },
+        { label: 'Journeys', value: '28 frameworks', note: 'Every framework with five or more active requirements.' },
+        { label: 'Agent estate', value: 'OWASP Agentic 10/10', note: 'OWASP MCP 10/10, AIUC-1 34/50 in the Agentic bundle.' },
       ]}
-      primary={{ label: 'Inspect the handoffs', href: '#use-case-ledger' }}
-      secondary={{ label: 'See the product workflow', href: '/features' }}
-      dark={true}
+      primary={{ label: 'Request access', href: '/request-access/' }}
+      secondary={{ label: 'See the platform', href: '/features/' }}
     />
 
-    <section class="route-section" id="use-case-ledger" aria-labelledby="use-case-title">
+    <section class="route-section" id="cases" aria-labelledby="cases-title">
       <header class="route-section-heading">
-        <h2 id="use-case-title">The same result has different jobs to do.</h2>
-        <p>Open a workflow to see the broken handoff FairMind addresses and the evidence the receiving team should get.</p>
+        <h2 id="cases-title">Open a case to see the handoff it fixes.</h2>
       </header>
       <div class="route-disclosure">
-        {cases.map((item, index) => (
-          <details open={index === 0}>
-            <summary>{item.title}</summary>
+        {cases.map((c, i) => (
+          <details open={i === 0}>
+            <summary><span>{c.who}</span><h3>{c.title}</h3></summary>
             <div>
-              <p><strong>Broken handoff:</strong><br />{item.problem}</p>
-              <ul>{item.result.map((result) => <li>{result}</li>)}</ul>
+              <p><strong>The problem.</strong> {c.problem}</p>
+              <ol style="margin: 0; padding-left: 1.1rem">{c.steps.map((s) => <li>{s}</li>)}</ol>
+              <p><strong>Result.</strong> {c.result}</p>
             </div>
           </details>
         ))}
       </div>
     </section>
 
-    <section class="route-section route-section-orange" aria-labelledby="not-fit-title">
+    <section class="route-section route-section-dark" aria-labelledby="not-fit-title">
       <div class="route-split">
         <div class="route-split-copy">
-          <h2 id="not-fit-title">What FairMind is not for.</h2>
-          <p>It is not a replacement for every evaluator, not a legal conformity engine, not an automated approver, and not a place where missing data quietly becomes “not biased.”</p>
+          <h2 id="not-fit-title">When FairMind is the wrong tool.</h2>
+          <p>We would rather say so now than after a pilot.</p>
         </div>
-        <div class="route-checklist">
-          <div><span>No</span><strong>Universal trust score without scope and denominator</strong></div>
-          <div><span>No</span><strong>Automatic control acceptance from a technical test</strong></div>
-          <div><span>No</span><strong>Certification or legal advice</strong></div>
-          <div><span>No</span><strong>Erased failures after a clean rerun</strong></div>
-        </div>
+        <ul class="route-checklist">
+          {notFit.map((n) => <li><strong>{n.strong}</strong>{n.text}</li>)}
+        </ul>
       </div>
     </section>
 
     <section class="route-closing" aria-labelledby="cases-closing-title">
-      <div><p>Choose one broken handoff</p><h2 id="cases-closing-title">Turn it into a defensible evidence path.</h2></div>
+      <h2 id="cases-closing-title">Tell us which handoff breaks for you.</h2>
       <div class="route-actions">
-        <a class="button button-primary" href="/request-access">Describe your use case</a>
-        <a class="button button-secondary" href="/roadmap">Check current boundaries</a>
+        <a class="button button-primary" href="/request-access/">Request access</a>
+        <a class="button" href="/contact/">Contact us</a>
       </div>
     </section>
   </div>
