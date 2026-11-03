@@ -233,7 +233,7 @@ pydantic-settings==2.14.1
     # via fairmind-backend (pyproject.toml)
 pygments==2.20.0
     # via rich
-pyjwt==2.14.0
+pyjwt==2.15.1
     # via fairmind-backend (pyproject.toml)
 pyparsing==3.3.2
     # via matplotlib
