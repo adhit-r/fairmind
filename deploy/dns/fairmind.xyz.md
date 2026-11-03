@@ -15,9 +15,9 @@ Netlify; only the nameservers change.
 | `zmail._domainkey` | TXT | `v=DKIM1; k=rsa; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDCsW6lpqJR6M30KhGKQJf7WcEiW0ufCAWaJydC5a4GJrJ9263mX7TGME6Gy54kHvtTbvF1j7bLNmBTU96JSHdJRARcNcdz/EfThJtADkSJuCM4QuvWTCA0tO3kHDmzK2NrSjAp1wk+5hOsQfGmzbDo9pCiBrnlD0BgODTheVVvOwIDAQAB` | | Zoho DKIM |
 | `app-demo` | A | `75.2.60.5` | DNS only | Netlify, fairmind-demo-app |
 | `api` | A | `75.2.60.5` | DNS only | Netlify (api.fairmind.xyz zone exists in Netlify DNS) |
-| `www` | CNAME | `8b7yg0t0.up.railway.app` | | Stale Railway deploy. Replace with a redirect to the apex (see below). |
+| `www` | CNAME | `fairmind-website-t41tz.netlify.app` | DNS only | Required. Netlify puts `www` on the apex certificate and refuses to issue or renew it while `www` points elsewhere. Netlify redirects `www` to the apex. |
 | `blog` | CNAME | `fairmind-website-t41tz.netlify.app` | DNS only | Netlify alias on the website site; netlify.toml 301s every path to `fairmind.xyz/blog/` |
-| `docs` | none | | | Missing. The site links to docs.fairmind.xyz; add `docs CNAME fairmind-docs.netlify.app`, DNS only. |
+| `docs` | CNAME | `fairmind-docs.netlify.app` | DNS only | Docs site |
 
 Not present today and worth adding: `_dmarc TXT "v=DMARC1; p=none; rua=mailto:support@fairmind.xyz"`.
 
@@ -50,5 +50,12 @@ record and the `api` and `app-demo` records by hand; it often misses them.
    cd apps/website && npm run build && netlify deploy --prod --no-build --dir=dist --site 95ca60ae-9006-486c-9606-218427c1934a
    ```
 
-7. Optional, `www`: in Cloudflare add `www CNAME fairmind.xyz` (proxied) and a redirect rule
-   `www.fairmind.xyz/*` to `https://fairmind.xyz/$1` (301). Then delete the Railway record.
+7. Certificates. Once `www`, `blog` and `docs` resolve to Netlify on public resolvers:
+
+   ```bash
+   netlify api provisionSiteTLSCertificate --data '{"site_id":"95ca60ae-9006-486c-9606-218427c1934a"}'
+   netlify api provisionSiteTLSCertificate --data '{"site_id":"a7383377-dbfe-49c1-8098-8491c1d17bfa"}'
+   ```
+
+   A 422 means at least one name on that site does not point at Netlify yet. The website
+   certificate covers `fairmind.xyz`, `www` and `blog`, so all three must be on Netlify.
