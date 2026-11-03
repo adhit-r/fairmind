@@ -728,7 +728,7 @@ export default function ExplainabilityStudioPage() {
                     Use the LLM Bias Detection suite for StereoSet, WEAT, BBQ, and more.
                   </p>
                 </div>
-                <a href="/modern-bias">
+                <a href="/llm-testing">
                   <Button
                     variant="noShadow"
                     className="border border-white/40 bg-transparent text-white hover:bg-white hover:text-black font-bold"

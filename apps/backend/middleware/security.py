@@ -40,31 +40,6 @@ _PUBLIC_ROUTES = frozenset(
     }
 )
 
-_DEVELOPMENT_PUBLIC_PATH_PREFIXES = (
-    "/api/v1/ai-bom",
-    "/api/v1/analytics",
-    "/api/v1/bias-detection",
-    "/api/v1/bias/llm-judge",
-    "/api/v1/compliance",
-    "/api/v1/core",
-    "/api/v1/database",
-    "/api/v1/datasets",
-    "/api/v1/marketplace",
-    "/api/v1/mlops",
-    "/api/v1/modern-bias-detection",
-    "/api/v1/monitoring",
-    "/api/v1/multimodal-bias-detection",
-    "/api/v1/remediation",
-    "/api/v1/reports",
-    "/api/v1/settings",
-)
-
-
-def _matches_path_family(path: str, prefix: str) -> bool:
-    """Match one route family without making similarly named siblings public."""
-
-    return path == prefix or path.startswith(f"{prefix}/")
-
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Add security headers to all responses."""
@@ -444,12 +419,6 @@ class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
         if route_key in _PUBLIC_ROUTES:
             return await call_next(request)
 
-        if settings.environment == "development" and any(
-            _matches_path_family(request.url.path, prefix)
-            for prefix in _DEVELOPMENT_PUBLIC_PATH_PREFIXES
-        ):
-            return await call_next(request)
-        
         # Extract JWT token from Authorization header
         auth_header = request.headers.get("Authorization")
 

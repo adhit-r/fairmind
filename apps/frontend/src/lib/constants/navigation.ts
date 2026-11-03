@@ -4,7 +4,6 @@ import {
   IconShieldLock,
   IconActivity,
   IconChartLine,
-  IconDna,
   IconSettings,
   IconRobot,
   IconTarget,
@@ -80,12 +79,6 @@ export const NAVIGATION_ITEMS: NavigationCategory[] = [
         description: "AI Evaluation",
       },
       {
-        title: "Model DNA",
-        href: "/model-dna",
-        icon: IconDna,
-        description: "Lineage & Provenance",
-      },
-      {
         title: "Explainability Studio",
         href: "/explainability-studio",
         icon: IconMicroscope,
@@ -157,19 +150,6 @@ export const NAVIGATION_ITEMS: NavigationCategory[] = [
         href: '/alerts',
         description: 'System notifications',
         icon: IconAlertCircle,
-      },
-    ],
-  },
-  {
-    id: 'community',
-    title: 'Community',
-    icon: IconRobot,
-    items: [
-      {
-        title: 'Model Marketplace',
-        href: '/marketplace',
-        description: 'Discover & share models',
-        icon: IconTarget,
       },
     ],
   },
