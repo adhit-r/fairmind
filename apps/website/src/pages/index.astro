@@ -56,7 +56,7 @@ const faqs = [
   },
   {
     q: 'What does a FairMind agent actually do?',
-    a: 'It runs a workflow made of seven step types: collect, check, suggest, ask a person, act, verify, and file evidence. It reads with scoped, read-only credentials, runs deterministic rules before any model judgement, cites the source of every finding, and never writes to an external system without a human approval and a verified rollback path.',
+    a: 'It runs a workflow made of seven step types: collect, check, suggest, ask a person, act, verify, and file evidence. Today the trigger, escalate and file steps run themselves, the gate steps open an approval request, and a person completes the collect, check, suggest, act and verify steps, which the ledger records as manual. Agent-executed steps arrive workflow by workflow, behind the same gates, with scoped read-only credentials, rules before model judgement, and a citation for every finding.',
   },
   {
     q: 'Can the agent change things on its own?',
@@ -85,7 +85,7 @@ const structuredData = [
     operatingSystem: 'Web',
     url: 'https://fairmind.xyz',
     description:
-      'Agentic AI governance platform. Agents collect evidence, check it against 50 frameworks, and propose actions; people approve. Covers EU AI Act, ISO/IEC 42001, NIST AI RMF, OWASP Agentic, AIUC-1, and DPDP.',
+      'Agentic AI governance platform. Governance runs as agent workflows mapped to 50 frameworks, with a human gate in every workflow and a hash-chained record of each run. Covers EU AI Act, ISO/IEC 42001, NIST AI RMF, OWASP Agentic, AIUC-1, and DPDP.',
     publisher: { '@id': 'https://fairmind.xyz/#organization' },
   },
   {
@@ -102,7 +102,7 @@ const structuredData = [
 
 <Layout
   title="FairMind: agentic AI governance platform"
-  description="Agents that collect evidence, check it against 50 frameworks, and propose what to do next, then stop for a human decision. EU AI Act, ISO/IEC 42001, NIST AI RMF, OWASP Agentic, AIUC-1, DPDP."
+  description="Governance as agent workflows across 50 frameworks, with a human gate in every one. EU AI Act, ISO/IEC 42001, NIST AI RMF, OWASP Agentic, AIUC-1, DPDP."
   structuredData={structuredData}
 >
   <div class="story" data-story>
@@ -111,7 +111,7 @@ const structuredData = [
       <p class="counter" aria-live="polite">
         <b data-counter>0</b>
         <span>items approved by you</span>
-        <em>24,000 checked by the agent · 0 changed without you</em>
+        <em>24,000 checks in the run · 0 changed without you</em>
       </p>
       <div class="scroll-cue" aria-hidden="true"><i></i>Scroll</div>
     </div>
@@ -124,8 +124,8 @@ const structuredData = [
             Governance that runs itself.<br />Decisions that stay <em>human.</em>
           </h1>
           <p class="panel-intro reveal" style="transition-delay: 160ms">
-            FairMind's agents collect evidence, check it against 50 frameworks, and propose what to
-            do next. Then they stop, and a person decides. Right now, that person is you.
+            FairMind runs governance as agent workflows: collect, check, suggest, act, verify, file.
+            Every workflow stops at a gate, and a person decides. Right now, that person is you.
           </p>
           <div class="panel-actions reveal" style="transition-delay: 240ms">
             <a class="button button-primary" href="/request-access/" data-magnet>Request access <span class="arr" aria-hidden="true">→</span></a>
@@ -138,7 +138,7 @@ const structuredData = [
         <div class="wrap">
           <div class="glass reveal">
             <p class="label">What you just did</p>
-            <h2>Every tile is a check the agent ran. It stayed grey until <em>you</em> looked at it.</h2>
+            <h2>Every tile is a check in a run. It stayed grey until <em>you</em> looked at it.</h2>
             <p>Deny by default. Nothing is recorded or changed until an approver decides, and every decision is kept with who made it and why.</p>
           </div>
         </div>
