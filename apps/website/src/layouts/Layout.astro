@@ -1,4 +1,5 @@
 ---
+import { registryTotals } from '../lib/registry';
 import '../styles/global.css';
 import Analytics from '../components/marketing/Analytics.astro';
 import Footer from '../components/layout/Footer.astro';
@@ -15,7 +16,7 @@ export interface Props {
 
 const {
   title,
-  description = 'FairMind is an agentic AI governance platform. Governance runs as agent workflows mapped to 50 frameworks, and a person decides at every gate.',
+  description = `FairMind is an agentic AI governance platform. Governance runs as agent workflows mapped to ${registryTotals.frameworks} frameworks, and a person decides at every gate.`,
   image = '/og-image.png',
   imageAlt = 'FairMind: governance that runs itself, decisions that stay human',
   canonical,
