@@ -377,7 +377,7 @@ _PUBLIC_EXACT = {
     "/api/v1/auth/oauth2/validate", "/api/v1/auth/oauth2/refresh",
     "/api/v1/register",
 }
-_PUBLIC_PREFIXES = ("/health", "/docs/", "/static/")
+_PUBLIC_PREFIXES = ("/health", "/docs/", "/static/", "/api/v1/public/packs/")
 
 
 def _is_public_path(path: str) -> bool:
@@ -442,6 +442,10 @@ class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
 
         route_key = (request.method.upper(), request.url.path)
         if route_key in _PUBLIC_ROUTES:
+            return await call_next(request)
+
+        # Auditor pack links carry their own token; the route checks it.
+        if request.method == "GET" and request.url.path.startswith("/api/v1/public/packs/"):
             return await call_next(request)
 
         if settings.environment == "development" and any(

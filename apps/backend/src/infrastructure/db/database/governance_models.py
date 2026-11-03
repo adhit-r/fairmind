@@ -3461,3 +3461,25 @@ class WorkflowVersion(Base):
     __table_args__ = (
         Index("idx_workflow_versions_org_wf_version", "org_id", "workflow_id", "version", unique=True),
     )
+
+
+class GovernanceEvidencePack(Base):
+    """An inspection pack: a frozen, hashed manifest of chosen systems and frameworks.
+
+    ``manifest_hash`` is SHA-256 over the canonical manifest bytes, so anyone holding the
+    JSON can recompute it. Only the SHA-256 of the auditor share token is stored.
+    """
+
+    __tablename__ = "governance_evidence_packs"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    title = Column(String, nullable=False)
+    frameworks_json = Column(Text, nullable=False, default="[]")
+    system_ids_json = Column(Text, nullable=False, default="[]")
+    manifest_json = Column(Text, nullable=False)
+    manifest_hash = Column(String, nullable=False)
+    created_by = Column(String, nullable=True)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    share_token_hash = Column(String, nullable=True)
+    share_expires_at = Column(String, nullable=True)
