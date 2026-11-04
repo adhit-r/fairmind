@@ -10,8 +10,16 @@ import { BTN_P, Crumbs, EnginePill, ErrorNote, Heading, LABEL, Loading, MUTED, P
 const FIELD = 'w-full rounded-[10px] border border-[var(--fm-line)] bg-white px-3 py-2 text-sm text-[var(--fm-ink)] focus:border-[var(--fm-ink)] focus:outline-none'
 const ACCEPT: Record<string, string> = { csv: '.csv,text/csv', text: '.txt,.md,.env,.yaml,.yml,.json,.log,text/plain', json: '.json,application/json', binary: '' }
 
-/** "datasetDrift" -> "Dataset drift" */
-const label = (key: string) => key.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase()).replace(/ ([A-Z])/g, (m) => m.toLowerCase())
+const ACRONYMS: Record<string, string> = { psi: 'PSI', ks: 'KS', auc: 'AUC', auroc: 'AUROC', ece: 'ECE', id: 'ID', f1: 'F1', mae: 'MAE', rmse: 'RMSE', r2: 'R2', fpr: 'FPR', tpr: 'TPR', url: 'URL' }
+
+/** "datasetDrift" -> "Dataset drift", "maxPsi" -> "Max PSI" */
+const label = (key: string) =>
+  key
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/_/g, ' ')
+    .split(' ')
+    .map((w, i) => ACRONYMS[w.toLowerCase()] ?? (i === 0 ? w.charAt(0).toUpperCase() + w.slice(1) : w.toLowerCase()))
+    .join(' ')
 
 function show(value: unknown): string {
   if (value === null || value === undefined || value === '') return '-'
@@ -21,11 +29,45 @@ function show(value: unknown): string {
   return String(value)
 }
 
-function RunResult({ run }: { run: EngineRun }) {
+function DetailTable({ rows }: { rows: Array<Record<string, unknown>> }) {
   const keys = useMemo(() => {
     const seen = new Set<string>()
-    for (const row of run.detail ?? []) Object.keys(row).forEach((k) => seen.add(k))
+    for (const row of rows) Object.keys(row).forEach((k) => k !== 'kind' && seen.add(k))
     return [...seen]
+  }, [rows])
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse text-left text-[12.5px]">
+        <thead>
+          <tr className={MUTED}>
+            {keys.map((k) => (
+              <th key={k} scope="col" className="whitespace-nowrap py-1.5 pr-3 font-semibold">{label(k)}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => (
+            <tr key={i} className="border-t border-[#15171a14] align-top">
+              {keys.map((k) => (
+                <td key={k} className="max-w-[280px] break-words py-1.5 pr-3 tabular-nums">{show(row[k])}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function RunResult({ run }: { run: EngineRun }) {
+  // Engines that report more than one kind of row (features and samples, say) get a table per kind.
+  const groups = useMemo(() => {
+    const out = new Map<string, Array<Record<string, unknown>>>()
+    for (const row of run.detail ?? []) {
+      const kind = typeof row.kind === 'string' ? row.kind : ''
+      out.set(kind, [...(out.get(kind) ?? []), row])
+    }
+    return [...out.entries()]
   }, [run.detail])
   return (
     <div className="flex flex-col gap-4">
@@ -45,30 +87,14 @@ function RunResult({ run }: { run: EngineRun }) {
           </div>
         ))}
       </dl>
-      {keys.length > 0 && (
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-left text-[12.5px]">
-            <thead>
-              <tr className={MUTED}>
-                {keys.map((k) => (
-                  <th key={k} scope="col" className="whitespace-nowrap py-1.5 pr-3 font-semibold">{label(k)}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {(run.detail ?? []).map((row, i) => (
-                <tr key={i} className="border-t border-[#15171a14] align-top">
-                  {keys.map((k) => (
-                    <td key={k} className="max-w-[280px] break-words py-1.5 pr-3 tabular-nums">{show(row[k])}</td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {(run.detailTotal ?? 0) > (run.detail?.length ?? 0) && (
-            <p className={`mt-2 text-xs ${MUTED}`}>Showing {run.detail?.length} of {run.detailTotal} rows.</p>
-          )}
+      {groups.map(([kind, rows]) => (
+        <div key={kind} className="flex flex-col gap-1.5">
+          {kind && <h3 className="m-0 text-[13px] font-semibold text-[var(--fm-ink)]">{label(kind)}s</h3>}
+          <DetailTable rows={rows} />
         </div>
+      ))}
+      {(run.detailTotal ?? 0) > (run.detail?.length ?? 0) && (
+        <p className={`m-0 text-xs ${MUTED}`}>Showing {run.detail?.length} of {run.detailTotal} rows.</p>
       )}
     </div>
   )
@@ -272,12 +298,6 @@ export default function EvaluationPage() {
             )}
           </section>
           <section className="flex min-w-0 flex-col gap-[22px]">
-            {shown && (
-              <div className="rounded-2xl bg-white p-5">
-                <h2 className="mb-3 mt-0 text-base font-semibold text-[var(--fm-ink)]">Result</h2>
-                <RunResult run={shown} />
-              </div>
-            )}
             <div className="rounded-2xl bg-white p-5">
               <h2 className="mb-3 mt-0 text-base font-semibold text-[var(--fm-ink)]">Runs</h2>
               {runs.data && runs.data.length === 0 && <p className={`m-0 text-sm ${MUTED}`}>No runs yet. Each run is kept as measured evidence on its AI system.</p>}
@@ -302,6 +322,12 @@ export default function EvaluationPage() {
             </div>
           </section>
         </div>
+      )}
+      {runnable && shown && (
+        <section className="rounded-2xl bg-white p-5">
+          <h2 className="mb-3 mt-0 text-base font-semibold text-[var(--fm-ink)]">Result</h2>
+          <RunResult run={shown} />
+        </section>
       )}
     </div>
   )

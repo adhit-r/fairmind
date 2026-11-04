@@ -82,6 +82,14 @@ def _sample_scores(ref: pd.DataFrame, cur: pd.DataFrame, features: List[str]) ->
     return ratio, score
 
 
+def _cell(value: Any) -> Any:
+    if isinstance(value, (int, np.integer)):
+        return int(value)
+    if isinstance(value, (float, np.floating)):
+        return round(float(value), 4)
+    return str(value)[:120]
+
+
 def data_drift(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[str, Any]:
     ref, cur = read_csv(files["reference"], "The reference set"), read_csv(files["current"], "The current set")
     wanted = split(params.get("features"))
@@ -116,7 +124,7 @@ def data_drift(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[str, Any
     worst = np.argsort(ratio)[:50]
     shown = [c for c in features if not _is_text(cur[c])][:4] + [c for c in features if _is_text(cur[c])][:1]
     rows += [{"kind": "sample", "row": int(i) + 1, "score": float(score[i]), "densityRatio": round(float(ratio[i]), 4),
-              **{c: str(cur[c].iloc[i])[:120] for c in shown}} for i in worst if score[i] < 1.0]
+              **{c: _cell(cur[c].iloc[i]) for c in shown}} for i in worst if score[i] < 1.0]
 
     failed_features = [r["feature"] for r in rows if r.get("drifted")]
     if tabular:
