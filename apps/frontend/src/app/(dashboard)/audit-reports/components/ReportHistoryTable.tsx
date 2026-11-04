@@ -1,13 +1,7 @@
 'use client'
 
-import {
-  IconDownload,
-  IconFileAnalytics,
-  IconFileCheck,
-  IconLoader2,
-} from '@tabler/icons-react'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { BTN, MUTED, Pill } from '@/components/packs/parts'
+import { cn } from '@/lib/utils'
 
 export interface SavedReport {
   id: string
@@ -34,7 +28,7 @@ interface ReportHistoryTableProps {
 }
 
 function formatDate(ts: string) {
-  if (!ts) return '—'
+  if (!ts) return 'date not recorded'
   const d = new Date(ts)
   return Number.isNaN(d.getTime()) ? ts : d.toLocaleString()
 }
@@ -45,11 +39,7 @@ const TYPE_LABELS: Record<string, string> = {
   governance: 'Governance Summary',
 }
 
-const TYPE_COLORS: Record<string, string> = {
-  compliance: 'border-blue-500 bg-blue-50 text-blue-800',
-  bias: 'border-orange-500 bg-orange-50 text-orange-900',
-  governance: 'border-emerald-500 bg-emerald-50 text-emerald-800',
-}
+const SMALL = cn(BTN, 'h-8 px-3 text-[12px]')
 
 export function ReportHistoryTable({
   reports,
@@ -59,81 +49,48 @@ export function ReportHistoryTable({
   onPreview,
 }: ReportHistoryTableProps) {
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-10">
-        <IconLoader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
-    )
+    return <p role="status" className={`mt-2 border-t border-[var(--fm-line)] pt-3 text-[13px] ${MUTED}`}>Loading saved reports</p>
   }
 
   if (reports.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-[rgba(21,23,26,.14)] bg-slate-50 p-8 text-center">
-        <IconFileAnalytics className="mx-auto h-8 w-8 text-muted-foreground" />
-        <p className="mt-2 font-bold text-muted-foreground">No reports generated yet</p>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          Configure and generate your first audit report above.
-        </p>
-      </div>
+      <p className={`mt-2 border-t border-[var(--fm-line)] pt-3 text-[13px] ${MUTED}`}>
+        No reports are saved for this system and framework yet.
+      </p>
     )
   }
 
   return (
-    <div className="space-y-2">
+    <ul className="mt-2">
       {reports.map((report) => (
-        <div
+        <li
           key={report.id}
-          className="flex flex-wrap items-center justify-between gap-3 rounded-xl p-4 fm-card"
+          className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--fm-line)] py-3"
         >
-          <div className="flex min-w-0 flex-1 items-start gap-3">
-            <IconFileCheck className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
-            <div className="min-w-0">
-              <p className="truncate font-bold">{report.title}</p>
-              <p className="text-xs text-muted-foreground">
-                Generated {formatDate(report.createdAt)}
-                {report.generatedBy ? ` by ${report.generatedBy}` : ''}
-              </p>
-              {report.config.frameworks && report.config.frameworks.length > 0 && (
-                <p className="mt-0.5 text-[10px] text-muted-foreground">
-                  Frameworks: {report.config.frameworks.join(', ')}
-                </p>
-              )}
-            </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[13.5px] font-semibold">{report.title}</p>
+            <p className={`mt-0.5 text-[12px] ${MUTED}`}>
+              Generated {formatDate(report.createdAt)}
+              {report.generatedBy ? ` by ${report.generatedBy}` : ''}
+              {report.config.frameworks && report.config.frameworks.length > 0
+                ? ` · ${report.config.frameworks.join(', ')}`
+                : ''}
+            </p>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <Badge
-              className={`border px-2 py-0.5 text-[10px] font-semibold uppercase ${TYPE_COLORS[report.reportType] || 'border-[var(--fm-line)] bg-slate-50'}`}
-            >
-              {TYPE_LABELS[report.reportType] ?? report.reportType}
-            </Badge>
-            <Button
-              variant="neutral"
-              className="h-7 border border-[var(--fm-line)] px-2 text-xs font-bold"
-              onClick={() => onPreview(report)}
-            >
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <Pill>{TYPE_LABELS[report.reportType] ?? report.reportType}</Pill>
+            <button type="button" className={SMALL} onClick={() => onPreview(report)}>
               Preview
-            </Button>
-            <Button
-              variant="neutral"
-              className="h-7 border border-[var(--fm-line)] px-2 text-xs font-bold"
-              onClick={() => onDownloadJson(report)}
-              title="Download JSON"
-            >
-              <IconDownload className="mr-1 h-3.5 w-3.5" />
+            </button>
+            <button type="button" className={SMALL} onClick={() => onDownloadJson(report)} title="Download JSON">
               JSON
-            </Button>
-            <Button
-              variant="default"
-              className="h-7 border border-[var(--fm-line)] px-2 text-xs font-bold"
-              onClick={() => onDownloadPdf(report)}
-              title="Download PDF"
-            >
-              <IconDownload className="mr-1 h-3.5 w-3.5" />
+            </button>
+            <button type="button" className={SMALL} onClick={() => onDownloadPdf(report)} title="Download PDF">
               PDF
-            </Button>
+            </button>
           </div>
-        </div>
+        </li>
       ))}
-    </div>
+    </ul>
   )
 }

@@ -282,7 +282,7 @@ async function mockEvaluationWorkbench(page: Page, options: MockOptions = {}) {
   }
 }
 
-test('keeps Evaluation Runs inside the original shell with framed, labelled identity and controls', async ({ page }) => {
+test('keeps Evaluation Runs inside the app shell with labelled identity and controls', async ({ page }) => {
   await mockEvaluationWorkbench(page)
   await page.goto('/tests')
 
@@ -309,7 +309,6 @@ test('keeps Evaluation Runs inside the original shell with framed, labelled iden
   await expect(search).toHaveCSS('outline-width', '2px')
 
   await expect(page.getByLabel('User Name profile image unavailable; showing initials UN').first()).toBeVisible()
-  await expect(page.locator('[data-framed-icon="true"]').first()).toBeVisible()
   await expect(page.getByText('Test History', { exact: true })).toHaveCount(0)
   await expect(page.getByText('Total Tests', { exact: true })).toHaveCount(0)
   await expect(page.getByText('Passed', { exact: true })).toHaveCount(0)
