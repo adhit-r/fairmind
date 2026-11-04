@@ -3412,6 +3412,25 @@ class WorkflowVersion(Base):
     )
 
 
+class OrgAIProvider(Base):
+    """The model an organization brings for the packs agent: one per organization, key encrypted at rest."""
+
+    __tablename__ = "org_ai_providers"
+
+    org_id = Column(String, primary_key=True)
+    provider = Column(String, nullable=False)
+    model = Column(String, nullable=False, default="")
+    fields_json = Column(Text, nullable=False, default="{}")  # baseUrl, endpoint or region, per provider
+    api_key_enc = Column(Text, nullable=True)
+    key_hint = Column(String, nullable=True)
+    enabled = Column(Boolean, nullable=False, default=True)
+    tested_ok = Column(Boolean, nullable=True)
+    tested_at = Column(String, nullable=True)
+    test_message = Column(String, nullable=True)
+    updated_by = Column(String, nullable=True)
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+
 class GovernanceEvidencePack(Base):
     """An inspection pack: a frozen, hashed manifest of chosen systems and frameworks.
 

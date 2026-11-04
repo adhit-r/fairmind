@@ -362,6 +362,10 @@ export const API_ENDPOINTS = {
     run: (runId: string) => `/api/v1/packs/runs/${runId}`,
     stepOutput: (runId: string, stepId: string) => `/api/v1/packs/runs/${runId}/steps/${stepId}/output`,
     decision: (runId: string) => `/api/v1/packs/runs/${runId}/decision`,
+    agentStep: (runId: string, stepId: string) => `/api/v1/packs/runs/${runId}/steps/${stepId}/agent`,
+    aiProviders: '/api/v1/packs/ai-providers',
+    aiProvider: '/api/v1/packs/ai-provider',
+    aiProviderTest: '/api/v1/packs/ai-provider/test',
   },
 
   // Organizations (Multi-org support)
