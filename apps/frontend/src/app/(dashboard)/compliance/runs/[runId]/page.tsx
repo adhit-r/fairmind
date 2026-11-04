@@ -2,7 +2,8 @@
 
 import { useParams } from 'next/navigation'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { GATE_KINDS, decisionsFor, usePackActions, useRun, useWaitingRuns, useWorkflow, versionName, type Decision, type RunEvent } from '@/lib/api/hooks/usePacks'
+import Link from 'next/link'
+import { GATE_KINDS, decisionsFor, useAIProvider, usePackActions, useRun, useWaitingRuns, useWorkflow, versionName, type Decision, type RunEvent } from '@/lib/api/hooks/usePacks'
 import { IsoFigure } from '@/components/packs/IsoFigure'
 import { runFigure } from '@/components/packs/figures'
 import { BTN, BTN_P, Crumbs, ErrorNote, Heading, LABEL, LINE, Loading, MUTED, Num, Pill, StatusPill, lifecycleStage, cap, when } from '@/components/packs/parts'
@@ -18,7 +19,11 @@ const DECISION_LABEL: Record<Decision, [string, string]> = {
 /** One line on what an event recorded: a step's submitted output, a decision, or the evidence seal. */
 function detailOf(e: RunEvent): string {
   const p = e.payload ?? {}
-  if (typeof p.summary === 'string') return typeof p.route === 'string' ? `${p.summary} (${p.route})` : p.summary
+  if (typeof p.summary === 'string') {
+    const how =
+      p.source !== 'agent' ? null : p.mode === 'llm' ? ['agent', p.model, p.confidence ? `${p.confidence} confidence` : null].filter(Boolean).join(', ') : 'agent, by rules'
+    return [p.summary, typeof p.route === 'string' ? `(${p.route})` : null, how ? `[${how}]` : null].filter(Boolean).join(' ')
+  }
   if (typeof p.decision === 'string') {
     const label = DECISION_LABEL[p.decision as Decision]?.[0] ?? p.decision
     return [label, p.notes, p.escalated ? `Escalated after ${p.escalated}` : null, p.selfReview ? 'Decided by the person who recorded the proposal' : null]
@@ -37,7 +42,10 @@ export default function RunPage() {
     getCurrentUser().then((u) => setMe(u?.id ?? null)).catch(() => setMe(null))
   }, [getCurrentUser])
   const run = useRun(runId)
-  const { decideRun, submitStepOutput } = usePackActions()
+  const { decideRun, submitStepOutput, runAgent } = usePackActions()
+  const provider = useAIProvider()
+  const [agentBusy, setAgentBusy] = useState<'step' | 'all' | null>(null)
+  const [agentFailure, setAgentFailure] = useState<string | null>(null)
   const workflow = useWorkflow(run.data?.workflowId)
   const waiting = useWaitingRuns()
   const [notes, setNotes] = useState('')
@@ -90,6 +98,26 @@ export default function RunPage() {
     waiting.reload()
   }
 
+  /** The agent does the waiting step; with `all` it carries on until the run needs a decision or ends. */
+  async function agent(all: boolean) {
+    if (!run.data?.currentStep) return
+    setAgentBusy(all ? 'all' : 'step')
+    setAgentFailure(null)
+    let current = run.data
+    for (let i = 0; i < 20 && current.waitingFor === 'input' && current.currentStep; i++) {
+      const res = await runAgent(runId, current.currentStep)
+      if (res.error || !res.data) {
+        setAgentFailure(res.error)
+        break
+      }
+      current = res.data
+      if (!all) break
+    }
+    setAgentBusy(null)
+    run.reload()
+    waiting.reload()
+  }
+
   async function decide(decision: Decision) {
     setDeciding(decision)
     setFailure(null)
@@ -116,6 +144,8 @@ export default function RunPage() {
   const branches = view.current && view.current.next.length > 1 ? view.current.next : []
   const decisions = view.current ? decisionsFor(view.current) : []
   const stage = workflow.data ? lifecycleStage(workflow.data.stage) : null
+  const cfg = provider.data?.config ?? null
+  const aiOn = !!cfg && cfg.enabled && cfg.keyReadable
   const stepsTotal = r.steps.length
 
   return (
@@ -140,13 +170,13 @@ export default function RunPage() {
           <IsoFigure
             className="p-2.5"
             figure={view.figure}
-            label={`The agent for ${r.workflowName}. ${stepsTotal} step tiles show progress; status is ${r.status}. ${view.sealed} evidence records are sealed on the ledger.${r.waitingFor === 'approval' ? ' A gate is closed and the agent waits for your decision.' : r.waitingFor === 'input' ? ' The agent waits for you to record this step.' : ''}`}
+            label={`The agent for ${r.workflowName}. ${stepsTotal} step tiles show progress; status is ${r.status}. ${view.sealed} evidence records are sealed on the ledger.${r.waitingFor === 'approval' ? ' A gate is closed and the agent waits for your decision.' : r.waitingFor === 'input' ? ' The agent waits for this step to be done.' : ''}`}
           />
         </div>
         <div className="flex flex-[1_1_300px] flex-col gap-3.5 px-1 py-1.5">
           <div className="flex items-center gap-2.5">
             {isWaiting && <Num n={view.waitNo} />}
-            <h2 className="m-0 text-base font-semibold text-[var(--fm-ink)]">{r.waitingFor === 'approval' ? 'Your decision' : r.waitingFor === 'input' ? 'Your step' : 'Where it stands'}</h2>
+            <h2 className="m-0 text-base font-semibold text-[var(--fm-ink)]">{r.waitingFor === 'approval' ? 'Your decision' : r.waitingFor === 'input' ? 'This step' : 'Where it stands'}</h2>
           </div>
           {r.waitingFor === 'input' && view.current ? (
             <form
@@ -157,7 +187,7 @@ export default function RunPage() {
               }}
             >
               <p className="m-0 leading-normal text-[var(--fm-ink)]">
-                The run is at <b className="font-semibold">{view.current.title}</b>. FairMind does not do this step itself yet, so record what you did and found. It goes on the ledger as a manual entry.
+                The run is at <b className="font-semibold">{view.current.title}</b>. The agent can do this step, or you can record it yourself. Either way it goes on the ledger with who or what did it, and every decision still waits for a person.
               </p>
               {view.current.detail && <p className={`m-0 text-[13px] leading-normal ${MUTED}`}>{view.current.detail}</p>}
               <dl className="m-0 flex flex-col gap-2.5 text-[13px]">
@@ -174,6 +204,30 @@ export default function RunPage() {
                     </div>
                   ))}
               </dl>
+              <div className="flex flex-col gap-2 rounded-[10px] border border-[var(--fm-line)] p-3">
+                <p className={`m-0 text-[13px] leading-normal ${MUTED}`}>
+                  {aiOn ? (
+                    <>
+                      The agent uses your organisation&apos;s model: <b className="font-semibold text-[var(--fm-ink)]">{cfg!.providerName}, {cfg!.model}</b>.
+                    </>
+                  ) : (
+                    <>
+                      No AI provider is switched on, so the agent works by rules: it lists what is on file and what is missing, and leaves the judgement to the reviewer.{' '}
+                      <Link href="/org-admin/settings#ai-provider" className="font-semibold text-[var(--fm-ink)] underline">Set up a provider</Link>
+                    </>
+                  )}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" className={BTN_P} disabled={agentBusy !== null || submitting} onClick={() => agent(false)}>
+                    {agentBusy === 'step' ? 'Doing this step' : 'Let the agent do this step'}
+                  </button>
+                  <button type="button" className={BTN} disabled={agentBusy !== null || submitting} onClick={() => agent(true)}>
+                    {agentBusy === 'all' ? 'Working to the next decision' : 'Run to the next decision'}
+                  </button>
+                </div>
+                {agentFailure && <ErrorNote message={agentFailure} />}
+              </div>
+              <p className="m-0 text-[13px] font-semibold text-[var(--fm-ink)]">Or record it yourself</p>
               {branches.length > 0 && (
                 <fieldset className="m-0 flex flex-col gap-1.5 border-0 p-0">
                   <legend className="mb-1.5 text-[13px] font-semibold text-[var(--fm-ink)]">Where next</legend>
@@ -198,7 +252,7 @@ export default function RunPage() {
               </div>
               {failure && <ErrorNote message={failure} />}
               <div>
-                <button type="submit" className={BTN_P} disabled={submitting || !output.trim() || (branches.length > 0 && !route)}>
+                <button type="submit" className={BTN} disabled={submitting || agentBusy !== null || !output.trim() || (branches.length > 0 && !route)}>
                   {submitting ? 'Recording' : 'Record and continue'}
                 </button>
               </div>
