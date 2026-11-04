@@ -31,6 +31,7 @@ from database.models import OrganizationMember
 from src.application.services.governance_assurance_service import (
     GovernanceAssuranceService,
     OrgMembership,
+    member_user_matches,
 )
 
 
@@ -63,7 +64,7 @@ def _resolve_caller_org(request: Request, db: Session) -> None:
     members = OrganizationMember.__table__.c
     org = db.execute(
         select(members.org_id)
-        .where(members.user_id == user_uuid, members.status == "active")
+        .where(member_user_matches(members.user_id, user_uuid), members.status == "active")
         .order_by(members.created_at)
         .limit(1)
     ).scalar_one_or_none()

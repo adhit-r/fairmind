@@ -405,6 +405,7 @@ _include_router("api.routes.fairness_runs", prefix="/api/v1/ai-governance", tags
 _include_router("api.routes.evidence_packs", prefix="/api/v1/ai-governance", tags=["evidence-packs"], required=True)
 _include_router("api.routes.evidence_packs", prefix="/api/v1/public", tags=["evidence-packs-public"], attr="public_router", required=True)
 _include_router("api.routes.governance_assurance", prefix="/api/v1/ai-governance", tags=["governance-assurance"], required=True)
+_include_router("api.routes.policy_center", prefix="/api/v1/ai-governance", tags=["policies"], required=True)
 if settings.assurance_v2_enabled:
     _include_router(
         "api.routes.evaluation_workbench",

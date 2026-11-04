@@ -3094,6 +3094,103 @@ class GovernancePolicyVersion(Base):
         return f"<GovernancePolicyVersion(policy_id={self.policy_id}, version={self.version})>"
 
 
+class OrgPolicy(Base):
+    """An organization's AI policy: a written document plus enforceable rules.
+
+    The working copy moves draft -> in_review -> approved -> published. Publishing
+    snapshots it into org_policy_versions; enforcement always runs the latest
+    published snapshot, so drafting a revision never pauses enforcement.
+    """
+
+    __tablename__ = "org_policies"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    name = Column(String, nullable=False)
+    summary = Column(Text, nullable=False, default="")
+    body = Column(Text, nullable=False, default="")
+    owner = Column(String, nullable=True)
+    status = Column(String, nullable=False, default="draft")
+    version = Column(Integer, nullable=False, default=1)
+    rules_json = Column(Text, nullable=False, default="[]")
+    published_version = Column(Integer, nullable=True)
+    created_by = Column(String, nullable=False)
+    submitted_by = Column(String, nullable=True)
+    approved_by = Column(String, nullable=True)
+    approved_at = Column(String, nullable=True)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('draft', 'in_review', 'approved', 'published', 'retired')",
+            name="ck_org_policies_status",
+        ),
+    )
+
+
+class OrgPolicyVersion(Base):
+    """Immutable snapshot of a policy as it was published and distributed."""
+
+    __tablename__ = "org_policy_versions"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    policy_id = Column(String, ForeignKey("org_policies.id", ondelete="CASCADE"), nullable=False, index=True)
+    version = Column(Integer, nullable=False)
+    name = Column(String, nullable=False)
+    summary = Column(Text, nullable=False, default="")
+    body = Column(Text, nullable=False, default="")
+    rules_json = Column(Text, nullable=False, default="[]")
+    approved_by = Column(String, nullable=True)
+    published_by = Column(String, nullable=False)
+    published_at = Column(String, nullable=False)
+
+    __table_args__ = (UniqueConstraint("policy_id", "version", name="uq_org_policy_version"),)
+
+
+class OrgPolicyAcknowledgement(Base):
+    """A member's attestation that they read a published policy version."""
+
+    __tablename__ = "org_policy_acknowledgements"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    policy_id = Column(String, ForeignKey("org_policies.id", ondelete="CASCADE"), nullable=False, index=True)
+    version = Column(Integer, nullable=False)
+    user_id = Column(String, nullable=False)
+    acknowledged_at = Column(String, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("policy_id", "version", "user_id", name="uq_org_policy_ack"),
+    )
+
+
+class OrgPolicyEvaluation(Base):
+    """One rule of one published policy version, evaluated against one system."""
+
+    __tablename__ = "org_policy_evaluations"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    run_id = Column(String, nullable=False, index=True)
+    policy_id = Column(String, ForeignKey("org_policies.id", ondelete="CASCADE"), nullable=False, index=True)
+    policy_version = Column(Integer, nullable=False)
+    system_id = Column(String, nullable=False, index=True)
+    rule_id = Column(String, nullable=False)
+    outcome = Column(String, nullable=False)
+    severity = Column(String, nullable=False)
+    enforcement = Column(String, nullable=False)
+    detail = Column(Text, nullable=False, default="")
+    evaluated_at = Column(String, nullable=False)
+
+    __table_args__ = (
+        CheckConstraint(
+            "outcome IN ('pass', 'fail', 'not_applicable')", name="ck_org_policy_eval_outcome"
+        ),
+    )
+
+
 class GovernanceApprovalWorkflow(Base):
     """Approval workflow definition."""
 

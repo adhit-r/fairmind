@@ -9,7 +9,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import insert, select, update
+from sqlalchemy import String, cast, insert, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -85,6 +85,11 @@ def _uuid(value: str) -> uuid.UUID | None:
         return None
 
 
+def member_user_matches(column, user_uuid: uuid.UUID):
+    """Match a member's user id whether it is stored as a UUID or as text, dashed or plain hex."""
+    return cast(column, String).in_([str(user_uuid), user_uuid.hex])
+
+
 def _canonical_json(value: object) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
@@ -144,7 +149,7 @@ class GovernanceAssuranceService:
         member = self.db.execute(
             select(OrganizationMember.__table__.c.role).where(
                 OrganizationMember.__table__.c.org_id == org_uuid,
-                OrganizationMember.__table__.c.user_id == user_uuid,
+                member_user_matches(OrganizationMember.__table__.c.user_id, user_uuid),
                 OrganizationMember.__table__.c.status == "active",
             )
         ).scalar_one_or_none()
