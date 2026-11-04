@@ -1,21 +1,10 @@
 'use client'
 
-import { useRef, useState } from 'react'
-import {
-  IconCheck,
-  IconCloudUpload,
-  IconFileText,
-  IconLink,
-  IconLoader2,
-  IconShieldCheck,
-  IconX,
-} from '@tabler/icons-react'
+import { useId, useRef, useState } from 'react'
+import { IconX } from '@tabler/icons-react'
 
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { Badge } from '@/components/ui/badge'
+import { BTN, BTN_P, MUTED } from '@/components/packs/parts'
+import { cn } from '@/lib/utils'
 import type { CollectEvidenceInput } from '@/lib/api/hooks/useEvidence'
 
 type ArtifactKind = 'file' | 'url' | 'attestation' | 'narrative'
@@ -26,10 +15,23 @@ interface EvidenceUploaderProps {
   onClose: () => void
 }
 
+const KINDS: Array<{ kind: ArtifactKind; label: string }> = [
+  { kind: 'narrative', label: 'Narrative' },
+  { kind: 'file', label: 'File upload' },
+  { kind: 'url', label: 'External URL' },
+  { kind: 'attestation', label: 'Attestation' },
+]
+
 const SUGGESTED_TAGS = ['eu-ai-act', 'bias-scan', 'monitoring', 'compliance', 'q1-2026', 'iso-42001', 'nist-rmf']
 const SUGGESTED_FOLDERS = ['EU AI Act', 'ISO 42001', 'NIST AI RMF', 'Bias Testing', 'Monitoring', 'Audits']
 
+const FIELD =
+  'h-9 w-full rounded-[10px] border border-[rgba(21,23,26,.14)] bg-white px-3 text-[13.5px] outline-none placeholder:text-[var(--fm-ink3)] focus:border-[var(--fm-ink)]'
+const LABEL_CLS = 'block text-[12px] font-medium text-[var(--fm-ink2)]'
+const SUGGEST = 'rounded-full bg-[var(--fm-bg)] px-2.5 py-1 text-[12px] font-medium text-[var(--fm-ink2)] hover:text-[var(--fm-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-ink)]'
+
 export function EvidenceUploader({ systemId, onCollect, onClose }: EvidenceUploaderProps) {
+  const uid = useId()
   const [kind, setKind] = useState<ArtifactKind>('narrative')
   const [title, setTitle] = useState('')
   const [evidenceType, setEvidenceType] = useState('test_results')
@@ -42,6 +44,7 @@ export function EvidenceUploader({ systemId, onCollect, onClose }: EvidenceUploa
   const [folder, setFolder] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [dragActive, setDragActive] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const addTag = (tag: string) => {
@@ -74,6 +77,7 @@ export function EvidenceUploader({ systemId, onCollect, onClose }: EvidenceUploa
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSubmitting(true)
+    setFormError(null)
     try {
       await onCollect({
         systemId,
@@ -91,87 +95,90 @@ export function EvidenceUploader({ systemId, onCollect, onClose }: EvidenceUploa
         fileName: kind === 'file' ? fileName : '',
       })
       onClose()
+    } catch (reason) {
+      setFormError(reason instanceof Error ? reason.message : 'The evidence could not be saved')
     } finally {
       setSubmitting(false)
     }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} className="grid gap-5">
       {/* Artifact kind selector */}
-      <div className="grid grid-cols-4 gap-2">
-        {([
-          { kind: 'narrative' as ArtifactKind, icon: IconFileText, label: 'Narrative' },
-          { kind: 'file' as ArtifactKind, icon: IconCloudUpload, label: 'File upload' },
-          { kind: 'url' as ArtifactKind, icon: IconLink, label: 'External URL' },
-          { kind: 'attestation' as ArtifactKind, icon: IconShieldCheck, label: 'Attestation' },
-        ] as const).map(({ kind: k, icon: Icon, label }) => (
+      <div role="group" aria-label="Artifact kind" className="grid grid-cols-2 gap-1 rounded-[22px] bg-[#ebebe8] p-1 sm:grid-cols-4 sm:rounded-full">
+        {KINDS.map(({ kind: k, label }) => (
           <button
             key={k}
             type="button"
+            aria-pressed={kind === k}
             onClick={() => setKind(k)}
-            className={`flex flex-col items-center gap-1.5 rounded-xl border-2 p-3 text-[11px] font-bold uppercase transition-colors ${
-              kind === k
-                ? 'border-black bg-black text-white'
-                : 'border-black bg-white text-black hover:bg-slate-50'
-            }`}
+            className={cn(
+              'h-8 whitespace-nowrap rounded-full px-3 text-[12.5px] font-semibold text-[var(--fm-ink2)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-ink)]',
+              kind === k && 'bg-white text-[var(--fm-ink)] shadow-[0_1px_2px_rgba(20,20,30,.08)]',
+            )}
           >
-            <Icon className="h-4 w-4" />
             {label}
           </button>
         ))}
       </div>
 
-      {/* Title */}
-      <div className="space-y-1.5">
-        <Label className="font-bold uppercase tracking-wide text-xs">Title</Label>
-        <Input
+      <div>
+        <label className={LABEL_CLS} htmlFor={`${uid}-title`}>Title</label>
+        <input
+          id={`${uid}-title`}
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          className="border-2 border-black font-medium"
+          className={FIELD}
           placeholder="Short name for this evidence artifact"
+          autoComplete="off"
           required
         />
       </div>
 
-      {/* Evidence type */}
-      <div className="space-y-1.5">
-        <Label className="font-bold uppercase tracking-wide text-xs">Evidence type</Label>
-        <Input
+      <div>
+        <label className={LABEL_CLS} htmlFor={`${uid}-type`}>Evidence type</label>
+        <input
+          id={`${uid}-type`}
           value={evidenceType}
           onChange={(e) => setEvidenceType(e.target.value)}
-          className="border-2 border-black font-medium"
+          className={FIELD}
           placeholder="e.g. bias_test_result, monitoring_snapshot, audit_log"
+          autoComplete="off"
           required
         />
       </div>
 
       {/* Kind-specific content */}
       {kind === 'file' && (
-        <div className="space-y-2">
-          <Label className="font-bold uppercase tracking-wide text-xs">Upload file</Label>
-          <div
+        <div>
+          <span className={LABEL_CLS} id={`${uid}-file`}>Upload file</span>
+          <button
+            type="button"
+            aria-labelledby={`${uid}-file ${uid}-file-state`}
+            aria-describedby={fileName ? undefined : `${uid}-file-hint`}
             onDragOver={(e) => { e.preventDefault(); setDragActive(true) }}
             onDragLeave={() => setDragActive(false)}
             onDrop={handleDrop}
             onClick={() => fileInputRef.current?.click()}
-            className={`flex cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed p-8 transition-colors ${
-              dragActive ? 'border-black bg-slate-100' : 'border-black/40 hover:border-black hover:bg-slate-50'
-            }`}
+            className={cn(
+              'mt-1 flex w-full flex-col items-center justify-center gap-1 rounded-xl border border-dashed px-4 py-8 text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-ink)]',
+              dragActive ? 'border-[var(--fm-ink)] bg-[var(--fm-bg)]' : 'border-[rgba(21,23,26,.2)] hover:border-[var(--fm-ink)] hover:bg-[var(--fm-bg)]',
+            )}
           >
-            <IconCloudUpload className="h-8 w-8 text-muted-foreground" />
             {fileName ? (
-              <p className="text-sm font-bold">{fileName}</p>
+              <span id={`${uid}-file-state`} className="text-[13.5px] font-semibold">{fileName}</span>
             ) : (
               <>
-                <p className="text-sm font-bold">Drop a file here or click to browse</p>
-                <p className="text-xs text-muted-foreground">PDF, DOCX, JSON, CSV, PNG, JPG</p>
+                <span id={`${uid}-file-state`} className="text-[13.5px] font-semibold">Drop a file here or click to browse</span>
+                <span id={`${uid}-file-hint`} className={cn('text-[12px]', MUTED)}>PDF, DOCX, JSON, CSV, PNG, JPG</span>
               </>
             )}
-          </div>
+          </button>
           <input
             ref={fileInputRef}
             type="file"
+            tabIndex={-1}
+            aria-hidden
             className="hidden"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileSelect(f) }}
           />
@@ -179,29 +186,33 @@ export function EvidenceUploader({ systemId, onCollect, onClose }: EvidenceUploa
       )}
 
       {kind === 'url' && (
-        <div className="space-y-1.5">
-          <Label className="font-bold uppercase tracking-wide text-xs">External URL</Label>
-          <Input
+        <div>
+          <label className={LABEL_CLS} htmlFor={`${uid}-url`}>External URL</label>
+          <input
+            id={`${uid}-url`}
             value={fileUrl}
             onChange={(e) => setFileUrl(e.target.value)}
             type="url"
-            className="border-2 border-black font-medium"
+            className={FIELD}
             placeholder="https://..."
+            autoComplete="off"
             required
           />
-          <p className="text-xs text-muted-foreground">Link to evidence stored in another system (e.g. S3, Confluence, Google Drive)</p>
+          <p className={cn('m-0 mt-1.5 text-[12px]', MUTED)}>Link to evidence stored in another system (for example S3, Confluence or Google Drive).</p>
         </div>
       )}
 
       {(kind === 'narrative' || kind === 'attestation') && (
-        <div className="space-y-1.5">
-          <Label className="font-bold uppercase tracking-wide text-xs">
+        <div>
+          <label className={LABEL_CLS} htmlFor={`${uid}-content`}>
             {kind === 'attestation' ? 'Attestation note' : 'Evidence content'}
-          </Label>
-          <Textarea
+          </label>
+          <textarea
+            id={`${uid}-content`}
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            className="min-h-[120px] border-2 border-black font-mono text-sm"
+            rows={5}
+            className="w-full resize-y rounded-[10px] border border-[rgba(21,23,26,.14)] bg-white p-3 font-mono text-[13px] outline-none placeholder:text-[var(--fm-ink3)] focus:border-[var(--fm-ink)]"
             placeholder={
               kind === 'attestation'
                 ? 'Describe what was manually verified and confirmed...'
@@ -212,106 +223,100 @@ export function EvidenceUploader({ systemId, onCollect, onClose }: EvidenceUploa
       )}
 
       {/* Tags */}
-      <div className="space-y-2">
-        <Label className="font-bold uppercase tracking-wide text-xs">Tags</Label>
+      <div>
+        <label className={LABEL_CLS} htmlFor={`${uid}-tag`}>Tags</label>
         <div className="flex gap-2">
-          <Input
+          <input
+            id={`${uid}-tag`}
             value={tagInput}
             onChange={(e) => setTagInput(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') { e.preventDefault(); addTag(tagInput) }
-              if (e.key === ',') { e.preventDefault(); addTag(tagInput) }
+              if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(tagInput) }
             }}
-            className="border-2 border-black font-medium"
+            className={FIELD}
             placeholder="Type a tag and press Enter"
+            autoComplete="off"
           />
-          <Button type="button" variant="neutral" className="border-2 border-black font-bold" onClick={() => addTag(tagInput)}>
+          <button type="button" className={cn(BTN, 'h-9 px-4 text-[12.5px]')} onClick={() => addTag(tagInput)}>
             Add
-          </Button>
+          </button>
         </div>
-        {/* Suggested tags */}
-        <div className="flex flex-wrap gap-1.5">
+        <div className="mt-2 flex flex-wrap gap-1.5">
           {SUGGESTED_TAGS.filter((t) => !tags.includes(t)).map((t) => (
-            <button key={t} type="button" onClick={() => addTag(t)}>
-              <Badge variant="outline" className="cursor-pointer border-2 border-black/30 bg-white px-2 py-0.5 text-[11px] font-bold hover:border-black">
-                + {t}
-              </Badge>
+            <button key={t} type="button" className={SUGGEST} onClick={() => addTag(t)}>
+              + {t}
             </button>
           ))}
         </div>
         {tags.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
+          <div className="mt-2 flex flex-wrap gap-1.5">
             {tags.map((tag) => (
-              <Badge key={tag} className="border-2 border-black bg-black px-2 py-0.5 text-[11px] font-bold text-white">
+              <span key={tag} className="inline-flex items-center gap-1 rounded-full bg-[var(--fm-ink)] py-1 pl-3 pr-1.5 text-[12px] font-medium text-white">
                 {tag}
-                <button type="button" onClick={() => removeTag(tag)} className="ml-1.5">
-                  <IconX className="h-2.5 w-2.5" />
+                <button
+                  type="button"
+                  aria-label={`Remove tag ${tag}`}
+                  onClick={() => removeTag(tag)}
+                  className="grid h-5 w-5 place-items-center rounded-full hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                >
+                  <IconX className="h-3 w-3" aria-hidden />
                 </button>
-              </Badge>
+              </span>
             ))}
           </div>
         )}
       </div>
 
       {/* Folder */}
-      <div className="space-y-2">
-        <Label className="font-bold uppercase tracking-wide text-xs">Folder (optional)</Label>
-        <Input
+      <div>
+        <label className={LABEL_CLS} htmlFor={`${uid}-folder`}>Folder (optional)</label>
+        <input
+          id={`${uid}-folder`}
           value={folder}
           onChange={(e) => setFolder(e.target.value)}
-          className="border-2 border-black font-medium"
+          className={FIELD}
           placeholder="e.g. EU AI Act, Monitoring, Q1 2026"
+          autoComplete="off"
         />
-        <div className="flex flex-wrap gap-1.5">
+        <div className="mt-2 flex flex-wrap gap-1.5">
           {SUGGESTED_FOLDERS.filter((f) => f !== folder).map((f) => (
-            <button key={f} type="button" onClick={() => setFolder(f)}>
-              <Badge variant="outline" className="cursor-pointer border-2 border-black/30 bg-white px-2 py-0.5 text-[11px] font-bold hover:border-black">
-                {f}
-              </Badge>
+            <button key={f} type="button" className={SUGGEST} onClick={() => setFolder(f)}>
+              {f}
             </button>
           ))}
         </div>
       </div>
 
       {/* Confidence */}
-      <div className="space-y-1.5">
+      <div>
         <div className="flex items-center justify-between">
-          <Label className="font-bold uppercase tracking-wide text-xs">Confidence</Label>
-          <span className="text-sm font-bold">{Math.round(confidence * 100)}%</span>
+          <label className={LABEL_CLS} htmlFor={`${uid}-confidence`}>Confidence</label>
+          <span className="text-[13px] font-semibold tabular-nums">{Math.round(confidence * 100)}%</span>
         </div>
         <input
+          id={`${uid}-confidence`}
           type="range"
           min={0}
           max={1}
           step={0.05}
           value={confidence}
           onChange={(e) => setConfidence(parseFloat(e.target.value))}
-          className="w-full cursor-pointer accent-black"
+          className="mt-1 w-full cursor-pointer accent-[var(--fm-ink)]"
         />
       </div>
 
+      {formError && (
+        <p role="alert" className="m-0 rounded-[10px] bg-[#fde8e8] px-3 py-2 text-[12.5px] text-[#b42318]">{formError}</p>
+      )}
+
       {/* Actions */}
-      <div className="flex gap-3">
-        <Button
-          type="submit"
-          className="flex-1 border-2 border-black font-black uppercase"
-          disabled={submitting}
-        >
-          {submitting ? (
-            <>
-              <IconLoader2 className="mr-2 h-4 w-4 animate-spin" />
-              Saving...
-            </>
-          ) : (
-            <>
-              <IconCheck className="mr-2 h-4 w-4" />
-              Save evidence
-            </>
-          )}
-        </Button>
-        <Button type="button" variant="neutral" className="border-2 border-black font-bold" onClick={onClose}>
+      <div className="flex gap-2.5">
+        <button type="submit" className={cn(BTN_P, 'flex-1')} disabled={submitting}>
+          {submitting ? 'Saving' : 'Save evidence'}
+        </button>
+        <button type="button" className={BTN} onClick={onClose}>
           Cancel
-        </Button>
+        </button>
       </div>
     </form>
   )

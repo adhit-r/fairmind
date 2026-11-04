@@ -100,7 +100,7 @@ CREATE TABLE IF NOT EXISTS governance_approval_workflows (
     name TEXT NOT NULL,
     entity_type TEXT NOT NULL,
     steps_json TEXT NOT NULL DEFAULT '[]',
-    is_active INTEGER NOT NULL DEFAULT 1,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_by TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL

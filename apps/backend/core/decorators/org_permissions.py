@@ -64,7 +64,7 @@ def require_org_owner(func: Callable) -> Callable:
     @wraps(func)
     async def wrapper(*args, org_id: str = None, request: Request = None, **kwargs):
         # Extract context from middleware
-        user_id = getattr(request.state, "user_id", None) if request else None
+        user_id = getattr(request.state, "user_id", None) if request is not None else None
 
         if not user_id or not org_id:
             logger.warning(f"Owner check failed: missing user_id or org_id")
@@ -132,7 +132,7 @@ def require_org_admin(func: Callable) -> Callable:
     @wraps(func)
     async def wrapper(*args, org_id: str = None, request: Request = None, **kwargs):
         # Extract context from middleware
-        user_id = getattr(request.state, "user_id", None) if request else None
+        user_id = getattr(request.state, "user_id", None) if request is not None else None
 
         if not user_id or not org_id:
             logger.warning(f"Admin check failed: missing user_id or org_id")
@@ -208,7 +208,7 @@ def require_org_member(func: Callable) -> Callable:
     @wraps(func)
     async def wrapper(*args, org_id: str = None, request: Request = None, **kwargs):
         # Extract context from middleware
-        user_id = getattr(request.state, "user_id", None) if request else None
+        user_id = getattr(request.state, "user_id", None) if request is not None else None
 
         if not user_id or not org_id:
             logger.warning(f"Member check failed: missing user_id or org_id")
@@ -283,7 +283,7 @@ def require_permission(permission: str) -> Callable:
         @wraps(func)
         async def wrapper(*args, org_id: str = None, request: Request = None, **kwargs):
             # Extract context from middleware
-            user_id = getattr(request.state, "user_id", None) if request else None
+            user_id = getattr(request.state, "user_id", None) if request is not None else None
 
             if not user_id or not org_id:
                 logger.warning(
@@ -410,7 +410,7 @@ def require_permissions(permissions: List[str], require_all: bool = True) -> Cal
         @wraps(func)
         async def wrapper(*args, org_id: str = None, request: Request = None, **kwargs):
             # Extract context from middleware
-            user_id = getattr(request.state, "user_id", None) if request else None
+            user_id = getattr(request.state, "user_id", None) if request is not None else None
 
             if not user_id or not org_id:
                 logger.warning(
@@ -547,11 +547,11 @@ def audit_org_action(action: str, resource_type: Optional[str] = None) -> Callab
         @wraps(func)
         async def wrapper(*args, org_id: str = None, request: Request = None, **kwargs):
             # Extract context from middleware
-            user_id = getattr(request.state, "user_id", None) if request else None
-            ip_address = getattr(request.state, "ip_address", None) if request else None
+            user_id = getattr(request.state, "user_id", None) if request is not None else None
+            ip_address = getattr(request.state, "ip_address", None) if request is not None else None
 
             # Get client IP from various sources (fallback chain)
-            if not ip_address and request:
+            if not ip_address and request is not None:
                 forwarded_for = request.headers.get("X-Forwarded-For")
                 if forwarded_for:
                     ip_address = forwarded_for.split(",")[0].strip()

@@ -58,9 +58,11 @@ class NeonAuthMiddleware(BaseHTTPMiddleware):
                     options={"verify_aud": bool(settings.neon_jwt_audience)},
                     **verify_kwargs,
                 )
-            elif settings.is_development:
-                payload = jwt.decode(token, options={"verify_signature": False})
             else:
+                # Previously fell back to jwt.decode(verify_signature=False) when
+                # is_development, which accepts any forged token. Unreachable, since
+                # this middleware mounts only when is_production, but refusing is the
+                # only correct answer with no key configured.
                 return Response(
                     "JWT verification configuration missing",
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -91,28 +93,9 @@ class NeonAuthMiddleware(BaseHTTPMiddleware):
             "/",
             "/api"
         ]
-        
-        # In development, also allow API access without auth for testing
-        if settings.is_development:
-            if any(path.startswith(p) for p in [
-                "/api/v1/database",
-                "/api/v1/core",
-                "/api/v1/bias-detection",
-                "/api/v1/bias/llm-judge",
-                "/api/v1/modern-bias-detection",
-                "/api/v1/multimodal-bias-detection",
-                "/api/v1/ai-bom",
-                "/api/v1/ai-governance",
-                "/api/v1/analytics",
-                "/api/v1/remediation",
-                "/api/v1/compliance",
-                "/api/v1/marketplace",
-                "/api/v1/reports",
-                "/api/v1/settings",
-                "/api/v1/datasets",
-                "/api/v1/monitoring",
-                "/api/v1/mlops"
-            ]):
-                return True
-                
-        return path in public_paths or path.startswith("/static")
+
+        # No development bypass here. This middleware is mounted only when
+        # is_production (api/main.py), and is_development is its negation, so a
+        # bypass keyed on is_development could never fire. It read as live, which
+        # was worse than useless. Development runs JWTAuthenticationMiddleware.
+        return path in public_paths or path.startswith(("/static", "/api/v1/public/packs/"))

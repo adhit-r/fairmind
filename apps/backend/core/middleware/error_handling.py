@@ -19,6 +19,15 @@ from config.settings import settings
 logger = get_logger(__name__)
 
 
+def public_validation_errors(errors: list) -> list:
+    """Field, message and type of each validation error, never the submitted input.
+
+    Pydantic's errors carry `input` and `ctx`, which can hold a password or token,
+    so neither goes into a response or a log line.
+    """
+    return [{"loc": e.get("loc"), "msg": e.get("msg"), "type": e.get("type")} for e in errors]
+
+
 class ErrorHandlingMiddleware(BaseHTTPMiddleware):
     """
     Global error handling middleware with structured error responses.
@@ -64,19 +73,20 @@ class ErrorHandlingMiddleware(BaseHTTPMiddleware):
         
         except RequestValidationError as e:
             # Handle validation errors
+            errors = public_validation_errors(e.errors())
             logger.warning(
                 "Validation error",
-                errors=e.errors(),
+                errors=errors,
                 path=request.url.path,
                 method=request.method
             )
-            
+
             return JSONResponse(
                 status_code=HTTP_422_UNPROCESSABLE_ENTITY,
                 content={
                     "error": "Validation Error",
                     "message": "Invalid request data",
-                    "details": e.errors() if settings.debug else None
+                    "details": errors,
                 }
             )
         

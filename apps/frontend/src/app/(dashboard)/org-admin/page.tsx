@@ -11,7 +11,7 @@ export default function OrgAdminPage() {
 
   if (!selectedOrg) {
     return (
-      <div className="min-h-screen bg-background p-8">
+      <div className="min-w-0">
         <div className="mx-auto max-w-4xl">
           <div className="rounded-lg border-2 border-gray-300 bg-gray-50 p-6 text-center">
             <p className="text-gray-600">Loading organization...</p>
@@ -28,7 +28,7 @@ export default function OrgAdminPage() {
       description: 'Manage team members and roles',
       icon: IconUsers,
       href: '/org-admin/members',
-      color: 'border-black',
+      color: 'border-[var(--fm-line)]',
     },
     {
       id: 'roles',
@@ -36,7 +36,7 @@ export default function OrgAdminPage() {
       description: 'Create and manage organization roles',
       icon: IconKey,
       href: '/org-admin/roles',
-      color: 'border-black',
+      color: 'border-[var(--fm-line)]',
     },
     {
       id: 'settings',
@@ -44,7 +44,7 @@ export default function OrgAdminPage() {
       description: 'Organization settings and domain',
       icon: IconSettings,
       href: '/org-admin/settings',
-      color: 'border-black',
+      color: 'border-[var(--fm-line)]',
     },
     {
       id: 'audit-log',
@@ -52,16 +52,16 @@ export default function OrgAdminPage() {
       description: 'View organization activity',
       icon: IconClipboardList,
       href: '/org-admin/audit-log',
-      color: 'border-black',
+      color: 'border-[var(--fm-line)]',
     },
   ];
 
   return (
-    <div className="min-h-screen bg-background p-8">
+    <div className="min-w-0">
       <div className="mx-auto max-w-6xl">
         {/* Header */}
-        <div className="mb-8 border-b-4 border-black pb-6">
-          <h1 className="text-4xl font-bold text-black">{selectedOrg.name}</h1>
+        <div className="mb-8 border-b border-[var(--fm-line)] pb-6">
+          <h1 className="text-[30px] font-semibold tracking-[-.03em] text-black">{selectedOrg.name}</h1>
           <p className="mt-2 text-gray-600">Organization Administration</p>
         </div>
 
@@ -73,7 +73,7 @@ export default function OrgAdminPage() {
               <button
                 key={card.id}
                 onClick={() => router.push(card.href)}
-                className="flex flex-col items-start rounded-lg border-4 border-black bg-white p-6 shadow-brutal transition-all hover:shadow-brutal-lg active:translate-y-1"
+                className="flex flex-col items-start p-6 transition-all fm-card"
               >
                 <div className="mb-4 flex items-center gap-3">
                   <Icon size={28} className="text-black" strokeWidth={3} />
@@ -90,7 +90,7 @@ export default function OrgAdminPage() {
         </div>
 
         {/* Organization Info Box */}
-        <div className="mt-12 rounded-lg border-4 border-black bg-white p-6 shadow-brutal-lg">
+        <div className="mt-12 p-6 fm-card">
           <h3 className="mb-4 font-bold text-black">Organization Details</h3>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>

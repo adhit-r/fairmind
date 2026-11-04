@@ -2,42 +2,51 @@
 import Layout from '../layouts/Layout.astro';
 import PageHero from '../components/marketing/PageHero.astro';
 import '../styles/pages.css';
+
+const structuredData = {
+  '@context': 'https://schema.org',
+  '@type': 'ContactPage',
+  name: 'Contact FairMind',
+  url: 'https://fairmind.xyz/contact/',
+  about: { '@id': 'https://fairmind.xyz/#organization' },
+};
 ---
 
 <Layout
-  title="Contact FairMind | Ask a precise AI assurance question"
-  description="Contact FairMind about AI evaluation evidence, safety review, governance workflows, research, evaluator adapters, or product access."
+  title="Contact FairMind | Agentic AI governance questions"
+  description="Contact FairMind about governance workflows, the release gate in CI, framework coverage, connectors, research collaboration, security disclosures, or product access."
+  structuredData={structuredData}
 >
   <div class="route-page">
     <PageHero
-      signal="Talk plainly"
-      title="Ask a precise"
-      accent="assurance question."
-      description="Tell us what produced the result, what decision it must support, and where the evidence chain breaks. Product access, evaluator adapters, AI safety review, governance workflows, and research collaboration are all in scope."
+      signal="Contact"
+      title="Ask us something"
+      accent="specific."
+      description="Which framework, which system, which handoff. The more concrete the question, the faster the answer. Product access has its own form; this one is for everything else."
       proofs={[
-        { label: 'Product', value: 'Evidence workflow', note: 'Evaluation, review, findings, remediation, retest, assurance package.' },
-        { label: 'Research', value: 'Methods and measurement', note: 'Environmental evidence, AI BOM, claim boundaries, and reproducibility.' },
-        { label: 'Integration', value: 'Evaluator adapters', note: 'Start with the artifact and contract your tool already produces.' },
+        { label: 'Product', value: 'Workflows and gates', note: 'Packs, the builder, the run ledger, the release gate, CLI and GitHub Action.' },
+        { label: 'Frameworks', value: '50 in the registry', note: 'Ask about coverage for yours, or for one we should add.' },
+        { label: 'Research', value: 'Measurement and methods', note: 'FairMind-E, fairness statistics, agent controls.' },
       ]}
       primary={{ label: 'Send a question', href: '#contact-form' }}
-      secondary={{ label: 'Request product access', href: '/request-access' }}
+      secondary={{ label: 'Request product access', href: '/request-access/' }}
     />
 
     <section class="route-section" id="contact-form" aria-labelledby="contact-title">
-      <header class="route-section-heading"><h2 id="contact-title">What should we inspect?</h2><p>For product-fit conversations, the request-access form asks for the most useful evidence-path detail. This form is for everything else.</p></header>
+      <header class="route-section-heading"><h2 id="contact-title">What are you working on?</h2></header>
       <div class="route-form-grid">
         <form class="route-form" action="https://formspree.io/f/xayzqjqw" method="POST">
           <input type="hidden" name="_subject" value="New FairMind question" />
           <div class="route-field"><label for="name">Name</label><input id="name" name="name" autocomplete="name" required /></div>
           <div class="route-field"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="email" required /></div>
-          <div class="route-field route-field-wide"><label for="subject">Topic</label><select id="subject" name="subject" required><option value="">Choose a topic</option><option value="product">Product question</option><option value="research">Research collaboration</option><option value="adapter">Evaluator adapter</option><option value="security">Security disclosure</option><option value="media">Media or speaking</option><option value="other">Other</option></select></div>
-          <div class="route-field route-field-wide"><label for="message">Question</label><textarea id="message" name="message" placeholder="Include the system, evaluator, artifact, or decision context that matters." required></textarea></div>
-          <div class="route-form-footer"><p>We use these details only to respond. Read the <a href="/privacy">Privacy Policy</a>.</p><button class="button button-primary" type="submit">Send question</button></div>
+          <div class="route-field route-field-wide"><label for="subject">Topic</label><select id="subject" name="subject" required><option value="">Choose a topic</option><option value="product">Product question</option><option value="frameworks">Framework coverage</option><option value="connector">Connector or integration</option><option value="research">Research collaboration</option><option value="security">Security disclosure</option><option value="media">Media or speaking</option><option value="other">Other</option></select></div>
+          <div class="route-field route-field-wide"><label for="message">Question</label><textarea id="message" name="message" placeholder="The system, framework, workflow, or decision this is about." required></textarea></div>
+          <div class="route-form-footer"><p>We use these details only to respond. Read the <a href="/privacy/">Privacy Policy</a>.</p><button class="button button-primary" type="submit">Send question</button></div>
         </form>
         <aside class="route-aside-ledger" aria-label="Direct contact routes">
-          <div><span>Email</span><strong><a href="mailto:support@fairmind.xyz">support@fairmind.xyz</a></strong><p>Product, research, integration, and general questions.</p></div>
-          <div><span>Source</span><strong><a href="https://github.com/adhit-r/fairmind">github.com/adhit-r/fairmind</a></strong><p>Inspect the active code and raise technical issues in context.</p></div>
-          <div><span>Documentation</span><strong><a href="https://docs.fairmind.xyz">docs.fairmind.xyz</a></strong><p>Product concepts, limitations, workflows, and reference material.</p></div>
+          <div><strong><a href="mailto:support@fairmind.xyz">support@fairmind.xyz</a></strong><p>Product, research, integration, and general questions.</p></div>
+          <div><strong><a href="https://github.com/adhit-r/fairmind">github.com/adhit-r/fairmind</a></strong><p>Read the code and raise technical issues in context.</p></div>
+          <div><strong><a href="https://docs.fairmind.xyz">docs.fairmind.xyz</a></strong><p>Concepts, limitations, workflows, the CLI and the GitHub Action.</p></div>
         </aside>
       </div>
     </section>

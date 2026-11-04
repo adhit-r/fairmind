@@ -6,6 +6,7 @@ import { Suspense, useEffect, useState } from 'react'
 import { useOrg } from '@/context/OrgContext'
 import { useSystemContext, type AISystemSummary } from '@/components/workflow/SystemContext'
 import { usePendingDecisions } from '@/lib/api/hooks/usePendingDecisions'
+import { useWaitingRuns } from '@/lib/api/hooks/usePacks'
 import { useAuth } from '@/lib/api/hooks/useAuth'
 import type { User } from '@/lib/api/types'
 import { cn } from '@/lib/utils'
@@ -43,6 +44,9 @@ function Spine() {
   const { requests: allRequests } = usePendingDecisions()
   // Approval requests are not org-scoped yet; count only those for systems in this estate.
   const requests = allRequests.filter((r) => systems.some((s) => s.id === r.entity_id))
+  // Workflow runs paused for a person's input or approval are decisions too.
+  const waitingRuns = useWaitingRuns().data ?? []
+  const decisions = requests.length + waitingRuns.length
   const pathname = usePathname()
   const params = useSearchParams()
   const activeStage = pathname === '/dashboard' ? params.get('stage') : null
@@ -52,7 +56,7 @@ function Spine() {
   }, {})
   const stations = [
     ...STAGES.slice(0, 4).map((s) => ({ ...s, count: counts[s.key] ?? 0, hot: false })),
-    { key: 'decision', label: 'Decision', count: requests.length, hot: requests.length > 0 },
+    { key: 'decision', label: 'Decision', count: decisions, hot: decisions > 0, href: '/compliance/runs' },
     { ...STAGES[4], count: counts.operate ?? 0, hot: false },
   ]
 
@@ -60,11 +64,11 @@ function Spine() {
     <nav aria-label="Lifecycle" className="fm-strip relative mt-1.5 pl-1.5 max-md:mt-2 max-md:flex max-md:gap-1.5 max-md:overflow-x-auto max-md:pl-0">
       <span aria-hidden className="absolute bottom-3 left-[11px] top-3 w-0.5 rounded bg-[var(--fm-line)] max-md:hidden" />
       {stations.map((s) => {
-        const on = activeStage === s.key
+        const on = activeStage === s.key || (s.key === 'decision' && pathname.startsWith('/compliance/runs'))
         return (
           <Link
             key={s.key}
-            href={`/dashboard?stage=${s.key}`}
+            href={'href' in s && s.href ? s.href : `/dashboard?stage=${s.key}`}
             className={cn(
               'relative flex h-[34px] items-center gap-3 pr-2.5 text-[13px] font-medium text-[var(--fm-ink2)] hover:text-[var(--fm-ink)]',
               'max-md:h-8 max-md:flex-none max-md:gap-2 max-md:rounded-full max-md:border max-md:border-[var(--fm-line)] max-md:bg-white max-md:px-2.5',

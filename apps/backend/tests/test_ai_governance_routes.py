@@ -171,6 +171,38 @@ def test_ai_governance_workspace_and_system_registry():
     assert fetched_system["lifecycleSummary"]["stage"] == fetched_system["lifecycleStage"]
 
 
+def test_ai_governance_new_system_without_evidence_reads_zero_readiness_everywhere(
+    authenticated_org_database,
+):
+    workspace = client.post(
+        "/api/v1/ai-governance/workspaces",
+        json={"name": "Readiness workspace", "owner": "owner@acme.ai"},
+    ).json()
+    created = client.post(
+        "/api/v1/ai-governance/systems",
+        json={
+            "workspace_id": workspace["id"],
+            "name": "Brand new system",
+            "owner": "risk@acme.ai",
+            "risk_tier": "high",
+            "lifecycle_stage": "onboard",
+            "metadata": {"business_line": "Retail"},
+        },
+    )
+    assert created.status_code == 200
+    system_id = created.json()["id"]
+    _scope_system(authenticated_org_database, system_id)
+
+    # The create response carries the same readiness as every later read, so the
+    # client never has to estimate one.
+    assert created.json()["readiness"] == 0
+    assert created.json()["lifecycleSummary"]["readiness"] == 0
+    listed = client.get("/api/v1/ai-governance/systems").json()
+    assert [item["readiness"] for item in listed if item["id"] == system_id] == [0]
+    assert client.get(f"/api/v1/ai-governance/systems/{system_id}").json()["readiness"] == 0
+    assert client.get(f"/api/v1/ai-governance/lifecycle/{system_id}/summary").json()["readiness"] == 0
+
+
 def test_ai_governance_lifecycle_summary_persists_stage_progression(authenticated_org_database):
     workspace_resp = client.post(
         "/api/v1/ai-governance/workspaces",
@@ -187,7 +219,7 @@ def test_ai_governance_lifecycle_summary_persists_stage_progression(authenticate
             "workspace_id": workspace["id"],
             "name": "Lifecycle Test System",
             "owner": "risk@acme.ai",
-            "risk_tier": "high",
+            "risk_tier": "low",
             "lifecycle_stage": "onboard",
             "metadata": {},
         },
@@ -205,7 +237,7 @@ def test_ai_governance_lifecycle_summary_persists_stage_progression(authenticate
         json={
             "systemId": system_id,
             "riskType": "bias",
-            "severity": "high",
+            "severity": "medium",
             "description": "Approval disparity detected.",
         },
     )
@@ -296,6 +328,26 @@ def test_ai_governance_lifecycle_summary_persists_stage_progression(authenticate
     persisted_operate = client.get(f"/api/v1/ai-governance/systems/{system_id}")
     assert persisted_operate.status_code == 200
     assert persisted_operate.json()["lifecycleStage"] == "operate"
+
+
+def test_ai_governance_open_high_risk_puts_system_in_remediate(authenticated_org_database):
+    system_id = _create_scoped_system(authenticated_org_database, "High finding system")
+    risk_resp = client.post(
+        "/api/v1/ai-governance/risks/assess",
+        json={
+            "systemId": system_id,
+            "riskType": "bias",
+            "severity": "high",
+            "description": "Approval disparity detected.",
+        },
+    )
+    assert risk_resp.status_code == 200
+
+    # SYSTEM_JOURNEY.md: Remediate lasts until no open high or critical risk remains,
+    # so the spine and Today (both read the system list) count it there, not under Govern.
+    assert client.get(f"/api/v1/ai-governance/lifecycle/{system_id}/summary").json()["stage"] == "remediate"
+    listed = client.get("/api/v1/ai-governance/systems").json()
+    assert [item["lifecycleStage"] for item in listed if item["id"] == system_id] == ["remediate"]
 
 
 def test_ai_governance_policy_create_and_list():
@@ -447,14 +499,25 @@ def test_ai_governance_evidence_endpoints_require_authentication(authenticated_o
         client.headers["Authorization"] = authorization
 
 
-def test_ai_governance_risk_dashboard_and_assessment(authenticated_org_database):
-    system_id = _create_scoped_system(authenticated_org_database, "Acme credit risk system")
+def test_ai_governance_risk_dashboard_and_assessment(authenticated_org_database, monkeypatch):
+    # The MIT and IBM library files are not in the repository, so the test brings its own two entries.
+    library = [
+        {"library_id": f"{source}-1", "source": source, "title": f"{source} library risk", "description": "",
+         "severity": "high", "likelihood": "possible", "risk_categories": [], "risk_score": 0.5}
+        for source in ("mit", "ibm")
+    ]
+    monkeypatch.setattr("api.routes.ai_governance._load_risk_library", lambda: library)
+    system_id = _create_scoped_system(authenticated_org_database, "Acme credit")
     dashboard_resp = client.get(f"/api/v1/ai-governance/dashboard/risk?system_id={system_id}")
     assert dashboard_resp.status_code == 200
     dashboard = dashboard_resp.json()
-    assert "risks" in dashboard
-    assert "summary" in dashboard
-    assert isinstance(dashboard["risks"], list)
+    # A new system has no findings: library suggestions are listed apart and never counted.
+    assert dashboard["risks"] == []
+    assert {s["title"] for s in dashboard["suggested"]} == {"mit library risk", "ibm library risk"}
+    assert dashboard["summary"]["total"] == dashboard["summary"]["open"] == 0
+    assert dashboard["summary"]["suggested"] == len(dashboard["suggested"])
+    org_wide = client.get("/api/v1/ai-governance/dashboard/risk").json()
+    assert org_wide["risks"] == [] and org_wide["suggested"] == []
 
     create_resp = client.post(
         "/api/v1/ai-governance/risks/assess",
@@ -475,11 +538,12 @@ def test_ai_governance_risk_dashboard_and_assessment(authenticated_org_database)
     refreshed_resp = client.get(f"/api/v1/ai-governance/dashboard/risk?system_id={system_id}")
     assert refreshed_resp.status_code == 200
     refreshed = refreshed_resp.json()
-    assert any(risk["id"] == created["id"] for risk in refreshed["risks"])
+    assert [risk["id"] for risk in refreshed["risks"]] == [created["id"]]
+    assert refreshed["summary"]["open"] == 1 and refreshed["summary"]["automated"] == 0
 
 
 def test_ai_governance_remediation_task_loop(authenticated_org_database):
-    system_id = _create_scoped_system(authenticated_org_database, "Acme remediation system")
+    system_id = _create_scoped_system(authenticated_org_database, "Acme remediation")
     create_resp = client.post(
         "/api/v1/ai-governance/remediation",
         json={

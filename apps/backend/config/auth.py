@@ -325,7 +325,9 @@ _USER_COLUMNS = (
     "u.permissions, u.password_hash, "
     "COALESCE(u.org_id, u.primary_org_id, "
     "(SELECT m.org_id FROM org_members m WHERE m.user_id = u.id AND m.status = 'active' "
-    "ORDER BY m.joined_at LIMIT 1)) AS resolved_org_id"
+    "ORDER BY m.joined_at LIMIT 1)) AS resolved_org_id, "
+    "(SELECT m.role FROM org_members m WHERE m.user_id = u.id AND m.status = 'active' "
+    "ORDER BY m.joined_at LIMIT 1) AS resolved_org_role"
 )
 
 
@@ -368,6 +370,14 @@ def _user_from_row(row) -> User:
         permissions = json.loads(permissions)
     if role == UserRole.ADMIN and "*" not in permissions:
         permissions = [*permissions, "*"]
+    try:
+        org_role = row["resolved_org_role"]
+    except (KeyError, IndexError):
+        org_role = None
+    if org_role in ("owner", "admin") and "model:write" not in permissions:
+        # Org owners and admins may change governance records
+        # (GovernanceAssuranceService.may_mutate); every token they mint carries it.
+        permissions = [*permissions, "model:write"]
     return User(
         id=str(row["id"]),
         email=row["email"],
@@ -416,7 +426,9 @@ async def get_current_active_user(
     current_user: TokenData = Depends(get_current_user)
 ) -> TokenData:
     """Return a human session authenticated with an access token."""
-    if current_user.token_type != TokenType.ACCESS:
+    # API keys (POST /api/v1/auth/api-keys) authorise requests like access tokens;
+    # only refresh tokens are turned away here.
+    if current_user.token_type not in (TokenType.ACCESS, TokenType.API_KEY):
         raise InvalidTokenException("Access token required")
     # In production, you might want to check if user is still active in database
     return current_user

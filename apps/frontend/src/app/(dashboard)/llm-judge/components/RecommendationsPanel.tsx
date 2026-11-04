@@ -79,7 +79,7 @@ Evaluation ID: ${result.evaluation_id}
 
   if (result.recommendations.length === 0) {
     return (
-      <Card className="border-2 border-black shadow-brutal p-6">
+      <Card className="p-6 fm-card">
         <div className="text-center py-8 space-y-3">
           <IconBulb className="w-12 h-12 mx-auto text-yellow-600" />
           <div>
@@ -94,8 +94,8 @@ Evaluation ID: ${result.evaluation_id}
   }
 
   return (
-    <Card className="border-2 border-black shadow-brutal">
-      <div className="p-6 border-b-2 border-black space-y-4">
+    <Card className="fm-card">
+      <div className="p-6 border-b border-[var(--fm-line)] space-y-4">
         <div>
           <h3 className="text-xl font-bold">Improvement Recommendations</h3>
           <p className="text-sm text-gray-600 mt-1">
@@ -107,7 +107,7 @@ Evaluation ID: ${result.evaluation_id}
           onClick={downloadRecommendations}
           variant="neutral"
           size="sm"
-          className="border-2 border-black font-bold"
+          className="border border-[var(--fm-line)] font-bold"
         >
           <IconDownload className="w-4 h-4 mr-2" />
           Download Report
@@ -146,7 +146,7 @@ Evaluation ID: ${result.evaluation_id}
             {expandedIndex === index && (
               <div className="mt-4 space-y-4 bg-blue-50 p-4 rounded border-2 border-blue-200">
                 <div className="space-y-2">
-                  <p className="text-sm font-bold uppercase text-gray-700">Full Recommendation</p>
+                  <p className="text-sm font-semibold text-gray-700">Full Recommendation</p>
                   <p className="text-sm leading-relaxed text-gray-800">
                     {recommendation}
                   </p>
@@ -154,7 +154,7 @@ Evaluation ID: ${result.evaluation_id}
 
                 {/* Implementation Tips */}
                 <div className="bg-white p-3 rounded border border-blue-200">
-                  <p className="text-xs font-bold uppercase text-gray-600 mb-2">
+                  <p className="text-xs font-semibold uppercase text-gray-600 mb-2">
                     💭 How to implement this
                   </p>
                   <ul className="text-xs text-gray-700 space-y-1 list-disc list-inside">
@@ -170,8 +170,8 @@ Evaluation ID: ${result.evaluation_id}
       </div>
 
       {/* Action Bar */}
-      <div className="bg-purple-50 border-t-2 border-black p-4 space-y-3">
-        <p className="text-xs font-bold uppercase text-purple-900">Next Steps</p>
+      <div className="bg-purple-50 border-t border-[var(--fm-line)] p-4 space-y-3">
+        <p className="text-xs font-semibold uppercase text-purple-900">Next Steps</p>
         <ol className="text-xs text-purple-900 space-y-2 list-decimal list-inside">
           <li>Review each recommendation above</li>
           <li>Modify your text based on the suggestions</li>

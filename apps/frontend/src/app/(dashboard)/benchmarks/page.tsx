@@ -51,11 +51,11 @@ export default function BenchmarksPage() {
 
   const getStatusBadge = (status: string) => {
     if (status === 'completed') {
-      return <Badge variant="default" className="border-2 border-black bg-green-500">Completed</Badge>
+      return <Badge variant="default" className="border border-[var(--fm-line)] bg-green-500">Completed</Badge>
     } else if (status === 'running') {
-      return <Badge variant="secondary" className="border-2 border-black bg-yellow-400">Running</Badge>
+      return <Badge variant="secondary" className="border border-[var(--fm-line)] bg-yellow-400">Running</Badge>
     } else {
-      return <Badge variant="destructive" className="border-2 border-black">Failed</Badge>
+      return <Badge variant="destructive" className="border border-[var(--fm-line)]">Failed</Badge>
     }
   }
 
@@ -73,7 +73,7 @@ export default function BenchmarksPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold">Benchmarks</h1>
+          <h1 className="text-[30px] font-semibold tracking-[-.03em]">Benchmarks</h1>
           <p className="text-muted-foreground mt-1">
             Model performance benchmarking and evaluation
           </p>
@@ -85,7 +85,7 @@ export default function BenchmarksPage() {
               Run Benchmark
             </Button>
           </DialogTrigger>
-          <DialogContent className="border-2 border-black shadow-brutal-lg">
+          <DialogContent className="fm-card">
             <DialogHeader>
               <DialogTitle>Run New Benchmark</DialogTitle>
               <DialogDescription>
@@ -98,7 +98,7 @@ export default function BenchmarksPage() {
                 <Input
                   id="modelId"
                   {...register('modelId')}
-                  className="border-2 border-black"
+                  className="border border-[var(--fm-line)]"
                 />
                 {errors.modelId && (
                   <p className="text-sm text-red-600">{errors.modelId.message}</p>
@@ -112,7 +112,7 @@ export default function BenchmarksPage() {
                     register('benchmarkType').onChange({ target: { value } })
                   }}
                 >
-                  <SelectTrigger className="border-2 border-black">
+                  <SelectTrigger className="border border-[var(--fm-line)]">
                     <SelectValue placeholder="Select benchmark type" />
                   </SelectTrigger>
                   <SelectContent>
@@ -145,7 +145,7 @@ export default function BenchmarksPage() {
       </div>
 
       {/* Benchmarks Table */}
-      <Card className="p-6 border-2 border-black shadow-brutal">
+      <Card className="p-6 fm-card">
         {error && (
           <div className="mb-4 p-4 border-2 border-red-500 bg-red-50">
             <p className="text-red-600">{error.message}</p>
@@ -163,7 +163,7 @@ export default function BenchmarksPage() {
         ) : (
           <Table>
             <TableHeader>
-              <TableRow className="border-2 border-black">
+              <TableRow className="border border-[var(--fm-line)]">
                 <TableHead className="font-bold">Name</TableHead>
                 <TableHead className="font-bold">Type</TableHead>
                 <TableHead className="font-bold">Status</TableHead>
@@ -173,10 +173,10 @@ export default function BenchmarksPage() {
             </TableHeader>
             <TableBody>
               {benchmarks.map((benchmark) => (
-                <TableRow key={benchmark.id} className="border-b-2 border-black">
+                <TableRow key={benchmark.id} className="border-b border-[var(--fm-line)]">
                   <TableCell className="font-medium">{benchmark.name}</TableCell>
                   <TableCell>
-                    <Badge variant="default" className="border-2 border-black">
+                    <Badge variant="default" className="border border-[var(--fm-line)]">
                       {benchmark.type}
                     </Badge>
                   </TableCell>

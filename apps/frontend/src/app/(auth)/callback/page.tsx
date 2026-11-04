@@ -78,14 +78,14 @@ function AuthCallbackContent() {
   if (error) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="w-full max-w-md rounded-lg border-4 border-black bg-white p-8 shadow-brutal-lg">
+        <div className="w-full max-w-md p-8 fm-card">
           <h1 className="mb-4 text-2xl font-bold text-black">
             Authentication Error
           </h1>
           <p className="mb-6 text-gray-700">{error}</p>
           <button
             onClick={() => router.push("/login")}
-            className="w-full rounded-lg bg-black px-4 py-2 font-bold text-white transition-all hover:shadow-brutal-lg"
+            className="w-full rounded-full bg-[var(--fm-ink)] px-4 py-2 font-semibold text-white transition-all"
           >
             Back to Login
           </button>
@@ -97,7 +97,7 @@ function AuthCallbackContent() {
   // Show loading state while processing
   return (
     <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="w-full max-w-md rounded-lg border-4 border-black bg-white p-8 shadow-brutal-lg">
+      <div className="w-full max-w-md p-8 fm-card">
         <h1 className="mb-4 text-2xl font-bold text-black">
           Completing Authentication
         </h1>
@@ -108,7 +108,7 @@ function AuthCallbackContent() {
         {/* Loading spinner */}
         <div className="flex justify-center">
           <div
-            className="h-12 w-12 animate-spin rounded-full border-4 border-gray-300 border-t-black"
+            className="h-12 w-12 animate-spin rounded-full border-2 border-[var(--fm-line)] border-t-[var(--fm-ink)]"
             role="status"
             aria-label="Loading"
           />
@@ -127,7 +127,7 @@ function AuthCallbackContent() {
 function AuthCallbackLoading() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="w-full max-w-md rounded-lg border-4 border-black bg-white p-8 shadow-brutal-lg">
+      <div className="w-full max-w-md p-8 fm-card">
         <h1 className="mb-4 text-2xl font-bold text-black">
           Completing Authentication
         </h1>
@@ -137,7 +137,7 @@ function AuthCallbackLoading() {
 
         <div className="flex justify-center">
           <div
-            className="h-12 w-12 animate-spin rounded-full border-4 border-gray-300 border-t-black"
+            className="h-12 w-12 animate-spin rounded-full border-2 border-[var(--fm-line)] border-t-[var(--fm-ink)]"
             role="status"
             aria-label="Loading"
           />

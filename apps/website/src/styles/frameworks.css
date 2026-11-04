@@ -1,0 +1,269 @@
+.fw-hero {
+  padding-block: clamp(3rem, 7vw, 5.5rem);
+  border-bottom: var(--line-heavy);
+}
+
+.fw-hero h1 {
+  max-width: 22ch;
+  margin: 0;
+  font-size: clamp(2.4rem, 5vw, 4rem);
+}
+
+.fw-lead {
+  max-width: 48rem;
+  margin: 1.5rem 0 0;
+  color: var(--ink-78);
+  font-size: clamp(1.05rem, 1.4vw, 1.25rem);
+}
+
+.fw-hero h1 em {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-weight: 400;
+}
+
+.fw-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.fw-chip {
+  padding: 0.4rem 0.9rem;
+  border: var(--line);
+  border-radius: 999px;
+  background: var(--white);
+  color: var(--ink2);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 200ms var(--ease-out), color 200ms var(--ease-out);
+}
+
+.fw-chip:hover {
+  color: var(--ink);
+}
+
+.fw-chip[aria-pressed='true'] {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--white);
+}
+
+.fw-registry {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.fw-registry thead th {
+  padding: 0 0 0.75rem;
+  color: var(--ink3);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.fw-registry th,
+.fw-registry td {
+  padding: 1rem 0;
+  border-top: var(--line);
+  vertical-align: top;
+}
+
+.fw-registry thead th {
+  border-top: 0;
+}
+
+.fw-registry td,
+.fw-registry thead th:not(:first-child) {
+  width: 8rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.fw-registry tbody th {
+  padding-right: 1.5rem;
+  font-weight: 400;
+  text-align: left;
+}
+
+.fw-name {
+  display: block;
+  font-weight: 500;
+}
+
+.fw-meta {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--ink3);
+  font-size: 0.82rem;
+}
+
+.fw-registry td a {
+  color: var(--ink);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.fw-registry td a:hover {
+  text-decoration: underline;
+}
+
+.fw-registry tr.is-reference td {
+  color: var(--ink3);
+}
+
+.fw-other {
+  margin: 2rem 0 0;
+  color: var(--ink2);
+  font-size: 0.9rem;
+}
+
+@media (max-width: 40rem) {
+  .fw-registry td,
+  .fw-registry thead th:not(:first-child) {
+    width: 4.5rem;
+  }
+
+  .fw-registry thead th:nth-child(3),
+  .fw-registry td:nth-child(3) {
+    display: none;
+  }
+}
+
+.fw-reqs {
+  display: grid;
+  margin: 0;
+  border: var(--line);
+}
+
+.fw-reqs > div {
+  display: grid;
+  gap: 1.5rem;
+  padding: 1.25rem 1.5rem;
+  grid-template-columns: minmax(0, 22rem) minmax(0, 1fr);
+}
+
+.fw-reqs > div + div {
+  border-top: var(--line);
+}
+
+.fw-reqs dt {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.fw-reqs dd {
+  margin: 0;
+  color: var(--ink-78);
+}
+
+.fw-split {
+  display: grid;
+  align-items: start;
+  gap: clamp(2rem, 5vw, 4rem);
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+}
+
+.fw-note {
+  margin: 1.25rem 0 0;
+  padding: 1rem 1.25rem;
+  border-left: 6px solid var(--orange);
+  background: var(--white);
+  color: var(--ink-78);
+}
+
+.fw-evidence {
+  display: grid;
+  gap: 1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fw-evidence li {
+  padding: 1.1rem 1.25rem 1.1rem 3.25rem;
+  border: var(--line);
+  background: var(--white);
+  box-shadow: var(--shadow);
+  font-weight: 600;
+  position: relative;
+}
+
+.fw-evidence li::before {
+  content: '';
+  position: absolute;
+  top: 1.35rem;
+  left: 1.25rem;
+  width: 1rem;
+  height: 1rem;
+  border: 1px solid var(--line-color);
+  background: var(--teal);
+}
+
+.fw-related-title {
+  margin-bottom: 1.5rem;
+  font-size: 1.75rem;
+}
+
+.fw-related {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fw-related a {
+  display: inline-block;
+  padding: 0.6rem 1rem;
+  border: var(--line);
+  background: var(--white);
+  box-shadow: var(--shadow);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.fw-related a:hover {
+  background: var(--teal-tint);
+}
+
+@media (max-width: 52rem) {
+  .fw-reqs > div,
+  .fw-split {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+
+  .fw-split {
+    gap: 2rem;
+  }
+}
+
+.fw-reqs,
+.fw-evidence li,
+.fw-related a {
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.fw-evidence li::before {
+  border: 0;
+  border-radius: 50%;
+}
+
+.fw-note {
+  border-left: 0;
+  border-radius: var(--radius);
+  background: var(--bg);
+}

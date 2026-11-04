@@ -51,6 +51,16 @@ CHAIN = (
     "013i_imported_evidence_delivery_integrity.sql",
     "013j_owner_decision_override_integrity.sql",
 )
+# PostgreSQL 18's frozen assurance catalog is measured with this between 010 and 011.
+PG18_RECONCILIATION = "upgrade_paths/010_to_011_drift_reconciliation.sql"
+# Idempotent, run on every setup after the ORM tables exist (015 alters runtime tables).
+# 014_neon_cleanup.sql drops tables and is an operator step, so it is not here.
+ALWAYS = (
+    "014_workflow_versions.sql",
+    "015_org_scope_legacy_tables.sql",
+    "016_registration_requests.sql",
+    "017_org_ai_providers.sql",
+)
 
 
 def database_url() -> str:
@@ -84,8 +94,24 @@ def apply_chain(url: str, schema: str) -> None:
             # 013-series guards require the schema owner to own its tables; on
             # PostgreSQL 15+ a new database's public schema is pg_database_owner's.
             cur.execute(f'ALTER SCHEMA "{schema}" OWNER TO CURRENT_USER')
-            for name in CHAIN:
+            cur.execute("SELECT current_setting('server_version_num')::int >= 180000")
+            chain = list(CHAIN)
+            if cur.fetchone()[0]:
+                chain.insert(chain.index("011_governance_assurance.sql"), PG18_RECONCILIATION)
+            for name in chain:
                 cur.execute("SELECT pg_catalog.set_config('fairmind.migration_schema', %s, false)", (schema,))
+                cur.execute((MIGRATIONS / name).read_text(encoding="utf-8"))
+                conn.commit()
+                print(f"migrations: applied {name}")
+    finally:
+        conn.close()
+
+
+def apply_always(url: str) -> None:
+    conn = psycopg2.connect(url)
+    try:
+        with conn.cursor() as cur:
+            for name in ALWAYS:
                 cur.execute((MIGRATIONS / name).read_text(encoding="utf-8"))
                 conn.commit()
                 print(f"migrations: applied {name}")
@@ -165,6 +191,7 @@ def main() -> None:
     if args.command == "setup":
         apply_chain(url, schema)
         add_orm_tables_and_columns(engine)
+        apply_always(url)
         load_reference_data(engine)
     sys.exit(verify(engine))
 

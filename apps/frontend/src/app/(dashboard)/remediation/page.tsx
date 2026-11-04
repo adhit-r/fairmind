@@ -223,21 +223,21 @@ export default function RemediationPage() {
 
   return (
     <div className="space-y-6">
-      <Card className="overflow-hidden border-4 border-black bg-[linear-gradient(135deg,#fff4de_0%,#fff_55%,#e9f7f0_100%)] shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+      <Card className="overflow-hidden bg-[linear-gradient(135deg,#fff4de_0%,#fff_55%,#e9f7f0_100%)] rounded-[14px] shadow-[var(--fm-shadow)]">
         <div className="grid gap-0 xl:grid-cols-[1.2fr_0.8fr]">
-          <div className="border-b-4 border-black p-6 xl:border-b-0 xl:border-r-4">
+          <div className="border-b border-[var(--fm-line)] p-6 xl:border-b-0 xl:border-r-4">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge className="border-2 border-black bg-black px-3 py-1 font-black uppercase text-white">
+              <Badge className="border border-[var(--fm-line)] bg-[var(--fm-ink)] px-3 py-1 font-semibold text-white">
                 <IconSparkles className="mr-2 h-4 w-4" />
                 Workflow bridge
               </Badge>
-              <Badge className="border-2 border-black bg-white px-3 py-1 font-black uppercase text-black">
+              <Badge className="border border-[var(--fm-line)] bg-white px-3 py-1 font-semibold text-black">
                 <IconRouteAltLeft className="mr-2 h-4 w-4" />
                 Risks to remediation
               </Badge>
             </div>
 
-            <h1 className="mt-4 text-4xl font-black uppercase tracking-tight text-balance">
+            <h1 className="mt-4 text-4xl font-semibold tracking-tight text-balance">
               Remediation turns risks into owned work
             </h1>
             <p className="mt-3 max-w-2xl text-sm text-slate-700">
@@ -247,23 +247,23 @@ export default function RemediationPage() {
             </p>
 
             <div className="mt-5 flex flex-wrap gap-2">
-              <Badge variant="outline" className="border-2 border-black bg-white px-3 py-1 font-bold uppercase">
+              <Badge variant="outline" className="border border-[var(--fm-line)] bg-white px-3 py-1 font-semibold">
                 {selectedSystem.name}
               </Badge>
-              <Badge variant="outline" className="border-2 border-black bg-white px-3 py-1 font-bold uppercase">
+              <Badge variant="outline" className="border border-[var(--fm-line)] bg-white px-3 py-1 font-semibold">
                 Owner: {selectedSystem.owner}
               </Badge>
-              <Badge className="border-2 border-black bg-black px-3 py-1 font-black uppercase text-white">
+              <Badge className="border border-[var(--fm-line)] bg-[var(--fm-ink)] px-3 py-1 font-semibold text-white">
                 Stage: {selectedSystem.stage}
               </Badge>
             </div>
 
             {hasRiskHandoff && (
-              <div className="mt-5 rounded-2xl border-2 border-black bg-white p-4 shadow-[4px_4px_0px_0px_#000]">
-                <p className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">
+              <div className="mt-5 rounded-2xl p-4 fm-card">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
                   Prefilled from risk handoff
                 </p>
-                <p className="mt-2 text-lg font-black uppercase">
+                <p className="mt-2 text-lg font-semibold">
                   {linkedRiskTitle}
                 </p>
                 <p className="mt-1 text-sm text-slate-700">
@@ -274,24 +274,24 @@ export default function RemediationPage() {
             )}
           </div>
 
-          <div className="bg-black p-6 text-white">
-            <p className="text-xs font-black uppercase tracking-[0.22em] text-orange">Decision flow</p>
+          <div className="fm-card p-6">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--fm-ink3)]">Decision flow</p>
             <div className="mt-4 space-y-3">
-              <div className="border-2 border-white p-4">
-                <p className="font-black uppercase">1. Review current risks</p>
-                <p className="mt-1 text-sm text-slate-200">
+              <div className="rounded-[12px] border border-[var(--fm-line)] bg-[var(--fm-bg)] p-4">
+                <p className="font-semibold">1. Review current risks</p>
+                <p className="mt-1 text-sm text-[var(--fm-ink2)]">
                   Risk items feed this page so remediation work stays tied to the real blockers.
                 </p>
               </div>
-              <div className="border-2 border-white p-4">
-                <p className="font-black uppercase">2. Create or update tasks</p>
-                <p className="mt-1 text-sm text-slate-200">
+              <div className="rounded-[12px] border border-[var(--fm-line)] bg-[var(--fm-bg)] p-4">
+                <p className="font-semibold">2. Create or update tasks</p>
+                <p className="mt-1 text-sm text-[var(--fm-ink2)]">
                   Create a task from a risk handoff or add a new corrective action manually.
                 </p>
               </div>
-              <div className="border-2 border-white p-4">
-                <p className="font-black uppercase">3. Close the loop</p>
-                <p className="mt-1 text-sm text-slate-200">
+              <div className="rounded-[12px] border border-[var(--fm-line)] bg-[var(--fm-bg)] p-4">
+                <p className="font-semibold">3. Close the loop</p>
+                <p className="mt-1 text-sm text-[var(--fm-ink2)]">
                   Mark work in progress or done, then recheck evidence before approval.
                 </p>
               </div>
@@ -301,40 +301,40 @@ export default function RemediationPage() {
       </Card>
 
       <div className="grid gap-4 md:grid-cols-4">
-        <Card className="border-2 border-black p-5 shadow-brutal">
-          <p className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">Active</p>
-          <p className="mt-2 text-3xl font-black">{summary.active}</p>
+        <Card className="p-5 fm-card">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Active</p>
+          <p className="mt-2 text-3xl font-semibold">{summary.active}</p>
           <p className="mt-1 text-sm text-muted-foreground">Open, in progress, and blocked work.</p>
         </Card>
-        <Card className="border-2 border-black p-5 shadow-brutal">
-          <p className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">Linked Risks</p>
-          <p className="mt-2 text-3xl font-black">{summary.linkedRiskReferences}</p>
+        <Card className="p-5 fm-card">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Linked Risks</p>
+          <p className="mt-2 text-3xl font-semibold">{summary.linkedRiskReferences}</p>
           <p className="mt-1 text-sm text-muted-foreground">Tasks prefilled from the risk register.</p>
         </Card>
-        <Card className="border-2 border-black p-5 shadow-brutal">
-          <p className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">Manual Tasks</p>
-          <p className="mt-2 text-3xl font-black">{Math.max(summary.total - summary.linkedRiskReferences, 0)}</p>
+        <Card className="p-5 fm-card">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Manual Tasks</p>
+          <p className="mt-2 text-3xl font-semibold">{Math.max(summary.total - summary.linkedRiskReferences, 0)}</p>
           <p className="mt-1 text-sm text-muted-foreground">Corrective actions added directly here.</p>
         </Card>
-        <Card className="border-2 border-black p-5 shadow-brutal">
-          <p className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">Done</p>
-          <p className="mt-2 text-3xl font-black">{summary.completed}</p>
+        <Card className="p-5 fm-card">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Done</p>
+          <p className="mt-2 text-3xl font-semibold">{summary.completed}</p>
           <p className="mt-1 text-sm text-muted-foreground">Closed tasks ready to support approval.</p>
         </Card>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
-        <Card className="border-2 border-black p-6 shadow-brutal">
+        <Card className="p-6 fm-card">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-2xl font-black">Create remediation task</h2>
+              <h2 className="text-2xl font-semibold">Create remediation task</h2>
               <p className="mt-1 text-sm text-muted-foreground">
                 Keep the task tied to the selected AI system. Use the risk handoff fields if you
                 arrived here from the risk register.
               </p>
             </div>
 
-            <Badge className="border-2 border-black bg-emerald-100 px-3 py-2 font-black uppercase text-emerald-900">
+            <Badge className="border border-[var(--fm-line)] bg-emerald-100 px-3 py-2 font-semibold text-emerald-900">
               <IconShieldCheck className="mr-2 h-4 w-4" />
               System scoped
             </Badge>
@@ -343,14 +343,14 @@ export default function RemediationPage() {
           <div className="mt-5 space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label className="font-bold uppercase tracking-wide">Source</Label>
+                <Label className="font-semibold tracking-wide">Source</Label>
                 <div className="flex flex-wrap gap-2">
                   {(['governance_blocker', 'risk', 'evidence_gap', 'bias_scan', 'manual'] as RemediationSourceType[]).map((option) => (
                     <Button
                       key={option}
                       type="button"
                       variant={draft.source === option ? 'default' : 'neutral'}
-                      className="border-2 border-black text-xs font-bold uppercase"
+                      className="border border-[var(--fm-line)] text-xs font-semibold uppercase"
                       onClick={() => setDraft((current) => ({ ...current, source: option }))}
                     >
                       {SOURCE_LABELS[option]}
@@ -360,14 +360,14 @@ export default function RemediationPage() {
               </div>
 
               <div className="space-y-2">
-                <Label className="font-bold uppercase tracking-wide">Re-test Required</Label>
-                <div className="flex items-center gap-3 rounded-2xl border-2 border-black bg-slate-50 p-3">
+                <Label className="font-semibold tracking-wide">Re-test Required</Label>
+                <div className="flex items-center gap-3 rounded-2xl border border-[var(--fm-line)] bg-slate-50 p-3">
                   <button
                     type="button"
                     onClick={() => setDraft((current) => ({ ...current, retestRequired: !current.retestRequired }))}
-                    className={`flex h-7 w-14 items-center rounded-full border-2 border-black transition-colors ${draft.retestRequired ? 'bg-black' : 'bg-white'}`}
+                    className={`flex h-7 w-14 items-center rounded-full border border-[var(--fm-line)] transition-colors ${draft.retestRequired ? 'bg-[var(--fm-ink)]' : 'bg-white'}`}
                   >
-                    <span className={`inline-block h-5 w-5 rounded-full border-2 border-black bg-white transition-transform ${draft.retestRequired ? 'translate-x-7' : 'translate-x-0.5'}`} />
+                    <span className={`inline-block h-5 w-5 rounded-full border border-[var(--fm-line)] bg-white transition-transform ${draft.retestRequired ? 'translate-x-7' : 'translate-x-0.5'}`} />
                   </button>
                   <div>
                     <p className="text-sm font-bold">{draft.retestRequired ? 'Yes — re-test before closing' : 'No re-test needed'}</p>
@@ -378,45 +378,45 @@ export default function RemediationPage() {
             </div>
 
             <div className="space-y-2">
-              <Label className="font-bold uppercase tracking-wide">Risk ID</Label>
+              <Label className="font-semibold tracking-wide">Risk ID</Label>
               <Input
                 value={draft.riskId}
                 onChange={(event) => setDraft((current) => ({ ...current, riskId: event.target.value }))}
-                className="border-2 border-black bg-white font-medium"
+                className="border border-[var(--fm-line)] bg-white font-medium"
                 placeholder="Optional: link this task to a specific risk"
               />
             </div>
 
             <div className="space-y-2">
-              <Label className="font-bold uppercase tracking-wide">Task title</Label>
+              <Label className="font-semibold tracking-wide">Task title</Label>
               <Input
                 value={draft.title}
                 onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
-                className="border-2 border-black bg-white font-medium"
+                className="border border-[var(--fm-line)] bg-white font-medium"
                 placeholder="e.g. Re-run fairness evaluation and attach results"
               />
             </div>
 
             <div className="space-y-2">
-              <Label className="font-bold uppercase tracking-wide">Task details</Label>
+              <Label className="font-semibold tracking-wide">Task details</Label>
               <Textarea
                 value={draft.description}
                 onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))}
-                className="min-h-[140px] border-2 border-black bg-white"
+                className="min-h-[140px] border border-[var(--fm-line)] bg-white"
                 placeholder="Describe the remediation action, success criteria, and what evidence will close the loop."
               />
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label className="font-bold uppercase tracking-wide">Priority</Label>
+                <Label className="font-semibold tracking-wide">Priority</Label>
                 <div className="grid grid-cols-2 gap-2">
                   {PRIORITY_OPTIONS.map((option) => (
                     <Button
                       key={option}
                       type="button"
                       variant={draft.priority === option ? 'default' : 'neutral'}
-                      className="justify-start border-2 border-black uppercase"
+                      className="justify-start border border-[var(--fm-line)] uppercase"
                       onClick={() => setDraft((current) => ({ ...current, priority: option }))}
                     >
                       {option}
@@ -426,24 +426,24 @@ export default function RemediationPage() {
               </div>
 
               <div className="space-y-2">
-                <Label className="font-bold uppercase tracking-wide">Owner</Label>
+                <Label className="font-semibold tracking-wide">Owner</Label>
                 <Input
                   value={draft.owner}
                   onChange={(event) => setDraft((current) => ({ ...current, owner: event.target.value }))}
-                  className="border-2 border-black bg-white font-medium"
+                  className="border border-[var(--fm-line)] bg-white font-medium"
                   placeholder="Optional owner or team"
                 />
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label className="font-bold uppercase tracking-wide">Evidence needed</Label>
+              <Label className="font-semibold tracking-wide">Evidence needed</Label>
               <Textarea
                 value={draft.evidenceNeeded}
                 onChange={(event) =>
                   setDraft((current) => ({ ...current, evidenceNeeded: event.target.value }))
                 }
-                className="min-h-[110px] border-2 border-black bg-white"
+                className="min-h-[110px] border border-[var(--fm-line)] bg-white"
                 placeholder="Enter one item per line or comma-separated: rerun report, dataset slice, sign-off note"
               />
               <p className="text-xs text-muted-foreground">
@@ -454,7 +454,7 @@ export default function RemediationPage() {
 
             <Button
               type="button"
-              className="w-full border-2 border-black font-black uppercase tracking-wide"
+              className="w-full border border-[var(--fm-line)] font-semibold tracking-wide"
               onClick={() => {
                 void handleCreateTask()
               }}
@@ -466,10 +466,10 @@ export default function RemediationPage() {
           </div>
         </Card>
 
-        <Card className="border-2 border-black p-6 shadow-brutal">
+        <Card className="p-6 fm-card">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h2 className="text-2xl font-black">Remediation queue</h2>
+              <h2 className="text-2xl font-semibold">Remediation queue</h2>
               <p className="mt-1 text-sm text-muted-foreground">
                 Tasks are pulled from the selected system’s risk register and updated here as the
                 team works through the blockers.
@@ -480,7 +480,7 @@ export default function RemediationPage() {
               <Button
                 type="button"
                 variant="neutral"
-                className="border-2 border-black font-bold"
+                className="border border-[var(--fm-line)] font-bold"
                 onClick={() => {
                   void refreshTasks()
                 }}
@@ -489,7 +489,7 @@ export default function RemediationPage() {
                 <IconRefresh className="mr-2 h-4 w-4" />
                 Refresh
               </Button>
-              <Button asChild variant="neutral" className="border-2 border-black font-bold">
+              <Button asChild variant="neutral" className="border border-[var(--fm-line)] font-bold">
                 <Link href="/risks">
                   Review risks
                   <IconArrowRight className="ml-2 h-4 w-4" />
@@ -500,7 +500,7 @@ export default function RemediationPage() {
 
           {loading && (
             <div className="mt-6 space-y-4">
-              <div className="flex items-center gap-3 rounded-3xl border-2 border-dashed border-black bg-slate-50 px-5 py-10">
+              <div className="flex items-center gap-3 rounded-3xl border border-dashed border-[var(--fm-line)] bg-slate-50 px-5 py-10">
                 <IconLoader2 className="h-6 w-6 animate-spin" />
                 <div>
                   <p className="font-bold">Loading remediation tasks for {selectedSystem.name}</p>
@@ -535,21 +535,21 @@ export default function RemediationPage() {
           )}
 
           {!loading && !error && tasks.length === 0 && (
-            <div className="mt-6 rounded-3xl border-2 border-dashed border-black bg-slate-50 px-6 py-14 text-center">
+            <div className="mt-6 rounded-3xl border border-dashed border-[var(--fm-line)] bg-slate-50 px-6 py-14 text-center">
               <IconClipboardCheck className="mx-auto h-12 w-12 opacity-60" />
-              <h3 className="mt-4 text-xl font-black">No remediation tasks yet</h3>
+              <h3 className="mt-4 text-xl font-semibold">No remediation tasks yet</h3>
               <p className="mx-auto mt-2 max-w-lg text-sm text-muted-foreground">
                 Start from a risk in the register or create a new task here when the blocker is not
                 already captured.
               </p>
               <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-                <Badge variant="outline" className="border-2 border-black bg-white px-3 py-1 font-bold">
+                <Badge variant="outline" className="border border-[var(--fm-line)] bg-white px-3 py-1 font-bold">
                   Risk-linked
                 </Badge>
-                <Badge variant="outline" className="border-2 border-black bg-white px-3 py-1 font-bold">
+                <Badge variant="outline" className="border border-[var(--fm-line)] bg-white px-3 py-1 font-bold">
                   Evidence-backed
                 </Badge>
-                <Badge variant="outline" className="border-2 border-black bg-white px-3 py-1 font-bold">
+                <Badge variant="outline" className="border border-[var(--fm-line)] bg-white px-3 py-1 font-bold">
                   Approval-ready
                 </Badge>
               </div>
@@ -562,17 +562,17 @@ export default function RemediationPage() {
                 const primaryAction = getPrimaryAction(task.status, task.retestRequired, task.retestStatus)
 
                 return (
-                  <Card key={task.id} className="border-2 border-black bg-white p-5 shadow-[4px_4px_0px_0px_#000]">
+                  <Card key={task.id} className="p-5 fm-card">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                       <div className="space-y-3">
                         <div className="flex flex-wrap items-center gap-2">
-                          <Badge className={`border-2 font-black uppercase ${priorityClassName(task.priority)}`}>
+                          <Badge className={`border-2 font-semibold ${priorityClassName(task.priority)}`}>
                             {task.priority}
                           </Badge>
-                          <Badge className={`border-2 font-black uppercase ${statusClassName(task.status)}`}>
+                          <Badge className={`border-2 font-semibold ${statusClassName(task.status)}`}>
                             {task.status.replace(/_/g, ' ')}
                           </Badge>
-                          <Badge variant="outline" className="border-2 border-black bg-white px-3 py-1 font-bold uppercase">
+                          <Badge variant="outline" className="border border-[var(--fm-line)] bg-white px-3 py-1 font-semibold">
                             {task.sourceType === 'governance_blocker'
                               ? 'Governance Blocker'
                               : task.sourceType === 'evidence_gap'
@@ -584,7 +584,7 @@ export default function RemediationPage() {
                                     : 'Manual'}
                           </Badge>
                           {task.retestRequired && (
-                            <Badge className={`border-2 font-black uppercase ${retestStatusClassName(task.retestStatus)}`}>
+                            <Badge className={`border-2 font-semibold ${retestStatusClassName(task.retestStatus)}`}>
                               <IconFlask className="mr-1 h-3 w-3" />
                               Re-test: {task.retestStatus.replace(/_/g, ' ')}
                             </Badge>
@@ -592,17 +592,17 @@ export default function RemediationPage() {
                         </div>
 
                         <div>
-                          <h3 className="text-xl font-black uppercase">{task.title}</h3>
+                          <h3 className="text-xl font-semibold">{task.title}</h3>
                           <p className="mt-2 text-sm text-slate-700">{task.description}</p>
                         </div>
 
                         <div className="grid gap-3 md:grid-cols-2">
-                          <div className="rounded-2xl border-2 border-black bg-slate-50 p-3">
-                            <p className="text-xs font-bold uppercase text-muted-foreground">Next action</p>
+                          <div className="rounded-2xl border border-[var(--fm-line)] bg-slate-50 p-3">
+                            <p className="text-xs font-semibold uppercase text-muted-foreground">Next action</p>
                             <p className="mt-1 text-sm font-medium">{task.nextAction}</p>
                           </div>
-                          <div className="rounded-2xl border-2 border-black bg-slate-50 p-3">
-                            <p className="text-xs font-bold uppercase text-muted-foreground">Owner</p>
+                          <div className="rounded-2xl border border-[var(--fm-line)] bg-slate-50 p-3">
+                            <p className="text-xs font-semibold uppercase text-muted-foreground">Owner</p>
                             <p className="mt-1 flex items-center gap-2 text-sm font-medium">
                               <IconUser className="h-4 w-4" />
                               {task.owner || 'Unassigned'}
@@ -611,13 +611,13 @@ export default function RemediationPage() {
                         </div>
 
                         <div className="space-y-2">
-                          <p className="text-xs font-bold uppercase text-muted-foreground">
+                          <p className="text-xs font-semibold uppercase text-muted-foreground">
                             Evidence needed
                           </p>
                           <div className="flex flex-wrap gap-2">
                             {task.evidenceNeeded.length > 0 ? (
                               task.evidenceNeeded.map((item) => (
-                                <Badge key={item} variant="outline" className="border-2 border-black bg-white px-3 py-1 font-bold">
+                                <Badge key={item} variant="outline" className="border border-[var(--fm-line)] bg-white px-3 py-1 font-bold">
                                   {item}
                                 </Badge>
                               ))
@@ -637,7 +637,7 @@ export default function RemediationPage() {
                       <div className="flex flex-col gap-2 lg:min-w-[220px]">
                         <Button
                           type="button"
-                          className="border-2 border-black font-bold"
+                          className="border border-[var(--fm-line)] font-bold"
                           disabled={saving || primaryAction.blocked}
                           onClick={async () => {
                             try {
@@ -672,7 +672,7 @@ export default function RemediationPage() {
                           <Button
                             asChild
                             variant="neutral"
-                            className="border-2 border-black font-bold"
+                            className="border border-[var(--fm-line)] font-bold"
                           >
                             <Link href="/evidence">
                               Review evidence
@@ -685,7 +685,7 @@ export default function RemediationPage() {
                           <Button
                             asChild
                             variant="neutral"
-                            className="border-2 border-black font-bold"
+                            className="border border-[var(--fm-line)] font-bold"
                           >
                             <Link href="/risks">
                               Open source risk

@@ -20,7 +20,7 @@ type ControlAssessmentTableProps = {
 }
 
 const cellClass = 'flex min-h-11 items-center justify-between gap-3 border-b border-[#CCD2CE] px-3 py-2 text-sm md:table-cell md:border-b-0 md:align-middle'
-const mobileLabelClass = 'text-[10px] font-black uppercase tracking-[0.1em] text-[#59615D] md:hidden'
+const mobileLabelClass = 'text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--fm-ink2)] md:hidden'
 
 function valueOrUnavailable(value: string | null) {
   return value ? readable(value) : 'Not specified'
@@ -34,9 +34,9 @@ function FreshnessLabel({ control }: { control: WorkbenchControl }) {
       ? 'bg-[#FFF4DE]'
       : value === 'missing' || value === 'expired'
         ? 'bg-[#FFF0ED]'
-        : 'bg-[#F3F5F0]'
+        : 'bg-[var(--fm-bg)]'
   return (
-    <span className={`inline-flex border-2 border-[#0F1412] px-2 py-1 text-[11px] font-black uppercase ${color}`}>
+    <span className={`inline-flex border border-[var(--fm-line)] px-2 py-1 text-[11px] font-semibold uppercase ${color}`}>
       {value ? readable(value) : 'Not evaluated'}
     </span>
   )
@@ -46,7 +46,7 @@ function TableLoading() {
   return (
     <div aria-label="Loading control assessments" className="space-y-2 p-4">
       {Array.from({ length: 4 }, (_, index) => (
-        <Skeleton key={index} className="h-14 rounded-none" />
+        <Skeleton key={index} className="h-14" />
       ))}
     </div>
   )
@@ -75,11 +75,11 @@ export function ControlAssessmentTable({
   }), [controls, mandatoryOnly, missingEvidenceOnly, query])
 
   return (
-    <section aria-labelledby="controls-heading" className="border-2 border-[#0F1412] bg-[#FCFDF8]">
-      <div className="flex flex-col gap-3 border-b-2 border-[#0F1412] bg-[#F3F5F0] px-4 py-4 xl:flex-row xl:items-end xl:justify-between">
+    <section aria-labelledby="controls-heading" className="border border-[var(--fm-line)] bg-white">
+      <div className="flex flex-col gap-3 border-b border-[var(--fm-line)] bg-[var(--fm-bg)] px-4 py-4 xl:flex-row xl:items-end xl:justify-between">
         <div>
-          <h2 id="controls-heading" className="text-base font-black uppercase">Control assessments</h2>
-          <p className="mt-1 text-sm text-[#59615D]">{frameworkName} {versionLabel} · {filtered.length} of {controls.length} controls shown</p>
+          <h2 id="controls-heading" className="text-base font-semibold">Control assessments</h2>
+          <p className="mt-1 text-sm text-[var(--fm-ink2)]">{frameworkName} {versionLabel} · {filtered.length} of {controls.length} controls shown</p>
         </div>
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
           <label className="relative block sm:min-w-[260px]" htmlFor="control-search">
@@ -91,10 +91,10 @@ export function ControlAssessmentTable({
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search ID, title, or owner"
-              className="min-h-11 w-full rounded-none border-2 border-[#0F1412] bg-[#FCFDF8] py-2 pl-9 pr-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[#0B7659] focus-visible:ring-offset-2"
+              className="min-h-11 w-full border border-[var(--fm-line)] bg-white py-2 pl-9 pr-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[#0B7659] focus-visible:ring-offset-2"
             />
           </label>
-          <label className="flex min-h-11 cursor-pointer items-center gap-2 border-2 border-[#0F1412] bg-[#FCFDF8] px-3 text-sm font-black">
+          <label className="flex min-h-11 cursor-pointer items-center gap-2 border border-[var(--fm-line)] bg-white px-3 text-sm font-semibold">
             <input
               type="checkbox"
               checked={mandatoryOnly}
@@ -103,7 +103,7 @@ export function ControlAssessmentTable({
             />
             Mandatory controls
           </label>
-          <label className="flex min-h-11 cursor-pointer items-center gap-2 border-2 border-[#0F1412] bg-[#FCFDF8] px-3 text-sm font-black">
+          <label className="flex min-h-11 cursor-pointer items-center gap-2 border border-[var(--fm-line)] bg-white px-3 text-sm font-semibold">
             <input
               type="checkbox"
               checked={missingEvidenceOnly}
@@ -119,17 +119,17 @@ export function ControlAssessmentTable({
         <TableLoading />
       ) : filtered.length === 0 ? (
         <div className="p-8 text-center">
-          <h3 className="text-lg font-black uppercase">No controls match these filters</h3>
-          <p className="mt-2 text-sm text-[#59615D]">Clear a filter or search term to return to the full control set.</p>
+          <h3 className="text-lg font-semibold">No controls match these filters</h3>
+          <p className="mt-2 text-sm text-[var(--fm-ink2)]">Clear a filter or search term to return to the full control set.</p>
         </div>
       ) : (
         <div className="overflow-visible md:overflow-x-auto">
           <table className="block w-full border-collapse md:table md:min-w-[980px]">
             <caption className="sr-only">System-scoped control assessments and evidence state</caption>
-            <thead className="hidden border-b-2 border-[#0F1412] bg-[#0F1412] text-[#FCFDF8] md:table-header-group">
+            <thead className="hidden border-b border-[var(--fm-line)] bg-[var(--fm-ink)] text-white md:table-header-group">
               <tr>
                 {['Control', 'Requirement', 'Application', 'Owner', 'State', 'Accepted evidence', 'Latest evaluation', 'Freshness', 'Findings'].map((heading) => (
-                  <th key={heading} scope="col" className="px-3 py-3 text-left text-[11px] font-black uppercase tracking-[0.08em]">{heading}</th>
+                  <th key={heading} scope="col" className="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em]">{heading}</th>
                 ))}
               </tr>
             </thead>
@@ -139,10 +139,10 @@ export function ControlAssessmentTable({
                 <tbody
                   key={control.id}
                   data-testid={`control-record-${control.externalId}`}
-                  className="mb-3 block border-2 border-[#0F1412] last:mb-0 md:table-row-group md:border-0 [&:not(:last-child)>tr:first-child]:md:border-b [&:not(:last-child)>tr:first-child]:md:border-[#CCD2CE]"
+                  className="mb-3 block border border-[var(--fm-line)] last:mb-0 md:table-row-group md:border-0 [&:not(:last-child)>tr:first-child]:md:border-b [&:not(:last-child)>tr:first-child]:md:border-[#CCD2CE]"
                 >
-                  <tr className="block bg-[#FCFDF8] md:table-row">
-                    <td className={`${cellClass} font-black`}>
+                  <tr className="block bg-white md:table-row">
+                    <td className={`${cellClass} font-semibold`}>
                       <span className={mobileLabelClass}>Control</span>
                       <button
                         type="button"
@@ -150,7 +150,7 @@ export function ControlAssessmentTable({
                         aria-controls={`trace-${control.id}`}
                         aria-label={`${expanded ? 'Collapse' : 'Expand'} control ${control.externalId}`}
                         onClick={() => setExpandedId(expanded ? null : control.id)}
-                        className="inline-flex min-h-11 items-center gap-2 text-left font-black underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-[#0B7659] focus-visible:ring-offset-2"
+                        className="inline-flex min-h-11 items-center gap-2 text-left font-semibold underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-[#0B7659] focus-visible:ring-offset-2"
                       >
                         {expanded ? <IconChevronDown aria-hidden="true" /> : <IconChevronRight aria-hidden="true" />}
                         <span>{control.externalId}</span>
@@ -163,8 +163,8 @@ export function ControlAssessmentTable({
                     <td className={cellClass}>
                       <span className={mobileLabelClass}>Application</span>
                       <span className="text-right md:text-left">
-                        <span className="block font-black">{valueOrUnavailable(control.obligation)}</span>
-                        <span className="block text-xs text-[#59615D]">{valueOrUnavailable(control.application)}</span>
+                        <span className="block font-semibold">{valueOrUnavailable(control.obligation)}</span>
+                        <span className="block text-xs text-[var(--fm-ink2)]">{valueOrUnavailable(control.application)}</span>
                       </span>
                     </td>
                     <td className={cellClass}>
@@ -173,17 +173,17 @@ export function ControlAssessmentTable({
                     </td>
                     <td className={cellClass}>
                       <span className={mobileLabelClass}>State</span>
-                      <span className="border-2 border-[#0F1412] bg-[#F3F5F0] px-2 py-1 text-[11px] font-black uppercase">{readable(control.status)}</span>
+                      <span className="border border-[var(--fm-line)] bg-[var(--fm-bg)] px-2 py-1 text-[11px] font-semibold uppercase">{readable(control.status)}</span>
                     </td>
                     <td className={cellClass}>
                       <span className={mobileLabelClass}>Accepted evidence</span>
-                      <span className="font-black">{control.acceptedEvidenceCount ?? 'Not evaluated'}</span>
+                      <span className="font-semibold">{control.acceptedEvidenceCount ?? 'Not evaluated'}</span>
                     </td>
                     <td className={`${cellClass} md:max-w-[200px]`}>
                       <span className={mobileLabelClass}>Latest evaluation</span>
                       <span className="text-right md:text-left">
                         <span className="block font-bold">{control.latestEvaluation || 'Not evaluated'}</span>
-                        <span className="block text-xs text-[#59615D]">
+                        <span className="block text-xs text-[var(--fm-ink2)]">
                           {control.latestEvaluationAt ? new Date(control.latestEvaluationAt).toLocaleDateString('en') : 'Capture date unavailable'}
                         </span>
                       </span>
@@ -194,13 +194,13 @@ export function ControlAssessmentTable({
                     </td>
                     <td className={cellClass}>
                       <span className={mobileLabelClass}>Findings</span>
-                      <span className={`font-black ${control.openFindings !== null && control.openFindings > 0 ? 'text-[#B3261E]' : ''}`}>
+                      <span className={`font-semibold ${control.openFindings !== null && control.openFindings > 0 ? 'text-[#B3261E]' : ''}`}>
                         {control.openFindings === null ? 'Not linked' : `${control.openFindings} open`}
                       </span>
                     </td>
                   </tr>
                   {expanded ? (
-                    <tr className="block border-t-2 border-[#0F1412] md:table-row">
+                    <tr className="block border-t border-[var(--fm-line)] md:table-row">
                       <td colSpan={9} className="block p-3 md:table-cell md:p-4">
                         <ControlTracePanel control={control} canEdit={canEdit} onUpdate={onUpdate} />
                       </td>

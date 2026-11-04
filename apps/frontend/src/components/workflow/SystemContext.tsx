@@ -47,59 +47,6 @@ interface AISystemRecord {
   metadata?: Record<string, unknown>
 }
 
-interface RiskDashboardSummary {
-  total: number
-  open: number
-  automated: number
-  bySeverity: Record<"low" | "medium" | "high" | "critical", number>
-}
-
-interface RiskDashboardResponse {
-  risks: Array<Record<string, unknown>>
-  summary: RiskDashboardSummary
-}
-
-interface EvidenceSummaryResponse {
-  systemId: string
-  totalEvidence: number
-  linkedEvidence: number
-  averageConfidence: number
-  highConfidenceEvidence: number
-  evidenceTypes: Array<{ type: string; count: number }>
-  metadataSources: Array<{ source: string; count: number }>
-  workflowState: string
-  decisionReadiness: string
-  missingSignals: string[]
-  recommendedNextStep: string
-}
-
-interface RemediationSummaryResponse {
-  systemId: string
-  total: number
-  active: number
-  completed: number
-  retestRequiredTasks: number
-  linkedRiskReferences: number
-  byStatus: Record<string, number>
-  byPriority: Record<string, number>
-}
-
-interface RemediationListResponse {
-  tasks: Array<Record<string, unknown>>
-  summary: RemediationSummaryResponse
-}
-
-interface ApprovalRequestRecord {
-  id: string
-  status: "pending" | "approved" | "rejected"
-}
-
-interface ApprovalStateResponse {
-  systemId: string
-  request: ApprovalRequestRecord | null
-  decisions: Array<Record<string, unknown>>
-}
-
 interface SelectedSystemStatus {
   readiness: number
   stage: AISystemSummary["stage"]
@@ -129,6 +76,8 @@ type SystemContextValue = {
   selectedSystemStatus: SelectedSystemStatus
   setSelectedSystemId: (systemId: string) => void
   loading: boolean
+  /** Why the systems request failed; null when it succeeded, including when the org has no systems. */
+  error: string | null
   refreshSystems: () => Promise<void>
   createWorkspaceAndSystem: (params: {
     workspaceName: string
@@ -163,31 +112,9 @@ export function chooseSelectedSystemId(
   return systemIds[0]
 }
 
-function estimateReadiness(stage: AISystemSummary["stage"]) {
-  if (stage === "onboard") return 20
-  if (stage === "assess") return 45
-  if (stage === "govern") return 65
-  if (stage === "remediate") return 78
-  return 88
-}
-
-function emptyRiskSummary(): RiskDashboardSummary {
-  return {
-    total: 0,
-    open: 0,
-    automated: 0,
-    bySeverity: {
-      low: 0,
-      medium: 0,
-      high: 0,
-      critical: 0,
-    },
-  }
-}
-
 function emptyDerivedStatus(system: AISystemSummary): SelectedSystemStatus {
   return {
-    readiness: estimateReadiness(system.stage),
+    readiness: 0,
     stage: system.stage,
     criticalBlockers: 0,
     failedControls: 0,
@@ -197,96 +124,11 @@ function emptyDerivedStatus(system: AISystemSummary): SelectedSystemStatus {
   }
 }
 
-function clamp(value: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, value))
-}
-
-function deriveLifecycleStage(
-  lifecycleStage: AISystemSummary["stage"],
-  riskSummary: RiskDashboardSummary,
-  evidenceSummary: EvidenceSummaryResponse,
-  remediationSummary: RemediationSummaryResponse,
-  approvalState: ApprovalStateResponse | null
-): AISystemSummary["stage"] {
-  if (approvalState?.request?.status === "approved") {
-    return "operate"
-  }
-
-  if (remediationSummary.active > 0 || remediationSummary.byStatus.blocked) {
-    return "remediate"
-  }
-
-  if (riskSummary.total > 0 || evidenceSummary.totalEvidence > 0 || approvalState?.request) {
-    return "govern"
-  }
-
-  return lifecycleStage
-}
-
-function deriveReadiness(
-  stage: AISystemSummary["stage"],
-  riskSummary: RiskDashboardSummary,
-  evidenceSummary: EvidenceSummaryResponse,
-  remediationSummary: RemediationSummaryResponse,
-  approvalState: ApprovalStateResponse | null
-) {
-  const stageBase: Record<AISystemSummary["stage"], number> = {
-    onboard: 18,
-    assess: 38,
-    govern: 58,
-    remediate: 52,
-    operate: 88,
-  }
-
-  let score = stageBase[stage]
-  score += Math.min(evidenceSummary.linkedEvidence * 6, 18)
-  score += evidenceSummary.decisionReadiness === "review_ready" ? 14 : 0
-  score += approvalState?.request?.status === "approved" ? 10 : 0
-  score -= riskSummary.bySeverity.critical * 18
-  score -= riskSummary.bySeverity.high * 10
-  score -= remediationSummary.active * 8
-  score -= Math.max(0, evidenceSummary.missingSignals.length - 1) * 5
-
-  return clamp(Math.round(score), 5, 100)
-}
-
-function deriveSystemStatus(
-  system: AISystemSummary,
-  riskSummary: RiskDashboardSummary,
-  evidenceSummary: EvidenceSummaryResponse,
-  remediationSummary: RemediationSummaryResponse,
-  approvalState: ApprovalStateResponse | null
-): SelectedSystemStatus {
-  const stage = deriveLifecycleStage(system.stage, riskSummary, evidenceSummary, remediationSummary, approvalState)
-  const readiness = deriveReadiness(stage, riskSummary, evidenceSummary, remediationSummary, approvalState)
-  const failedControls =
-    riskSummary.open +
-    remediationSummary.active +
-    (evidenceSummary.decisionReadiness === "review_ready" ? 0 : 1)
-  const criticalBlockers =
-    riskSummary.bySeverity.critical +
-    (approvalState?.request?.status === "rejected" ? 1 : 0) +
-    (evidenceSummary.decisionReadiness === "needs_evidence" ? 1 : 0)
-
-  return {
-    readiness,
-    stage,
-    criticalBlockers,
-    failedControls,
-    missingEvidence: evidenceSummary.missingSignals.length,
-    openRisks: riskSummary.open,
-    activeRemediation: remediationSummary.active,
-  }
-}
-
 function normalizeSystem(record: AISystemRecord): AISystemSummary {
   const lifecycleSummary = record.lifecycleSummary || {}
   const stage = lifecycleSummary.stage || record.lifecycleStage
-  const readiness = typeof lifecycleSummary.readiness === "number"
-    ? lifecycleSummary.readiness
-    : typeof record.readiness === "number"
-      ? record.readiness
-      : estimateReadiness(stage)
+  // The backend is the only source of readiness; a record without one reads 0.
+  const readiness = lifecycleSummary.readiness ?? record.readiness ?? 0
   return {
     id: record.id,
     name: record.name,
@@ -306,15 +148,20 @@ export function SystemContextProvider({ children }: { children: React.ReactNode 
   const [systems, setSystems] = useState<AISystemSummary[]>([])
   const [selectedSystemId, setSelectedSystemId] = useState<string>("")
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [selectedSystemStatus, setSelectedSystemStatus] = useState<SelectedSystemStatus>(
     emptyDerivedStatus(NO_SYSTEM)
   )
 
   const refreshSystems = async () => {
     setLoading(true)
+    setError(null)
     try {
       const response: ApiResponse<AISystemRecord[]> = await apiClient.get(API_ENDPOINTS.aiGovernance.systems)
-      if (response.success && response.data && response.data.length > 0) {
+      if (!response.success || !response.data) {
+        throw new Error(response.error || "Failed to load AI systems")
+      }
+      if (response.data.length > 0) {
         const nextSystems = response.data.map(normalizeSystem)
         setSystems(nextSystems)
         setSelectedSystemId((currentId) => {
@@ -328,7 +175,8 @@ export function SystemContextProvider({ children }: { children: React.ReactNode 
         setSystems([])
         setSelectedSystemId("")
       }
-    } catch {
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load AI systems")
       setSystems([])
       setSelectedSystemId("")
     } finally {
@@ -442,6 +290,7 @@ export function SystemContextProvider({ children }: { children: React.ReactNode 
         selectedSystemStatus,
         setSelectedSystemId: setAndPersist,
         loading,
+        error,
         refreshSystems,
         createWorkspaceAndSystem,
       }}
@@ -475,27 +324,27 @@ export function SystemContextBar() {
   const realSystems = systems.filter((system) => system.metadata?.source !== "fallback")
 
   return (
-    <section aria-label="Selected AI system context" className="mb-6 border-4 border-[#0F1412] bg-[#FCFDF8] p-4">
+    <section aria-label="Selected AI system context" className="mb-6 border border-[var(--fm-line)] bg-white p-4">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-start gap-3">
-          <div className="border-2 border-black bg-black p-3 text-white shadow-[4px_4px_0px_0px_#FF6B35]">
+          <div className="bg-[var(--fm-ink)] p-3 text-white rounded-[14px] shadow-[var(--fm-shadow)]">
             <IconBuildingSkyscraper className="h-5 w-5" />
           </div>
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
               Current AI System
             </p>
-            <h2 className="text-xl font-black uppercase">{selectedSystem.name}</h2>
+            <h2 className="text-xl font-semibold">{selectedSystem.name}</h2>
             <p className="text-sm text-muted-foreground">{selectedSystem.owner}</p>
           </div>
         </div>
 
         <div className="grid gap-3 md:grid-cols-4 lg:min-w-[720px]">
           <div className="space-y-1">
-            <p className="text-xs font-bold uppercase text-muted-foreground">System Scope</p>
+            <p className="text-xs font-semibold uppercase text-muted-foreground">System Scope</p>
             {realSystems.length > 0 ? (
               <Select onValueChange={setSelectedSystemId} value={selectedSystem.id}>
-                <SelectTrigger aria-label="System scope" className="border-2 border-black bg-white font-bold">
+                <SelectTrigger aria-label="System scope" className="border border-[var(--fm-line)] bg-white font-bold">
                   <SelectValue placeholder={loading ? "Loading systems..." : "Select system"} />
                 </SelectTrigger>
                 <SelectContent>
@@ -507,7 +356,7 @@ export function SystemContextBar() {
                 </SelectContent>
               </Select>
             ) : (
-              <Button asChild variant="neutral" className="w-full border-2 border-black font-bold">
+              <Button asChild variant="neutral" className="w-full border border-[var(--fm-line)] font-bold">
                 <a href="/onboard">
                   <IconPlus className="mr-2 h-4 w-4" />
                   Create system
@@ -517,24 +366,24 @@ export function SystemContextBar() {
           </div>
 
           <div className="space-y-1">
-            <p className="text-xs font-bold uppercase text-muted-foreground">Risk Tier</p>
-            <Badge className={`border-2 px-3 py-2 font-black uppercase ${riskTierClassName(selectedSystem.riskTier)}`}>
+            <p className="text-xs font-semibold uppercase text-muted-foreground">Risk Tier</p>
+            <Badge className={`border-2 px-3 py-2 font-semibold ${riskTierClassName(selectedSystem.riskTier)}`}>
               <IconShieldCheck className="mr-2 h-4 w-4" />
               {selectedSystem.riskTier}
             </Badge>
           </div>
 
           <div className="space-y-1">
-            <p className="text-xs font-bold uppercase text-muted-foreground">Readiness</p>
-            <div className="border-2 border-black bg-white px-3 py-2 font-black">
+            <p className="text-xs font-semibold uppercase text-muted-foreground">Readiness</p>
+            <div className="border border-[var(--fm-line)] bg-white px-3 py-2 font-semibold">
               {selectedSystemStatus.readiness}%
             </div>
           </div>
 
           <div className="space-y-1">
-            <p className="text-xs font-bold uppercase text-muted-foreground">Lifecycle Stage</p>
-            <Badge className="border-2 border-black bg-black px-3 py-2 font-black uppercase text-white">
-              <IconRouteAltLeft className="mr-2 h-4 w-4 text-orange" />
+            <p className="text-xs font-semibold uppercase text-muted-foreground">Lifecycle Stage</p>
+            <Badge className="border border-[var(--fm-line)] bg-[var(--fm-ink)] px-3 py-2 font-semibold text-white">
+              <IconRouteAltLeft className="mr-2 h-4 w-4 text-[var(--fm-brand)]" />
               {selectedSystemStatus.stage}
             </Badge>
           </div>

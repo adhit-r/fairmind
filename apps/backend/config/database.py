@@ -46,10 +46,11 @@ async def _connect_with_retry(*args, **kwargs):
 
     Some networks drop the TCP handshake for a connection and the attempt then
     hangs for the whole pool timeout. A fresh attempt gets a new source port
-    and normally succeeds, so split the pool timeout into short attempts.
+    and normally succeeds, so spend the pool timeout on short attempts.
     """
-    attempts = 4
-    kwargs["timeout"] = kwargs.get("timeout", 20) / attempts
+    total_timeout = kwargs.get("timeout", 60)
+    kwargs["timeout"] = min(10, total_timeout)
+    attempts = max(1, int(total_timeout // kwargs["timeout"]))
     for attempt in range(attempts):
         try:
             return await asyncpg.connect(*args, **kwargs)
@@ -107,7 +108,7 @@ class DatabaseManager:
                 "max_size": settings.database_pool_size,
                 "max_queries": 50000,
                 "max_inactive_connection_lifetime": 300,
-                "timeout": 20,
+                "timeout": settings.database_connect_timeout,
                 "command_timeout": 60,
                 "connect": _connect_with_retry,
             }

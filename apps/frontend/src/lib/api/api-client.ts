@@ -149,8 +149,18 @@ interface RequestOptions extends RequestInit {
 
 type ErrorPayload = {
   detail?: unknown
+  details?: unknown
   error?: unknown
   message?: unknown
+}
+
+/** First field error of a request validation failure ({loc, msg} list), as "email: value is not...". */
+function validationMessage(payload: ErrorPayload): string | undefined {
+  const list = Array.isArray(payload.details) ? payload.details : Array.isArray(payload.detail) ? payload.detail : []
+  const first = list.find((item): item is { loc?: unknown; msg: string } => typeof item?.msg === 'string')
+  if (!first) return undefined
+  const field = Array.isArray(first.loc) ? first.loc.filter((p) => p !== 'body').join('.') : ''
+  return field ? `${field}: ${first.msg}` : first.msg
 }
 
 const workflowErrorCodeSchema = z.enum([
@@ -219,6 +229,7 @@ function decodeFailure(
   const message = knownMessage
     || legacyDetail
     || untrustedMessage
+    || validationMessage(payloadRecord)
     || stringValue(payloadRecord.error)
     || stringValue(payloadRecord.message)
     || classified.message
@@ -392,7 +403,8 @@ export class ApiClient {
     const url = `${this.baseUrl}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`
 
     const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
+      // A FormData body sets its own multipart boundary; forcing JSON here drops the file.
+      ...(fetchOptions.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
       ...(fetchOptions.headers as Record<string, string>),
     }
 

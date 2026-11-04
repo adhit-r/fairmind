@@ -1,7 +1,7 @@
 """
 Integrations: the gateway for onboarding AI systems.
 
-A connector (MLflow registry, GitHub org) is synced into discovered assets.
+A connector (MLflow registry, GitHub org, Hugging Face Hub) is synced into discovered assets.
 Rules suggest a risk tier and lifecycle stage; a person promotes an asset into
 a governed system. Decisions stay human; discovery is automatic.
 """
@@ -21,9 +21,13 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from api.routes.ai_governance import _caller_org, _load_json_value
+from api.routes.org_scope import org_member, org_mutator
 from database.connection import get_db
 
-router = APIRouter(prefix="/integrations", tags=["integrations"])
+# Every query below already filters on the caller's org_id. The dependencies add
+# what the middleware alone did not: an active member of that organisation, and
+# the organisation's mutation permission for anything that writes.
+router = APIRouter(prefix="/integrations", tags=["integrations"], dependencies=[Depends(org_member)])
 
 _tables_ready = False
 
@@ -213,7 +217,102 @@ async def _sync_github(config: Dict[str, Any], token: Optional[str]) -> List[Dic
     return found
 
 
-_CONNECTORS = {"mlflow": _sync_mlflow, "github": _sync_github}
+_HF_API = "https://huggingface.co/api"
+_HF_LLM_TASKS = {"text-generation", "text2text-generation", "conversational", "image-text-to-text"}
+
+
+def _as_list(value: Any) -> List[str]:
+    if not value:
+        return []
+    return [str(v) for v in value] if isinstance(value, (list, tuple)) else [str(value)]
+
+
+def _hf_candidate(owner: str, listed: Dict[str, Any], detail: Dict[str, Any]) -> Dict[str, Any]:
+    model_id = detail.get("id") or listed["id"]
+    card = detail.get("cardData") or {}
+    tags = _as_list(detail.get("tags") or listed.get("tags"))
+    pipeline = detail.get("pipeline_tag") or listed.get("pipeline_tag") or ""
+    license_ = ", ".join(_as_list(card.get("license"))) or next(
+        (t.split(":", 1)[1] for t in tags if t.startswith("license:")), ""
+    )
+    kind = "llm_app" if pipeline in _HF_LLM_TASKS else "ml_model"
+    name = model_id.split("/", 1)[-1]
+    return {
+        "external_id": model_id,
+        "name": name,
+        "kind": kind,
+        "metadata": {
+            "model_id": model_id,
+            "url": f"https://huggingface.co/{model_id}",
+            "pipeline_tag": pipeline,
+            "library": detail.get("library_name") or listed.get("library_name") or "",
+            "license": license_,
+            "downloads": detail.get("downloads", listed.get("downloads")),
+            "likes": detail.get("likes", listed.get("likes")),
+            "last_modified": detail.get("lastModified") or listed.get("lastModified"),
+            "private": bool(detail.get("private", listed.get("private"))),
+            "gated": detail.get("gated", listed.get("gated")) or False,
+            "datasets": _as_list(card.get("datasets")),
+            "languages": _as_list(card.get("language")),
+            "base_model": _as_list(card.get("base_model")),
+            "business_line": "",
+            "owner": owner,
+        },
+        "suggested_tier": suggest_tier(f"{name} {pipeline}", {}, kind),
+        "suggested_stage": "onboard",
+    }
+
+
+async def _sync_huggingface(config: Dict[str, Any], token: Optional[str]) -> List[Dict[str, Any]]:
+    owner = str(config.get("owner") or "").strip()
+    if not owner:
+        raise HTTPException(status_code=400, detail="Hugging Face integration has no owner")
+    name_has = str(config.get("name_contains") or "").strip().lower()
+    pipeline = str(config.get("pipeline_tag") or "").strip()
+    library = str(config.get("library") or "").strip()
+    # Same cap convention as GitHub: tokenless is a public, rate-limited view, so 12; with a token 60.
+    max_models = int(config.get("max_models") or (60 if token else 12))
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    params: Dict[str, Any] = {"author": owner, "full": "true", "limit": 100, "sort": "downloads", "direction": -1}
+    if name_has:
+        params["search"] = name_has
+    if pipeline:
+        params["pipeline_tag"] = pipeline
+    if library:
+        params["library"] = library
+    where = f"Hugging Face owner {owner}"
+    found: List[Dict[str, Any]] = []
+    try:
+        # ponytail: first page of 100 matches, then one detail request per kept model; page or background it for large orgs.
+        async with httpx.AsyncClient(timeout=20, headers=headers) as client:
+            resp = await client.get(f"{_HF_API}/models", params=params)
+            if resp.status_code in (401, 403):
+                raise HTTPException(status_code=401, detail=f"Hugging Face rejected the token or access to {where}")
+            if resp.status_code >= 400:
+                raise HTTPException(status_code=502, detail=f"Hugging Face responded {resp.status_code}")
+            listed = resp.json()
+            if not listed and not (name_has or pipeline or library):
+                raise HTTPException(status_code=404, detail=f"No models found for {where}; check the name, or add a token for private models")
+            # Filter before capping, whatever the server did with the query.
+            keep = [
+                m for m in listed
+                if (not name_has or name_has in m["id"].split("/", 1)[-1].lower())
+                and (not pipeline or m.get("pipeline_tag") == pipeline)
+                and (not library or m.get("library_name") == library)
+            ]
+            for m in keep[:max_models]:
+                d = await client.get(f"{_HF_API}/models/{m['id']}")
+                if d.status_code in (401, 403, 404):
+                    continue  # listed but not readable with this token
+                if d.status_code >= 400:
+                    raise HTTPException(status_code=502, detail=f"Hugging Face responded {d.status_code} for {m['id']}")
+                found.append(_hf_candidate(owner, m, d.json()))
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"Could not reach Hugging Face: {type(exc).__name__}") from None
+    return found
+
+
+_CONNECTORS = {"mlflow": _sync_mlflow, "github": _sync_github, "huggingface": _sync_huggingface}
 
 
 # ---------------------------------------------------------------------------
@@ -222,7 +321,7 @@ _CONNECTORS = {"mlflow": _sync_mlflow, "github": _sync_github}
 
 
 class IntegrationCreate(BaseModel):
-    kind: str = Field(pattern="^(mlflow|github)$")
+    kind: str = Field(pattern="^(mlflow|github|huggingface)$")
     name: str = Field(min_length=1)
     config: Dict[str, Any] = Field(default_factory=dict)
     token: Optional[str] = None
@@ -298,7 +397,7 @@ async def list_integrations(http: Request, db: Session = Depends(get_db)):
     return [_integration_out(r) for r in rows]
 
 
-@router.post("", status_code=201)
+@router.post("", status_code=201, dependencies=[Depends(org_mutator)])
 async def create_integration(body: IntegrationCreate, http: Request, db: Session = Depends(get_db)):
     _ensure_tables()
     row_id = str(uuid.uuid4())
@@ -321,7 +420,7 @@ async def create_integration(body: IntegrationCreate, http: Request, db: Session
     return _integration_out(_get_integration(db, _caller_org(http), row_id))
 
 
-@router.delete("/{integration_id}", status_code=204)
+@router.delete("/{integration_id}", status_code=204, dependencies=[Depends(org_mutator)])
 async def delete_integration(integration_id: str, http: Request, db: Session = Depends(get_db)):
     _ensure_tables()
     org = _caller_org(http)
@@ -332,17 +431,25 @@ async def delete_integration(integration_id: str, http: Request, db: Session = D
     return None
 
 
-@router.post("/{integration_id}/sync")
+@router.post("/{integration_id}/sync", dependencies=[Depends(org_mutator)])
 async def sync_integration(integration_id: str, http: Request, db: Session = Depends(get_db)):
     """Pull the source and upsert discovered assets. Promoted or ignored assets keep their status."""
     _ensure_tables()
     org = _caller_org(http)
     row = _get_integration(db, org, integration_id)
     kind, config, token = row[2], _load_json_value(row[4], {}), row[5]
-    found = await _CONNECTORS[kind](config, token)
+    now = _now()
+    try:
+        found = await _CONNECTORS[kind](config, token)
+    except HTTPException as exc:
+        db.execute(
+            text("UPDATE governance_integrations SET last_sync_summary = :summary WHERE id = :id"),
+            {"summary": json.dumps({"error": str(exc.detail), "at": now}), "id": integration_id},
+        )
+        db.commit()
+        raise
 
     created = updated = 0
-    now = _now()
     for item in found:
         existing = db.execute(
             text("SELECT id, status FROM governance_discovered_assets WHERE integration_id = :iid AND external_id = :ext"),
@@ -442,7 +549,7 @@ def _workspace_for(db: Session, org_id: str, integration_row: Any) -> str:
     return ws_id
 
 
-@router.post("/discovered/{asset_id}/promote")
+@router.post("/discovered/{asset_id}/promote", dependencies=[Depends(org_mutator)])
 async def promote_asset(asset_id: str, body: PromoteRequest, http: Request, db: Session = Depends(get_db)):
     """Turn a discovered asset into a governed system. Suggestions apply unless overridden."""
     _ensure_tables()
@@ -489,7 +596,7 @@ async def promote_asset(asset_id: str, body: PromoteRequest, http: Request, db: 
     return {"systemId": system_id, "alreadyPromoted": False}
 
 
-@router.post("/discovered/{asset_id}/ignore")
+@router.post("/discovered/{asset_id}/ignore", dependencies=[Depends(org_mutator)])
 async def ignore_asset(asset_id: str, http: Request, db: Session = Depends(get_db)):
     _ensure_tables()
     org = _caller_org(http)

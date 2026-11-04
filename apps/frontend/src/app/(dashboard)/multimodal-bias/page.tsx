@@ -148,14 +148,14 @@ export default function MultimodalBiasPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-4xl font-bold">Multimodal Bias Detection</h1>
+        <h1 className="text-[30px] font-semibold tracking-[-.03em]">Multimodal Bias Detection</h1>
         <p className="text-muted-foreground mt-1">
           Detect bias in image, audio, video, and cross-modal AI models
         </p>
       </div>
 
       {error && (
-        <Alert className="border-2 border-red-500 shadow-brutal">
+        <Alert className="border-2 border-red-500">
           <IconAlertTriangle className="h-4 w-4" />
           <AlertTitle>Error</AlertTitle>
           <AlertDescription>{error.message}</AlertDescription>
@@ -163,16 +163,16 @@ export default function MultimodalBiasPage() {
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="border-2 border-black">
-          <TabsTrigger value="image" className="border-r-2 border-black">
+        <TabsList className="border border-[var(--fm-line)]">
+          <TabsTrigger value="image" className="border-r border-[var(--fm-line)]">
             <IconPhoto className="mr-2 h-4 w-4" />
             Image
           </TabsTrigger>
-          <TabsTrigger value="audio" className="border-r-2 border-black">
+          <TabsTrigger value="audio" className="border-r border-[var(--fm-line)]">
             <IconMusic className="mr-2 h-4 w-4" />
             Audio
           </TabsTrigger>
-          <TabsTrigger value="video" className="border-r-2 border-black">
+          <TabsTrigger value="video" className="border-r border-[var(--fm-line)]">
             <IconVideo className="mr-2 h-4 w-4" />
             Video
           </TabsTrigger>
@@ -183,7 +183,7 @@ export default function MultimodalBiasPage() {
         </TabsList>
 
         <TabsContent value="image" className="space-y-4">
-          <Card className="p-6 border-2 border-black shadow-brutal">
+          <Card className="p-6 fm-card">
             <h2 className="text-2xl font-bold mb-4">Image Bias Detection</h2>
             <form onSubmit={handleImageBias} className="space-y-4">
               <div className="space-y-2">
@@ -194,7 +194,7 @@ export default function MultimodalBiasPage() {
                   onChange={(e) => setImageForm({ ...imageForm, modelOutputs: e.target.value })}
                   placeholder='[{"text": "prompt", "image_url": "https://...", "metadata": {}}]'
                   required
-                  className="border-2 border-black font-mono text-sm"
+                  className="border border-[var(--fm-line)] font-mono text-sm"
                   rows={8}
                 />
               </div>
@@ -206,7 +206,7 @@ export default function MultimodalBiasPage() {
         </TabsContent>
 
         <TabsContent value="audio" className="space-y-4">
-          <Card className="p-6 border-2 border-black shadow-brutal">
+          <Card className="p-6 fm-card">
             <h2 className="text-2xl font-bold mb-4">Audio Bias Detection</h2>
             <form onSubmit={handleAudioBias} className="space-y-4">
               <div className="space-y-2">
@@ -217,7 +217,7 @@ export default function MultimodalBiasPage() {
                   onChange={(e) => setAudioForm({ ...audioForm, modelOutputs: e.target.value })}
                   placeholder='[{"text": "prompt", "audio_url": "https://...", "metadata": {}}]'
                   required
-                  className="border-2 border-black font-mono text-sm"
+                  className="border border-[var(--fm-line)] font-mono text-sm"
                   rows={8}
                 />
               </div>
@@ -229,7 +229,7 @@ export default function MultimodalBiasPage() {
         </TabsContent>
 
         <TabsContent value="video" className="space-y-4">
-          <Card className="p-6 border-2 border-black shadow-brutal">
+          <Card className="p-6 fm-card">
             <h2 className="text-2xl font-bold mb-4">Video Bias Detection</h2>
             <form onSubmit={handleVideoBias} className="space-y-4">
               <div className="space-y-2">
@@ -240,7 +240,7 @@ export default function MultimodalBiasPage() {
                   onChange={(e) => setVideoForm({ ...videoForm, modelOutputs: e.target.value })}
                   placeholder='[{"text": "prompt", "video_url": "https://...", "metadata": {}}]'
                   required
-                  className="border-2 border-black font-mono text-sm"
+                  className="border border-[var(--fm-line)] font-mono text-sm"
                   rows={8}
                 />
               </div>
@@ -252,7 +252,7 @@ export default function MultimodalBiasPage() {
         </TabsContent>
 
         <TabsContent value="cross-modal" className="space-y-4">
-          <Card className="p-6 border-2 border-black shadow-brutal">
+          <Card className="p-6 fm-card">
             <h2 className="text-2xl font-bold mb-4">Cross-Modal Bias Detection</h2>
             <form onSubmit={handleCrossModalBias} className="space-y-4">
               <div className="space-y-2">
@@ -277,7 +277,7 @@ export default function MultimodalBiasPage() {
                             })
                           }
                         }}
-                        className="border-2 border-black"
+                        className="border border-[var(--fm-line)]"
                       />
                       <Label htmlFor={modality} className="font-normal capitalize">{modality}</Label>
                     </div>
@@ -293,7 +293,7 @@ export default function MultimodalBiasPage() {
                   onChange={(e) => setCrossModalForm({ ...crossModalForm, modelOutputs: e.target.value })}
                   placeholder='[{"text": "...", "image_url": "...", "audio_url": "...", "video_url": "...", "metadata": {}}]'
                   required
-                  className="border-2 border-black font-mono text-sm"
+                  className="border border-[var(--fm-line)] font-mono text-sm"
                   rows={8}
                 />
               </div>
@@ -307,22 +307,22 @@ export default function MultimodalBiasPage() {
 
       {/* Results */}
       {results.length > 0 && (
-        <Card className="p-6 border-2 border-black shadow-brutal">
+        <Card className="p-6 fm-card">
           <h2 className="text-2xl font-bold mb-4">Detection Results</h2>
           <div className="space-y-3">
             {results.map((result, index) => (
-              <div key={index} className="p-4 border-2 border-black bg-white">
+              <div key={index} className="p-4 border border-[var(--fm-line)] bg-white">
                 <div className="flex items-center justify-between mb-2">
                   <div>
                     <span className="font-medium capitalize">{result.modality} - {result.biasType}</span>
                     <Badge 
                       variant={result.isBiased ? 'destructive' : 'default'} 
-                      className="ml-2 border-2 border-black"
+                      className="ml-2 border border-[var(--fm-line)]"
                     >
                       {result.isBiased ? 'Biased' : 'Not Biased'}
                     </Badge>
                   </div>
-                  <Badge variant={result.biasScore > 0.7 ? 'destructive' : result.biasScore > 0.5 ? 'secondary' : 'default'} className="border-2 border-black">
+                  <Badge variant={result.biasScore > 0.7 ? 'destructive' : result.biasScore > 0.5 ? 'secondary' : 'default'} className="border border-[var(--fm-line)]">
                     {(result.biasScore * 100).toFixed(1)}%
                   </Badge>
                 </div>

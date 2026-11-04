@@ -15,9 +15,9 @@ def test_connect_retries_stalled_attempts_with_short_timeout(monkeypatch):
         return "connection"
 
     monkeypatch.setattr(database_module.asyncpg, "connect", fake_connect)
-    result = asyncio.run(database_module._connect_with_retry("dsn", timeout=20))
+    result = asyncio.run(database_module._connect_with_retry("dsn", timeout=60))
     assert result == "connection"
-    assert timeouts == [5, 5, 5]
+    assert timeouts == [10, 10, 10]
 
 
 def test_connect_gives_up_after_last_attempt(monkeypatch):
@@ -29,5 +29,5 @@ def test_connect_gives_up_after_last_attempt(monkeypatch):
 
     monkeypatch.setattr(database_module.asyncpg, "connect", fake_connect)
     with pytest.raises(TimeoutError):
-        asyncio.run(database_module._connect_with_retry("dsn", timeout=20))
-    assert len(calls) == 4
+        asyncio.run(database_module._connect_with_retry("dsn", timeout=60))
+    assert len(calls) == 6

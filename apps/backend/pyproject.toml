@@ -60,6 +60,7 @@ dependencies = [
     "bcrypt>=5.0.0",
     "sentry-sdk[fastapi]>=2.43.0",
     "aiosmtplib>=5.1.0",
+    "jinja2>=3.1.6", # compliance email templates (src/infrastructure/email/compliance_notifier.py)
     "boto3>=1.42.0",
     "httpx>=0.28.1",
     "gunicorn>=25.0.0",
@@ -71,9 +72,11 @@ dependencies = [
     "tensorflow>=2.15.0",
     "duckdb>=1.5.0",
     "apscheduler>=3.10.4",
+    "jinja2>=3.1.6",
     "openpyxl>=3.1.5",
     "rfc8785>=0.1.4,<1",
     "jsonschema[format-nongpl]>=4.23,<5",
+    "anthropic>=2.4.0",  # Claude provider for the packs agent (src/api/routers/llm.py)
 ]
 
 [project.optional-dependencies]
@@ -89,7 +92,6 @@ dev = [
     "mypy>=1.5.0",
     "pre-commit>=3.4.0",
     "bandit>=1.7.0",
-    "safety>=2.3.0",
     "pylint>=2.17.0",
     "autopep8>=2.0.0",
     "coverage>=7.3.0",

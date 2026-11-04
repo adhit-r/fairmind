@@ -35,34 +35,10 @@ _PUBLIC_ROUTES = frozenset(
         ("POST", "/api/v1/auth/oauth2/sync-user"),
         ("POST", "/api/v1/auth/oauth2/validate"),
         ("POST", "/api/v1/auth/refresh"),
+        ("POST", "/api/v1/auth/register"),
         ("POST", "/api/v1/register"),
     }
 )
-
-_DEVELOPMENT_PUBLIC_PATH_PREFIXES = (
-    "/api/v1/ai-bom",
-    "/api/v1/analytics",
-    "/api/v1/bias-detection",
-    "/api/v1/bias/llm-judge",
-    "/api/v1/compliance",
-    "/api/v1/core",
-    "/api/v1/database",
-    "/api/v1/datasets",
-    "/api/v1/marketplace",
-    "/api/v1/mlops",
-    "/api/v1/modern-bias-detection",
-    "/api/v1/monitoring",
-    "/api/v1/multimodal-bias-detection",
-    "/api/v1/remediation",
-    "/api/v1/reports",
-    "/api/v1/settings",
-)
-
-
-def _matches_path_family(path: str, prefix: str) -> bool:
-    """Match one route family without making similarly named siblings public."""
-
-    return path == prefix or path.startswith(f"{prefix}/")
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -376,7 +352,7 @@ _PUBLIC_EXACT = {
     "/api/v1/auth/oauth2/validate", "/api/v1/auth/oauth2/refresh",
     "/api/v1/register",
 }
-_PUBLIC_PREFIXES = ("/health", "/docs/", "/static/")
+_PUBLIC_PREFIXES = ("/health", "/docs/", "/static/", "/api/v1/public/packs/")
 
 
 def _is_public_path(path: str) -> bool:
@@ -420,11 +396,7 @@ class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
         user = await self.auth_manager.get_user_by_email(self.dev_login_email)
         if not user or not user.is_active:
             return None
-        permissions = list(user.permissions)
-        if user.org_id and await self._org_role(user.id, user.org_id) in ("owner", "admin"):
-            # Org owners and admins may change governance records (see
-            # GovernanceAssuranceService.may_mutate); carry that in the token.
-            permissions.append("model:write")
+        permissions = list(user.permissions)  # org owners and admins already carry model:write
         now = datetime.now(timezone.utc)
         return TokenData(
             user_id=user.id,
@@ -437,16 +409,6 @@ class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
             org_id=user.org_id,
         )
 
-    @staticmethod
-    async def _org_role(user_id: str, org_id: str):
-        from config.database import get_db_connection
-
-        async with get_db_connection() as db:
-            row = await db.fetch_one(
-                "SELECT role FROM org_members WHERE user_id = :user_id AND org_id = :org_id AND status = 'active'",
-                {"user_id": user_id, "org_id": org_id},
-            )
-        return row["role"] if row else None
     
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         # Always allow OPTIONS requests (CORS preflight)
@@ -457,12 +419,10 @@ class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
         if route_key in _PUBLIC_ROUTES:
             return await call_next(request)
 
-        if settings.environment == "development" and any(
-            _matches_path_family(request.url.path, prefix)
-            for prefix in _DEVELOPMENT_PUBLIC_PATH_PREFIXES
-        ):
+        # Auditor pack links carry their own token; the route checks it.
+        if request.method == "GET" and request.url.path.startswith("/api/v1/public/packs/"):
             return await call_next(request)
-        
+
         # Extract JWT token from Authorization header
         auth_header = request.headers.get("Authorization")
 

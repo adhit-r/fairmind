@@ -40,8 +40,8 @@ def isolate_by_org(func: Callable) -> Callable:
     @wraps(func)
     async def wrapper(*args, request: Request = None, **kwargs):
         # Extract org context set by OrgIsolationMiddleware
-        org_id = getattr(request.state, 'org_id', None) if request else None
-        user_id = getattr(request.state, 'user_id', None) if request else None
+        org_id = getattr(request.state, 'org_id', None) if request is not None else None
+        user_id = getattr(request.state, 'user_id', None) if request is not None else None
 
         if not org_id:
             logger.warning(
@@ -97,8 +97,8 @@ def require_org_member(func: Callable) -> Callable:
     @wraps(func)
     async def wrapper(*args, org_id: Optional[str] = None, request: Request = None, **kwargs):
         # Get user's assigned org from middleware context
-        user_org_id = getattr(request.state, 'org_id', None) if request else None
-        user_id = getattr(request.state, 'user_id', None) if request else None
+        user_org_id = getattr(request.state, 'org_id', None) if request is not None else None
+        user_id = getattr(request.state, 'user_id', None) if request is not None else None
 
         # Validate org_id parameter against user's org
         if org_id and user_org_id and str(org_id) != str(user_org_id):

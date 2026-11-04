@@ -5,8 +5,14 @@ POST /api/v1/register          — public signup request
 GET  /api/v1/registrations     — admin: list pending requests
 POST /api/v1/registrations/{id}/approve  — admin: approve
 POST /api/v1/registrations/{id}/deny     — admin: deny
+
+"admin" here is the platform operator (users.role = 'admin'). Approval only
+ever creates a new account and a new organisation owned by it; joining an
+existing organisation is the invitation flow's job.
 """
 
+import re
+import secrets
 import uuid
 import logging
 from datetime import datetime
@@ -14,7 +20,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel, EmailStr
 
-from config.database import get_db_connection
+from config.database import get_db_connection, get_db_transaction
 from config.settings import settings
 from config.auth import get_current_active_user, require_admin, TokenData
 from src.application.services.api_boundary_dependencies import email_service
@@ -58,26 +64,11 @@ async def submit_registration(payload: RegistrationRequest):
                     detail="A pending request for this email already exists.",
                 )
 
-            # Resolve or create org
-            org = await db.fetch_one(
-                "SELECT id FROM organizations WHERE name = :name",
-                {"name": payload.org_name},
-            )
-            if not org:
-                org_id = str(uuid.uuid4())
-                slug = payload.org_name.lower().replace(" ", "-").replace(".", "-")
-                await db.execute(
-                    "INSERT INTO organizations (id, name, slug, domain) "
-                    "VALUES (:id, :name, :slug, :domain)",
-                    {"id": org_id, "name": payload.org_name, "slug": slug, "domain": payload.org_domain},
-                )
-            else:
-                org_id = str(org["id"])
-
+            # No organisation is created or looked up until an admin approves.
             await db.execute(
                 "INSERT INTO registration_requests "
-                "(id, email, name, org_name, org_domain, requested_role, message, org_id, status) "
-                "VALUES (:id, :email, :name, :org_name, :org_domain, :role, :message, :org_id, 'pending')",
+                "(id, email, name, org_name, org_domain, requested_role, message, status) "
+                "VALUES (:id, :email, :name, :org_name, :org_domain, :role, :message, 'pending')",
                 {
                     "id": request_id,
                     "email": payload.email,
@@ -86,7 +77,6 @@ async def submit_registration(payload: RegistrationRequest):
                     "org_domain": payload.org_domain,
                     "role": payload.requested_role,
                     "message": payload.message,
-                    "org_id": org_id,
                 },
             )
 
@@ -160,9 +150,13 @@ async def approve_registration(
     body: ReviewRequest = ReviewRequest(),
     current_user: TokenData = Depends(require_admin),
 ):
-    """Admin: approve request → create user → send approval email."""
+    """Admin: approve request → create user and the new org they own → send approval email.
+
+    Refuses (409) when the email already has an account or the organisation
+    name is taken, so approval can never change an existing user or org.
+    """
     try:
-        async with get_db_connection() as db:
+        async with get_db_transaction() as db:
             req = await db.fetch_one(
                 "SELECT * FROM registration_requests WHERE id = :id",
                 {"id": request_id},
@@ -172,29 +166,59 @@ async def approve_registration(
                 raise HTTPException(status_code=404, detail="Request not found")
             if req["status"] != "pending":
                 raise HTTPException(status_code=409, detail=f"Request is already {req['status']}")
+            if await db.fetch_one("SELECT id FROM users WHERE lower(email) = lower(:e)", {"e": req["email"]}):
+                raise HTTPException(
+                    status_code=409,
+                    detail="An account with this email already exists. Use an organisation invitation instead.",
+                )
+            if await db.fetch_one("SELECT id FROM organizations WHERE lower(name) = lower(:n)", {"n": req["org_name"]}):
+                raise HTTPException(
+                    status_code=409,
+                    detail="An organisation with this name already exists. Its owner can invite the requester.",
+                )
 
-            # Create user account
-            new_user_id = str(uuid.uuid4())
+            # Same shape as self-serve signup (api/routes/auth.py), except the
+            # global role: requested_role is requester input and 'admin' would
+            # make them a platform operator. Org rights come from org_members.
+            user_id = str(uuid.uuid4())
+            org_id = str(uuid.uuid4())
+            now = datetime.utcnow()
+            slug_base = re.sub(r"[^a-z0-9]+", "-", req["org_name"].lower()).strip("-") or "org"
             await db.execute(
-                "INSERT INTO users (id, email, username, password_hash, role, is_active, org_id, roles, name) "
-                "VALUES (:id, :email, :username, '', :role, TRUE, :org_id, :roles::jsonb, :name) "
-                "ON CONFLICT (email) DO UPDATE SET role = EXCLUDED.role, is_active = TRUE, org_id = EXCLUDED.org_id",
+                "INSERT INTO users (id, email, username, password_hash, name, role, roles, is_active) "
+                "VALUES (:id, :email, :username, '', :name, 'analyst', CAST(:roles AS jsonb), TRUE)",
                 {
-                    "id": new_user_id,
+                    "id": user_id,
                     "email": req["email"],
-                    "username": req["email"].split("@")[0],
-                    "role": req["requested_role"],
-                    "org_id": str(req["org_id"]) if req.get("org_id") else None,
-                    "roles": f'["{req["requested_role"]}"]',
+                    "username": f"{req['email'].split('@')[0]}-{secrets.token_hex(3)}",
                     "name": req["name"],
+                    "roles": '["analyst"]',
                 },
             )
-
-            # Mark request as approved
             await db.execute(
-                "UPDATE registration_requests SET status='approved', reviewed_by=:reviewer, "
+                "INSERT INTO organizations (id, name, slug, domain, owner_id, is_active) "
+                "VALUES (:id, :name, :slug, :domain, :owner, TRUE)",
+                {
+                    "id": org_id,
+                    "name": req["org_name"],
+                    "slug": f"{slug_base}-{secrets.token_hex(3)}",
+                    "domain": req.get("org_domain"),
+                    "owner": user_id,
+                },
+            )
+            await db.execute(
+                "UPDATE users SET org_id = :org, primary_org_id = :org WHERE id = :id",
+                {"org": org_id, "id": user_id},
+            )
+            await db.execute(
+                "INSERT INTO org_members (id, org_id, user_id, role, status, joined_at) "
+                "VALUES (:id, :org, :user, 'owner', 'active', :now)",
+                {"id": str(uuid.uuid4()), "org": org_id, "user": user_id, "now": now},
+            )
+            await db.execute(
+                "UPDATE registration_requests SET status='approved', org_id=:org, reviewed_by=:reviewer, "
                 "reviewed_at=:now, review_notes=:notes WHERE id=:id",
-                {"reviewer": current_user.user_id, "now": datetime.utcnow(), "notes": body.notes, "id": request_id},
+                {"org": org_id, "reviewer": current_user.user_id, "now": now, "notes": body.notes, "id": request_id},
             )
 
         import asyncio
@@ -203,7 +227,7 @@ async def approve_registration(
         )
 
         logger.info(f"Registration approved: {req['email']} by {current_user.email}")
-        return {"status": "approved", "user_created": True}
+        return {"status": "approved", "user_created": True, "user_id": user_id, "org_id": org_id}
 
     except HTTPException:
         raise

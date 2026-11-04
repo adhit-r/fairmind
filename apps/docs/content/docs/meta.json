@@ -1,0 +1,11 @@
+{
+  "title": "FairMind",
+  "pages": [
+    "index",
+    "quickstart",
+    "concepts",
+    "workflows",
+    "reference",
+    "limitations"
+  ]
+}

@@ -8,6 +8,9 @@ import type {
 } from '@/lib/api/hooks/useGovernanceAssurance'
 import { evidenceRunDisplayName } from '@/lib/api/hooks/useGovernanceAssurance'
 
+import { BTN, LABEL, MUTED, Pill } from '@/components/packs/parts'
+import { cn } from '@/lib/utils'
+
 import { EvidenceMappingReview } from './EvidenceMappingReview'
 
 type EvaluationRunListProps = {
@@ -15,7 +18,8 @@ type EvaluationRunListProps = {
   controls: ControlAssessment[]
   loading: boolean
   error: Error | null
-  canReview: boolean
+  /** null while the role is still loading. */
+  canReview: boolean | null
   onReview: (mappingId: string, review: EvidenceMappingReviewInput) => Promise<EvidenceMapping>
   onRefresh: () => Promise<void>
 }
@@ -35,7 +39,7 @@ function RunLoading() {
   return (
     <div aria-label="Loading evaluation runs" className="space-y-3">
       {[0, 1].map((item) => (
-        <div key={item} className="h-48 animate-pulse border-2 border-[#0F1412] bg-[#E6EAE5]" />
+        <div key={item} className="h-48 animate-pulse rounded-[14px] bg-black/5" />
       ))}
     </div>
   )
@@ -48,10 +52,10 @@ export function EvaluationRunList({ runs, controls, loading, error, canReview, o
 
   if (error) {
     return (
-      <div role="alert" className="border-4 border-[#B3261E] bg-[#FFF0ED] p-5 shadow-[6px_6px_0_0_#0F1412]">
-        <h2 className="font-black uppercase">Evaluation runs could not be loaded</h2>
-        <p className="mt-1 text-sm">{error.message}</p>
-        <button type="button" onClick={() => void onRefresh()} className="mt-4 min-h-11 border-2 border-[#0F1412] bg-white px-4 font-black uppercase shadow-[3px_3px_0_0_#0F1412]">
+      <div role="alert" className="rounded-xl bg-[#fde8e8] p-5 text-[#b42318]">
+        <h2 className="m-0 text-[15px] font-semibold">Evaluation runs could not be loaded</h2>
+        <p className="mt-1 text-[13px]">{error.message}</p>
+        <button type="button" onClick={() => void onRefresh()} className={cn(BTN, 'mt-4 h-9 px-4 text-[12.5px]')}>
           Retry
         </button>
       </div>
@@ -60,78 +64,78 @@ export function EvaluationRunList({ runs, controls, loading, error, canReview, o
 
   if (runs.length === 0) {
     return (
-      <div className="border-2 border-dashed border-[#0F1412] bg-[#F3F5F0] p-10 text-center">
-        <h2 className="text-lg font-black uppercase">No evaluation evidence captured</h2>
-        <p className="mx-auto mt-2 max-w-xl text-sm text-[#59615D]">
-          Completed FairMind evaluations and company integration runs will appear here with immutable provenance.
-        </p>
-      </div>
+      <section className="fm-card grid min-h-[240px] place-items-center p-9 text-center">
+        <div className="max-w-md">
+          <h2 className="m-0 text-[20px] font-semibold tracking-tight">No evaluation evidence captured</h2>
+          <p className={cn('mt-3 text-[14.5px] leading-[1.55]', MUTED)}>
+            Completed FairMind evaluations and company integration runs will appear here with immutable provenance.
+          </p>
+        </div>
+      </section>
     )
   }
 
   return (
-    <div className="space-y-5">
+    <div className="grid gap-4">
       {runs.map((run) => {
         const name = evidenceRunDisplayName(run)
         return (
           <article
             key={run.id}
             aria-label={`Evaluation run ${name}`}
-            className="border-4 border-[#0F1412] bg-[#FCFDF8] shadow-[7px_7px_0_0_#0F1412]"
+            className="fm-card"
           >
-            <header className="flex flex-col gap-3 border-b-2 border-[#0F1412] bg-[#DDF4EA] p-5 md:flex-row md:items-start md:justify-between">
+            <header className="flex flex-col gap-3 border-b border-[var(--fm-line)] p-5 md:flex-row md:items-start md:justify-between">
               <div>
-                <p className="text-xs font-black uppercase tracking-[0.14em] text-[#0B7659]">Completed evaluation evidence</p>
-                <h2 className="mt-1 text-xl font-black uppercase">{name}</h2>
-                <p className="mt-1 text-sm font-bold">
+                <p className={cn('m-0', LABEL)}>Completed evaluation evidence</p>
+                <h2 className="mt-1.5 text-[18px] font-semibold tracking-tight">{name}</h2>
+                <p className={cn('mt-1 text-[13px]', MUTED)}>
                   {run.sourceIdentifier} · {readable(run.sourceType)}{run.suiteVersion ? ` · suite ${run.suiteVersion}` : ''}
                 </p>
               </div>
-              <span className="w-fit border-2 border-[#0F1412] bg-[#FCFDF8] px-3 py-1.5 text-sm font-black uppercase">
-                {readable(run.result)}
-              </span>
+              <Pill>{readable(run.result)}</Pill>
             </header>
 
-            <div className="space-y-5 p-5">
-              <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <div className="border-2 border-[#0F1412] bg-[#F3F5F0] p-3">
-                  <dt className="text-[10px] font-black uppercase tracking-[0.1em] text-[#59615D]">System version</dt>
-                  <dd className="mt-1 text-sm font-black">System version {run.subjectVersion || 'not supplied'}</dd>
+            <div className="grid gap-5 p-5">
+              <dl className="m-0 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-xl bg-[var(--fm-bg)] p-3.5">
+                  <dt className={LABEL}>System version</dt>
+                  <dd className="m-0 mt-1 text-[13.5px] font-semibold">System version {run.subjectVersion || 'not supplied'}</dd>
                 </div>
-                <div className="border-2 border-[#0F1412] bg-[#F3F5F0] p-3">
-                  <dt className="text-[10px] font-black uppercase tracking-[0.1em] text-[#59615D]">Runner</dt>
-                  <dd className="mt-1 text-sm font-black">Runner version {run.runnerVersion || 'not supplied'}</dd>
+                <div className="rounded-xl bg-[var(--fm-bg)] p-3.5">
+                  <dt className={LABEL}>Runner</dt>
+                  <dd className="m-0 mt-1 text-[13.5px] font-semibold">Runner version {run.runnerVersion || 'not supplied'}</dd>
                 </div>
-                <div className="border-2 border-[#0F1412] bg-[#F3F5F0] p-3">
-                  <dt className="text-[10px] font-black uppercase tracking-[0.1em] text-[#59615D]">Captured</dt>
-                  <dd className="mt-1 text-sm font-black">Captured {formatCaptured(run.capturedAt)}</dd>
+                <div className="rounded-xl bg-[var(--fm-bg)] p-3.5">
+                  <dt className={LABEL}>Captured</dt>
+                  <dd className="m-0 mt-1 text-[13.5px] font-semibold">Captured {formatCaptured(run.capturedAt)}</dd>
                 </div>
-                <div className="border-2 border-[#0F1412] bg-[#F3F5F0] p-3">
-                  <dt className="text-[10px] font-black uppercase tracking-[0.1em] text-[#59615D]">Assurance source</dt>
-                  <dd className="mt-1 text-sm font-black">{run.assuranceSource ? readable(run.assuranceSource) : 'Not supplied'}</dd>
+                <div className="rounded-xl bg-[var(--fm-bg)] p-3.5">
+                  <dt className={LABEL}>Assurance source</dt>
+                  <dd className="m-0 mt-1 text-[13.5px] font-semibold">{run.assuranceSource ? readable(run.assuranceSource) : 'Not supplied'}</dd>
                 </div>
               </dl>
 
-              <section aria-label="Evaluation limitations" className="border-l-4 border-[#E76F2E] bg-[#FFF4DE] p-4">
-                <h3 className="text-xs font-black uppercase tracking-[0.1em]">Limitations</h3>
+              <section aria-label="Evaluation limitations" className={cn((run.limitations ?? []).length > 0 && 'rounded-xl bg-[#fff4d6] p-4')}>
+                <h3 className={cn('m-0', LABEL)}>Limitations</h3>
                 {(run.limitations ?? []).length > 0 ? (
-                  <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
+                  <ul className="mt-2 list-disc space-y-1 pl-5 text-[13.5px]">
                     {(run.limitations ?? []).map((limitation) => <li key={limitation}>{limitation}</li>)}
                   </ul>
                 ) : (
-                  <p className="mt-2 text-sm text-[#59615D]">No limitations were supplied with this run.</p>
+                  <p className={cn('mt-2 text-[13.5px]', MUTED)}>No limitations were supplied with this run.</p>
                 )}
               </section>
 
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.1em] text-[#59615D]">Content hash</p>
-                <code className="mt-1 block break-all border-2 border-[#0F1412] bg-[#0F1412] p-3 text-xs text-[#FCFDF8]">{run.contentHash}</code>
+                <p className={cn('m-0', LABEL)}>Content hash</p>
+                <code className="mt-1.5 block break-all rounded-xl bg-[var(--fm-bg)] p-3 text-[12px]">{run.contentHash}</code>
               </div>
 
-              <section aria-label="Control mapping reviews" className="space-y-3 border-t-2 border-[#0F1412] pt-5">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h3 className="font-black uppercase">Control mapping reviews</h3>
-                  <span className="text-sm font-bold text-[#59615D]">{run.candidateMappings.length} mapping{run.candidateMappings.length === 1 ? '' : 's'}</span>
+              <section aria-label="Control mapping reviews" className="grid gap-3 border-t border-[var(--fm-line)] pt-5">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <h3 className="m-0 text-[15px] font-semibold">Control mapping reviews</h3>
+                  <span className={cn('text-[12.5px] tabular-nums', MUTED)}>{run.candidateMappings.length} mapping{run.candidateMappings.length === 1 ? '' : 's'}</span>
                 </div>
                 {run.candidateMappings.length > 0 ? run.candidateMappings.map((mapping) => (
                   <EvidenceMappingReview
@@ -143,7 +147,7 @@ export function EvaluationRunList({ runs, controls, loading, error, canReview, o
                     onRefresh={onRefresh}
                   />
                 )) : (
-                  <p className="border-2 border-dashed border-[#0F1412] bg-[#F3F5F0] p-4 text-sm text-[#59615D]">
+                  <p className={cn('m-0 rounded-xl border border-dashed border-[rgba(21,23,26,.16)] px-4 py-5 text-center text-[13px]', MUTED)}>
                     No control mappings were suggested for this run.
                   </p>
                 )}

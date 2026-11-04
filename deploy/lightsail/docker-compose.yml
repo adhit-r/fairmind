@@ -1,0 +1,42 @@
+# Single-box production stack for Lightsail. Database, auth and realtime stay on Neon.
+# Cloudflare Tunnel routes app.fairmind.xyz (see tunnel.yml); Next.js forwards /api/proxy/* to the backend.
+services:
+  backend:
+    build: ../../apps/backend
+    image: fairmind-backend
+    env_file: backend.env
+    volumes:
+      - uploads:/app/uploads
+      - datasets:/app/datasets
+      - models:/app/models
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ../../apps/frontend
+      args:
+        NEXT_PUBLIC_NEON_REALTIME_URL: ${NEXT_PUBLIC_NEON_REALTIME_URL:-}
+        NEXT_PUBLIC_AUTHENTIK_URL: ${NEXT_PUBLIC_AUTHENTIK_URL:-}
+        NEXT_PUBLIC_AUTHENTIK_CLIENT_ID: ${NEXT_PUBLIC_AUTHENTIK_CLIENT_ID:-}
+        NEXT_PUBLIC_AUTHENTIK_REDIRECT_URI: ${NEXT_PUBLIC_AUTHENTIK_REDIRECT_URI:-}
+    image: fairmind-frontend
+    env_file: frontend.env
+    environment:
+      BACKEND_INTERNAL_URL: http://backend:8000
+    depends_on: [backend]
+    restart: unless-stopped
+
+  # Outbound-only Cloudflare Tunnel: no inbound ports, TLS ends at Cloudflare
+  cloudflared:
+    image: cloudflare/cloudflared:2026.10.7
+    command: tunnel --no-autoupdate --config /etc/cloudflared/tunnel.yml --cred-file /etc/cloudflared/creds.json run ${TUNNEL_ID:?set TUNNEL_ID in .env}
+    volumes:
+      - ./tunnel.yml:/etc/cloudflared/tunnel.yml:ro
+      - ./tunnel.json:/etc/cloudflared/creds.json:ro
+    depends_on: [frontend]
+    restart: unless-stopped
+
+volumes:
+  uploads:
+  datasets:
+  models:

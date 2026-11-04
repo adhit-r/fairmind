@@ -6,23 +6,26 @@ import * as React from "react"
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center whitespace-nowrap rounded-base text-sm font-base ring-offset-white transition-all gap-2 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
+  "inline-flex items-center justify-center whitespace-nowrap rounded-full text-[13px] font-semibold ring-offset-white transition-colors gap-2 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-ink)] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-60",
   {
     variants: {
       variant: {
-        default:
-          "text-main-foreground bg-main border-2 border-border shadow-shadow hover:translate-x-boxShadowX hover:translate-y-boxShadowY hover:shadow-none",
-        noShadow: "text-main-foreground bg-main border-2 border-border",
+        default: "bg-[var(--fm-ink)] text-white hover:bg-black",
+        noShadow: "bg-[var(--fm-ink)] text-white hover:bg-black",
+        reverse: "bg-[var(--fm-ink)] text-white hover:bg-black",
         neutral:
-          "bg-secondary-background text-foreground border-2 border-border shadow-shadow hover:translate-x-boxShadowX hover:translate-y-boxShadowY hover:shadow-none",
-        reverse:
-          "text-main-foreground bg-main border-2 border-border hover:translate-x-reverseBoxShadowX hover:translate-y-reverseBoxShadowY hover:shadow-shadow",
+          "border border-[var(--fm-line)] bg-white font-medium text-[var(--fm-ink2)] hover:border-[var(--fm-ink)] hover:text-[var(--fm-ink)]",
+        outline:
+          "border border-[var(--fm-line)] bg-white font-medium text-[var(--fm-ink2)] hover:border-[var(--fm-ink)] hover:text-[var(--fm-ink)]",
+        secondary: "bg-[var(--fm-bg)] font-medium text-[var(--fm-ink)] hover:bg-[rgba(21,23,26,.08)]",
+        light: "bg-[var(--fm-bg)] font-medium text-[var(--fm-ink)] hover:bg-[rgba(21,23,26,.08)]",
+        destructive: "bg-[#b4232c] text-white hover:bg-[#961d25]",
       },
       size: {
-        default: "h-11 px-4 py-2 min-h-[44px]",
-        sm: "h-10 px-3 min-h-[40px]",
-        lg: "h-12 px-8 min-h-[48px]",
-        icon: "size-11 min-h-[44px] min-w-[44px]",
+        default: "h-10 px-4",
+        sm: "h-9 px-3.5 text-[12.5px]",
+        lg: "h-11 px-6",
+        icon: "size-10",
       },
     },
     defaultVariants: {

@@ -94,18 +94,18 @@ export default function OrgAuditLogPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-background p-8">
+    <div className="min-w-0">
       <div className="mx-auto max-w-6xl">
         {/* Header */}
-        <div className="mb-8 border-b-4 border-black pb-6">
-          <h1 className="text-4xl font-bold text-black">Audit Log</h1>
+        <div className="mb-8 border-b border-[var(--fm-line)] pb-6">
+          <h1 className="text-[30px] font-semibold tracking-[-.03em] text-black">Audit Log</h1>
           <p className="mt-2 text-gray-600">
             Complete record of organization activity and events
           </p>
         </div>
 
         {/* Filters */}
-        <div className="mb-8 rounded-lg border-2 border-black bg-white p-6 shadow-brutal-lg">
+        <div className="mb-8 p-6 fm-card">
           <div className="flex items-center gap-2 mb-4 font-bold text-black">
             <IconFilter size={20} />
             <span>Filters</span>
@@ -118,7 +118,7 @@ export default function OrgAuditLogPage() {
               <select
                 value={filterAction}
                 onChange={(e) => setFilterAction(e.target.value)}
-                className="w-full rounded border-2 border-black px-4 py-2 text-black"
+                className="w-full rounded border border-[var(--fm-line)] px-4 py-2 text-black"
               >
                 <option value="">All Actions</option>
                 {uniqueActions.map((action) => (
@@ -135,7 +135,7 @@ export default function OrgAuditLogPage() {
               <select
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
-                className="w-full rounded border-2 border-black px-4 py-2 text-black"
+                className="w-full rounded border border-[var(--fm-line)] px-4 py-2 text-black"
               >
                 <option value="">All Statuses</option>
                 <option value="success">Success</option>
@@ -148,16 +148,16 @@ export default function OrgAuditLogPage() {
         {/* Audit Log Table */}
         {isLoading ? (
           <div className="flex justify-center">
-            <div className="h-12 w-12 animate-spin rounded-full border-4 border-gray-300 border-t-black" />
+            <div className="h-12 w-12 animate-spin rounded-full border-2 border-[var(--fm-line)] border-t-[var(--fm-ink)]" />
           </div>
         ) : error ? (
           <div className="rounded-lg border-2 border-red-800 bg-red-50 p-4">
             <p className="text-red-800">Error: {error}</p>
           </div>
         ) : (
-          <div className="overflow-x-auto rounded-lg border-4 border-black shadow-brutal-lg">
+          <div className="overflow-x-auto fm-card">
             <table className="w-full">
-              <thead className="border-b-4 border-black bg-gray-100">
+              <thead className="border-b border-[var(--fm-line)] bg-gray-100">
                 <tr>
                   <th className="px-6 py-4 text-left font-bold text-black">Timestamp</th>
                   <th className="px-6 py-4 text-left font-bold text-black">User</th>
@@ -227,7 +227,7 @@ export default function OrgAuditLogPage() {
         )}
 
         {/* Info Box */}
-        <div className="mt-8 rounded-lg border-4 border-black bg-white p-6 shadow-brutal-lg">
+        <div className="mt-8 p-6 fm-card">
           <h3 className="mb-4 font-bold text-black">About Audit Logs</h3>
           <ul className="space-y-2 text-sm text-gray-600">
             <li>

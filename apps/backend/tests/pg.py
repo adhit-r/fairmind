@@ -5,7 +5,7 @@ databases on (never Neon or any shared database). Each test session gets:
 
 * an app database built by scripts/setup_db.py, used as DATABASE_URL, and
 * a template with every ORM table, cloned by ``fresh_engine()`` into an empty
-  per-test database (what the in-memory SQLite engines used to provide).
+  per-test database.
 """
 
 import atexit
@@ -59,6 +59,7 @@ def create_app_database() -> str:
     engine = create_engine(url)
     setup_db.add_orm_tables_and_columns(engine)
     engine.dispose()
+    setup_db.apply_always(url)
     return url
 
 

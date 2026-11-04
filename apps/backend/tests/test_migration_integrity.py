@@ -535,12 +535,17 @@ def test_production_postgresql_manifest_covers_audit_immutability() -> None:
         POSTGRESQL_ASSURANCE_REQUIRED_TRIGGERS
     )
     assert isinstance(FROZEN_POSTGRESQL_ASSURANCE_CATALOGS, MappingProxyType)
-    assert set(FROZEN_POSTGRESQL_ASSURANCE_CATALOGS) == {14}
-    frozen = FROZEN_POSTGRESQL_ASSURANCE_CATALOGS[14]
-    assert frozen.spec is POSTGRESQL_ASSURANCE_CATALOG_SPEC
-    assert frozen.postgresql_major == 14
-    assert frozen.digest == "c181fd00d2c65009cd17a673c0462d92d557c73dc7976f800a4bcb83ae4c6fd2"
-    validate_frozen_postgresql_catalog(frozen)
+    assert set(FROZEN_POSTGRESQL_ASSURANCE_CATALOGS) == {14, 18}
+    expected_digests = {
+        14: "c181fd00d2c65009cd17a673c0462d92d557c73dc7976f800a4bcb83ae4c6fd2",
+        18: "ca00ef6d75a35294ac915de43d8f1a188a77a784060065d3947f982e8e6920a4",
+    }
+    for major, digest in expected_digests.items():
+        frozen = FROZEN_POSTGRESQL_ASSURANCE_CATALOGS[major]
+        assert frozen.spec is POSTGRESQL_ASSURANCE_CATALOG_SPEC
+        assert frozen.postgresql_major == major
+        assert frozen.digest == digest
+        validate_frozen_postgresql_catalog(frozen)
 
 
 def test_frozen_postgresql_catalog_rejects_placeholder_and_invalid_digests() -> None:

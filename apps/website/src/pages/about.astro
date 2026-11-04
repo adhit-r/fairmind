@@ -1,58 +1,87 @@
 ---
+import { registryTotals } from '../lib/registry';
 import Layout from '../layouts/Layout.astro';
 import PageHero from '../components/marketing/PageHero.astro';
 import '../styles/pages.css';
+
+const principles = [
+  { strong: 'Deny by default.', text: 'If an approver is unreachable or no policy covers an action, nothing is recorded or changed.' },
+  { strong: 'Capability truth.', text: 'Every evaluator and every workflow step says what it does today: validated, external provider, metadata only, unavailable, or manual.' },
+  { strong: 'Evidence over claims.', text: 'A measured failure outranks an attestation. Readiness is never certification.' },
+  { strong: 'The agent is governed too.', text: 'Scoped identity per step, a tool allowlist prompts cannot widen, a hash-chained trace, a kill switch per run.' },
+  { strong: 'Gaps shown, not hidden.', text: 'Framework journeys list every requirement, including the ones nothing covers yet.' },
+];
+
+const structuredData = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://fairmind.xyz/' },
+      { '@type': 'ListItem', position: 2, name: 'About', item: 'https://fairmind.xyz/about/' },
+    ],
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'AboutPage',
+    name: 'About FairMind',
+    url: 'https://fairmind.xyz/about/',
+    about: { '@id': 'https://fairmind.xyz/#organization' },
+  },
+];
 ---
 
 <Layout
-  title="About FairMind | Evidence infrastructure for AI assurance"
-  description="FairMind is a vendor-neutral AI assurance evidence workbench built around capability truth, human review, retained failure history, and portable evidence."
+  title="About FairMind | Agentic AI governance by Axonome"
+  description="FairMind is built by Axonome. It turns AI governance into agent workflows that stop for human decisions, and keeps the evidence on a tamper-evident ledger. Open source."
+  structuredData={structuredData}
 >
   <div class="route-page">
     <PageHero
-      signal="Why FairMind exists"
-      title="AI assurance has a"
-      accent="continuity problem."
-      description="Tests happen in one tool, system identity in another, framework mappings in spreadsheets, remediation in tickets, and final review in a document assembled under deadline. FairMind exists to preserve that chain as evidence moves."
+      signal="About"
+      title="Governance work should be done by agents."
+      accent="Governance decisions should not."
+      description="FairMind started as a bias-detection toolkit and became a governance platform when we noticed where the real cost was: not in running a test, but in everything around it. Collecting the evidence, mapping it to fifty frameworks, getting a person to look, and proving later that they did."
       proofs={[
-        { label: 'Problem', value: 'Fragmented evidence', note: 'The result loses scope, thresholds, artifacts, limitations, and review history.' },
-        { label: 'Product', value: 'Evidence workbench', note: 'A vendor-neutral layer between evaluators and accountable governance.' },
-        { label: 'Principle', value: 'No silent promotion', note: 'Metadata stays metadata. Missing evidence stays missing. Review stays human.' },
+        { label: 'Built by', value: 'Axonome', note: 'A small team working with ML engineers, security leads and compliance leads.' },
+        { label: 'Code', value: 'Open source', note: 'MIT licence. The product you evaluate is the repository you can read.' },
+        { label: 'Research', value: 'FairMind-E', note: 'Environmental evidence for AI systems, with limitations attached.' },
       ]}
-      primary={{ label: 'See what is novel', href: '#novelty' }}
-      secondary={{ label: 'Inspect the workflow', href: '/features' }}
+      primary={{ label: 'Contact us', href: '/contact/' }}
+      secondary={{ label: 'Research notes', href: '/blog/' }}
     />
 
-    <section class="route-section" id="novelty" aria-labelledby="novelty-title">
-      <header class="route-section-heading">
-        <h2 id="novelty-title">The novelty is not another score.</h2>
-        <p>FairMind’s product thesis is that trustworthy governance depends on durable relationships between evidence objects, decisions, and change over time.</p>
-      </header>
-      <div class="route-ledger">
-        <article class="route-ledger-row"><span>Portable unit</span><h3>Evidence Passport</h3><p>A target exchange contract that binds the tested subject, evaluator, threshold, artifact, limitation, review, remediation, and superseding rerun.</p></article>
-        <article class="route-ledger-row"><span>Explicit boundary</span><h3>Capability truth</h3><p>Every evaluator declares validated, metadata-only, external-provider, unavailable, or insufficient-data state.</p></article>
-        <article class="route-ledger-row"><span>Human control</span><h3>Reviewed mapping</h3><p>Technical evidence can suggest a framework relationship. An accountable person decides whether that relationship is accepted.</p></article>
-        <article class="route-ledger-row"><span>Temporal truth</span><h3>Failure-preserving retest</h3><p>A clean rerun supersedes the failed evidence without deleting what failed, who acted, or why the new result was accepted.</p></article>
-        <article class="route-ledger-row"><span>Reusable output</span><h3>Framework-pinned manifest</h3><p>The same accepted evidence can support several versioned frameworks while keeping the underlying technical claim bounded.</p></article>
+    <section class="route-section" id="principles" aria-labelledby="principles-title">
+      <div class="route-split">
+        <div class="route-split-copy">
+          <h2 id="principles-title">Five rules we don't trade away.</h2>
+          <p>They are written into the workflow validator, the gate, and the ledger, not only into this page.</p>
+        </div>
+        <ul class="route-checklist">{principles.map((p) => <li><strong>{p.strong}</strong>{p.text}</li>)}</ul>
       </div>
     </section>
 
-    <section class="route-section route-section-dark" aria-labelledby="principles-title">
+    <section class="route-section route-section-dark" aria-labelledby="why-title">
       <div class="route-split">
-        <div class="route-split-copy"><h2 id="principles-title">Built for skeptical reviewers.</h2><p>FairMind should make it easier to reject an overstated claim, inspect its source, find the unresolved blocker, and reproduce the package—not merely make a dashboard look complete.</p></div>
-        <div class="route-checklist">
-          <div><span>01</span><strong>Evidence before readiness</strong></div>
-          <div><span>02</span><strong>Limitations beside results</strong></div>
-          <div><span>03</span><strong>Human decisions with rationale</strong></div>
-          <div><span>04</span><strong>Research claims bounded by measurement status</strong></div>
-          <div><span>05</span><strong>Open interfaces before another closed evaluator</strong></div>
+        <div class="route-split-copy">
+          <h2 id="why-title">Why evaluations and workflows, not a checklist.</h2>
+          <p>A checklist tells you what a framework asks. It cannot tell you whether the agent blocked an out-of-scope action, or whether the impact ratio cleared 0.8. So the catalogue is built from 109 evaluations, each with a metric and a declared threshold, and 90 workflows that produce the evidence a requirement actually needs. {registryTotals.commonControls} common controls connect them to {registryTotals.requirements} requirements across {registryTotals.frameworks} frameworks, so one run counts everywhere it applies.</p>
+          <p>The registry covers {registryTotals.frameworks} frameworks because that is how many our design partners are actually asked about.</p>
+        </div>
+        <div class="route-quote">
+          <blockquote>Let the agents do the paperwork. Keep the decisions.</blockquote>
+          <p>The sentence we test every feature against.</p>
         </div>
       </div>
     </section>
 
     <section class="route-closing" aria-labelledby="about-closing-title">
-      <div><p>Bring your tests</p><h2 id="about-closing-title">Produce evidence you can defend.</h2></div>
-      <div class="route-actions"><a class="button button-primary" href="/request-access">Work with FairMind</a><a class="button button-secondary" href="/blog">Read the research notes</a></div>
+      <h2 id="about-closing-title">Work with us.</h2>
+      <p>Design partners, contributors, and researchers are all welcome. Start with the repository or a conversation.</p>
+      <div class="route-actions">
+        <a class="button button-primary" href="/request-access/">Request access</a>
+        <a class="button" href="https://github.com/adhit-r/fairmind">GitHub</a>
+      </div>
     </section>
   </div>
 </Layout>

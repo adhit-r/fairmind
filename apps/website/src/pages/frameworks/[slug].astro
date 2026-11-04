@@ -1,0 +1,126 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { frameworks, type Framework } from '../../lib/frameworks';
+import '../../styles/frameworks.css';
+
+export function getStaticPaths() {
+  return frameworks.map((framework) => ({ params: { slug: framework.slug }, props: { framework } }));
+}
+
+const { framework: f } = Astro.props as { framework: Framework };
+const url = `https://fairmind.xyz/frameworks/${f.slug}/`;
+const related = frameworks.filter((other) => other.slug !== f.slug);
+
+const structuredData = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://fairmind.xyz/' },
+      { '@type': 'ListItem', position: 2, name: 'Frameworks', item: 'https://fairmind.xyz/frameworks/' },
+      { '@type': 'ListItem', position: 3, name: f.shortName, item: url },
+    ],
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'TechArticle',
+    headline: f.title,
+    description: f.description,
+    about: f.name,
+    url,
+    publisher: { '@id': 'https://fairmind.xyz/#organization' },
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: f.faqs.map((faq) => ({
+      '@type': 'Question',
+      name: faq.q,
+      acceptedAnswer: { '@type': 'Answer', text: faq.a },
+    })),
+  },
+];
+---
+
+<Layout title={`${f.title} | FairMind`} description={f.description} structuredData={structuredData}>
+  <section class="fw-hero">
+    <div class="wrap">
+      <nav class="breadcrumbs" aria-label="Breadcrumb">
+        <ol>
+          <li><a href="/">Home</a></li>
+          <li><a href="/frameworks/">Frameworks</a></li>
+          <li aria-current="page">{f.shortName}</li>
+        </ol>
+      </nav>
+      <p class="kicker">{f.region} · {f.type}</p>
+      <h1>{f.title}</h1>
+      <p class="fw-lead">{f.summary}</p>
+    </div>
+  </section>
+
+  <section class="section section-white">
+    <div class="wrap">
+      <header class="section-heading">
+        <h2>What the {f.shortName} asks of AI systems</h2>
+        <p>The obligations most relevant to bias, risk, and accountability, summarised from the {f.name}.</p>
+      </header>
+      <dl class="fw-reqs">
+        {f.requirements.map((r) => (
+          <div>
+            <dt><span class="chip">{r.ref}</span>{r.label}</dt>
+            <dd>{r.detail}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap fw-split">
+      <header>
+        <h2>Evidence FairMind helps you produce</h2>
+        <p class="fw-note">
+          FairMind links technical evidence to {f.shortName} obligations for a human reviewer to accept.
+          It is not legal advice and does not decide compliance.
+        </p>
+      </header>
+      <ul class="fw-evidence">
+        {f.evidence.map((e) => <li>{e}</li>)}
+      </ul>
+    </div>
+  </section>
+
+  <section class="section section-white">
+    <div class="wrap">
+      <header class="section-heading">
+        <h2>{f.shortName} questions</h2>
+      </header>
+      <div class="faq">
+        {f.faqs.map((faq) => (
+          <details open>
+            <summary>{faq.q}</summary>
+            <div><p>{faq.a}</p></div>
+          </details>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap">
+      <h2 class="fw-related-title">Related frameworks</h2>
+      <ul class="fw-related">
+        {related.map((r) => (
+          <li><a href={`/frameworks/${r.slug}/`}>{r.shortName}</a></li>
+        ))}
+      </ul>
+    </div>
+  </section>
+
+  <section class="section section-orange">
+    <div class="wrap cta-band">
+      <h2>Start building your {f.shortName} evidence record.</h2>
+      <a class="button button-secondary" href="/request-access/">Request access <span aria-hidden="true">→</span></a>
+    </div>
+  </section>
+</Layout>

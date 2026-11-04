@@ -176,10 +176,13 @@ credentials*
 
 # JSON files (but allow important config files)
 *.json
+# fumadocs section indexes order the docs navigation; they are source, not data.
+!apps/docs/content/**/meta.json
 !package.json
 !package-lock.json
 !research/aibom-fairness-evidence/**/*.json
 !apps/backend/src/domain/assurance/evidence-passport-v2.schema.json
+!apps/backend/src/api/routers/pack_catalogue_data/catalogue.json
 !tsconfig.json
 !next.config.js
 !tailwind.config.ts
@@ -288,6 +291,9 @@ checkpoints/
 *.xml
 *.yaml
 *.yml
+# GitHub workflows and composite actions are source.
+!.github/**/*.yml
+!.github/**/*.yaml
 data/
 datasets/
 *.parquet
@@ -309,8 +315,10 @@ localhost.har
 apps/backend/public_key.pem
 
 # The broad ML artifact rule ``models/`` must not hide active API source.
+# Re-including the directory still leaves *.pt, *.pkl etc. ignored inside it.
 !apps/backend/api/models/
 !apps/backend/api/models/**/*.py
+!apps/backend/src/**/models/
 apps/backend/private_key.pem
 apps/backend/api/services/real_bias_detection_service.py
 apps/backend/email_service.py

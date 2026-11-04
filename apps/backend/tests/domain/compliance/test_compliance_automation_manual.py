@@ -5,7 +5,14 @@ try:
     from domain.compliance.services.compliance_automation_service import ComplianceAutomationService
 except ModuleNotFoundError as exc:
     pytest.skip(f"compliance automation dependencies unavailable: {exc}", allow_module_level=True)
-from database.models import ComplianceSchedule, Model
+from types import SimpleNamespace
+
+from database.models import ComplianceSchedule
+
+# There is no Model ORM class in database.models, and importing one broke
+# collection for the whole suite. The object below is only ever handed back by a
+# mocked session, so a plain stub with the attributes read is enough.
+Model = SimpleNamespace
 
 @pytest.fixture
 def mock_db_session():
@@ -17,20 +24,16 @@ def service():
     with patch('domain.compliance.services.compliance_automation_service.inject') as mock_inject:
         # Mock injected services
         mock_report_generator = AsyncMock()
-        mock_model_test = AsyncMock()
         
         def side_effect(service_type):
             if str(service_type) == "<class 'domain.reports.services.report_generator_service.ReportGeneratorService'>":
                 return mock_report_generator
-            if str(service_type) == "<class 'domain.models.services.model_test_service.ModelTestService'>":
-                return mock_model_test
             return MagicMock()
             
         mock_inject.side_effect = side_effect
         
         service = ComplianceAutomationService()
         service.report_generator = mock_report_generator
-        service.model_test_service = mock_model_test
         return service
 
 @pytest.mark.asyncio
@@ -39,29 +42,35 @@ async def test_generate_automated_report(service, mock_db_session):
     schedule_id = "test-schedule-id"
     schedule = ComplianceSchedule(
         id=schedule_id,
+        org_id="org-a",
         framework="Test Framework",
         is_active=True,
         recipients=["test@example.com"]
     )
     
+    # Every attribute generate_automated_report reads. A missing one raises
+    # inside the method's try block, which swallows it and skips the report.
     model = Model(
         id="test-model-id",
         name="Test Model",
         version="1.0",
         model_type="classifier",
+        author="Test Author",
         fairness_score=0.9,
         bias_score=0.1
     )
     
     # Mock DB queries
     mock_db_session.query.return_value.filter.return_value.first.return_value = schedule
-    mock_db_session.query.return_value.all.return_value = [model]
+    # Models are scoped to the schedule's organisation: query(...).filter(...).all().
+    mock_db_session.query.return_value.filter.return_value.all.return_value = [model]
     
     # Mock report generator
     service.report_generator.generate_compliance_certificate.return_value = "/tmp/report.pdf"
     
     # Mock db_manager context manager
-    with patch('domain.compliance.services.compliance_automation_service.db_manager.get_session') as mock_get_session:
+    with patch('domain.compliance.services.compliance_automation_service.db_manager.get_session') as mock_get_session, \
+            patch('domain.compliance.services.compliance_automation_service.compliance_notifier', AsyncMock()):
         mock_get_session.return_value.__enter__.return_value = mock_db_session
         
         # Execute
@@ -70,24 +79,3 @@ async def test_generate_automated_report(service, mock_db_session):
         # Verify
         service.report_generator.generate_compliance_certificate.assert_called_once()
         assert schedule.last_run is not None
-
-@pytest.mark.asyncio
-async def test_check_compliance_violations(service, mock_db_session):
-    # Setup
-    model_id = "test-model-id"
-    
-    # Mock model test service to return low score
-    service.model_test_service.run_bias_test.return_value = {
-        "score": 0.5, # Below 0.8 threshold
-        "metrics": {}
-    }
-    
-    # Execute
-    violations = await service.check_compliance_violations(mock_db_session, model_id)
-    
-    # Verify
-    assert len(violations) == 1
-    assert violations[0].model_id == model_id
-    assert violations[0].violation_type == "Low Fairness Score"
-    mock_db_session.add.assert_called_once()
-    mock_db_session.commit.assert_called_once()

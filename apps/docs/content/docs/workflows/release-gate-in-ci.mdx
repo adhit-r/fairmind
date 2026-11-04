@@ -1,0 +1,56 @@
+---
+title: Release gate in CI
+description: Let the pipeline ask FairMind whether a system may ship, and store the fairness test it ran as evidence.
+---
+
+An engineer should never fill in a governance form to get a model released. The pipeline runs the test, FairMind grades the evidence, and the gate answers.
+
+## What the gate is
+
+Each AI system has a release gate made of five checks: fairness measured, data governance, human oversight, monitoring in place, and environmental impact. A check is **proven** when measured or tool-estimated evidence with confidence 0.70 or higher backs it, **attested** when any other evidence does, and **open** when nothing does. The verdict comes from the impact-by-confidence matrix: the system's risk tier against the gate's overall confidence. A measured fairness failure never produces a plain go.
+
+## Set up
+
+1. Create an API key once, as a user who belongs to the system's organisation: `POST /api/v1/auth/api-keys` with a name. The key is valid for 365 days. Store it as a repository secret.
+2. Find the system id: `fairmind systems`, or copy it from the system file's address in the app.
+
+## Run the test and read the gate
+
+```yaml
+jobs:
+  release-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Produce predictions for the holdout set
+        run: python scripts/score_holdout.py --out artifacts/predictions.csv
+      - uses: ./.github/actions/fairmind-gate
+        with:
+          system: ${{ vars.FAIRMIND_SYSTEM_ID }}
+          api-url: ${{ vars.FAIRMIND_API_URL }}
+          api-key: ${{ secrets.FAIRMIND_API_KEY }}
+          predictions: artifacts/predictions.csv
+          outcome: repaid
+          prediction: approved
+          attributes: gender,region
+```
+
+The predictions file has one row per decision: the outcome, the model's prediction or score, and the protected attributes. The action uploads it, FairMind computes disparate impact, demographic parity, equal opportunity, equalized odds and calibration per attribute with 95% bootstrap intervals, and stores the result on the system as measured evidence. Then it reads the gate and fails the job unless the verdict is go, or conditional go when `allow-conditional` is `true`.
+
+## From a terminal
+
+```bash
+pipx install ./apps/cli
+export FAIRMIND_API_URL=https://fairmind.example.com FAIRMIND_API_KEY=...
+fairmind test --system <id> --file predictions.csv --outcome repaid --prediction approved --attributes gender,region
+fairmind gate --system <id>
+```
+
+Exit codes: 0 go, 2 conditional go, 1 no go, 3 the command itself failed.
+
+## What the gate does not do yet
+
+Only the fairness check has a producer today. Data governance, human oversight and monitoring can be attested by recording evidence in the app, which caps them in the manual confidence band until their own flows exist.

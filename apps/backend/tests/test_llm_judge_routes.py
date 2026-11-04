@@ -3,9 +3,10 @@
 from fastapi.testclient import TestClient
 
 from api.main import app
+from tests.auth_helpers import auth_headers
 
 
-client = TestClient(app)
+client = TestClient(app, headers=auth_headers())
 
 
 def test_llm_judge_models_endpoint():

@@ -18,15 +18,15 @@ export function MetricsCards({
   isLoading = false
 }: MetricsCardsProps) {
   const StatCard = ({ title, value, icon: Icon, subtext }: any) => (
-    <Card className="border-4 border-black shadow-brutal hover:shadow-brutal-lg transition-all h-full">
+    <Card className="transition-all h-full fm-card">
       <CardContent className="p-6">
         <div className="flex items-start justify-between mb-4">
           <div className="flex-1">
-            <p className="text-xs font-bold uppercase text-gray-600 mb-2">{title}</p>
-            <p className="text-4xl font-bold tracking-tight">{isLoading ? '-' : value}</p>
+            <p className="text-xs font-semibold uppercase text-gray-600 mb-2">{title}</p>
+            <p className="text-[30px] font-semibold tracking-[-.03em]">{isLoading ? '-' : value}</p>
             {subtext && <p className="text-xs text-gray-500 mt-2">{subtext}</p>}
           </div>
-          <div className="p-3 border-2 border-black bg-orange-500 shadow-brutal">
+          <div className="p-3 bg-orange-500 rounded-[14px] shadow-[var(--fm-shadow)]">
             <Icon className="w-6 h-6 text-white" />
           </div>
         </div>
