@@ -240,7 +240,7 @@ def test_ai_governance_lifecycle_summary_persists_stage_progression(authenticate
         json={
             "systemId": system_id,
             "riskType": "bias",
-            "severity": "high",
+            "severity": "medium",
             "description": "Approval disparity detected.",
         },
     )
@@ -331,6 +331,26 @@ def test_ai_governance_lifecycle_summary_persists_stage_progression(authenticate
     persisted_operate = client.get(f"/api/v1/ai-governance/systems/{system_id}")
     assert persisted_operate.status_code == 200
     assert persisted_operate.json()["lifecycleStage"] == "operate"
+
+
+def test_ai_governance_open_high_risk_puts_system_in_remediate(authenticated_org_database):
+    system_id = _create_scoped_system(authenticated_org_database, "High finding system")
+    risk_resp = client.post(
+        "/api/v1/ai-governance/risks/assess",
+        json={
+            "systemId": system_id,
+            "riskType": "bias",
+            "severity": "high",
+            "description": "Approval disparity detected.",
+        },
+    )
+    assert risk_resp.status_code == 200
+
+    # SYSTEM_JOURNEY.md: Remediate lasts until no open high or critical risk remains,
+    # so the spine and Today (both read the system list) count it there, not under Govern.
+    assert client.get(f"/api/v1/ai-governance/lifecycle/{system_id}/summary").json()["stage"] == "remediate"
+    listed = client.get("/api/v1/ai-governance/systems").json()
+    assert [item["lifecycleStage"] for item in listed if item["id"] == system_id] == ["remediate"]
 
 
 def test_ai_governance_policy_create_and_list():
