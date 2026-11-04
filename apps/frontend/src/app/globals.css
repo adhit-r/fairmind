@@ -29,7 +29,7 @@
     --fm-bg: #f4f4f2;
     --fm-ink: #15171a;
     --fm-ink2: #5a5f68;
-    --fm-ink3: #9096a0;
+    --fm-ink3: #6a707c;
     --fm-line: rgba(21, 23, 26, 0.08);
     --fm-brand: #ff6b35;
     --fm-shadow: 0 1px 2px rgba(20, 20, 30, 0.04), 0 18px 44px -20px rgba(20, 20, 30, 0.22);
@@ -109,7 +109,9 @@ body {
 }
 .fm-strip { scrollbar-width: none; }
 .fm-strip::-webkit-scrollbar { display: none; }
-.fm-card {
+/* .pk-card is the packs pages' name for the same card. */
+.fm-card,
+.pk-card {
   background: #fff;
   border-radius: 14px;
   box-shadow: var(--fm-shadow), inset 0 0 0 1px rgba(255, 255, 255, 0.6);

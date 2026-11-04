@@ -1,14 +1,17 @@
 'use client'
 
-import { IconFolder, IconFolderOpen, IconStack2 } from '@tabler/icons-react'
-import { Badge } from '@/components/ui/badge'
 import type { Evidence } from '@/lib/api/hooks/useEvidence'
+import { LABEL, MUTED } from '@/components/packs/parts'
+import { cn } from '@/lib/utils'
 
 interface EvidenceFolderTreeProps {
   evidence: Evidence[]
   activeFolder: string | null
   onFolderChange: (folder: string | null) => void
 }
+
+const ROW =
+  'flex w-full items-center gap-2 rounded-[10px] px-2.5 py-1.5 text-left text-[13px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-ink)]'
 
 export function EvidenceFolderTree({ evidence, activeFolder, onFolderChange }: EvidenceFolderTreeProps) {
   const folderCounts: Record<string, number> = {}
@@ -23,70 +26,32 @@ export function EvidenceFolderTree({ evidence, activeFolder, onFolderChange }: E
   }
 
   const folders = Object.entries(folderCounts).sort((a, b) => a[0].localeCompare(b[0]))
+  const rows: Array<{ key: string; value: string | null; label: string; count: number }> = [
+    { key: 'all', value: null, label: 'All evidence', count: evidence.length },
+    ...(uncategorized > 0 ? [{ key: 'uncategorized', value: '__uncategorized__', label: 'Uncategorized', count: uncategorized }] : []),
+    ...folders.map(([folder, count]) => ({ key: `folder:${folder}`, value: folder, label: folder, count })),
+  ]
 
   return (
-    <div className="space-y-1">
-      <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-        Folders
-      </p>
-
-      <button
-        type="button"
-        onClick={() => onFolderChange(null)}
-        className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-bold transition-colors ${
-          activeFolder === null
-            ? 'bg-[var(--fm-ink)] text-white'
-            : 'hover:bg-slate-100'
-        }`}
-      >
-        <IconStack2 className="h-4 w-4 shrink-0" />
-        <span className="flex-1 text-left">All evidence</span>
-        <Badge className={`border border-[var(--fm-line)] px-1.5 py-0 text-[10px] font-bold ${activeFolder === null ? 'bg-white/20 text-white' : 'bg-slate-200 text-black'}`}>
-          {evidence.length}
-        </Badge>
-      </button>
-
-      {uncategorized > 0 && (
-        <button
-          type="button"
-          onClick={() => onFolderChange('__uncategorized__')}
-          className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-bold transition-colors ${
-            activeFolder === '__uncategorized__'
-              ? 'bg-[var(--fm-ink)] text-white'
-              : 'hover:bg-slate-100'
-          }`}
-        >
-          <IconFolder className="h-4 w-4 shrink-0" />
-          <span className="flex-1 text-left">Uncategorized</span>
-          <Badge className={`border border-[var(--fm-line)] px-1.5 py-0 text-[10px] font-bold ${activeFolder === '__uncategorized__' ? 'bg-white/20 text-white' : 'bg-slate-200 text-black'}`}>
-            {uncategorized}
-          </Badge>
-        </button>
-      )}
-
-      {folders.map(([folder, count]) => {
-        const isActive = activeFolder === folder
-        return (
-          <button
-            key={folder}
-            type="button"
-            onClick={() => onFolderChange(folder)}
-            className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-bold transition-colors ${
-              isActive ? 'bg-[var(--fm-ink)] text-white' : 'hover:bg-slate-100'
-            }`}
-          >
-            {isActive ? (
-              <IconFolderOpen className="h-4 w-4 shrink-0" />
-            ) : (
-              <IconFolder className="h-4 w-4 shrink-0" />
-            )}
-            <span className="flex-1 truncate text-left">{folder}</span>
-            <Badge className={`border border-[var(--fm-line)] px-1.5 py-0 text-[10px] font-bold ${isActive ? 'bg-white/20 text-white' : 'bg-slate-200 text-black'}`}>
-              {count}
-            </Badge>
-          </button>
-        )
-      })}
+    <div>
+      <h2 className={cn('m-0 mb-2 px-2.5', LABEL)}>Folders</h2>
+      <div className="grid gap-0.5">
+        {rows.map((row) => {
+          const isActive = activeFolder === row.value
+          return (
+            <button
+              key={row.key}
+              type="button"
+              aria-pressed={isActive}
+              onClick={() => onFolderChange(row.value)}
+              className={cn(ROW, isActive ? 'bg-[var(--fm-bg)] font-semibold text-[var(--fm-ink)]' : 'text-[var(--fm-ink2)] hover:bg-[var(--fm-bg)]')}
+            >
+              <span className="min-w-0 flex-1 truncate">{row.label}</span>
+              <span className={cn('text-[12px] tabular-nums', MUTED)}>{row.count}</span>
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }

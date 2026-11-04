@@ -164,12 +164,10 @@ export default function SystemFilePage() {
   const summary = s?.lifecycleSummary
   const line = businessLine(s?.metadata)
   const source = (s?.metadata?.source as string | undefined) || 'manual'
-  // The risk dashboard mixes stored findings with suggestions generated from
-  // risk taxonomies (source mit or ibm). Only stored findings are this system's.
-  const recorded = (risks?.risks ?? []).filter((r) => !['mit', 'ibm'].includes(String(r.source ?? '')))
-  const recordedOpen = recorded.filter((r) => r.status !== 'accepted')
+  // risks are this system's recorded findings; taxonomy suggestions come apart.
+  const recordedOpen = (risks?.risks ?? []).filter((r) => r.status !== 'accepted')
   const recordedSevere = recordedOpen.filter((r) => r.severity === 'high' || r.severity === 'critical')
-  const suggested = (risks?.risks.length ?? 0) - recorded.length
+  const suggested = risks?.suggested?.length ?? 0
   const req = approval?.request ?? null
   const decided = req && req.status !== 'pending' ? req : null
   const latestReport = reports[0]
@@ -208,7 +206,7 @@ export default function SystemFilePage() {
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-[.08em] text-[var(--fm-ink3)]">Readiness</div>
             <div className="mt-0.5 text-[20px] font-semibold tabular-nums">{summary ? `${summary.readiness}%` : ''}</div>
-            <div className="max-w-[220px] text-[11.5px] leading-snug text-[var(--fm-ink3)]">From stage, linked evidence, open risks and active remediation.</div>
+            <div className="max-w-[220px] text-[11.5px] leading-snug text-[var(--fm-ink3)]">0% until evidence is recorded. After that: stage, linked evidence, open risks and active remediation.</div>
           </div>
         </div>
       </header>

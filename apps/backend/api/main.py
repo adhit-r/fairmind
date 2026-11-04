@@ -31,6 +31,7 @@ from core.middleware.auth import NeonAuthMiddleware
 from core.middleware.audit import AuditLoggingMiddleware
 from core.middleware.org_isolation import OrgIsolationMiddleware
 from core.middleware import ErrorHandlingMiddleware, RequestLoggingMiddleware
+from core.middleware.error_handling import public_validation_errors
 from middleware.security import (
     SecurityHeadersMiddleware,
     RateLimitMiddleware,
@@ -346,13 +347,14 @@ async def options_handler(request: Request):
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     """Handle validation errors."""
-    logger.warning(f"Validation error: {exc.errors()}")
+    errors = public_validation_errors(exc.errors())
+    logger.warning(f"Validation error: {errors}")
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={
             "error": "Validation error",
             "message": "Invalid request data",
-            "details": exc.errors() if settings.debug else None,
+            "details": errors,
         }
     )
 
