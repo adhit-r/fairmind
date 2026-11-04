@@ -44,6 +44,25 @@ def _get_repository_database_manager():
     return repository_database_manager
 
 
+async def _connect_with_retry(*args, **kwargs):
+    """Open an asyncpg connection, retrying a stalled connect on a new socket.
+
+    Some networks drop the TCP handshake for a connection and the attempt then
+    hangs for the whole pool timeout. A fresh attempt gets a new source port
+    and normally succeeds, so spend the pool timeout on short attempts.
+    """
+    total_timeout = kwargs.get("timeout", 60)
+    kwargs["timeout"] = min(10, total_timeout)
+    attempts = max(1, int(total_timeout // kwargs["timeout"]))
+    for attempt in range(attempts):
+        try:
+            return await asyncpg.connect(*args, **kwargs)
+        except (TimeoutError, OSError):
+            if attempt == attempts - 1:
+                raise
+            logger.warning("Database connect attempt %d failed, retrying", attempt + 1)
+
+
 def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record) -> None:
     cursor = dbapi_connection.cursor()
     try:
@@ -147,6 +166,7 @@ class DatabaseManager:
                     "max_inactive_connection_lifetime": 300,
                     "timeout": settings.database_connect_timeout,
                     "command_timeout": 60,
+                    "connect": _connect_with_retry,
                 }
                 if runtime_search_path is not None:
                     database_options["server_settings"] = {
@@ -162,6 +182,7 @@ class DatabaseManager:
                     "max_inactive_connection_lifetime": 300,
                     "timeout": settings.database_connect_timeout,
                     "command_timeout": 60,
+                    "connect": _connect_with_retry,
                 }
                 if runtime_search_path is not None:
                     pool_options["server_settings"] = {
@@ -190,6 +211,8 @@ class DatabaseManager:
                     max_overflow=settings.database_max_overflow,
                     pool_pre_ping=True,
                     pool_recycle=3600,  # Recycle connections every hour
+                    # libpq moves on to the next address when a connect stalls
+                    connect_args={"connect_timeout": 5},
                     echo=settings.database_echo and not settings.is_production,
                 )
                 if assurance_enabled:

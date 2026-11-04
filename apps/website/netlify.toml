@@ -7,6 +7,12 @@
 
 # Redirects for old URLs
 [[redirects]]
+  from = "https://blog.fairmind.xyz/*"
+  to = "https://fairmind.xyz/blog/:splat"
+  status = 301
+  force = true
+
+[[redirects]]
   from = "/docs"
   to = "https://docs.fairmind.xyz"
   status = 301

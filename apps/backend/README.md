@@ -117,7 +117,7 @@ asyncio.run(test_sample_simulation())
 -  **Frontend**: Live at https://app-demo.fairmind.xyz
 -  **Frontend**: Live at https://app-demo.fairmind.xyz
 -  **Backend**: Phase 2 deployment pending
--  **API**: Will be live at https://api.fairmind.xyz
+-  **API**: served by the app at https://app.fairmind.xyz/api/proxy (no separate API host)
 
 ##  **Documentation**
 
