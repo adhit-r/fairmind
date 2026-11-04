@@ -47,6 +47,7 @@ def test_data_drift_scores_new_text_topics_as_out_of_distribution():
                      pd.DataFrame({"query": [f"digital nomad visa exemption question {i}" for i in range(150)]})])
     out = _run("EV-DAT-01", reference=_csv(ref), current=_csv(cur))
     assert out["metrics"]["features"] == 1 and out["status"] == "failed"
+    assert out["detail"][0]["type"] == "text"  # judged per sample, not as a category
     assert 0.3 < out["metrics"]["datasetDrift"] < 0.7
 
 
