@@ -21,6 +21,7 @@ export const STAGES: Array<{ key: AISystemSummary['stage']; label: string }> = [
 const LIBRARY = [
   { label: 'Integrations', href: '/integrations' },
   { label: 'Frameworks', href: '/compliance' },
+  { label: 'Policies', href: '/policies' },
   { label: 'Evidence', href: '/evidence' },
   { label: 'Findings', href: '/risks' },
   { label: 'Exports', href: '/audit-reports' },
