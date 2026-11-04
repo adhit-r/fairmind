@@ -47,59 +47,6 @@ interface AISystemRecord {
   metadata?: Record<string, unknown>
 }
 
-interface RiskDashboardSummary {
-  total: number
-  open: number
-  automated: number
-  bySeverity: Record<"low" | "medium" | "high" | "critical", number>
-}
-
-interface RiskDashboardResponse {
-  risks: Array<Record<string, unknown>>
-  summary: RiskDashboardSummary
-}
-
-interface EvidenceSummaryResponse {
-  systemId: string
-  totalEvidence: number
-  linkedEvidence: number
-  averageConfidence: number
-  highConfidenceEvidence: number
-  evidenceTypes: Array<{ type: string; count: number }>
-  metadataSources: Array<{ source: string; count: number }>
-  workflowState: string
-  decisionReadiness: string
-  missingSignals: string[]
-  recommendedNextStep: string
-}
-
-interface RemediationSummaryResponse {
-  systemId: string
-  total: number
-  active: number
-  completed: number
-  retestRequiredTasks: number
-  linkedRiskReferences: number
-  byStatus: Record<string, number>
-  byPriority: Record<string, number>
-}
-
-interface RemediationListResponse {
-  tasks: Array<Record<string, unknown>>
-  summary: RemediationSummaryResponse
-}
-
-interface ApprovalRequestRecord {
-  id: string
-  status: "pending" | "approved" | "rejected"
-}
-
-interface ApprovalStateResponse {
-  systemId: string
-  request: ApprovalRequestRecord | null
-  decisions: Array<Record<string, unknown>>
-}
-
 interface SelectedSystemStatus {
   readiness: number
   stage: AISystemSummary["stage"]
@@ -129,6 +76,8 @@ type SystemContextValue = {
   selectedSystemStatus: SelectedSystemStatus
   setSelectedSystemId: (systemId: string) => void
   loading: boolean
+  /** Why the systems request failed; null when it succeeded, including when the org has no systems. */
+  error: string | null
   refreshSystems: () => Promise<void>
   createWorkspaceAndSystem: (params: {
     workspaceName: string
@@ -163,31 +112,9 @@ export function chooseSelectedSystemId(
   return systemIds[0]
 }
 
-function estimateReadiness(stage: AISystemSummary["stage"]) {
-  if (stage === "onboard") return 20
-  if (stage === "assess") return 45
-  if (stage === "govern") return 65
-  if (stage === "remediate") return 78
-  return 88
-}
-
-function emptyRiskSummary(): RiskDashboardSummary {
-  return {
-    total: 0,
-    open: 0,
-    automated: 0,
-    bySeverity: {
-      low: 0,
-      medium: 0,
-      high: 0,
-      critical: 0,
-    },
-  }
-}
-
 function emptyDerivedStatus(system: AISystemSummary): SelectedSystemStatus {
   return {
-    readiness: estimateReadiness(system.stage),
+    readiness: 0,
     stage: system.stage,
     criticalBlockers: 0,
     failedControls: 0,
@@ -197,96 +124,11 @@ function emptyDerivedStatus(system: AISystemSummary): SelectedSystemStatus {
   }
 }
 
-function clamp(value: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, value))
-}
-
-function deriveLifecycleStage(
-  lifecycleStage: AISystemSummary["stage"],
-  riskSummary: RiskDashboardSummary,
-  evidenceSummary: EvidenceSummaryResponse,
-  remediationSummary: RemediationSummaryResponse,
-  approvalState: ApprovalStateResponse | null
-): AISystemSummary["stage"] {
-  if (approvalState?.request?.status === "approved") {
-    return "operate"
-  }
-
-  if (remediationSummary.active > 0 || remediationSummary.byStatus.blocked) {
-    return "remediate"
-  }
-
-  if (riskSummary.total > 0 || evidenceSummary.totalEvidence > 0 || approvalState?.request) {
-    return "govern"
-  }
-
-  return lifecycleStage
-}
-
-function deriveReadiness(
-  stage: AISystemSummary["stage"],
-  riskSummary: RiskDashboardSummary,
-  evidenceSummary: EvidenceSummaryResponse,
-  remediationSummary: RemediationSummaryResponse,
-  approvalState: ApprovalStateResponse | null
-) {
-  const stageBase: Record<AISystemSummary["stage"], number> = {
-    onboard: 18,
-    assess: 38,
-    govern: 58,
-    remediate: 52,
-    operate: 88,
-  }
-
-  let score = stageBase[stage]
-  score += Math.min(evidenceSummary.linkedEvidence * 6, 18)
-  score += evidenceSummary.decisionReadiness === "review_ready" ? 14 : 0
-  score += approvalState?.request?.status === "approved" ? 10 : 0
-  score -= riskSummary.bySeverity.critical * 18
-  score -= riskSummary.bySeverity.high * 10
-  score -= remediationSummary.active * 8
-  score -= Math.max(0, evidenceSummary.missingSignals.length - 1) * 5
-
-  return clamp(Math.round(score), 5, 100)
-}
-
-function deriveSystemStatus(
-  system: AISystemSummary,
-  riskSummary: RiskDashboardSummary,
-  evidenceSummary: EvidenceSummaryResponse,
-  remediationSummary: RemediationSummaryResponse,
-  approvalState: ApprovalStateResponse | null
-): SelectedSystemStatus {
-  const stage = deriveLifecycleStage(system.stage, riskSummary, evidenceSummary, remediationSummary, approvalState)
-  const readiness = deriveReadiness(stage, riskSummary, evidenceSummary, remediationSummary, approvalState)
-  const failedControls =
-    riskSummary.open +
-    remediationSummary.active +
-    (evidenceSummary.decisionReadiness === "review_ready" ? 0 : 1)
-  const criticalBlockers =
-    riskSummary.bySeverity.critical +
-    (approvalState?.request?.status === "rejected" ? 1 : 0) +
-    (evidenceSummary.decisionReadiness === "needs_evidence" ? 1 : 0)
-
-  return {
-    readiness,
-    stage,
-    criticalBlockers,
-    failedControls,
-    missingEvidence: evidenceSummary.missingSignals.length,
-    openRisks: riskSummary.open,
-    activeRemediation: remediationSummary.active,
-  }
-}
-
 function normalizeSystem(record: AISystemRecord): AISystemSummary {
   const lifecycleSummary = record.lifecycleSummary || {}
   const stage = lifecycleSummary.stage || record.lifecycleStage
-  const readiness = typeof lifecycleSummary.readiness === "number"
-    ? lifecycleSummary.readiness
-    : typeof record.readiness === "number"
-      ? record.readiness
-      : estimateReadiness(stage)
+  // The backend is the only source of readiness; a record without one reads 0.
+  const readiness = lifecycleSummary.readiness ?? record.readiness ?? 0
   return {
     id: record.id,
     name: record.name,
@@ -306,15 +148,20 @@ export function SystemContextProvider({ children }: { children: React.ReactNode 
   const [systems, setSystems] = useState<AISystemSummary[]>([])
   const [selectedSystemId, setSelectedSystemId] = useState<string>("")
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [selectedSystemStatus, setSelectedSystemStatus] = useState<SelectedSystemStatus>(
     emptyDerivedStatus(NO_SYSTEM)
   )
 
   const refreshSystems = async () => {
     setLoading(true)
+    setError(null)
     try {
       const response: ApiResponse<AISystemRecord[]> = await apiClient.get(API_ENDPOINTS.aiGovernance.systems)
-      if (response.success && response.data && response.data.length > 0) {
+      if (!response.success || !response.data) {
+        throw new Error(response.error || "Failed to load AI systems")
+      }
+      if (response.data.length > 0) {
         const nextSystems = response.data.map(normalizeSystem)
         setSystems(nextSystems)
         setSelectedSystemId((currentId) => {
@@ -328,7 +175,8 @@ export function SystemContextProvider({ children }: { children: React.ReactNode 
         setSystems([])
         setSelectedSystemId("")
       }
-    } catch {
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load AI systems")
       setSystems([])
       setSelectedSystemId("")
     } finally {
@@ -442,6 +290,7 @@ export function SystemContextProvider({ children }: { children: React.ReactNode 
         selectedSystemStatus,
         setSelectedSystemId: setAndPersist,
         loading,
+        error,
         refreshSystems,
         createWorkspaceAndSystem,
       }}

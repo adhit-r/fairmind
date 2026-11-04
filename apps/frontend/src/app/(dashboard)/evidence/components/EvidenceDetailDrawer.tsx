@@ -1,26 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import {
-  IconAlertTriangle,
-  IconCheck,
-  IconExternalLink,
-  IconFileText,
-  IconLink,
-  IconLoader2,
-  IconPencil,
-  IconPlus,
-  IconShieldCheck,
-  IconTag,
-  IconTrash,
-  IconX,
-} from '@tabler/icons-react'
+import { IconTrash, IconX } from '@tabler/icons-react'
 
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { BTN, BTN_P, LABEL, MUTED, Pill } from '@/components/packs/parts'
+import { cn } from '@/lib/utils'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
 import type { Evidence, EvidenceLink, EvidenceUpdateInput } from '@/lib/api/hooks/useEvidence'
@@ -34,7 +19,8 @@ interface EvidenceDetailDrawerProps {
   onAddLink: (evidenceId: string, entityType: string, entityId: string) => Promise<EvidenceLink>
   onRemoveLink: (evidenceId: string, linkId: string) => Promise<void>
   controlOptions?: ControlAssessment[]
-  canEdit?: boolean
+  /** null while the role is still loading: no edit controls and no read-only note. */
+  canEdit?: boolean | null
 }
 
 const STATUS_OPTIONS = [
@@ -51,10 +37,16 @@ const ENTITY_TYPES = [
   { value: 'remediation', label: 'Remediation task' },
 ]
 
+const SMALL = 'h-8 px-3.5 text-[12.5px]'
+const FIELD =
+  'h-9 w-full rounded-[10px] border border-[rgba(21,23,26,.14)] bg-white px-3 text-[13.5px] outline-none placeholder:text-[var(--fm-ink3)] focus:border-[var(--fm-ink)]'
+const FIELD_LABEL = 'block text-[12px] font-medium text-[var(--fm-ink2)]'
+const PANEL = 'rounded-xl bg-[var(--fm-bg)] p-3.5'
+
 function formatDate(ts: string) {
-  if (!ts) return '—'
+  if (!ts) return 'Unknown'
   const d = new Date(ts)
-  return Number.isNaN(d.getTime()) ? ts : d.toLocaleString()
+  return Number.isNaN(d.getTime()) ? ts : d.toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
 export function EvidenceDetailDrawer({
@@ -159,40 +151,28 @@ export function EvidenceDetailDrawer({
 
   return (
     <Sheet open={open} onOpenChange={(o) => { if (!o) onClose() }}>
-      <SheetContent className="w-full overflow-y-auto border-l border-[var(--fm-line)] sm:max-w-lg">
-        <SheetHeader className="border-b border-[var(--fm-line)] pb-4">
+      <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
+        <SheetHeader className="border-b border-[var(--fm-line)] pb-4 text-left">
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-1">
-              <SheetTitle className="text-xl font-semibold leading-tight">
+              <SheetTitle className="text-[20px] font-semibold leading-tight tracking-tight">
                 {displayTitle}
               </SheetTitle>
               <SheetDescription>
                 Evidence details and scoped governance links for {displayTitle}.
               </SheetDescription>
               <div className="flex flex-wrap items-center gap-1.5">
-                <Badge className="border border-[var(--fm-line)] bg-[var(--fm-ink)] px-2 py-0.5 text-[11px] font-semibold uppercase text-white">
-                  {evidence.type}
-                </Badge>
-                {evidence.stale && (
-                  <Badge className="border-2 border-amber-500 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold uppercase text-amber-800">
-                    <IconAlertTriangle className="mr-1 h-3 w-3" />
-                    Potentially stale
-                  </Badge>
-                )}
-                <Badge className={`border border-[var(--fm-line)] px-2 py-0.5 text-[11px] font-bold uppercase ${
-                  evidence.status === 'accepted' ? 'bg-emerald-100 text-emerald-800' :
-                  evidence.status === 'rejected' ? 'bg-red-100 text-red-800' :
-                  'bg-slate-100 text-slate-800'
-                }`}>
+                <Pill>{evidence.type}</Pill>
+                {evidence.stale && <Pill tone="warn">Potentially stale</Pill>}
+                <Pill tone={evidence.status === 'accepted' ? 'done' : evidence.status === 'rejected' ? 'block' : 'plain'}>
                   {evidence.status || 'draft'}
-                </Badge>
+                </Pill>
               </div>
             </div>
             {!editMode && canEdit && (
-              <Button size="sm" variant="neutral" className="shrink-0 border border-[var(--fm-line)] font-bold" onClick={startEdit}>
-                <IconPencil className="mr-1.5 h-3.5 w-3.5" />
+              <button type="button" className={cn(BTN, SMALL, 'shrink-0')} onClick={startEdit}>
                 Edit
-              </Button>
+              </button>
             )}
           </div>
         </SheetHeader>
@@ -200,15 +180,15 @@ export function EvidenceDetailDrawer({
         <div className="space-y-5 pt-5">
           {/* Edit mode */}
           {editMode ? (
-            <div className="space-y-4 rounded-xl border border-[var(--fm-line)] bg-slate-50 p-4">
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold uppercase">Title</Label>
-                <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} className="border border-[var(--fm-line)]" />
+            <div className={cn('grid gap-4', PANEL, 'p-4')}>
+              <div>
+                <label className={FIELD_LABEL} htmlFor="evidence-edit-title">Title</label>
+                <input id="evidence-edit-title" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} className={FIELD} autoComplete="off" />
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold uppercase">Status</Label>
+              <div>
+                <span className={FIELD_LABEL} id="evidence-edit-status-label">Status</span>
                 <Select value={editStatus} onValueChange={setEditStatus}>
-                  <SelectTrigger className="border border-[var(--fm-line)] font-bold">
+                  <SelectTrigger aria-labelledby="evidence-edit-status-label" className="h-9 rounded-[10px] border border-[rgba(21,23,26,.14)] bg-white text-[13.5px] font-medium">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -218,71 +198,77 @@ export function EvidenceDetailDrawer({
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold uppercase">Folder</Label>
-                <Input value={editFolder} onChange={(e) => setEditFolder(e.target.value)} className="border border-[var(--fm-line)]" placeholder="e.g. EU AI Act" />
+              <div>
+                <label className={FIELD_LABEL} htmlFor="evidence-edit-folder">Folder</label>
+                <input id="evidence-edit-folder" value={editFolder} onChange={(e) => setEditFolder(e.target.value)} className={FIELD} placeholder="e.g. EU AI Act" autoComplete="off" />
               </div>
-              <div className="space-y-2">
-                <Label className="text-xs font-semibold uppercase">Tags</Label>
+              <div>
+                <label className={FIELD_LABEL} htmlFor="evidence-edit-tag">Tags</label>
                 <div className="flex gap-2">
-                  <Input
+                  <input
+                    id="evidence-edit-tag"
                     value={editTagInput}
                     onChange={(e) => setEditTagInput(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addEditTag(editTagInput) } }}
-                    className="border border-[var(--fm-line)]"
+                    className={FIELD}
                     placeholder="Add tag"
+                    autoComplete="off"
                   />
-                  <Button type="button" variant="neutral" size="sm" className="border border-[var(--fm-line)] font-bold" onClick={() => addEditTag(editTagInput)}>
+                  <button type="button" className={cn(BTN, SMALL, 'h-9')} onClick={() => addEditTag(editTagInput)}>
                     Add
-                  </Button>
+                  </button>
                 </div>
                 {editTags.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
+                  <div className="mt-2 flex flex-wrap gap-1.5">
                     {editTags.map((tag) => (
-                      <Badge key={tag} className="border border-[var(--fm-line)] bg-[var(--fm-ink)] px-2 py-0.5 text-[11px] font-bold text-white">
+                      <span key={tag} className="inline-flex items-center gap-1 rounded-full bg-[var(--fm-ink)] py-1 pl-3 pr-1.5 text-[12px] font-medium text-white">
                         {tag}
-                        <button type="button" onClick={() => setEditTags((prev) => prev.filter((t) => t !== tag))} className="ml-1.5">
-                          <IconX className="h-2.5 w-2.5" />
+                        <button
+                          type="button"
+                          aria-label={`Remove tag ${tag}`}
+                          onClick={() => setEditTags((prev) => prev.filter((t) => t !== tag))}
+                          className="grid h-5 w-5 place-items-center rounded-full hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                        >
+                          <IconX className="h-3 w-3" aria-hidden />
                         </button>
-                      </Badge>
+                      </span>
                     ))}
                   </div>
                 )}
               </div>
               <div className="flex gap-2">
-                <Button size="sm" className="border border-[var(--fm-line)] font-semibold" onClick={saveEdit} disabled={saving}>
-                  {saving ? <IconLoader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <IconCheck className="mr-1.5 h-3.5 w-3.5" />}
-                  Save changes
-                </Button>
-                <Button size="sm" variant="neutral" className="border border-[var(--fm-line)] font-bold" onClick={cancelEdit}>
+                <button type="button" className={cn(BTN_P, SMALL)} onClick={saveEdit} disabled={saving}>
+                  {saving ? 'Saving' : 'Save changes'}
+                </button>
+                <button type="button" className={cn(BTN, SMALL)} onClick={cancelEdit}>
                   Cancel
-                </Button>
+                </button>
               </div>
             </div>
           ) : (
             <>
               {/* Provenance */}
               <section className="space-y-3">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Provenance</p>
+                <p className={cn('m-0', LABEL)}>Provenance</p>
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-lg border border-[var(--fm-line)] bg-slate-50 p-3">
-                    <p className="text-[10px] font-semibold uppercase text-muted-foreground">Captured</p>
-                    <p className="mt-0.5 text-xs font-semibold">{formatDate(evidence.capturedAt || evidence.timestamp)}</p>
+                  <div className="rounded-xl bg-[var(--fm-bg)] p-3.5">
+                    <p className={cn('m-0', LABEL)}>Captured</p>
+                    <p className="m-0 mt-1 text-[13px] font-medium">{formatDate(evidence.capturedAt || evidence.timestamp)}</p>
                   </div>
-                  <div className="rounded-lg border border-[var(--fm-line)] bg-slate-50 p-3">
-                    <p className="text-[10px] font-semibold uppercase text-muted-foreground">Confidence</p>
-                    <p className="mt-0.5 text-sm font-semibold">{Math.round(evidence.confidence * 100)}%</p>
+                  <div className="rounded-xl bg-[var(--fm-bg)] p-3.5">
+                    <p className={cn('m-0', LABEL)}>Confidence</p>
+                    <p className="m-0 mt-1 text-[13px] font-medium tabular-nums">{Math.round(evidence.confidence * 100)}%</p>
                   </div>
                   {evidence.uploadedBy && (
-                    <div className="col-span-2 rounded-lg border border-[var(--fm-line)] bg-slate-50 p-3">
-                      <p className="text-[10px] font-semibold uppercase text-muted-foreground">Uploaded by</p>
-                      <p className="mt-0.5 text-xs font-semibold">{evidence.uploadedBy}</p>
+                    <div className="col-span-2 rounded-xl bg-[var(--fm-bg)] p-3.5">
+                      <p className={cn('m-0', LABEL)}>Uploaded by</p>
+                      <p className="m-0 mt-1 text-[13px] font-medium">{evidence.uploadedBy}</p>
                     </div>
                   )}
                   {evidence.source && (
-                    <div className="col-span-2 rounded-lg border border-[var(--fm-line)] bg-slate-50 p-3">
-                      <p className="text-[10px] font-semibold uppercase text-muted-foreground">Source</p>
-                      <p className="mt-0.5 text-xs font-semibold">{evidence.source}</p>
+                    <div className="col-span-2 rounded-xl bg-[var(--fm-bg)] p-3.5">
+                      <p className={cn('m-0', LABEL)}>Source</p>
+                      <p className="m-0 mt-1 text-[13px] font-medium">{evidence.source}</p>
                     </div>
                   )}
                 </div>
@@ -290,41 +276,37 @@ export function EvidenceDetailDrawer({
 
               {/* Artifact */}
               {evidence.artifactKind === 'file' && evidence.fileName && (
-                <section className="space-y-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">File artifact</p>
-                  <div className="flex items-center gap-3 rounded-lg border border-[var(--fm-line)] bg-slate-50 p-3">
-                    <IconFileText className="h-5 w-5 shrink-0" />
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-bold">{evidence.fileName}</p>
-                      {evidence.fileSize > 0 && (
-                        <p className="text-xs text-muted-foreground">{(evidence.fileSize / 1024).toFixed(1)} KB</p>
-                      )}
-                    </div>
+                <section className="grid gap-2">
+                  <p className={cn('m-0', LABEL)}>File artifact</p>
+                  <div className={PANEL}>
+                    <p className="m-0 truncate text-[13.5px] font-semibold">{evidence.fileName}</p>
+                    {evidence.fileSize > 0 && (
+                      <p className={cn('m-0 mt-0.5 text-[12px]', MUTED)}>{(evidence.fileSize / 1024).toFixed(1)} KB</p>
+                    )}
                   </div>
                 </section>
               )}
 
               {evidence.artifactKind === 'url' && evidence.fileUrl && (
-                <section className="space-y-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">External artifact</p>
+                <section className="grid gap-2">
+                  <p className={cn('m-0', LABEL)}>External artifact</p>
                   <a
                     href={evidence.fileUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-2 rounded-lg border border-[var(--fm-line)] bg-slate-50 p-3 text-sm font-bold hover:bg-slate-100"
+                    className={cn(PANEL, 'block truncate text-[13.5px] font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-ink)]')}
                   >
-                    <IconExternalLink className="h-4 w-4 shrink-0" />
-                    <span className="truncate">{evidence.fileUrl}</span>
+                    {evidence.fileUrl}
                   </a>
                 </section>
               )}
 
               {evidence.artifactKind === 'attestation' && (
-                <section className="space-y-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Attestation</p>
-                  <div className="flex items-center gap-2 rounded-lg border-2 border-emerald-500 bg-emerald-50 p-3">
-                    <IconShieldCheck className="h-4 w-4 text-emerald-600" />
-                    <p className="text-sm font-bold text-emerald-800">Manually confirmed</p>
+                <section className="grid gap-2">
+                  <p className={cn('m-0', LABEL)}>Attestation</p>
+                  <div className={PANEL}>
+                    <p className="m-0 text-[13.5px] font-semibold">Manually confirmed</p>
+                    <p className={cn('m-0 mt-0.5 text-[12px]', MUTED)}>A person attested to this artifact; no automated check backs it.</p>
                   </div>
                 </section>
               )}
@@ -332,24 +314,17 @@ export function EvidenceDetailDrawer({
               {/* Folder */}
               {evidence.folder && (
                 <section className="flex items-center gap-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Folder</p>
-                  <Badge variant="outline" className="border border-[var(--fm-line)] px-2 py-0.5 text-[11px] font-bold">
-                    {evidence.folder}
-                  </Badge>
+                  <p className={cn('m-0', LABEL)}>Folder</p>
+                  <Pill>{evidence.folder}</Pill>
                 </section>
               )}
 
               {/* Tags */}
               {evidence.tags && evidence.tags.length > 0 && (
-                <section className="space-y-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Tags</p>
+                <section className="grid gap-2">
+                  <p className={cn('m-0', LABEL)}>Tags</p>
                   <div className="flex flex-wrap gap-1.5">
-                    {evidence.tags.map((tag) => (
-                      <Badge key={tag} className="border border-[var(--fm-line)] bg-[var(--fm-ink)] px-2 py-0.5 text-[11px] font-bold text-white">
-                        <IconTag className="mr-1 h-2.5 w-2.5" />
-                        {tag}
-                      </Badge>
-                    ))}
+                    {evidence.tags.map((tag) => <Pill key={tag}>{tag}</Pill>)}
                   </div>
                 </section>
               )}
@@ -358,47 +333,36 @@ export function EvidenceDetailDrawer({
 
           {/* Stale warning */}
           {evidence.stale && (
-            <div className="rounded-xl border-2 border-amber-400 bg-amber-50 p-4">
-              <div className="flex items-start gap-3">
-                <IconAlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-                <div>
-                  <p className="text-sm font-bold text-amber-800">Potentially stale evidence</p>
-                  <p className="mt-0.5 text-xs text-amber-700">
-                    This artifact is more than 90 days old. Consider refreshing it before a governance review.
-                  </p>
-                </div>
-              </div>
+            <div className="rounded-xl bg-[#fff4d6] p-4">
+              <p className="m-0 text-[13.5px] font-semibold text-[#8a5a00]">Potentially stale evidence</p>
+              <p className="m-0 mt-0.5 text-[12.5px] text-[#8a5a00]">
+                This artifact is more than 90 days old. Consider refreshing it before a governance review.
+              </p>
             </div>
           )}
 
           {/* Cross-entity links */}
-          <section className="space-y-3">
-            <div className="flex items-center justify-between">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+          <section className="grid gap-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className={cn('m-0', LABEL)}>
                 Linked entities ({evidence.linkedEntityCount})
               </p>
               {canEdit ? (
-                <Button
-                  size="sm"
-                  variant="neutral"
-                  className="border border-[var(--fm-line)] text-[11px] font-semibold uppercase"
-                  onClick={() => setAddingLink((v) => !v)}
-                >
-                  <IconPlus className="mr-1 h-3 w-3" />
+                <button type="button" className={cn(BTN, SMALL)} onClick={() => setAddingLink((v) => !v)}>
                   Link entity
-                </Button>
-              ) : (
-                <span className="text-[11px] font-semibold uppercase text-muted-foreground">Read-only</span>
-              )}
+                </button>
+              ) : canEdit === false ? (
+                <span className={cn('text-[12px] font-medium', MUTED)}>Read-only</span>
+              ) : null}
             </div>
 
             {addingLink && (
-              <div className="space-y-2 rounded-xl border border-[var(--fm-line)] bg-slate-50 p-4">
+              <div className={cn('grid gap-3', PANEL, 'p-4')}>
                 <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <Label className="text-[10px] font-semibold uppercase">Entity type</Label>
+                  <div>
+                    <span className={FIELD_LABEL} id="evidence-link-type-label">Entity type</span>
                     <Select value={linkEntityType} onValueChange={setLinkEntityType}>
-                      <SelectTrigger className="border border-[var(--fm-line)] font-bold">
+                      <SelectTrigger aria-labelledby="evidence-link-type-label" className="h-9 rounded-[10px] border border-[rgba(21,23,26,.14)] bg-white text-[13.5px] font-medium">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -409,9 +373,9 @@ export function EvidenceDetailDrawer({
                     </Select>
                   </div>
                   {linkEntityType === 'control' ? (
-                    <div className="space-y-1">
-                      <Label htmlFor="framework-control-search" className="text-[10px] font-semibold uppercase">Search framework controls</Label>
-                      <Input
+                    <div>
+                      <label htmlFor="framework-control-search" className={FIELD_LABEL}>Search framework controls</label>
+                      <input
                         id="framework-control-search"
                         type="search"
                         value={controlQuery}
@@ -419,70 +383,75 @@ export function EvidenceDetailDrawer({
                           setControlQuery(event.target.value)
                           setLinkEntityId('')
                         }}
-                        className="border border-[var(--fm-line)] text-sm"
+                        className={FIELD}
                         placeholder="Search control ID or title"
+                        autoComplete="off"
                       />
                     </div>
                   ) : (
-                    <div className="space-y-1">
-                      <Label className="text-[10px] font-semibold uppercase">Entity ID</Label>
-                      <Input
+                    <div>
+                      <label htmlFor="evidence-link-entity-id" className={FIELD_LABEL}>Entity ID</label>
+                      <input
+                        id="evidence-link-entity-id"
                         value={linkEntityId}
                         onChange={(e) => setLinkEntityId(e.target.value)}
-                        className="border border-[var(--fm-line)] font-mono text-sm"
+                        className={cn(FIELD, 'font-mono')}
                         placeholder="ID or reference"
+                        autoComplete="off"
                         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleAddLink() } }}
                       />
                     </div>
                   )}
                 </div>
                 {linkEntityType === 'control' ? (
-                  <div className="max-h-48 space-y-1 overflow-y-auto border border-[var(--fm-line)] bg-white p-2">
+                  <div className="max-h-48 overflow-y-auto rounded-[10px] border border-[var(--fm-line)] bg-white">
                     {matchingControls.length > 0 ? matchingControls.map((control) => (
                       <button
                         key={control.id}
                         type="button"
                         aria-label={`Select ${control.externalId} ${control.title}`}
+                        aria-pressed={linkEntityId === control.id}
                         onClick={() => {
                           setLinkEntityId(control.id)
                           setControlQuery(`${control.externalId} — ${control.title}`)
                         }}
-                        className={`block w-full border border-[var(--fm-line)] px-3 py-2 text-left text-xs font-bold ${linkEntityId === control.id ? 'bg-[#DDF4EA]' : 'bg-white hover:bg-[#F3F5F0]'}`}
+                        className={cn(
+                          'block w-full border-t border-[var(--fm-line)] px-3 py-2 text-left text-[13px] first:border-t-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--fm-ink)]',
+                          linkEntityId === control.id ? 'bg-[var(--fm-bg)] font-semibold' : 'hover:bg-[var(--fm-bg)]',
+                        )}
                       >
                         {control.externalId} — {control.title}
                       </button>
                     )) : (
-                      <p className="p-2 text-xs font-bold text-muted-foreground">No assigned controls match this search.</p>
+                      <p className={cn('m-0 p-3 text-[12.5px]', MUTED)}>No assigned controls match this search.</p>
                     )}
                   </div>
                 ) : null}
                 <div className="flex gap-2">
-                  <Button size="sm" className="border border-[var(--fm-line)] font-semibold" onClick={handleAddLink} disabled={linkSaving || !linkEntityId.trim()}>
-                    {linkSaving ? <IconLoader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <IconLink className="mr-1.5 h-3.5 w-3.5" />}
-                    Add link
-                  </Button>
-                  <Button size="sm" variant="neutral" className="border border-[var(--fm-line)] font-bold" onClick={() => setAddingLink(false)}>
+                  <button type="button" className={cn(BTN_P, SMALL)} onClick={handleAddLink} disabled={linkSaving || !linkEntityId.trim()}>
+                    {linkSaving ? 'Adding' : 'Add link'}
+                  </button>
+                  <button type="button" className={cn(BTN, SMALL)} onClick={() => setAddingLink(false)}>
                     Cancel
-                  </Button>
+                  </button>
                 </div>
               </div>
             )}
 
             {evidence.linkedEntities.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-[rgba(21,23,26,.14)] bg-slate-50 p-6 text-center">
-                <IconLink className="mx-auto h-6 w-6 text-muted-foreground" />
-                <p className="mt-2 text-xs font-bold text-muted-foreground">No linked entities yet</p>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">
+              <div className="rounded-xl border border-dashed border-[rgba(21,23,26,.16)] px-4 py-6 text-center">
+                <p className="m-0 text-[13px] font-semibold">No linked entities yet</p>
+                <p className={cn('m-0 mt-0.5 text-[12.5px]', MUTED)}>
                   Link this evidence to a control, policy, or incident.
                 </p>
               </div>
             ) : (
-              <div className="space-y-2">
+              <div className="rounded-xl border border-[var(--fm-line)]">
                 {evidence.linkedEntities.map((link) => (
-                  <div key={link.id} className="flex items-center gap-3 rounded-lg border border-[var(--fm-line)] bg-white p-3">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[10px] font-semibold uppercase text-muted-foreground">{link.entityType}</p>
-                      <p className="truncate text-sm font-bold">
+                  <div key={link.id} className="flex items-center gap-3 border-t border-[var(--fm-line)] px-3.5 py-3 first:border-t-0">
+                    <div className="min-w-0 flex-1">
+                      <p className={cn('m-0 text-[12px] font-semibold capitalize', MUTED)}>{link.entityType}</p>
+                      <p className="m-0 mt-0.5 truncate text-[13.5px] font-medium">
                         {link.entityType === 'control'
                           ? (() => {
                               const control = controlOptions.find((item) => item.id === link.entityId)
@@ -496,9 +465,9 @@ export function EvidenceDetailDrawer({
                         type="button"
                         aria-label={`Remove link to ${link.entityType}`}
                         onClick={() => void handleRemoveLink(link)}
-                        className="shrink-0 rounded p-1 text-muted-foreground hover:bg-red-50 hover:text-red-600"
+                        className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-[var(--fm-ink2)] hover:bg-[var(--fm-bg)] hover:text-[#b42318] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-ink)]"
                       >
-                        <IconTrash className="h-3.5 w-3.5" />
+                        <IconTrash className="h-4 w-4" aria-hidden />
                       </button>
                     ) : null}
                   </div>

@@ -255,3 +255,18 @@ test('does not treat a workflow code without nextAction as a decoded workflow en
   assert.equal(result.apiError?.code, undefined)
   assert.equal(result.apiError?.nextAction, undefined)
 })
+
+test('names the field and reason of a request validation failure', async () => {
+  installBrowser()
+  const client = new ApiClient('https://fairmind.test')
+  globalThis.fetch = (async () => response(422, {
+    error: 'Validation error',
+    message: 'Invalid request data',
+    details: [{ type: 'value_error', loc: ['body', 'email'], msg: 'value is not a valid email address' }],
+  })) as typeof fetch
+
+  const result = await client.post('/api/v1/auth/register', {}, { enableRetry: false })
+
+  assert.equal(result.success, false)
+  assert.equal(result.error, 'email: value is not a valid email address')
+})
