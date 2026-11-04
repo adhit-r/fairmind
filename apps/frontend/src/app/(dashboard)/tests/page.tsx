@@ -344,7 +344,7 @@ function RunsTable({ runs, plans }: { runs: EvaluationRun[]; plans: EvaluationPl
   }
 
   return (
-    <div className="max-w-full overflow-x-auto border border-[var(--fm-line)]">
+    <div className="relative max-w-full overflow-x-auto border border-[var(--fm-line)]">
       <table aria-label="Recent evaluation runs" className="w-full min-w-[840px] border-collapse text-left text-sm">
         <thead className="bg-[var(--fm-ink)] text-white">
           <tr>
