@@ -44,10 +44,11 @@ record and the `api` and `app-demo` records by hand; it often misses them.
    `https://app.fairmind.xyz` to `ALLOWED_ORIGINS` in `backend.env`, then
    `docker compose up -d --build`.
 5. Check: `curl -sI https://app.fairmind.xyz/login` returns 200.
-6. Redeploy the marketing site so Sign in points at the new host:
+6. Point Sign in at the new host. The website site builds from `main` (base `apps/website`),
+   so set the Netlify environment variable and trigger a deploy:
 
    ```bash
-   cd apps/website && npm run build && netlify deploy --prod --no-build --dir=dist --site 95ca60ae-9006-486c-9606-218427c1934a
+   NETLIFY_SITE_ID=95ca60ae-9006-486c-9606-218427c1934a netlify env:set PUBLIC_APP_URL https://app.fairmind.xyz
    ```
 
 7. Certificates. Once `www`, `blog` and `docs` resolve to Netlify on public resolvers:
@@ -57,5 +58,7 @@ record and the `api` and `app-demo` records by hand; it often misses them.
    netlify api provisionSiteTLSCertificate --data '{"site_id":"a7383377-dbfe-49c1-8098-8491c1d17bfa"}'
    ```
 
-   A 422 means at least one name on that site does not point at Netlify yet. The website
+   A 422 means the site has no certificate yet and one of its names does not point at Netlify,
+   or the site already has a certificate. For an existing certificate, use Renew certificate in
+   Domain management, HTTPS, and confirm the dialog. The website
    certificate covers `fairmind.xyz`, `www` and `blog`, so all three must be on Netlify.
