@@ -20,6 +20,14 @@ jobs:
     permissions:
       contents: read
       checks: write
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
 
     steps:
     - uses: actions/checkout@v4
@@ -42,6 +50,14 @@ jobs:
       working-directory: apps/backend
       run: uv run playwright install --with-deps chromium
 
+    - name: Create database
+      working-directory: apps/backend
+      run: |
+        psql postgresql://postgres:postgres@localhost:5432/postgres -c "CREATE DATABASE fairmind_e2e"
+        uv run python scripts/setup_db.py
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/fairmind_e2e
+
     - name: Start backend server
       working-directory: apps/backend
       run: |
@@ -49,9 +65,7 @@ jobs:
         sleep 5
       env:
         APP_ENV: development
-        # Not test.db: tests/conftest.py deletes that file after every test, and the
-        # e2e suite runs under that conftest while this server is still using it.
-        DATABASE_URL: sqlite:///./e2e-backend.db
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/fairmind_e2e
         RATE_LIMIT_REQUESTS: "10000"
 
     - name: Start frontend server
@@ -73,25 +87,15 @@ jobs:
         E2E_BASE_URL: http://localhost:1111
         E2E_API_URL: http://localhost:8000
         E2E_HEADLESS: "true"
+        FAIRMIND_TEST_POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/postgres
 
     - name: Backend log
       if: always()
       working-directory: apps/backend
       run: |
-        grep -v -E '"name": "(aiosqlite|databases)"' backend.log > backend.filtered.log || true
+        grep -v -E '"name": "databases"' backend.log > backend.filtered.log || true
         echo '::group::key lines'; grep -E 'Database identities|Database tables ready|Could not create table|Login error|table creation failed|Failed to initialize|ORM table creation' backend.log | head -n 60; echo '::endgroup::'
-        echo '::group::database files'; find . -maxdepth 2 -name '*.db*' -newer pyproject.toml -exec ls -la {} \; ; uv run --no-sync python - <<'PY'
-        import sqlite3, glob
-        print("sqlite", sqlite3.sqlite_version)
-        for path in sorted(glob.glob("*.db")):
-            con = sqlite3.connect(path)
-            try:
-                names = sorted(r[0] for r in con.execute("select name from sqlite_master where type='table'"))
-                print(path, len(names), "tables; users:", "users" in names, "; governance_ai_systems:", "governance_ai_systems" in names)
-            except Exception as e:
-                print(path, "ERROR", e)
-        PY
-        echo '::endgroup::'
+        echo '::group::database'; DATABASE_URL=postgresql://postgres:postgres@localhost:5432/fairmind_e2e uv run --no-sync python scripts/setup_db.py verify || true; echo '::endgroup::'
         echo '::group::startup'; head -n 200 backend.filtered.log; echo '::endgroup::'
         echo '::group::tail'; tail -n 300 backend.filtered.log; echo '::endgroup::'
 
@@ -118,6 +122,14 @@ jobs:
     permissions:
       contents: read
       checks: write
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
 
     steps:
     - uses: actions/checkout@v4
@@ -140,6 +152,14 @@ jobs:
       working-directory: apps/backend
       run: uv run playwright install --with-deps chromium
 
+    - name: Create database
+      working-directory: apps/backend
+      run: |
+        psql postgresql://postgres:postgres@localhost:5432/postgres -c "CREATE DATABASE fairmind_e2e"
+        uv run python scripts/setup_db.py
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/fairmind_e2e
+
     - name: Start backend server
       working-directory: apps/backend
       run: |
@@ -147,9 +167,7 @@ jobs:
         sleep 5
       env:
         APP_ENV: development
-        # Not test.db: tests/conftest.py deletes that file after every test, and the
-        # e2e suite runs under that conftest while this server is still using it.
-        DATABASE_URL: sqlite:///./e2e-backend.db
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/fairmind_e2e
         RATE_LIMIT_REQUESTS: "10000"
 
     - name: Start frontend server
@@ -171,25 +189,15 @@ jobs:
         E2E_BASE_URL: http://localhost:1111
         E2E_API_URL: http://localhost:8000
         E2E_HEADLESS: "true"
+        FAIRMIND_TEST_POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/postgres
 
     - name: Backend log
       if: always()
       working-directory: apps/backend
       run: |
-        grep -v -E '"name": "(aiosqlite|databases)"' backend.log > backend.filtered.log || true
+        grep -v -E '"name": "databases"' backend.log > backend.filtered.log || true
         echo '::group::key lines'; grep -E 'Database identities|Database tables ready|Could not create table|Login error|table creation failed|Failed to initialize|ORM table creation' backend.log | head -n 60; echo '::endgroup::'
-        echo '::group::database files'; find . -maxdepth 2 -name '*.db*' -newer pyproject.toml -exec ls -la {} \; ; uv run --no-sync python - <<'PY'
-        import sqlite3, glob
-        print("sqlite", sqlite3.sqlite_version)
-        for path in sorted(glob.glob("*.db")):
-            con = sqlite3.connect(path)
-            try:
-                names = sorted(r[0] for r in con.execute("select name from sqlite_master where type='table'"))
-                print(path, len(names), "tables; users:", "users" in names, "; governance_ai_systems:", "governance_ai_systems" in names)
-            except Exception as e:
-                print(path, "ERROR", e)
-        PY
-        echo '::endgroup::'
+        echo '::group::database'; DATABASE_URL=postgresql://postgres:postgres@localhost:5432/fairmind_e2e uv run --no-sync python scripts/setup_db.py verify || true; echo '::endgroup::'
         echo '::group::startup'; head -n 200 backend.filtered.log; echo '::endgroup::'
         echo '::group::tail'; tail -n 300 backend.filtered.log; echo '::endgroup::'
 

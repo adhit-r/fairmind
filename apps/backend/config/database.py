@@ -7,8 +7,7 @@ from typing import Optional, AsyncGenerator
 from contextlib import asynccontextmanager
 import logging
 from databases import Database
-from databases.backends.sqlite import SQLitePool
-from sqlalchemy import create_engine, MetaData, event
+from sqlalchemy import create_engine, MetaData
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import QueuePool
@@ -24,8 +23,6 @@ from .migration_integrity import (
 )
 
 logger = logging.getLogger("fairmind.database")
-
-_DATABASE_IMPLEMENTATION = Database
 
 # SQLAlchemy setup
 engine = None
@@ -44,53 +41,22 @@ def _get_repository_database_manager():
     return repository_database_manager
 
 
-def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record) -> None:
-    cursor = dbapi_connection.cursor()
-    try:
-        cursor.execute("PRAGMA foreign_keys = ON")
-    finally:
-        cursor.close()
+async def _connect_with_retry(*args, **kwargs):
+    """Open an asyncpg connection, retrying a stalled connect on a new socket.
 
-
-class _ForeignKeySQLitePool(SQLitePool):
-    """Enable and verify foreign keys on every aiosqlite acquisition."""
-
-    async def acquire(self):
-        connection = await super().acquire()
+    Some networks drop the TCP handshake for a connection and the attempt then
+    hangs for the whole pool timeout. A fresh attempt gets a new source port
+    and normally succeeds, so split the pool timeout into short attempts.
+    """
+    attempts = 4
+    kwargs["timeout"] = kwargs.get("timeout", 20) / attempts
+    for attempt in range(attempts):
         try:
-            enable_cursor = await connection.execute("PRAGMA foreign_keys = ON")
-            await enable_cursor.close()
-            cursor = await connection.execute("PRAGMA foreign_keys")
-            try:
-                row = await cursor.fetchone()
-            finally:
-                await cursor.close()
-            if row is None or int(row[0]) != 1:
-                raise RuntimeError(
-                    "SQLite foreign-key enforcement could not be enabled"
-                )
-        except Exception:
-            await super().release(connection)
-            raise
-        return connection
-
-
-def _install_async_sqlite_foreign_key_pool(database_instance) -> None:
-    """Replace the per-query library pool before connect; fail on API drift."""
-    if not isinstance(database_instance, _DATABASE_IMPLEMENTATION):
-        # Unit-test doubles do not expose the third-party backend internals.
-        return
-    backend = getattr(database_instance, "_backend", None)
-    current_pool = getattr(backend, "_pool", None)
-    if not isinstance(current_pool, SQLitePool):
-        raise RuntimeError("Unexpected databases SQLite backend implementation")
-    memory_reference = getattr(current_pool, "_memref", None)
-    if memory_reference is not None:
-        memory_reference.close()
-    backend._pool = _ForeignKeySQLitePool(
-        database_instance.url,
-        **database_instance.options,
-    )
+            return await asyncpg.connect(*args, **kwargs)
+        except (TimeoutError, OSError):
+            if attempt == attempts - 1:
+                raise
+            logger.warning("Database connect attempt %d failed, retrying", attempt + 1)
 
 
 class DatabaseManager:
@@ -130,76 +96,42 @@ class DatabaseManager:
     async def initialize(self):
         """Initialize database connections and pool."""
         try:
-            is_postgresql = settings.database_url.startswith("postgresql")
             assurance_enabled = settings.assurance_v2_enabled
             trusted_schema = settings.assurance_migration_schema or ""
             runtime_search_path = None
-            if is_postgresql and assurance_enabled:
+            if assurance_enabled:
                 runtime_search_path = postgresql_runtime_search_path(trusted_schema)
 
-            # Create async database connection with pooling
-            if is_postgresql:
-                # PostgreSQL with connection pooling
-                database_options = {
-                    "min_size": 5,
-                    "max_size": settings.database_pool_size,
-                    "max_queries": 50000,
-                    "max_inactive_connection_lifetime": 300,
-                    "timeout": 20,
-                    "command_timeout": 60,
-                }
-                if runtime_search_path is not None:
-                    database_options["server_settings"] = {
-                        "search_path": runtime_search_path
-                    }
-                self.database = Database(settings.database_url, **database_options)
-                
-                # Create asyncpg pool for direct access when needed
-                pool_options = {
-                    "min_size": 5,
-                    "max_size": settings.database_pool_size,
-                    "max_queries": 50000,
-                    "max_inactive_connection_lifetime": 300,
-                    "timeout": 20,
-                    "command_timeout": 60,
-                }
-                if runtime_search_path is not None:
-                    pool_options["server_settings"] = {
-                        "search_path": runtime_search_path
-                    }
-                self._pool = await asyncpg.create_pool(
-                    settings.database_url,
-                    **pool_options,
-                )
-                
-            else:
-                # SQLite fallback (development)
-                self.database = Database(settings.database_url)
-                _install_async_sqlite_foreign_key_pool(self.database)
-            
+            pool_options = {
+                "min_size": 5,
+                "max_size": settings.database_pool_size,
+                "max_queries": 50000,
+                "max_inactive_connection_lifetime": 300,
+                "timeout": 20,
+                "command_timeout": 60,
+                "connect": _connect_with_retry,
+            }
+            if runtime_search_path is not None:
+                pool_options["server_settings"] = {"search_path": runtime_search_path}
+            self.database = Database(settings.database_url, **pool_options)
+            # asyncpg pool for direct access when needed
+            self._pool = await asyncpg.create_pool(settings.database_url, **pool_options)
             await self.database.connect()
-            if not is_postgresql:
-                await self.database.execute("PRAGMA foreign_keys = ON")
-            
-            # Create sync engine for migrations and admin tasks
-            if is_postgresql:
-                self.engine = create_engine(
-                    settings.database_url,
-                    poolclass=QueuePool,
-                    pool_size=settings.database_pool_size,
-                    max_overflow=settings.database_max_overflow,
-                    pool_pre_ping=True,
-                    pool_recycle=3600,  # Recycle connections every hour
-                    echo=settings.database_echo and not settings.is_production,
-                )
-                if assurance_enabled:
-                    bind_postgresql_engine_search_path(self.engine, trusted_schema)
-            else:
-                self.engine = create_engine(
-                    settings.database_url,
-                    echo=settings.database_echo and not settings.is_production,
-                )
-                event.listen(self.engine, "connect", _enable_sqlite_foreign_keys)
+
+            # Sync engine for migrations and admin tasks
+            self.engine = create_engine(
+                settings.database_url,
+                poolclass=QueuePool,
+                pool_size=settings.database_pool_size,
+                max_overflow=settings.database_max_overflow,
+                pool_pre_ping=True,
+                pool_recycle=3600,  # Recycle connections every hour
+                # libpq moves on to the next address when a connect stalls
+                connect_args={"connect_timeout": 5},
+                echo=settings.database_echo and not settings.is_production,
+            )
+            if assurance_enabled:
+                bind_postgresql_engine_search_path(self.engine, trusted_schema)
 
             repository_engine = None
             if assurance_enabled:
@@ -207,10 +139,7 @@ class DatabaseManager:
                 repository_engine = getattr(repository_database_manager, "engine", None)
                 if repository_engine is None:
                     raise RuntimeError("Repository database engine is unavailable")
-                if is_postgresql:
-                    bind_postgresql_engine_search_path(
-                        repository_engine, trusted_schema
-                    )
+                bind_postgresql_engine_search_path(repository_engine, trusted_schema)
                 verify_database_identities(self.engine, repository_engine)
 
             verify_assurance_migration_integrity(

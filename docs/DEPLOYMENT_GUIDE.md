@@ -208,17 +208,13 @@ pip install -r requirements.txt
 
 ### 2. Create Tables
 
-Run the RBAC schema migration:
+Create the schema and load reference data (safe to re-run; on an existing
+database it only adds missing tables/columns and skips the clean-install
+migration chain, which is upgraded through `migrations/upgrade_paths/`):
 
 ```bash
-# Option 1: Using Alembic (recommended)
-uv run alembic upgrade head
-
-# Option 2: Direct SQL
-psql $DATABASE_URL < ../migrations/007_rbac_schema.sql
-
-# Option 3: Python script
-uv run python scripts/migrate.py
+uv run python scripts/setup_db.py
+uv run python scripts/setup_db.py verify
 ```
 
 ### 3. Verify Schema

@@ -3,6 +3,7 @@ Database models for AI BOM system
 """
 
 from sqlalchemy import Column, String, Integer, Float, DateTime, Text, JSON, ForeignKey, Enum, Boolean, UUID
+from sqlalchemy.dialects.postgresql import INET, JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from datetime import datetime
@@ -41,25 +42,25 @@ class AIBOMDocument(Base):
     description = Column(Text, nullable=False)
     project_name = Column(String, nullable=False)
     organization = Column(String, nullable=False)
-    overall_risk_level = Column(Enum(RiskLevel), nullable=False)
-    overall_compliance_status = Column(Enum(ComplianceStatus), nullable=False)
+    overall_risk_level = Column(Enum(RiskLevel, native_enum=False), nullable=False)
+    overall_compliance_status = Column(Enum(ComplianceStatus, native_enum=False), nullable=False)
     total_components = Column(Integer, default=0)
     created_by = Column(String, nullable=False)
-    created_at = Column(DateTime, default=func.now())
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
-    tags = Column(JSON, default=list)
-    risk_assessment = Column(JSON, default=dict)
-    compliance_report = Column(JSON, default=dict)
-    recommendations = Column(JSON, default=list)
+    created_at = Column(DateTime(timezone=True), default=func.now())
+    updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
+    tags = Column(JSONB, default=list)
+    risk_assessment = Column(JSONB, default=dict)
+    compliance_report = Column(JSONB, default=dict)
+    recommendations = Column(JSONB, default=list)
     
     # Layer data
-    data_layer = Column(JSON, default=dict)
-    model_development_layer = Column(JSON, default=dict)
-    infrastructure_layer = Column(JSON, default=dict)
-    deployment_layer = Column(JSON, default=dict)
-    monitoring_layer = Column(JSON, default=dict)
-    security_layer = Column(JSON, default=dict)
-    compliance_layer = Column(JSON, default=dict)
+    data_layer = Column(JSONB, default=dict)
+    model_development_layer = Column(JSONB, default=dict)
+    infrastructure_layer = Column(JSONB, default=dict)
+    deployment_layer = Column(JSONB, default=dict)
+    monitoring_layer = Column(JSONB, default=dict)
+    security_layer = Column(JSONB, default=dict)
+    compliance_layer = Column(JSONB, default=dict)
     
     # Relationships
     components = relationship("AIBOMComponent", back_populates="document", cascade="all, delete-orphan")
@@ -72,17 +73,17 @@ class AIBOMComponent(Base):
     id = Column(String, primary_key=True, index=True)
     bom_id = Column(String, ForeignKey("ai_bom_documents.id"), nullable=False)
     name = Column(String, nullable=False)
-    type = Column(Enum(ComponentType), nullable=False)
+    type = Column(Enum(ComponentType, native_enum=False), nullable=False)
     version = Column(String, nullable=False)
     description = Column(Text, nullable=False)
     vendor = Column(String)
     license = Column(String)
-    risk_level = Column(Enum(RiskLevel), nullable=False)
-    compliance_status = Column(Enum(ComplianceStatus), nullable=False)
-    dependencies = Column(JSON, default=list)
-    component_metadata = Column(JSON, default=dict)
-    created_at = Column(DateTime, default=func.now())
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    risk_level = Column(Enum(RiskLevel, native_enum=False), nullable=False)
+    compliance_status = Column(Enum(ComplianceStatus, native_enum=False), nullable=False)
+    dependencies = Column(JSONB, default=list)
+    component_metadata = Column(JSONB, default=dict)
+    created_at = Column(DateTime(timezone=True), default=func.now())
+    updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
     
     # Relationships
     document = relationship("AIBOMDocument", back_populates="components")
@@ -98,9 +99,9 @@ class AIBOMAnalysis(Base):
     compliance_score = Column(Float, nullable=False)
     security_score = Column(Float, nullable=False)
     performance_score = Column(Float, nullable=False)
-    cost_analysis = Column(JSON, default=dict)
-    recommendations = Column(JSON, default=list)
-    created_at = Column(DateTime, default=func.now())
+    cost_analysis = Column(JSONB, default=dict)
+    recommendations = Column(JSONB, default=list)
+    created_at = Column(DateTime(timezone=True), default=func.now())
     
     # Relationships
     document = relationship("AIBOMDocument", back_populates="analyses")
@@ -149,22 +150,20 @@ class User(Base):
     """User model for persistent user storage with Authentik integration"""
     __tablename__ = "users"
 
-    id = Column(UUID, primary_key=True, default=uuid.uuid4, index=True)
+    id = Column(String(255), primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
     authentik_id = Column(String, unique=True, index=True, nullable=True)  # Authentik user UUID
-    email = Column(String, unique=True, index=True, nullable=False)
-    username = Column(String, unique=True, index=True, nullable=False)
+    email = Column(String(255), unique=True, index=True, nullable=False)
+    username = Column(String(255), unique=True, index=True, nullable=False)
     name = Column(String, nullable=True)
 
     # Roles and permissions from Authentik
     roles = Column(JSON, default=list)  # ["admin", "analyst", "viewer"]
     groups = Column(JSON, default=list)  # Authentik groups
-    permissions = Column(JSON, default=list)  # Computed permissions
+    permissions = Column(JSONB, default=list)  # Computed permissions
 
     # Password sign-in (config.auth reads these; the register route writes them).
-    # Present in the Postgres schema already; declared here so SQLite dev and
-    # test databases built from this model carry the same columns.
-    role = Column(String(50), nullable=True)
-    password_hash = Column(String(255), nullable=True)
+    role = Column(String(50), nullable=False, server_default="viewer")
+    password_hash = Column(String(255), nullable=False)
 
     # Account status
     is_active = Column(Boolean, default=True)
@@ -175,9 +174,9 @@ class User(Base):
     org_id = Column(UUID, ForeignKey('organizations.id'), nullable=True, index=True)
 
     # Audit trail
-    created_at = Column(DateTime, default=func.now(), index=True)
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
-    last_login = Column(DateTime, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=func.now(), index=True)
+    updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
+    last_login = Column(DateTime(timezone=True), nullable=True)
     last_ip = Column(String, nullable=True)
 
     # Synchronization with Authentik
@@ -194,20 +193,20 @@ class AuditLog(Base):
     """Audit Log model for tracking user actions and compliance"""
     __tablename__ = "audit_logs"
 
-    id = Column(UUID, primary_key=True, default=uuid.uuid4, index=True)
-    user_id = Column(UUID, ForeignKey("users.id"), nullable=True, index=True)
-    action = Column(String, nullable=False, index=True)  # "login", "export_report", "create_model", etc.
-    resource_type = Column(String, nullable=True, index=True)  # "report", "model", "compliance_check"
-    resource_id = Column(String, nullable=True, index=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String(255), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    action = Column(String(255), nullable=False, index=True)  # "login", "export_report", "create_model", etc.
+    resource_type = Column(String(100), nullable=True, index=True)  # "report", "model", "compliance_check"
+    resource_id = Column(String(255), nullable=True, index=True)
 
     # Additional context
-    details = Column(JSON, default=dict)
-    ip_address = Column(String, nullable=True)
+    details = Column(JSONB, default=dict)
+    ip_address = Column(INET, nullable=True)
     user_agent = Column(String, nullable=True)
 
     # Status tracking
     timestamp = Column(DateTime, default=func.now(), index=True)
-    status = Column(String, nullable=False, index=True)  # "success", "failure"
+    status = Column(String, nullable=True, index=True)  # "success", "failure"
     error_message = Column(String, nullable=True)
 
     # Relationships
@@ -267,12 +266,12 @@ class Organization(Base):
     name = Column(String(255), nullable=False)
     slug = Column(String(255), nullable=False, unique=True, index=True)
     domain = Column(String(255), nullable=True)
-    owner_id = Column(UUID, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True)
+    owner_id = Column(String(255), ForeignKey("users.id", ondelete="RESTRICT"), nullable=True, index=True)
     is_active = Column(Boolean, default=True, index=True)
     org_metadata = Column(JSON, default=dict)
 
-    created_at = Column(DateTime, default=func.now(), index=True)
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), default=func.now(), index=True)
+    updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
 
     # Relationships
     members = relationship("OrganizationMember", back_populates="organization", cascade="all, delete-orphan")
@@ -292,12 +291,12 @@ class OrganizationMember(Base):
 
     id = Column(UUID, primary_key=True, default=uuid.uuid4, index=True)
     org_id = Column(UUID, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
-    user_id = Column(UUID, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(String(255), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     role = Column(String(50), nullable=False, default="member", index=True)
     status = Column(String(50), nullable=False, default="active", index=True)
-    invited_by = Column(UUID, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    joined_at = Column(DateTime, nullable=True, index=True)
-    created_at = Column(DateTime, default=func.now())
+    invited_by = Column(String(255), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    joined_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    created_at = Column(DateTime(timezone=True), default=func.now())
 
     # Ensure one user per org (composite unique constraint handled at DB level)
 
@@ -319,11 +318,11 @@ class OrganizationInvitation(Base):
     email = Column(String(255), nullable=False, index=True)
     role = Column(String(50), nullable=False, default="member")
     token = Column(String(255), nullable=False, unique=True, index=True)
-    expires_at = Column(DateTime, nullable=False, index=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
     status = Column(String(50), nullable=False, default="pending", index=True)
-    invited_by = Column(UUID, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    accepted_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=func.now())
+    invited_by = Column(String(255), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    accepted_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=func.now())
 
     # Relationships
     organization = relationship("Organization", back_populates="invitations")
@@ -342,10 +341,10 @@ class OrganizationRole(Base):
     org_id = Column(UUID, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
     name = Column(String(100), nullable=False, index=True)
     description = Column(Text, nullable=True)
-    permissions = Column(JSON, nullable=False, default=list)
+    permissions = Column(JSONB, nullable=False, default=list)
     is_system_role = Column(Boolean, default=False, index=True)
-    created_at = Column(DateTime, default=func.now())
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), default=func.now())
+    updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
 
     # Relationships
     organization = relationship("Organization", back_populates="roles")
@@ -361,16 +360,16 @@ class OrganizationAuditLog(Base):
 
     id = Column(UUID, primary_key=True, default=uuid.uuid4, index=True)
     org_id = Column(UUID, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
-    user_id = Column(UUID, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    user_id = Column(String(255), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     action = Column(String(100), nullable=False, index=True)
     resource_type = Column(String(50), nullable=True)
     resource_id = Column(UUID, nullable=True)
-    changes = Column(JSON, default=dict)
+    changes = Column(JSONB, default=dict)
     ip_address = Column(String(45), nullable=True)
     user_agent = Column(Text, nullable=True)
     status = Column(String(20), nullable=False, default="success")
     error_message = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=func.now(), index=True)
+    created_at = Column(DateTime(timezone=True), default=func.now(), index=True)
 
     # Relationships
     organization = relationship("Organization", back_populates="audit_logs")

@@ -262,9 +262,8 @@ FairMind is intended to gather and organize evidence for governance frameworks. 
 - The original high-contrast neobrutalist visual language remains the design constraint
 
 **Data Layer (Hybrid Architecture)**
-- **SQLite (Local)**: Primary relational storage for users, authentication, and application state. Zero-config, local-first.
+- **PostgreSQL (Neon in production)**: Primary relational storage for users, authentication, governance, and application state.
 - **DuckDB (Analytics)**: High-performance in-process OLAP database for dataset analysis and heavy bias queries.
-- **Supabase PostgreSQL (Optional/Prod)**: Scalable production database option.
 - **Redis**: High-performance caching for real-time metrics.
 - **Vector Store**: Embeddings for regulatory RAG system.
 - **File Storage**: Local filesystem or S3 for artifacts and datasets.
@@ -276,6 +275,7 @@ FairMind is intended to gather and organize evidence for governance frameworks. 
 ### Prerequisites
 
 - **Python 3.9+** (Backend)
+- **PostgreSQL 14+** (local install, Docker, or a Neon branch)
 - **Node.js 18+** (Frontend)
 - **UV** (Python package manager) - [Installation Guide](https://github.com/astral-sh/uv)
 - **Bun** (JavaScript runtime) - [Installation Guide](https://bun.sh/)
@@ -290,10 +290,10 @@ cd fairmind
 # Backend Setup
 cd apps/backend
 uv sync
-cp config/env.example .env  # Configure your environment
-# Create developer account (dev@fairmind.ai / dev)
-uv run python scripts/create_dev_user.py
-# Start server
+cp config/env.example .env  # set DATABASE_URL to an empty PostgreSQL database
+# Create schema and load reference data (AIUC-1 controls); safe to re-run
+uv run python scripts/setup_db.py
+# Start server, then sign up in the app to create your user and organization
 uv run python -m uvicorn api.main:app --reload --port 8000
 
 # Frontend Setup (New Terminal)
@@ -311,8 +311,8 @@ bun run dev
 
 **Backend** (`apps/backend/.env`):
 ```env
-# Database (Defaults to local SQLite if not set)
-# DATABASE_URL=sqlite:///./fairmind.db
+# Database (required, PostgreSQL only)
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/fairmind
 
 # Cache (Optional)
 # REDIS_URL=redis://localhost:6379
@@ -449,8 +449,7 @@ For complete API reference, see [API Documentation](docs/API_ENDPOINTS.md)
 
 **Database & Storage**
 - SQLAlchemy 2.0.44 (ORM)
-- Supabase (PostgreSQL production)
-- SQLite (local development)
+- PostgreSQL (Neon in production)
 - Redis 7.0.1 (caching)
 
 **Authentication & Security**
@@ -770,8 +769,8 @@ packs, lifecycle workflows, and rollout gates remain open.
   and one append-only per-organization audit chain across all 21 enabled
   Assurance V2 mutation routes
 - Tenant-bound environmental evidence routes, response admission, and migration 013e,
-  verified on SQLite and a disposable local PostgreSQL 14 instance
-- Focused unit, route, SQLite migration-parity, PostgreSQL 14 lifecycle, and
+  verified on a disposable local PostgreSQL 14 instance
+- Focused unit, route, PostgreSQL 14 lifecycle, and
   concurrent trust-authority verification for the current internal-alpha slices
 
 **Next release gates**

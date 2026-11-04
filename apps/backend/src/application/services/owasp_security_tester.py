@@ -30,7 +30,6 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 import threading
 from queue import Queue
 import pickle
-import sqlite3
 from contextlib import asynccontextmanager
 
 from models.owasp_ai_security import (

@@ -8,11 +8,10 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from sqlalchemy import create_engine, event, func, select, update
+from sqlalchemy import func, select, text, update
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
-from database.connection import Base
+from tests import pg
 from database.governance_models import (
     GovernanceEvaluationAuditEvent,
     GovernanceIdempotencyRecord,
@@ -37,7 +36,7 @@ from src.infrastructure.db.repositories.evaluation_audit_chain import (
 from src.infrastructure.db.repositories.evaluation_workbench_repository import (
     SqlAlchemyEvaluationWorkbenchUnitOfWork,
 )
-from tests.evaluation_workbench_sqlite import (
+from tests.evaluation_workbench_pg import (
     install_authoritative_assurance_fixtures_for_application_verifier_harness,
 )
 
@@ -48,22 +47,13 @@ ACTOR = str(uuid.uuid4())
 
 @pytest.fixture
 def audit_session():
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-
-    @event.listens_for(engine, "connect")
-    def _foreign_keys(connection, _record):
-        connection.execute("PRAGMA foreign_keys = ON")
-
-    Base.metadata.create_all(engine)
+    engine = pg.fresh_engine()
     install_authoritative_assurance_fixtures_for_application_verifier_harness(engine)
     session = sessionmaker(bind=engine)()
     actor_uuid = uuid.UUID(ACTOR)
     session.execute(
         User.__table__.insert().values(
+            password_hash="",
             id=actor_uuid,
             email="audit-actor@example.test",
             username=ACTOR,
@@ -859,7 +849,11 @@ def test_expired_rejected_key_can_be_reclaimed_then_successfully_replayed(
         select(GovernanceIdempotencyRecord.__table__.c.expires_at)
     )
     after_expiry = datetime.fromisoformat(original_expiry) + timedelta(seconds=1)
-    monkeypatch.setattr(workbench_repository_module, "_now", lambda: after_expiry)
+    monkeypatch.setattr(
+        workbench_repository_module.SqlAlchemyEvaluationWorkbenchRepository,
+        "read_fresh_utc_now",
+        lambda _self: after_expiry,
+    )
 
     next_command = _command(key="rejected-key", request_hash="b" * 64)
     created = unit_of_work.mutate(next_command, lambda _now: _success_outcome())
@@ -894,7 +888,11 @@ def test_expired_success_can_be_reclaimed_as_a_rejection_without_old_replay(
     original_record = dict(_idempotency_record(audit_session, key="success-then-rejected"))
     original_wrapper = json.loads(original_record["response_body_json"])
     after_expiry = datetime.fromisoformat(original_record["expires_at"]) + timedelta(seconds=1)
-    monkeypatch.setattr(workbench_repository_module, "_now", lambda: after_expiry)
+    monkeypatch.setattr(
+        workbench_repository_module.SqlAlchemyEvaluationWorkbenchRepository,
+        "read_fresh_utc_now",
+        lambda _self: after_expiry,
+    )
 
     next_command = _command(key="success-then-rejected", request_hash="b" * 64)
     with pytest.raises(EvaluationWorkbenchError) as reclaimed:
@@ -968,7 +966,11 @@ def test_tampered_in_progress_expiry_cannot_force_callback_execution(
         )
     )
     audit_session.commit()
-    monkeypatch.setattr(workbench_repository_module, "_now", lambda: observed_now)
+    monkeypatch.setattr(
+        workbench_repository_module.SqlAlchemyEvaluationWorkbenchRepository,
+        "read_fresh_utc_now",
+        lambda _self: observed_now,
+    )
 
     with pytest.raises(EvaluationWorkbenchError) as caught:
         SqlAlchemyEvaluationWorkbenchUnitOfWork(audit_session).mutate(
@@ -1002,7 +1004,11 @@ def test_expired_in_progress_generation_is_reclaimed_for_exactly_thirty_days(
         )
     )
     audit_session.commit()
-    monkeypatch.setattr(workbench_repository_module, "_now", lambda: observed_now)
+    monkeypatch.setattr(
+        workbench_repository_module.SqlAlchemyEvaluationWorkbenchRepository,
+        "read_fresh_utc_now",
+        lambda _self: observed_now,
+    )
 
     result = SqlAlchemyEvaluationWorkbenchUnitOfWork(audit_session).mutate(
         command,
@@ -1369,6 +1375,12 @@ def test_unexpected_callback_failure_rolls_back_without_mislabeling_a_rejection(
 def test_tampered_chain_blocks_the_next_append(audit_session) -> None:
     unit_of_work = SqlAlchemyEvaluationWorkbenchUnitOfWork(audit_session)
     unit_of_work.mutate(_command(key="first"), lambda _now: _success_outcome())
+    audit_session.execute(
+        text(
+            "DROP TRIGGER governance_evaluation_audit_events_no_update "
+            "ON governance_evaluation_audit_events"
+        )
+    )
     audit_session.execute(
         update(GovernanceEvaluationAuditEvent.__table__)
         .where(GovernanceEvaluationAuditEvent.org_id == ORG)

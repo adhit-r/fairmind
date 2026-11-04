@@ -1,14 +1,11 @@
 """Database contract tests for 013h idempotency-retention integrity.
 
-PostgreSQL 14 is the release authority. SQLite remains a fail-closed parity
-fixture because it cannot provide the same database-clock and concurrency
-semantics.
+PostgreSQL 14 is the release authority.
 """
 
 import os
 import hashlib
 import json
-import sqlite3
 import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -169,7 +166,7 @@ def postgresql_013h_expired_connection():
 
 
 def test_013h_idempotency_retention_migration_artifacts_exist() -> None:
-    """A deployable release includes direct, operator, fixture, and loader artifacts."""
+    """A deployable release includes direct, operator, and loader artifacts."""
 
     assert (MIGRATIONS / "013h_idempotency_retention_integrity.sql").is_file()
     assert (
@@ -178,69 +175,8 @@ def test_013h_idempotency_retention_migration_artifacts_exist() -> None:
         / "013g_to_013h_idempotency_retention_integrity.sql"
     ).is_file()
     assert (
-        MIGRATIONS
-        / "fixtures"
-        / "013h_idempotency_retention_integrity.sqlite.sql"
-    ).is_file()
-    assert (
         MIGRATIONS / "idempotency_retention_integrity_migration.py"
     ).is_file()
-
-
-def test_sqlite_013h_is_explicitly_fail_closed_for_every_idempotency_write() -> None:
-    """SQLite cannot pretend to own a PostgreSQL-grade retention clock."""
-
-    from migrations.evaluation_assurance_v2_migration import sql_for as sql_013
-    from migrations.evaluation_runs_migration import sql_for as sql_012
-    from migrations.governance_assurance_migration import sql_for as sql_011
-    from migrations.idempotency_retention_integrity_migration import apply_sqlite
-
-    connection = sqlite3.connect(":memory:")
-    connection.execute("PRAGMA foreign_keys = ON")
-    connection.executescript(
-        (MIGRATIONS / "008_governance_canonical.sql").read_text(encoding="utf-8")
-    )
-    connection.executescript(sql_011("sqlite"))
-    connection.executescript(sql_012("sqlite"))
-    connection.executescript(sql_013("sqlite"))
-    apply_sqlite(connection)
-    apply_sqlite(connection)
-
-    installed = {
-        str(row[0])
-        for row in connection.execute(
-            "SELECT name FROM sqlite_master WHERE type = 'trigger' "
-            "AND name LIKE 'governance_idempotency_records_%_unavailable_013h'"
-        ).fetchall()
-    }
-    assert installed == {
-        "governance_idempotency_records_insert_unavailable_013h",
-        "governance_idempotency_records_update_unavailable_013h",
-        "governance_idempotency_records_delete_unavailable_013h",
-    }
-    with pytest.raises(
-        sqlite3.IntegrityError,
-        match="idempotency retention authority requires PostgreSQL",
-    ):
-        connection.execute(
-            """
-            INSERT INTO governance_idempotency_records (
-                id, org_id, actor_id, operation, key_hash, request_hash,
-                status, created_at, updated_at, expires_at
-            ) VALUES (?, ?, ?, ?, ?, ?, 'in_progress', ?, ?, ?)
-            """,
-            (
-                "sqlite-record",
-                "org-sqlite",
-                "actor-sqlite",
-                "evaluation.run.create",
-                "a" * 64,
-                "b" * 64,
-                "2000-01-01T00:00:00+00:00",
-                "2000-01-01T00:00:00+00:00",
-                "2000-01-31T00:00:00+00:00",
-            ),
-        )
 
 
 def test_postgresql14_013h_insert_uses_database_clock_and_exact_thirty_days(

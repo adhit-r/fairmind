@@ -5,13 +5,13 @@ import uuid
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from api.main import app
+from tests import pg
 from config.auth import User as AuthUser, UserRole, auth_manager
-from database.connection import Base, get_db
+from database.connection import get_db
 from database.models import Organization, OrganizationMember, User
 
 
@@ -20,15 +20,13 @@ client = TestClient(app)
 
 @pytest.fixture(autouse=True)
 def authenticated_org_database():
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-    Base.metadata.create_all(engine)
+    engine = pg.fresh_engine()
     session_factory = sessionmaker(bind=engine)
     user_id, org_id = uuid.uuid4(), uuid.uuid4()
     session = session_factory()
     session.execute(
         User.__table__.insert().values(
+            password_hash="",
             id=user_id, email="governance@example.test", username="governance-owner"
         )
     )
@@ -82,7 +80,6 @@ def authenticated_org_database():
     finally:
         client.headers.pop("Authorization", None)
         app.dependency_overrides.clear()
-        Base.metadata.drop_all(engine)
         engine.dispose()
 
 
@@ -450,8 +447,9 @@ def test_ai_governance_evidence_endpoints_require_authentication(authenticated_o
         client.headers["Authorization"] = authorization
 
 
-def test_ai_governance_risk_dashboard_and_assessment():
-    dashboard_resp = client.get("/api/v1/ai-governance/dashboard/risk?system_id=acme-credit")
+def test_ai_governance_risk_dashboard_and_assessment(authenticated_org_database):
+    system_id = _create_scoped_system(authenticated_org_database, "Acme credit risk system")
+    dashboard_resp = client.get(f"/api/v1/ai-governance/dashboard/risk?system_id={system_id}")
     assert dashboard_resp.status_code == 200
     dashboard = dashboard_resp.json()
     assert "risks" in dashboard
@@ -461,7 +459,7 @@ def test_ai_governance_risk_dashboard_and_assessment():
     create_resp = client.post(
         "/api/v1/ai-governance/risks/assess",
         json={
-            "systemId": "acme-credit",
+            "systemId": system_id,
             "riskType": "bias",
             "severity": "high",
             "description": "Approval disparity detected for older applicants.",
@@ -469,19 +467,19 @@ def test_ai_governance_risk_dashboard_and_assessment():
     )
     assert create_resp.status_code == 200
     created = create_resp.json()
-    assert created["systemId"] == "acme-credit"
+    assert created["systemId"] == system_id
     assert created["severity"] == "high"
     assert created["source"] == "manual_assessment"
     assert isinstance(created["automation"]["recommendedRisks"], list)
 
-    refreshed_resp = client.get("/api/v1/ai-governance/dashboard/risk?system_id=acme-credit")
+    refreshed_resp = client.get(f"/api/v1/ai-governance/dashboard/risk?system_id={system_id}")
     assert refreshed_resp.status_code == 200
     refreshed = refreshed_resp.json()
     assert any(risk["id"] == created["id"] for risk in refreshed["risks"])
 
 
-def test_ai_governance_remediation_task_loop():
-    system_id = f"acme-remediation-{uuid.uuid4().hex[:8]}"
+def test_ai_governance_remediation_task_loop(authenticated_org_database):
+    system_id = _create_scoped_system(authenticated_org_database, "Acme remediation system")
     create_resp = client.post(
         "/api/v1/ai-governance/remediation",
         json={

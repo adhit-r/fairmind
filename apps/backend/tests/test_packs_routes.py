@@ -5,17 +5,17 @@ from datetime import datetime, timezone
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 import api.routes.ai_governance as ai_governance
 from api.main import app
 from api.routes import pack_catalogue
 from config.auth import User as AuthUser, UserRole, auth_manager
-from database.connection import Base, get_db
+from database.connection import get_db
 from database.models import Organization, OrganizationMember, User
 from middleware.security import RateLimitMiddleware
+from tests import pg
 
 PACKS = "/api/v1/packs"
 WORKFLOW = "ai_policy_review"
@@ -39,8 +39,7 @@ def no_rate_limit():
 def tmp_database():
     import database.governance_models  # noqa: F401
 
-    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
-    Base.metadata.create_all(engine)
+    engine = pg.fresh_engine()
     session_factory = sessionmaker(bind=engine)
 
     def override_db():
@@ -57,7 +56,6 @@ def tmp_database():
     yield engine
     app.dependency_overrides.clear()
     ai_governance._tables_ready = saved_ready
-    Base.metadata.drop_all(engine)
     engine.dispose()
 
 
@@ -65,7 +63,7 @@ def _client(engine, org_id: uuid.UUID, role: str = "owner", token_role: UserRole
     """A member of org_id with the given org role, signed in with a real access token."""
     user_id = uuid.uuid4()
     with engine.begin() as conn:
-        conn.execute(User.__table__.insert().values(id=user_id, email=f"{user_id}@packs.test", username=str(user_id)))
+        conn.execute(User.__table__.insert().values(password_hash="", id=user_id, email=f"{user_id}@packs.test", username=str(user_id)))
         conn.execute(
             OrganizationMember.__table__.insert().values(
                 id=uuid.uuid4(), org_id=org_id, user_id=user_id, role=role, status="active"
@@ -89,7 +87,7 @@ def _client(engine, org_id: uuid.UUID, role: str = "owner", token_role: UserRole
 def _new_org(engine) -> uuid.UUID:
     org_id, owner_id = uuid.uuid4(), uuid.uuid4()
     with engine.begin() as conn:
-        conn.execute(User.__table__.insert().values(id=owner_id, email=f"{owner_id}@packs.test", username=str(owner_id)))
+        conn.execute(User.__table__.insert().values(password_hash="", id=owner_id, email=f"{owner_id}@packs.test", username=str(owner_id)))
         conn.execute(
             Organization.__table__.insert().values(id=org_id, name="Packs test org", slug=f"packs-{org_id}", owner_id=owner_id)
         )

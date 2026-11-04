@@ -10,7 +10,6 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import sqlite3
 import threading
 import uuid
 import weakref
@@ -19,11 +18,11 @@ import pytest
 import rfc8785
 from fastapi.testclient import TestClient
 from sqlalchemy import Boolean, create_engine, select, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from api.main import app
+from tests import pg
 from config.auth import (
     TokenData,
     TokenType,
@@ -150,12 +149,7 @@ class _ActiveBearer:
 
 @pytest.fixture
 def assurance_client():
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(engine)
+    engine = pg.fresh_engine()
     session_factory = sessionmaker(bind=engine)
 
     def override_db():
@@ -172,7 +166,6 @@ def assurance_client():
             yield client, session_factory, active_user
     finally:
         app.dependency_overrides.clear()
-        Base.metadata.drop_all(engine)
         engine.dispose()
 
 
@@ -246,10 +239,35 @@ def postgresql_assurance_client():
             cleanup_connection.close()
 
 
+def _fail_inserts(session_factory, name: str, table: str, *, when: str | None = None) -> None:
+    """Make every INSERT into ``table`` (optionally only rows matching ``when``) raise."""
+    condition = f"IF {when} THEN RAISE EXCEPTION 'forced {name} failure'; END IF;" if when else (
+        f"RAISE EXCEPTION 'forced {name} failure';"
+    )
+    session = session_factory()
+    try:
+        session.execute(
+            text(
+                f"CREATE FUNCTION fail_{name}() RETURNS trigger AS $$ "
+                f"BEGIN {condition} RETURN NEW; END; $$ LANGUAGE plpgsql"
+            )
+        )
+        session.execute(
+            text(
+                f"CREATE TRIGGER fail_{name} BEFORE INSERT ON {table} "
+                f"FOR EACH ROW EXECUTE FUNCTION fail_{name}()"
+            )
+        )
+        session.commit()
+    finally:
+        session.close()
+
+
 def _seed_org(session, org_id: str, user_id: str, role: str = "admin") -> None:
     user_uuid = uuid.UUID(user_id)
     session.execute(
         User.__table__.insert().values(
+            password_hash="",
             id=user_uuid,
             email=f"{user_id}@example.test",
             username=user_id,
@@ -1210,16 +1228,12 @@ def test_conflict_audit_failure_returns_500_instead_of_unaudited_409(
     _seed_default(session_factory)
     original = _passport()
     assert _post(client, original).status_code == 201
-    session = session_factory()
-    session.execute(
-        text(
-            "CREATE TRIGGER fail_conflict_audit BEFORE INSERT ON org_audit_logs "
-            "FOR EACH ROW WHEN NEW.action = 'evidence_passport.conflict' "
-            "BEGIN SELECT RAISE(ABORT, 'forced conflict audit failure'); END"
-        )
+    _fail_inserts(
+        session_factory,
+        "conflict_audit",
+        "org_audit_logs",
+        when="NEW.action = 'evidence_passport.conflict'",
     )
-    session.commit()
-    session.close()
     changed = deepcopy(original)
     changed["evaluation"]["result"]["metrics"][0]["value"] = 0.2
     changed = with_server_hashes(EvidencePassport.model_validate(changed)).model_dump(
@@ -1459,7 +1473,7 @@ def test_candidate_control_must_belong_to_the_assigned_framework_version(
             title="Foreign control",
             statement="Not part of the assigned version",
             frequency="Annual",
-            active=True,
+            active=1,
         )
     )
     session.execute(
@@ -1516,15 +1530,7 @@ def test_forced_subwrite_failure_rolls_back_entire_new_run(
 ) -> None:
     client, session_factory, _ = assurance_client
     _seed_default(session_factory)
-    session = session_factory()
-    session.execute(
-        text(
-            f"CREATE TRIGGER fail_{stage} BEFORE INSERT ON {table} "
-            f"BEGIN SELECT RAISE(ABORT, 'forced {stage} failure'); END"
-        )
-    )
-    session.commit()
-    session.close()
+    _fail_inserts(session_factory, stage, table)
 
     response = _post(client, _passport())
 
@@ -1581,12 +1587,8 @@ def test_mapping_review_atomically_appends_hash_linked_snapshot_and_stale_review
     session.close()
 
 
-def _concurrent_review_database(tmp_path: Path, *, two_mappings: bool):
-    engine = create_engine(
-        f"sqlite:///{tmp_path / 'revision-race.db'}",
-        connect_args={"check_same_thread": False, "timeout": 10},
-    )
-    Base.metadata.create_all(engine)
+def _concurrent_review_database(*, two_mappings: bool):
+    engine = pg.fresh_engine()
     factory = sessionmaker(bind=engine)
     session = factory()
     _seed_org(session, ORG_A, USER_A)
@@ -1601,7 +1603,7 @@ def _concurrent_review_database(tmp_path: Path, *, two_mappings: bool):
                 title="Control two",
                 statement="Second independently reviewable control",
                 frequency="Annual",
-                active=True,
+                active=1,
             )
         )
         session.execute(
@@ -1654,9 +1656,9 @@ def _race_reviews(factory, mapping_ids: list[str]):
 
 @pytest.mark.parametrize("_race_iteration", range(20))
 def test_two_sessions_racing_same_mapping_yield_one_revision_and_one_stale_conflict(
-    tmp_path: Path, _race_iteration: int
+    _race_iteration: int,
 ) -> None:
-    engine, factory, mapping_ids = _concurrent_review_database(tmp_path, two_mappings=False)
+    engine, factory, mapping_ids = _concurrent_review_database(two_mappings=False)
 
     outcomes = _race_reviews(factory, [mapping_ids[0], mapping_ids[0]])
 
@@ -1676,9 +1678,9 @@ def test_two_sessions_racing_same_mapping_yield_one_revision_and_one_stale_confl
 
 @pytest.mark.parametrize("_race_iteration", range(20))
 def test_two_sessions_racing_different_mappings_allocate_unique_run_wide_revisions(
-    tmp_path: Path, _race_iteration: int
+    _race_iteration: int,
 ) -> None:
-    engine, factory, mapping_ids = _concurrent_review_database(tmp_path, two_mappings=True)
+    engine, factory, mapping_ids = _concurrent_review_database(two_mappings=True)
 
     outcomes = _race_reviews(factory, mapping_ids)
 
@@ -1774,16 +1776,9 @@ def test_forced_revision_failure_rolls_back_mapping_review(
     client, session_factory, _ = assurance_client
     _seed_default(session_factory)
     mapping = _post(client, _passport()).json()["candidateMappings"][0]
-    session = session_factory()
-    session.execute(
-        text(
-            "CREATE TRIGGER fail_review_revision BEFORE INSERT ON "
-            "governance_evidence_passport_revisions FOR EACH ROW "
-            "BEGIN SELECT RAISE(ABORT, 'forced revision failure'); END"
-        )
+    _fail_inserts(
+        session_factory, "review_revision", "governance_evidence_passport_revisions"
     )
-    session.commit()
-    session.close()
 
     response = client.post(
         f"/api/v1/ai-governance/organizations/{ORG_A}/evidence-mappings/{mapping['id']}/review",
@@ -1839,8 +1834,6 @@ def test_orm_create_all_enforces_s12_required_scope_digests_and_revision_links(
     _, session_factory, _ = assurance_client
     _seed_default(session_factory)
     session = session_factory()
-    session.execute(text("PRAGMA foreign_keys = ON"))
-    assert session.execute(text("PRAGMA foreign_keys")).scalar_one() == 1
     runs = GovernanceEvidenceRun.__table__
     valid_run = {
         "id": "orm-run-1",
@@ -1929,7 +1922,6 @@ def test_orm_create_all_enforces_s12_required_scope_digests_and_revision_links(
         session.execute(revisions.insert().values(**revision))
         session.commit()
     session.rollback()
-    session.execute(text("PRAGMA foreign_keys = OFF"))
     session.close()
 
 
@@ -1942,110 +1934,8 @@ def test_migration_011_creates_normalized_tenant_scoped_append_only_schema() -> 
         "011_governance_assurance.sql"
     )
 
-    connection = sqlite3.connect(":memory:")
-    connection.execute("PRAGMA foreign_keys = ON")
-    connection.executescript("""
-        CREATE TABLE governance_workspaces (
-            id TEXT PRIMARY KEY, name TEXT NOT NULL, owner TEXT,
-            created_at TEXT NOT NULL, updated_at TEXT NOT NULL
-        );
-        CREATE TABLE governance_ai_systems (
-            id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL,
-            name TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
-        );
-        CREATE TABLE governance_evidence (
-            id TEXT PRIMARY KEY, system_id TEXT NOT NULL,
-            evidence_type TEXT NOT NULL, content_json TEXT NOT NULL DEFAULT '{}',
-            created_at TEXT NOT NULL
-        );
-        """)
-    connection.executescript(sql_for("sqlite"))
-    for table_name in (
-        "governance_evidence_runs",
-        "governance_evidence_artifacts",
-        "governance_evidence_passport_revisions",
-        "governance_control_evidence",
-    ):
-        assert connection.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
-            (table_name,),
-        ).fetchone()
-    triggers = {
-        row[0]
-        for row in connection.execute(
-            "SELECT name FROM sqlite_master WHERE type='trigger'"
-        ).fetchall()
-    }
-    assert {
-        "governance_evidence_runs_immutable_update",
-        "governance_evidence_runs_immutable_delete",
-        "governance_evidence_artifacts_immutable_update",
-        "governance_evidence_artifacts_immutable_delete",
-        "governance_evidence_passport_revisions_immutable_update",
-        "governance_evidence_passport_revisions_immutable_delete",
-    } <= triggers
-
-    connection.execute(
-        "INSERT INTO governance_workspaces (id, org_id, name, created_at, updated_at) "
-        "VALUES ('workspace-1', 'org-1', 'Workspace', 'now', 'now')"
-    )
-    connection.execute(
-        "INSERT INTO governance_ai_systems "
-        "(id, workspace_id, org_id, name, created_at, updated_at) "
-        "VALUES ('system-1', 'workspace-1', 'org-1', 'System', 'now', 'now')"
-    )
-    run_insert = (
-        "INSERT INTO governance_evidence_runs "
-        "(id, org_id, system_id, workspace_id, passport_id, schema_version, "
-        "capability_state, assurance_source, source_type, source_identifier, run_id, "
-        "content_hash, result, created_at) VALUES (?, 'org-1', 'system-1', "
-        "'workspace-1', 'passport-1', '1.0.0', 'validated', 'fairmind_internal', "
-        "'fairmind_evaluation', 'suite-1', ?, ?, 'passed', 'now')"
-    )
-    with pytest.raises(sqlite3.IntegrityError):
-        connection.execute(run_insert, ("run-short", "run-short", "a" * 63))
-    with pytest.raises(sqlite3.IntegrityError):
-        connection.execute(run_insert, ("run-upper", "run-upper", "A" * 64))
-    connection.execute(run_insert, ("run-1", "run-1", "a" * 64))
-
-    artifact_insert = (
-        "INSERT INTO governance_evidence_artifacts "
-        "(id, org_id, system_id, evidence_run_id, artifact_id, ordinal, role, uri, "
-        "sha256, media_type, contains_sensitive_data, created_at) VALUES "
-        "(?, 'org-1', 'system-1', 'run-1', ?, ?, 'report', 's3://evidence/report', "
-        "?, 'application/json', 0, 'now')"
-    )
-    with pytest.raises(sqlite3.IntegrityError):
-        connection.execute(artifact_insert, ("artifact-upper", "bad", 0, "B" * 64))
-    with pytest.raises(sqlite3.IntegrityError):
-        connection.execute(
-            artifact_insert.replace("'org-1'", "'org-other'", 1),
-            ("artifact-cross-tenant", "cross-tenant", 0, "b" * 64),
-        )
-    connection.execute(artifact_insert, ("artifact-1", "report", 0, "b" * 64))
-
-    revision_insert = (
-        "INSERT INTO governance_evidence_passport_revisions "
-        "(id, org_id, system_id, evidence_run_id, passport_id, passport_revision, "
-        "previous_revision_hash, canonical_content_hash, snapshot_json, created_at) "
-        "VALUES (?, 'org-1', 'system-1', 'run-1', 'passport-1', 1, NULL, ?, '{}', 'now')"
-    )
-    with pytest.raises(sqlite3.IntegrityError):
-        connection.execute(revision_insert, ("revision-upper", "C" * 64))
-    connection.execute(revision_insert, ("revision-1", "c" * 64))
-
-    for table_name, row_id in (
-        ("governance_evidence_runs", "run-1"),
-        ("governance_evidence_artifacts", "artifact-1"),
-        ("governance_evidence_passport_revisions", "revision-1"),
-    ):
-        with pytest.raises(sqlite3.IntegrityError, match="append-only"):
-            connection.execute(
-                f"UPDATE {table_name} SET created_at = 'later' WHERE id = ?", (row_id,)
-            )
-        with pytest.raises(sqlite3.IntegrityError, match="append-only"):
-            connection.execute(f"DELETE FROM {table_name} WHERE id = ?", (row_id,))
-    connection.close()
+    with pytest.raises(ValueError, match="Unsupported migration dialect"):
+        sql_for("mysql")
 
     postgresql_sql = sql_for("postgresql")
     adapter_source = (
@@ -2053,16 +1943,44 @@ def test_migration_011_creates_normalized_tenant_scoped_append_only_schema() -> 
     ).read_text(encoding="utf-8")
     assert "011_governance_assurance.sql" in adapter_source
     assert "import re" not in adapter_source and "re.sub" not in adapter_source
-    sqlite_fixture = migrations / "fixtures/011_governance_assurance.sqlite.sql"
-    assert sqlite_fixture.exists()
-    assert sqlite_fixture not in migrations.glob("*.sql")
-    assert not (migrations / "011_governance_assurance.sqlite.sql").exists()
     assert "governance_evidence_artifacts" in postgresql_sql
     assert "governance_evidence_passport_revisions" in postgresql_sql
     assert "CHECK (content_hash ~ '^[0-9a-f]{64}$')" in postgresql_sql
     assert "FOREIGN KEY (evidence_run_id, system_id, org_id)" in postgresql_sql
     assert "FOREIGN KEY (passport_revision_id, evidence_id, system_id, org_id)" in postgresql_sql
     assert "CREATE TRIGGER governance_evidence_passport_revisions_no_mutation" in postgresql_sql
+
+
+def test_migration_011_enforces_hash_checks_and_append_only_triggers_on_postgresql(
+    postgresql_assurance_client,
+) -> None:
+    _, session_factory, _ = postgresql_assurance_client
+    _seed_default(session_factory)
+    run_insert = text(
+        "INSERT INTO governance_evidence_runs "
+        "(id, org_id, system_id, workspace_id, passport_id, schema_version, "
+        "capability_state, assurance_source, source_type, source_identifier, run_id, "
+        "content_hash, result, created_at) VALUES (:id, :org, 'system-001', "
+        "'workspace-001', 'passport-1', '1.0.0', 'validated', 'fairmind_internal', "
+        "'fairmind_evaluation', 'suite-1', :id, :hash, 'passed', now())"
+    )
+    session = session_factory()
+    try:
+        for bad_hash in ("a" * 63, "A" * 64):
+            with pytest.raises(IntegrityError):
+                session.execute(run_insert, {"id": "run-bad", "org": ORG_A, "hash": bad_hash})
+            session.rollback()
+        session.execute(run_insert, {"id": "run-1", "org": ORG_A, "hash": "a" * 64})
+        session.commit()
+        for statement in (
+            "UPDATE governance_evidence_runs SET result = 'failed' WHERE id = 'run-1'",
+            "DELETE FROM governance_evidence_runs WHERE id = 'run-1'",
+        ):
+            with pytest.raises(DBAPIError, match="append-only"):
+                session.execute(text(statement))
+            session.rollback()
+    finally:
+        session.close()
 
 
 def test_old_009_postgresql_installation_has_explicit_ledgered_s12_upgrade_path() -> None:

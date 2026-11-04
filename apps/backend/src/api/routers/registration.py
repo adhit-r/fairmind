@@ -176,8 +176,8 @@ async def approve_registration(
             # Create user account
             new_user_id = str(uuid.uuid4())
             await db.execute(
-                "INSERT INTO users (id, email, username, role, is_active, org_id, roles, name) "
-                "VALUES (:id, :email, :username, :role, TRUE, :org_id, :roles::jsonb, :name) "
+                "INSERT INTO users (id, email, username, password_hash, role, is_active, org_id, roles, name) "
+                "VALUES (:id, :email, :username, '', :role, TRUE, :org_id, :roles::jsonb, :name) "
                 "ON CONFLICT (email) DO UPDATE SET role = EXCLUDED.role, is_active = TRUE, org_id = EXCLUDED.org_id",
                 {
                     "id": new_user_id,

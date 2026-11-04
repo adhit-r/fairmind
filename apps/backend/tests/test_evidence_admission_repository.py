@@ -8,11 +8,10 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
-from sqlalchemy import create_engine, func, insert, select, update
+from sqlalchemy import func, insert, select, update
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import Session
 
-import src.infrastructure.db.repositories.evaluation_workbench_repository as repository_module
 from database.governance_models import (
     GovernanceEvaluationRun,
     GovernanceEvaluationRunSuiteExecution,
@@ -53,7 +52,7 @@ from src.domain.assurance.evidence_passport_v2 import (
 from src.infrastructure.db.repositories.evaluation_workbench_repository import (
     SqlAlchemyEvaluationWorkbenchRepository,
 )
-from tests.test_evaluation_workbench_repository import (
+from tests.test_evaluation_workbench_repository import (  # noqa: F401  (fixture re-export)
     ORG,
     OTHER_ORG,
     USER,
@@ -61,40 +60,23 @@ from tests.test_evaluation_workbench_repository import (
     _service,
     _suite_payload,
     _target_payload,
-    repository_fixture as base_repository_fixture,
+    repository_fixture,
 )
-from tests.evaluation_workbench_sqlite import (
+from tests import pg
+from tests.evaluation_workbench_pg import (
     active_trust_policy_values_for_verifier_harness,
     public_signing_key_values_for_verifier_harness,
 )
 
 
-@pytest.fixture
-def repository_fixture(base_repository_fixture):
-    """Exercise repository admission against the installed 013d receipt shape."""
+def test_fresh_clock_is_utc_database_time() -> None:
+    """Catches replacing the trusted database clock with a naive or local timestamp."""
 
-    session, factory = base_repository_fixture
-    from migrations.evaluator_catalog_migration import apply_sqlite
-
-    raw_connection = session.connection().connection.driver_connection
-    apply_sqlite(raw_connection)
-    session.expire_all()
-    yield session, factory
-
-
-def test_sqlite_fresh_clock_is_utc_and_does_not_use_the_process_clock(monkeypatch) -> None:
-    """Catches replacing the trusted database clock with the process clock."""
-
-    engine = create_engine("sqlite://")
-    process_time = datetime(1999, 12, 31, tzinfo=timezone.utc)
-    monkeypatch.setattr(repository_module, "_now", lambda: process_time)
-
-    with Session(engine) as session:
+    with Session(pg.fresh_engine()) as session:
         observed = SqlAlchemyEvaluationWorkbenchRepository(session).read_fresh_utc_now()
 
     assert observed.tzinfo == timezone.utc
-    assert observed.year >= 2026
-    assert observed != process_time
+    assert abs(datetime.now(timezone.utc) - observed) < timedelta(minutes=1)
 
 
 class _PostgresFailure(Exception):
@@ -229,7 +211,7 @@ def test_database_error_classifier_propagates_unexpected_raise_exceptions(
 
 
 def test_database_error_boundary_reraises_the_original_unexpected_integrity_error() -> None:
-    engine = create_engine("sqlite://")
+    engine = pg.fresh_engine()
     original = _postgres_database_error(
         sqlstate="23514",
         message="unexpected check constraint failure",
@@ -318,7 +300,7 @@ def _verified_after_locked_graph(
         observed = repository.read_fresh_utc_now()
         if observed > floor:
             return observed
-    raise AssertionError("SQLite database clock did not advance beyond the locked graph")
+    raise AssertionError("database clock did not advance beyond the locked graph")
 
 
 def _ensure_approved_catalog_registration(

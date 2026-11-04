@@ -255,7 +255,7 @@ Integración perfecta con plataformas de seguimiento de experimentos:
 - **Gestión de Evidencias**: Interfaz de usuario para recopilación y generación de informes automatizada
 
 **Capa de Datos (Arquitectura Híbrida)**
-- **SQLite (Local)**: Almacenamiento relacional principal para usuarios, autenticación y estado de la aplicación. Sin configuración, priorizado localmente.
+- **PostgreSQL (Neon en producción)**: Almacenamiento relacional principal para usuarios, autenticación, gobernanza y estado de la aplicación.
 - **DuckDB (Analíticas)**: Base de datos OLAP de alto rendimiento en proceso para análisis de conjuntos de datos y consultas pesadas de sesgos.
 - **Supabase PostgreSQL (Opcional/Producción)**: Opción de base de datos escalable para producción.
 - **Redis**: Caché de alto rendimiento para métricas en tiempo real.
@@ -304,8 +304,8 @@ bun run dev
 
 **Backend** (`apps/backend/.env`):
 ```env
-# Base de datos (Por defecto SQLite local si no se establece)
-# DATABASE_URL=sqlite:///./fairmind.db
+# Base de datos (obligatoria, solo PostgreSQL)
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/fairmind
 
 # Caché (Opcional)
 # REDIS_URL=redis://localhost:6379
@@ -444,7 +444,6 @@ Para la referencia completa de la API, consulta [Documentación de la API](docs/
 **Base de Datos y Almacenamiento**
 - SQLAlchemy 2.0.44 (ORM)
 - Supabase (PostgreSQL para producción)
-- SQLite (desarrollo local)
 - Redis 7.0.1 (caché)
 
 **Autenticación y Seguridad**

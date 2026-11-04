@@ -5,11 +5,11 @@ import uuid
 import pytest
 from fastapi.testclient import TestClient
 from openpyxl import Workbook
-from sqlalchemy import create_engine, event, func, select
+from sqlalchemy import event, func, select
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from api.main import app
+from tests import pg
 from config.auth import (
     TokenData,
     TokenType,
@@ -17,7 +17,7 @@ from config.auth import (
     UserRole,
     auth_manager,
 )
-from database.connection import Base, get_db
+from database.connection import get_db
 from database.governance_models import (
     GovernanceAISystem,
     GovernanceControlAssessment,
@@ -87,10 +87,7 @@ class _ActiveBearer:
 
 @pytest.fixture
 def assurance_client():
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-    Base.metadata.create_all(engine)
+    engine = pg.fresh_engine()
     session_factory = sessionmaker(bind=engine)
 
     def override_db():
@@ -107,7 +104,6 @@ def assurance_client():
             yield client, session_factory, active_user
     finally:
         app.dependency_overrides.clear()
-        Base.metadata.drop_all(engine)
         engine.dispose()
 
 
@@ -115,6 +111,7 @@ def _seed_org(session, org_id: str, user_id: str, role: str = "member") -> None:
     owner_id = uuid.UUID(user_id)
     session.execute(
         User.__table__.insert().values(
+            password_hash="",
             id=owner_id, email=f"{user_id}@example.test", username=user_id
         )
     )
@@ -170,7 +167,7 @@ def _seed_catalog_and_system(session) -> tuple[str, str, str]:
                 "title": "Active control one",
                 "statement": "Test control",
                 "frequency": "Annual",
-                "active": True,
+                "active": 1,
             },
             {
                 "id": "control-2",
@@ -179,7 +176,7 @@ def _seed_catalog_and_system(session) -> tuple[str, str, str]:
                 "title": "Active control two",
                 "statement": "Test control",
                 "frequency": "Quarterly",
-                "active": True,
+                "active": 1,
             },
             {
                 "id": "control-retired",
@@ -188,7 +185,7 @@ def _seed_catalog_and_system(session) -> tuple[str, str, str]:
                 "title": "Retired control",
                 "statement": "Test control",
                 "frequency": "",
-                "active": False,
+                "active": 0,
             },
         ],
     )

@@ -437,7 +437,7 @@ class FrameworkCatalogService:
                     "additional_capabilities": control.additional_capabilities,
                 }
             ),
-            "active": control.active,
+            "active": int(control.active),
         }
 
     @staticmethod

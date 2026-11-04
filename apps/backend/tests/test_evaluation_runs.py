@@ -5,15 +5,14 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 import json
-from pathlib import Path
 import uuid
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, event, select, update
+from sqlalchemy import select, update
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
+from tests import pg
 from api.main import app
 from config.auth import (
     TokenData,
@@ -23,7 +22,7 @@ from config.auth import (
     auth_manager,
 )
 from config.settings import settings
-from database.connection import Base, get_db
+from database.connection import get_db
 from database.governance_models import (
     GovernanceAISystem,
     GovernanceEvaluationPlan,
@@ -105,13 +104,13 @@ class _ActiveBearer:
 
 
 def _seed_org(session, org_id: str, user_id: str, *, role: str = "admin") -> None:
-    user_uuid = uuid.UUID(user_id)
     if session.execute(
-        select(User.__table__.c.id).where(User.__table__.c.id == user_uuid)
+        select(User.__table__.c.id).where(User.__table__.c.id == user_id)
     ).scalar_one_or_none() is None:
         session.execute(
             User.__table__.insert().values(
-                id=user_uuid,
+                password_hash="",
+                id=user_id,
                 email=f"{user_id}@example.test",
                 username=user_id,
             )
@@ -121,14 +120,14 @@ def _seed_org(session, org_id: str, user_id: str, *, role: str = "admin") -> Non
             id=uuid.UUID(org_id),
             name=org_id,
             slug=org_id,
-            owner_id=user_uuid,
+            owner_id=user_id,
         )
     )
     session.execute(
         OrganizationMember.__table__.insert().values(
             id=uuid.uuid4(),
             org_id=uuid.UUID(org_id),
-            user_id=user_uuid,
+            user_id=user_id,
             role=role,
             status="active",
         )
@@ -136,10 +135,10 @@ def _seed_org(session, org_id: str, user_id: str, *, role: str = "admin") -> Non
 
 
 def _seed_member(session, org_id: str, user_id: str, *, role: str) -> None:
-    user_uuid = uuid.UUID(user_id)
     session.execute(
         User.__table__.insert().values(
-            id=user_uuid,
+            password_hash="",
+            id=user_id,
             email=f"{user_id}@example.test",
             username=user_id,
         )
@@ -148,7 +147,7 @@ def _seed_member(session, org_id: str, user_id: str, *, role: str) -> None:
         OrganizationMember.__table__.insert().values(
             id=uuid.uuid4(),
             org_id=uuid.UUID(org_id),
-            user_id=user_uuid,
+            user_id=user_id,
             role=role,
             status="active",
         )
@@ -181,17 +180,7 @@ def _seed_system(
 
 @pytest.fixture
 def evaluation_client():
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-
-    @event.listens_for(engine, "connect")
-    def _enable_foreign_keys(dbapi_connection, _connection_record) -> None:
-        dbapi_connection.execute("PRAGMA foreign_keys = ON")
-
-    Base.metadata.create_all(engine)
+    engine = pg.fresh_engine()
     session_factory = sessionmaker(bind=engine)
     session = session_factory()
     _seed_org(session, ORG_A, USER_A)
@@ -1454,19 +1443,8 @@ def test_passport_link_rejects_unsupported_passport_contract_version_without_mut
     assert detail["linkedPassportRevisionId"] is None
 
 
-def test_two_sessions_atomically_link_only_one_distinct_passport_revision(tmp_path: Path) -> None:
-    database_path = tmp_path / "evaluation-race.sqlite3"
-    engine = create_engine(
-        f"sqlite:///{database_path}",
-        connect_args={"check_same_thread": False, "timeout": 10},
-    )
-
-    @event.listens_for(engine, "connect")
-    def _configure_sqlite(dbapi_connection, _connection_record) -> None:
-        dbapi_connection.execute("PRAGMA foreign_keys = ON")
-        dbapi_connection.execute("PRAGMA journal_mode = WAL")
-
-    Base.metadata.create_all(engine)
+def test_two_sessions_atomically_link_only_one_distinct_passport_revision() -> None:
+    engine = pg.fresh_engine()
     factory = sessionmaker(bind=engine)
     seed = factory()
     try:

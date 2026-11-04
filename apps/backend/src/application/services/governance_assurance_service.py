@@ -85,6 +85,11 @@ def _uuid(value: str) -> uuid.UUID | None:
         return None
 
 
+def member_user_matches(column, user_uuid: uuid.UUID):
+    """Match a varchar user id stored either dashed or as plain hex."""
+    return column.in_([str(user_uuid), user_uuid.hex])
+
+
 def _canonical_json(value: object) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
@@ -144,7 +149,7 @@ class GovernanceAssuranceService:
         member = self.db.execute(
             select(OrganizationMember.__table__.c.role).where(
                 OrganizationMember.__table__.c.org_id == org_uuid,
-                OrganizationMember.__table__.c.user_id == user_uuid,
+                member_user_matches(OrganizationMember.__table__.c.user_id, user_uuid),
                 OrganizationMember.__table__.c.status == "active",
             )
         ).scalar_one_or_none()

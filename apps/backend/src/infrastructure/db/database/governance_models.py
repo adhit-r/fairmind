@@ -12,6 +12,8 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import (
+    REAL,
+    BigInteger,
     Boolean,
     CheckConstraint,
     Column,
@@ -40,7 +42,7 @@ def _utc_now() -> datetime:
 
 
 def _lower_hex64(column: str) -> str:
-    """Portable SQLite/PostgreSQL predicate for exactly 64 lower-hex characters."""
+    """PostgreSQL predicate for exactly 64 lower-hex characters."""
     stripped = column
     for character in "0123456789abcdef":
         stripped = f"replace({stripped}, '{character}', '')"
@@ -96,7 +98,7 @@ def _canonical_utc_timestamp(column: str, *, nullable: bool = True) -> str:
         f"AND substr({column}, 11, 1) = 'T' "
         f"AND substr({column}, 14, 1) = ':' "
         f"AND substr({column}, 17, 1) = ':' "
-        f"AND substr({column}, -6) = '+00:00' "
+        f"AND right({column}, 6) = '+00:00' "
         f"AND {year} BETWEEN 1 AND 9999 "
         f"AND {month} BETWEEN 1 AND 12 "
         f"AND {day} BETWEEN 1 AND ({maximum_day}) "
@@ -470,7 +472,7 @@ class GovernanceEvidenceArtifact(Base):
     uri = Column(Text, nullable=False)
     sha256 = Column(String, nullable=False)
     media_type = Column(String, nullable=False)
-    size_bytes = Column(Integer, nullable=True)
+    size_bytes = Column(BigInteger, nullable=True)
     contains_sensitive_data = Column(Boolean, nullable=False, default=False)
     retention_policy = Column(String, nullable=True)
     redaction_note = Column(Text, nullable=True)
@@ -515,7 +517,7 @@ class GovernanceEvidencePassportRevision(Base):
     previous_revision_hash = Column(String, nullable=True)
     canonical_content_hash = Column(String, nullable=False)
     snapshot_json = Column(Text, nullable=False)
-    created_by = Column(String, nullable=False)
+    created_by = Column(String, nullable=True)
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
 
     __table_args__ = (
@@ -1066,7 +1068,6 @@ class GovernanceEvidenceTrustPolicyVersion(Base):
             "org_id",
             unique=True,
             postgresql_where=(status == "active"),
-            sqlite_where=(status == "active"),
         ),
         Index(
             "idx_governance_evidence_trust_policies_org_status_version",
@@ -2910,7 +2911,7 @@ class GovernanceEvidence(Base):
     title = Column(String, nullable=True)
     source = Column(String, nullable=True)
     content_json = Column(Text, nullable=False, default="{}")
-    confidence = Column(Float, nullable=False, default=1.0)
+    confidence = Column(REAL, nullable=False, default=1.0)
     status = Column(String, nullable=False, default="draft")
     uploaded_by = Column(String, nullable=True)
     metadata_json = Column(Text, nullable=False, default="{}")
@@ -2985,7 +2986,7 @@ class GovernanceEnvironmentalAssessment(Base):
     reviewer_state = Column(String, nullable=False, default="draft")
     exception_json = Column(Text, nullable=False, default="{}")
     payload_json = Column(Text, nullable=False, default="{}")
-    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    created_at = Column(DateTime(timezone=True), nullable=True, default=_utc_now)
 
     ai_system = relationship(
         "GovernanceAISystem",
@@ -3095,6 +3096,103 @@ class GovernancePolicyVersion(Base):
         return f"<GovernancePolicyVersion(policy_id={self.policy_id}, version={self.version})>"
 
 
+class OrgPolicy(Base):
+    """An organization's AI policy: a written document plus enforceable rules.
+
+    The working copy moves draft -> in_review -> approved -> published. Publishing
+    snapshots it into org_policy_versions; enforcement always runs the latest
+    published snapshot, so drafting a revision never pauses enforcement.
+    """
+
+    __tablename__ = "org_policies"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    name = Column(String, nullable=False)
+    summary = Column(Text, nullable=False, default="")
+    body = Column(Text, nullable=False, default="")
+    owner = Column(String, nullable=True)
+    status = Column(String, nullable=False, default="draft")
+    version = Column(Integer, nullable=False, default=1)
+    rules_json = Column(Text, nullable=False, default="[]")
+    published_version = Column(Integer, nullable=True)
+    created_by = Column(String, nullable=False)
+    submitted_by = Column(String, nullable=True)
+    approved_by = Column(String, nullable=True)
+    approved_at = Column(String, nullable=True)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('draft', 'in_review', 'approved', 'published', 'retired')",
+            name="ck_org_policies_status",
+        ),
+    )
+
+
+class OrgPolicyVersion(Base):
+    """Immutable snapshot of a policy as it was published and distributed."""
+
+    __tablename__ = "org_policy_versions"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    policy_id = Column(String, ForeignKey("org_policies.id", ondelete="CASCADE"), nullable=False, index=True)
+    version = Column(Integer, nullable=False)
+    name = Column(String, nullable=False)
+    summary = Column(Text, nullable=False, default="")
+    body = Column(Text, nullable=False, default="")
+    rules_json = Column(Text, nullable=False, default="[]")
+    approved_by = Column(String, nullable=True)
+    published_by = Column(String, nullable=False)
+    published_at = Column(String, nullable=False)
+
+    __table_args__ = (UniqueConstraint("policy_id", "version", name="uq_org_policy_version"),)
+
+
+class OrgPolicyAcknowledgement(Base):
+    """A member's attestation that they read a published policy version."""
+
+    __tablename__ = "org_policy_acknowledgements"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    policy_id = Column(String, ForeignKey("org_policies.id", ondelete="CASCADE"), nullable=False, index=True)
+    version = Column(Integer, nullable=False)
+    user_id = Column(String, nullable=False)
+    acknowledged_at = Column(String, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("policy_id", "version", "user_id", name="uq_org_policy_ack"),
+    )
+
+
+class OrgPolicyEvaluation(Base):
+    """One rule of one published policy version, evaluated against one system."""
+
+    __tablename__ = "org_policy_evaluations"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    run_id = Column(String, nullable=False, index=True)
+    policy_id = Column(String, ForeignKey("org_policies.id", ondelete="CASCADE"), nullable=False, index=True)
+    policy_version = Column(Integer, nullable=False)
+    system_id = Column(String, nullable=False, index=True)
+    rule_id = Column(String, nullable=False)
+    outcome = Column(String, nullable=False)
+    severity = Column(String, nullable=False)
+    enforcement = Column(String, nullable=False)
+    detail = Column(Text, nullable=False, default="")
+    evaluated_at = Column(String, nullable=False)
+
+    __table_args__ = (
+        CheckConstraint(
+            "outcome IN ('pass', 'fail', 'not_applicable')", name="ck_org_policy_eval_outcome"
+        ),
+    )
+
+
 class GovernanceApprovalWorkflow(Base):
     """Approval workflow definition."""
 
@@ -3184,7 +3282,7 @@ class GovernanceRisk(Base):
     description = Column(Text, nullable=False, default="")
     mitigation = Column(Text, nullable=False, default="")
     likelihood = Column(String, nullable=False, default="possible")
-    risk_score = Column(Float, nullable=False, default=0.0)
+    risk_score = Column(REAL, nullable=False, default=0.0)
     source = Column(String, nullable=False, default="manual")
     categories_json = Column(Text, nullable=False, default="[]")
     metadata_json = Column(Text, nullable=False, default="{}")

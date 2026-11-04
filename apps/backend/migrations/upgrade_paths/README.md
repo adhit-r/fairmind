@@ -82,7 +82,3 @@ Expiry permits an atomic in-place rollover of the same identity; it does not
 authorize historical deletion. A later migration may add archival or partition
 retirement only with an independently integrity-protected history. Operators
 must capacity-plan the table and must not disable the guard for cleanup.
-
-SQLite installs three guards that reject every idempotency INSERT, UPDATE, and
-DELETE. It remains a fail-closed parity fixture and is not an execution
-authority for assurance-v2 mutations.
