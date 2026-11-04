@@ -801,6 +801,42 @@ def _fetch_remediation_tasks(db: Session, system_id: str) -> List[Dict[str, Any]
     return [_serialize_remediation_task_row(row) for row in rows]
 
 
+def _risk_dashboard(rows: List[Any], system_id: Optional[str]) -> Dict[str, Any]:
+    """Recorded findings, counted; taxonomy suggestions listed apart and never counted.
+
+    A suggestion is a MIT or IBM library entry that might apply, not a finding
+    about the system, so it is offered for one system only and dropped once a
+    recorded risk carries its title.
+    """
+    risks = sorted(
+        (_serialize_risk_row(row) for row in rows),
+        key=lambda item: (_severity_rank(item["severity"]), item.get("riskScore", 0.0)),
+        reverse=True,
+    )
+    recorded_titles = {risk["title"].strip().lower() for risk in risks}
+    suggested = (
+        [s for s in _generate_automated_risks(system_id) if s["title"].strip().lower() not in recorded_titles]
+        if system_id
+        else []
+    )
+    severity_counts = {"low": 0, "medium": 0, "high": 0, "critical": 0}
+    for risk in risks:
+        severity_counts[risk["severity"]] = severity_counts.get(risk["severity"], 0) + 1
+
+    return {
+        "risks": risks,
+        "suggested": suggested,
+        "summary": {
+            "total": len(risks),
+            "open": len([risk for risk in risks if risk["status"] != "accepted"]),
+            # Raised by FairMind itself (drift, environmental impact), not typed in by a person.
+            "automated": len([risk for risk in risks if risk.get("source") != "manual_assessment"]),
+            "bySeverity": severity_counts,
+            "suggested": len(suggested),
+        },
+    }
+
+
 def _fetch_risk_dashboard_payload(db: Session, system_id: str) -> Dict[str, Any]:
     rows = db.execute(
         text(
@@ -809,34 +845,7 @@ def _fetch_risk_dashboard_payload(db: Session, system_id: str) -> Dict[str, Any]
         ),
         {"system_id": system_id},
     ).fetchall()
-
-    stored_risks = [_serialize_risk_row(row) for row in rows]
-    automated_risks = _generate_automated_risks(system_id)
-
-    deduped: Dict[str, Dict[str, Any]] = {}
-    for risk in stored_risks + automated_risks:
-        key = f"{risk['systemId']}::{risk['title'].strip().lower()}"
-        if key not in deduped:
-            deduped[key] = risk
-
-    risks = sorted(
-        deduped.values(),
-        key=lambda item: (_severity_rank(item["severity"]), item.get("riskScore", 0.0)),
-        reverse=True,
-    )
-    severity_counts = {"low": 0, "medium": 0, "high": 0, "critical": 0}
-    for risk in risks:
-        severity_counts[risk["severity"]] = severity_counts.get(risk["severity"], 0) + 1
-
-    return {
-        "risks": risks,
-        "summary": {
-            "total": len(risks),
-            "open": len([risk for risk in risks if risk["status"] != "accepted"]),
-            "automated": len([risk for risk in risks if risk.get("source") in {"mit", "ibm"}]),
-            "bySeverity": severity_counts,
-        },
-    }
+    return _risk_dashboard(rows, system_id)
 
 
 def _fetch_stored_risk_summary(db: Session, system_id: str) -> Dict[str, Any]:
@@ -894,15 +903,21 @@ def _derive_lifecycle_status(
         "remediate": 52,
         "operate": 88,
     }
-    readiness = stage_base.get(stage, 18)
-    readiness += min(int(evidence_summary.get("linkedEvidence", 0)) * 6, 18)
-    readiness += 14 if evidence_summary.get("decisionReadiness") == "review_ready" else 0
-    readiness += 10 if approval_request and approval_request.get("status") == "approved" else 0
-    readiness -= int(risk_summary.get("bySeverity", {}).get("critical", 0)) * 18
-    readiness -= int(risk_summary.get("bySeverity", {}).get("high", 0)) * 10
-    readiness -= int(remediation_summary.get("activeTasks", 0)) * 8
-    readiness -= max(0, len(evidence_summary.get("missingSignals", [])) - 1) * 5
-    readiness = _clamp(round(readiness), 5, 100)
+    # Readiness credits lifecycle progress only once evidence backs it: a system
+    # with no evidence reads 0, whatever stage it was registered at.
+    if int(evidence_summary.get("totalEvidence", 0)) == 0:
+        readiness = 0
+    else:
+        readiness = stage_base.get(stage, 18)
+        readiness += min(int(evidence_summary.get("linkedEvidence", 0)) * 6, 18)
+        readiness += 14 if evidence_summary.get("decisionReadiness") == "review_ready" else 0
+        readiness += 10 if approval_request and approval_request.get("status") == "approved" else 0
+        readiness -= int(risk_summary.get("bySeverity", {}).get("critical", 0)) * 18
+        readiness -= int(risk_summary.get("bySeverity", {}).get("high", 0)) * 10
+        readiness -= int(remediation_summary.get("activeTasks", 0)) * 8
+        readiness -= max(0, len(evidence_summary.get("missingSignals", [])) - 1) * 5
+        # Floor of 5 once evidence exists, so 0% only ever means "no evidence yet".
+        readiness = _clamp(round(readiness), 5, 100)
 
     failed_controls = (
         int(risk_summary.get("open", 0))
@@ -1225,17 +1240,14 @@ async def create_ai_system(request: AISystemCreateRequest, http: Request, db: Se
         },
     )
     db.commit()
-    return {
-        "id": system_id,
-        "workspaceId": request.workspace_id,
-        "name": request.name,
-        "owner": request.owner,
-        "riskTier": request.risk_tier,
-        "lifecycleStage": request.lifecycle_stage,
-        "metadata": request.metadata,
-        "createdAt": now,
-        "updatedAt": now,
-    }
+    row = db.execute(
+        text(
+            "SELECT id, workspace_id, name, owner, risk_tier, lifecycle_stage, metadata_json, created_at, updated_at "
+            "FROM governance_ai_systems WHERE id = :id"
+        ),
+        {"id": system_id},
+    ).fetchone()
+    return _build_ai_system_payload(db, row)
 
 
 @router.get("/systems")
@@ -1319,34 +1331,7 @@ async def get_risk_dashboard(
             ),
             {"org_id": membership.org_id},
         ).fetchall()
-
-    stored_risks = [_serialize_risk_row(row) for row in rows]
-    automated_risks = _generate_automated_risks(system_id or "org-default")
-
-    deduped: Dict[str, Dict[str, Any]] = {}
-    for risk in stored_risks + automated_risks:
-        key = f"{risk['systemId']}::{risk['title'].strip().lower()}"
-        if key not in deduped:
-            deduped[key] = risk
-
-    risks = sorted(
-        deduped.values(),
-        key=lambda item: (_severity_rank(item["severity"]), item.get("riskScore", 0.0)),
-        reverse=True,
-    )
-    severity_counts = {"low": 0, "medium": 0, "high": 0, "critical": 0}
-    for risk in risks:
-        severity_counts[risk["severity"]] = severity_counts.get(risk["severity"], 0) + 1
-
-    return {
-        "risks": risks,
-        "summary": {
-            "total": len(risks),
-            "open": len([risk for risk in risks if risk["status"] != "accepted"]),
-            "automated": len([risk for risk in risks if risk.get("source") in {"mit", "ibm"}]),
-            "bySeverity": severity_counts,
-        },
-    }
+        return _risk_dashboard(rows, None)
 
 
 @router.post("/risks/assess")
