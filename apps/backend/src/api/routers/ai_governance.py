@@ -857,14 +857,18 @@ def _fetch_stored_risk_summary(db: Session, system_id: str) -> Dict[str, Any]:
     ).fetchall()
     severity_counts = {"low": 0, "medium": 0, "high": 0, "critical": 0}
     open_count = 0
+    open_high_or_critical = 0
     for row in rows:
         severity = row[0] if row[0] in severity_counts else "medium"
         severity_counts[severity] += 1
         if row[1] != "accepted":
             open_count += 1
+            if severity in ("high", "critical"):
+                open_high_or_critical += 1
     return {
         "total": len(rows),
         "open": open_count,
+        "openHighOrCritical": open_high_or_critical,
         "automated": 0,
         "bySeverity": severity_counts,
     }
@@ -885,7 +889,12 @@ def _derive_lifecycle_status(
 
     if approval_request and approval_request.get("status") == "approved":
         stage = "operate"
-    elif remediation_summary.get("activeTasks", 0) > 0 or remediation_summary.get("byStatus", {}).get("blocked", 0) > 0:
+    # SYSTEM_JOURNEY.md: Remediate lasts until no open high or critical risk and no active task.
+    elif (
+        risk_summary.get("openHighOrCritical", 0) > 0
+        or remediation_summary.get("activeTasks", 0) > 0
+        or remediation_summary.get("byStatus", {}).get("blocked", 0) > 0
+    ):
         stage = "remediate"
     elif (
         risk_summary.get("total", 0) > 0
