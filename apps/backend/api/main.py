@@ -509,7 +509,6 @@ _include_router("api.routes.registration", prefix="/api/v1", tags=["registration
 _include_router("api.routes.org_management", tags=["organization-management"], required=False)
 _include_router("api.routes.compliance", tags=["compliance"], required=False)
 _include_router("api.routes.compliance_audit", tags=["compliance-audit"], required=False)
-_include_router("api.routes.policies", tags=["policies"], required=False)
 # The legacy /api/approvals router writes the same approval tables without the
 # tenant and actor guarantees enforced by the primary governance API. Keep it
 # unmounted; clients must use /api/v1/ai-governance approval endpoints.

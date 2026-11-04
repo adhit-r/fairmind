@@ -318,8 +318,6 @@ UNSIGNED = [
     ("GET", "/api/v1/database/audit-logs"),
     ("GET", "/api/v1/models"),
     ("GET", "/api/v1/integrations"),
-    ("GET", "/api/policies"),
-    ("POST", "/api/policies"),
     ("POST", "/api/v1/india/check"),
     ("GET", "/api/v1/india/trends?system_id=system-a&framework=dpdp_act_2023"),
 ]
@@ -458,60 +456,6 @@ def test_mlops_logging_needs_mutation_permission_and_tags_the_organisation(clien
     assert client.post("/api/v1/mlops/log-test", headers=A_MEMBER, json=body).status_code == 403
     assert client.post("/api/v1/mlops/log-test", headers=A, json=body).status_code == 200
     assert seen["metadata"]["org_id"] == ORG_A
-
-
-# --------------------------------------------------------------------------- policies
-
-
-@pytest.fixture
-def policies(client):
-    from api.routes import policies as policy_routes
-
-    policy_routes._tables_ready = False
-    yield
-    policy_routes._tables_ready = False
-
-
-def _policy(client, headers, name="Release gate"):
-    return client.post(
-        "/api/policies", headers=headers, json={"name": name, "framework": "eu_ai_act", "rules": [{"id": "r1"}]}
-    )
-
-
-def test_policies_are_per_organisation(client, policies):
-    created = _policy(client, A)
-    assert created.status_code == 200
-    policy_id = created.json()["id"]
-
-    assert [p["id"] for p in client.get("/api/policies", headers=A).json()] == [policy_id]
-    assert client.get("/api/policies", headers=B).json() == []
-    assert client.get(f"/api/policies/{policy_id}", headers=B).status_code == 404
-    assert client.get(f"/api/policies/{policy_id}/versions", headers=B).status_code == 404
-    assert client.patch(f"/api/policies/{policy_id}", headers=B, json={"status": "review"}).status_code == 404
-
-    untouched = client.get(f"/api/policies/{policy_id}", headers=A).json()
-    assert untouched["status"] == "draft" and untouched["version"] == 1
-
-
-def test_policy_changes_need_mutation_permission(client, policies):
-    policy_id = _policy(client, A).json()["id"]
-    assert _policy(client, A_MEMBER, "Member policy").status_code == 403
-    assert client.patch(f"/api/policies/{policy_id}", headers=A_MEMBER, json={"status": "review"}).status_code == 403
-    assert client.get(f"/api/policies/{policy_id}", headers=A_MEMBER).status_code == 200
-
-
-def test_a_policy_with_no_organisation_is_visible_to_nobody(client, policies, db):
-    assert client.get("/api/policies", headers=A).status_code == 200  # creates the org_id column
-    with db[1]() as session:
-        session.execute(
-            text(
-                "INSERT INTO governance_policies (id, name, framework, rules_json, status, version, created_at, updated_at) "
-                "VALUES ('legacy', 'Legacy', 'eu_ai_act', '[]', 'draft', 1, 'now', 'now')"
-            )
-        )
-        session.commit()
-    assert client.get("/api/policies", headers=A).json() == []
-    assert client.get("/api/policies/legacy", headers=B).status_code == 404
 
 
 # --------------------------------------------------------------------------- core and database legacy tables
