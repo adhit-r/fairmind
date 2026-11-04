@@ -1,0 +1,101 @@
+---
+import { runWorkflow } from '../../lib/catalogue';
+import { SHORT } from '../../scripts/run-machine';
+const steps = runWorkflow.steps;
+---
+
+<section class="rm" id="how-a-run-works" data-run-machine aria-labelledby="rm-title">
+  <div class="wrap rm-head">
+    <p class="label reveal">How a run works</p>
+    <h2 id="rm-title" class="reveal">The agent stops at you. <em>Nothing moves until you decide.</em></h2>
+    <p class="rm-intro reveal">
+      One real workflow from the catalogue, the deployment release gate, taken apart on a bench. Every
+      station reads its step definition. Press one to look inside. The line backs up at the gate until a person decides.
+    </p>
+  </div>
+
+  <div class="rm-stage">
+    <canvas data-rm-canvas role="img" aria-label="A 3D model of the deployment release gate workflow: evidence tiles move through nine stations and wait at the approval gate."></canvas>
+    <div class="rm-labels" data-rm-labels aria-hidden="true"></div>
+
+    <div class="rm-hud">
+      <header class="rm-run">
+        <span class="rm-chip">Example run</span>
+        <b>{runWorkflow.name}</b>
+        <span><span data-rm-run>run</span> · {runWorkflow.id} · {runWorkflow.autonomy}</span>
+      </header>
+
+      <nav class="rm-stations" aria-label="Steps in this workflow">
+        <ol>
+          {steps.map((s, i) => (
+            <li>
+              <button type="button" data-rm-station={i} aria-pressed="false" class:list={[s.kind === 'ask' && 'is-gate']}>
+                <span class="rm-n">{String(i + 1).padStart(2, '0')}</span>
+                <span class="rm-t">{s.kind === 'ask' ? 'You decide' : SHORT[s.kind] ?? s.type}</span>
+                <span class="rm-w" data-rm-who>{s.kind === 'ask' ? 'You' : 'Agent'}</span>
+              </button>
+            </li>
+          ))}
+        </ol>
+      </nav>
+
+      <aside class="rm-readout" aria-live="polite" aria-label="Selected step">
+        <p class="rm-idx" data-rm-r="index"></p>
+        <h3 data-rm-r="title"></h3>
+        <p class="rm-detail" data-rm-r="detail"></p>
+        <dl>
+          <div><dt>Runs</dt><dd data-rm-r="who"></dd></div>
+          <div><dt>Permission</dt><dd data-rm-r="permission"></dd></div>
+          <div><dt>Leaves behind</dt><dd data-rm-r="output"></dd></div>
+          <div><dt>If it fails</dt><dd data-rm-r="failure"></dd></div>
+        </dl>
+      </aside>
+
+      <div class="rm-gate" data-rm-gate>
+        <div class="rm-proposal">
+          <p class="label">At the gate · {runWorkflow.approver}</p>
+          <p data-rm-proposal></p>
+          <p class="rm-sla" data-rm-sla></p>
+        </div>
+        <div class="rm-actions">
+          <button type="button" class="button button-primary button-compact" data-rm-decide="approve" disabled>Approve</button>
+          <button type="button" class="button button-compact" data-rm-decide="edits" disabled>Approve with edits</button>
+          <button type="button" class="button button-compact" data-rm-decide="changes" disabled>Request changes</button>
+          <button type="button" class="button button-compact" data-rm-decide="reject" disabled>Reject</button>
+        </div>
+        <p class="rm-caption" data-rm-caption>The tour never presses this. A person does.</p>
+      </div>
+
+      <footer class="rm-foot">
+        <div class="rm-mode" role="group" aria-label="Show the steps as designed or as they run today">
+          <button type="button" data-rm-mode="designed" aria-pressed="true">As designed</button>
+          <button type="button" data-rm-mode="today" aria-pressed="false">As it runs today</button>
+        </div>
+        <p class="rm-ledger"><b data-rm-filed>0</b> filed by you · ledger head <code data-rm-head>none yet</code></p>
+      </footer>
+    </div>
+
+    <svg class="rm-cursor" data-rm-cursor viewBox="0 0 20 20" aria-hidden="true"><path d="M3 2l12 7-5.5 1.2L7 16z" /></svg>
+  </div>
+
+  <ol class="rm-fallback">
+    {steps.map((s) => (<li><b>{s.title}</b> {s.detail.split('.')[0]}.</li>))}
+  </ol>
+  <p class="visually-hidden" data-rm-status aria-live="polite"></p>
+
+  <script type="application/json" data-rm-data set:html={JSON.stringify(runWorkflow)} />
+</section>
+
+<script>
+  import { mountRunMachine } from '../../scripts/run-machine';
+  const root = document.querySelector<HTMLElement>('[data-run-machine]');
+  const raw = root?.querySelector('[data-rm-data]')?.textContent;
+  if (root && raw) {
+    try {
+      mountRunMachine(root, JSON.parse(raw));
+      root.dataset.live = '';
+    } catch (err) {
+      console.error(err);
+    }
+  }
+</script>

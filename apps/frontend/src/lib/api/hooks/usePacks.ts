@@ -369,6 +369,57 @@ export const useRun = (runId: string | undefined) =>
 export const useRuns = () => useOrgResource<RunSummary[]>(API_ENDPOINTS.packs.runs)
 export const useWaitingRuns = () => useOrgResource<RunSummary[]>(`${API_ENDPOINTS.packs.runs}?status=waiting`)
 
+/** A model provider the organisation can bring its own key for. */
+export interface AIProviderOption {
+  id: string
+  name: string
+  kind: 'anthropic' | 'openai'
+  needs: Array<'baseUrl' | 'endpoint' | 'region'>
+  key: 'required' | 'optional'
+  default_model: string
+  model_hint: string
+  lists_models: boolean
+  docs: string
+}
+
+/** The organisation's saved provider. The key itself never comes back, only its last four characters. */
+export interface AIProviderConfig {
+  provider: string
+  providerName: string
+  model: string
+  baseUrl?: string
+  endpoint?: string
+  region?: string
+  hasKey: boolean
+  keyHint: string | null
+  keyReadable: boolean
+  enabled: boolean
+  testedOk: boolean | null
+  testedAt: string | null
+  testMessage: string | null
+  updatedAt: string
+}
+
+export interface AIProviderBody {
+  provider: string
+  model: string
+  apiKey?: string
+  baseUrl?: string
+  endpoint?: string
+  region?: string
+  enabled: boolean
+}
+
+export interface AIProviderTest {
+  ok: boolean
+  message: string
+  models: string[]
+  latencyMs: number | null
+}
+
+export const useAIProviders = () => useOrgResource<AIProviderOption[]>(API_ENDPOINTS.packs.aiProviders)
+export const useAIProvider = () => useOrgResource<{ config: AIProviderConfig | null }>(API_ENDPOINTS.packs.aiProvider)
+
 export interface MutationResult<T> {
   data: T | null
   error: string | null
@@ -406,6 +457,11 @@ export function usePackActions() {
       publishDraft: (workflowId: string) => send<Workflow>(API_ENDPOINTS.packs.publishDraft(workflowId), (p) => apiClient.post(p)),
       submitStepOutput: (runId: string, stepId: string, summary: string, route?: string) =>
         send<Run>(API_ENDPOINTS.packs.stepOutput(runId, stepId), (p) => apiClient.post(p, { summary, ...(route ? { route } : {}) })),
+      runAgent: (runId: string, stepId: string) => send<Run>(API_ENDPOINTS.packs.agentStep(runId, stepId), (p) => apiClient.post(p)),
+      saveAIProvider: (body: AIProviderBody) =>
+        send<{ config: AIProviderConfig | null }>(API_ENDPOINTS.packs.aiProvider, (p) => apiClient.put(p, body)),
+      deleteAIProvider: () => send<{ config: null }>(API_ENDPOINTS.packs.aiProvider, (p) => apiClient.delete(p)),
+      testAIProvider: (body: AIProviderBody) => send<AIProviderTest>(API_ENDPOINTS.packs.aiProviderTest, (p) => apiClient.post(p, body)),
     }
   }, [orgId])
 }

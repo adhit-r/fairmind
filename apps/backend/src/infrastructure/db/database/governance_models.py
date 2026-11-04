@@ -3103,7 +3103,7 @@ class GovernanceApprovalWorkflow(Base):
     name = Column(String, nullable=False)
     entity_type = Column(String, nullable=False)
     steps_json = Column(Text, nullable=False, default="[]")
-    is_active = Column(Integer, nullable=False, default=1)
+    is_active = Column(Boolean, nullable=False, default=True)
     created_by = Column(String, nullable=True)
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
     updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
@@ -3410,6 +3410,25 @@ class WorkflowVersion(Base):
     __table_args__ = (
         Index("idx_workflow_versions_org_wf_version", "org_id", "workflow_id", "version", unique=True),
     )
+
+
+class OrgAIProvider(Base):
+    """The model an organization brings for the packs agent: one per organization, key encrypted at rest."""
+
+    __tablename__ = "org_ai_providers"
+
+    org_id = Column(String, primary_key=True)
+    provider = Column(String, nullable=False)
+    model = Column(String, nullable=False, default="")
+    fields_json = Column(Text, nullable=False, default="{}")  # baseUrl, endpoint or region, per provider
+    api_key_enc = Column(Text, nullable=True)
+    key_hint = Column(String, nullable=True)
+    enabled = Column(Boolean, nullable=False, default=True)
+    tested_ok = Column(Boolean, nullable=True)
+    tested_at = Column(String, nullable=True)
+    test_message = Column(String, nullable=True)
+    updated_by = Column(String, nullable=True)
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
 
 
 class GovernanceEvidencePack(Base):
