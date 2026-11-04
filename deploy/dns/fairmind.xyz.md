@@ -14,7 +14,6 @@ Netlify; only the nameservers change.
 | `@` | TXT | `v=spf1 include:zohomail.com ~all` | | SPF |
 | `zmail._domainkey` | TXT | `v=DKIM1; k=rsa; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDCsW6lpqJR6M30KhGKQJf7WcEiW0ufCAWaJydC5a4GJrJ9263mX7TGME6Gy54kHvtTbvF1j7bLNmBTU96JSHdJRARcNcdz/EfThJtADkSJuCM4QuvWTCA0tO3kHDmzK2NrSjAp1wk+5hOsQfGmzbDo9pCiBrnlD0BgODTheVVvOwIDAQAB` | | Zoho DKIM |
 | `app-demo` | A | `75.2.60.5` | DNS only | Netlify, fairmind-demo-app |
-| `api` | A | `75.2.60.5` | DNS only | Netlify (api.fairmind.xyz zone exists in Netlify DNS) |
 | `www` | CNAME | `fairmind-website-t41tz.netlify.app` | DNS only | Required. Netlify puts `www` on the apex certificate and refuses to issue or renew it while `www` points elsewhere. Netlify redirects `www` to the apex. |
 | `blog` | CNAME | `fairmind-website-t41tz.netlify.app` | DNS only | Netlify alias on the website site; netlify.toml 301s every path to `fairmind.xyz/blog/` |
 | `docs` | CNAME | `fairmind-docs.netlify.app` | DNS only | Docs site |
@@ -22,7 +21,7 @@ Netlify; only the nameservers change.
 Not present today and worth adding: `_dmarc TXT "v=DMARC1; p=none; rua=mailto:support@fairmind.xyz"`.
 
 Cloudflare's import on "Add a site" usually finds the A, MX and SPF records. Check the DKIM
-record and the `api` and `app-demo` records by hand; it often misses them.
+record and the `app-demo` record by hand; it often misses them.
 
 ## Steps
 
