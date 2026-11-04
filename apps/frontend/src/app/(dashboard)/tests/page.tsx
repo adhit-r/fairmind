@@ -284,7 +284,7 @@ function RunsTable({ runs, plans }: { runs: EvaluationRun[]; plans: EvaluationPl
 
   const th = `px-2 py-2 ${LABEL}`
   return (
-    <div className="mt-3 max-w-full overflow-x-auto">
+    <div className="relative mt-3 max-w-full overflow-x-auto">
       <table aria-label="Recent evaluation runs" className="w-full min-w-[840px] border-collapse text-left text-[13px]">
         <thead>
           <tr>
@@ -422,7 +422,7 @@ export default function EvaluationRunsPage() {
   const ready = Boolean(selectedOrg && realSystem) && !initialLoading
 
   return (
-    <div data-testid="evaluation-runs-workbench" className="grid gap-4 text-[var(--fm-ink)]">
+    <div data-testid="evaluation-runs-workbench" className="grid grid-cols-1 gap-4 text-[var(--fm-ink)]">
       <div className="text-[12.5px] font-medium text-[var(--fm-ink2)]">
         <Link href="/dashboard" className="hover:text-[var(--fm-ink)]">Today</Link> · Evaluations
       </div>
