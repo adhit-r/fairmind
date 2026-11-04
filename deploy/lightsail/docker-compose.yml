@@ -1,13 +1,6 @@
 # Single-box production stack for Lightsail. Database, auth and realtime stay on Neon.
-# Cloudflare Tunnel routes each hostname (see tunnel.yml); the Next.js apps forward /api/proxy/* to their backend.
+# Cloudflare Tunnel routes app.fairmind.xyz (see tunnel.yml); Next.js forwards /api/proxy/* to the backend.
 services:
-  # The website is on Netlify (fairmind.xyz); the old host just redirects there
-  redirect:
-    image: caddy:2.10-alpine
-    volumes:
-      - ./redirect.Caddyfile:/etc/caddy/Caddyfile:ro
-    restart: unless-stopped
-
   backend:
     build: ../../apps/backend
     image: fairmind-backend
@@ -33,22 +26,6 @@ services:
     depends_on: [backend]
     restart: unless-stopped
 
-  # Public demo: same images, isolated Neon "demo" branch with synthetic data only
-  backend-demo:
-    image: fairmind-backend
-    env_file: backend-demo.env
-    volumes:
-      - demo-uploads:/app/uploads
-      - demo-datasets:/app/datasets
-    restart: unless-stopped
-
-  frontend-demo:
-    image: fairmind-frontend
-    environment:
-      BACKEND_INTERNAL_URL: http://backend-demo:8000
-    depends_on: [backend-demo]
-    restart: unless-stopped
-
   # Outbound-only Cloudflare Tunnel: no inbound ports, TLS ends at Cloudflare
   cloudflared:
     image: cloudflare/cloudflared:2026.10.7
@@ -56,12 +33,10 @@ services:
     volumes:
       - ./tunnel.yml:/etc/cloudflared/tunnel.yml:ro
       - ./tunnel.json:/etc/cloudflared/creds.json:ro
-    depends_on: [redirect, frontend, frontend-demo]
+    depends_on: [frontend]
     restart: unless-stopped
 
 volumes:
   uploads:
   datasets:
   models:
-  demo-uploads:
-  demo-datasets:
