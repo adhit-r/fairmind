@@ -43,6 +43,7 @@ curl -fsSL https://get.docker.com | sudo sh && sudo usermod -aG docker ubuntu
 ```bash
 cloudflared tunnel create fairmind
 cloudflared tunnel route dns fairmind fairmind.axonome.xyz
+cloudflared tunnel route dns fairmind app.fairmind.xyz   # once fairmind.xyz is on Cloudflare DNS, see deploy/dns/fairmind.xyz.md
 scp ~/.cloudflared/<tunnel-id>.json ubuntu@<static-ip>:fairmind/deploy/lightsail/tunnel.json
 ```
 
@@ -50,10 +51,10 @@ On the instance: `chmod 644 tunnel.json` (cloudflared runs as a non-root user in
 
 ## 3. Config (on the instance, in `deploy/lightsail/`; all gitignored)
 
-- `.env`: `TUNNEL_ID=<tunnel-id>`, plus build-time `NEXT_PUBLIC_*` values if used.
+- `.env`: `TUNNEL_ID=<tunnel-id>`, `PUBLIC_APP_URL=https://app.fairmind.xyz` (the website's Sign in target), plus build-time `NEXT_PUBLIC_*` values if used.
 - `backend.env`: the keys in `apps/backend/.env.example` with real values. Required:
   `ENVIRONMENT=production`, `DATABASE_URL` (Neon), `SECRET_KEY`, `JWT_SECRET`,
-  `ALLOWED_ORIGINS=https://fairmind.axonome.xyz`. Leave `REDIS_URL` unset.
+  `ALLOWED_ORIGINS=https://app.fairmind.xyz,https://fairmind-app.axonome.xyz`. Leave `REDIS_URL` unset.
 - `frontend.env`: server-side frontend keys (`DATABASE_URL`, `NEON_REALTIME_SECRET`, `NEON_REALTIME_URL`).
 
 ## 4. Deploy / update
