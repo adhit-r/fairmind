@@ -2,12 +2,15 @@
 
 import copy
 import json
+import os
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, text
+from sqlalchemy import Boolean, create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -16,6 +19,7 @@ from api.main import app
 from api.routes import pack_catalogue
 from config.auth import User as AuthUser, UserRole, auth_manager
 from database.connection import Base, get_db
+from database.governance_models import GovernanceApprovalWorkflow
 from database.models import Organization, OrganizationMember, User
 from middleware.security import RateLimitMiddleware
 
@@ -39,11 +43,9 @@ def no_rate_limit():
     RateLimitMiddleware.check_rate_limit = original
 
 
-@pytest.fixture(autouse=True)
-def tmp_database():
-    import database.governance_models  # noqa: F401
-
-    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+@contextmanager
+def _serving(engine):
+    """Build every table from the models on engine and point the app at it."""
     Base.metadata.create_all(engine)
     session_factory = sessionmaker(bind=engine)
 
@@ -61,8 +63,33 @@ def tmp_database():
     yield engine
     app.dependency_overrides.clear()
     ai_governance._tables_ready = saved_ready
-    Base.metadata.drop_all(engine)
     engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def tmp_database():
+    with _serving(create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)) as engine:
+        yield engine
+        Base.metadata.drop_all(engine)
+
+
+@pytest.fixture
+def pg_database():
+    """A fresh schema on FAIRMIND_TEST_POSTGRES_URL, built from the models alone as a new install does."""
+    database_url = os.getenv("FAIRMIND_TEST_POSTGRES_URL")
+    if not database_url:
+        pytest.skip("requires FAIRMIND_TEST_POSTGRES_URL pointing to disposable PostgreSQL")
+    schema = f"fairmind_packs_{uuid.uuid4().hex}"
+    admin = create_engine(database_url, isolation_level="AUTOCOMMIT")
+    with admin.connect() as conn:
+        conn.execute(text(f'CREATE SCHEMA "{schema}"'))
+    try:
+        with _serving(create_engine(database_url, connect_args={"options": f"-csearch_path={schema}"})) as engine:
+            yield engine
+    finally:
+        with admin.connect() as conn:
+            conn.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
+        admin.dispose()
 
 
 def _client(engine, org_id: uuid.UUID, role: str = "owner", token_role: UserRole = UserRole.ADMIN) -> TestClient:
@@ -263,6 +290,20 @@ def test_run_starts_and_waits_on_the_first_step_that_needs_a_person(tmp_database
     assert run["chainValid"] and run["events"][0]["prevHash"] == "0" * 64
     assert client.get(f"{PACKS}/workflows/{WORKFLOW}").json()["latestRun"]["id"] == run["id"]
     assert [r["id"] for r in client.get(f"{PACKS}/runs?status=waiting").json()] == [run["id"]]
+
+
+def test_approval_workflow_is_active_matches_the_postgresql_boolean_contract():
+    column = GovernanceApprovalWorkflow.__table__.c.is_active
+    assert isinstance(column.type, Boolean) and column.default.arg is True
+    migration = (Path(__file__).parents[1] / "migrations/008_governance_canonical.sql").read_text()
+    assert "is_active BOOLEAN NOT NULL DEFAULT TRUE" in migration
+
+
+def test_a_model_built_postgres_database_opens_the_approval_gate(pg_database):
+    _, client = _installed_org(pg_database)
+    run = _to_gate(client)
+    assert (run["currentStep"], run["waitingFor"]) == (ASK_STEP, "approval")
+    assert _approval_count(pg_database, run["id"]) == 1
 
 
 def test_approved_run_acts_files_evidence_and_completes(tmp_database):
