@@ -488,6 +488,7 @@ if settings.assurance_v2_enabled:
 else:
     logger.info("Assurance-contract v2 routes are disabled")
 _include_router("api.routes.packs", prefix="/api/v1/packs", tags=["packs"], required=True)
+_include_router("api.routes.evaluation_runs", prefix="/api/v1/packs", tags=["packs"], required=True)
 _include_router("api.routes.environmental", tags=["environmental"], required=False)
 _include_router("api.routes.settings", prefix="/api/v1", tags=["settings"], required=False)
 
