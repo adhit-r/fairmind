@@ -5,7 +5,7 @@ Postgres, auth and realtime stay on Neon. The instance takes no inbound web traf
 The marketing website is not here: Netlify builds `apps/website` from `main` and serves it at fairmind.xyz.
 
 ```
-fairmind-app.axonome.xyz  -> tunnel -> frontend:3000       -> /api/proxy/* -> backend:8000      (Neon production branch)
+app.fairmind.xyz          -> tunnel -> frontend:3000       -> /api/proxy/* -> backend:8000      (Neon production branch)
 fairmind-demo.axonome.xyz -> tunnel -> frontend-demo:3000  -> /api/proxy/* -> backend-demo:8000 (Neon demo branch, synthetic data)
 fairmind.axonome.xyz      -> tunnel -> redirect:80         -> 301 to https://fairmind.xyz
 ```
@@ -54,7 +54,7 @@ On the instance: `chmod 644 tunnel.json` (cloudflared runs as a non-root user in
 - `.env`: `TUNNEL_ID=<tunnel-id>`, `PUBLIC_APP_URL=https://app.fairmind.xyz` (the website's Sign in target), plus build-time `NEXT_PUBLIC_*` values if used.
 - `backend.env`: the keys in `apps/backend/.env.example` with real values. Required:
   `ENVIRONMENT=production`, `DATABASE_URL` (Neon), `SECRET_KEY`, `JWT_SECRET`,
-  `ALLOWED_ORIGINS=https://app.fairmind.xyz,https://fairmind-app.axonome.xyz`. Leave `REDIS_URL` unset.
+  `ALLOWED_ORIGINS=https://app.fairmind.xyz`. Leave `REDIS_URL` unset.
 - `frontend.env`: server-side frontend keys (`DATABASE_URL`, `NEON_REALTIME_SECRET`, `NEON_REALTIME_URL`).
 
 ## 4. Deploy / update
