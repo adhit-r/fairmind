@@ -422,7 +422,7 @@ export default function EvaluationRunsPage() {
   const ready = Boolean(selectedOrg && realSystem) && !initialLoading
 
   return (
-    <div data-testid="evaluation-runs-workbench" className="grid gap-4 text-[var(--fm-ink)]">
+    <div data-testid="evaluation-runs-workbench" className="grid grid-cols-1 gap-4 text-[var(--fm-ink)]">
       <div className="text-[12.5px] font-medium text-[var(--fm-ink2)]">
         <Link href="/dashboard" className="hover:text-[var(--fm-ink)]">Today</Link> · Evaluations
       </div>
