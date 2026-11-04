@@ -41,7 +41,7 @@ const nextConfig = {
     // analysis, which loads `jspdf.node.min.js` and pulls in fflate's node
     // worker code that Turbopack cannot statically resolve. Force the browser
     // ES bundle for both client and server passes — jspdf is only ever
-    // invoked from `'use client'` event handlers (e.g. audit-reports/page.tsx),
+    // invoked from `'use client'` event handlers (e.g. reports/components/AssuranceReportStudio.tsx),
     // so the SSR pre-pass never actually executes the code.
     resolveAlias: {
       jspdf: 'jspdf/dist/jspdf.es.min.js',

@@ -5,7 +5,7 @@ import {
   buildAssurancePdfLines,
   reportMatchesAssuranceScope,
   type AssurancePdfContext,
-} from './AssuranceReportStudio'
+} from './assurancePdf'
 import type { SavedReport } from '../../audit-reports/components/ReportHistoryTable'
 
 const report: SavedReport = {
