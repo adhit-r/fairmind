@@ -13,13 +13,17 @@ from config.database import get_database, get_db_connection
 from config.cache import cache_manager, cached, cache_key_for_model, cache_key_for_dataset
 from config.auth import get_current_active_user, require_permission, TokenData, Permissions, auth_manager
 from config.settings import settings
-from core.decorators.org_isolation import isolate_by_org
+from api.routes.org_scope import ORG_MEMBER_USER_IDS, org_claim, org_mutator, plain_id
+from src.application.services.governance_assurance_service import OrgMembership
 
 router = APIRouter(prefix="/core", tags=["core"])
 
 logger = logging.getLogger(__name__)
 
 # No mock data - all endpoints return real data from database or proper errors
+
+# audit_logs has no tenant column; an organisation's activity is what its active members did.
+_ORG_AUDIT_FILTER = f"{plain_id('user_id')} IN ({ORG_MEMBER_USER_IDS})"
 
 @router.get("/")
 async def root():
@@ -40,13 +44,11 @@ async def health_check():
     }
 
 @router.get("/models")
-@isolate_by_org
 async def get_models(
     request: Request,
     limit: int = Query(10, ge=1, le=100, description="Number of models to return"),
     offset: int = Query(0, ge=0, description="Number of models to skip"),
-    org_id: str = None,
-    user_id: str = None,
+    m: OrgMembership = Depends(org_claim),
 ):
     """
     Get organization's models from database with caching.
@@ -89,6 +91,8 @@ async def get_models(
     - `429 Too Many Requests`: Rate limit exceeded
     - `500 Internal Server Error`: Server error during database query
     """
+    org_id, user_id = m.org_id, m.user_id
+
     # In production, require authentication
     if not settings.is_development:
         try:
@@ -147,12 +151,13 @@ async def get_models(
 async def get_datasets(
     limit: int = Query(10, ge=1, le=100, description="Number of datasets to return"),
     offset: int = Query(0, ge=0, description="Number of datasets to skip"),
-    current_user: TokenData = Depends(require_permission(Permissions.DATASET_READ))
+    current_user: TokenData = Depends(require_permission(Permissions.DATASET_READ)),
+    m: OrgMembership = Depends(org_claim),
 ):
-    """Get all datasets from database with caching"""
+    """Get this organisation's datasets from database with caching"""
     try:
         # Try cache first
-        cache_key = f"datasets:list:{limit}:{offset}"
+        cache_key = f"datasets:list:{m.org_id}:{limit}:{offset}"
         cached_datasets = await cache_manager.get(cache_key)
         
         if cached_datasets is not None:
@@ -165,10 +170,11 @@ async def get_datasets(
                 SELECT id, name, description, source, size, columns, 
                        upload_date, tags, file_path, file_type
                 FROM datasets 
+                WHERE org_id = :org_id
                 ORDER BY upload_date DESC 
                 LIMIT :limit OFFSET :offset
             """
-            datasets = await conn.fetch_all(query, {"limit": limit, "offset": offset})
+            datasets = await conn.fetch_all(query, {"org_id": m.org_id, "limit": limit, "offset": offset})
             
             # Convert to dict format
             datasets_data = [dict(dataset) for dataset in datasets]
@@ -191,19 +197,21 @@ async def get_datasets(
 @router.get("/activity/recent")
 async def get_recent_activity(
     limit: int = Query(10, ge=1, le=100, description="Number of activities to return"),
-    current_user: TokenData = Depends(require_permission(Permissions.SYSTEM_MONITOR))
+    current_user: TokenData = Depends(require_permission(Permissions.SYSTEM_MONITOR)),
+    m: OrgMembership = Depends(org_claim),
 ):
-    """Get recent activity from database"""
+    """Get this organisation's recent activity from database"""
     try:
         async with get_db_connection() as conn:
             query = """
                 SELECT id, action as type, resource_type, resource_id, 
                        created_at as timestamp, user_id
                 FROM audit_logs 
+                WHERE """ + _ORG_AUDIT_FILTER + """
                 ORDER BY created_at DESC 
                 LIMIT :limit
             """
-            activities = await conn.fetch_all(query, {"limit": limit})
+            activities = await conn.fetch_all(query, {"org_id": m.org_id, "limit": limit})
             
             activities_data = []
             for activity in activities:
@@ -225,13 +233,19 @@ async def get_recent_activity(
         raise HTTPException(status_code=500, detail=f"Failed to fetch recent activity: {str(e)}")
 
 @router.get("/governance/metrics")
-@cached(ttl=300)  # Cache for 5 minutes
 async def get_governance_metrics(
-    current_user: TokenData = Depends(require_permission(Permissions.SYSTEM_MONITOR))
+    current_user: TokenData = Depends(require_permission(Permissions.SYSTEM_MONITOR)),
+    m: OrgMembership = Depends(org_claim),
 ):
-    """Get governance metrics from database with caching"""
+    """Get this organisation's governance metrics from database with caching"""
     try:
+        cache_key = f"governance:metrics:{m.org_id}"
+        cached_metrics = await cache_manager.get(cache_key)
+        if cached_metrics is not None:
+            return cached_metrics
+
         # Try to get real metrics from database
+        params = {"org_id": m.org_id}
         async with get_db_connection() as conn:
             # Get model counts
             model_query = """
@@ -239,33 +253,36 @@ async def get_governance_metrics(
                     COUNT(*) as total_models,
                     COUNT(CASE WHEN status = 'active' THEN 1 END) as active_models
                 FROM models
+                WHERE org_id = :org_id
             """
-            model_metrics = await conn.fetch_one(model_query)
+            model_metrics = await conn.fetch_one(model_query, params)
             
             # Get dataset count
-            dataset_query = "SELECT COUNT(*) as total_datasets FROM datasets"
-            dataset_metrics = await conn.fetch_one(dataset_query)
+            dataset_query = "SELECT COUNT(*) as total_datasets FROM datasets WHERE org_id = :org_id"
+            dataset_metrics = await conn.fetch_one(dataset_query, params)
             
             # Get recent bias alerts from database
             bias_query = """
                 SELECT COUNT(*) as bias_count
                 FROM bias_test_results
                 WHERE is_biased = true
+                AND org_id = :org_id
                 AND created_at > NOW() - INTERVAL '30 days'
             """
-            bias_result = await conn.fetch_one(bias_query)
+            bias_result = await conn.fetch_one(bias_query, params)
             bias_alerts = bias_result["bias_count"] if bias_result else 0
             
             # Calculate fairness score from recent bias tests
             fairness_query = """
                 SELECT AVG(1.0 - bias_score) * 100 as avg_fairness
                 FROM bias_test_results
-                WHERE created_at > NOW() - INTERVAL '30 days'
+                WHERE org_id = :org_id
+                AND created_at > NOW() - INTERVAL '30 days'
             """
-            fairness_result = await conn.fetch_one(fairness_query)
+            fairness_result = await conn.fetch_one(fairness_query, params)
             fairness_score = float(fairness_result["avg_fairness"]) if fairness_result and fairness_result["avg_fairness"] else 0.0
             
-            return {
+            result = {
                 "success": True,
                 "data": {
                     "totalModels": model_metrics["total_models"] if model_metrics else 2,
@@ -279,36 +296,45 @@ async def get_governance_metrics(
                     "lastUpdated": datetime.now().isoformat()
                 }
             }
+            await cache_manager.set(cache_key, result, ttl=300)
+            return result
             
     except Exception as e:
         logger.error(f"Error fetching governance metrics: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch governance metrics: {str(e)}")
 
 @router.get("/metrics/summary")
-async def get_metrics_summary():
-    """Get metrics summary from database"""
+async def get_metrics_summary(m: OrgMembership = Depends(org_claim)):
+    """Get this organisation's metrics summary from database"""
     try:
+        params = {"org_id": m.org_id}
         async with get_db_connection() as conn:
-            model_count_row = await conn.fetch_one("SELECT COUNT(*) as total_models FROM models")
-            dataset_count_row = await conn.fetch_one("SELECT COUNT(*) as total_datasets FROM datasets")
+            model_count_row = await conn.fetch_one(
+                "SELECT COUNT(*) as total_models FROM models WHERE org_id = :org_id", params
+            )
+            dataset_count_row = await conn.fetch_one(
+                "SELECT COUNT(*) as total_datasets FROM datasets WHERE org_id = :org_id", params
+            )
             simulation_count_row = await conn.fetch_one(
-                "SELECT COUNT(*) as total_simulations FROM simulation_runs"
+                "SELECT COUNT(*) as total_simulations FROM simulation_runs WHERE org_id = :org_id", params
             )
 
             fairness_row = await conn.fetch_one(
                 """
                 SELECT AVG(1.0 - bias_score) * 100 as fairness_score
                 FROM bias_test_results
-                WHERE created_at > NOW() - INTERVAL '30 days'
-                """
+                WHERE org_id = :org_id AND created_at > NOW() - INTERVAL '30 days'
+                """,
+                params,
             )
 
             compliance_row = await conn.fetch_one(
                 """
                 SELECT AVG(compliance_score) as compliance_score
                 FROM compliance_results
-                WHERE created_at > NOW() - INTERVAL '30 days'
-                """
+                WHERE org_id = :org_id AND created_at > NOW() - INTERVAL '30 days'
+                """,
+                params,
             )
 
             metrics = {
@@ -343,9 +369,10 @@ async def create_model(
     model_type: str = Form(...),
     version: str = Form("1.0.0"),
     file: UploadFile = File(...),
-    current_user: TokenData = Depends(require_permission(Permissions.MODEL_WRITE))
+    current_user: TokenData = Depends(require_permission(Permissions.MODEL_WRITE)),
+    m: OrgMembership = Depends(org_mutator),
 ):
-    """Create a new model with database storage and cache invalidation"""
+    """Create a new model in the caller's organisation with database storage and cache invalidation"""
     try:
         # Validate file size
         if file.size > 100 * 1024 * 1024:  # 100MB limit
@@ -359,9 +386,9 @@ async def create_model(
         async with get_db_connection() as conn:
             query = """
                 INSERT INTO models (id, name, description, model_type, version, 
-                                  file_path, file_size, status, created_by, upload_date)
+                                  file_path, file_size, status, created_by, upload_date, org_id)
                 VALUES (:id, :name, :description, :model_type, :version, 
-                        :file_path, :file_size, :status, :created_by, :upload_date)
+                        :file_path, :file_size, :status, :created_by, :upload_date, :org_id)
                 RETURNING *
             """
             
@@ -375,7 +402,8 @@ async def create_model(
                 "file_size": file.size,
                 "status": "active",
                 "created_by": current_user.user_id,
-                "upload_date": datetime.now()
+                "upload_date": datetime.now(),
+                "org_id": m.org_id,
             }
             
             model = await conn.fetch_one(query, model_data)
@@ -411,9 +439,10 @@ async def create_model(
 async def create_dataset(
     name: str = Form(...),
     description: str = Form(...),
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
+    m: OrgMembership = Depends(org_mutator),
 ):
-    """Create a new dataset"""
+    """Create a new dataset in the caller's organisation"""
     try:
         dataset_id = str(uuid.uuid4())
         file_path = f"/datasets/{dataset_id}_{file.filename}"
@@ -433,11 +462,11 @@ async def create_dataset(
             query = """
                 INSERT INTO datasets (
                     id, name, description, file_path, file_size, source,
-                    upload_date, file_type, columns
+                    upload_date, file_type, columns, org_id, created_by
                 )
                 VALUES (
                     :id, :name, :description, :file_path, :file_size, :source,
-                    :upload_date, :file_type, :columns
+                    :upload_date, :file_type, :columns, :org_id, :created_by
                 )
                 RETURNING id, name, description, file_path, file_size, source, upload_date, file_type, columns
             """
@@ -454,6 +483,8 @@ async def create_dataset(
                     "upload_date": datetime.now(),
                     "file_type": dataset_data["file_type"],
                     "columns": json.dumps(dataset_data["schema_json"]),
+                    "org_id": m.org_id,
+                    "created_by": m.user_id,
                 },
             )
 

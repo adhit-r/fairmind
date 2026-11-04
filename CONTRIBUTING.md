@@ -1,105 +1,122 @@
 # Contributing to FairMind
 
-Thanks for your interest in contributing to FairMind! This guide will get you up and running.
+Thanks for your interest in FairMind. This guide gets you from a fresh clone to an open pull request.
 
 ## Prerequisites
 
 - **Python 3.11+** and [uv](https://docs.astral.sh/uv/getting-started/installation/) (backend)
 - **Node.js 20+** and npm (frontend)
-- **PostgreSQL** (local or [Neon](https://neon.tech) free tier)
 - **Git**
 
-## Getting Started
+PostgreSQL is optional. The backend uses a local SQLite file unless you set `DATABASE_URL`.
+
+## Getting started
 
 ### 1. Fork and clone
+
+Fork the repository on GitHub, then:
 
 ```bash
 git clone https://github.com/<your-username>/fairmind.git
 cd fairmind
+git remote add upstream https://github.com/adhit-r/fairmind.git
 ```
 
-### 2. Backend setup
+### 2. Backend
 
 ```bash
 cd apps/backend
-cp .env.example .env
-# Edit .env — set DATABASE_URL to your Postgres connection string
-# For local dev, most other defaults are fine
-
+cp config/env.example .env
 uv sync
-uv run fastapi dev api/main.py
+uv run uvicorn api.main:app --reload --port 8000
 ```
 
-Backend runs at `http://localhost:8000`. API docs at `http://localhost:8000/docs`.
+The defaults in `.env` work for local development. The first start takes about a minute while it creates the SQLite tables. To use PostgreSQL instead, set `DATABASE_URL` in `.env` to your connection string.
 
-### 3. Frontend setup
+### 3. Frontend
+
+In a second terminal:
 
 ```bash
 cd apps/frontend
+echo "BACKEND_INTERNAL_URL=http://localhost:8000" > .env.local
 npm install
 npm run dev
 ```
 
-Frontend runs at `http://localhost:1111`.
+`BACKEND_INTERNAL_URL` tells the frontend's API proxy where your local backend is. Without it, API calls go to the hosted backend address and fail.
 
-### 4. Verify it works
+### 4. Check it works
 
-- Open `http://localhost:1111` — you should see the dashboard
-- Open `http://localhost:8000/docs` — you should see the Swagger UI
+- http://localhost:8000/docs shows the API docs.
+- http://localhost:1111 shows the sign-in page. Create an account on the register page and sign in.
 
-## Finding Something to Work On
+If a step fails, open an issue with the command and the error. Fixing setup problems is a useful first contribution.
 
-- Browse [good first issues](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
-- Check [help wanted](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22) for more substantial tasks
-- Comment on the issue to let us know you're working on it
+## Finding something to work on
 
-## Making Changes
+- [Good first issues](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) are small and come with pointers to the files involved.
+- [Help wanted](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22) issues are larger.
+- Comment on an issue before you start so others know it is taken. If you stop working on it, say so in a comment so someone else can pick it up.
+- For a new idea, open a [Discussion](https://github.com/adhit-r/fairmind/discussions) or a feature request first, so we can agree on the approach before you write code.
 
-### Branch naming
+## Making changes
 
+### Branches
+
+Branch from an up-to-date `main`:
+
+```bash
+git fetch upstream
+git checkout -b fix/short-description upstream/main
 ```
-feature/short-description
-fix/short-description
-```
+
+Use `feature/`, `fix/`, `docs/` or `task/` as the prefix.
 
 ### Code style
 
-- **Backend**: Follow existing patterns in `apps/backend/src/`. Domain-driven design with routers, services, and domain models.
-- **Frontend**: Follow existing patterns in `apps/frontend/src/`. Next.js App Router, Tailwind CSS, neobrutalist design system.
-- No mock data, no hardcoded IDs, no placeholder content in production code.
+- **Backend** (`apps/backend/`): FastAPI with a domain-driven layout of routes, services and domain models. Follow the patterns of nearby code.
+- **Frontend** (`apps/frontend/`): Next.js App Router with Tailwind CSS. New pages use the lifecycle-shell design described in [CLAUDE.md](CLAUDE.md); `/dashboard`, `/integrations` and `/onboard` are good reference pages.
+- No mock data, hardcoded IDs or placeholder content in production code. Everything the UI shows comes from a real API, or is labelled "Coming soon".
+- No emoji in code, docs, commit messages or templates.
 
-### Running tests
+### Tests
 
 ```bash
 # Backend
 cd apps/backend
 uv run pytest
 
-# Frontend
+# Frontend (Playwright; run `npx playwright install` once first)
 cd apps/frontend
 npm run test
 ```
 
-## Submitting a PR
+Add or update tests for behaviour you change.
 
-1. Create a feature branch from `main`
-2. Make your changes
-3. Run tests and make sure they pass
-4. Push your branch and open a PR against `main`
-5. Describe what you changed and why in the PR description
-6. Link the related issue
+## Opening a pull request
 
-## Project Structure
+1. Push your branch to your fork and open a pull request against `main`.
+2. Fill in the pull request template: what changed, why, and how you tested it.
+3. Link the issue it closes, for example `Closes #123`.
+4. Keep the pull request focused on one change. Smaller pull requests get reviewed faster.
+
+A maintainer reviews every pull request before it is merged.
+
+## Project structure
 
 ```
 apps/
-  backend/     → FastAPI backend (Python)
-  frontend/    → Next.js dashboard (TypeScript)
-  website/     → Marketing site (Astro)
-  ml/          → ML models and utilities
-docs/          → Documentation
+  backend/     FastAPI backend (Python)
+  frontend/    Next.js dashboard (TypeScript)
+  docs/        Documentation site
+  website/     Marketing site (Astro)
+  ml/          ML models and utilities
+docs/          Architecture notes, ADRs, audits and plans
 ```
 
-## Questions?
+## Questions
 
-Open an issue or comment on an existing one. We're happy to help you get started.
+Ask in [GitHub Discussions](https://github.com/adhit-r/fairmind/discussions) or comment on the issue you are working on.
+
+By contributing, you agree that your contributions are licensed under the [MIT License](LICENSE) and that you will follow the [Code of Conduct](CODE_OF_CONDUCT.md).

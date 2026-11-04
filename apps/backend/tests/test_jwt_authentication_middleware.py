@@ -147,9 +147,7 @@ def test_identity_bootstrap_routes_are_public_without_an_access_token(path: str)
 @pytest.mark.parametrize(
     ("path", "body", "expected_status"),
     [
-        # Registration is an optional router in the lean test environment; a
-        # 405 still proves JWT did not intercept its documented public path.
-        ("/api/v1/register", {}, 405),
+        ("/api/v1/register", {}, 422),
         ("/api/v1/auth/callback", None, 422),
     ],
 )
@@ -163,3 +161,29 @@ def test_main_app_reaches_public_identity_bootstrap_validation(
     response = client.post(path, json=body) if body is not None else client.post(path)
 
     assert response.status_code == expected_status
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/v1/analytics/overview",
+        "/api/v1/compliance/frameworks",
+        "/api/v1/datasets",
+        "/api/v1/reports",
+        "/api/v1/settings",
+    ],
+)
+def test_development_does_not_expose_api_families_without_a_session(path, monkeypatch):
+    """Development requires a session like production; no route family is public."""
+
+    from middleware import security
+
+    monkeypatch.setattr(security.settings, "environment", "development")
+    app = FastAPI()
+    app.add_middleware(JWTAuthenticationMiddleware)
+
+    @app.get(path)
+    async def protected() -> dict[str, bool]:
+        return {"protected": True}
+
+    assert TestClient(app).get(path).status_code == 401

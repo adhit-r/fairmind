@@ -16,9 +16,12 @@ from ..services.dataset_service import dataset_service
 
 # Import org isolation decorators
 from core.decorators.org_isolation import isolate_by_org
+from api.routes.org_scope import org_member, org_mutator
+from config.auth import require_admin
+from src.application.services.governance_assurance_service import OrgMembership
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/v1/datasets", tags=["datasets"])
+router = APIRouter(prefix="/api/v1/datasets", tags=["datasets"], dependencies=[Depends(org_member)])
 
 # Pydantic Models
 class DatasetUploadRequest(BaseModel):
@@ -43,7 +46,8 @@ class DatasetResponse(BaseModel):
 async def upload_dataset(
     file: UploadFile = File(...),
     name: Optional[str] = Form(None),
-    description: Optional[str] = Form(None)
+    description: Optional[str] = Form(None),
+    m: OrgMembership = Depends(org_mutator),
 ):
     """
     Upload a new dataset (CSV/Parquet file)
@@ -61,7 +65,8 @@ async def upload_dataset(
         result = await dataset_service.upload_dataset(
             file=file,
             name=name,
-            description=description
+            description=description,
+            owner_id=m.user_id,
         )
         
         if result["success"]:
@@ -161,7 +166,8 @@ async def get_dataset_schema(dataset_id: str):
     raise HTTPException(status_code=501, detail="Dataset storage is not available yet.")
 
 
-@router.post("/cleanup")
+# Cleanup walks the one shared upload directory, so it is a platform-admin job.
+@router.post("/cleanup", dependencies=[Depends(require_admin)])
 async def cleanup_old_datasets(max_age_days: int = 30):
     """
     Clean up old dataset files

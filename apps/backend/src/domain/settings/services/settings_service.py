@@ -27,36 +27,39 @@ class SettingsService(BaseService):
     
     def __init__(self, logger: Optional[ILogger] = None):
         super().__init__(logger)
-        # In a real app, this would be backed by a DB
-        # For now, we'll use in-memory storage for the session
-        self._settings = UserSettings(
-            email="user@example.com",
-            language="en",
-            notifications=True,
-            auto_refresh=True,
-            theme="light"
-        )
+        # In a real app, this would be backed by a DB.
+        # For now, in-memory storage for the session, one entry per user.
+        self._settings: Dict[str, UserSettings] = {}
 
-    async def get_settings(self) -> UserSettings:
-        """Get current user settings."""
-        return self._settings
+    async def get_settings(self, user_id: str, email: str = "") -> UserSettings:
+        """Get the given user's settings (defaults until they change something)."""
+        if user_id not in self._settings:
+            self._settings[user_id] = UserSettings(
+                email=email,
+                language="en",
+                notifications=True,
+                auto_refresh=True,
+                theme="light"
+            )
+        return self._settings[user_id]
 
-    async def update_settings(self, settings_data: Dict[str, Any]) -> UserSettings:
+    async def update_settings(self, user_id: str, settings_data: Dict[str, Any], email: str = "") -> UserSettings:
         """
-        Update user settings.
-        
+        Update the given user's settings.
+
         Args:
+            user_id: Whose settings to change.
             settings_data: Dictionary of settings to update.
-            
+
         Returns:
             Updated UserSettings object.
         """
-        current_dict = self._settings.__dict__
-        
+        current = await self.get_settings(user_id, email)
+
         # Update fields
         for key, value in settings_data.items():
-            if key in current_dict:
-                setattr(self._settings, key, value)
-                
+            if key in current.__dict__:
+                setattr(current, key, value)
+
         self._log_operation("update_settings", updated_fields=list(settings_data.keys()))
-        return self._settings
+        return current

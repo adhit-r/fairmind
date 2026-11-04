@@ -4,60 +4,116 @@ import PageHero from '../components/marketing/PageHero.astro';
 import '../styles/pages.css';
 
 const chapters = [
-  ['01 · Define the subject', 'Start with the exact AI system, model or agent version, deployment, owner, and intended use. Evaluation without a subject boundary is not reusable evidence.', ['System identity', 'Framework assignment', 'Owner and deployment context']],
-  ['02 · Ingest the run', 'Run a supported evaluator or import a bounded output. Preserve the evaluator identity, threshold, artifacts, limitations, and capability state.', ['Evaluation identity', 'Metric and threshold', 'Raw artifact and limitation']],
-  ['03 · Review the mapping', 'A technical result can create a candidate relationship to a control. A reviewer accepts, rejects, or narrows it with recorded rationale.', ['Candidate mapping', 'Reviewer decision', 'Rationale and review state']],
-  ['04 · Close the loop', 'Turn failures into findings, assign remediation, and link a clean retest without erasing the history. Compile the package at a stated evidence cutoff.', ['Finding and risk', 'Remediation and retest', 'Framework-pinned manifest']],
+  {
+    n: '01',
+    title: 'A connector finds the system',
+    body: 'The MLflow connector lists registered models with versions, aliases and owners. Rules suggest a tier and a stage. A person promotes the credit-scoring model into governance, and a system file appears with Onboard complete and “Run the first evaluation” as the next action.',
+    shows: 'Integrations review queue, system file, derived stage.',
+  },
+  {
+    n: '02',
+    title: 'The fairness test runs on real predictions',
+    body: 'A CSV of predictions, outcomes and protected attributes goes through disparate impact, demographic parity, equal opportunity, equalized odds and calibration, with bootstrap confidence intervals and a permutation test. One group fails the 0.80 disparate-impact threshold and the result is bound to the exact model version.',
+    shows: 'Evaluation run, thresholds declared before the run, measured evidence with confidence.',
+  },
+  {
+    n: '03',
+    title: 'The release gate says no-go',
+    body: 'Five checks: fairness is proven and failing; monitoring is open; data governance and human oversight are attested at a capped confidence. The impact-by-confidence matrix returns no-go, and fairmind gate exits 1 in the pipeline.',
+    shows: 'Gate verdict, attestation forms, the CLI and GitHub Action in a deploy job.',
+  },
+  {
+    n: '04',
+    title: 'A pack workflow runs, and stops at a person',
+    body: 'The deployment release gate workflow from the Inventory pack starts a run. The trigger step fires itself; the collect and check steps are completed by the engineer and logged as manual; the ask step opens an approval request. The reviewer approves with edits, the file step maps the evidence to ISO 42001 6.1.2, EU AI Act Article 9 and NIST AI RMF GOVERN 1.7, and the ledger head is sealed.',
+    shows: 'Run page, step tiles, approval card, hash-chained ledger with chain state.',
+  },
+  {
+    n: '05',
+    title: 'Remediation, retest, decision',
+    body: 'The finding gets an owner and a remediation task. A retest clears the threshold and links back to the original failure. The approver requests the release decision; the evidence is sealed when it is recorded. The auditor opens the same report in read-only mode.',
+    shows: 'Findings, remediation tasks, decision request, auditor mode.',
+  },
 ];
+
+const wontFake = [
+  { strong: 'No simulated agent reasoning.', text: 'Steps that a person completes today are shown as manual, exactly as the ledger records them.' },
+  { strong: 'No green dashboard.', text: 'The walkthrough ends with a no-go that becomes a go only after a measured retest.' },
+  { strong: 'No certification.', text: 'The last screen is a decision record and a report, not a certificate.' },
+];
+
+const structuredData = {
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: [
+    { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://fairmind.xyz/' },
+    { '@type': 'ListItem', position: 2, name: 'Walkthrough', item: 'https://fairmind.xyz/demo/' },
+  ],
+};
+
+// Sandbox runs on synthetic sample data in its own database; credentials are public by design.
+const demoUrl = import.meta.env.PUBLIC_DEMO_URL;
+const demoEmail = import.meta.env.PUBLIC_DEMO_EMAIL;
+const demoPassword = import.meta.env.PUBLIC_DEMO_PASSWORD;
 ---
 
 <Layout
-  title="FairMind product walkthrough | Follow the evidence chain"
-  description="Walk through FairMind from AI-system definition and evaluator output to human-reviewed mappings, findings, remediation, retests, and assurance packages."
+  title="FairMind walkthrough: from a registered model to a gated release"
+  description="Five chapters: a connector finds the system, the fairness test runs, the release gate says no-go, a pack workflow stops at a human gate and seals its ledger, and a retest turns the decision around."
+  structuredData={structuredData}
 >
   <div class="route-page">
     <PageHero
-      signal="Product walkthrough · no canned pass screen"
-      title="Watch evidence move"
-      accent="without losing meaning."
-      description="The useful demonstration is not a dashboard tour. It is whether the same evaluation can keep its identity, limits, review state, failure history, and framework context from test run to accountable decision."
+      signal="Walkthrough"
+      title="One model, from registry to"
+      accent="release decision."
+      description="A guided session follows a credit-scoring model through the whole journey on your own data or ours. Every screen is the product as it is today, including the steps a person still completes by hand."
       proofs={[
-        { label: 'Chapter one', value: 'Define the subject', note: 'No result is interpreted before the exact AI system boundary exists.' },
-        { label: 'Chapter two', value: 'Preserve the run', note: 'Evaluator, threshold, artifact, limitation, and capability state travel together.' },
-        { label: 'Chapter three', value: 'Route the decision', note: 'Human review, finding, remediation, retest, and package remain linked.' },
+        { label: 'Length', value: '45 minutes', note: 'Live, with your questions. No slides.' },
+        { label: 'Data', value: 'Yours or ours', note: 'A predictions CSV is enough to run the fairness test.' },
+        { label: 'Ends with', value: 'A sealed run', note: 'And a gate verdict your CI could read.' },
       ]}
-      primary={{ label: 'Start the walkthrough', href: '#walkthrough' }}
-      secondary={{ label: 'Request a working session', href: '/request-access' }}
-      dark={true}
+      primary={{ label: 'Book a walkthrough', href: '/request-access/' }}
+      secondary={{ label: 'See the platform', href: '/features/' }}
     />
 
     <section class="route-section" id="walkthrough" aria-labelledby="walkthrough-title">
-      <header class="route-section-heading"><h2 id="walkthrough-title">Four chapters. One chain.</h2><p>Open each chapter to inspect the evidence the next accountable person should receive.</p></header>
+      <header class="route-section-heading">
+        <h2 id="walkthrough-title">Five chapters.</h2>
+      </header>
       <div class="route-disclosure">
-        {chapters.map((chapter, index) => (
-          <details open={index === 0}>
-            <summary>{chapter[0]}</summary>
-            <div><p>{chapter[1]}</p><ul>{chapter[2].map((item) => <li>{item}</li>)}</ul></div>
+        {chapters.map((c, i) => (
+          <details open={i === 0}>
+            <summary><span>Chapter {c.n}</span><h3>{c.title}</h3></summary>
+            <div><p>{c.body}</p><p><strong>You see:</strong> {c.shows}</p></div>
           </details>
         ))}
       </div>
     </section>
 
-    <section class="route-section route-section-orange" aria-labelledby="demo-boundary-title">
+    <section class="route-section route-section-dark" aria-labelledby="demo-boundary-title">
       <div class="route-split">
-        <div class="route-split-copy"><h2 id="demo-boundary-title">What this walkthrough will not fake.</h2><p>No “22 dashboards,” invented pass rate, live integration logo wall, or automatic compliance result. Current capability states and recovery boundaries stay visible.</p></div>
-        <div class="route-checklist">
-          <div><span>Live</span><strong>Environmental evidence path</strong></div>
-          <div><span>Bounded</span><strong>External-provider LLM review</strong></div>
-          <div><span>Bounded</span><strong>AI BOM metadata transformation</strong></div>
-          <div><span>Target</span><strong>Immutable Evidence Passport contract</strong></div>
-        </div>
+        <div class="route-split-copy"><h2 id="demo-boundary-title">What the walkthrough will not fake.</h2><p>If a step is manual today, you will see it recorded as manual.</p></div>
+        <ul class="route-checklist">{wontFake.map((w) => <li><strong>{w.strong}</strong>{w.text}</li>)}</ul>
       </div>
     </section>
 
+    {demoUrl && (
+      <section class="route-section" aria-labelledby="demo-sandbox-title">
+        <div class="route-split">
+          <div class="route-split-copy"><h2 id="demo-sandbox-title">Try the sandbox.</h2><p>A shared FairMind workspace filled with synthetic sample systems, evaluations and findings. Nothing in it is customer data, and it is reset periodically.</p></div>
+          <div class="route-checklist">
+            <div><span>Sandbox</span><strong><a href={`${demoUrl}/login`}>{demoUrl.replace('https://', '')}</a></strong></div>
+            <div><span>Email</span><strong>{demoEmail}</strong></div>
+            <div><span>Password</span><strong>{demoPassword}</strong></div>
+          </div>
+        </div>
+      </section>
+    )}
+
     <section class="route-closing" aria-labelledby="demo-closing-title">
-      <div><p>Use your own evaluator output</p><h2 id="demo-closing-title">Make the walkthrough real.</h2></div>
-      <div class="route-actions"><a class="button button-primary" href="/request-access">Request a working session</a><a class="button button-secondary" href="/features">Inspect the product</a></div>
+      <h2 id="demo-closing-title">Bring a predictions file and a question.</h2>
+      <div class="route-actions"><a class="button button-primary" href="/request-access/">Book a walkthrough</a><a class="button" href="/use-cases/">Read the use cases</a></div>
     </section>
   </div>
 </Layout>

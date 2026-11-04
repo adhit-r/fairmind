@@ -5,34 +5,33 @@ import '../styles/pages.css';
 ---
 
 <Layout
-  title="Request FairMind access | Start with a real evidence path"
-  description="Talk to FairMind about evaluation evidence, AI safety review, framework mapping, remediation, retests, and assurance-package workflows."
+  title="Request access to FairMind | Agentic AI governance"
+  description="Request access to FairMind: register your AI systems, run the release gate in CI, install packs for your frameworks, and run governance workflows that stop for a human decision."
 >
   <div class="route-page">
     <PageHero
-      signal="A working session, not a generic sales funnel"
-      title="Show us the"
-      accent="evidence problem."
-      description="Start with the evaluator output, review bottleneck, or governance decision your team cannot defend cleanly today. We will determine whether a current FairMind path fits—and say so plainly when it does not."
+      signal="Request access"
+      title="Start with one system and"
+      accent="one gate."
+      description="Tell us which systems you run, which frameworks you answer to, and where a decision gets stuck today. We will say plainly whether FairMind fits, and set up a pilot around one system if it does."
       proofs={[
-        { label: 'Bring', value: 'A real test output', note: 'Model, data, LLM, agent, security, provenance, or environmental.' },
-        { label: 'Trace', value: 'The decision boundary', note: 'Who reviews it, what threshold applies, and what happens after failure.' },
-        { label: 'Leave with', value: 'A bounded next step', note: 'Pilot path, adapter target, research collaboration, or a clear not-yet.' },
+        { label: 'Week one', value: 'A gated system', note: 'Registered, tested, and a verdict in your pipeline.' },
+        { label: 'Week two', value: 'A pack installed', note: 'Workflows running with your people at the gates.' },
+        { label: 'Leave with', value: 'A sealed run', note: 'Or a clear not-yet, with the reason written down.' },
       ]}
-      primary={{ label: 'Describe your evidence path', href: '#access-form' }}
-      secondary={{ label: 'Check current capability', href: '/#capabilities' }}
-      dark={true}
+      primary={{ label: 'Describe your setup', href: '#access-form' }}
+      secondary={{ label: 'See the platform', href: '/features/' }}
     />
 
     <section class="route-section" id="access-form" aria-labelledby="access-title">
       <header class="route-section-heading">
-        <h2 id="access-title">Tell us where the chain breaks.</h2>
-        <p>No inflated maturity questionnaire. A few precise fields are enough to route the conversation to evaluation, review, governance, or research.</p>
+        <h2 id="access-title">A few specifics are enough.</h2>
+        <p>No maturity questionnaire. These fields route you to the right first workflow.</p>
       </header>
 
       <div class="route-form-grid">
         <form class="route-form" action="https://formspree.io/f/xayzqjqw" method="POST">
-          <input type="hidden" name="_subject" value="New FairMind evidence-path request" />
+          <input type="hidden" name="_subject" value="New FairMind access request" />
           <div class="route-field">
             <label for="firstName">First name</label>
             <input id="firstName" name="firstName" type="text" autocomplete="given-name" required />
@@ -51,60 +50,57 @@ import '../styles/pages.css';
           </div>
           <div class="route-field">
             <label for="jobTitle">Role</label>
-            <input id="jobTitle" name="jobTitle" type="text" autocomplete="organization-title" placeholder="Assurance lead, ML engineer, reviewer…" />
+            <input id="jobTitle" name="jobTitle" type="text" autocomplete="organization-title" placeholder="ML engineer, compliance lead, approver, auditor…" />
           </div>
           <div class="route-field">
-            <label for="teamSize">Team size</label>
-            <select id="teamSize" name="teamSize">
+            <label for="systems">AI systems in scope</label>
+            <select id="systems" name="systems">
               <option value="">Select if useful</option>
-              <option value="individual">Individual</option>
-              <option value="2-10">2–10</option>
-              <option value="11-50">11–50</option>
-              <option value="51-plus">51+</option>
+              <option value="1-5">1–5</option>
+              <option value="6-25">6–25</option>
+              <option value="26-100">26–100</option>
+              <option value="100-plus">100+</option>
             </select>
           </div>
           <div class="route-field route-field-wide">
-            <label for="useCase">Where does the evidence need to go?</label>
+            <label for="useCase">Where should we start?</label>
             <select id="useCase" name="useCase" required>
               <option value="">Choose the closest path</option>
-              <option value="evaluation-evidence">Evaluation output to evidence record</option>
-              <option value="safety-review">AI safety finding to human review</option>
-              <option value="framework-mapping">Evidence to framework mapping</option>
-              <option value="remediation-retest">Finding, remediation, and retest</option>
-              <option value="environmental-research">Environmental evidence or research</option>
-              <option value="adapter">Evaluator adapter or integration</option>
+              <option value="release-gate">Release gate in CI for a model</option>
+              <option value="framework-journey">A framework journey (ISO 42001, EU AI Act, NIST AI RMF, AIUC-1…)</option>
+              <option value="agentic-estate">Governing agents, tools, and MCP servers</option>
+              <option value="evaluations">Evaluations for a model, LLM app, or agent</option>
+              <option value="connector">Connecting MLflow, GitHub, or another source</option>
+              <option value="research">Research or measurement collaboration</option>
               <option value="other">Something else</option>
             </select>
           </div>
           <div class="route-field route-field-wide">
-            <label for="message">Describe the test, artifact, or decision</label>
-            <textarea id="message" name="message" placeholder="What produces the result today? Who reviews it? What must the final evidence support?" required></textarea>
+            <label for="message">Describe the system and the decision</label>
+            <textarea id="message" name="message" placeholder="What is the system, who approves its release today, and which frameworks do you answer to?" required></textarea>
           </div>
           <div class="route-form-footer">
-            <p>By submitting, you agree that we may use these details to respond. Read the <a href="/privacy">Privacy Policy</a>.</p>
-            <button class="button button-primary" type="submit">Send evidence-path request</button>
+            <p>By submitting, you agree that we may use these details to respond. Read the <a href="/privacy/">Privacy Policy</a>.</p>
+            <button class="button button-primary" type="submit">Request access</button>
           </div>
         </form>
 
         <aside aria-label="What happens next">
           <div class="route-aside-ledger">
             <div>
-              <span>01 · Triage</span>
-              <strong>We identify the current capability state.</strong>
-              <p>Validated, metadata-only, external-provider, unavailable, or insufficient data.</p>
+              <strong>01 · We check fit</strong>
+              <p>Which packs and evaluators apply to your systems, and which steps a person still completes today.</p>
             </div>
             <div>
-              <span>02 · Boundary</span>
-              <strong>We separate what exists from what would need building.</strong>
-              <p>No roadmap feature is presented as a shipped integration.</p>
+              <strong>02 · We set up one system</strong>
+              <p>A connector or a manual registration, the fairness test on your data, and the gate in your pipeline.</p>
             </div>
             <div>
-              <span>03 · Next step</span>
-              <strong>We propose a bounded pilot or close the loop honestly.</strong>
-              <p>FairMind is decision support. It does not certify AI systems or provide legal advice.</p>
+              <strong>03 · Your people take the gates</strong>
+              <p>Approvers are named, the first workflow runs, and the first ledger is sealed.</p>
             </div>
           </div>
-          <p class="route-meta">Prefer email? <a href="mailto:support@fairmind.xyz">support@fairmind.xyz</a></p>
+          <p class="route-meta" style="margin-top: 1rem; color: var(--ink2); font-size: 0.9rem">Prefer email? <a href="mailto:support@fairmind.xyz">support@fairmind.xyz</a></p>
         </aside>
       </div>
     </section>

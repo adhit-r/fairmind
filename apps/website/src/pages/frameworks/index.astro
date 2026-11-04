@@ -1,0 +1,107 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { frameworks } from '../../lib/frameworks';
+import { registry, registryTotals, kindLabels, type RegistryKind } from '../../lib/registry';
+import '../../styles/frameworks.css';
+
+const kinds = Object.keys(kindLabels) as RegistryKind[];
+const counts = Object.fromEntries(kinds.map((k) => [k, registry.filter((e) => e.kind === k).length]));
+const linkedGuides = new Set(registry.map((e) => e.guide).filter(Boolean));
+const otherGuides = frameworks.filter((f) => !linkedGuides.has(f.slug));
+
+const structuredData = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://fairmind.xyz/' },
+      { '@type': 'ListItem', position: 2, name: 'Frameworks', item: 'https://fairmind.xyz/frameworks/' },
+    ],
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    itemListElement: frameworks.map((f, i) => ({
+      '@type': 'ListItem',
+      position: i + 1,
+      name: f.name,
+      url: `https://fairmind.xyz/frameworks/${f.slug}/`,
+    })),
+  },
+];
+---
+
+<Layout
+  title={`${registryTotals.frameworks} AI governance frameworks: EU AI Act, ISO/IEC 42001, NIST AI RMF, OWASP | FairMind`}
+  description={`The ${registryTotals.frameworks} frameworks in FairMind's registry, from the EU AI Act and ISO/IEC 42001 to the OWASP Agentic Top 10, with the requirements and governance workflows mapped to each.`}
+  structuredData={structuredData}
+>
+  <section class="fw-hero">
+    <div class="wrap">
+      <nav class="breadcrumbs" aria-label="Breadcrumb">
+        <ol><li><a href="/">Home</a></li><li aria-current="page">Frameworks</li></ol>
+      </nav>
+      <p class="kicker">Frameworks</p>
+      <h1>{registryTotals.frameworks} frameworks. <em>One set of evidence.</em></h1>
+      <p class="fw-lead">
+        {registryTotals.mapped} are mapped to {registryTotals.requirements} requirements, so one approved record can
+        satisfy every requirement it covers. {registryTotals.frameworks - registryTotals.mapped} are tracked for
+        reference, with no requirement mapping yet. Counts come straight from the packs catalogue.
+      </p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap">
+      <div class="fw-filters" role="group" aria-label="Filter frameworks" data-filters hidden>
+        <button type="button" class="fw-chip" aria-pressed="true" data-kind="all">All {registryTotals.frameworks}</button>
+        {kinds.map((k) => (
+          <button type="button" class="fw-chip" aria-pressed="false" data-kind={k}>{kindLabels[k]} {counts[k]}</button>
+        ))}
+      </div>
+
+      <table class="fw-registry">
+        <thead>
+          <tr><th scope="col">Framework</th><th scope="col">Requirements</th><th scope="col">Workflows</th><th scope="col"><span class="visually-hidden">Guide</span></th></tr>
+        </thead>
+        <tbody>
+          {registry.map((e) => (
+            <tr data-kind={e.kind} class:list={[e.kind === 'reference' && 'is-reference']}>
+              <th scope="row">
+                <span class="fw-name">{e.name}</span>
+                <span class="fw-meta">{e.jurisdiction} · {e.type}</span>
+              </th>
+              <td>{e.requirements || '·'}</td>
+              <td>{e.workflows || '·'}</td>
+              <td>{e.guide && <a href={`/frameworks/${e.guide}/`}>Guide <span aria-hidden="true">→</span></a>}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {otherGuides.length > 0 && (
+        <p class="fw-other">
+          Also in plain English:{' '}
+          {otherGuides.map((f, i) => (
+            <>{i > 0 && ', '}<a href={`/frameworks/${f.slug}/`}>{f.shortName}</a></>
+          ))}.
+        </p>
+      )}
+    </div>
+  </section>
+</Layout>
+
+<script>
+  const filters = document.querySelector<HTMLElement>('[data-filters]');
+  if (filters) {
+    filters.hidden = false;
+    const rows = document.querySelectorAll<HTMLElement>('.fw-registry tbody tr');
+    filters.addEventListener('click', (event) => {
+      const chip = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-kind]');
+      if (!chip) return;
+      filters.querySelectorAll('[data-kind]').forEach((c) => c.setAttribute('aria-pressed', String(c === chip)));
+      const kind = chip.dataset.kind;
+      rows.forEach((row) => (row.hidden = kind !== 'all' && row.dataset.kind !== kind));
+    });
+  }
+</script>

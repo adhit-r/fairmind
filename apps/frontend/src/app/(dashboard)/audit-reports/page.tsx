@@ -57,7 +57,7 @@ const REPORT_TYPES = [
   },
 ]
 
-const ALL_FRAMEWORKS = ['EU AI Act', 'ISO 42001', 'NIST AI RMF', 'GDPR', 'DPDP Act']
+const ALL_FRAMEWORKS = ['EU AI Act', 'ISO 42001', 'NIST AI RMF', 'RBI FREE-AI', 'GDPR', 'DPDP Act']
 
 const ALL_SECTIONS = [
   { id: 'executive_summary', label: 'Executive Summary' },

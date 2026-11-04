@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
-from config.auth import TokenData, UserRole, get_current_active_user
+from config.auth import TokenData, UserRole, get_current_active_user, require_admin
 from config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -105,16 +105,53 @@ async def _enforce_org_scope(request: Request, db: Session = Depends(get_db)) ->
             row = db.execute(
                 text(f"SELECT org_id FROM {table} WHERE id = :id"), {"id": str(value)}
             ).fetchone()
-            # Unknown ids pass through: risk and remediation records may name
-            # systems that were never registered, and the route answers for them.
+            # Unknown ids pass through here; routes that store or read records
+            # under a system id resolve it with _require_system_access.
             # A registered id must belong to the caller's org.
             if row is not None and str(row[0] or "") != str(org_id):
                 raise HTTPException(status_code=404, detail="Not found")
 
 
-# ponytail: policies, approval workflows/requests, evidence items, remediation
-# and reports addressed by their own ids are not org-scoped yet; their tables
-# carry no org_id. Add the column and extend _SCOPED_IDS when they do.
+def _membership(request, current_user: TokenData, db: Session) -> OrgMembership:
+    org_id = _caller_org(request)
+    membership = GovernanceAssuranceService(db).membership(org_id, current_user.user_id)
+    if not membership and settings.is_development and current_user.org_id and str(current_user.org_id) == org_id:
+        # Same local-development allowance as _require_system_access.
+        membership = OrgMembership(
+            org_id, current_user.user_id, current_user.role.value, tuple(current_user.permissions)
+        )
+    if not membership:
+        raise HTTPException(status_code=403, detail="You are not a member of this organization")
+    return membership
+
+
+async def org_member(
+    request: Request,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+) -> OrgMembership:
+    """The caller's active membership in their organisation, else 403."""
+    # Some prefixes skip the auth middleware in local development, so the
+    # identity is taken from the bearer token here rather than from request state.
+    if getattr(request.state, "user", None) is None:
+        request.state.user = current_user
+    if not getattr(request.state, "org_id", None) and current_user.org_id:
+        request.state.org_id = str(current_user.org_id)
+    await _enforce_org_scope(request, db)
+    return _membership(request, current_user, db)
+
+
+async def org_mutator(membership: OrgMembership = Depends(org_member)) -> OrgMembership:
+    """``org_member`` plus the organisation's mutation permission."""
+    if not GovernanceAssuranceService.may_mutate(membership):
+        raise HTTPException(status_code=403, detail="Organization mutation permission required")
+    return membership
+
+
+# Records addressed by their own ids are scoped by their route: through the
+# system they belong to (approval requests, evidence items, remediation tasks,
+# reports) or their own org_id (policies). Approval workflows and framework
+# controls are a platform catalogue that only platform admins write.
 router = APIRouter(tags=["ai-governance"], dependencies=[Depends(_enforce_org_scope)])
 
 SYSTEM_APPROVAL_WORKFLOW_ID = "fairmind-system-release-v1"
@@ -319,7 +356,7 @@ def _ensure_system_approval_workflow(db: Session, now: str) -> str:
         text(
             "UPDATE governance_approval_workflows "
             "SET name = :name, entity_type = 'ai_system', steps_json = :steps_json, "
-            "is_active = 1, updated_at = :updated_at WHERE id = :id"
+            "is_active = TRUE, updated_at = :updated_at WHERE id = :id"
         ),
         {
             "id": SYSTEM_APPROVAL_WORKFLOW_ID,
@@ -333,7 +370,7 @@ def _ensure_system_approval_workflow(db: Session, now: str) -> str:
             text(
                 "INSERT INTO governance_approval_workflows "
                 "(id, name, entity_type, steps_json, is_active, created_by, created_at, updated_at) "
-                "VALUES (:id, :name, 'ai_system', :steps_json, 1, :created_by, :created_at, :updated_at)"
+                "VALUES (:id, :name, 'ai_system', :steps_json, TRUE, :created_by, :created_at, :updated_at)"
             ),
             {
                 "id": SYSTEM_APPROVAL_WORKFLOW_ID,
@@ -424,6 +461,7 @@ def _require_report_access(
 _LATE_COLUMNS = (
     ("governance_ai_systems", "org_id"),
     ("governance_workspaces", "org_id"),
+    ("governance_policies", "org_id"),  # also migrations/015_org_scope_legacy_tables.sql
 )
 
 
@@ -1264,17 +1302,22 @@ async def get_ai_system_lifecycle_summary(system_id: str, db: Session = Depends(
 @router.get("/dashboard/risk")
 async def get_risk_dashboard(
     system_id: Optional[str] = Query(default=None),
+    current_user: TokenData = Depends(get_current_active_user),
+    membership: OrgMembership = Depends(org_member),
     db: Session = Depends(get_db),
 ):
     _ensure_tables(db)
     if system_id:
+        _require_system_access(db, system_id, current_user)
         return _fetch_risk_dashboard_payload(db, system_id)
     else:
         rows = db.execute(
             text(
                 "SELECT id, system_id, title, severity, status, description, mitigation, likelihood, risk_score, source, categories_json, metadata_json, created_at, updated_at "
-                "FROM governance_risks ORDER BY risk_score DESC, created_at DESC LIMIT 50"
-            )
+                "FROM governance_risks WHERE system_id IN (SELECT id FROM governance_ai_systems WHERE org_id = :org_id) "
+                "ORDER BY risk_score DESC, created_at DESC LIMIT 50"
+            ),
+            {"org_id": membership.org_id},
         ).fetchall()
 
     stored_risks = [_serialize_risk_row(row) for row in rows]
@@ -1307,8 +1350,13 @@ async def get_risk_dashboard(
 
 
 @router.post("/risks/assess")
-async def assess_risks(request: RiskAssessmentRequest, db: Session = Depends(get_db)):
+async def assess_risks(
+    request: RiskAssessmentRequest,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
     _ensure_tables(db)
+    _require_system_access(db, request.systemId, current_user, mutate=True)
     risk_id = str(uuid.uuid4())
     now = _utc_now_iso()
     severity = _normalize_severity(request.severity)
@@ -1430,7 +1478,9 @@ async def list_framework_controls(framework: str, db: Session = Depends(get_db))
     ]
 
 
-@router.post("/frameworks/{framework}/controls")
+# The control catalogue is shared: every organisation and seed_env_controls read
+# it by framework alone, so only a platform admin may add to it.
+@router.post("/frameworks/{framework}/controls", dependencies=[Depends(require_admin)])
 async def create_framework_control(
     framework: str,
     request: FrameworkControlCreateRequest,
@@ -1682,9 +1732,11 @@ async def create_system_approval(
     }
 
 
+# governance_policies is shared with api.routes.policies: both filter on org_id.
 @router.get("/policies")
 async def list_policies(
     framework: Optional[str] = Query(default=None),
+    membership: OrgMembership = Depends(org_member),
     db: Session = Depends(get_db),
 ):
     _ensure_tables(db)
@@ -1692,16 +1744,17 @@ async def list_policies(
         rows = db.execute(
             text(
                 "SELECT id, name, framework, description, rules_json, status, created_at FROM governance_policies "
-                "WHERE framework = :framework ORDER BY created_at DESC"
+                "WHERE framework = :framework AND org_id = :org_id ORDER BY created_at DESC"
             ),
-            {"framework": framework},
+            {"framework": framework, "org_id": membership.org_id},
         ).fetchall()
     else:
         rows = db.execute(
             text(
                 "SELECT id, name, framework, description, rules_json, status, created_at FROM governance_policies "
-                "ORDER BY created_at DESC"
-            )
+                "WHERE org_id = :org_id ORDER BY created_at DESC"
+            ),
+            {"org_id": membership.org_id},
         ).fetchall()
 
     return [
@@ -1719,18 +1772,23 @@ async def list_policies(
 
 
 @router.post("/policies")
-async def create_policy(request: PolicyCreateRequest, db: Session = Depends(get_db)):
+async def create_policy(
+    request: PolicyCreateRequest,
+    membership: OrgMembership = Depends(org_mutator),
+    db: Session = Depends(get_db),
+):
     _ensure_tables(db)
     policy_id = str(uuid.uuid4())
     now = _utc_now_iso()
     db.execute(
         text(
             "INSERT INTO governance_policies "
-            "(id, name, framework, description, rules_json, status, version, created_at, updated_at) "
-            "VALUES (:id, :name, :framework, :description, :rules_json, :status, 1, :created_at, :updated_at)"
+            "(id, org_id, name, framework, description, rules_json, status, version, created_at, updated_at) "
+            "VALUES (:id, :org_id, :name, :framework, :description, :rules_json, :status, 1, :created_at, :updated_at)"
         ),
         {
             "id": policy_id,
+            "org_id": membership.org_id,
             "name": request.name,
             "framework": request.framework,
             "description": request.description,
@@ -1754,14 +1812,18 @@ async def create_policy(request: PolicyCreateRequest, db: Session = Depends(get_
 
 
 @router.get("/policies/{policy_id}")
-async def get_policy(policy_id: str, db: Session = Depends(get_db)):
+async def get_policy(
+    policy_id: str,
+    membership: OrgMembership = Depends(org_member),
+    db: Session = Depends(get_db),
+):
     _ensure_tables(db)
     row = db.execute(
         text(
             "SELECT id, name, framework, description, rules_json, status, created_at, updated_at "
-            "FROM governance_policies WHERE id = :id"
+            "FROM governance_policies WHERE id = :id AND org_id = :org_id"
         ),
-        {"id": policy_id},
+        {"id": policy_id, "org_id": membership.org_id},
     ).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Policy not found")
@@ -1782,12 +1844,13 @@ async def get_policy(policy_id: str, db: Session = Depends(get_db)):
 async def update_policy(
     policy_id: str,
     request: PolicyUpdateRequest,
+    membership: OrgMembership = Depends(org_mutator),
     db: Session = Depends(get_db),
 ):
     _ensure_tables(db)
     existing = db.execute(
-        text("SELECT id, status FROM governance_policies WHERE id = :id"),
-        {"id": policy_id},
+        text("SELECT id, status FROM governance_policies WHERE id = :id AND org_id = :org_id"),
+        {"id": policy_id, "org_id": membership.org_id},
     ).fetchone()
     if not existing:
         raise HTTPException(status_code=404, detail="Policy not found")
@@ -1803,30 +1866,34 @@ async def update_policy(
         "status": request.status,
     }
     set_parts = []
-    params: Dict[str, Any] = {"id": policy_id, "updated_at": _utc_now_iso()}
+    params: Dict[str, Any] = {"id": policy_id, "org_id": membership.org_id, "updated_at": _utc_now_iso()}
     for key, value in updates.items():
         if value is not None:
             set_parts.append(f"{key} = :{key}")
             params[key] = value
 
     if not set_parts:
-        return await get_policy(policy_id, db)
+        return await get_policy(policy_id, membership, db)
 
     set_parts.append("updated_at = :updated_at")
     db.execute(
-        text(f"UPDATE governance_policies SET {', '.join(set_parts)} WHERE id = :id"),
+        text(f"UPDATE governance_policies SET {', '.join(set_parts)} WHERE id = :id AND org_id = :org_id"),
         params,
     )
     db.commit()
-    return await get_policy(policy_id, db)
+    return await get_policy(policy_id, membership, db)
 
 
 @router.delete("/policies/{policy_id}")
-async def delete_policy(policy_id: str, db: Session = Depends(get_db)):
+async def delete_policy(
+    policy_id: str,
+    membership: OrgMembership = Depends(org_mutator),
+    db: Session = Depends(get_db),
+):
     _ensure_tables(db)
     result = db.execute(
-        text("DELETE FROM governance_policies WHERE id = :id"),
-        {"id": policy_id},
+        text("DELETE FROM governance_policies WHERE id = :id AND org_id = :org_id"),
+        {"id": policy_id, "org_id": membership.org_id},
     )
     if result.rowcount == 0:
         raise HTTPException(status_code=404, detail="Policy not found")
@@ -1835,15 +1902,19 @@ async def delete_policy(policy_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/policies/{policy_id}/submit")
-async def submit_policy_for_approval(policy_id: str, db: Session = Depends(get_db)):
+async def submit_policy_for_approval(
+    policy_id: str,
+    membership: OrgMembership = Depends(org_mutator),
+    db: Session = Depends(get_db),
+):
     _ensure_tables(db)
     now = _utc_now_iso()
     result = db.execute(
         text(
             "UPDATE governance_policies SET status = :status, updated_at = :updated_at "
-            "WHERE id = :id"
+            "WHERE id = :id AND org_id = :org_id"
         ),
-        {"status": "awaiting_approval", "updated_at": now, "id": policy_id},
+        {"status": "awaiting_approval", "updated_at": now, "id": policy_id, "org_id": membership.org_id},
     )
     if result.rowcount == 0:
         raise HTTPException(status_code=404, detail="Policy not found")
@@ -1872,7 +1943,7 @@ async def create_approval_workflow(
             "name": request.name,
             "entity_type": request.entity_type,
             "steps_json": json.dumps(request.steps),
-            "is_active": 1,
+            "is_active": True,
             "created_by": _authenticated_actor(current_user),
             "created_at": now,
             "updated_at": now,
@@ -1937,7 +2008,7 @@ async def create_approval_request(
         raise HTTPException(status_code=404, detail="Approval target not found")
     _require_system_access(db, request.entity_id, current_user, mutate=True)
     workflow = db.execute(
-        text("SELECT id FROM governance_approval_workflows WHERE id = :id AND is_active = 1"),
+        text("SELECT id FROM governance_approval_workflows WHERE id = :id AND is_active = TRUE"),
         {"id": workflow_id},
     ).fetchone()
     if not workflow:
@@ -1977,6 +2048,29 @@ async def create_approval_request(
     }
 
 
+def _gate_decision_block(gate: dict, notes: Optional[str]):
+    """Return None when approval may proceed, else (status_code, detail)."""
+    verdict = gate.get("verdict")
+    if verdict == "no_go":
+        open_checks = [c.get("label") for c in gate.get("checks", []) if c.get("state") == "open"]
+        reasons = gate.get("reasons") or []
+        return 409, {
+            "message": "The release gate says no go: " + ("; ".join(reasons) if reasons else "required evidence is missing") + ".",
+            "gate": {
+                "verdict": verdict,
+                "confidence": gate.get("confidence"),
+                "reasons": reasons,
+                "openChecks": open_checks,
+            },
+        }
+    if verdict == "conditional_go" and not (notes or "").strip():
+        return 422, {
+            "message": "The release gate is conditional go. State the conditions you accept in the notes to approve.",
+            "gate": {"verdict": verdict, "confidence": gate.get("confidence"), "reasons": gate.get("reasons") or []},
+        }
+    return None
+
+
 @router.post("/approval-requests/{request_id}/decision")
 async def make_approval_decision(
     request_id: str,
@@ -2001,6 +2095,16 @@ async def make_approval_decision(
     ).fetchone()
     if not existing:
         raise HTTPException(status_code=404, detail="Approval request not found")
+    gate = None
+    if existing.entity_type == "ai_system" and approval_system_id:
+        from api.routes.fairness_runs import _gate_payload  # function-level: that router imports this one
+
+        system = db.execute(text("SELECT risk_tier FROM governance_ai_systems WHERE id = :id"), {"id": approval_system_id}).fetchone()
+        gate = _gate_payload(db, approval_system_id, system[0] if system else "medium")
+        if new_status == "approved":
+            blocked = _gate_decision_block(gate, request.notes)
+            if blocked:
+                raise HTTPException(status_code=blocked[0], detail=blocked[1])
     if new_status == "approved" and existing.entity_type == "ai_system":
         from src.application.services.environmental_service import env_gate_status
 
@@ -2068,10 +2172,8 @@ async def make_approval_decision(
     )
     seal = None
     if existing.entity_type == "ai_system" and approval_system_id:
-        from api.routes.fairness_runs import _gate_payload  # function-level: that router imports this one
         from src.application.services.decision_seal_service import seal_decision
 
-        system = db.execute(text("SELECT risk_tier FROM governance_ai_systems WHERE id = :id"), {"id": approval_system_id}).fetchone()
         seal = seal_decision(
             db,
             system_id=approval_system_id,
@@ -2079,7 +2181,7 @@ async def make_approval_decision(
             decision_id=decision_id,
             decision=new_status,
             sealed_by=actor,
-            gate=_gate_payload(db, approval_system_id, system[0] if system else "medium"),
+            gate=gate,
         )
 
     db.commit()
@@ -2764,9 +2866,11 @@ async def list_evidence(
 @router.get("/remediation")
 async def list_remediation_tasks(
     system_id: str = Query(min_length=1),
+    current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
     _ensure_tables(db)
+    _require_system_access(db, system_id, current_user)
     rows = db.execute(
         text(
             "SELECT id, system_id, title, description, source_type, source_id, linked_risk_ids_json, "
@@ -2784,8 +2888,13 @@ async def list_remediation_tasks(
 
 
 @router.post("/remediation")
-async def create_remediation_task(request: RemediationCreateRequest, db: Session = Depends(get_db)):
+async def create_remediation_task(
+    request: RemediationCreateRequest,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
     _ensure_tables(db)
+    _require_system_access(db, request.system_id, current_user, mutate=True)
     task_id = str(uuid.uuid4())
     now = _utc_now_iso()
     db.execute(
@@ -2838,6 +2947,7 @@ async def create_remediation_task(request: RemediationCreateRequest, db: Session
 async def update_remediation_task(
     task_id: str,
     request: RemediationUpdateRequest,
+    current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
     _ensure_tables(db)
@@ -2851,6 +2961,7 @@ async def update_remediation_task(
     ).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Remediation task not found")
+    _require_system_access(db, str(row[1]), current_user, mutate=True)
 
     updates: Dict[str, Any] = {"id": task_id, "updated_at": _utc_now_iso()}
     set_parts: List[str] = []

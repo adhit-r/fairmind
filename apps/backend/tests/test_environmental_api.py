@@ -97,6 +97,15 @@ def test_environmental_service_uses_migrations_instead_of_request_time_ddl():
         assert statement not in source
 
 
+def _set_low_tier(fixture, system_id: str) -> None:
+    """The org-scoped create route ignores risk_tier; a low tier lets the release gate read conditional go so the environmental rule is what blocks."""
+    from sqlalchemy import text
+
+    with fixture.session_factory() as session:
+        session.execute(text("UPDATE governance_ai_systems SET risk_tier = 'low' WHERE id = :id"), {"id": system_id})
+        session.commit()
+
+
 def _seed_system(client: TestClient, org_id: str, name: str = "env-test-system") -> str:
     """Create a governance AI system through the canonical tenant-scoped API."""
     workspace = client.post(
@@ -349,6 +358,7 @@ def test_environmental_gate_blocks_deployment_approval(environmental_governance_
     """The env gate must block the deployment-approval workflow on no_go."""
     client, org_id = environmental_governance_client
     system_id = _seed_system(client, org_id, "gate-system")
+    _set_low_tier(environmental_governance_client, system_id)
     base = _environmental_base(org_id, system_id)
     # Record a no_go assessment (undisclosed source).
     client.post(

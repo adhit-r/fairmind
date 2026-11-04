@@ -8,11 +8,18 @@ Requirements: 7.8
 """
 
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPBearer
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 import logging
 import json
+
+from api.routes.org_scope import org_member
+from config.auth import TokenData, get_current_active_user
+from src.application.services.governance_assurance_service import (
+    GovernanceAssuranceService,
+    OrgMembership,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -194,41 +201,35 @@ class UserContext:
 # Authentication Functions
 # ============================================================================
 
+def _roles_for(membership: OrgMembership) -> List[str]:
+    """Compliance roles implied by the caller's organisation membership."""
+    if membership.role in ("owner", "admin"):
+        return [ComplianceRole.COMPLIANCE_ADMIN]
+    if GovernanceAssuranceService.may_mutate(membership):
+        return [ComplianceRole.COMPLIANCE_OFFICER]
+    return [ComplianceRole.COMPLIANCE_VIEWER]
+
+
 async def get_current_user_context(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    current_user: TokenData = Depends(get_current_active_user),
+    membership: OrgMembership = Depends(org_member),
 ) -> UserContext:
     """
-    Get current user context from JWT token
-    
-    In production, this would validate the JWT token and extract user information
-    from the token claims.
+    Get current user context from the verified bearer token.
+
+    Identity comes from the token, the organisation and role from the caller's
+    active membership. Routes still check each system id against that
+    organisation (see ``_require_system_access``).
     """
-    try:
-        token = credentials.credentials
-        
-        # In production, validate JWT token here
-        # For now, extract user info from token (mock implementation)
-        # In real implementation, use PyJWT to decode and validate
-        
-        # Mock user context for development
-        user_context = UserContext(
-            user_id="user_123",
-            username="compliance_officer",
-            email="officer@example.com",
-            roles=[ComplianceRole.COMPLIANCE_OFFICER],
-            organization_id="org_123",
-            system_ids=["system_1", "system_2"],
-        )
-        
-        logger.info(f"User authenticated: {user_context.username}")
-        return user_context
-    except Exception as e:
-        logger.error(f"Authentication error: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    user_context = UserContext(
+        user_id=current_user.user_id,
+        username=current_user.email.split("@")[0],
+        email=current_user.email,
+        roles=_roles_for(membership),
+        organization_id=membership.org_id,
+    )
+    logger.info(f"User authenticated: {user_context.user_id}")
+    return user_context
 
 
 # ============================================================================

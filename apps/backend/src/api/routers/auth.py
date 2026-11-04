@@ -258,18 +258,20 @@ async def signup(payload: SignupRequest):
         async with get_db_transaction() as db:
             if await db.fetch_one("SELECT id FROM users WHERE lower(email) = lower(:e)", {"e": payload.email}):
                 raise HTTPException(status_code=409, detail="An account with this email already exists")
+            # The signer owns their organisation through org_members; the global role
+            # stays analyst, since admin is the platform operator.
             # users and organizations reference each other, so create the user first,
             # then the organization it owns, then point the user at it.
             await db.execute(
                 "INSERT INTO users (id, email, username, name, password_hash, role, roles, is_active) "
-                "VALUES (:id, :email, :username, :name, :pw, 'admin', CAST(:roles AS jsonb), TRUE)",
+                "VALUES (:id, :email, :username, :name, :pw, 'analyst', CAST(:roles AS jsonb), TRUE)",
                 {
                     "id": user_id,
                     "email": payload.email,
                     "username": f"{payload.email.split('@')[0]}-{secrets.token_hex(3)}",
                     "name": name,
                     "pw": auth_manager.get_password_hash(payload.password),
-                    "roles": '["admin"]',
+                    "roles": '["analyst"]',
                 },
             )
             await db.execute(
@@ -697,15 +699,23 @@ async def create_user(
 async def list_users(
     current_user: TokenData = Depends(require_admin)
 ):
-    """List all users (admin only). Returns users from DB or cache."""
+    """List the users of the caller's organisation (admin only). Returns users from DB or cache."""
     try:
+        if not current_user.org_id:
+            return {"users": []}
         # Query users from DB if available
         try:
+            from api.routes.org_scope import ORG_MEMBER_USER_IDS, plain_id
             from config.database import get_db
             from sqlalchemy import text
             async with get_db() as db:
                 result = await db.execute(
-                    text("SELECT id, email, username, name, roles, is_active, last_login, created_at FROM users ORDER BY created_at DESC LIMIT 100")
+                    text(
+                        "SELECT id, email, username, name, roles, is_active, last_login, created_at FROM users "
+                        f"WHERE {plain_id('id')} IN ({ORG_MEMBER_USER_IDS}) "
+                        "ORDER BY created_at DESC LIMIT 100"
+                    ),
+                    {"org_id": str(current_user.org_id)},
                 )
                 rows = result.mappings().all()
                 users = [

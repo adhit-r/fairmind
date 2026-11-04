@@ -137,6 +137,11 @@ export interface JourneySummary {
   coveredAll: number
   coveredInstalled: number
   contributingPacks: string[]
+  binding: string | null
+  /** Workflows of installed packs that map to this framework, with their latest run status. */
+  workflows: Array<{ id: string; name: string; stage: string; status: RunStatus | null }>
+  /** How many of those workflows have a run waiting for a person. */
+  waiting: number
 }
 
 export interface JourneyRequirement {
@@ -144,8 +149,8 @@ export interface JourneyRequirement {
   control: string
   title: string
   status: ReqStatus
-  workflows: Array<{ id: string; name: string; relation: string; pack: string; installed: boolean; latestRun: RunSummary | null }>
-  evaluations: Array<{ id: string; name: string; engine: EngineStatus; pack: string; installed: boolean }>
+  workflows: Array<{ id: string; name: string; relation: string; stage: string; pack: string; installed: boolean; latestRun: RunSummary | null }>
+  evaluations: Array<{ id: string; name: string; engine: EngineStatus; pack: string; installed: boolean; result: ResultStatus | null }>
 }
 
 export interface Journey {
@@ -162,6 +167,14 @@ export interface Journey {
   steps: Array<{ pack: string; name: string; installed: boolean; newlyCovered: number; cumulative: number }>
 }
 
+export type ResultStatus = 'passed' | 'failed' | 'insufficient' | 'not_run'
+/** Results FairMind reads for an evaluation: the organisation-wide status and the latest result per AI system. */
+export interface EvaluationResults {
+  status: ResultStatus
+  systems: Array<{ systemId: string; systemName: string; status: Exclude<ResultStatus, 'not_run'>; detail: string; evidenceId: string; at: string }>
+  latestAt: string | null
+}
+
 export interface EvaluationRow {
   id: string
   name: string
@@ -176,6 +189,8 @@ export interface EvaluationRow {
   codeLocation: string | null
   tests: Array<{ key: string; framework: string; control: string; title: string }>
   installed: boolean
+  /** Null when FairMind does not record results for this evaluation yet. */
+  results: EvaluationResults | null
 }
 
 export interface Step {
@@ -260,6 +275,8 @@ export interface Run extends RunSummary {
   systemId: string | null
   approvalRequestId: string | null
   approval: { status: string; decisionNotes: string | null } | null
+  /** Who recorded the step output now up for approval; deciding on your own proposal is allowed but recorded. */
+  proposalBy: string | null
   finishedAt: string | null
   events: RunEvent[]
   chainValid: boolean
@@ -378,6 +395,7 @@ export function usePackActions() {
       installPack: (packId: string) => send<Pack>(API_ENDPOINTS.packs.install(packId), (p) => apiClient.post(p)),
       uninstallPack: (packId: string) => send<Pack>(API_ENDPOINTS.packs.install(packId), (p) => apiClient.delete(p)),
       installBundle: (bundleId: string) => send<Bundle>(API_ENDPOINTS.packs.installBundle(bundleId), (p) => apiClient.post(p)),
+      installFramework: (frameworkKey: string) => send<{ installed: string[] }>(API_ENDPOINTS.packs.installFramework(frameworkKey), (p) => apiClient.post(p)),
       startRun: (workflowId: string, systemId?: string) =>
         send<Run>(API_ENDPOINTS.packs.startRun(workflowId), (p) => apiClient.post(p, systemId ? { system_id: systemId } : {})),
       decideRun: (runId: string, decision: Decision, notes?: string) =>
@@ -394,7 +412,7 @@ export function usePackActions() {
 
 /** Install, remove and bundle-install with one busy id and one failure message; `onDone` runs after every attempt so pages can reload. */
 export function useInstaller(onDone: () => void) {
-  const { installPack, uninstallPack, installBundle } = usePackActions()
+  const { installPack, uninstallPack, installBundle, installFramework } = usePackActions()
   const [busy, setBusy] = useState<string | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
   async function run(id: string, call: () => Promise<MutationResult<unknown>>) {
@@ -410,5 +428,6 @@ export function useInstaller(onDone: () => void) {
     failure,
     pack: (id: string, remove = false) => run(id, () => (remove ? uninstallPack(id) : installPack(id))),
     bundle: (id: string) => run(id, () => installBundle(id)),
+    framework: (key: string) => run(key, () => installFramework(key)),
   }
 }

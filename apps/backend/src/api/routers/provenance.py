@@ -1,6 +1,10 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
-router = APIRouter()
+from config.auth import get_current_active_user
+
+# Both routes answer 501 until lineage is recorded; keep them behind sign-in so
+# the tenant check has a place to land when they do.
+router = APIRouter(dependencies=[Depends(get_current_active_user)])
 
 _NOT_RECORDED = "Model provenance is not recorded yet. Register lineage through the AI-BOM before reading it here."
 

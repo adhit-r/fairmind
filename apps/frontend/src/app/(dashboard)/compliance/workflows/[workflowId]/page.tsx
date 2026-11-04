@@ -7,7 +7,7 @@ import ReactFlow, { Background, Controls } from 'reactflow'
 import 'reactflow/dist/style.css'
 import { needsPerson, usePackActions, useRun, useWorkflow, versionName } from '@/lib/api/hooks/usePacks'
 import { FitWhenReady, KIND_LABEL, KindIcon, flowGraph, nodeTypes, type NodeState } from '@/components/packs/flow'
-import { BTN, BTN_P, Crumbs, EnginePill, ErrorNote, Heading, LABEL, LINE, Loading, MUTED, Pill, StatusPill, cap, when } from '@/components/packs/parts'
+import { BTN, BTN_P, Crumbs, EnginePill, ErrorNote, Heading, LABEL, LINE, Loading, MUTED, Pill, StatusPill, StagePill, cap, when } from '@/components/packs/parts'
 import { cn } from '@/lib/utils'
 
 export default function WorkflowPage() {
@@ -71,7 +71,7 @@ export default function WorkflowPage() {
   const w = wf.data
   const last = w.latestRun
   const facts: Array<[string, ReactNode]> = [
-    ['Runs in', cap(w.stage)],
+    ['Runs in', <StagePill key="stage" stage={w.stage} />],
     ['Autonomy', <span key="a" title={w.autonomy}>{w.autonomy.split(/\s/)[0]}</span>],
     ['Approver', w.approver],
     ['Pattern', w.pattern.name],

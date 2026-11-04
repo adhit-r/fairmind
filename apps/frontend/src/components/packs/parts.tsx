@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import './iso.css'
 import type { ReactNode } from 'react'
-import type { EngineStatus, ReqStatus, RunStatus } from '@/lib/api/hooks/usePacks'
+import type { EngineStatus, ReqStatus, ResultStatus, RunStatus } from '@/lib/api/hooks/usePacks'
 import { cn } from '@/lib/utils'
 
 /** Class strings shared by the pack screens; they follow the approved design (pill buttons, soft pills). */
@@ -34,6 +34,47 @@ export function Pill({ tone = 'plain', dot, children }: { tone?: Tone; dot?: boo
   )
 }
 
+const RESULT: Record<ResultStatus, { label: string; tone: Tone }> = {
+  passed: { label: 'Passed', tone: 'done' },
+  failed: { label: 'Failed', tone: 'block' },
+  insufficient: { label: 'Insufficient data', tone: 'warn' },
+  not_run: { label: 'Not run yet', tone: 'plain' },
+}
+
+/** An evaluation's result on a system, or across the organisation's systems. */
+export function ResultPill({ status }: { status: ResultStatus }) {
+  return <Pill tone={RESULT[status].tone}>{RESULT[status].label}</Pill>
+}
+
+/** The catalogue names 12 workflow stages; each belongs to one of the five lifecycle stages in the menu. */
+const LIFECYCLE: Record<string, string> = {
+  map: 'Onboard',
+  assess: 'Assess',
+  test: 'Assess',
+  measure: 'Assess',
+  govern: 'Govern',
+  manage: 'Govern',
+  build: 'Govern',
+  deploy: 'Govern',
+  respond: 'Remediate',
+  improve: 'Remediate',
+  operate: 'Operate',
+  retire: 'Operate',
+}
+/** The lifecycle stage a catalogue stage belongs to; an unknown stage is shown as the catalogue names it. */
+export const lifecycleStage = (stage: string) => LIFECYCLE[stage.toLowerCase()] ?? cap(stage)
+
+/** A workflow's lifecycle stage, with the catalogue's finer stage on hover when it differs. */
+export function StagePill({ stage }: { stage: string }) {
+  const life = lifecycleStage(stage)
+  const fine = cap(stage)
+  return (
+    <span title={fine === life ? undefined : `Catalogue stage: ${fine}`}>
+      <Pill>{life}</Pill>
+    </span>
+  )
+}
+
 const STATUS: Record<RunStatus, { label: string; tone: Tone }> = {
   queued: { label: 'Queued', tone: 'plain' },
   running: { label: 'Running', tone: 'run' },
@@ -51,8 +92,8 @@ export function StatusPill({ status }: { status: RunStatus | null | undefined })
 /** Requirement coverage on a journey; the same words and colours everywhere. */
 const REQ: Record<ReqStatus, { label: string; tone: Tone; hint: string }> = {
   covered: { label: 'Covered', tone: 'done', hint: 'An installed workflow covers this requirement.' },
-  tested: { label: 'Tested', tone: 'info', hint: 'An installed evaluation tests this requirement.' },
-  available: { label: 'Available', tone: 'you', hint: 'A pack that is not installed would cover or test this requirement.' },
+  tested: { label: 'Tested', tone: 'info', hint: 'An evaluation that tests this requirement passed on your AI systems.' },
+  available: { label: 'Available', tone: 'you', hint: 'A pack that is not installed would cover it, or an evaluation would test it once it passes.' },
   supported: { label: 'Supported', tone: 'plain', hint: 'Workflows only support this requirement; none satisfies it.' },
   gap: { label: 'Gap', tone: 'block', hint: 'Nothing in the catalogue maps to this requirement.' },
 }

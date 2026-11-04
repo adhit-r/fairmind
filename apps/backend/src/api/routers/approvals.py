@@ -195,7 +195,7 @@ async def create_approval_request(
     workflow_id = request.workflow_id
     if workflow_id:
         wf = db.execute(
-            text("SELECT id FROM governance_approval_workflows WHERE id = :id AND is_active = 1"),
+            text("SELECT id FROM governance_approval_workflows WHERE id = :id AND is_active = TRUE"),
             {"id": workflow_id},
         ).fetchone()
         if not wf:
@@ -204,7 +204,7 @@ async def create_approval_request(
         wf = db.execute(
             text(
                 "SELECT id FROM governance_approval_workflows "
-                "WHERE entity_type = 'ai_system' AND is_active = 1 "
+                "WHERE entity_type = 'ai_system' AND is_active = TRUE "
                 "ORDER BY created_at DESC LIMIT 1"
             ),
         ).fetchone()
@@ -218,7 +218,7 @@ async def create_approval_request(
                 text(
                     "INSERT INTO governance_approval_workflows "
                     "(id, name, entity_type, steps_json, is_active, created_at, updated_at) "
-                    "VALUES (:id, :name, :entity_type, :steps_json, 1, :created_at, :updated_at)"
+                    "VALUES (:id, :name, :entity_type, :steps_json, TRUE, :created_at, :updated_at)"
                 ),
                 {
                     "id": workflow_id,

@@ -1,410 +1,355 @@
 ---
+import { registryTotals } from '../lib/registry';
 import Layout from '../layouts/Layout.astro';
-import EvidenceExchange from '../components/marketing/EvidenceExchange.astro';
+import { frameworks } from '../lib/frameworks';
 import '../styles/home.css';
 
-const capabilities = [
+const stats = [
+  { n: String(registryTotals.frameworks), t: 'Frameworks in the registry, EU AI Act to OWASP Agentic' },
+  { n: '90', t: 'Governance workflows agents can run' },
+  { n: '109', t: 'Evaluations mapped to requirement IDs' },
+  { n: '21', t: 'Packs across Govern, Evaluate, Secure, Comply' },
+  { n: '0', t: 'External changes made without a human approval' },
+];
+
+const steps = [
+  { n: '01', title: 'Collect', body: 'Policies, tickets, model cards, logs. Read-only scopes.' },
+  { n: '02', title: 'Check', body: 'Rules first, model second. Every finding cites its source.' },
+  { n: '03', title: 'Suggest', body: 'The record, mapping, or fix, with its confidence stated.' },
   {
-    evaluator: 'Environmental evidence',
-    state: 'validated',
-    category: 'usable',
-    output: 'Energy, carbon, water, and uncertainty records',
-    boundary: 'Strongest evidence-grade vertical currently in this repository.',
+    n: '04 · Gate', title: 'You', body: 'Approve, edit, or reject. Deny by default.', gate: true,
+    who: 'Waiting on a person', approved: { body: 'Decision recorded.', who: 'Approved by you' }, rejected: { body: 'Nothing changed.', who: 'Rejected by you' },
   },
+  { n: '05', title: 'Act', body: 'Dry run, blast radius, rollback plan. Then the change.' },
+  { n: '06', title: 'Verify', body: 'Re-read the target. A mismatch rolls back and escalates.' },
   {
-    evaluator: 'LLM judge',
-    state: 'external_provider',
-    category: 'usable',
-    output: 'Provider-evaluated response assessment',
-    boundary: 'Requires a configured external model provider and recorded provider identity.',
-  },
-  {
-    evaluator: 'Multimodal bias',
-    state: 'metadata_only',
-    category: 'bounded',
-    output: 'Media metadata and statistical summary',
-    boundary: 'The current path does not evaluate image, audio, or video content.',
-  },
-  {
-    evaluator: 'AI BOM profile',
-    state: 'metadata_only',
-    category: 'bounded',
-    output: 'Software and model inventory profile',
-    boundary: 'Transforms supplied metadata; it does not independently verify the subject.',
-  },
-  {
-    evaluator: 'Tabular bias',
-    state: 'unavailable',
-    category: 'blocked',
-    output: 'No defensible artifact from the current route',
-    boundary: 'The interface calls an evaluator endpoint that is not present.',
-  },
-  {
-    evaluator: 'Modern LLM bias',
-    state: 'unavailable',
-    category: 'blocked',
-    output: 'No defensible evidence artifact',
-    boundary: 'The current interface produces mock results and must not be exported as evidence.',
+    n: '07', title: 'File evidence', body: 'Hash-chained trace, mapped to every requirement it satisfies.',
+    approved: { body: 'Chained to the previous run and mapped to its requirement.' }, rejected: { body: 'The rejection is filed too, with the reason.' },
   },
 ];
 
-const graphNodes = [
+const autonomy = [
+  { level: 'A0', name: 'Manual', detail: 'The agent does nothing unless asked for a draft.' },
+  { level: 'A1', name: 'Assist', detail: 'Collects and checks. Humans write every conclusion.' },
+  { level: 'A2', name: 'Propose', detail: 'Proposes; nothing is recorded until a human approves. The default.' },
+  { level: 'A3', name: 'Act on internal records', detail: 'Files records inside FairMind; humans review by sampling. Never external writes.' },
+];
+
+const pillars = [
+  { name: 'Govern', title: 'Run the management system', body: 'Policies, accountability, inventory, risk and impact, data, suppliers.' },
+  { name: 'Evaluate', title: 'Test before and after release', body: 'Quality, fairness and bias, agent behaviour, production drift.' },
+  { name: 'Secure', title: 'Protect LLM apps and agents', body: 'OWASP LLM and Agentic Top 10, MITRE ATLAS, supply chain.' },
+  { name: 'Comply', title: 'Show it, requirement by requirement', body: 'EU AI Act, ISO/IEC 42001, AIUC-1. Gaps shown, not hidden.' },
+];
+
+const registry = [
+  { b: 'EU AI Act', s: '2024/1689', href: '/frameworks/eu-ai-act/' },
+  { b: 'ISO/IEC 42001', s: '', href: '/frameworks/iso-42001/' },
+  { b: 'NIST AI RMF', s: '', href: '/frameworks/nist-ai-rmf/' },
+  { b: 'OWASP', s: 'Agentic Top 10', href: '/frameworks/' },
+  { b: 'AIUC-1', s: '', href: '/frameworks/' },
+  { b: 'OWASP', s: 'LLM Top 10', href: '/frameworks/' },
+  { b: 'MITRE ATLAS', s: '', href: '/frameworks/' },
+  { b: 'NIST AI 600-1', s: '', href: '/frameworks/nist-ai-rmf/' },
+  { b: 'ISO/IEC 42005', s: '', href: '/frameworks/iso-42001/' },
+  { b: 'CSA', s: 'MAESTRO', href: '/frameworks/' },
+  { b: 'OWASP', s: 'MCP Top 10', href: '/frameworks/' },
+];
+
+const evaluations = [
+  { name: 'Agents', title: 'Can it only do what it was allowed to?', body: 'Tool least privilege, out-of-scope actions blocked, MCP server permission audit, excessive agency, kill-switch time to stop, runaway containment.' },
+  { name: 'LLM apps and RAG', title: 'Does it hold under attack?', body: 'Direct and indirect prompt injection, jailbreak resistance, system prompt leakage, groundedness, harmful content, over-refusal, knowledge-base poisoning.' },
+  { name: 'Models and data', title: 'Is it still the model you tested?', body: 'Task accuracy, calibration, robustness, data drift, out-of-distribution detection, membership inference, backdoor detection, label quality.' },
+  { name: 'Decision systems', title: 'Is it fair, with the statistics shown?', body: 'Selection-rate parity at the four-fifths rule, error-rate parity, intersectional slices, fairness drift. Suites for hiring, credit, insurance, benefits and education.' },
+];
+
+const faqs = [
   {
-    key: 'system',
-    label: 'AI system',
-    detail: 'The exact model, agent, application, version, deployment, owner, and intended use.',
-    proof: 'Creates the subject boundary before any result is interpreted.',
+    q: 'What is agentic AI governance?',
+    a: 'Agentic AI governance uses AI agents to run the repeatable parts of governing AI systems: collecting evidence, checking it against framework requirements, proposing records and fixes, and filing the trace. The decisions stay with people. In FairMind, every workflow stops at an approval gate before anything is recorded or changed.',
   },
   {
-    key: 'run',
-    label: 'Evaluation run',
-    detail: 'Evaluator version, scope, pre-declared threshold, result, and execution identity.',
-    proof: 'Separates an observed run from a floating score or screenshot.',
+    q: 'What does a FairMind agent actually do?',
+    a: 'It runs a workflow made of seven step types: collect, check, suggest, ask a person, act, verify, and file evidence. Today the trigger, escalate and file steps run themselves, the gate steps open an approval request, and a person completes the collect, check, suggest, act and verify steps, which the ledger records as manual. Agent-executed steps arrive workflow by workflow, behind the same gates, with scoped read-only credentials, rules before model judgement, and a citation for every finding.',
   },
   {
-    key: 'artifact',
-    label: 'Artifact',
-    detail: 'The source-native output, bounded storage reference, integrity metadata, and limitations.',
-    proof: 'Keeps the conclusion traceable to what the tool actually produced.',
+    q: 'What does FairMind evaluate?',
+    a: 'The catalogue defines 109 evaluations: 53 for security, 46 for behaviour and fairness, and 10 for governance and compliance. They cover agents (tool least privilege, out-of-scope actions, MCP permissions, kill switches), LLM apps and RAG (prompt injection, jailbreaks, prompt leakage, groundedness, harmful content), models and data (accuracy, calibration, drift, membership inference, backdoors) and decision systems (selection-rate parity, error-rate parity, intersectional slices). Each one names its metric, its threshold and where that threshold comes from, and every evaluator declares whether it is validated, runs through an external provider, reads metadata only, or is not yet available.',
   },
   {
-    key: 'mapping',
-    label: 'Candidate mapping',
-    detail: 'A proposed relationship between technical evidence and a versioned governance control.',
-    proof: 'A candidate mapping never satisfies a control by itself.',
+    q: 'Can the agent change things on its own?',
+    a: 'Only inside FairMind, and only if you set that workflow to autonomy level A3. The default is A2: the agent proposes and a person approves. External systems are never written without an approval. If an approver is unreachable or no policy covers the action, nothing happens.',
   },
   {
-    key: 'review',
-    label: 'Reviewer decision',
-    detail: 'An accountable person accepts, rejects, or narrows the mapping with a recorded rationale.',
-    proof: 'This is the human boundary between evaluation and governance.',
+    q: 'Which frameworks does FairMind cover?',
+    a: `The registry holds ${registryTotals.frameworks} frameworks, including the EU AI Act, ISO/IEC 42001, NIST AI RMF and AI 600-1, the OWASP Top 10 for LLM and Agentic applications, AIUC-1, MITRE ATLAS, the OWASP MCP Top 10, CSA MAESTRO, Singapore’s Model AI Governance Framework, and national rules from India, Japan, Korea, China and US states. One workflow run counts toward every requirement it maps to.`,
   },
   {
-    key: 'finding',
-    label: 'Finding + risk',
-    detail: 'A failed, missing, stale, or rejected evidence state becomes owned governance work.',
-    proof: 'Missing evidence stays visible and never becomes a pass.',
+    q: 'How is FairMind’s own agent governed?',
+    a: 'Twenty runtime controls apply to it: per-step scoped identity, a deterministic tool allowlist that prompts cannot widen, collected content treated as data rather than instructions, mandatory citations, pinned model and prompt versions with golden-set evaluations, a hash-chained immutable trace, cost and rate caps, and a kill switch per run. Customers can see the agent’s metrics and incidents.',
   },
   {
-    key: 'retest',
-    label: 'Remediation + retest',
-    detail: 'The fix, owner, success criteria, and clean rerun link back to the original failure.',
-    proof: 'A passing retest supersedes current state without deleting history.',
+    q: 'Is FairMind a certification?',
+    a: 'No. FairMind produces and organises evidence and records human decisions. Certification and conformity decisions stay with your reviewers, auditors, and, where relevant, accredited bodies.',
+  },
+];
+
+const structuredData = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    name: 'FairMind',
+    applicationCategory: 'BusinessApplication',
+    operatingSystem: 'Web',
+    url: 'https://fairmind.xyz',
+    description:
+      `Agentic AI governance platform: 90 governance workflows, 109 evaluations and ${registryTotals.frameworks} frameworks, with a human gate in every workflow and a hash-chained record of each run. Covers EU AI Act, ISO/IEC 42001, NIST AI RMF, OWASP LLM and Agentic Top 10, MITRE ATLAS and AIUC-1.`,
+    publisher: { '@id': 'https://fairmind.xyz/#organization' },
   },
   {
-    key: 'package',
-    label: 'Assurance package',
-    detail: 'A framework-pinned evidence index, unresolved findings, decisions, limitations, and history.',
-    proof: 'The package supports a decision. It is not a certificate.',
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: faqs.map((f) => ({
+      '@type': 'Question',
+      name: f.q,
+      acceptedAnswer: { '@type': 'Answer', text: f.a },
+    })),
   },
 ];
 ---
 
 <Layout
-  title="FairMind · Bring your tests. Produce evidence you can defend."
-  description="FairMind is a vendor-neutral AI assurance evidence workbench connecting evaluator output, provenance, human review, remediation, retests, and assurance reporting."
+  title="FairMind: agentic AI governance platform"
+  description={`Agentic AI governance: 90 workflows, 109 evaluations and ${registryTotals.frameworks} frameworks, with a human gate in every workflow. EU AI Act, ISO/IEC 42001, NIST AI RMF, OWASP Agentic, MITRE ATLAS, AIUC-1.`}
+  structuredData={structuredData}
 >
-  <section class="fm-hero" id="what-fairmind-does">
-    <div class="fm-hero-copy">
-      <p class="fm-hero-kicker">AI evaluation · AI safety · AI governance</p>
-      <h1><span>Bring your tests.</span><span>Produce evidence you can defend.</span></h1>
-      <p class="fm-hero-intro">
-        FairMind is the vendor-neutral evidence workbench between your AI test tools and your
-        governance process. It binds every result to the system, threshold, artifact,
-        limitation, reviewer, finding, remediation, and retest that give it meaning.
+  <div class="story" data-story>
+    <div class="stage" data-stage>
+      <canvas data-canvas aria-hidden="true"></canvas>
+      <p class="counter" aria-live="polite">
+        <b data-counter>0</b>
+        <span>items approved by you</span>
+        <em>24,000 checks in the run · 0 changed without you</em>
       </p>
-      <div class="fm-hero-actions">
-        <a class="button button-primary" href="#evidence-exchange">Explore the evidence layer</a>
-        <a class="button button-secondary" href="#capabilities">See current capability</a>
-      </div>
-      <dl class="fm-hero-proof">
-        <div><dt>Input</dt><dd>Your evaluator output</dd></div>
-        <div><dt>FairMind adds</dt><dd>Context + chain of custody</dd></div>
-        <div><dt>Decision</dt><dd>Always human</dd></div>
-      </dl>
+      <div class="scroll-cue" aria-hidden="true"><i></i>Scroll</div>
     </div>
-    <div id="evidence-exchange">
-      <EvidenceExchange />
-    </div>
-  </section>
 
-  <section class="fm-definition" aria-label="FairMind definition">
-    <p>
-      <strong>FairMind connects evaluators to accountable governance.</strong>
-      It does not replace the evaluator, infer compliance, issue certification, or approve an AI
-      system because a dashboard turned green.
-    </p>
-    <a href="#evidence-graph">See the evidence graph</a>
-  </section>
-
-  <section class="fm-role-section" id="workbench" aria-labelledby="roles-title">
-    <header class="fm-section-heading fm-section-heading-split">
-      <h2 id="roles-title">Three teams. One evidence record.</h2>
-      <p>
-        Engineers, reviewers, and assurance owners enter at different points. FairMind keeps them
-        anchored to the same AI system and the same source artifacts.
-      </p>
-    </header>
-
-    <div class="role-workbench" data-role-workbench>
-      <div class="role-tabs" role="tablist" aria-label="FairMind user workflow">
-        <button type="button" role="tab" id="role-engineer" aria-controls="panel-engineer" aria-selected="true" data-role-tab="engineer">
-          <span>01</span> I run tests
-        </button>
-        <button type="button" role="tab" id="role-reviewer" aria-controls="panel-reviewer" aria-selected="false" data-role-tab="reviewer">
-          <span>02</span> I review evidence
-        </button>
-        <button type="button" role="tab" id="role-owner" aria-controls="panel-owner" aria-selected="false" data-role-tab="owner">
-          <span>03</span> I own the decision
-        </button>
-      </div>
-
-      <div class="role-panel" id="panel-engineer" role="tabpanel" aria-labelledby="role-engineer" data-role-panel="engineer">
-        <div class="role-panel-copy">
-          <p>For ML engineers and security testers</p>
-          <h3>Keep the result attached to the thing you actually tested.</h3>
-          <p>Register the system boundary, bring or run an evaluator, record the threshold before interpretation, and preserve the source artifact with its limitations.</p>
+    <div class="panels">
+      <section class="panel" aria-labelledby="hero-title">
+        <div class="wrap">
+          <p class="label reveal">Agentic AI governance</p>
+          <h1 id="hero-title" class="reveal" style="transition-delay: 80ms">
+            Governance that runs itself.<br />Decisions that stay <em>human.</em>
+          </h1>
+          <p class="panel-intro reveal" style="transition-delay: 160ms">
+            FairMind runs governance as agent workflows: collect, check, suggest, act, verify, file.
+            Every workflow stops at a gate, and a person decides. Right now, that person is you.
+          </p>
+          <div class="panel-actions reveal" style="transition-delay: 240ms">
+            <a class="button button-primary" href="/request-access/" data-magnet>Request access <span class="arr" aria-hidden="true">→</span></a>
+            <a class="button" href="#how-a-run-works" data-magnet>How a run works</a>
+          </div>
         </div>
-        <ol class="role-task-rail">
-          <li><span>System</span><strong>Name the exact subject and version</strong></li>
-          <li><span>Evaluation</span><strong>Record scope, threshold, and result</strong></li>
-          <li><span>Evidence</span><strong>Preserve artifact identity and limitations</strong></li>
-        </ol>
-        <p class="role-output"><span>Output</span> Reviewable evidence record</p>
-      </div>
+      </section>
 
-      <div class="role-panel" id="panel-reviewer" role="tabpanel" aria-labelledby="role-reviewer" data-role-panel="reviewer" hidden>
-        <div class="role-panel-copy">
-          <p>For model-risk, compliance, and independent reviewers</p>
-          <h3>Review what the evidence proves—and where it stops.</h3>
-          <p>Inspect capability state, provenance, thresholds, freshness, and limitations. Accept, reject, or narrow candidate control mappings with your rationale attached.</p>
+      <section class="panel" aria-label="What the tunnel shows">
+        <div class="wrap">
+          <div class="glass reveal">
+            <p class="label">What you just did</p>
+            <h2>Every tile is a check in a run. It stayed grey until <em>you</em> looked at it.</h2>
+            <p>Deny by default. Nothing is recorded or changed until an approver decides, and every decision is kept with who made it and why.</p>
+          </div>
         </div>
-        <ol class="role-task-rail">
-          <li><span>Truth</span><strong>See validated, bounded, or unavailable</strong></li>
-          <li><span>Mapping</span><strong>Review the proposed control relationship</strong></li>
-          <li><span>Decision</span><strong>Record reviewer identity and rationale</strong></li>
-        </ol>
-        <p class="role-output"><span>Output</span> Human-reviewed evidence mapping</p>
-      </div>
+      </section>
 
-      <div class="role-panel" id="panel-owner" role="tabpanel" aria-labelledby="role-owner" data-role-panel="owner" hidden>
-        <div class="role-panel-copy">
-          <p>For AI assurance leads and accountable owners</p>
-          <h3>Make release decisions with failures, fixes, and unknowns intact.</h3>
-          <p>Turn evidence gaps into findings, assign remediation, require a linked retest, pin the framework version, and export the evidence index behind the decision.</p>
+      <section class="panel" aria-label="The evidence trail">
+        <div class="wrap">
+          <div class="glass reveal">
+            <p class="label">Behind you</p>
+            <h2>Your decisions become the <em>evidence trail.</em></h2>
+            <p>A hash-chained trace of inputs, model calls, tool calls, and approvals, mapped to the requirements it satisfies. Auditors read the trail; they don't take our word for it.</p>
+          </div>
         </div>
-        <ol class="role-task-rail">
-          <li><span>Finding</span><strong>Own the blocker and remediation</strong></li>
-          <li><span>Retest</span><strong>Link the clean run to the failure</strong></li>
-          <li><span>Package</span><strong>Export decisions, limits, and history</strong></li>
+      </section>
+    </div>
+  </div>
+
+  <div class="strip" aria-label="FairMind by the numbers">
+    <div class="wrap">
+      {stats.map((s) => (<div><b>{s.n}</b><span>{s.t}</span></div>))}
+    </div>
+  </div>
+
+  <section class="section" id="how-a-run-works">
+    <div class="wrap">
+      <header class="section-heading">
+        <p class="label reveal">How a run works</p>
+        <h2 class="reveal">The agent stops at you. <em>Nothing moves until you decide.</em></h2>
+      </header>
+      <div class="run" data-run data-state="waiting">
+        <div class="run-track" aria-hidden="true"><i></i></div>
+        <ol class="run-steps">
+          {steps.map((s, i) => (
+            <li class:list={['run-step', s.gate && 'gate', i > 3 && 'after', i === 6 && 'filed']}>
+              <span class="run-dot" aria-hidden="true"></span>
+              <p class="label">{s.n}</p>
+              <b>{s.title}</b>
+              <span class="run-body" data-waiting={s.body} data-approved={s.approved?.body} data-rejected={s.rejected?.body}>{s.body}</span>
+              <span class="run-who" data-waiting={s.who ?? 'Agent'} data-approved={s.approved?.who} data-rejected={s.rejected?.who}>{s.who ?? 'Agent'}</span>
+            </li>
+          ))}
         </ol>
-        <p class="role-output"><span>Output</span> Decision-ready assurance package</p>
+        <div class="run-decision">
+          <p aria-live="polite" data-waiting="The agent suggests mapping this fairness run to EU AI Act Article 10(2)(f)." data-approved="Applied, verified, filed. Steps 05 to 07 ran because you approved." data-rejected="Steps 05 and 06 never ran. The trail shows why.">The agent suggests mapping this fairness run to EU AI Act Article 10(2)(f).</p>
+          <div class="run-actions">
+            <button type="button" class="button button-primary button-compact" data-run-to="approved">Approve</button>
+            <button type="button" class="button button-compact" data-run-to="rejected">Reject</button>
+            <button type="button" class="button button-compact" data-run-to="waiting" hidden>Run again</button>
+          </div>
+        </div>
       </div>
     </div>
   </section>
 
-  <section class="fm-graph-section" id="evidence-graph" aria-labelledby="graph-title">
-    <header class="fm-section-heading fm-graph-heading">
-      <div>
-        <h2 id="graph-title">The graph is the product.</h2>
-        <p>Not another score. A durable relationship between the test, the evidence, the reviewer, and what happened next.</p>
-      </div>
-      <p class="fm-graph-instruction">Focus or select a node to inspect why it exists.</p>
-    </header>
-
-    <div class="evidence-graph" data-evidence-graph>
-      <div class="evidence-graph-track" role="group" aria-label="Canonical assurance graph">
-        {
-          graphNodes.map((node, index) => (
-            <button
-              type="button"
-              class:list={['graph-node', index === 0 && 'is-active']}
-              data-graph-node={node.key}
-              data-graph-detail={node.detail}
-              data-graph-proof={node.proof}
-              aria-pressed={index === 0 ? 'true' : 'false'}
-            >
-              <span>{String(index + 1).padStart(2, '0')}</span>
-              <strong>{node.label}</strong>
-            </button>
-          ))
-        }
-      </div>
-      <div class="graph-detail" aria-live="polite">
-        <span data-graph-index>01 / AI system</span>
-        <p data-graph-detail>{graphNodes[0].detail}</p>
-        <strong data-graph-proof>{graphNodes[0].proof}</strong>
+  <section class="section section-grey" id="autonomy">
+    <div class="wrap split">
+      <header>
+        <p class="label reveal">Autonomy</p>
+        <h2 class="reveal">You set how far the agent goes. <em>Per workflow.</em></h2>
+        <p class="split-lead reveal">Internal audit stays at Assist. Inventory upkeep can run at Act. External systems are never written without a person.</p>
+      </header>
+      <div class="ladder reveal">
+        {autonomy.map((a) => (
+          <div><b>{a.level}</b><span>{a.name}</span><span>{a.detail}</span></div>
+        ))}
       </div>
     </div>
   </section>
 
-  <section class="fm-capability-section" id="capabilities" aria-labelledby="capability-title">
-    <header class="fm-section-heading fm-section-heading-split">
-      <h2 id="capability-title">Capability truth is part of the interface.</h2>
-      <p>
-        Current implementation state is shown per evaluator. It describes what evidence a route
-        can produce today—not compliance, certification, or product vision.
-      </p>
-    </header>
-
-    <div class="capability-controls" role="group" aria-label="Filter capabilities">
-      <button type="button" class="is-active" data-capability-filter="all" aria-pressed="true">All routes</button>
-      <button type="button" data-capability-filter="usable" aria-pressed="false">Usable paths</button>
-      <button type="button" data-capability-filter="bounded" aria-pressed="false">Bounded metadata</button>
-      <button type="button" data-capability-filter="blocked" aria-pressed="false">Unavailable</button>
-    </div>
-
-    <div class="capability-ledger" data-capability-ledger>
-      {
-        capabilities.map((capability) => (
-          <article class="capability-row" data-capability-category={capability.category}>
-            <div>
-              <strong>{capability.evaluator}</strong>
-              <span>{capability.state}</span>
-            </div>
-            <p>{capability.output}</p>
-            <p>{capability.boundary}</p>
+  <section class="section" id="packs">
+    <div class="wrap">
+      <header class="section-heading">
+        <p class="label reveal">Four pillars</p>
+        <h2 class="reveal">Install the packs your systems <em>need.</em></h2>
+      </header>
+      <div class="grid-4">
+        {pillars.map((p, i) => (
+          <article class="card tilt reveal" style={`transition-delay: ${i * 80}ms`}>
+            <p class="label">{p.name}</p>
+            <h3>{p.title}</h3>
+            <p>{p.body}</p>
           </article>
-        ))
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <section class="section section-grey" id="evaluations">
+    <div class="wrap">
+      <header class="section-heading">
+        <p class="label reveal">109 evaluations</p>
+        <h2 class="reveal">Tests for the systems you actually run. <em>Thresholds declared first.</em></h2>
+        <p class="reveal">Each evaluation names its metric, its threshold and where that threshold comes from. Each evaluator says whether it is validated, external, metadata only, or not yet available.</p>
+      </header>
+      <div class="grid-4">
+        {evaluations.map((e, i) => (
+          <article class="card tilt reveal" style={`transition-delay: ${i * 80}ms`}>
+            <p class="label">{e.name}</p>
+            <h3>{e.title}</h3>
+            <p>{e.body}</p>
+          </article>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <nav class="marquee" aria-label="Frameworks in the registry">
+    <ul>
+      {[...registry, ...registry].map((r) => (
+        <li><a href={r.href}><b>{r.b}</b> {r.s}</a></li>
+      ))}
+    </ul>
+  </nav>
+
+  <section class="section" id="governed-agent">
+    <div class="wrap split" style="align-items: center">
+      <header>
+        <p class="label reveal">The agent is governed too</p>
+        <h2 class="reveal">Twenty controls on <em>our own</em> agent.</h2>
+        <p class="split-lead reveal">
+          Per-step scoped identity. A deterministic tool allowlist prompts cannot widen. Collected
+          content treated as data, never instructions. A hash-chained trace of every call. A kill
+          switch per run. You can see our agent's metrics and incidents; we cannot hide them.
+        </p>
+      </header>
+      <div class="card trace reveal" aria-label="Example run trace">
+        <div>
+          <div><span class="dim">run</span> 7f3a…c21e <span class="dim">workflow</span> deployment_release_gate@v4</div>
+          <div><i>collect</i> 14 items · scopes: read</div>
+          <div><i>check</i> 11 pass · 2 fail · 1 cannot conclude</div>
+          <div><i>suggest</i> finding RSK-0412, cites item 9 §3</div>
+          <div class="hi"><i class="ask">ask</i> approver: priya.n · decision: approve with edits</div>
+          <div><i>act</i> dry-run ok · blast radius 1 record</div>
+          <div><i>verify</i> target re-read · match</div>
+          <div><i>file</i> evidence → ISO42001 6.1.2, EUAIA Art.9, NISTRMF GOVERN 1.7</div>
+          <div class="dim">trace sha256 e1b0…9a44 · chained to previous run</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section-grey" id="faq">
+    <div class="wrap">
+      <header class="section-heading">
+        <h2 class="reveal">Questions teams ask</h2>
+      </header>
+      <div class="faq">
+        {faqs.map((f) => (
+          <details>
+            <summary>{f.q}</summary>
+            <div><p>{f.a}</p></div>
+          </details>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap">
+      <div class="cta-band reveal">
+        <h2>Let the agents do the paperwork. Keep the <em>decisions.</em></h2>
+        <a class="button" href="/request-access/" data-magnet>Request access <span class="arr" aria-hidden="true">→</span></a>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    const run = document.querySelector<HTMLElement>('[data-run]');
+    if (run) {
+      const texts = run.querySelectorAll<HTMLElement>('[data-waiting]');
+      run.addEventListener('click', (event) => {
+        const to = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-run-to]')?.dataset.runTo;
+        if (!to) return;
+        run.dataset.state = to;
+        texts.forEach((el) => (el.textContent = el.dataset[to] ?? el.dataset.waiting ?? ''));
+        run.querySelectorAll<HTMLButtonElement>('[data-run-to]').forEach((b) => {
+          b.hidden = to === 'waiting' ? b.dataset.runTo === 'waiting' : b.dataset.runTo !== 'waiting';
+        });
+      });
+    }
+  </script>
+  <script>
+    import { mountTunnel } from '../scripts/tunnel';
+    const story = document.querySelector<HTMLElement>('[data-story]');
+    const stage = document.querySelector<HTMLElement>('[data-stage]');
+    const canvas = document.querySelector<HTMLCanvasElement>('[data-canvas]');
+    const counter = document.querySelector<HTMLElement>('[data-counter]');
+    if (story && stage && canvas && counter) {
+      try {
+        mountTunnel(story, stage, canvas, counter);
+      } catch {
+        canvas.remove();
       }
-    </div>
-    <div class="capability-contract-note">
-      <strong>Current recovery boundary</strong>
-      <p>Workbench records are still mutable and are not yet the immutable Evidence Passports defined by the target exchange contract.</p>
-      <a href="/roadmap">Inspect the recovery roadmap</a>
-    </div>
-  </section>
-
-  <section class="fm-adapter-section" aria-labelledby="adapter-title">
-    <div>
-      <h2 id="adapter-title">Use the evaluators you already trust.</h2>
-      <p>
-        FairMind’s opening is not to rebuild every test engine. It is to preserve outputs from
-        model, data, LLM, agent, security, provenance, and environmental tools in one reviewable
-        evidence chain.
-      </p>
-    </div>
-    <div class="adapter-register">
-      <div>
-        <span>Current product paths</span>
-        <p>Environmental evidence · provider-backed LLM judge · AI BOM transformation</p>
-      </div>
-      <div>
-        <span>Prioritized adapter targets</span>
-        <p>Giskard · MLflow · Fairlearn / AIF360 · ModelScan · garak / PyRIT</p>
-      </div>
-      <div>
-        <span>What FairMind adds</span>
-        <p>System identity · thresholds · limitations · review · remediation · framework reuse</p>
-      </div>
-    </div>
-  </section>
-
-  <section class="fm-research-section" id="research" aria-labelledby="research-title">
-    <header class="fm-section-heading fm-section-heading-split">
-      <h2 id="research-title">Research ships with its limitations attached.</h2>
-      <p>Methods, artifacts, measurement status, and what remains unproven belong beside the work—not in a footnote after the claim.</p>
-    </header>
-    <div class="research-ledger">
-      <article>
-        <div><span>FairMind-E</span><strong>Measurement path validated</strong></div>
-        <h3>Environmental evidence with provenance and uncertainty</h3>
-        <p>Energy, carbon, water, mitigation, exception, and reviewer records. Smoke runs prove the path; real hardware evidence is still required for paper claims.</p>
-        <a href="/roadmap">See research status</a>
-      </article>
-      <article>
-        <div><span>AI BOM</span><strong>Metadata transformation</strong></div>
-        <h3>A fairness evidence profile for AI inventory records</h3>
-        <p>Transforms supplied BOM, bias, remediation, and unknown metadata into a reviewer-facing profile. Metadata remains metadata—not independent verification.</p>
-        <a href="https://github.com/adhit-r/fairmind">Inspect the source</a>
-      </article>
-    </div>
-  </section>
-
-  <section class="fm-closing-section" aria-labelledby="closing-title">
-    <div>
-      <p>Start with the test output you already have.</p>
-      <h2 id="closing-title">Keep the evidence chain. Make the decision accountable.</h2>
-    </div>
-    <div>
-      <a class="button button-primary" href="/request-access">Request access</a>
-      <a class="button button-secondary" href="https://docs.fairmind.xyz">Read the documentation</a>
-    </div>
-  </section>
+    }
+  </script>
 </Layout>
-
-<script>
-  document.querySelectorAll('[data-role-workbench]').forEach((workbench) => {
-    const tabs = workbench.querySelectorAll('[data-role-tab]');
-    const panels = workbench.querySelectorAll('[data-role-panel]');
-
-    tabs.forEach((tab) => {
-      tab.addEventListener('click', () => {
-        if (!(tab instanceof HTMLButtonElement)) return;
-        const role = tab.dataset.roleTab;
-
-        tabs.forEach((item) => {
-          if (!(item instanceof HTMLButtonElement)) return;
-          item.setAttribute('aria-selected', String(item === tab));
-        });
-
-        panels.forEach((panel) => {
-          if (!(panel instanceof HTMLElement)) return;
-          panel.hidden = panel.dataset.rolePanel !== role;
-          if (!panel.hidden) {
-            panel.classList.remove('is-entering');
-            void panel.offsetWidth;
-            panel.classList.add('is-entering');
-          }
-        });
-      });
-    });
-  });
-
-  document.querySelectorAll('[data-evidence-graph]').forEach((graph) => {
-    const nodes = graph.querySelectorAll('[data-graph-node]');
-    const index = graph.querySelector('[data-graph-index]');
-    const detail = graph.querySelector('[data-graph-detail]:not(button)');
-    const proof = graph.querySelector('[data-graph-proof]:not(button)');
-
-    const activate = (node) => {
-      if (!(node instanceof HTMLButtonElement)) return;
-      nodes.forEach((item) => {
-        if (!(item instanceof HTMLButtonElement)) return;
-        const active = item === node;
-        item.classList.toggle('is-active', active);
-        item.setAttribute('aria-pressed', String(active));
-      });
-      const nodeIndex = Array.from(nodes).indexOf(node) + 1;
-      if (index instanceof HTMLElement) index.textContent = `${String(nodeIndex).padStart(2, '0')} / ${node.textContent?.trim().replace(/^\d+/, '').trim()}`;
-      if (detail instanceof HTMLElement) detail.textContent = node.dataset.graphDetail || '';
-      if (proof instanceof HTMLElement) proof.textContent = node.dataset.graphProof || '';
-      graph.classList.remove('is-changing');
-      void graph.offsetWidth;
-      graph.classList.add('is-changing');
-    };
-
-    nodes.forEach((node) => {
-      node.addEventListener('click', () => activate(node));
-      node.addEventListener('focus', () => activate(node));
-      node.addEventListener('pointerenter', () => activate(node));
-    });
-  });
-
-  document.querySelectorAll('[data-capability-filter]').forEach((filter) => {
-    filter.addEventListener('click', () => {
-      if (!(filter instanceof HTMLButtonElement)) return;
-      const selected = filter.dataset.capabilityFilter || 'all';
-      document.querySelectorAll('[data-capability-filter]').forEach((item) => {
-        if (!(item instanceof HTMLButtonElement)) return;
-        const active = item === filter;
-        item.classList.toggle('is-active', active);
-        item.setAttribute('aria-pressed', String(active));
-      });
-      document.querySelectorAll('[data-capability-category]').forEach((row) => {
-        if (!(row instanceof HTMLElement)) return;
-        row.hidden = selected !== 'all' && row.dataset.capabilityCategory !== selected;
-      });
-    });
-  });
-</script>

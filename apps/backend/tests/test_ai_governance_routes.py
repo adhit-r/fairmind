@@ -190,7 +190,7 @@ def test_ai_governance_lifecycle_summary_persists_stage_progression(authenticate
             "workspace_id": workspace["id"],
             "name": "Lifecycle Test System",
             "owner": "risk@acme.ai",
-            "risk_tier": "high",
+            "risk_tier": "low",
             "lifecycle_stage": "onboard",
             "metadata": {},
         },
@@ -450,8 +450,9 @@ def test_ai_governance_evidence_endpoints_require_authentication(authenticated_o
         client.headers["Authorization"] = authorization
 
 
-def test_ai_governance_risk_dashboard_and_assessment():
-    dashboard_resp = client.get("/api/v1/ai-governance/dashboard/risk?system_id=acme-credit")
+def test_ai_governance_risk_dashboard_and_assessment(authenticated_org_database):
+    system_id = _create_scoped_system(authenticated_org_database, "Acme credit")
+    dashboard_resp = client.get(f"/api/v1/ai-governance/dashboard/risk?system_id={system_id}")
     assert dashboard_resp.status_code == 200
     dashboard = dashboard_resp.json()
     assert "risks" in dashboard
@@ -461,7 +462,7 @@ def test_ai_governance_risk_dashboard_and_assessment():
     create_resp = client.post(
         "/api/v1/ai-governance/risks/assess",
         json={
-            "systemId": "acme-credit",
+            "systemId": system_id,
             "riskType": "bias",
             "severity": "high",
             "description": "Approval disparity detected for older applicants.",
@@ -469,19 +470,19 @@ def test_ai_governance_risk_dashboard_and_assessment():
     )
     assert create_resp.status_code == 200
     created = create_resp.json()
-    assert created["systemId"] == "acme-credit"
+    assert created["systemId"] == system_id
     assert created["severity"] == "high"
     assert created["source"] == "manual_assessment"
     assert isinstance(created["automation"]["recommendedRisks"], list)
 
-    refreshed_resp = client.get("/api/v1/ai-governance/dashboard/risk?system_id=acme-credit")
+    refreshed_resp = client.get(f"/api/v1/ai-governance/dashboard/risk?system_id={system_id}")
     assert refreshed_resp.status_code == 200
     refreshed = refreshed_resp.json()
     assert any(risk["id"] == created["id"] for risk in refreshed["risks"])
 
 
-def test_ai_governance_remediation_task_loop():
-    system_id = f"acme-remediation-{uuid.uuid4().hex[:8]}"
+def test_ai_governance_remediation_task_loop(authenticated_org_database):
+    system_id = _create_scoped_system(authenticated_org_database, "Acme remediation")
     create_resp = client.post(
         "/api/v1/ai-governance/remediation",
         json={

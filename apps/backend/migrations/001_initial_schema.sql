@@ -156,25 +156,3 @@ CREATE INDEX IF NOT EXISTS idx_api_keys_active ON api_keys(is_active);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
-
--- Insert default admin user (password: admin123)
-INSERT INTO users (id, email, username, password_hash, role, permissions)
-VALUES (
-    'admin',
-    'admin@fairmind.ai',
-    'admin',
-    '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj3QJflLxQjm', -- bcrypt hash of 'admin123'
-    'admin',
-    '["*"]'::jsonb
-) ON CONFLICT (id) DO NOTHING;
-
--- Insert default analyst user (password: analyst123)
-INSERT INTO users (id, email, username, password_hash, role, permissions)
-VALUES (
-    'analyst',
-    'analyst@fairmind.ai',
-    'analyst',
-    '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj3QJflLxQjm', -- bcrypt hash of 'analyst123'
-    'analyst',
-    '["model:read", "model:write", "dataset:read", "dataset:write", "analysis:run", "analysis:read"]'::jsonb
-) ON CONFLICT (id) DO NOTHING;
