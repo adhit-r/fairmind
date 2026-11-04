@@ -155,22 +155,11 @@ class AIBOMAnalysis(Base):
     # Relationships
     document = relationship("AIBOMDocument", back_populates="analyses")
 
-class AnalyticsSnapshot(Base):
-    """Analytics Snapshot model for time-series data"""
-    __tablename__ = "analytics_snapshots"
-
-    id = Column(String, primary_key=True, index=True)
-    snapshot_date = Column(DateTime, nullable=False, index=True)
-    metric_type = Column(String, nullable=False)  # e.g., "bias_score", "compliance_score"
-    metric_value = Column(JSON, nullable=False)   # Stores the actual value/distribution
-    model_id = Column(String, nullable=True, index=True) # Optional link to specific model
-    created_at = Column(DateTime, default=func.now())
-
 class ComplianceSchedule(Base):
     """Compliance Report Schedule model"""
     __tablename__ = "compliance_schedules"
 
-    id = Column(String, primary_key=True, index=True)
+    id = Column(String, primary_key=True)
     framework = Column(String, nullable=False) # e.g., "EU_AI_ACT", "GDPR"
     frequency = Column(String, nullable=False) # "daily", "weekly", "monthly"
     recipients = Column(JSON, nullable=False)  # List of email strings
@@ -185,7 +174,7 @@ class ComplianceViolation(Base):
     """Compliance Violation model"""
     __tablename__ = "compliance_violations"
 
-    id = Column(String, primary_key=True, index=True)
+    id = Column(String, primary_key=True)
     model_id = Column(String, nullable=True, index=True)
     framework = Column(String, nullable=False)
     violation_type = Column(String, nullable=False)
@@ -280,7 +269,7 @@ class ComplianceRemediationPlan(Base):
     """Compliance Remediation Plan model for tracking remediation workflows"""
     __tablename__ = "compliance_remediation_plans"
 
-    id = Column(String, primary_key=True, index=True)
+    id = Column(String, primary_key=True)
     framework = Column(String, nullable=False, index=True)  # Compliance framework
     gap_id = Column(String, nullable=False, index=True)  # ID of the compliance gap
     gap_description = Column(String, nullable=False)  # Description of the gap
