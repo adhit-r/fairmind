@@ -3103,7 +3103,7 @@ class GovernanceApprovalWorkflow(Base):
     name = Column(String, nullable=False)
     entity_type = Column(String, nullable=False)
     steps_json = Column(Text, nullable=False, default="[]")
-    is_active = Column(Integer, nullable=False, default=1)
+    is_active = Column(Boolean, nullable=False, default=True)
     created_by = Column(String, nullable=True)
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
     updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
