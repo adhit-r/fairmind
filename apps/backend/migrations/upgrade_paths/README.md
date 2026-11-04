@@ -86,3 +86,54 @@ must capacity-plan the table and must not disable the guard for cleanup.
 SQLite installs three guards that reject every idempotency INSERT, UPDATE, and
 DELETE. It remains a fail-closed parity fixture and is not an execution
 authority for assurance-v2 mutations.
+
+## ORM-provisioned 010 to 011 drift reconciliation (PostgreSQL 18, Neon)
+
+Neon production was provisioned by SQLAlchemy `create_all()` and router-level
+`ALTER`s, not the SQL chain. Its tables differ from what 011 expects: empty
+ORM copies of assurance tables, a different column order and types on
+`organizations` and `governance_evidence`, 011's tenant foreign keys already
+present, and Neon Data API default privileges that grant the `authenticated`
+role access to every new object in `public`. The Data API serves only `auth`
+and `neon_auth`, so those grants are dormant.
+
+`010_to_011_drift_reconciliation.sql` brings that schema and a clean SQL-chain
+install to one layout. It runs after 010 and before 011 on every PostgreSQL 18
+install, clean or not; the frozen PostgreSQL 18 catalog in
+`config/migration_integrity.py` is measured with it. It:
+
+- makes the migration owner own the trusted schema (Neon creates `public`
+  owned by `pg_database_owner`, which fails 013h's ownership checks);
+- revokes non-owner grants on the schema and its default privileges;
+- drops chain-owned assurance tables only when they are empty, and stops if
+  any holds rows;
+- rebuilds `organizations`, `org_members`, `org_roles` and
+  `governance_evidence` when their column layout is not the clean-install
+  layout or they carry an explicit ACL (013j requires a never-granted ACL).
+  Rows move by column name. A source column with no canonical home stops the
+  rebuild. `organizations` keeps `plan` and `settings` as appended columns,
+  and a clean install gains them too;
+- moves evidence whose AI system does not exist, and the links that point at
+  it, intact into `fairmind_reconciliation_quarantine_010r` rather than
+  deleting them.
+
+It is one transaction under an advisory lock, a no-op on replay before 011,
+and does nothing once the operator ledger exists. Rehearse on a disposable
+Neon branch of production first. Then, during a write-maintenance window:
+
+```bash
+export PGOPTIONS='-c fairmind.migration_schema=public'
+psql -X -w -v ON_ERROR_STOP=1 -f 010_to_011_drift_reconciliation.sql "$DATABASE_URL"
+psql -X -w -v ON_ERROR_STOP=1 -f ../011_governance_assurance.sql "$DATABASE_URL"
+psql -X -w -v ON_ERROR_STOP=1 -f ../012_evaluation_runs.sql "$DATABASE_URL"
+```
+
+Then run `012_to_013` through `013i_to_013j` in order, using the
+`013a_to_013b` `_v2` wrapper. 011 and 012 are not transactional: if either
+fails, restore the branch rather than retrying in place.
+
+The PostgreSQL 18 catalog fingerprint includes the role authority graph around
+the schema owner. On Neon every project role is a member of `neon_superuser`,
+so adding or removing a project role changes the fingerprint, and startup with
+`assurance_v2_enabled` fails closed until it is re-measured from a clean
+install on a branch that has the same roles.

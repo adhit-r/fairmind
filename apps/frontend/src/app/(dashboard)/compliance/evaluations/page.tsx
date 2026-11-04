@@ -2,8 +2,8 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
-import { useCatalogue, useEvaluations, type EngineStatus } from '@/lib/api/hooks/usePacks'
-import { Crumbs, EnginePill, Empty, ErrorNote, Heading, Loading, MUTED, Pill, cap } from '@/components/packs/parts'
+import { useCatalogue, useEvaluations, type EngineStatus, type EvaluationRow } from '@/lib/api/hooks/usePacks'
+import { Crumbs, EnginePill, Empty, ErrorNote, Heading, Loading, MUTED, Pill, ResultPill, cap, when } from '@/components/packs/parts'
 
 const ENGINES: Array<{ value: EngineStatus; label: string }> = [
   { value: 'Engine exists', label: 'Engine exists' },
@@ -11,6 +11,22 @@ const ENGINES: Array<{ value: EngineStatus; label: string }> = [
   { value: 'Not found', label: 'Not built yet' },
 ]
 const FIELD = 'h-10 rounded-full border border-[#15171a24] bg-white px-4 text-[13px] font-semibold'
+const RESULTS = [
+  { value: 'recorded', label: 'Has results' },
+  { value: 'passed', label: 'Passed' },
+  { value: 'failed', label: 'Failed' },
+  { value: 'none', label: 'No results recorded' },
+]
+
+function matchesResult(e: EvaluationRow, filter: string): boolean {
+  if (!filter) return true
+  if (filter === 'none') return !e.results || e.results.status === 'not_run'
+  if (filter === 'recorded') return Boolean(e.results && e.results.status !== 'not_run')
+  return e.results?.status === filter
+}
+
+/** Where to produce results for an evaluation FairMind can read but that has none yet. */
+const HOW_TO_RUN = 'Run a fairness, monitoring or environmental check on an AI system to record one.'
 
 export default function EvaluationsPage() {
   const evals = useEvaluations()
@@ -19,6 +35,7 @@ export default function EvaluationsPage() {
   const [pillar, setPillar] = useState('')
   const [engine, setEngine] = useState('')
   const [installedOnly, setInstalledOnly] = useState(false)
+  const [result, setResult] = useState('')
 
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase()
@@ -27,9 +44,10 @@ export default function EvaluationsPage() {
         (!pillar || e.pillar === pillar) &&
         (!engine || e.engine === engine) &&
         (!installedOnly || e.installed) &&
+        matchesResult(e, result) &&
         (!needle || [e.name, e.measures, e.metric, e.appliesTo, e.id].some((t) => t?.toLowerCase().includes(needle))),
     )
-  }, [evals.data, q, pillar, engine, installedOnly])
+  }, [evals.data, q, pillar, engine, installedOnly, result])
 
   // A pack page links here with the evaluation id in the hash; scroll to it once the table exists.
   useEffect(() => {
@@ -49,13 +67,15 @@ export default function EvaluationsPage() {
 
   const all = evals.data ?? []
   const built = all.filter((e) => e.engine === 'Engine exists').length
+  const readable = all.filter((e) => e.results).length
+  const recorded = all.filter((e) => e.results && e.results.status !== 'not_run').length
 
   return (
     <div className="flex flex-col gap-[22px]">
       <Crumbs items={[{ label: 'Frameworks', href: '/compliance' }, { label: 'Evaluations' }]} />
       <Heading
         title="Evaluations"
-        lead={`${all.length} evaluations measure how your AI systems behave. ${built} have an engine that runs today; the rest are partly built or not built yet.`}
+        lead={`${all.length} evaluations measure how your AI systems behave. ${built} have an engine that runs today. FairMind records results for ${readable} of them from your fairness, monitoring and environmental checks; ${recorded} have results so far, and a passing one marks the requirements it tests as tested.`}
       />
 
       <section aria-label="Filters" className="pk-card flex flex-wrap items-center gap-3 px-5 py-4">
@@ -87,6 +107,15 @@ export default function EvaluationsPage() {
             ))}
           </select>
         </label>
+        <label className="flex flex-col gap-1 text-[12.5px] font-semibold">
+          Result
+          <select value={result} onChange={(e) => setResult(e.target.value)} className={FIELD}>
+            <option value="">Any result</option>
+            {RESULTS.map((r) => (
+              <option key={r.value} value={r.value}>{r.label}</option>
+            ))}
+          </select>
+        </label>
         <label className="flex items-center gap-2 self-end pb-2.5 text-[13px] font-semibold">
           <input type="checkbox" checked={installedOnly} onChange={(e) => setInstalledOnly(e.target.checked)} className="h-[18px] w-[18px] accent-[#15171a]" />
           Installed packs only
@@ -110,6 +139,7 @@ export default function EvaluationsPage() {
                   <th scope="col" className="py-2 pr-3 font-semibold">Evaluation</th>
                   <th scope="col" className="py-2 pr-3 font-semibold">Metric</th>
                   <th scope="col" className="py-2 pr-3 font-semibold">Default threshold</th>
+                  <th scope="col" className="py-2 pr-3 font-semibold">Latest result</th>
                   <th scope="col" className="py-2 pr-3 font-semibold">Engine</th>
                   <th scope="col" className="py-2 pr-3 font-semibold">Pattern and pack</th>
                   <th scope="col" className="py-2 font-semibold">Requirements tested</th>
@@ -128,6 +158,30 @@ export default function EvaluationsPage() {
                     </td>
                     <td className="max-w-[200px] py-[10px] pr-3">{e.metric}</td>
                     <td className="max-w-[200px] py-[10px] pr-3">{e.threshold}</td>
+                    <td className="min-w-[220px] max-w-[300px] py-[10px] pr-3">
+                      {!e.results ? (
+                        <span className="text-[12.5px] text-[var(--fm-ink3)]">No results recorded by FairMind yet</span>
+                      ) : e.results.status === 'not_run' ? (
+                        <div className="flex flex-col gap-1">
+                          <span><ResultPill status="not_run" /></span>
+                          <span className={`text-[12px] leading-snug ${MUTED}`}>{HOW_TO_RUN}</span>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-1.5">
+                          <span><ResultPill status={e.results.status} /></span>
+                          <ul className="m-0 flex list-none flex-col gap-1 p-0">
+                            {e.results.systems.slice(0, 3).map((s) => (
+                              <li key={s.systemId} className="text-[12.5px] leading-snug">
+                                <Link href={`/systems/${s.systemId}`} className="font-semibold hover:underline">{s.systemName}</Link>
+                                {s.status !== e.results?.status && <span className="ml-1.5"><ResultPill status={s.status} /></span>}
+                                <span className={`block ${MUTED}`}>{s.detail}, {when(s.at)}</span>
+                              </li>
+                            ))}
+                            {e.results.systems.length > 3 && <li className={`text-[12px] ${MUTED}`}>and {e.results.systems.length - 3} more systems</li>}
+                          </ul>
+                        </div>
+                      )}
+                    </td>
                     <td className="py-[10px] pr-3">
                       <EnginePill engine={e.engine} />
                       {e.codeLocation && <div className="mt-1 break-all font-mono text-[11px]">{e.codeLocation}</div>}

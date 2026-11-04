@@ -315,8 +315,10 @@ localhost.har
 apps/backend/public_key.pem
 
 # The broad ML artifact rule ``models/`` must not hide active API source.
+# Re-including the directory still leaves *.pt, *.pkl etc. ignored inside it.
 !apps/backend/api/models/
 !apps/backend/api/models/**/*.py
+!apps/backend/src/**/models/
 apps/backend/private_key.pem
 apps/backend/api/services/real_bias_detection_service.py
 apps/backend/email_service.py

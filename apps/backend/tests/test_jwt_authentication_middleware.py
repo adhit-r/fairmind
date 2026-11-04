@@ -147,9 +147,7 @@ def test_identity_bootstrap_routes_are_public_without_an_access_token(path: str)
 @pytest.mark.parametrize(
     ("path", "body", "expected_status"),
     [
-        # Registration is an optional router in the lean test environment; a
-        # 405 still proves JWT did not intercept its documented public path.
-        ("/api/v1/register", {}, 405),
+        ("/api/v1/register", {}, 422),
         ("/api/v1/auth/callback", None, 422),
     ],
 )

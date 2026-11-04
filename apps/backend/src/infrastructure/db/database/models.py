@@ -14,13 +14,52 @@ from .connection import Base
 
 
 class TextUUID(TypeDecorator):
-    """UUID values kept in a varchar column (users.id is varchar in the database); binds str(value)."""
+    """A user id kept as text on Postgres, where users.id is varchar; binds str(value) and returns it as stored.
+
+    Elsewhere (SQLite development databases and tests) it stays a UUID column so it
+    matches users.id there and SQLite's foreign-key checks accept it.
+    """
 
     impl = String
     cache_ok = True
 
+    def load_dialect_impl(self, dialect):
+        return dialect.type_descriptor(String() if dialect.name == "postgresql" else UUID())
+
     def process_bind_param(self, value, dialect):
+        if dialect.name != "postgresql":
+            return value
         return None if value is None else str(value)
+
+
+class UserId(TypeDecorator):
+    """users.id and the columns that reference it.
+
+    On Postgres the column is VARCHAR(255): migration 001 created users.id that
+    way and every reference to it is varchar, so a database built from these
+    models matches production and its foreign keys can be created. Values still
+    come back as uuid.UUID, as they did when this column was declared UUID.
+    Elsewhere (SQLite development databases and tests) it stays a UUID column.
+    """
+
+    impl = UUID
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        return dialect.type_descriptor(String(255) if dialect.name == "postgresql" else UUID())
+
+    def process_bind_param(self, value, dialect):
+        if dialect.name == "postgresql" and value is not None:
+            return str(value)
+        return value
+
+    def process_result_value(self, value, dialect):
+        if dialect.name == "postgresql" and isinstance(value, str):
+            try:
+                return uuid.UUID(value)
+            except ValueError:
+                return value  # an id written outside the app; return it as stored
+        return value
 
 class RiskLevel(enum.Enum):
     LOW = "low"
@@ -116,22 +155,11 @@ class AIBOMAnalysis(Base):
     # Relationships
     document = relationship("AIBOMDocument", back_populates="analyses")
 
-class AnalyticsSnapshot(Base):
-    """Analytics Snapshot model for time-series data"""
-    __tablename__ = "analytics_snapshots"
-
-    id = Column(String, primary_key=True, index=True)
-    snapshot_date = Column(DateTime, nullable=False, index=True)
-    metric_type = Column(String, nullable=False)  # e.g., "bias_score", "compliance_score"
-    metric_value = Column(JSON, nullable=False)   # Stores the actual value/distribution
-    model_id = Column(String, nullable=True, index=True) # Optional link to specific model
-    created_at = Column(DateTime, default=func.now())
-
 class ComplianceSchedule(Base):
     """Compliance Report Schedule model"""
     __tablename__ = "compliance_schedules"
 
-    id = Column(String, primary_key=True, index=True)
+    id = Column(String, primary_key=True)
     framework = Column(String, nullable=False) # e.g., "EU_AI_ACT", "GDPR"
     frequency = Column(String, nullable=False) # "daily", "weekly", "monthly"
     recipients = Column(JSON, nullable=False)  # List of email strings
@@ -146,7 +174,7 @@ class ComplianceViolation(Base):
     """Compliance Violation model"""
     __tablename__ = "compliance_violations"
 
-    id = Column(String, primary_key=True, index=True)
+    id = Column(String, primary_key=True)
     model_id = Column(String, nullable=True, index=True)
     framework = Column(String, nullable=False)
     violation_type = Column(String, nullable=False)
@@ -162,7 +190,7 @@ class User(Base):
     """User model for persistent user storage with Authentik integration"""
     __tablename__ = "users"
 
-    id = Column(UUID, primary_key=True, default=uuid.uuid4, index=True)
+    id = Column(UserId, primary_key=True, default=uuid.uuid4, index=True)
     authentik_id = Column(String, unique=True, index=True, nullable=True)  # Authentik user UUID
     email = Column(String, unique=True, index=True, nullable=False)
     username = Column(String, unique=True, index=True, nullable=False)
@@ -184,8 +212,9 @@ class User(Base):
     is_verified_email = Column(Boolean, default=False)
 
     # Organization relationships
-    primary_org_id = Column(UUID, ForeignKey('organizations.id'), nullable=True, index=True)
-    org_id = Column(UUID, ForeignKey('organizations.id'), nullable=True, index=True)
+    # organizations.owner_id points back at users, so these two keys are added after both tables exist (use_alter).
+    primary_org_id = Column(UUID, ForeignKey('organizations.id', use_alter=True), nullable=True, index=True)
+    org_id = Column(UUID, ForeignKey('organizations.id', use_alter=True), nullable=True, index=True)
 
     # Audit trail
     created_at = Column(DateTime, default=func.now(), index=True)
@@ -217,7 +246,7 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id = Column(UUID, primary_key=True, default=uuid.uuid4, index=True)
-    user_id = Column(UUID, ForeignKey("users.id"), nullable=True, index=True)
+    user_id = Column(UserId, ForeignKey("users.id"), nullable=True, index=True)
     action = Column(String, nullable=False, index=True)  # "login", "export_report", "create_model", etc.
     resource_type = Column(String, nullable=True, index=True)  # "report", "model", "compliance_check"
     resource_id = Column(String, nullable=True, index=True)
@@ -240,7 +269,7 @@ class ComplianceRemediationPlan(Base):
     """Compliance Remediation Plan model for tracking remediation workflows"""
     __tablename__ = "compliance_remediation_plans"
 
-    id = Column(String, primary_key=True, index=True)
+    id = Column(String, primary_key=True)
     framework = Column(String, nullable=False, index=True)  # Compliance framework
     gap_id = Column(String, nullable=False, index=True)  # ID of the compliance gap
     gap_description = Column(String, nullable=False)  # Description of the gap
@@ -289,7 +318,7 @@ class Organization(Base):
     name = Column(String(255), nullable=False)
     slug = Column(String(255), nullable=False, unique=True, index=True)
     domain = Column(String(255), nullable=True)
-    owner_id = Column(UUID, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True)
+    owner_id = Column(UserId, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True)
     is_active = Column(Boolean, default=True, index=True)
     org_metadata = Column(JSON, default=dict)
 
@@ -389,7 +418,7 @@ class OrganizationAuditLog(Base):
 
     id = Column(UUID, primary_key=True, default=uuid.uuid4, index=True)
     org_id = Column(UUID, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
-    user_id = Column(UUID, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    user_id = Column(UserId, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     action = Column(String(100), nullable=False, index=True)
     resource_type = Column(String(50), nullable=True)
     resource_id = Column(UUID, nullable=True)

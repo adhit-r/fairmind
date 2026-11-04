@@ -258,18 +258,20 @@ async def signup(payload: SignupRequest):
         async with get_db_transaction() as db:
             if await db.fetch_one("SELECT id FROM users WHERE lower(email) = lower(:e)", {"e": payload.email}):
                 raise HTTPException(status_code=409, detail="An account with this email already exists")
+            # The signer owns their organisation through org_members; the global role
+            # stays analyst, since admin is the platform operator.
             # users and organizations reference each other, so create the user first,
             # then the organization it owns, then point the user at it.
             await db.execute(
                 "INSERT INTO users (id, email, username, name, password_hash, role, roles, is_active) "
-                "VALUES (:id, :email, :username, :name, :pw, 'admin', CAST(:roles AS jsonb), TRUE)",
+                "VALUES (:id, :email, :username, :name, :pw, 'analyst', CAST(:roles AS jsonb), TRUE)",
                 {
                     "id": user_id,
                     "email": payload.email,
                     "username": f"{payload.email.split('@')[0]}-{secrets.token_hex(3)}",
                     "name": name,
                     "pw": auth_manager.get_password_hash(payload.password),
-                    "roles": '["admin"]',
+                    "roles": '["analyst"]',
                 },
             )
             await db.execute(

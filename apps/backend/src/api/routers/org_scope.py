@@ -17,43 +17,20 @@ from fastapi import Depends, HTTPException, Query, Request, WebSocket, WebSocket
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from api.routes.ai_governance import _caller_org, _enforce_org_scope, _ensure_tables, _resolve_caller_org
-from config.auth import TokenData, TokenType, auth_manager, get_current_active_user
-from config.settings import settings
-from database.connection import get_db
-from src.application.services.governance_assurance_service import (
-    GovernanceAssuranceService,
-    OrgMembership,
+# org_member and org_mutator live in ai_governance, next to the helpers they use,
+# so that router can depend on them without importing this module back.
+from api.routes.ai_governance import (
+    _caller_org,
+    _enforce_org_scope,
+    _ensure_tables,
+    _membership,
+    _resolve_caller_org,
+    org_member,
+    org_mutator,
 )
-
-
-def _membership(request, current_user: TokenData, db: Session) -> OrgMembership:
-    org_id = _caller_org(request)
-    membership = GovernanceAssuranceService(db).membership(org_id, current_user.user_id)
-    if not membership and settings.is_development and current_user.org_id and str(current_user.org_id) == org_id:
-        # Same local-development allowance as ai_governance._require_system_access.
-        membership = OrgMembership(
-            org_id, current_user.user_id, current_user.role.value, tuple(current_user.permissions)
-        )
-    if not membership:
-        raise HTTPException(status_code=403, detail="You are not a member of this organization")
-    return membership
-
-
-async def org_member(
-    request: Request,
-    current_user: TokenData = Depends(get_current_active_user),
-    db: Session = Depends(get_db),
-) -> OrgMembership:
-    """The caller's active membership in their organisation, else 403."""
-    # Some prefixes skip the auth middleware in local development, so the
-    # identity is taken from the bearer token here rather than from request state.
-    if getattr(request.state, "user", None) is None:
-        request.state.user = current_user
-    if not getattr(request.state, "org_id", None) and current_user.org_id:
-        request.state.org_id = str(current_user.org_id)
-    await _enforce_org_scope(request, db)
-    return _membership(request, current_user, db)
+from config.auth import TokenData, TokenType, auth_manager, get_current_active_user
+from database.connection import get_db
+from src.application.services.governance_assurance_service import OrgMembership
 
 
 async def org_claim(
@@ -101,13 +78,6 @@ async def ws_member(
         return _membership(websocket, user, db)
     except HTTPException:
         raise WebSocketException(code=1008)
-
-
-async def org_mutator(membership: OrgMembership = Depends(org_member)) -> OrgMembership:
-    """``org_member`` plus the organisation's mutation permission."""
-    if not GovernanceAssuranceService.may_mutate(membership):
-        raise HTTPException(status_code=403, detail="Organization mutation permission required")
-    return membership
 
 
 def plain_id(column: str) -> str:

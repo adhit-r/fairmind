@@ -10,7 +10,7 @@ This service provides comprehensive AI governance capabilities including:
 - Multimodal bias analysis
 """
 
-from fastapi import FastAPI, Request, status
+from fastapi import Depends, FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse, Response
@@ -37,6 +37,8 @@ from middleware.security import (
     JWTAuthenticationMiddleware,
 )
 from services.health import health_service
+from api.routes.org_scope import ORG_MEMBER_USER_IDS, org_member, plain_id
+from src.application.services.governance_assurance_service import OrgMembership
 
 # Get logger
 logger = get_logger("main")
@@ -521,50 +523,52 @@ async def list_audit_logs(
     limit: int = 25,
     offset: int = 0,
     action: str = None,
-    status_filter: str = None,
     resource_type: str = None,
+    m: OrgMembership = Depends(org_member),
 ):
-    """Retrieve audit logs for compliance reporting."""
-    try:
-        from config.database import get_db
-        from sqlalchemy import text
+    """Retrieve this organisation's audit logs for compliance reporting.
 
-        filters = []
-        params = {"limit": limit, "offset": offset}
+    audit_logs has no tenant column (migrations/001_initial_schema.sql, which is
+    also the live shape: created_at, no status), so an organisation's log is
+    what its active members did.
+    """
+    try:
+        from config.database import get_db_connection
+
+        filters = [f"{plain_id('user_id')} IN ({ORG_MEMBER_USER_IDS})"]
+        params = {"org_id": m.org_id, "limit": limit, "offset": offset}
 
         if action:
             filters.append("action = :action")
             params["action"] = action
-        if status_filter:
-            filters.append("status = :status_filter")
-            params["status_filter"] = status_filter
         if resource_type:
             filters.append("resource_type = :resource_type")
             params["resource_type"] = resource_type
 
-        where = f"WHERE {' AND '.join(filters)}" if filters else ""
-        query = text(
-            f"SELECT id, user_id, action, resource_type, resource_id, status, "
-            f"ip_address, user_agent, details, error_message, timestamp "
-            f"FROM audit_logs {where} ORDER BY timestamp DESC LIMIT :limit OFFSET :offset"
+        query = (
+            "SELECT id, user_id, action, resource_type, resource_id, "
+            "ip_address, user_agent, details, created_at "
+            f"FROM audit_logs WHERE {' AND '.join(filters)} "
+            "ORDER BY created_at DESC LIMIT :limit OFFSET :offset"
         )
 
-        async with get_db() as db:
-            result = await db.execute(query, params)
-            rows = result.mappings().all()
+        async with get_db_connection() as conn:
+            rows = await conn.fetch_all(query, params)
             logs = [
                 {
                     "id": str(row["id"]),
                     "user_id": str(row["user_id"]) if row["user_id"] else None,
                     "action": row["action"],
-                    "resource_type": row.get("resource_type"),
-                    "resource_id": str(row["resource_id"]) if row.get("resource_id") else None,
-                    "status": row["status"],
-                    "ip_address": row.get("ip_address"),
-                    "user_agent": row.get("user_agent"),
-                    "details": row.get("details") or {},
-                    "error_message": row.get("error_message"),
-                    "timestamp": row["timestamp"].isoformat() if row["timestamp"] else None,
+                    "resource_type": row["resource_type"],
+                    "resource_id": str(row["resource_id"]) if row["resource_id"] else None,
+                    "ip_address": str(row["ip_address"]) if row["ip_address"] else None,
+                    "user_agent": row["user_agent"],
+                    "details": row["details"] or {},
+                    "timestamp": (
+                        row["created_at"].isoformat()
+                        if hasattr(row["created_at"], "isoformat")
+                        else row["created_at"]
+                    ),
                 }
                 for row in rows
             ]

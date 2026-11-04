@@ -14,7 +14,6 @@ from database.connection import db_manager
 from core.container import inject, provide
 
 from domain.reports.services.report_generator_service import ReportGeneratorService
-from domain.models.services.model_test_service import ModelTestService
 from src.infrastructure.email.compliance_notifier import compliance_notifier, NotificationChannel
 
 logger = logging.getLogger(__name__)
@@ -23,7 +22,6 @@ class ComplianceAutomationService:
     def __init__(self):
         self.scheduler = AsyncIOScheduler()
         self.report_generator = inject(ReportGeneratorService)
-        self.model_test_service = inject(ModelTestService)
         self._scheduler_started = False
 
     async def start_scheduler(self) -> None:
@@ -210,51 +208,6 @@ class ComplianceAutomationService:
 
         except Exception as e:
             logger.error(f"Error in generate_automated_report: {e}", exc_info=True)
-
-    async def check_compliance_violations(
-        self, db: Session, model_id: str, org_id: Optional[str] = None
-    ) -> List[ComplianceViolation]:
-        """Check for compliance violations for a specific model"""
-        logger.info(f"Checking compliance violations for model {model_id}")
-        
-        violations = []
-        
-        # 1. Run Bias Test to get latest metrics
-        # We'll use the ModelTestService to run a fresh test
-        try:
-            test_results = await self.model_test_service.run_bias_test(model_id=model_id)
-            metrics = test_results.get("metrics", {})
-            overall_score = test_results.get("score", 0.0)
-            
-            # 2. Check against thresholds
-            # Threshold: Fairness Score < 0.8 is a violation
-            if overall_score < 0.8:
-                violation = ComplianceViolation(
-                    id=str(uuid.uuid4()),
-                    model_id=model_id,
-                    framework="General Fairness",
-                    violation_type="Low Fairness Score",
-                    severity="high",
-                    description=f"Model fairness score {overall_score:.2f} is below threshold of 0.8",
-                    detected_at=datetime.utcnow(),
-                    resolved=False,
-                    org_id=org_id,
-                )
-                db.add(violation)
-                violations.append(violation)
-                
-            # Check specific metrics if available
-            # Example: Disparate Impact < 0.8
-            for metric_name, metric_data in metrics.items():
-                # This depends on the structure of metrics returned by bias service
-                # Assuming simple structure for now
-                pass
-
-        except Exception as e:
-            logger.error(f"Error checking compliance for model {model_id}: {e}")
-            
-        db.commit()
-        return violations
 
     async def list_schedules(self, db: Session, org_id: str) -> List[ComplianceSchedule]:
         return db.query(ComplianceSchedule).filter(ComplianceSchedule.org_id == org_id).all()

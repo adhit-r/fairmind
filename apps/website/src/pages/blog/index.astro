@@ -1,4 +1,5 @@
 ---
+import { registryTotals } from '../../lib/registry';
 import Layout from '../../layouts/Layout.astro';
 import PageHero from '../../components/marketing/PageHero.astro';
 import '../../styles/pages.css';
@@ -23,7 +24,7 @@ const notes = [
   {
     type: 'Catalogue',
     title: 'Agentic packs catalogue v2.3',
-    description: '50 frameworks, 506 requirements, 29 common controls and 888 crosswalk links; 21 packs, 90 workflows and 109 evaluations in four pillars. How the crosswalk lets one run count toward every requirement it maps to, and where the gaps still are.',
+    description: `${registryTotals.frameworks} frameworks, ${registryTotals.requirements} requirements, ${registryTotals.commonControls} common controls and ${registryTotals.crosswalk} crosswalk links; 21 packs, 90 workflows and 109 evaluations in four pillars. How the crosswalk lets one run count toward every requirement it maps to, and where the gaps still are.`,
     state: 'Published',
     href: '/frameworks/',
     link: 'Browse the frameworks',

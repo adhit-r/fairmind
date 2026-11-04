@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from api.routes.ai_governance import _ensure_tables, _utc_now_iso
+from api.routes import evaluation_results
 from api.routes import pack_catalogue as cat
 from api.routes.pack_catalogue import (
     BUNDLES,
@@ -297,6 +298,17 @@ def _verify_chain(events) -> bool:
     return True
 
 
+def _proposal_by(events) -> Optional[str]:
+    """Who recorded the last step output before the latest gate opened: the author of what is up for approval."""
+    author, proposal = None, None
+    for e in events:
+        if e["kind"] == "step.completed":
+            author = json.loads(e["payload_json"]).get("submittedBy") or author
+        elif e["kind"] == "gate.opened":
+            proposal = author
+    return proposal
+
+
 def _run_json(db: Session, run_id: str) -> dict:
     run = db.execute(text("SELECT * FROM workflow_runs WHERE id = :id"), {"id": run_id}).mappings().fetchone()
     events = (
@@ -318,6 +330,8 @@ def _run_json(db: Session, run_id: str) -> dict:
         "systemId": run["ai_system_id"],
         "approvalRequestId": run["approval_request_id"],
         "approval": approval,
+        # Separation of duties is warned, not enforced: one-person organisations must still be able to decide.
+        "proposalBy": _proposal_by(events),
         "finishedAt": run["finished_at"],
         "events": [
             {
@@ -385,7 +399,12 @@ async def list_packs(m: OrgMembership = Depends(_member), db: Session = Depends(
     return [_pack_json(pid, pid in installed) for pid in PACKS]
 
 
-def _evaluation_json(ev, installed: set) -> dict:
+def _org_coverage(db: Session, org_id: str, installed: List[str]) -> Coverage:
+    """What the organisation has now: workflows of installed packs, plus evaluations with a passing result."""
+    return Coverage(installed, tested_by=evaluation_results.passed(evaluation_results.results(db, org_id)))
+
+
+def _evaluation_json(ev, installed: set, res: dict) -> dict:
     pattern = PATTERNS[ev.pattern]
     pack_id = cat.EVALUATION_PACK[ev.id]
     return {
@@ -405,6 +424,8 @@ def _evaluation_json(ev, installed: set) -> dict:
             for k in ev.tests
         ],
         "installed": pack_id in installed,
+        # None when FairMind does not read this evaluation's results yet; else its status and latest result per system.
+        "results": res.get(ev.id),
     }
 
 
@@ -418,9 +439,10 @@ async def list_evaluations(
 ):
     _ensure_tables(db)
     installed = set(_installed_ids(db, m.org_id))
+    res = evaluation_results.results(db, m.org_id)
     needle = q.strip().lower() if q else ""
     return [
-        _evaluation_json(ev, installed)
+        _evaluation_json(ev, installed, res)
         for ev in EVALUATIONS.values()
         if (not pillar or ev.pillar == pillar.upper())
         and (not engine or ev.engine == engine)
@@ -434,7 +456,7 @@ async def get_evaluation(evaluation_id: str, m: OrgMembership = Depends(_member)
     if not ev:
         raise HTTPException(status_code=404, detail="Evaluation not found")
     _ensure_tables(db)
-    return _evaluation_json(ev, set(_installed_ids(db, m.org_id)))
+    return _evaluation_json(ev, set(_installed_ids(db, m.org_id)), evaluation_results.results(db, m.org_id))
 
 
 @router.get("/library/{pack_id}")
@@ -473,9 +495,9 @@ async def get_library(pack_id: str, m: OrgMembership = Depends(_member), db: Ses
     return {**_pack_json(pack_id, pack_id in _installed_ids(db, org_id)), "patterns": patterns, "frameworks": frameworks}
 
 
-def _bundle_json(bundle_id: str, installed: List[str]) -> dict:
+def _bundle_json(bundle_id: str, installed: List[str], org: Coverage) -> dict:
     bundle = BUNDLES[bundle_id]
-    own, org = Coverage(bundle.packs), Coverage(installed)
+    own = Coverage(bundle.packs)
     return {
         "id": bundle.id,
         "name": bundle.name,
@@ -499,7 +521,8 @@ def _bundle_json(bundle_id: str, installed: List[str]) -> dict:
 async def list_bundles(m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     _ensure_tables(db)
     installed = _installed_ids(db, m.org_id)
-    return [_bundle_json(b, installed) for b in BUNDLES]
+    org = _org_coverage(db, m.org_id, installed)
+    return [_bundle_json(b, installed, org) for b in BUNDLES]
 
 
 @router.post("/bundles/{bundle_id}/install")
@@ -509,13 +532,16 @@ async def install_bundle(bundle_id: str, m: OrgMembership = Depends(_manager), d
     _ensure_tables(db)
     for pack_id in BUNDLES[bundle_id].packs:
         _install(db, m, pack_id)
-    return _bundle_json(bundle_id, _installed_ids(db, m.org_id))
+    installed = _installed_ids(db, m.org_id)
+    return _bundle_json(bundle_id, installed, _org_coverage(db, m.org_id, installed))
 
 
 @router.get("/journeys")
 async def list_journeys(m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     _ensure_tables(db)
-    org = Coverage(_installed_ids(db, m.org_id))
+    org = _org_coverage(db, m.org_id, _installed_ids(db, m.org_id))
+    installed = set(_installed_ids(db, m.org_id))
+    latest = _latest_runs(db, m.org_id, set(WORKFLOWS))
     rows = [
         {
             "key": fk,
@@ -525,11 +551,35 @@ async def list_journeys(m: OrgMembership = Depends(_member), db: Session = Depen
             "coveredAll": EVERY_PACK.count(fk),
             "coveredInstalled": org.count(fk),
             "contributingPacks": [p for p in PACKS if FRAMEWORK_KEYS[fk] & cat.PACK_DONE[p]],
+            "binding": fw.binding,
+            **_framework_workflows(fk, installed, latest),
         }
         for fk, fw in FRAMEWORKS.items()
         if len(FRAMEWORK_KEYS[fk]) >= 5
     ]
     return sorted(rows, key=lambda r: r["name"])
+
+
+def _framework_workflows(framework_key: str, installed: set, latest: Dict[str, Any]) -> dict:
+    """Workflows of installed packs that map to the framework, each with its latest run status, and how many wait for a person."""
+    ids = sorted({w for k in FRAMEWORK_KEYS[framework_key] for w, _ in cat.REQUIREMENT_WORKFLOWS.get(k, []) if cat.WORKFLOW_PACK[w] in installed})
+    workflows = [
+        {"id": w, "name": WORKFLOWS[w].name, "stage": WORKFLOWS[w].stage, "status": latest[w]["status"] if w in latest else None}
+        for w in ids
+    ]
+    return {"workflows": workflows, "waiting": sum(1 for w in workflows if w["status"] == "waiting")}
+
+
+@router.post("/journeys/{framework_key}/install")
+async def install_framework(framework_key: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+    """Add a framework: install every pack that covers or tests one of its requirements."""
+    if framework_key not in FRAMEWORKS:
+        raise HTTPException(status_code=404, detail="Journey not found")
+    _ensure_tables(db)
+    for pack_id in PACKS:
+        if FRAMEWORK_KEYS[framework_key] & cat.PACK_DONE[pack_id]:
+            _install(db, m, pack_id)
+    return {"installed": _installed_ids(db, m.org_id)}
 
 
 @router.get("/journeys/{framework_key}")
@@ -539,7 +589,8 @@ async def get_journey(framework_key: str, m: OrgMembership = Depends(_member), d
         raise HTTPException(status_code=404, detail="Journey not found")
     _ensure_tables(db)
     ids = _installed_ids(db, m.org_id)
-    installed, org = set(ids), Coverage(ids)
+    res = evaluation_results.results(db, m.org_id)
+    installed, org = set(ids), Coverage(ids, tested_by=evaluation_results.passed(res))
     keys = FRAMEWORK_KEYS[framework_key]
     latest = _latest_runs(db, m.org_id, {w for k in keys for w, _ in cat.REQUIREMENT_WORKFLOWS.get(k, [])})
     groups: Dict[str, list] = {}
@@ -557,6 +608,7 @@ async def get_journey(framework_key: str, m: OrgMembership = Depends(_member), d
                         "id": wid,
                         "name": WORKFLOWS[wid].name,
                         "relation": relation,
+                        "stage": WORKFLOWS[wid].stage,
                         "pack": cat.WORKFLOW_PACK[wid],
                         "installed": cat.WORKFLOW_PACK[wid] in installed,
                         "latestRun": _summary(db, latest[wid]) if wid in latest else None,
@@ -570,6 +622,7 @@ async def get_journey(framework_key: str, m: OrgMembership = Depends(_member), d
                         "engine": EVALUATIONS[eid].engine,
                         "pack": cat.EVALUATION_PACK[eid],
                         "installed": cat.EVALUATION_PACK[eid] in installed,
+                        "result": res[eid]["status"] if eid in res else None,
                     }
                     for eid in cat.REQUIREMENT_EVALUATIONS.get(req.key, [])
                 ],
@@ -1020,6 +1073,11 @@ async def decide_run(
         },
     )
     payload = {"decision": body.decision, "notes": body.notes, "decidedBy": m.user_id}
+    events = db.execute(
+        text("SELECT kind, payload_json FROM workflow_run_events WHERE run_id = :id ORDER BY seq"), {"id": run_id}
+    ).mappings().all()
+    if _proposal_by(events) == m.user_id:
+        payload["selfReview"] = True  # the decider also recorded the proposal; kept on the ledger for the audit
     if escalated:
         payload["escalated"] = f"more than {MAX_REVISIONS} rounds of changes"
     _append(db, run_id, "gate.decided", step.id, payload)

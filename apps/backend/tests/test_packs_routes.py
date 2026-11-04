@@ -187,7 +187,9 @@ def test_bundle_install_installs_its_packs(tmp_database):
     done = client.post(f"{PACKS}/bundles/{bundle['id']}/install").json()
     assert done["installedCount"] == len(done["packs"]) == len(bundle["packs"]) and all(p["installed"] for p in done["packs"])
     assert {p["id"] for p in client.get(PACKS).json() if p["installed"]} == {p["id"] for p in bundle["packs"]}
-    assert all(t["coveredInstalled"] == t["coveredAll"] for t in done["targets"])
+    # Installed packs cover through their workflows; their evaluations test nothing until a result passes.
+    covered_only = pack_catalogue.Coverage([p["id"] for p in bundle["packs"]], tested_by=[])
+    assert all(t["coveredInstalled"] == covered_only.count(t["key"]) <= t["coveredAll"] for t in done["targets"])
     assert client.post(f"{PACKS}/bundles/nope/install").status_code == 404
 
 
@@ -497,3 +499,138 @@ def test_draft_rules(tmp_database):
     assert client.put(f"{url}/draft", json={"steps": []}).status_code == 422
     assert client.delete(f"{url}/draft").status_code == 200
     assert client.get(f"{url}/draft").status_code == 404
+
+
+def test_adding_a_framework_installs_its_packs_and_journeys_show_waiting_runs(tmp_database):
+    _, client = _org(tmp_database)
+    before = next(j for j in client.get(f"{PACKS}/journeys").json() if j["key"] == "ISO42001")
+    assert before["workflows"] == [] and before["waiting"] == 0
+
+    assert client.post(f"{PACKS}/journeys/ISO42001/install").status_code == 200
+    installed = {p["id"] for p in client.get(PACKS).json() if p["installed"]}
+    assert installed == set(before["contributingPacks"])
+
+    run = _start(client)  # the AI policy review waits for its collect step
+    after = next(j for j in client.get(f"{PACKS}/journeys").json() if j["key"] == "ISO42001")
+    policy = next(w for w in after["workflows"] if w["id"] == WORKFLOW)
+    assert policy["status"] == "waiting" and policy["stage"] and after["waiting"] == 1
+    # Installed packs cover through their workflows; their evaluations count only once a result passes.
+    assert after["coveredInstalled"] == pack_catalogue.Coverage(before["contributingPacks"], tested_by=[]).count("ISO42001")
+
+    journey = client.get(f"{PACKS}/journeys/ISO42001").json()
+    assert all(w["stage"] for g in journey["groups"] for r in g["requirements"] for w in r["workflows"])
+    assert client.post(f"{PACKS}/journeys/NOPE/install").status_code == 404
+    assert run["status"] == "waiting"
+
+
+def test_a_plain_member_cannot_add_a_framework(tmp_database):
+    org_id = _new_org(tmp_database)
+    member = _client(tmp_database, org_id, role="member", token_role=UserRole.ANALYST)
+    assert member.post(f"{PACKS}/journeys/ISO42001/install").status_code == 403
+# --- evaluation results ----------------------------------------------------
+# Runs are produced by the real fairness engine and stored the way its router stores them.
+
+
+def _system(engine, org_id, name="Credit model"):
+    from database.governance_models import GovernanceAISystem, GovernanceWorkspace
+
+    workspace_id, system_id = str(uuid.uuid4()), str(uuid.uuid4())
+    with engine.begin() as conn:
+        conn.execute(GovernanceWorkspace.__table__.insert().values(id=workspace_id, org_id=str(org_id), name="Workspace"))
+        conn.execute(GovernanceAISystem.__table__.insert().values(id=system_id, workspace_id=workspace_id, org_id=str(org_id), name=name))
+    return system_id
+
+
+def _store(engine, org_id, system_id, evidence_type, content, at):
+    from database.governance_models import GovernanceEvidence
+
+    with engine.begin() as conn:
+        conn.execute(
+            GovernanceEvidence.__table__.insert().values(
+                id=str(uuid.uuid4()), system_id=system_id, org_id=str(org_id), evidence_type=evidence_type,
+                content_json=json.dumps(content), status="collected", created_at=at,
+            )
+        )
+
+
+def _decisions(fair: bool, attribute="gender") -> bytes:
+    rows = ["y_true,y_pred," + attribute]
+    for i in range(400):
+        group = "a" if i % 2 else "b"
+        pred = (i // 2) % 2 if fair else int(group == "a")
+        rows.append(f"{(i // 2) % 2},{pred},{group}")
+    return "\n".join(rows).encode()
+
+
+def _fairness(fair: bool, attribute="gender"):
+    from src.application.services.fairness_run_service import run_fairness
+
+    return run_fairness(_decisions(fair, attribute), outcome="y_true", prediction="y_pred", attributes=[attribute], favorable_label=1)
+
+
+def _requirement(client, framework, key):
+    journey = client.get(f"{PACKS}/journeys/{framework}").json()
+    return next(r for g in journey["groups"] for r in g["requirements"] if r["key"] == key)
+
+
+def test_a_passing_fairness_run_marks_its_requirements_tested(tmp_database):
+    org_id, client = _org(tmp_database)
+    key = "NISTRMF|MEASURE 2.11"  # tested by EV-FAI-01 and EV-FAI-02
+    assert _requirement(client, "NISTRMF", key)["status"] == "available"
+    assert client.get(f"{PACKS}/evaluations/EV-FAI-01").json()["results"]["status"] == "not_run"
+
+    _store(tmp_database, org_id, _system(tmp_database, org_id), "fairness_test", _fairness(True), "2026-11-01T10:00:00")
+    result = client.get(f"{PACKS}/evaluations/EV-FAI-01").json()["results"]
+    assert result["status"] == "passed"
+    assert result["systems"][0]["systemName"] == "Credit model" and result["systems"][0]["detail"].startswith("Impact ratio gender")
+    requirement = _requirement(client, "NISTRMF", key)
+    assert requirement["status"] == "tested"
+    assert {e["id"]: e["result"] for e in requirement["evaluations"]}["EV-FAI-01"] == "passed"
+
+    _, other = _org(tmp_database)
+    assert other.get(f"{PACKS}/evaluations/EV-FAI-01").json()["results"]["status"] == "not_run"
+
+
+def test_a_failing_system_fails_the_evaluation_and_the_latest_run_counts(tmp_database):
+    org_id, client = _org(tmp_database)
+    fair, unfair = _system(tmp_database, org_id, "Fair model"), _system(tmp_database, org_id, "Skewed model")
+    _store(tmp_database, org_id, fair, "fairness_test", _fairness(True), "2026-11-01T10:00:00")
+    _store(tmp_database, org_id, unfair, "fairness_test", _fairness(False), "2026-11-01T11:00:00")
+    assert client.get(f"{PACKS}/evaluations/EV-FAI-01").json()["results"]["status"] == "failed"
+    assert _requirement(client, "NISTRMF", "NISTRMF|MEASURE 2.11")["status"] == "available"
+
+    _store(tmp_database, org_id, unfair, "fairness_test", _fairness(True), "2026-11-02T09:00:00")  # fixed and re-run
+    assert client.get(f"{PACKS}/evaluations/EV-FAI-01").json()["results"]["status"] == "passed"
+
+
+def test_india_bias_needs_an_india_attribute_and_drift_needs_a_baseline(tmp_database):
+    from src.application.services.fairness_run_service import run_monitoring
+
+    org_id, client = _org(tmp_database)
+    system = _system(tmp_database, org_id)
+    _store(tmp_database, org_id, system, "fairness_test", _fairness(True, "gender"), "2026-11-01T10:00:00")
+    assert client.get(f"{PACKS}/evaluations/EV-FAI-06").json()["results"]["status"] == "not_run"
+    _store(tmp_database, org_id, system, "fairness_test", _fairness(True, "caste"), "2026-11-01T11:00:00")
+    assert client.get(f"{PACKS}/evaluations/EV-FAI-06").json()["results"]["status"] == "passed"
+
+    monitoring = run_monitoring(_decisions(True), prediction="y_pred", attributes=["gender"], favorable_label=1)
+    _store(tmp_database, org_id, system, "monitoring", monitoring, "2026-11-01T12:00:00")
+    drift = client.get(f"{PACKS}/evaluations/EV-FAI-07").json()["results"]
+    assert drift["status"] == "insufficient" and drift["systems"][0]["detail"] == "No baseline run to compare against"
+    assert client.get(f"{PACKS}/evaluations/EV-TST-01").json()["results"] is None  # no stored results to read yet
+
+
+def test_deciding_on_your_own_proposal_is_recorded_not_blocked(tmp_database):
+    org_id, author = _installed_org(tmp_database)
+    run = _to_gate(author)
+    submitted = [e["payload"]["submittedBy"] for e in run["events"] if e["kind"] == "step.completed" and "submittedBy" in e["payload"]]
+    assert run["proposalBy"] == submitted[-1]
+
+    decided = _decide(author, run, "approve")  # allowed: a one-person organisation must still be able to decide
+    gate = next(e for e in reversed(decided["events"]) if e["kind"] == "gate.decided")
+    assert gate["payload"]["selfReview"] is True
+
+    reviewer = _client(tmp_database, org_id)
+    other = _decide(reviewer, _to_gate(author), "approve")
+    gate = next(e for e in reversed(other["events"]) if e["kind"] == "gate.decided")
+    assert "selfReview" not in gate["payload"]

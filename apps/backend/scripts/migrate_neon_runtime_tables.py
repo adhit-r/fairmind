@@ -231,10 +231,6 @@ SQL_STATEMENTS = [
     )
     """,
     """
-    CREATE INDEX IF NOT EXISTS idx_governance_env_assessments_system_version
-        ON governance_environmental_assessments(system_id, version)
-    """,
-    """
     CREATE INDEX IF NOT EXISTS idx_governance_env_assessments_recommendation
         ON governance_environmental_assessments(recommendation)
     """,
