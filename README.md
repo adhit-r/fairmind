@@ -13,6 +13,7 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Good first issues](https://img.shields.io/github/issues/adhit-r/fairmind/good%20first%20issue)](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
 [![Contributors](https://img.shields.io/github/contributors/adhit-r/fairmind)](https://github.com/adhit-r/fairmind/graphs/contributors)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23982915.svg)](https://doi.org/10.5281/zenodo.23982915)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
 [Website](https://fairmind.xyz) | [Docs](https://docs.fairmind.xyz) | [Contributing](CONTRIBUTING.md) | [Discussions](https://github.com/adhit-r/fairmind/discussions) | [Leer en español](README.es-ES.md)
