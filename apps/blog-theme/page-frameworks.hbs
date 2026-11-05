@@ -1,0 +1,13 @@
+{{!< default}}
+{{#post}}
+<header class="page-head wrap-read">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="{{@site.url}}/">Home</a></nav>
+  <h1>{{title}}</h1>
+  {{#if custom_excerpt}}<p class="dek">{{custom_excerpt}}</p>{{/if}}
+</header>
+<div class="prose gh-content wrap-read">{{content}}</div>
+{{/post}}
+<section class="browse wrap-read" aria-labelledby="all-fw-h">
+  <h2 class="sec" id="all-fw-h">All frameworks</h2>
+  {{> topics}}
+</section>

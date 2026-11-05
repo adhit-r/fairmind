@@ -1,0 +1,52 @@
+{{!< default}}
+{{#post}}
+<div class="progress" aria-hidden="true"><i></i></div>
+<article class="post">
+  <header class="post-head wrap-read">
+    <nav class="crumbs" aria-label="Breadcrumb"><a href="{{@site.url}}/">Home</a>{{#primary_tag}}<span aria-hidden="true">/</span><a href="{{url}}">{{name}}</a>{{/primary_tag}}</nav>
+    <h1>{{title}}</h1>
+    {{#if custom_excerpt}}<p class="dek">{{custom_excerpt}}</p>{{/if}}
+    <p class="meta byline">{{#primary_author}}<a href="{{url}}">{{name}}</a>{{/primary_author}}<time datetime="{{date published_at format="YYYY-MM-DD"}}">Published {{date published_at format="D MMM YYYY"}}</time><span>Updated {{date updated_at format="D MMM YYYY"}}</span><span>{{reading_time minute="1 min read" minutes="% min read"}}</span><span hidden><span data-sources></span> primary sources</span></p>
+    {{#primary_tag}}<p class="callout" data-topic-due="{{name}}" hidden></p>{{/primary_tag}}
+  </header>
+  {{#if feature_image}}
+  <figure class="feat wrap">
+    <img srcset="{{img_url feature_image size="m"}} 800w, {{img_url feature_image size="xl"}} 1600w" sizes="(max-width: 900px) 100vw, 68rem" src="{{img_url feature_image size="xl"}}" alt="{{#if feature_image_alt}}{{feature_image_alt}}{{/if}}">
+    {{#if feature_image_caption}}<figcaption>{{feature_image_caption}}</figcaption>{{/if}}
+  </figure>
+  {{/if}}
+  <div class="post-body">
+    <nav class="toc" aria-labelledby="toc-h" hidden><h2 id="toc-h">On this page</h2></nav>
+    <div class="post-main">
+      <details class="toc-m" hidden><summary>{{> icon name="list"}}On this page</summary></details>
+      <div class="prose gh-content" data-post>
+        {{content}}
+      </div>
+    </div>
+  </div>
+  <footer class="post-end wrap-read">
+    <section class="cite" aria-labelledby="cite-h">
+      <h2 id="cite-h">Cite this guide</h2>
+      <p class="cite-text" data-cite>{{primary_author.name}}. "{{title}}". Chain of Custody, FairMind, {{date published_at format="D MMMM YYYY"}}, updated {{date updated_at format="D MMMM YYYY"}}. {{url absolute="true"}}</p>
+      <button class="btn quiet" type="button" data-copy>{{> icon name="copy" size="16"}}<span>Copy citation</span></button>
+      <span class="copied" role="status" aria-live="polite"></span>
+    </section>
+    {{#primary_author}}
+    <section class="author" aria-label="About the author">
+      {{#if profile_image}}<img src="{{img_url profile_image size="m"}}" alt="" width="56" height="56">{{/if}}
+      <div>
+        <p class="author-name">Written by <a href="{{url}}">{{name}}</a></p>
+        {{#if bio}}<p>{{bio}}</p>{{/if}}
+        <p><a href="{{@site.url}}/about/">How we write and check these guides</a></p>
+      </div>
+    </section>
+    {{/primary_author}}
+    <section class="keep" aria-labelledby="keep-h">
+      <h2 class="sec" id="keep-h">Keep reading</h2>
+      <div class="keep-same">{{#get "posts" filter="primary_tag:{{primary_tag.slug}}+id:-{{id}}" include="tags,authors" limit="3" as |same|}}{{#foreach same}}{{> entry}}{{/foreach}}{{/get}}</div>
+      <div class="keep-latest">{{#get "posts" filter="id:-{{id}}" include="tags,authors" limit="3" as |latest|}}{{#foreach latest}}{{> entry}}{{/foreach}}{{/get}}</div>
+    </section>
+    {{> newsletter}}
+  </footer>
+</article>
+{{/post}}
