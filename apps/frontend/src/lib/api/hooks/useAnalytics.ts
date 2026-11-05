@@ -12,7 +12,6 @@ export interface GovernanceMetrics {
   activeUsers?: number
   avgScore?: number
   euCompliance?: number
-  nistCompliance?: number
   gdprCompliance?: number
 }
 
