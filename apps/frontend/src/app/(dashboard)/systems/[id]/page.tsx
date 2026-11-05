@@ -13,6 +13,7 @@ import { WatchPanel } from './WatchPanel'
 import { AttestForm } from './AttestForm'
 import { ConditionsForm } from './ConditionsForm'
 import { ClauseMapPanel } from './ClauseMapPanel'
+import { TargetPanel } from './TargetPanel'
 import { cn } from '@/lib/utils'
 
 type JourneyKey = 'onboard' | 'assess' | 'govern' | 'remediate' | 'decision' | 'operate'
@@ -238,6 +239,7 @@ export default function SystemFilePage() {
           }
         />
         <FairnessRunPanel inspect={inspectCsv} run={runFairness} />
+        {id && <TargetPanel systemId={id} />}
       </Stage>
 
       <Stage step={JOURNEY[2]} status={statusOf('govern')} actions={<>

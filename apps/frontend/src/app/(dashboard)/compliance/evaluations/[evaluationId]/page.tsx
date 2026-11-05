@@ -2,16 +2,19 @@
 
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
+  useAIProvider,
   useEngine,
   useEngineRun,
   useEngineRuns,
   useEvaluation,
   usePackActions,
+  useSystemTarget,
   usePlatformConnections,
   type EngineRun,
   type EngineSpec,
+  type EvaluationJob,
 } from '@/lib/api/hooks/usePacks'
 import { useSystemContext } from '@/components/workflow/SystemContext'
 import { BTN_P, Crumbs, EnginePill, ErrorNote, Heading, LABEL, Loading, MUTED, Pill, ResultPill, when } from '@/components/packs/parts'
@@ -85,6 +88,7 @@ function RunResult({ run }: { run: EngineRun }) {
         <span className={`text-[13px] ${MUTED}`}>
           {run.systemName}, {when(run.createdAt)}
           {Object.values(run.files).length > 0 && `, from ${run.source === 'connection' ? 'the connection to ' : ''}${Object.values(run.files).join(' and ')}`}
+          {run.judge && `, judged by ${run.judge.model}`}
         </span>
       </div>
       <p className="m-0 leading-normal text-[var(--fm-ink)]">{run.summary}</p>
@@ -109,14 +113,85 @@ function RunResult({ run }: { run: EngineRun }) {
   )
 }
 
-function RunForm({ evaluationId, spec, onDone }: { evaluationId: string; spec: EngineSpec; onDone: (run: EngineRun) => void }) {
+/** What a behaviour test calls: the system under test (from its page) and the judge (the organisation's AI provider). */
+function Connections({ spec, systemId, onReady }: { spec: EngineSpec; systemId: string; onReady: (ready: boolean) => void }) {
+  const provider = useAIProvider()
+  const target = useSystemTarget(spec.live === 'target' && systemId ? systemId : undefined)
+  const cfg = provider.data?.config
+  const judgeOk = !!cfg && cfg.enabled && cfg.keyReadable
+  const t = target.data?.target
+  const targetOk = spec.live !== 'target' || (!!t && t.authReadable)
+  useEffect(() => onReady(judgeOk && targetOk), [judgeOk, targetOk, onReady])
+  const row = (label: string, value: ReactNode) => (
+    <div className="flex flex-col gap-0.5">
+      <span className={LABEL}>{label}</span>
+      <span className="text-[13px] leading-snug text-[var(--fm-ink)]">{value}</span>
+    </div>
+  )
+  return (
+    <div className="flex flex-col gap-2.5 rounded-[10px] border border-[var(--fm-line)] px-3 py-2.5">
+      {spec.live === 'target' &&
+        row(
+          'System under test',
+          !systemId ? (
+            <span className={MUTED}>Choose a system first</span>
+          ) : target.error ? (
+            <span>
+              Could not check the connection. {target.error}{' '}
+              <button type="button" onClick={target.reload} className="font-semibold underline">Try again</button>
+            </span>
+          ) : target.loading && !target.data ? (
+            <span className={MUTED}>Checking</span>
+          ) : t ? (
+            <span className="break-all">{t.url}{t.model ? `, ${t.model}` : ''}{t.authReadable ? '' : ' (auth value unreadable, enter it again)'}</span>
+          ) : (
+            <span>
+              Not connected. <Link href={`/systems/${encodeURIComponent(systemId)}#target`} className="font-semibold underline">Connect it on the system&apos;s page</Link>
+            </span>
+          ),
+        )}
+      {spec.live === 'agent' && row('Agent under test', "FairMind's packs agent, on your AI provider")}
+      {row(
+        'Judge',
+        provider.error ? (
+          <span>
+            Could not check the AI provider. {provider.error}{' '}
+            <button type="button" onClick={provider.reload} className="font-semibold underline">Try again</button>
+          </span>
+        ) : provider.loading && !provider.data ? (
+          <span className={MUTED}>Checking</span>
+        ) : judgeOk ? (
+          `${cfg.providerName}, ${cfg.model}`
+        ) : (
+          <span>
+            No AI provider is on. <Link href="/org-admin/settings#ai-provider" className="font-semibold underline">Set one up in organisation settings</Link>
+          </span>
+        ),
+      )}
+    </div>
+  )
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+function RunForm({ evaluationId, spec, live, onDone }: { evaluationId: string; spec: EngineSpec; live: boolean; onDone: (run: EngineRun) => void }) {
   const { systems, selectedSystem } = useSystemContext()
-  const { runEvaluation } = usePackActions()
+  const { runEvaluation, getJob, getRun } = usePackActions()
   const [systemId, setSystemId] = useState('')
   const [files, setFiles] = useState<Record<string, File | null>>({})
   const [params, setParams] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
+  const [job, setJob] = useState<EvaluationJob | null>(null)
+  const [connected, setConnected] = useState(!spec.live)
+  const mounted = useRef(true)
+
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
   const connections = usePlatformConnections()
   const connection = connections.data?.find((c) => c.connected && c.keyReadable) ?? null
   const [source, setSource] = useState<'upload' | 'connection' | null>(null)
@@ -127,7 +202,26 @@ function RunForm({ evaluationId, spec, onDone }: { evaluationId: string; spec: E
   }, [selectedSystem, systemId])
 
   const filesReady = from === 'connection' ? !!connection : spec.slots.every((s) => !s.required || files[s.name])
-  const ready = !!systemId && filesReady && spec.params.every((p) => !p.required || (params[p.name] ?? '').trim())
+  const ready = !!systemId && connected && filesReady && spec.params.every((p) => !p.required || (params[p.name] ?? '').trim())
+
+  /** A behaviour test answers with a job; follow it until the run is stored. */
+  async function follow(started: EvaluationJob) {
+    let current = started
+    while (mounted.current && current.status === 'running') {
+      setJob(current)
+      await sleep(2000)
+      const res = await getJob(current.id)
+      if (res.error || !res.data) return setFailure(res.error)
+      current = res.data
+    }
+    setJob(null)
+    if (current.status === 'failed') return setFailure(current.error ?? 'The run stopped')
+    if (current.evidenceId) {
+      const run = await getRun(current.evidenceId)
+      if (run.error || !run.data) setFailure(run.error)
+      else onDone(run.data)
+    }
+  }
 
   async function submit() {
     setBusy(true)
@@ -150,12 +244,14 @@ function RunForm({ evaluationId, spec, onDone }: { evaluationId: string; spec: E
     const form = new FormData()
     form.append('system_id', systemId)
     form.append('params', JSON.stringify(values))
+    if (live) form.append('mode', 'live')
     form.append('source', from)
     if (from === 'upload') for (const s of spec.slots) if (files[s.name]) form.append(s.name, files[s.name] as File)
     const res = await runEvaluation(evaluationId, form)
-    setBusy(false)
     if (res.error || !res.data) setFailure(res.error)
+    else if ('job' in res.data) await follow(res.data.job)
     else onDone(res.data)
+    setBusy(false)
   }
 
   return (
@@ -213,6 +309,7 @@ function RunForm({ evaluationId, spec, onDone }: { evaluationId: string; spec: E
           </span>
         )}
       </div>
+      {spec.live && <Connections spec={spec} systemId={systemId} onReady={setConnected} />}
       {from === 'upload' && spec.slots.map((s) => (
         <div key={s.name} className="flex flex-col gap-1.5">
           <label htmlFor={`slot-${s.name}`} className="text-[13px] font-semibold text-[var(--fm-ink)]">
@@ -263,9 +360,20 @@ function RunForm({ evaluationId, spec, onDone }: { evaluationId: string; spec: E
         </details>
       )}
       {failure && <ErrorNote message={failure} />}
+      {job && (
+        <div className="flex flex-col gap-1.5" role="status">
+          <span className={`text-[13px] ${MUTED}`}>
+            {job.phase ?? 'Running'}{job.total > 0 ? `: ${job.done} of ${job.total}` : ''}
+          </span>
+          <div className="h-1.5 overflow-hidden rounded-full bg-[var(--fm-line)]">
+            <div className="h-full rounded-full bg-[var(--fm-ink)] transition-[width]" style={{ width: `${job.total ? (job.done / job.total) * 100 : 4}%` }} />
+          </div>
+        </div>
+      )}
       <div>
         <button type="submit" className={BTN_P} disabled={!ready || busy}>{busy ? 'Running' : 'Run evaluation'}</button>
       </div>
+      {spec.live && <p className={`m-0 text-xs ${MUTED}`}>Runs in the background; you can leave this page and find the result under Runs.</p>}
     </form>
   )
 }
@@ -278,6 +386,7 @@ export default function EvaluationPage() {
   const runs = useEngineRuns(evaluationId, runnable)
   const [openId, setOpenId] = useState<string | null>(null)
   const [fresh, setFresh] = useState<EngineRun | null>(null)
+  const [live, setLive] = useState(false)
   const opened = useEngineRun(fresh ? null : openId)
   const shown = fresh ?? opened.data
 
@@ -320,7 +429,7 @@ export default function EvaluationPage() {
         <section className="rounded-2xl bg-white p-5">
           <h2 className="m-0 text-base font-semibold text-[var(--fm-ink)]">Not runnable in FairMind yet</h2>
           <p className={`mb-0 mt-2 text-sm leading-normal ${MUTED}`}>
-            FairMind cannot compute this evaluation from uploaded files. It needs a connection to the system under test or to its platform, which is not built yet.
+            FairMind cannot run this evaluation yet. It needs a connection to the system&apos;s platform or evidence FairMind does not collect.
           </p>
         </section>
       ) : (
@@ -332,9 +441,27 @@ export default function EvaluationPage() {
             ) : !engine.data ? (
               <Loading label="Loading" />
             ) : (
+              <div className="flex flex-col gap-4">
+              {engine.data.alternate && (
+                <div className="flex gap-2" role="group" aria-label="How to run">
+                  {([[false, 'From uploaded files'], [true, 'Against the live system']] as const).map(([v, text]) => (
+                    <button
+                      key={text}
+                      type="button"
+                      aria-pressed={live === v}
+                      onClick={() => setLive(v)}
+                      className={`rounded-full px-3 py-1.5 text-[12.5px] font-semibold ${live === v ? 'bg-[var(--fm-ink)] text-white' : 'border border-[var(--fm-line)] bg-white text-[var(--fm-ink2)]'}`}
+                    >
+                      {text}
+                    </button>
+                  ))}
+                </div>
+              )}
               <RunForm
+                key={live ? 'live' : 'files'}
                 evaluationId={e.id}
-                spec={engine.data}
+                spec={live && engine.data.alternate ? engine.data.alternate : engine.data}
+                live={live && !!engine.data.alternate}
                 onDone={(run) => {
                   setFresh(run)
                   setOpenId(run.id)
@@ -342,6 +469,7 @@ export default function EvaluationPage() {
                   evaluation.reload()
                 }}
               />
+              </div>
             )}
           </section>
           <section className="flex min-w-0 flex-col gap-[22px]">
