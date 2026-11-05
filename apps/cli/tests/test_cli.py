@@ -62,6 +62,7 @@ def test_gate_exit_codes(verdict, allow, expected, monkeypatch):
 
 @pytest.mark.parametrize("approval,verdict,expected", [
     ("approved", "go", EXIT_GO),
+    ("approved", "conditional_go", EXIT_GO),
     ("pending", "go", EXIT_NO_GO),
     ("not_requested", "go", EXIT_NO_GO),
     ("rejected", "no_go", EXIT_NO_GO),

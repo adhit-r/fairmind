@@ -44,7 +44,7 @@ The action installs the `fairmind` CLI that ships next to it, so it works from a
 
 ## Require a release decision
 
-The gate also reports the system's latest release decision as `approvalStatus`: `not_requested`, `pending`, `approved` or `rejected`. A rejected decision makes the verdict no go until a new decision is requested. Pending or not requested leaves the evidence verdict as it is, so a deploy job that must wait for sign-off sets `require-approval: true` (or passes `--require-approval` to `fairmind gate`), which fails unless the decision is approved. An approval with conditions counts as approved. The action exposes both as outputs, `verdict` and `approval`.
+The gate also reports the system's latest release decision as `approvalStatus`: `not_requested`, `pending`, `approved` or `rejected`. A rejected decision makes the verdict no go until a reviewer approves a new request; requesting one does not lift it. Pending or not requested leaves the evidence verdict as it is, so a deploy job that must wait for sign-off sets `require-approval: true` (or passes `--require-approval` to `fairmind gate`), which fails unless the decision is approved. An approval with conditions counts as approved, so an approved conditional go passes without `allow-conditional`. The action exposes both as outputs, `verdict` and `approval`.
 
 ## From a terminal
 
@@ -56,7 +56,7 @@ fairmind gate --system <id>
 fairmind gate --system <id> --require-approval
 ```
 
-Exit codes: 0 go, 2 conditional go, 1 no go (or, with `--require-approval`, a release decision that is not approved), 3 the command itself failed.
+Exit codes: 0 go, 2 conditional go, 1 no go (or, with `--require-approval`, a release decision that is not approved; an approved conditional go exits 0), 3 the command itself failed.
 
 ## What the gate does not do yet
 

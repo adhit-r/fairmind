@@ -15,13 +15,13 @@ export FAIRMIND_API_KEY=...        # minted at POST /api/v1/auth/api-keys, valid
 fairmind systems
 fairmind gate --system <id>                       # exit 0 go, 2 conditional go, 1 no go
 fairmind gate --system <id> --allow-conditional   # exit 0 on conditional go
-fairmind gate --system <id> --require-approval    # also exit 1 unless the release decision is approved
+fairmind gate --system <id> --require-approval    # exit 1 unless the release decision is approved
 fairmind test --system <id> --file predictions.csv \
     --outcome repaid --prediction approved --score score --attributes gender,region
 fairmind test ... --gate                          # exit by the gate's verdict after the run
 ```
 
-`test` uploads the CSV, runs disparate impact, demographic parity, equal opportunity, equalized odds and calibration per attribute with bootstrap intervals, and stores the result as measured evidence on the system. `gate` reads the release gate: five checks, each proven, attested or open, a confidence, the verdict from the impact-by-confidence matrix, and the latest release decision (`approvalStatus`: not requested, pending, approved or rejected). A rejected decision makes the verdict no go; an approval with conditions counts as approved for `--require-approval`.
+`test` uploads the CSV, runs disparate impact, demographic parity, equal opportunity, equalized odds and calibration per attribute with bootstrap intervals, and stores the result as measured evidence on the system. `gate` reads the release gate: five checks, each proven, attested or open, a confidence, the verdict from the impact-by-confidence matrix, and the latest release decision (`approvalStatus`: not requested, pending, approved or rejected). A rejected decision makes the verdict no go until a reviewer approves a new request. With `--require-approval` an approval with conditions counts as approved: an approved conditional go exits 0.
 
 Exit code 3 means the command itself failed: no network, no key, wrong system id, a column that is not in the file. Add `--json` to any command for the raw response.
 

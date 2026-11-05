@@ -1,7 +1,7 @@
 """fairmind: gate, test and systems.
 
     fairmind gate --system <id>                 exit 0 go, 2 conditional go, 1 no go
-    fairmind gate --system <id> --require-approval   also exit 1 unless the release decision is approved
+    fairmind gate --system <id> --require-approval   exit 1 unless the release decision is approved; approved, a conditional go exits 0
     fairmind test --system <id> --file p.csv \
         --outcome repaid --attributes gender,region [--prediction approved] [--score score]
     fairmind monitor --system <id> --file decisions.csv --attributes gender [--prediction approved] [--score score]
@@ -110,7 +110,8 @@ def cmd_gate(args: argparse.Namespace, factory: ClientFactory, out: Callable[[st
     if verdict == "go":
         return EXIT_GO
     if verdict == "conditional_go":
-        return EXIT_GO if args.allow_conditional else EXIT_CONDITIONAL
+        # Past --require-approval the decision is approved, and approving a conditional go records the accepted conditions.
+        return EXIT_GO if args.allow_conditional or args.require_approval else EXIT_CONDITIONAL
     return EXIT_NO_GO
 
 
