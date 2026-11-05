@@ -27,7 +27,7 @@ jobs:
           python-version: "3.12"
       - name: Produce predictions for the holdout set
         run: python scripts/score_holdout.py --out artifacts/predictions.csv
-      - uses: ./.github/actions/fairmind-gate
+      - uses: adhit-r/fairmind/.github/actions/fairmind-gate@main
         with:
           system: ${{ vars.FAIRMIND_SYSTEM_ID }}
           api-url: ${{ vars.FAIRMIND_API_URL }}
@@ -40,16 +40,23 @@ jobs:
 
 The predictions file has one row per decision: the outcome, the model's prediction or score, and the protected attributes. The action uploads it, FairMind computes disparate impact, demographic parity, equal opportunity, equalized odds and calibration per attribute with 95% bootstrap intervals, and stores the result on the system as measured evidence. Then it reads the gate and fails the job unless the verdict is go, or conditional go when `allow-conditional` is `true`.
 
+The action installs the `fairmind` CLI that ships next to it, so it works from any repository. Replace `@main` with a commit SHA to pin it. Inside the FairMind repository itself, `uses: ./.github/actions/fairmind-gate` does the same. Set `cli-source` only to install the CLI from somewhere else (a path or a pip requirement).
+
+## Require a release decision
+
+The gate also reports the system's latest release decision as `approvalStatus`: `not_requested`, `pending`, `approved` or `rejected`. A rejected decision makes the verdict no go until a new decision is requested. Pending or not requested leaves the evidence verdict as it is, so a deploy job that must wait for sign-off sets `require-approval: true` (or passes `--require-approval` to `fairmind gate`), which fails unless the decision is approved. An approval with conditions counts as approved. The action exposes both as outputs, `verdict` and `approval`.
+
 ## From a terminal
 
 ```bash
-pipx install ./apps/cli
+pipx install "git+https://github.com/adhit-r/fairmind.git#subdirectory=apps/cli"
 export FAIRMIND_API_URL=https://fairmind.example.com FAIRMIND_API_KEY=...
 fairmind test --system <id> --file predictions.csv --outcome repaid --prediction approved --attributes gender,region
 fairmind gate --system <id>
+fairmind gate --system <id> --require-approval
 ```
 
-Exit codes: 0 go, 2 conditional go, 1 no go, 3 the command itself failed.
+Exit codes: 0 go, 2 conditional go, 1 no go (or, with `--require-approval`, a release decision that is not approved), 3 the command itself failed.
 
 ## What the gate does not do yet
 
