@@ -391,39 +391,68 @@ class PolicyService:
                 raise ValueError(f"rule {rule['id']!r}: unknown framework control {unknown[0]!r}")
 
     def coverage(self, org_id: str) -> list[dict]:
-        p = OrgPolicy.__table__
+        """Each framework control, the published rules mapped to it, and whether they hold.
+
+        A control is failing when any mapped rule fails on any system, passing when
+        mapped rules pass and none fail, and unchecked when no system was assessed.
+        Drafts do not count: only the published, enforced version of a policy does.
+        """
+        outcomes: dict[tuple, list[str]] = {}
+        for r in self.latest_results(org_id):
+            outcomes.setdefault((r["policyId"], r["policyVersion"], r["ruleId"]), []).append(r["outcome"])
         covering: dict[str, list[dict]] = {}
-        for row in self.db.execute(
-            select(p.c.id, p.c.name, p.c.status, p.c.rules_json).where(p.c.org_id == org_id, p.c.status != "retired")
-        ).mappings():
-            for rule in json.loads(row["rules_json"]):
+        for policy in self._enforced(org_id, None):
+            for rule in json.loads(policy["rules_json"]):
+                seen = outcomes.get((policy["id"], policy["version"], rule["id"]), [])
+                entry = {
+                    "policyId": policy["id"],
+                    "policyName": policy["name"],
+                    "policyVersion": policy["version"],
+                    "ruleId": rule["id"],
+                    "ruleTitle": rule["title"],
+                    "enforcement": rule["enforcement"],
+                    "passingSystems": seen.count("pass"),
+                    "failingSystems": seen.count("fail"),
+                }
                 for ref in rule.get("controls", []):
-                    covering.setdefault(ref, []).append(
-                        {"policyId": row["id"], "policyName": row["name"], "policyStatus": row["status"], "ruleId": rule["id"], "ruleTitle": rule["title"]}
-                    )
+                    covering.setdefault(ref, []).append(entry)
         controls = self._controls_by_ref()
         out = []
         for version in self._latest_versions():
             key = version["framework_key"]
-            items = [
-                {
-                    "ref": ref,
-                    "externalId": c["external_id"],
-                    "title": c["title"],
-                    "requirementId": c["parent_requirement_id"],
-                    "requirementTitle": c["parent_requirement_title"],
-                    "coveredBy": covering.get(ref, []),
-                }
-                for ref, c in controls.items()
-                if c["framework_key"] == key
-            ]
+            items = []
+            for ref, c in controls.items():
+                if c["framework_key"] != key:
+                    continue
+                rules = covering.get(ref, [])
+                if any(r["failingSystems"] for r in rules):
+                    status = "failing"
+                elif any(r["passingSystems"] for r in rules):
+                    status = "passing"
+                else:
+                    status = "unchecked" if rules else "unmapped"
+                items.append(
+                    {
+                        "ref": ref,
+                        "externalId": c["external_id"],
+                        "title": c["title"],
+                        "requirementId": c["parent_requirement_id"],
+                        "requirementTitle": c["parent_requirement_title"],
+                        "status": status,
+                        "coveredBy": rules,
+                    }
+                )
+            count = lambda status: sum(1 for i in items if i["status"] == status)  # noqa: E731
             out.append(
                 {
                     "frameworkKey": key,
                     "name": version["name"],
                     "versionLabel": version["version_label"],
                     "totalControls": len(items),
-                    "coveredControls": sum(1 for i in items if i["coveredBy"]),
+                    "coveredControls": len(items) - count("unmapped"),
+                    "passingControls": count("passing"),
+                    "failingControls": count("failing"),
+                    "uncheckedControls": count("unchecked"),
                     "controls": items,
                 }
             )
