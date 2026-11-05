@@ -52,3 +52,10 @@ def test_sqlite_is_rejected_as_worker_queue_authority() -> None:
     with pytest.raises(WorkerQueueError) as caught:
         queue.claim(WorkerQueuePrincipal("org-a", "service:worker-a"))
     assert caught.value.code == "postgres_required"
+
+    with pytest.raises(WorkerQueueError) as heartbeat:
+        queue.heartbeat(
+            WorkerQueuePrincipal("org-a", "service:worker-a"),
+            LeaseCredential("attempt-a", "A" * 43),
+        )
+    assert heartbeat.value.code == "postgres_required"

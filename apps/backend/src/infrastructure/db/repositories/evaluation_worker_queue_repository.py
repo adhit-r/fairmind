@@ -246,6 +246,83 @@ class PostgresEvaluationWorkerQueue:
         finally:
             session.close()
 
+    @staticmethod
+    def _lock_attempt_scope(
+        session: Session,
+        principal: WorkerQueuePrincipal,
+        credential: LeaseCredential,
+    ) -> Mapping[str, Any]:
+        locator = session.execute(
+            text(
+                "SELECT attempt.org_id, attempt.workspace_id, attempt.system_id, "
+                "attempt.run_id, attempt.suite_execution_id, attempt.worker_identity_id "
+                "FROM governance_evaluation_suite_attempts AS attempt "
+                "JOIN governance_evaluation_worker_identities AS worker "
+                "ON worker.id=attempt.worker_identity_id AND worker.org_id=attempt.org_id "
+                "WHERE attempt.id=:attempt_id AND attempt.org_id=:org_id "
+                "AND worker.principal_subject=:principal_subject"
+            ),
+            {"attempt_id": credential.attempt_id, "org_id": principal.organization_id,
+             "principal_subject": principal.principal_subject},
+        ).mappings().one_or_none()
+        if locator is None:
+            raise WorkerQueueError("lease_lost", _LEASE_LOST)
+        scope = dict(locator)
+        scope["attempt_id"] = credential.attempt_id
+        scope["principal_subject"] = principal.principal_subject
+        session.execute(
+            text(
+                "SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended("
+                "'fairmind:evaluation-run:v1|' "
+                "|| length(:org_id)::text || ':' || :org_id "
+                "|| '|' || length(:run_id)::text || ':' || :run_id, 0))"
+            ), scope,
+        )
+        system_id = session.scalar(
+            text("SELECT id FROM governance_ai_systems WHERE id=:system_id "
+                 "AND org_id=:org_id AND workspace_id=:workspace_id FOR SHARE"), scope,
+        )
+        run_id = session.scalar(
+            text("SELECT id FROM governance_evaluation_runs WHERE id=:run_id "
+                 "AND org_id=:org_id AND workspace_id=:workspace_id "
+                 "AND system_id=:system_id FOR UPDATE"), scope,
+        )
+        if system_id is None or run_id is None:
+            raise WorkerQueueError("lease_lost", _LEASE_LOST)
+        siblings = session.execute(
+            text("SELECT id, technical_status, attempt_count "
+                 "FROM governance_evaluation_run_suite_executions "
+                 "WHERE run_id=:run_id AND org_id=:org_id "
+                 "AND workspace_id=:workspace_id AND system_id=:system_id "
+                 "ORDER BY ordinal, id FOR UPDATE"), scope,
+        ).mappings().all()
+        suite = next((row for row in siblings if row["id"] == scope["suite_execution_id"]), None)
+        attempt = session.execute(
+            text("SELECT technical_status, attempt_number, lease_token_hash, lease_expires_at "
+                 "FROM governance_evaluation_suite_attempts WHERE id=:attempt_id "
+                 "AND org_id=:org_id AND workspace_id=:workspace_id "
+                 "AND system_id=:system_id AND run_id=:run_id "
+                 "AND suite_execution_id=:suite_execution_id "
+                 "AND worker_identity_id=:worker_identity_id FOR UPDATE"), scope,
+        ).mappings().one_or_none()
+        worker_status = session.scalar(
+            text("SELECT status FROM governance_evaluation_worker_identities "
+                 "WHERE id=:worker_identity_id AND org_id=:org_id "
+                 "AND principal_subject=:principal_subject FOR SHARE"), scope,
+        )
+        if suite is None or attempt is None or worker_status is None:
+            raise WorkerQueueError("lease_lost", _LEASE_LOST)
+        cancellations = session.execute(
+            text("SELECT id FROM governance_evaluation_cancellations "
+                 "WHERE org_id=:org_id AND workspace_id=:workspace_id "
+                 "AND system_id=:system_id AND run_id=:run_id "
+                 "AND (suite_execution_id IS NULL OR suite_execution_id=:suite_execution_id) "
+                 "ORDER BY suite_execution_id NULLS FIRST, id FOR SHARE"), scope,
+        ).all()
+        return {**attempt, "suite_status": suite["technical_status"],
+                "attempt_count": suite["attempt_count"], "worker_status": worker_status,
+                "cancelled": bool(cancellations)}
+
     def heartbeat(
         self,
         principal: WorkerQueuePrincipal,
@@ -255,36 +332,21 @@ class PostgresEvaluationWorkerQueue:
         try:
             self._require_postgresql(session)
             with session.begin():
-                row = session.execute(
-                    text(
-                        "SELECT attempt.id, attempt.technical_status, "
-                        "attempt.lease_token_hash, attempt.lease_expires_at, "
-                        "worker.status AS worker_status "
-                        "FROM governance_evaluation_suite_attempts AS attempt "
-                        "JOIN governance_evaluation_worker_identities AS worker "
-                        "ON worker.id=attempt.worker_identity_id "
-                        "AND worker.org_id=attempt.org_id "
-                        "WHERE attempt.id=:attempt_id AND attempt.org_id=:org_id "
-                        "AND worker.principal_subject=:principal_subject "
-                        "FOR UPDATE OF attempt FOR SHARE OF worker"
-                    ),
-                    {
-                        "attempt_id": credential.attempt_id,
-                        "org_id": principal.organization_id,
-                        "principal_subject": principal.principal_subject,
-                    },
-                ).mappings().one_or_none()
-                now = self._database_now(session)
                 supplied_hash = _lease_token_hash(credential.raw_token)
+                row = self._lock_attempt_scope(session, principal, credential)
+                now = self._database_now(session)
                 if (
-                    row is None
-                    or row["technical_status"] != "leased"
+                    row["technical_status"] not in {"leased", "running"}
+                    or row["suite_status"] != row["technical_status"]
+                    or row["attempt_count"] != row["attempt_number"]
                     or not hmac.compare_digest(str(row["lease_token_hash"]), supplied_hash)
                     or _stored_datetime(row["lease_expires_at"]) <= now
                 ):
                     raise WorkerQueueError("lease_lost", _LEASE_LOST)
                 if row["worker_status"] != "active":
                     raise WorkerQueueError("worker_inactive", _WORKER_INACTIVE)
+                if row["cancelled"]:
+                    raise WorkerQueueError("job_cancelled", "The evaluation job was cancelled.")
 
                 expires_at = now + timedelta(seconds=LEASE_DURATION_SECONDS)
                 session.execute(

@@ -66,6 +66,11 @@ def _iso(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat()
 
 
+def _database_now(factory) -> datetime:
+    with factory() as session:
+        return session.scalar(text("SELECT clock_timestamp()"))
+
+
 def _register_worker(factory, *, org_id: str, subject: str, worker_type: str) -> str:
     worker_id = str(uuid.uuid4())
     capabilities = canonical_json(
@@ -92,7 +97,7 @@ def _register_worker(factory, *, org_id: str, subject: str, worker_type: str) ->
                 "worker_type": worker_type,
                 "capabilities": capabilities,
                 "capabilities_hash": hashlib.sha256(capabilities.encode("utf-8")).hexdigest(),
-                "created_at": _iso(datetime.now(timezone.utc)),
+                "created_at": _iso(session.scalar(text("SELECT clock_timestamp()"))),
             },
         )
         session.commit()
@@ -112,7 +117,7 @@ def _queue_scenario(factory, *, suite_count: int = 2, max_attempts: int = 3):
                 "WHERE run_id=:run_id AND org_id=:org_id"
             ),
             {
-                "updated_at": _iso(datetime.now(timezone.utc) + timedelta(milliseconds=1)),
+                "updated_at": _iso(session.scalar(text("SELECT clock_timestamp()"))),
                 "run_id": scenario.run_id,
                 "org_id": scenario.org_id,
             },
@@ -335,7 +340,7 @@ def _insert_attempt(
     expires_in_seconds: float = -30,
 ) -> str:
     attempt_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc)
+    now = _database_now(factory)
     expires_at = now + timedelta(seconds=expires_in_seconds)
     heartbeat_at = expires_at - timedelta(seconds=60)
     leased_at = heartbeat_at - timedelta(seconds=30)
@@ -515,3 +520,165 @@ def test_heartbeat_rejects_lease_that_expires_while_waiting_for_lock(
         lock_session.rollback()
         lock_session.close()
         heartbeat_connection.close()
+
+
+def _heartbeat_scenario(factory, *, suite_count=1):
+    scenario = _queue_scenario(factory, suite_count=suite_count)
+    subject = f"service:heartbeat-state:{uuid.uuid4()}"
+    worker_id = _register_worker(
+        factory, org_id=scenario.org_id, subject=subject,
+        worker_type="external_provider",
+    )
+    queue = PostgresEvaluationWorkerQueue(factory)
+    principal = _principal(scenario, subject)
+    lease = queue.claim(principal)
+    assert lease is not None
+    return scenario, worker_id, queue, principal, lease
+
+
+def _lease_snapshot(factory, attempt_id):
+    with factory() as session:
+        return session.execute(
+            text("SELECT technical_status, last_heartbeat_at, lease_expires_at, "
+                 "updated_at FROM governance_evaluation_suite_attempts WHERE id=:id"),
+            {"id": attempt_id},
+        ).one()
+
+
+def _cancel(session, scenario, suite_execution_id):
+    session.execute(
+        text("INSERT INTO governance_evaluation_cancellations "
+             "(id, org_id, workspace_id, system_id, run_id, suite_execution_id, "
+             "scope_kind, requested_by, requested_at, reason) "
+             "VALUES (:id, :org_id, :workspace_id, :system_id, :run_id, :suite_id, "
+             ":scope_kind, :actor, :requested_at, 'Stop this test execution')"),
+        {"id": str(uuid.uuid4()), "org_id": scenario.org_id,
+         "workspace_id": scenario.workspace_id, "system_id": scenario.system_id,
+         "run_id": scenario.run_id, "suite_id": suite_execution_id,
+         "scope_kind": "run" if suite_execution_id is None else "suite",
+         "actor": scenario.actor_id,
+         "requested_at": _iso(session.scalar(text("SELECT clock_timestamp()")))},
+    )
+
+
+@pytest.mark.parametrize("scope", ["run", "suite", "other_suite"])
+def test_heartbeat_obeys_exact_cancellation_scope(worker_queue_session_factory, scope):
+    factory = worker_queue_session_factory
+    scenario, _, queue, principal, lease = _heartbeat_scenario(factory, suite_count=2)
+    suite_id = None if scope == "run" else lease.suite_execution_id
+    if scope == "other_suite":
+        suite_id = next(str(row["id"]) for row in scenario.suite_executions
+                        if row["id"] != lease.suite_execution_id)
+    with factory.begin() as session:
+        _cancel(session, scenario, suite_id)
+    before = _lease_snapshot(factory, lease.credential.attempt_id)
+    if scope == "other_suite":
+        receipt = queue.heartbeat(principal, lease.credential)
+        assert receipt.lease_expires_at > lease.lease_expires_at
+    else:
+        with pytest.raises(WorkerQueueError) as caught:
+            queue.heartbeat(principal, lease.credential)
+        assert caught.value.code == "job_cancelled"
+        assert _lease_snapshot(factory, lease.credential.attempt_id) == before
+
+
+@pytest.mark.parametrize("advance_attempt", [False, True])
+def test_heartbeat_requires_matching_active_job_and_attempt(
+    worker_queue_session_factory, advance_attempt,
+):
+    factory = worker_queue_session_factory
+    scenario, _, queue, principal, lease = _heartbeat_scenario(factory)
+    with factory.begin() as session:
+        now = _iso(session.scalar(text("SELECT clock_timestamp()")))
+        session.execute(
+            text("UPDATE governance_evaluation_run_suite_executions "
+                 "SET technical_status='running', started_at=:now, updated_at=:now "
+                 "WHERE id=:id"),
+            {"id": lease.suite_execution_id, "now": now},
+        )
+        if advance_attempt:
+            session.execute(
+                text("UPDATE governance_evaluation_suite_attempts "
+                     "SET technical_status='running', started_at=:now, updated_at=:now "
+                     "WHERE id=:id"),
+                {"id": lease.credential.attempt_id, "now": now},
+            )
+    before = _lease_snapshot(factory, lease.credential.attempt_id)
+    if advance_attempt:
+        receipt = queue.heartbeat(principal, lease.credential)
+        assert (receipt.lease_expires_at - receipt.heartbeat_at).total_seconds() == 60
+        assert _lease_snapshot(factory, lease.credential.attempt_id).technical_status == "running"
+    else:
+        with pytest.raises(WorkerQueueError) as caught:
+            queue.heartbeat(principal, lease.credential)
+        assert caught.value.code == "lease_lost"
+        assert _lease_snapshot(factory, lease.credential.attempt_id) == before
+
+
+def test_heartbeat_rechecks_cancellation_after_run_arbiter_wait(worker_queue_session_factory):
+    factory = worker_queue_session_factory
+    scenario, _, _, principal, lease = _heartbeat_scenario(factory)
+    lock_session = factory()
+    heartbeat_connection = factory.kw["bind"].connect()
+    before = _lease_snapshot(factory, lease.credential.attempt_id)
+    try:
+        heartbeat_pid = heartbeat_connection.scalar(text("SELECT pg_backend_pid()"))
+        heartbeat_connection.rollback()
+        lock_session.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended("
+                 "'fairmind:evaluation-run:v1|' "
+                 "|| length(:org_id)::text || ':' || :org_id "
+                 "|| '|' || length(:run_id)::text || ':' || :run_id, 0))"),
+            {"org_id": scenario.org_id, "run_id": scenario.run_id},
+        )
+        queue = PostgresEvaluationWorkerQueue(lambda: factory(bind=heartbeat_connection))
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(queue.heartbeat, principal, lease.credential)
+            try:
+                deadline = time.monotonic() + 5
+                while not lock_session.scalar(
+                    text("SELECT cardinality(pg_blocking_pids(:pid)) > 0"),
+                    {"pid": heartbeat_pid},
+                ):
+                    assert not future.done(), "heartbeat bypassed the run arbiter"
+                    assert time.monotonic() < deadline, "heartbeat never waited on the run arbiter"
+                    time.sleep(0.01)
+                _cancel(lock_session, scenario, None)
+                lock_session.commit()
+            finally:
+                lock_session.rollback()
+            with pytest.raises(WorkerQueueError) as caught:
+                future.result(timeout=5)
+            assert caught.value.code == "job_cancelled"
+        assert _lease_snapshot(factory, lease.credential.attempt_id) == before
+    finally:
+        lock_session.rollback()
+        lock_session.close()
+        heartbeat_connection.close()
+
+
+@pytest.mark.parametrize("status", ["disabled", "revoked"])
+def test_heartbeat_rejects_worker_deactivation_without_renewing(
+    worker_queue_session_factory, status,
+):
+    factory = worker_queue_session_factory
+    scenario, worker_id, queue, principal, lease = _heartbeat_scenario(factory)
+    with factory.begin() as session:
+        session.execute(
+            text("UPDATE governance_evaluation_worker_identities SET status=:status, "
+                 "revoked_by=:actor, revoked_at=:now, revocation_reason=:reason "
+                 "WHERE id=:id"),
+            {"id": worker_id, "status": status,
+             "actor": scenario.actor_id if status == "revoked" else None,
+             "now": _iso(_database_now(factory)) if status == "revoked" else None,
+             "reason": "Remove test authority" if status == "revoked" else None},
+        )
+    before = _lease_snapshot(factory, lease.credential.attempt_id)
+    with pytest.raises(WorkerQueueError) as caught:
+        queue.heartbeat(principal, lease.credential)
+    assert caught.value.code == "worker_inactive"
+    wrong_token = "B" * 43 if lease.credential.raw_token != "B" * 43 else "C" * 43
+    with pytest.raises(WorkerQueueError) as invalid:
+        queue.heartbeat(principal, LeaseCredential(lease.credential.attempt_id, wrong_token))
+    assert invalid.value.code == "lease_lost"
+    assert _lease_snapshot(factory, lease.credential.attempt_id) == before

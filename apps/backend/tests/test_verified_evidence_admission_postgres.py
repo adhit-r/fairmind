@@ -346,7 +346,7 @@ def _insert_identity_and_scope(
     trust_policy_id: str,
     maximum_evidence_age_seconds: int = 86400,
 ) -> None:
-    now = _iso(datetime.now(timezone.utc))
+    now = _iso(session.scalar(text("SELECT clock_timestamp()")))
     session.execute(
         text(
             "INSERT INTO users "
