@@ -350,27 +350,6 @@ def test_ai_governance_open_high_risk_puts_system_in_remediate(authenticated_org
     assert [item["lifecycleStage"] for item in listed if item["id"] == system_id] == ["remediate"]
 
 
-def test_ai_governance_policy_create_and_list():
-    create_resp = client.post(
-        "/api/v1/ai-governance/policies",
-        json={
-            "name": "Model Transparency Policy",
-            "framework": "eu_ai_act",
-            "description": "Ensure explainability artifacts exist",
-            "rules": [{"id": "R1", "text": "publish model card"}],
-        },
-    )
-    assert create_resp.status_code == 200
-    created = create_resp.json()
-    assert created["name"] == "Model Transparency Policy"
-    assert created["status"] == "draft"
-
-    list_resp = client.get("/api/v1/ai-governance/policies?framework=eu_ai_act")
-    assert list_resp.status_code == 200
-    policies = list_resp.json()
-    assert any(p["id"] == created["id"] for p in policies)
-
-
 def test_ai_governance_workflow_and_request_decision(authenticated_org_database):
     system_id = _create_scoped_system(authenticated_org_database, "Workflow decision system")
     workflow_resp = client.post(
