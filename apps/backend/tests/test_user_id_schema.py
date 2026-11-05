@@ -2,6 +2,7 @@
 
 import uuid
 
+from sqlalchemy import MetaData
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import CreateTable
 
@@ -9,7 +10,12 @@ from database.models import AuditLog, Organization, OrganizationMember, Organiza
 
 
 def _ddl(model, dialect):
-    return str(CreateTable(model.__table__).compile(dialect=dialect))
+    # Compile a fresh copy: once any Postgres create_all in the session has added the use_alter keys
+    # with ALTER, SQLAlchemy leaves them out of every later CREATE TABLE built from the shared metadata.
+    fresh = MetaData()
+    for table in model.metadata.tables.values():
+        table.to_metadata(fresh)
+    return str(CreateTable(fresh.tables[model.__table__.key]).compile(dialect=dialect))
 
 
 def test_user_id_columns_are_varchar_on_postgres():
