@@ -1,0 +1,50 @@
+{{!< default}}
+{{#post}}
+<div class="progress" aria-hidden="true"></div>
+<div class="wrap article">
+  <aside class="toc-col">
+    <nav class="mod toc" aria-label="On this page" hidden>
+      <h2 class="rail-h">{{> icon name="list"}}On this page</h2>
+    </nav>
+  </aside>
+  <article class="doc">
+    <nav class="crumbs" aria-label="Breadcrumb"><a href="{{@site.url}}/">Home</a>{{#primary_tag}}{{> icon name="chevron" size="12"}}<a href="{{url}}">{{name}}</a>{{/primary_tag}}</nav>
+    <h1>{{title}}</h1>
+    {{#if custom_excerpt}}<p class="dek">{{custom_excerpt}}</p>{{/if}}
+    <p class="byline">{{#has tag="deadline"}}<b class="lbl dl">Deadline</b>{{/has}}{{authors separator=", "}} <span>Updated {{date updated_at format="D MMM YYYY"}}</span><span>{{reading_time minute="1 min read" minutes="% min read"}}</span><span hidden><span data-sources></span> primary sources</span></p>
+    <details class="toc-m" hidden><summary>{{> icon name="list"}}On this page</summary></details>
+    {{#if feature_image}}
+    <figure class="feat"><img src="{{img_url feature_image size="xl"}}" alt="{{#if feature_image_alt}}{{feature_image_alt}}{{else}}{{title}}{{/if}}">{{#if feature_image_caption}}<figcaption>{{feature_image_caption}}</figcaption>{{/if}}</figure>
+    {{/if}}
+    <div class="prose gh-content" data-post>
+      {{content}}
+    </div>
+  </article>
+  <aside class="side">
+    <section class="mod facts-mod">
+      <header class="mh"><h2>This guide</h2></header>
+      <dl class="facts">
+        <div><dt>Published</dt><dd>{{date published_at format="D MMM YYYY"}}</dd></div>
+        <div><dt>Last updated</dt><dd>{{date updated_at format="D MMM YYYY"}}</dd></div>
+        <div hidden><dt>Primary sources</dt><dd data-sources></dd></div>
+        <div><dt>Reading time</dt><dd>{{reading_time minute="1 min" minutes="% min"}}</dd></div>
+      </dl>
+    </section>
+    {{#if primary_tag}}
+    {{#get "posts" filter="primary_tag:{{primary_tag.slug}}+id:-{{id}}" limit="4" as |more|}}{{#if more}}
+    <section class="mod more">
+      <header class="mh"><h2>More on {{../primary_tag.name}}</h2><a href="{{../primary_tag.url}}">View all {{> icon name="chevron" size="12"}}</a></header>
+      <ul>{{#foreach more}}<li><a href="{{url}}">{{title}}</a><span class="m">{{reading_time minute="1 min" minutes="% min"}}</span></li>{{/foreach}}</ul>
+    </section>
+    {{/if}}{{/get}}
+    {{/if}}
+    {{> due limit="3"}}
+    <section class="mod promo">
+      <h2>{{@custom.cta_title}}</h2>
+      <p>{{@custom.cta_text}}</p>
+      <a class="btn red" href="https://fairmind.xyz/request-access?utm_source=blog&utm_medium=post&utm_campaign={{slug}}">Request access {{> icon name="arrow" size="14"}}</a>
+    </section>
+  </aside>
+</div>
+<div class="wrap after">{{> newsletter}}</div>
+{{/post}}

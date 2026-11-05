@@ -12,10 +12,16 @@
   status = 301
   force = true
 
+# Research notes moved from /blog/. 302 until blog.fairmind.xyz is live, then point /blog/* there with a 301.
 [[redirects]]
   from = "/blog"
-  to = "/blog/"
-  status = 301
+  to = "/research/"
+  status = 302
+
+[[redirects]]
+  from = "/blog/*"
+  to = "/research/"
+  status = 302
 
 # Security headers
 [[headers]]

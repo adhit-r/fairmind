@@ -1,0 +1,15 @@
+{{#if @site.members_enabled}}{{#unless @member}}
+<section class="mod news" id="subscribe">
+  <header class="mh"><h2>{{@custom.newsletter_title}}</h2></header>
+  <div class="mb">
+    <p>{{@custom.newsletter_text}}</p>
+    <form data-members-form="subscribe">
+      <label class="sr" for="news-email">Work email</label>
+      <input id="news-email" data-members-email type="email" required placeholder="Work email" autocomplete="email">
+      <button class="btn red" type="submit">Subscribe</button>
+    </form>
+    <p class="msg ok">Check your inbox to confirm your subscription.</p>
+    <p class="msg err">That did not go through. Check the address and try again.</p>
+  </div>
+</section>
+{{/unless}}{{/if}}
