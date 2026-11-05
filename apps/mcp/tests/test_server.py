@@ -15,6 +15,7 @@ GATE = {
     "attested": 1,
     "open": 1,
     "reasons": ["Nothing on file for: Monitoring"],
+    "approvalStatus": "not_requested",
     "checks": [
         {"key": "fairness", "label": "Fairness measured", "state": "proven", "confidence": 0.88, "evidenceId": "e1", "detail": None},
         {"key": "data_governance", "label": "Data governance", "state": "attested", "confidence": 0.3, "evidenceId": "e2", "detail": None},
@@ -50,6 +51,7 @@ def test_release_gate_text_and_structured(client):
     client.gate.assert_called_once_with("s1")
     text = result.content[0].text
     assert text.startswith("CONDITIONAL GO  confidence 0.62") and "- Monitoring: open" in text and "Reason: Nothing on file" in text
+    assert "Release decision: not requested" in text
     assert result.structuredContent["verdict"] == "conditional_go" and not result.isError
 
 
