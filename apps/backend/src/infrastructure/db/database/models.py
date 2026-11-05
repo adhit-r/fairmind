@@ -237,11 +237,16 @@ class User(Base):
 
 
 class AuditLog(Base):
-    """Audit Log model for tracking user actions and compliance"""
+    """Audit Log model for tracking user actions and compliance.
+
+    The live table's shape (migrations/001_initial_schema.sql plus 019's org_id),
+    so a table created from this model takes AuditLoggingMiddleware's inserts.
+    """
     __tablename__ = "audit_logs"
 
-    id = Column(UUID, primary_key=True, default=uuid.uuid4, index=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(UserId, ForeignKey("users.id"), nullable=True, index=True)
+    org_id = Column(String, nullable=True, index=True)  # organisation the request acted in
     action = Column(String, nullable=False, index=True)  # "login", "export_report", "create_model", etc.
     resource_type = Column(String, nullable=True, index=True)  # "report", "model", "compliance_check"
     resource_id = Column(String, nullable=True, index=True)
@@ -250,11 +255,7 @@ class AuditLog(Base):
     details = Column(JSON, default=dict)
     ip_address = Column(String, nullable=True)
     user_agent = Column(String, nullable=True)
-
-    # Status tracking
-    timestamp = Column(DateTime, default=func.now(), index=True)
-    status = Column(String, nullable=False, index=True)  # "success", "failure"
-    error_message = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     # Relationships
     user = relationship("User", back_populates="audit_logs")
