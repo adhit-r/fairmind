@@ -107,5 +107,24 @@ class ResendEmailService:
         """
         return await self._send(user_email, "Your FairMind access request was not approved", html)
 
+    async def send_password_reset_email(self, user_email: str, reset_url: str, expires_minutes: int) -> bool:
+        html = f"""
+        <div style="font-family:sans-serif;max-width:600px;margin:0 auto;border:2px solid #000;padding:32px">
+          <h1 style="font-size:24px;font-weight:900;border-bottom:4px solid #000;padding-bottom:16px">
+            Reset your password — FairMind
+          </h1>
+          <p>Someone asked to reset the password of the FairMind account for this email address.</p>
+          <a href="{reset_url}"
+             style="display:inline-block;background:#000;color:#fff;padding:12px 24px;text-decoration:none;font-weight:900;margin-top:16px">
+            Choose a new password
+          </a>
+          <p style="margin-top:24px;font-size:12px;color:#666">
+            The link works once and expires in {expires_minutes} minutes.
+            If you did not ask for this, ignore this email; your password stays the same.
+          </p>
+        </div>
+        """
+        return await self._send(user_email, "Reset your FairMind password", html)
+
 
 email_service = ResendEmailService()

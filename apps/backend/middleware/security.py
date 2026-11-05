@@ -34,6 +34,8 @@ _PUBLIC_ROUTES = frozenset(
         ("POST", "/api/v1/auth/oauth2/refresh"),
         ("POST", "/api/v1/auth/oauth2/sync-user"),
         ("POST", "/api/v1/auth/oauth2/validate"),
+        ("POST", "/api/v1/auth/password-reset"),
+        ("POST", "/api/v1/auth/password-reset/request"),
         ("POST", "/api/v1/auth/refresh"),
         ("POST", "/api/v1/auth/register"),
         ("POST", "/api/v1/register"),
@@ -67,6 +69,15 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             )
         
         return response
+
+
+def client_ip(request: Request) -> str:
+    """The caller's address: behind the Next.js proxy request.client is the
+    frontend container, so the forwarded headers come first."""
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    return request.headers.get("X-Real-IP") or (request.client.host if request.client else "unknown")
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
@@ -203,17 +214,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             del self.fallback_clients[client_ip]
     
     def get_client_ip(self, request: Request) -> str:
-        """Get client IP address."""
-        # Check for forwarded headers (for reverse proxy setups)
-        forwarded_for = request.headers.get("X-Forwarded-For")
-        if forwarded_for:
-            return forwarded_for.split(",")[0].strip()
-        
-        real_ip = request.headers.get("X-Real-IP")
-        if real_ip:
-            return real_ip
-        
-        return request.client.host if request.client else "unknown"
+        return client_ip(request)
 
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
@@ -350,6 +351,7 @@ _PUBLIC_EXACT = {
     "/api/v1/auth/login", "/api/v1/auth/register", "/api/v1/auth/refresh",
     "/api/v1/auth/callback", "/api/v1/auth/health",
     "/api/v1/auth/oauth2/validate", "/api/v1/auth/oauth2/refresh",
+    "/api/v1/auth/password-reset", "/api/v1/auth/password-reset/request",
     "/api/v1/register",
 }
 _PUBLIC_PREFIXES = ("/health", "/docs/", "/static/", "/api/v1/public/packs/")

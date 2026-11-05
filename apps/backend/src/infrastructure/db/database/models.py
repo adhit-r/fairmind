@@ -2,7 +2,7 @@
 Database models for AI BOM system
 """
 
-from sqlalchemy import Column, String, Integer, Float, DateTime, Text, JSON, ForeignKey, Enum, Boolean, UUID
+from sqlalchemy import Column, String, Integer, Float, DateTime, Text, JSON, ForeignKey, Enum, Boolean, UUID, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.types import TypeDecorator
 from sqlalchemy.sql import func
@@ -234,6 +234,24 @@ class User(Base):
         secondaryjoin="Organization.id == OrganizationMember.org_id",
         back_populates="users",
     )
+
+
+class ApiKey(Base):
+    """A key minted at POST /api/v1/auth/api-keys, as migrations/001_initial_schema.sql
+    created the table. Only a SHA-256 of the key is kept; config.auth accepts a key
+    while its row exists and its user is active."""
+    __tablename__ = "api_keys"
+    __table_args__ = (UniqueConstraint("user_id", "name"),)
+
+    id = Column(String(255), primary_key=True)
+    user_id = Column(UserId, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    key_hash = Column(String(255), nullable=False)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), default=func.now())
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    last_used = Column(DateTime(timezone=True), nullable=True)
 
 
 class AuditLog(Base):

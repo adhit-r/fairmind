@@ -101,9 +101,9 @@ class Settings(BaseSettings):
     authentik_jwt_algorithm: str = "RS256"
     authentik_jwks_cache_ttl: int = 3600
     jwt_validation_mode: str = "internal"  # "internal" (HS256) or "authentik" (RS256)
-    authentik_oauth_client_id: Optional[str] = "fairmind-frontend"
+    authentik_oauth_client_id: Optional[str] = None
     authentik_oauth_client_secret: Optional[str] = None
-    authentik_oauth_redirect_uri: Optional[str] = "http://localhost:3000/auth/callback"
+    authentik_oauth_redirect_uri: Optional[str] = None
     authentik_token_endpoint: Optional[str] = None  # Will default to {authentik_server_url}/application/o/token/
     authentik_refresh_token_ttl: int = 604800  # 7 days in seconds
     
