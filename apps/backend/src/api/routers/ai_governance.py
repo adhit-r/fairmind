@@ -698,6 +698,9 @@ def _serialize_remediation_task_row(row: Any) -> Dict[str, Any]:
     }
 
 
+ACTIVE_REMEDIATION_STATUSES = ("open", "in_progress", "blocked", "ready_for_retest")
+
+
 def _summarize_remediation_tasks(tasks: List[Dict[str, Any]], system_id: str) -> Dict[str, Any]:
     status_counts = {
         "open": 0,
@@ -722,7 +725,7 @@ def _summarize_remediation_tasks(tasks: List[Dict[str, Any]], system_id: str) ->
             retest_required += 1
         linked_risk_refs += len(task.get("linkedRiskIds") or [])
 
-    active = sum(status_counts[key] for key in ("open", "in_progress", "blocked", "ready_for_retest"))
+    active = sum(status_counts[key] for key in ACTIVE_REMEDIATION_STATUSES)
     completed = status_counts["resolved"] + status_counts["closed"]
 
     return {
@@ -2065,6 +2068,25 @@ def _gate_decision_block(gate: dict, notes: Optional[str]):
     return None
 
 
+def _release_blockers(db: Session, system_id: str) -> Optional[Dict[str, Any]]:
+    """None when nothing blocks approval, else the 409 detail: open high or critical findings, active critical tasks."""
+    findings = _fetch_stored_risk_summary(db, system_id)["openHighOrCritical"]
+    tasks = sum(
+        1 for task in _fetch_remediation_tasks(db, system_id)
+        if task.get("priority") == "critical" and (task.get("status") or "open") in ACTIVE_REMEDIATION_STATUSES
+    )
+    if not findings and not tasks:
+        return None
+    parts = [
+        f"{findings} open high or critical finding{'' if findings == 1 else 's'}" if findings else "",
+        f"{tasks} active critical remediation task{'' if tasks == 1 else 's'}" if tasks else "",
+    ]
+    return {
+        "message": "Approval is blocked by " + " and ".join(p for p in parts if p) + ". Close them first; the release can still be rejected.",
+        "blockers": {"openHighOrCriticalFindings": findings, "activeCriticalTasks": tasks},
+    }
+
+
 @router.post("/approval-requests/{request_id}/decision")
 async def make_approval_decision(
     request_id: str,
@@ -2121,6 +2143,9 @@ async def make_approval_decision(
                     "environmentalGate": environmental_gate,
                 },
             )
+        blockers = _release_blockers(db, approval_system_id)
+        if blockers:
+            raise HTTPException(status_code=409, detail=blockers)
     actor = _authenticated_actor(current_user)
     result = db.execute(
         text(

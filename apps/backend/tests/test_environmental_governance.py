@@ -259,3 +259,23 @@ def test_documented_conditional_go_allows_system_approval(environmental_governan
     )
     assert decision.status_code == 200
     assert decision.json()["status"] == "approved"
+
+
+def test_approval_is_refused_while_findings_or_critical_tasks_are_open(environmental_governance_client):
+    client, org_id = environmental_governance_client
+    system_id = _create_system(client, org_id)
+    _set_low_tier(environmental_governance_client, system_id)
+    assert client.post(f"{_environmental_base(org_id, system_id)}/assess", json={"assessment": _assessment()}).status_code == 200
+    risk = client.post("/api/v1/ai-governance/risks/assess", json={"systemId": system_id, "riskType": "fairness", "severity": "high", "description": "Approval rates differ by region"})
+    assert risk.status_code == 200, risk.text
+    task = client.post("/api/v1/ai-governance/remediation", json={"system_id": system_id, "title": "Recalibrate", "description": "Recalibrate by region", "source_type": "risk", "source_id": risk.json()["id"], "priority": "critical"})
+    assert task.status_code == 200, task.text
+    request_id = client.post(f"/api/v1/ai-governance/approval/system/{system_id}/request", json={}).json()["request"]["id"]
+    url = f"/api/v1/ai-governance/approval-requests/{request_id}/decision"
+
+    refused = client.post(url, json={"decision": "approved", "notes": "Environmental mitigation documented."})
+    assert refused.status_code == 409, refused.text
+    detail = refused.json()["detail"]
+    assert detail["blockers"] == {"openHighOrCriticalFindings": 1, "activeCriticalTasks": 1}
+    assert detail["message"].startswith("Approval is blocked by 1 open high or critical finding and 1 active critical remediation task")
+    assert client.post(url, json={"decision": "rejected", "notes": "Findings open."}).status_code == 200

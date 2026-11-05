@@ -483,6 +483,9 @@ def _record_time(record: Dict[str, Any]) -> Optional[datetime]:
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
+_NO_TIME = datetime.min.replace(tzinfo=timezone.utc)
+
+
 def _span(hours: float) -> str:
     """"12 days" or "30 hours": whole days once a span passes two days."""
     if hours >= 48:
@@ -499,13 +502,15 @@ def release_gate(
     environmental_assessed: bool = False,
     monitoring_cadence_hours: Optional[int] = None,
     now: Optional[datetime] = None,
+    approval_status: str = "not_requested",
 ) -> Dict[str, Any]:
     """Verdict, confidence and the state of each check from the evidence on file.
 
     A check is proven when measured or tool-estimated evidence with confidence
     at or above 0.70 backs it, attested when any other evidence does, open when
-    nothing does. The verdict comes from the impact-by-confidence matrix; a
-    measured fairness failure never lets a system through as a plain go.
+    nothing does; within each, the newest record counts. The verdict comes from
+    the impact-by-confidence matrix; a measured fairness failure never lets a
+    system through as a plain go, and a rejected release decision makes it no go.
 
     With ``monitoring_cadence_hours`` the monitoring check is proven only while
     the newest qualifying snapshot is within 1.5 cadences old; past that it is open.
@@ -525,7 +530,8 @@ def release_gate(
                 if age_hours > STALE_AFTER_CADENCES * monitoring_cadence_hours:
                     stale_for = age_hours
                     reasons.append(f"Latest monitoring snapshot is {_span(age_hours)} old; the cadence is {_span(monitoring_cadence_hours)}")
-        for record in ([] if stale_for is not None else sorted(matching, key=lambda r: float(r.get("confidence") or 0.0), reverse=True)):
+        newest_first = sorted(matching, key=lambda r: (_record_time(r) or _NO_TIME, float(r.get("confidence") or 0.0)), reverse=True)
+        for record in ([] if stale_for is not None else newest_first):
             prov = _provenance(record)
             conf = cap_confidence_for_provenance(float(record.get("confidence") or 0.0), prov if prov in PROVEN_CLASSES else "manual")
             if prov in PROVEN_CLASSES and conf >= 0.70:
@@ -544,6 +550,9 @@ def release_gate(
     verdict = get_recommendation(TIER_TO_IMPACT.get(str(risk_tier).lower(), "high"), overall)
     if reasons and verdict == "go":
         verdict = "conditional_go"
+    if approval_status == "rejected":
+        verdict = "no_go"
+        reasons.insert(0, "The release decision was rejected; request a new one once its reasons are addressed")
     open_checks = [c["label"] for c in checks if c["state"] == "open"]
     missing = [c["label"] for c in checks if c["state"] == "open" and not c.get("stale")]
     if missing:
@@ -557,4 +566,5 @@ def release_gate(
         "proven": sum(1 for c in checks if c["state"] == "proven"),
         "attested": sum(1 for c in checks if c["state"] == "attested"),
         "open": len(open_checks),
+        "approvalStatus": approval_status,
     }

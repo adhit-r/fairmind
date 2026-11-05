@@ -217,6 +217,39 @@ def test_approving_a_no_go_system_is_refused_but_rejecting_is_allowed():
     assert client.post(url, json={"decision": "rejected", "notes": "not ready"}).status_code == 200
 
 
+def test_gate_reads_the_newest_record_per_check():
+    now = datetime(2026, 11, 3, tzinfo=timezone.utc)
+    run = lambda rid, days, conf, passing: {"id": rid, "evidenceType": "fairness_test", "confidence": conf, "metadata": {"provenance_class": "measured"}, "timestamp": (now - timedelta(days=days)).isoformat(), "content": {"all_checks_pass": passing, "attributes": []}}
+    fairness = lambda gate: next(c for c in gate["checks"] if c["key"] == "fairness")
+    gate = release_gate("low", [run("old-pass", 30, 0.97, True), run("new-fail", 1, 0.85, False)], now=now)
+    assert fairness(gate)["evidenceId"] == "new-fail" and fairness(gate)["detail"]["all_checks_pass"] is False
+    assert "Measured fairness checks fail on at least one attribute" in gate["reasons"]
+    # Same timestamp: the higher confidence breaks the tie.
+    assert fairness(release_gate("low", [run("a", 1, 0.80, True), run("b", 1, 0.90, True)], now=now))["evidenceId"] == "b"
+
+
+def test_a_rejected_release_decision_makes_the_gate_no_go():
+    evidence = [{"id": "e1", "evidenceType": "fairness_test", "confidence": 0.95, "metadata": {"provenance_class": "measured"}, "content": {"all_checks_pass": True, "attributes": []}}]
+    baseline = release_gate("low", evidence)
+    assert baseline["approvalStatus"] == "not_requested" and baseline["verdict"] != "no_go"
+    assert release_gate("low", evidence, approval_status="pending")["verdict"] == baseline["verdict"]
+    rejected = release_gate("low", evidence, approval_status="rejected")
+    assert rejected["verdict"] == "no_go" and rejected["reasons"][0].startswith("The release decision was rejected")
+
+    client = TestClient(app, client=(f"rej-{uuid.uuid4().hex[:8]}", 50000), headers=auth_headers())
+    ws = client.post("/api/v1/ai-governance/workspaces", json={"name": "Reject ws", "owner": "owner"}).json()
+    sid = client.post("/api/v1/ai-governance/systems", json={"workspace_id": ws["id"], "name": "Rejected", "owner": "owner", "risk_tier": "low", "lifecycle_stage": "govern"}).json()["id"]
+    gate = lambda: client.get(f"/api/v1/ai-governance/systems/{sid}/gate").json()
+    assert gate()["approvalStatus"] == "not_requested"
+    req = client.post(f"/api/v1/ai-governance/approval/system/{sid}/request", json={}).json()["request"]
+    assert gate()["approvalStatus"] == "pending"
+    assert client.post(f"/api/v1/ai-governance/approval-requests/{req['id']}/decision", json={"decision": "rejected", "notes": "no"}).status_code == 200
+    after = gate()
+    assert after["approvalStatus"] == "rejected" and after["verdict"] == "no_go"
+    client.post(f"/api/v1/ai-governance/approval/system/{sid}/request", json={})
+    assert gate()["approvalStatus"] == "pending"
+
+
 def test_clause_map_reads_the_gate_per_framework_clause():
     from src.application.services.clause_map_service import clause_map, framework_keys
 

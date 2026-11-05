@@ -6,7 +6,7 @@ POST /systems/{id}/monitoring-runs         current scores against the last run; 
 GET  /systems/{id}/monitoring-policy       expected snapshot cadence and the drift window (defaults when none stored)
 PUT  /systems/{id}/monitoring-policy       set them; stale monitoring stops counting as proven, sustained drift opens a finding
 POST /systems/{id}/attestations            a person states a check is satisfied; manual evidence
-GET  /systems/{id}/gate                    verdict, confidence and check states
+GET  /systems/{id}/gate                    verdict, confidence, check states and the release decision status
 
 Mounted under /api/v1/ai-governance next to the governance router and sharing
 its org scoping and system access rules.
@@ -29,6 +29,7 @@ from api.routes.ai_governance import (
     _enforce_org_scope,
     _ensure_tables,
     _fetch_evidence_records,
+    _fetch_latest_system_approval,
     _risk_score,
     _require_system_access,
 )
@@ -101,7 +102,11 @@ def _monitoring_policy(db: Session, system_id: str) -> Dict[str, Any]:
 def _gate_payload(db: Session, system_id: str, risk_tier: str) -> Dict[str, Any]:
     records = _fetch_evidence_records(db, system_id)
     cadence = _monitoring_policy(db, system_id)["cadenceHours"]
-    gate = release_gate(risk_tier, records, environmental_assessed=_environmental_assessed(db, system_id), monitoring_cadence_hours=cadence)
+    approval = _fetch_latest_system_approval(db, system_id)
+    gate = release_gate(
+        risk_tier, records, environmental_assessed=_environmental_assessed(db, system_id), monitoring_cadence_hours=cadence,
+        approval_status=approval["status"] if approval else "not_requested",
+    )
     gate["systemId"] = system_id
     gate["riskTier"] = risk_tier
     return gate
