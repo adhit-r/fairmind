@@ -1,6 +1,7 @@
 """fairmind: gate, test and systems.
 
     fairmind gate --system <id>                 exit 0 go, 2 conditional go, 1 no go
+    fairmind gate --system <id> --require-approval   also exit 1 unless the release decision is approved
     fairmind test --system <id> --file p.csv \
         --outcome repaid --attributes gender,region [--prediction approved] [--score score]
     fairmind monitor --system <id> --file decisions.csv --attributes gender [--prediction approved] [--score score]
@@ -77,6 +78,7 @@ def _call(client: httpx.Client, method: str, path: str, **kwargs: Any) -> Any:
 
 VERDICT_WORD = {"go": "GO", "conditional_go": "CONDITIONAL GO", "no_go": "NO GO"}
 STATE_MARK = {"proven": "+", "attested": "~", "open": "-"}
+APPROVAL_WORD = {"not_requested": "not requested", "pending": "pending", "approved": "approved", "rejected": "rejected"}
 
 
 def render_gate(gate: Dict[str, Any]) -> str:
@@ -88,6 +90,8 @@ def render_gate(gate: Dict[str, Any]) -> str:
     for check in gate.get("checks", []):
         conf = f" {check['confidence']:.2f}" if check.get("confidence") else ""
         lines.append(f"  {STATE_MARK.get(check['state'], '?')} {check['label']:<22} {check['state']}{conf}")
+    if "approvalStatus" in gate:
+        lines.append(f"    {'Release decision':<22} {APPROVAL_WORD.get(gate['approvalStatus'], gate['approvalStatus'])}")
     if gate.get("reasons"):
         lines.append("")
         lines.extend(f"  {reason}" for reason in gate["reasons"])
@@ -98,6 +102,10 @@ def cmd_gate(args: argparse.Namespace, factory: ClientFactory, out: Callable[[st
     with _client(args, factory) as client:
         gate = _call(client, "GET", f"{GOV}/systems/{args.system}/gate")
     out(json.dumps(gate, indent=2) if args.json else render_gate(gate))
+    if args.require_approval and gate.get("approvalStatus") != "approved":
+        status = APPROVAL_WORD.get(gate.get("approvalStatus"), "not reported by this server")
+        print(f"fairmind: --require-approval: the release decision is {status}", file=sys.stderr)
+        return EXIT_NO_GO
     verdict = gate.get("verdict")
     if verdict == "go":
         return EXIT_GO
@@ -306,6 +314,7 @@ def build_parser() -> argparse.ArgumentParser:
     gate = sub.add_parser("gate", parents=[common], help="read the release gate; exit 0 go, 2 conditional, 1 no go")
     gate.add_argument("--system", required=True, help="AI system id")
     gate.add_argument("--allow-conditional", action="store_true", help="exit 0 on a conditional go")
+    gate.add_argument("--require-approval", action="store_true", help="exit 1 unless the release decision is approved (with or without conditions)")
     gate.set_defaults(func=cmd_gate)
 
     test = sub.add_parser("test", parents=[common], help="run a fairness test from a predictions CSV and store it as evidence")

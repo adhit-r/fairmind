@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Literal, Optional, TypedDict
 
 Verdict = Literal["go", "conditional_go", "no_go"]
+ApprovalStatus = Literal["not_requested", "pending", "approved", "rejected"]
 CheckState = Literal["proven", "attested", "open"]
 AttestableCheck = Literal["data_governance", "human_oversight", "monitoring", "environmental"]
 
@@ -38,6 +39,7 @@ class Gate(TypedDict, total=False):
     open: int
     systemId: str
     riskTier: str
+    approvalStatus: ApprovalStatus  # latest release decision; "rejected" forces verdict no_go
 
 
 class ClauseCheck(TypedDict):
