@@ -13,7 +13,7 @@ This service provides comprehensive AI governance capabilities including:
 from fastapi import Depends, FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from contextlib import asynccontextmanager
 import logging
@@ -255,22 +255,6 @@ See the request/response examples in each endpoint for code samples in Python, J
 )
 
 # Add CORS middleware FIRST (order matters!)
-# CORS must be before other middleware to handle preflight OPTIONS requests
-# In development, allow all localhost origins
-cors_origins = settings.get_allowed_origins()
-# Development: any loopback origin, whatever port the dev server picked.
-cors_origin_regex = r"^https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$" if settings.is_development else None
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=cors_origins,
-    allow_origin_regex=cors_origin_regex,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allow_headers=["*"],
-    expose_headers=["*"],
-)
-
 # Add production-ready middleware (order matters!)
 app.add_middleware(AuditLoggingMiddleware)  # Audit logging for compliance
 app.add_middleware(ErrorHandlingMiddleware)
@@ -317,31 +301,23 @@ try:
         return response
 except Exception as e:
     logger.warning(f"Could not load versioning middleware: {e}")
-@app.options("/{full_path:path}")
-async def options_handler(request: Request):
-    """Handle OPTIONS preflight requests."""
-    origin = request.headers.get("origin")
-    allowed_origins = settings.get_allowed_origins()
-    
-    # Check if origin is allowed
-    if origin and origin in allowed_origins:
-        allow_origin = origin
-    elif settings.is_development:
-        # In development, allow localhost origins
-        allow_origin = origin if origin and "localhost" in origin else "*"
-    else:
-        allow_origin = "*"
-    
-    return Response(
-        status_code=200,
-        headers={
-            "Access-Control-Allow-Origin": allow_origin,
-            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
-            "Access-Control-Allow-Headers": "*",
-            "Access-Control-Allow-Credentials": "true",
-            "Access-Control-Max-Age": "600",
-        }
-    )
+
+# CORS is added last so it is the outermost middleware: preflights are answered
+# here, and every response, including a 401 from the auth middleware or a 429
+# from the rate limiter, carries the CORS headers the browser needs to read it.
+cors_origins = settings.get_allowed_origins()
+# Development: any loopback origin, whatever port the dev server picked.
+cors_origin_regex = r"^https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$" if settings.is_development else None
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins,
+    allow_origin_regex=cors_origin_regex,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allow_headers=["*"],
+    expose_headers=["*"],
+)
 
 # Custom exception handlers
 @app.exception_handler(RequestValidationError)
