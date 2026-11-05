@@ -153,3 +153,19 @@ def test_fairmind_agent_injection_needs_no_target(tmp_database, stub):
     assert stored["status"] == "passed" and stored["target"] == {"kind": "fairmind-agent"} and not stub["target"]
     facts = json.loads(stub["judge"][0]["messages"][1]["content"])
     assert "Reviewer note" in facts["evidence"][0]["title"] and facts["aiSystem"]["name"] == "Credit model"
+
+
+def test_a_failed_connection_test_answers_with_a_fixed_message(tmp_database, stub, monkeypatch):
+    from api.routes import system_targets
+
+    org_id, client = _org(tmp_database)
+    system = _system(tmp_database, org_id)
+    _target(client, system)
+
+    async def fails(target, prompt):
+        raise system_targets.BadStatus("The system responded 500 from internal-host-7")
+
+    monkeypatch.setattr(system_targets, "ask", fails)
+    result = client.post(f"{PACKS}/ai-systems/{system}/target/test").json()
+    assert not result["ok"] and result["message"].startswith("The system answered with an error status")
+    assert "internal-host-7" not in json.dumps(result)

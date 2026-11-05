@@ -145,7 +145,7 @@ function Connections({ spec, systemId, onReady }: { spec: EngineSpec; systemId: 
             <span className="break-all">{t.url}{t.model ? `, ${t.model}` : ''}{t.authReadable ? '' : ' (auth value unreadable, enter it again)'}</span>
           ) : (
             <span>
-              Not connected. <Link href={`/systems/${systemId}#target`} className="font-semibold underline">Connect it on the system&apos;s page</Link>
+              Not connected. <Link href={`/systems/${encodeURIComponent(systemId)}#target`} className="font-semibold underline">Connect it on the system&apos;s page</Link>
             </span>
           ),
         )}

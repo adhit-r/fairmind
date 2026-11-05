@@ -12,6 +12,7 @@ encrypted the same way its key is. Mounted under /api/v1/packs beside the packs 
 """
 
 import json
+import logging
 import time
 from dataclasses import dataclass
 from typing import Any, Dict, Literal, Optional
@@ -28,6 +29,7 @@ from api.routes.packs import _manager, _member
 from database.connection import get_db
 from src.application.services.governance_assurance_service import OrgMembership
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 TIMEOUT_S = 60  # runs are background jobs, so this is per call, not per request
@@ -37,6 +39,41 @@ TEST_PROMPT = "This is a connection check from FairMind. Reply with one short se
 
 class TargetError(Exception):
     """The system under test could not be called; the message never carries the auth value."""
+
+
+class Unreachable(TargetError):
+    pass
+
+
+class TimedOut(TargetError):
+    pass
+
+
+class AuthRejected(TargetError):
+    pass
+
+
+class BadStatus(TargetError):
+    pass
+
+
+class BadAnswer(TargetError):
+    pass
+
+
+# What the connection test tells the person; the exception's own detail goes to the server log.
+FIXES = (
+    (TimedOut, f"The system did not answer within {TIMEOUT_S} seconds"),
+    (Unreachable, "Could not reach the system. Check the URL"),
+    (AuthRejected, "The system rejected the auth value. Enter it again and save"),
+    (BadStatus, "The system answered with an error status. Check the URL, the model name and the request body"),
+    (BadAnswer, "The system's answer could not be read. Check that it returns JSON and that the answer path is right"),
+    (llm.LLMError, "The endpoint must be a public https address that resolves"),
+)
+
+
+def _fix(e: Exception) -> str:
+    return next((message for kind, message in FIXES if isinstance(e, kind)), "Could not call the system. Check the connection settings")
 
 
 @dataclass
@@ -72,7 +109,7 @@ def _at(data: Any, path: str) -> Any:
         elif isinstance(data, dict) and part in data:
             data = data[part]
         else:
-            raise TargetError(f"The answer has nothing at {path}")
+            raise BadAnswer(f"The answer has nothing at {path}")
     return data
 
 
@@ -94,26 +131,26 @@ async def ask(target: Target, prompt: str) -> str:
         async with httpx.AsyncClient(timeout=TIMEOUT_S, headers=headers, follow_redirects=False) as client:
             resp = await client.post(url, json=body)
     except httpx.TimeoutException:
-        raise TargetError("The system did not answer in time")
+        raise TimedOut("The system did not answer in time")
     except httpx.HTTPError:
-        raise TargetError("Could not reach the system")
+        raise Unreachable("Could not reach the system")
     if resp.status_code in (401, 403):
-        raise TargetError(f"The system rejected the auth value ({resp.status_code})")
+        raise AuthRejected(f"The system rejected the auth value ({resp.status_code})")
     if resp.status_code >= 400:
-        raise TargetError(f"The system responded {resp.status_code}")
+        raise BadStatus(f"The system responded {resp.status_code}")
     if len(resp.content) > MAX_ANSWER_BYTES:
-        raise TargetError("The answer is over 1 MB")
+        raise BadAnswer("The answer is over 1 MB")
     try:
         data = resp.json()
     except ValueError:
         if target.kind == "http" and not target.fields.get("responsePath"):
             return resp.text
-        raise TargetError("The system did not answer with JSON")
+        raise BadAnswer("The system did not answer with JSON")
     if target.kind == "openai":
         try:
             answer = data["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError):
-            raise TargetError("The system returned no message")
+            raise BadAnswer("The system returned no message")
     else:
         answer = _at(data, target.fields.get("responsePath", ""))
     return answer if isinstance(answer, str) else json.dumps(answer)
@@ -252,7 +289,8 @@ async def test_target(system_id: str, m: OrgMembership = Depends(_manager), db: 
         answer = await ask(target, TEST_PROMPT)
         ok, message = True, "The system answered"
     except (TargetError, llm.LLMError) as e:
-        answer, ok, message = "", False, str(e)
+        logger.info("connection test for AI system %s failed: %s", system_id, e)
+        answer, ok, message = "", False, _fix(e)
     db.execute(
         text("UPDATE governance_ai_system_targets SET tested_ok = :ok, tested_at = :now, test_message = :msg WHERE system_id = :id"),
         {"ok": ok, "now": _utc_now_iso(), "msg": message[:300], "id": system_id},
