@@ -1,0 +1,28 @@
+cff-version: 1.2.0
+message: "If you use FairMind, please cite it using the metadata below."
+type: software
+title: FairMind
+abstract: >-
+  Open-source AI assurance workbench for models and agents: map governance
+  frameworks (AIUC-1, NIST AI RMF, EU AI Act, DPDP) to controls, collect
+  evaluation evidence, review findings and produce audit-ready evidence trails.
+authors:
+  - given-names: Adhithya
+    family-names: Rajasekaran
+    email: adhithya@axonome.xyz
+    affiliation: Axonome
+    orcid: "https://orcid.org/0009-0004-1682-7958"
+repository-code: "https://github.com/adhit-r/fairmind"
+url: "https://www.fairmind.xyz"
+license: MIT
+keywords:
+  - ai-governance
+  - ai-assurance
+  - ai-audit
+  - ai-compliance
+  - responsible-ai
+  - agentic-ai
+  - eu-ai-act
+  - nist-ai-rmf
+  - iso-42001
+  - dpdp
