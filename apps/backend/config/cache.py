@@ -136,7 +136,7 @@ class CacheManager:
             return bool(result)
             
         except Exception as e:
-            logger.error(f"Cache set error for key {key}: {e}")
+            logger.error("Cache set failed: %s", type(e).__name__)
             return False
     
     async def delete(self, key: str) -> bool:

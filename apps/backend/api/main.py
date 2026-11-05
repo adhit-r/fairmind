@@ -600,7 +600,7 @@ async def health_check():
         return {
             "status": "unhealthy",
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "error": str(e),
+            "error": "Health check failed; see the server log",
             "message": "Health check service error"
         }
 
