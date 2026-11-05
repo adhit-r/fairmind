@@ -1,4 +1,4 @@
-"""Import immutable framework catalogs from versioned AIUC workbooks."""
+"""Import immutable framework catalogs from versioned AIUC workbooks and JSON principle sets."""
 
 from __future__ import annotations
 
@@ -105,6 +105,8 @@ class ParsedFrameworkCatalog:
     source_hash: str
     requirements: tuple[ParsedRequirement, ...]
     controls: tuple[ParsedControl, ...]
+    parser: str = "aiuc-1-workbook"
+    source_uri: str = ""
 
     @property
     def requirement_count(self) -> int:
@@ -271,6 +273,70 @@ def parse_aiuc_workbook(
     )
 
 
+def parse_principles_json(payload: bytes) -> ParsedFrameworkCatalog:
+    """Parse a JSON principle set (such as the OECD AI Principles) without changing database state."""
+    data = json.loads(payload)
+    requirements = tuple(
+        ParsedRequirement(
+            external_id=item["external_id"],
+            source_title=item["title"],
+            statement=item["statement"],
+            principle=item["title"],
+            application="",
+            frequency="",
+            source_capabilities="",
+            capabilities=(),
+            active=True,
+        )
+        for item in data["requirements"]
+    )
+    titles = {item.external_id: item.source_title for item in requirements}
+    controls, seen = [], set()
+    for item in data["controls"]:
+        external_id, parent = item["external_id"], item["requirement_id"]
+        if parent not in titles:
+            raise WorkbookValidationError(f"control {external_id} references unknown requirement {parent}")
+        if external_id in seen:
+            raise WorkbookValidationError(f"duplicate control id {external_id}")
+        seen.add(external_id)
+        controls.append(
+            ParsedControl(
+                external_id=external_id,
+                parent_requirement_id=parent,
+                source_parent_title=titles[parent],
+                source_statement=item["statement"],
+                # Same "<id> <kind>: <title>" shape as AIUC evidence titles, so _control_values splits it alike.
+                source_evidence_title=f"{external_id} Principle: {item['title']}",
+                source_evidence_guidance="",
+                category="",
+                source_locations="",
+                locations=(),
+                source_capabilities="",
+                capabilities=(),
+                additional_category="",
+                source_additional_locations="",
+                additional_locations=(),
+                source_additional_capabilities="",
+                additional_capabilities=(),
+                application="",
+                active=True,
+                source_cell=item["source_uri"],
+            )
+        )
+    if not controls:
+        raise WorkbookValidationError("principle set has no controls")
+    return ParsedFrameworkCatalog(
+        framework_key=data["framework_key"],
+        name=data["name"],
+        version_label=data["version_label"],
+        source_hash=hashlib.sha256(payload).hexdigest(),
+        requirements=requirements,
+        controls=tuple(controls),
+        parser="principles-json",
+        source_uri=data["source_uri"],
+    )
+
+
 class FrameworkCatalogService:
     """Persist validated, immutable framework catalog versions."""
 
@@ -309,6 +375,13 @@ class FrameworkCatalogService:
             source_filename=source_filename,
             source_uri=f"managed-import://{catalog.source_hash}",
             actor_id=actor_id,
+        )
+
+    def import_principles_json(self, path: Path, actor_id: str) -> FrameworkImportResult:
+        path = Path(path)
+        catalog = parse_principles_json(path.read_bytes())
+        return self._import_catalog(
+            catalog, source_filename=path.name, source_uri=catalog.source_uri, actor_id=actor_id
         )
 
     def _import_catalog(
@@ -379,7 +452,7 @@ class FrameworkCatalogService:
                 requirements_json=json.dumps(
                     [asdict(requirement) for requirement in catalog.requirements]
                 ),
-                metadata_json=json.dumps({"parser": "aiuc-1-workbook"}),
+                metadata_json=json.dumps({"parser": catalog.parser}),
                 status="active",
             )
         )
