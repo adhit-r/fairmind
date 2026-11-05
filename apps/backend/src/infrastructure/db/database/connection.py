@@ -1,16 +1,13 @@
 """
-Database connection management for FairMind
-Supports both PostgreSQL (Supabase) and SQLite for development
+Database connection management for FairMind (PostgreSQL only)
 """
 
 import os
 import logging
-from pathlib import Path
-from sqlalchemy import create_engine, event, inspect, text
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.schema import AddConstraint
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
-from sqlalchemy.pool import StaticPool
 from contextlib import contextmanager
 
 from config.migration_integrity import bind_postgresql_engine_search_path
@@ -19,14 +16,6 @@ from config.settings import settings
 logger = logging.getLogger(__name__)
 
 Base = declarative_base()
-
-
-def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record) -> None:
-    cursor = dbapi_connection.cursor()
-    try:
-        cursor.execute("PRAGMA foreign_keys = ON")
-    finally:
-        cursor.close()
 
 
 class DatabaseManager:
@@ -48,43 +37,23 @@ class DatabaseManager:
         database_url = (
             self._database_url
             or os.getenv("DATABASE_URL")
+            or settings.database_url
         )
-        if not database_url:
-            if settings.assurance_v2_enabled:
-                database_url = settings.database_url
-            else:
-                # V2 is opt-in. Preserve the repository manager's historical
-                # dedicated SQLite identity until the enabled startup path
-                # verifies both database authorities are equivalent.
-                database_url = f"sqlite:///{Path(__file__).parent.parent / 'fairmind.db'}"
-        
-        if database_url.startswith("postgresql"):
-            # PostgreSQL/Supabase connection
-            self.engine = create_engine(
-                database_url,
-                pool_pre_ping=True,
-                pool_recycle=300,
-                echo=os.getenv("DEBUG", "false").lower() == "true"
+        self.engine = create_engine(
+            database_url,
+            pool_pre_ping=True,
+            pool_recycle=300,
+            echo=os.getenv("DEBUG", "false").lower() == "true"
+        )
+        if settings.assurance_v2_enabled:
+            bind_postgresql_engine_search_path(
+                self.engine,
+                self._trusted_schema
+                or settings.assurance_migration_schema
+                or "",
             )
-            if settings.assurance_v2_enabled:
-                bind_postgresql_engine_search_path(
-                    self.engine,
-                    self._trusted_schema
-                    or settings.assurance_migration_schema
-                    or "",
-                )
-            logger.info("Connected to PostgreSQL database")
-        else:
-            # SQLite for development; identity is checked against config startup.
-            self.engine = create_engine(
-                database_url,
-                connect_args={"check_same_thread": False},
-                poolclass=StaticPool,
-                echo=os.getenv("DEBUG", "false").lower() == "true"
-            )
-            event.listen(self.engine, "connect", _enable_sqlite_foreign_keys)
-            logger.info("Connected to SQLite database")
-        
+        logger.info("Connected to PostgreSQL database")
+
         self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
     
     def create_tables(self):
@@ -101,9 +70,8 @@ class DatabaseManager:
             created, failed, new_tables = 0, [], []
             existing = set(inspect(self.engine).get_table_names())
             for metadata in metadatas.values():
-                # Table by table: one definition the local SQLite build cannot
-                # parse (governance_evaluation_runs overflows the parser stack on
-                # older versions) must not roll back the users table.
+                # Table by table: one failing definition must not roll back
+                # the users table.
                 for table in metadata.sorted_tables:
                     try:
                         table.create(bind=self.engine, checkfirst=True)
@@ -115,16 +83,15 @@ class DatabaseManager:
                         logger.warning(f"Could not create table {table.name}: {table_error}")
             # Foreign keys in a cycle (users <-> organizations) are left out of CREATE TABLE
             # (use_alter) and added here, only on tables created just now: an existing
-            # database is never altered. SQLite writes them inline, so it has none to add.
-            if self.engine.dialect.supports_alter:
-                for table in new_tables:
-                    for fk in table.foreign_key_constraints:
-                        if fk.use_alter:
-                            try:
-                                with self.engine.begin() as conn:
-                                    conn.execute(AddConstraint(fk))
-                            except Exception as fk_error:
-                                logger.warning(f"Could not add foreign key {fk.name or fk.column_keys} on {table.name}: {fk_error}")
+            # database is never altered.
+            for table in new_tables:
+                for fk in table.foreign_key_constraints:
+                    if fk.use_alter:
+                        try:
+                            with self.engine.begin() as conn:
+                                conn.execute(AddConstraint(fk))
+                        except Exception as fk_error:
+                            logger.warning(f"Could not add foreign key {fk.name or fk.column_keys} on {table.name}: {fk_error}")
             logger.info(f"Database tables ready: {created} checked, {len(failed)} failed{': ' + ', '.join(failed) if failed else ''}")
         except Exception as e:
             logger.error(f"Error creating tables: {e}")

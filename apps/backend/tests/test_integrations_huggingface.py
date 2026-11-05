@@ -12,13 +12,12 @@ from fastapi.testclient import TestClient
 
 from api.routes import org_scope
 from src.application.services.governance_assurance_service import OrgMembership
-from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 import database.governance_models  # noqa: F401  (registers the governance tables)
 from api.routes import integrations
-from database.connection import Base, get_db
+from database.connection import get_db
+from tests import pg
 
 ORG = "org-under-test"
 SECRET = "hf_secret_token_value"
@@ -58,8 +57,7 @@ class Hub:
 
 @pytest.fixture
 def client(monkeypatch):
-    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
-    Base.metadata.create_all(engine)
+    engine = pg.fresh_engine()
     factory = sessionmaker(bind=engine)
 
     def override_db():

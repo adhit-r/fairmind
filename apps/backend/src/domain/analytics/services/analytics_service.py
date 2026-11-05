@@ -112,7 +112,6 @@ class AnalyticsService(BaseService):
             # Get model names
             models_query = text("SELECT id, name FROM models WHERE id IN :model_ids")
             # Handle list parameter for IN clause - SQLAlchemy handles this if passed as tuple/list
-            # But for text() with SQLite, sometimes it's tricky. 
             # Let's iterate for safety or use proper binding if supported.
             # Actually, let's just fetch all models and filter in python if list is small, 
             # or execute one by one. Given it's a comparison of a few models, one by one is fine.

@@ -1,7 +1,6 @@
 """Shared SQLAlchemy row-integrity and release-authority helpers.
 
-Reads deliberately remain usable in SQLite fixtures. Every mutation fails
-closed unless the bound database is PostgreSQL, where migration 013f supplies
+Every mutation fails closed unless the bound database is PostgreSQL, where migration 013f supplies
 the cross-process triggers and lifecycle authority.
 """
 

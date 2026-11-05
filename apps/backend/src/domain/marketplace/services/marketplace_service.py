@@ -137,8 +137,7 @@ class MarketplaceService:
             params["query"] = f"%{search_query.lower()}%"
             
         if framework:
-            # This is a bit tricky with JSONB in SQLite/Postgres abstraction, 
-            # but for now we'll filter in Python if needed or use simple text match on metadata
+            # For now we'll filter in Python if needed or use simple text match on metadata
             query_parts.append("AND metadata LIKE :framework")
             params["framework"] = f"%{framework}%"
             

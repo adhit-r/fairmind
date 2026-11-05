@@ -185,8 +185,8 @@ async def approve_registration(
             now = datetime.utcnow()
             slug_base = re.sub(r"[^a-z0-9]+", "-", req["org_name"].lower()).strip("-") or "org"
             await db.execute(
-                "INSERT INTO users (id, email, username, name, role, roles, is_active) "
-                "VALUES (:id, :email, :username, :name, 'analyst', CAST(:roles AS jsonb), TRUE)",
+                "INSERT INTO users (id, email, username, password_hash, name, role, roles, is_active) "
+                "VALUES (:id, :email, :username, '', :name, 'analyst', CAST(:roles AS jsonb), TRUE)",
                 {
                     "id": user_id,
                     "email": req["email"],

@@ -27,5 +27,6 @@
 ## Notes
 
 - FairMind now uses Neon/PostgreSQL as the primary database target.
-- Local SQLite is still supported for quick development runs.
+- PostgreSQL is required (local, Docker, or a Neon branch). Create the schema with `uv run python scripts/setup_db.py`; check it with `uv run python scripts/setup_db.py verify`.
+- Tests need `FAIRMIND_TEST_POSTGRES_URL` pointing at a disposable server they may create databases on (never Neon).
 - Dataset and model file artifacts are stored locally unless a separate object storage adapter is configured.

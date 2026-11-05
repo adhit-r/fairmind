@@ -31,7 +31,7 @@ FairMind apoya la preparación y la revisión. No certifica el cumplimiento, no 
 
 ## Inicio rápido
 
-Necesitas Python 3.11+, [uv](https://docs.astral.sh/uv/getting-started/installation/), Node.js 20+ y npm. No hace falta un servidor de base de datos: el backend usa un archivo SQLite local por defecto.
+Necesitas Python 3.11+, [uv](https://docs.astral.sh/uv/getting-started/installation/), Node.js 20+ y npm. También necesitas PostgreSQL 14+ (local, Docker o una rama de Neon) con una base de datos vacía.
 
 ```bash
 git clone https://github.com/adhit-r/fairmind.git
@@ -42,12 +42,13 @@ cd fairmind
 
 ```bash
 cd apps/backend
-cp config/env.example .env
+cp config/env.example .env        # pon en DATABASE_URL tu base de datos PostgreSQL vacía
 uv sync
+uv run python scripts/setup_db.py # esquema + datos de referencia AIUC-1; se puede repetir
 uv run uvicorn api.main:app --reload --port 8000
 ```
 
-El primer arranque tarda alrededor de un minuto mientras crea las tablas de SQLite. Cuando esté listo, la documentación de la API está en http://localhost:8000/docs.
+Cuando esté listo, la documentación de la API está en http://localhost:8000/docs.
 
 **Frontend** (segunda terminal):
 

@@ -20,7 +20,7 @@ from tests.test_org_isolation_audit import (  # noqa: F401  (db and client are f
     OWNER_A,
     OWNER_B,
     _insert,
-    _SqliteConnection,
+    _EngineConnection,
     client,
     db,
 )
@@ -193,7 +193,7 @@ def audit_logs(db, monkeypatch):
     import config.database
 
     engine = db[0]
-    connection = _SqliteConnection(engine)
+    connection = _EngineConnection(engine)
 
     @asynccontextmanager
     async def fake_connection():

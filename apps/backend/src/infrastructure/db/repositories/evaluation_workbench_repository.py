@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import threading
 import uuid
 from contextlib import nullcontext
 from dataclasses import dataclass
@@ -125,7 +124,6 @@ from src.infrastructure.db.repositories.evaluation_audit_chain import (
     verify_evaluation_audit_chain,
 )
 
-_SQLITE_WRITE_LOCK = threading.RLock()
 _BINDING_INTEGRITY_MESSAGE = "Stored assurance bindings failed integrity verification."
 _AUDIT_CHAIN_INTEGRITY_MESSAGE = "Stored evaluation audit chain failed integrity verification."
 _REJECTED_IDEMPOTENCY_MARKER = "_fairmindEvaluationMutationRejected"
@@ -687,7 +685,7 @@ class SqlAlchemyEvaluationWorkbenchRepository:
             )
 
     def _require_postgres_imported_evidence(self) -> None:
-        """Keep unsigned imports off SQLite and every non-authoritative dialect."""
+        """Keep unsigned imports off every non-authoritative dialect."""
 
         if self.db.get_bind().dialect.name != "postgresql":
             raise self._error(
@@ -2717,8 +2715,7 @@ class SqlAlchemyEvaluationWorkbenchRepository:
     # Normal governance decisions.  The application never accepts an
     # evidence set from the caller: PostgreSQL reconstructs it from the exact
     # locked run graph and the adapter persists those canonical server bytes.
-    # SQLite deliberately remains a read/test fixture and cannot write this
-    # authority-bearing record.
+    # Non-PostgreSQL binds cannot write this authority-bearing record.
     # ------------------------------------------------------------------
 
     def _require_postgres_governance_decisions(self) -> None:
@@ -4960,8 +4957,6 @@ class SqlAlchemyEvaluationWorkbenchUnitOfWork:
             )
 
     def _mutation_lock(self):
-        if self.db.bind is not None and self.db.bind.dialect.name == "sqlite":
-            return _SQLITE_WRITE_LOCK
         return nullcontext()
 
     def _invalid_idempotency_response(self) -> EvaluationWorkbenchError:
@@ -5291,12 +5286,6 @@ class SqlAlchemyEvaluationWorkbenchUnitOfWork:
         if row is None:
             record_id = str(uuid.uuid4())
             try:
-                if self.db.bind is not None and self.db.bind.dialect.name == "sqlite":
-                    self.db.execute(
-                        update(records)
-                        .where(records.c.id == "__fairmind_never__")
-                        .values(updated_at=records.c.updated_at)
-                    )
                 with self.db.begin_nested():
                     claimed_row = (
                         self.db.execute(

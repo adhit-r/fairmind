@@ -22,16 +22,16 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from api.main import app
 from config.auth import TokenData, TokenType, User as AuthUser, UserRole, auth_manager
 from config.jwt_exceptions import JWT_EXCEPTION_HANDLERS
-from database.connection import Base, get_db
+from database.connection import get_db
 from database.governance_models import GovernanceAISystem, GovernanceWorkspace
 from database.models import Organization, OrganizationMember, User
+from tests import pg
 
 ORG_A = str(uuid.uuid4())
 ORG_B = str(uuid.uuid4())
@@ -96,12 +96,12 @@ def _seed_member(session, org_id: str, user_id: str, role: str) -> None:
 
 @pytest.fixture
 def db():
-    """In-memory database with both tenants, one registered AI system each, and the legacy tables."""
-    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
-    Base.metadata.create_all(engine)
+    """Fresh PostgreSQL database with both tenants, one registered AI system each, and the legacy tables."""
+    engine = pg.fresh_engine()
     with engine.begin() as conn:
-        # The legacy routes read the 001_initial_schema shape of audit_logs (created_at), not the ORM's.
-        conn.execute(text("DROP TABLE audit_logs"))
+        # The legacy routes read the 001_initial_schema shape of these tables (e.g. audit_logs.created_at), not the ORM's.
+        for table in ("models", "datasets", "audit_logs", "geographic_bias_analyses", "profiles", "bias_test_results"):
+            conn.execute(text(f"DROP TABLE IF EXISTS {table} CASCADE"))
         for stmt in (
             "CREATE TABLE models (id TEXT PRIMARY KEY, name TEXT, description TEXT, model_type TEXT, version TEXT, "
             "upload_date TEXT, updated_at TEXT, file_path TEXT, file_size INTEGER, tags TEXT, metadata TEXT, "
@@ -109,15 +109,15 @@ def db():
             "CREATE TABLE datasets (id TEXT PRIMARY KEY, name TEXT, description TEXT, source TEXT, size INTEGER, "
             "columns TEXT, upload_date TEXT, tags TEXT, file_path TEXT, file_type TEXT, file_size INTEGER, "
             "created_by TEXT, org_id TEXT)",
-            "CREATE TABLE audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, action TEXT, "
+            "CREATE TABLE audit_logs (id SERIAL PRIMARY KEY, user_id TEXT, action TEXT, "
             "resource_type TEXT, resource_id TEXT, details TEXT, ip_address TEXT, user_agent TEXT, created_at TEXT)",
             "CREATE TABLE geographic_bias_analyses (id TEXT PRIMARY KEY, model_id TEXT, source_country TEXT, "
-            "target_country TEXT, bias_score REAL, risk_level TEXT, compliance_status TEXT, analysis_date TEXT, "
+            "target_country TEXT, bias_score DOUBLE PRECISION, risk_level TEXT, compliance_status TEXT, analysis_date TEXT, "
             "org_id TEXT)",
             "CREATE TABLE profiles (id TEXT PRIMARY KEY, username TEXT, full_name TEXT, avatar_url TEXT, "
             "role TEXT, created_at TEXT)",
-            "CREATE TABLE bias_test_results (id TEXT PRIMARY KEY, test_name TEXT, bias_score REAL, is_biased INTEGER, "
-            "confidence REAL, category TEXT, explainability_method TEXT, insights TEXT, created_at TEXT, org_id TEXT)",
+            "CREATE TABLE bias_test_results (id TEXT PRIMARY KEY, test_name TEXT, bias_score DOUBLE PRECISION, is_biased BOOLEAN, "
+            "confidence DOUBLE PRECISION, category TEXT, explainability_method TEXT, insights TEXT, created_at TEXT, org_id TEXT)",
         ):
             conn.execute(text(stmt))
     factory = sessionmaker(bind=engine)
@@ -163,8 +163,6 @@ def db():
         yield engine, factory, override_db
     finally:
         app.dependency_overrides.clear()
-        Base.metadata.drop_all(engine)
-        engine.dispose()
 
 
 @pytest.fixture
@@ -220,7 +218,7 @@ def _mini_app(db, module: str, prefix: str = "/api/v1") -> TestClient:
 # --------------------------------------------------------------------------- legacy-table adapters
 
 
-class _SqliteConnection:
+class _EngineConnection:
     """The slice of config.database.get_db_connection() the core routes use, over the test engine."""
 
     def __init__(self, engine):
@@ -258,7 +256,7 @@ def legacy(db, monkeypatch):
     from api.routes import database as database_routes
 
     engine = db[0]
-    connection = _SqliteConnection(engine)
+    connection = _EngineConnection(engine)
 
     @asynccontextmanager
     async def fake_connection():
@@ -857,7 +855,7 @@ def test_modern_bias_results_are_per_organisation_and_configuration_is_admin_onl
 
     engine = db[0]
     for org, name in ((ORG_A, "a-test"), (ORG_B, "b-test")):
-        _insert(engine, "bias_test_results", id=name, test_name=name, bias_score=0.2, is_biased=0, confidence=0.9,
+        _insert(engine, "bias_test_results", id=name, test_name=name, bias_score=0.2, is_biased=False, confidence=0.9,
                 category="gender", explainability_method="shap", insights=name, created_at="2026-01-01", org_id=org)
 
     class FakeManager:

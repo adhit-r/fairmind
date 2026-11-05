@@ -8,7 +8,6 @@ Creates/updates user records with roles and permissions from Authentik.
 import logging
 from typing import Optional, Dict, Any, List
 from datetime import datetime
-from uuid import UUID
 import uuid as uuid_module
 
 from src.infrastructure.db.database.models import User
@@ -98,11 +97,12 @@ class UserSyncService:
                 if not user:
                     # Create new user
                     user = User(
-                        id=uuid_module.uuid4(),
+                        id=str(uuid_module.uuid4()),
                         authentik_id=authentik_id,
                         email=email,
                         username=username or email.split("@")[0],
                         name=name or username,
+                        password_hash="",  # SSO account: no password sign-in
                         roles=roles,
                         groups=groups,
                         permissions=permissions,
@@ -196,11 +196,12 @@ class UserSyncService:
                     computed_perms = self._compute_permissions(computed_roles)
 
                     user = User(
-                        id=uuid_module.uuid4(),
+                        id=str(uuid_module.uuid4()),
                         authentik_id=authentik_id,
                         email=email,
                         username=username,
                         name=name or username,
+                        password_hash="",  # SSO account: no password sign-in
                         roles=computed_roles,
                         groups=groups or [],
                         permissions=computed_perms,
@@ -320,7 +321,7 @@ class UserSyncService:
         try:
             session = db_manager.get_sync_session()
             try:
-                user = session.query(User).filter(User.id == UUID(user_id)).first()
+                user = session.query(User).filter(User.id == str(user_id)).first()
                 return user
             finally:
                 session.close()
