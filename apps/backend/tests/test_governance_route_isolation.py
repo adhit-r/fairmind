@@ -186,7 +186,7 @@ def test_audit_logs_list_only_the_organisations_members(client, audit_logs):
     assert [log["action"] for log in client.get("/api/v1/audit-logs", headers=B).json()["logs"]] == ["b-did-this"]
     assert client.get("/api/v1/audit-logs?action=b-did-this", headers=A).json()["logs"] == []
     # The reads above are audited too, so pick the seeded row by its action.
-    assert client.get("/api/v1/audit-logs?action=a-did-this", headers=A).json()["logs"][0]["timestamp"] == "2026-01-01"
+    assert client.get("/api/v1/audit-logs?action=a-did-this", headers=A).json()["logs"][0]["timestamp"].startswith("2026-01-01")
 
 
 def test_requests_through_the_app_write_a_readable_audit_row_without_the_body(client, audit_logs):
@@ -196,7 +196,8 @@ def test_requests_through_the_app_write_a_readable_audit_row_without_the_body(cl
 
     [log] = client.get("/api/v1/audit-logs", headers=A).json()["logs"]
     assert (log["action"], log["user_id"], log["resource_type"]) == ("POST /api/v1/integrations", OWNER_A, "integrations")
-    assert json.loads(log["details"])["status_code"] == 201
+    details = log["details"]  # a JSON column comes back as an object
+    assert details["status_code"] == 201
     assert log["timestamp"]
 
     with audit_logs.begin() as conn:

@@ -11,14 +11,13 @@ permissions:
 jobs:
   backend:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45  # the full suite takes about 30 minutes on PostgreSQL
     services:
       postgres:
         # The *_postgres.py suites assert server_version 14, the release authority.
         image: postgres:14
         env:
           POSTGRES_HOST_AUTH_METHOD: trust  # disposable container, no credentials
-          POSTGRES_DB: fairmind_test
         ports:
           - 5432:5432
         options: >-
@@ -31,9 +30,9 @@ jobs:
         working-directory: apps/backend
     env:
       UV_PYTHON: "3.11"
-      # Not test.db: tests/conftest.py deletes that file after every test.
-      DATABASE_URL: sqlite:///./ci-tests.db
-      FAIRMIND_TEST_POSTGRES_URL: postgresql://postgres@localhost:5432/fairmind_test
+      # A server the tests may create and drop databases on; tests/pg.py builds the app database
+      # and sets DATABASE_URL itself.
+      FAIRMIND_TEST_POSTGRES_URL: postgresql://postgres@localhost:5432/postgres
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4.0.0

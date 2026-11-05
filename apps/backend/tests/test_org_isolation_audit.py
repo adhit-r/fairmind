@@ -62,7 +62,9 @@ def _bearer(user_id: str, role: UserRole = UserRole.ANALYST) -> dict:
             role=data.role,
             created_at=data.iat,
             permissions=data.permissions,
-        )
+        ),
+        # Minted once at import, so it must outlive a full suite run (about 30 minutes on PostgreSQL).
+        expires_delta=timedelta(hours=6),
     )
     return {"Authorization": f"Bearer {token}"}
 
@@ -116,7 +118,7 @@ def db():
             "CREATE TABLE profiles (id TEXT PRIMARY KEY, username TEXT, full_name TEXT, avatar_url TEXT, "
             "role TEXT, created_at TEXT)",
             "CREATE TABLE bias_test_results (id TEXT PRIMARY KEY, test_name TEXT, bias_score DOUBLE PRECISION, is_biased BOOLEAN, "
-            "confidence DOUBLE PRECISION, category TEXT, explainability_method TEXT, insights TEXT, created_at TEXT, org_id TEXT)",
+            "confidence DOUBLE PRECISION, category TEXT, explainability_method TEXT, insights TEXT, created_at TIMESTAMPTZ, org_id TEXT)",
         ):
             conn.execute(text(stmt))
     factory = sessionmaker(bind=engine)

@@ -72,12 +72,15 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 
 def client_ip(request: Request) -> str:
-    """The caller's address: behind the Next.js proxy request.client is the
-    frontend container, so the forwarded headers come first."""
-    forwarded_for = request.headers.get("X-Forwarded-For")
-    if forwarded_for:
-        return forwarded_for.split(",")[0].strip()
-    return request.headers.get("X-Real-IP") or (request.client.host if request.client else "unknown")
+    """The caller's address, for rate limits and the audit trail.
+
+    X-Forwarded-For and X-Real-IP come from the client, so reading them here would
+    let anyone pick their own address. uvicorn rewrites request.client from
+    X-Forwarded-For only when the request arrives from an address in
+    FORWARDED_ALLOW_IPS (the Next.js proxy in deploy/lightsail/docker-compose.yml),
+    and walks the list from the right, so a forged leftmost entry is ignored.
+    """
+    return request.client.host if request.client else "unknown"
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):

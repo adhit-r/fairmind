@@ -5,22 +5,21 @@ Each test fails against the placeholder constants these routes used to return.
 
 from __future__ import annotations
 
-import os
-import uuid
 from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timezone
 
 import pytest
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
 
 from database.governance_models import GovernanceRisk
+from tests import pg
 from tests.test_org_isolation_audit import (  # noqa: F401  (fixtures)
     A,
     B,
     ORG_A,
     ORG_B,
-    _SqliteConnection,
+    _EngineConnection,
     _detect,
     _insert,
     _mini_app,
@@ -32,7 +31,6 @@ from tests.test_org_isolation_audit import (  # noqa: F401  (fixtures)
 )
 
 
-POSTGRES_URL = os.getenv("FAIRMIND_TEST_POSTGRES_URL")
 
 
 def _db_manager(monkeypatch, engine):
@@ -70,7 +68,7 @@ def test_custom_templates_are_not_reported_as_stored(client):
 def test_modern_bias_evaluation_history_lists_the_organisations_stored_rows(db, stubbed_modules, monkeypatch):
     engine = db[0]
     for org, name, day in ((ORG_A, "a-old", "2026-01-01"), (ORG_A, "a-new", "2026-02-01"), (ORG_B, "b-test", "2026-03-01")):
-        _insert(engine, "bias_test_results", id=name, test_name=name, bias_score=0.3, is_biased=1, confidence=0.7,
+        _insert(engine, "bias_test_results", id=name, test_name=name, bias_score=0.3, is_biased=True, confidence=0.7,
                 category="gender", created_at=day, org_id=org)
     _db_manager(monkeypatch, engine)
 
@@ -85,7 +83,7 @@ def test_modern_bias_evaluation_history_lists_the_organisations_stored_rows(db, 
 
 def test_modern_bias_detection_results_carry_no_invented_compliance_or_confidence(db, stubbed_modules, monkeypatch):
     engine = db[0]
-    _insert(engine, "bias_test_results", id="a-test", test_name="a-test", bias_score=0.2, is_biased=0,
+    _insert(engine, "bias_test_results", id="a-test", test_name="a-test", bias_score=0.2, is_biased=False,
             confidence=0.9, category="gender", explainability_method="shap", insights="i",
             created_at="2026-01-01", org_id=ORG_A)
     _db_manager(monkeypatch, engine)
@@ -103,13 +101,6 @@ def test_modern_bias_detection_results_carry_no_invented_compliance_or_confidenc
         assert b["evaluation_summary"] == {"total_tests_run": 0, "biased_tests": 0, "bias_rate": None}
 
 
-class _PortableConnection(_SqliteConnection):
-    """The core summaries' Postgres time window, spelled for SQLite."""
-
-    async def fetch_all(self, query, params=None):
-        return await super().fetch_all(query.replace("NOW() - INTERVAL '30 days'", "datetime('now', '-30 days')"), params)
-
-
 def test_core_metrics_are_computed_from_the_organisations_rows_or_left_out(client, legacy, db, monkeypatch):
     from api.routes import core as core_routes
 
@@ -117,14 +108,14 @@ def test_core_metrics_are_computed_from_the_organisations_rows_or_left_out(clien
     with engine.begin() as conn:
         conn.execute(text("CREATE TABLE simulation_runs (id TEXT PRIMARY KEY, status TEXT, org_id TEXT)"))
         conn.execute(text("CREATE TABLE compliance_results (id TEXT PRIMARY KEY, compliance_score REAL, "
-                          "framework TEXT, created_at TEXT, org_id TEXT)"))
-    connection = _PortableConnection(engine)
+                          "framework TEXT, created_at TIMESTAMPTZ, org_id TEXT)"))
+    connection = _EngineConnection(engine)
 
     @asynccontextmanager
-    async def portable():
+    async def engine_connection():
         yield connection
 
-    monkeypatch.setattr(core_routes, "get_db_connection", portable)
+    monkeypatch.setattr(core_routes, "get_db_connection", engine_connection)
 
     with db[1]() as session:
         session.add_all([
@@ -135,7 +126,7 @@ def test_core_metrics_are_computed_from_the_organisations_rows_or_left_out(clien
         ])
         session.commit()
     recent = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-    _insert(engine, "bias_test_results", id="t-a", test_name="t", bias_score=0.25, is_biased=1, created_at=recent, org_id=ORG_A)
+    _insert(engine, "bias_test_results", id="t-a", test_name="t", bias_score=0.25, is_biased=True, created_at=recent, org_id=ORG_A)
 
     a = client.get("/api/v1/core/governance/metrics", headers=A).json()["data"]
     assert (a["criticalRisks"], a["biasAlerts"], a["fairnessScore"]) == (1, 1, 75.0)
@@ -167,9 +158,9 @@ def test_detect_reports_no_score_when_no_output_could_be_scored(client, clean_bi
 
 def test_modern_bias_detection_results_average_only_the_scored_tests(db, stubbed_modules, monkeypatch):
     engine = db[0]
-    _insert(engine, "bias_test_results", id="scored", test_name="scored", bias_score=0.8, is_biased=1,
+    _insert(engine, "bias_test_results", id="scored", test_name="scored", bias_score=0.8, is_biased=True,
             category="gender", created_at="2026-01-02", org_id=ORG_A)
-    _insert(engine, "bias_test_results", id="unscored", test_name="unscored", bias_score=None, is_biased=0,
+    _insert(engine, "bias_test_results", id="unscored", test_name="unscored", bias_score=None, is_biased=False,
             category="gender", created_at="2026-01-01", org_id=ORG_A)
     _db_manager(monkeypatch, engine)
 
@@ -180,30 +171,21 @@ def test_modern_bias_detection_results_average_only_the_scored_tests(db, stubbed
     assert a["evaluation_summary"]["total_tests_run"] == 2
 
 
-@pytest.mark.skipif(not POSTGRES_URL, reason="requires FAIRMIND_TEST_POSTGRES_URL pointing to disposable PostgreSQL")
 def test_modern_bias_detection_results_query_runs_on_postgres(db, stubbed_modules, monkeypatch):
-    schema = f"fm_detect_{uuid.uuid4().hex[:12]}"
-    admin = create_engine(POSTGRES_URL)
-    with admin.begin() as conn:
-        conn.execute(text(f'CREATE SCHEMA "{schema}"'))
-    engine = create_engine(POSTGRES_URL, connect_args={"options": f"-csearch_path={schema}"})
-    try:
-        with engine.begin() as conn:
-            conn.execute(text("CREATE TABLE bias_test_results (id TEXT PRIMARY KEY, test_name TEXT, "
-                              "bias_score DOUBLE PRECISION, is_biased BOOLEAN, confidence DOUBLE PRECISION, "
-                              "category TEXT, explainability_method TEXT, insights TEXT, "
-                              "created_at TIMESTAMPTZ DEFAULT NOW(), org_id TEXT)"))
-        for name, method, day in (("old", "shap", "2026-01-01"), ("again", "shap", "2026-01-03"), ("lime", "lime", "2026-01-02")):
-            _insert(engine, "bias_test_results", id=name, test_name=name, bias_score=0.2, is_biased=False,
-                    explainability_method=method, insights="i", created_at=day, org_id=ORG_A)
-        _db_manager(monkeypatch, engine)
+    # GROUP BY rather than DISTINCT ... ORDER BY an unselected column, which PostgreSQL rejects.
+    engine = pg.fresh_engine()
+    with engine.begin() as conn:
+        conn.execute(text("DROP TABLE IF EXISTS bias_test_results CASCADE"))
+        conn.execute(text("CREATE TABLE bias_test_results (id TEXT PRIMARY KEY, test_name TEXT, "
+                          "bias_score DOUBLE PRECISION, is_biased BOOLEAN, confidence DOUBLE PRECISION, "
+                          "category TEXT, explainability_method TEXT, insights TEXT, "
+                          "created_at TIMESTAMPTZ DEFAULT NOW(), org_id TEXT)"))
+    for name, method, day in (("old", "shap", "2026-01-01"), ("again", "shap", "2026-01-03"), ("lime", "lime", "2026-01-02")):
+        _insert(engine, "bias_test_results", id=name, test_name=name, bias_score=0.2, is_biased=False,
+                explainability_method=method, insights="i", created_at=day, org_id=ORG_A)
+    _db_manager(monkeypatch, engine)
 
-        with _mini_app(db, "api.routes.modern_bias_detection") as mini:
-            response = mini.get("/api/v1/modern-bias/detection-results", headers=A)
-        assert response.status_code == 200, response.text
-        assert [e["method"] for e in response.json()["data"]["explainability_analysis"]] == ["shap", "lime"]
-    finally:
-        engine.dispose()
-        with admin.begin() as conn:
-            conn.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
-        admin.dispose()
+    with _mini_app(db, "api.routes.modern_bias_detection") as mini:
+        response = mini.get("/api/v1/modern-bias/detection-results", headers=A)
+    assert response.status_code == 200, response.text
+    assert [e["method"] for e in response.json()["data"]["explainability_analysis"]] == ["shap", "lime"]

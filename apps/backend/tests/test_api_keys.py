@@ -12,14 +12,13 @@ from datetime import datetime, timezone
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, text
-from sqlalchemy.pool import StaticPool
+from sqlalchemy import text
 
+from tests import pg
 from api.main import app
 from api.routes import auth
 from config.auth import E2E_ADMIN_ID, User, UserRole, auth_manager
 from config.settings import settings
-from database.connection import Base
 from database.models import ApiKey, Organization, OrganizationMember, User as UserRow
 from middleware.security import JWTAuthenticationMiddleware
 from tests.test_registration_approval import _Db, _rows
@@ -32,10 +31,7 @@ def _user():
 
 @pytest.fixture
 def env(monkeypatch):
-    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
-    Base.metadata.create_all(engine, tables=[
-        UserRow.__table__, Organization.__table__, OrganizationMember.__table__, ApiKey.__table__,
-    ])
+    engine = pg.fresh_engine()
     db = _Db(engine)
 
     @asynccontextmanager
@@ -47,7 +43,7 @@ def env(monkeypatch):
     user = _user()
     with engine.begin() as conn:
         conn.execute(
-            text("INSERT INTO users (id, email, username, role, is_active) VALUES (:id, :email, 'ci', 'analyst', 1)"),
+            text("INSERT INTO users (id, email, username, role, is_active) VALUES (:id, :email, 'ci', 'analyst', TRUE)"),
             {"id": user.id, "email": user.email},
         )
     api = FastAPI()
@@ -82,7 +78,7 @@ def test_revoked_key_stops_working_on_its_next_request(env):
 
 
 @pytest.mark.parametrize("change", (
-    "UPDATE users SET is_active = 0 WHERE id = :id",
+    "UPDATE users SET is_active = FALSE WHERE id = :id",
     "DELETE FROM users WHERE id = :id",
 ))
 def test_key_of_a_deactivated_or_deleted_user_is_refused(env, change):

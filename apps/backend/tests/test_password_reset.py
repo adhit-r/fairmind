@@ -10,14 +10,13 @@ from unittest.mock import AsyncMock
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, text
-from sqlalchemy.pool import StaticPool
+from sqlalchemy import text
 
+from tests import pg
 from api.routes import auth
 from config.auth import auth_manager
 from config.settings import settings
 from core.middleware.auth import NeonAuthMiddleware
-from database.connection import Base
 from database.models import Organization, OrganizationMember, User
 from middleware.security import JWTAuthenticationMiddleware
 from tests.test_registration_approval import _Db, _rows
@@ -27,8 +26,7 @@ EMAIL = "person@corp.example.com"
 
 @pytest.fixture
 def env(monkeypatch):
-    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
-    Base.metadata.create_all(engine, tables=[User.__table__, Organization.__table__, OrganizationMember.__table__])
+    engine = pg.fresh_engine()
     db = _Db(engine)
 
     @asynccontextmanager
@@ -43,7 +41,7 @@ def env(monkeypatch):
     with engine.begin() as conn:
         conn.execute(
             text("INSERT INTO users (id, email, username, role, password_hash, is_active) "
-                 "VALUES (:id, :email, 'person', 'analyst', :pw, 1)"),
+                 "VALUES (:id, :email, 'person', 'analyst', :pw, TRUE)"),
             {"id": str(uuid.uuid4()), "email": EMAIL, "pw": auth_manager.get_password_hash("the-old-password")},
         )
     api = FastAPI()
@@ -54,8 +52,9 @@ def env(monkeypatch):
 
 
 def _request(client, email, ip="198.51.100.1"):
-    # Production traffic reaches the backend through the Next.js proxy, so the caller is in X-Forwarded-For.
-    return client.post("/api/v1/auth/password-reset/request", json={"email": email}, headers={"X-Forwarded-For": ip})
+    # uvicorn puts the caller's address in request.client once the proxy is trusted (FORWARDED_ALLOW_IPS).
+    caller = TestClient(client.app, client=(ip, 50000))
+    return caller.post("/api/v1/auth/password-reset/request", json={"email": email})
 
 
 def test_reset_link_sets_a_new_password_once(env):
@@ -89,11 +88,22 @@ def test_reset_requests_are_rate_limited_per_email(env):
     assert email.send_password_reset_email.call_count == 5
 
 
-def test_reset_requests_are_rate_limited_per_forwarded_client(env):
+def test_reset_requests_are_rate_limited_per_client(env):
     client, _, _ = env
     assert [_request(client, f"p{i}@corp.example.com").status_code for i in range(6)] == [202] * 5 + [429]
-    # Another caller behind the same proxy is not blocked by the first one's requests.
+    # Another caller is not blocked by the first one's requests.
     assert _request(client, "p9@corp.example.com", ip="203.0.113.7").status_code == 202
+
+
+def test_forged_forwarded_header_does_not_buy_more_attempts(env):
+    client, _, _ = env
+    caller = TestClient(client.app, client=("198.51.100.9", 50000))
+    statuses = [
+        caller.post("/api/v1/auth/password-reset/request", json={"email": f"f{i}@corp.example.com"},
+                    headers={"X-Forwarded-For": f"203.0.113.{i}"}).status_code
+        for i in range(6)
+    ]
+    assert statuses == [202] * 5 + [429]
 
 
 def test_sso_only_account_cannot_gain_a_password(env):
@@ -102,7 +112,7 @@ def test_sso_only_account_cannot_gain_a_password(env):
     with engine.begin() as conn:
         conn.execute(
             text("INSERT INTO users (id, email, username, role, is_active) "
-                 "VALUES (:id, 'sso@corp.example.com', 'sso', 'analyst', 1)"),
+                 "VALUES (:id, 'sso@corp.example.com', 'sso', 'analyst', TRUE)"),
             {"id": sso_id},
         )
     assert _request(client, "sso@corp.example.com").json() == _request(client, "nobody@corp.example.com").json()
