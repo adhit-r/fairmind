@@ -236,6 +236,11 @@ class _SqliteConnection:
         rows = await self.fetch_all(query, params)
         return rows[0] if rows else None
 
+    async def execute(self, query, params=None):
+        self.queries.append((query, params or {}))
+        with self.engine.begin() as conn:
+            conn.execute(text(query), params or {})
+
 
 class _Cache:
     def __init__(self):

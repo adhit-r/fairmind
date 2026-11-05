@@ -7,6 +7,7 @@ tries to read or change the other tenant's records.
 
 from __future__ import annotations
 
+import json
 from contextlib import asynccontextmanager
 
 import pytest
@@ -212,4 +213,22 @@ def test_audit_logs_list_only_the_organisations_members(client, audit_logs):
     assert [log["action"] for log in client.get("/api/v1/audit-logs", headers=A).json()["logs"]] == ["a-did-this"]
     assert [log["action"] for log in client.get("/api/v1/audit-logs", headers=B).json()["logs"]] == ["b-did-this"]
     assert client.get("/api/v1/audit-logs?action=b-did-this", headers=A).json()["logs"] == []
-    assert client.get("/api/v1/audit-logs", headers=A).json()["logs"][0]["timestamp"] == "2026-01-01"
+    # The reads above are audited too, so pick the seeded row by its action.
+    assert client.get("/api/v1/audit-logs?action=a-did-this", headers=A).json()["logs"][0]["timestamp"] == "2026-01-01"
+
+
+def test_requests_through_the_app_write_a_readable_audit_row_without_the_body(client, audit_logs):
+    secret = "audit-body-secret-5d1c"
+    body = {"kind": "github", "name": "models-repo", "config": {"repo": "acme/models"}, "token": secret}
+    assert client.post("/api/v1/integrations", headers=A, json=body).status_code == 201
+
+    [log] = client.get("/api/v1/audit-logs", headers=A).json()["logs"]
+    assert (log["action"], log["user_id"], log["resource_type"]) == ("POST /api/v1/integrations", OWNER_A, "integrations")
+    assert json.loads(log["details"])["status_code"] == 201
+    assert log["timestamp"]
+
+    with audit_logs.begin() as conn:
+        stored = [dict(row) for row in conn.execute(text("SELECT * FROM audit_logs")).mappings()]
+    assert [row["action"] for row in stored] == ["POST /api/v1/integrations", "GET /api/v1/audit-logs"]
+    assert secret not in repr(stored)
+    assert A["Authorization"].split(" ", 1)[1] not in repr(stored)
