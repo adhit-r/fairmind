@@ -2,11 +2,13 @@
 
 from unittest.mock import AsyncMock
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from api.routes import auth
 from config.auth import UserRole, require_admin
+from config.settings import Settings
 from tests.auth_helpers import make_token_data
 
 
@@ -19,10 +21,17 @@ def _client():
     return TestClient(api)
 
 
-def test_authentik_callback_without_a_client_secret_never_calls_authentik(monkeypatch):
+@pytest.mark.parametrize("unset", (
+    "authentik_oauth_client_id", "authentik_oauth_client_secret", "authentik_oauth_redirect_uri",
+))
+def test_authentik_callback_missing_any_client_setting_never_calls_authentik(monkeypatch, unset):
     monkeypatch.setattr(auth.settings, "authentik_enabled", True)
     monkeypatch.setattr(auth.settings, "authentik_server_url", "https://sso.corp.example.com")
-    monkeypatch.setattr(auth.settings, "authentik_oauth_client_secret", None)
+    monkeypatch.setattr(auth.settings, "authentik_oauth_client_id", "fairmind")
+    monkeypatch.setattr(auth.settings, "authentik_oauth_client_secret", "configured")
+    monkeypatch.setattr(auth.settings, "authentik_oauth_redirect_uri", "https://app.corp.example.com/auth/callback")
+    # Left out of the environment, the setting keeps its declared default.
+    monkeypatch.setattr(auth.settings, unset, Settings.model_fields[unset].default)
     post = AsyncMock()
     monkeypatch.setattr(auth.httpx.AsyncClient, "post", post)
 

@@ -71,6 +71,15 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 
+def client_ip(request: Request) -> str:
+    """The caller's address: behind the Next.js proxy request.client is the
+    frontend container, so the forwarded headers come first."""
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    return request.headers.get("X-Real-IP") or (request.client.host if request.client else "unknown")
+
+
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """Redis-based rate limiting middleware for production scalability."""
     
@@ -205,17 +214,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             del self.fallback_clients[client_ip]
     
     def get_client_ip(self, request: Request) -> str:
-        """Get client IP address."""
-        # Check for forwarded headers (for reverse proxy setups)
-        forwarded_for = request.headers.get("X-Forwarded-For")
-        if forwarded_for:
-            return forwarded_for.split(",")[0].strip()
-        
-        real_ip = request.headers.get("X-Real-IP")
-        if real_ip:
-            return real_ip
-        
-        return request.client.host if request.client else "unknown"
+        return client_ip(request)
 
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):

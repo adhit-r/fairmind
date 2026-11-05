@@ -205,9 +205,9 @@ authentik_issuer: Optional[str] = None
 authentik_audience: Optional[str] = None
 authentik_jwt_algorithm: str = "RS256"
 authentik_jwks_cache_ttl: int = 3600  # 1 hour
-authentik_oauth_client_id: Optional[str] = "fairmind-frontend"
+authentik_oauth_client_id: Optional[str] = None
 authentik_oauth_client_secret: Optional[str] = None
-authentik_oauth_redirect_uri: Optional[str] = "http://localhost:3000/auth/callback"
+authentik_oauth_redirect_uri: Optional[str] = None
 authentik_token_endpoint: Optional[str] = None
 authentik_refresh_token_ttl: int = 604800  # 7 days
 ```

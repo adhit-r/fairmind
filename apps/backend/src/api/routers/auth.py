@@ -25,6 +25,7 @@ from config.auth import (
     TokenData,
     require_admin,
     api_key_hash,
+    E2E_ADMIN_ID,
 )
 from config.cache import cache_manager
 from config.jwt_exceptions import (
@@ -366,7 +367,10 @@ class PasswordResetConfirm(BaseModel):
     password: str
 
 
-_RESET_ANSWER = {"message": "If that email belongs to an active account, a link to reset its password is on its way."}
+_RESET_ANSWER = {"message": (
+    "If that email belongs to an active account that signs in with a password, a link to reset it is on its way. "
+    "Accounts that use single sign-on change their password with their identity provider."
+)}
 _RESET_WINDOW_SECONDS = 15 * 60
 _RESET_MAX_PER_WINDOW = 5
 _reset_requests: dict[str, list[float]] = {}
@@ -391,15 +395,18 @@ def _reset_rate_limited(*keys: str) -> bool:
 async def request_password_reset(payload: PasswordResetRequest, request: Request):
     """Email a single-use reset link. The answer is the same whether or not the account exists."""
     from config.database import get_db_connection
+    from middleware.security import client_ip
     from src.application.services.api_boundary_dependencies import email_service
 
-    client_ip = request.client.host if request.client else "unknown"
-    if _reset_rate_limited(f"email:{payload.email.lower()}", f"ip:{client_ip}"):
+    if _reset_rate_limited(f"email:{payload.email.lower()}", f"ip:{client_ip(request)}"):
         raise HTTPException(status_code=429, detail="Too many reset requests. Try again in a few minutes.")
 
+    # Only accounts that already sign in with a password: an SSO-only row (no
+    # password_hash) must not gain a password that skips the identity provider.
     async with get_db_connection() as db:
         user = await db.fetch_one(
-            "SELECT id, email, password_hash FROM users WHERE lower(email) = lower(:email) AND is_active",
+            "SELECT id, email, password_hash FROM users "
+            "WHERE lower(email) = lower(:email) AND is_active AND COALESCE(password_hash, '') <> ''",
             {"email": payload.email},
         )
     if user:
@@ -427,7 +434,8 @@ async def reset_password(payload: PasswordResetConfirm):
         raise invalid
     async with get_db_connection() as db:
         user = await db.fetch_one(
-            "SELECT password_hash FROM users WHERE id = :id AND is_active", {"id": claims["sub"]}
+            "SELECT password_hash FROM users WHERE id = :id AND is_active AND COALESCE(password_hash, '') <> ''",
+            {"id": claims["sub"]},
         )
         if not user or not secrets.compare_digest(
             claims["pwd"], auth_manager.password_fingerprint(user["password_hash"])
@@ -435,11 +443,11 @@ async def reset_password(payload: PasswordResetConfirm):
             raise invalid
         # Compare-and-set on the old hash: of two concurrent uses of one token, only one lands.
         changed = await db.fetch_one(
-            "UPDATE users SET password_hash = :new WHERE id = :id AND COALESCE(password_hash, '') = :old RETURNING id",
+            "UPDATE users SET password_hash = :new WHERE id = :id AND password_hash = :old RETURNING id",
             {
                 "new": auth_manager.get_password_hash(payload.password),
                 "id": claims["sub"],
-                "old": user["password_hash"] or "",
+                "old": user["password_hash"],
             },
         )
     if not changed:
@@ -678,6 +686,12 @@ async def create_api_key(
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found"
+            )
+        if user_data.id == E2E_ADMIN_ID:
+            # Keys are rows tied to a users row, and the E2E admin is never stored.
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="The E2E admin has no stored account, so it cannot hold API keys. Sign in as a registered user."
             )
         
         api_key = auth_manager.create_api_key(user_data, api_key_data.name)

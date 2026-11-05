@@ -16,6 +16,7 @@ from sqlalchemy.pool import StaticPool
 from api.routes import auth
 from config.auth import auth_manager
 from config.settings import settings
+from core.middleware.auth import NeonAuthMiddleware
 from database.connection import Base
 from database.models import Organization, OrganizationMember, User
 from middleware.security import JWTAuthenticationMiddleware
@@ -52,8 +53,9 @@ def env(monkeypatch):
         yield client, engine, email
 
 
-def _request(client, email):
-    return client.post("/api/v1/auth/password-reset/request", json={"email": email})
+def _request(client, email, ip="198.51.100.1"):
+    # Production traffic reaches the backend through the Next.js proxy, so the caller is in X-Forwarded-For.
+    return client.post("/api/v1/auth/password-reset/request", json={"email": email}, headers={"X-Forwarded-For": ip})
 
 
 def test_reset_link_sets_a_new_password_once(env):
@@ -83,8 +85,38 @@ def test_reset_link_sets_a_new_password_once(env):
 
 def test_reset_requests_are_rate_limited_per_email(env):
     client, _, email = env
-    assert [_request(client, EMAIL).status_code for _ in range(6)] == [202] * 5 + [429]
+    assert [_request(client, EMAIL, f"198.51.100.{i}").status_code for i in range(6)] == [202] * 5 + [429]
     assert email.send_password_reset_email.call_count == 5
+
+
+def test_reset_requests_are_rate_limited_per_forwarded_client(env):
+    client, _, _ = env
+    assert [_request(client, f"p{i}@corp.example.com").status_code for i in range(6)] == [202] * 5 + [429]
+    # Another caller behind the same proxy is not blocked by the first one's requests.
+    assert _request(client, "p9@corp.example.com", ip="203.0.113.7").status_code == 202
+
+
+def test_sso_only_account_cannot_gain_a_password(env):
+    client, engine, email = env
+    sso_id = str(uuid.uuid4())
+    with engine.begin() as conn:
+        conn.execute(
+            text("INSERT INTO users (id, email, username, role, is_active) "
+                 "VALUES (:id, 'sso@corp.example.com', 'sso', 'analyst', 1)"),
+            {"id": sso_id},
+        )
+    assert _request(client, "sso@corp.example.com").json() == _request(client, "nobody@corp.example.com").json()
+    email.send_password_reset_email.assert_not_called()
+    token = auth_manager.create_password_reset_token(sso_id, None)
+    response = client.post("/api/v1/auth/password-reset", json={"token": token, "password": "a-brand-new-password"})
+    assert response.status_code == 400
+    assert _rows(engine, "SELECT password_hash FROM users WHERE id = :id", id=sso_id)[0]["password_hash"] is None
+
+
+def test_reset_routes_are_public_under_neon_auth():
+    neon = NeonAuthMiddleware(app=None)
+    assert neon._is_public_endpoint("/api/v1/auth/password-reset/request")
+    assert neon._is_public_endpoint("/api/v1/auth/password-reset")
 
 
 def test_without_email_configured_the_answer_is_unchanged_and_the_gap_is_logged(env, caplog, monkeypatch):
