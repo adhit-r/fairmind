@@ -2,22 +2,22 @@
 -- Idempotent: safe to re-run.
 
 -- Extend governance_policies with version tracking and ownership fields.
--- SQLite ALTER TABLE only supports ADD COLUMN, so we guard each addition.
+-- Each addition is guarded with IF NOT EXISTS.
 
 -- version column
-ALTER TABLE governance_policies ADD COLUMN version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE governance_policies ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
 
 -- owner column
-ALTER TABLE governance_policies ADD COLUMN owner TEXT;
+ALTER TABLE governance_policies ADD COLUMN IF NOT EXISTS owner TEXT;
 
 -- reviewer column
-ALTER TABLE governance_policies ADD COLUMN reviewer TEXT;
+ALTER TABLE governance_policies ADD COLUMN IF NOT EXISTS reviewer TEXT;
 
 -- approver column
-ALTER TABLE governance_policies ADD COLUMN approver TEXT;
+ALTER TABLE governance_policies ADD COLUMN IF NOT EXISTS approver TEXT;
 
 -- approved_at column
-ALTER TABLE governance_policies ADD COLUMN approved_at TEXT;
+ALTER TABLE governance_policies ADD COLUMN IF NOT EXISTS approved_at TEXT;
 
 
 -- Policy version history table.
@@ -40,7 +40,7 @@ CREATE INDEX IF NOT EXISTS idx_gpv_policy_id ON governance_policy_versions(polic
 
 
 -- Extend governance_approval_requests with columns added by FAI-14.
-ALTER TABLE governance_approval_requests ADD COLUMN ai_system_id TEXT;
-ALTER TABLE governance_approval_requests ADD COLUMN decision TEXT;
-ALTER TABLE governance_approval_requests ADD COLUMN decided_by TEXT;
-ALTER TABLE governance_approval_requests ADD COLUMN decided_at TEXT;
+ALTER TABLE governance_approval_requests ADD COLUMN IF NOT EXISTS ai_system_id TEXT;
+ALTER TABLE governance_approval_requests ADD COLUMN IF NOT EXISTS decision TEXT;
+ALTER TABLE governance_approval_requests ADD COLUMN IF NOT EXISTS decided_by TEXT;
+ALTER TABLE governance_approval_requests ADD COLUMN IF NOT EXISTS decided_at TEXT;

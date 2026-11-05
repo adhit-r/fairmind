@@ -14,11 +14,7 @@ from .connection import Base
 
 
 class TextUUID(TypeDecorator):
-    """A user id kept as text on Postgres, where users.id is varchar; binds str(value) and returns it as stored.
-
-    Elsewhere (SQLite development databases and tests) it stays a UUID column so it
-    matches users.id there and SQLite's foreign-key checks accept it.
-    """
+    """A user id kept as text on Postgres, where users.id is varchar; binds str(value) and returns it as stored."""
 
     impl = String
     cache_ok = True
@@ -39,7 +35,6 @@ class UserId(TypeDecorator):
     way and every reference to it is varchar, so a database built from these
     models matches production and its foreign keys can be created. Values still
     come back as uuid.UUID, as they did when this column was declared UUID.
-    Elsewhere (SQLite development databases and tests) it stays a UUID column.
     """
 
     impl = UUID
@@ -202,8 +197,8 @@ class User(Base):
     permissions = Column(JSON, default=list)  # Computed permissions
 
     # Password sign-in (config.auth reads these; the register route writes them).
-    # Present in the Postgres schema already; declared here so SQLite dev and
-    # test databases built from this model carry the same columns.
+    # Present in the Postgres schema already; declared here so databases built
+    # from this model carry the same columns.
     role = Column(String(50), nullable=True)
     password_hash = Column(String(255), nullable=True)
 
@@ -320,7 +315,7 @@ class Organization(Base):
     domain = Column(String(255), nullable=True)
     owner_id = Column(UserId, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True)
     is_active = Column(Boolean, default=True, index=True)
-    org_metadata = Column(JSON, default=dict)
+    org_metadata = Column("metadata", JSON, default=dict)  # "metadata" is reserved on declarative models
 
     created_at = Column(DateTime, default=func.now(), index=True)
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())

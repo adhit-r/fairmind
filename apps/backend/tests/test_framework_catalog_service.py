@@ -6,9 +6,10 @@ from pathlib import Path
 
 import pytest
 from openpyxl import Workbook
-from sqlalchemy import create_engine, event, func, select
+from sqlalchemy import event, func, select
 from sqlalchemy.orm import Session
 
+from tests import pg
 from src.application.services.framework_catalog_service import (
     FrameworkCatalogService,
     WorkbookValidationError,
@@ -135,9 +136,7 @@ def test_parse_aiuc_workbook_rejects_reordered_or_wrong_headers(
 def test_import_is_idempotent_and_persists_catalog_in_one_transaction(tmp_path: Path) -> None:
     workbook_path = tmp_path / "aiuc.xlsx"
     write_workbook(workbook_path)
-    engine = create_engine("sqlite://")
-    GovernanceFrameworkVersion.__table__.create(engine)
-    GovernanceControlDefinition.__table__.create(engine)
+    engine = pg.fresh_engine()
     session = Session(engine)
     service = FrameworkCatalogService(session, strict=False, expected_counts=(2, 2))
 
@@ -164,9 +163,7 @@ def test_import_workbook_bytes_persists_an_immutable_source_snapshot(tmp_path: P
     workbook_path = tmp_path / "aiuc.xlsx"
     write_workbook(workbook_path)
     payload = workbook_path.read_bytes()
-    engine = create_engine("sqlite://")
-    GovernanceFrameworkVersion.__table__.create(engine)
-    GovernanceControlDefinition.__table__.create(engine)
+    engine = pg.fresh_engine()
     session = Session(engine)
     service = FrameworkCatalogService(session, strict=False, expected_counts=(2, 2))
 
@@ -184,9 +181,7 @@ def test_import_workbook_bytes_persists_an_immutable_source_snapshot(tmp_path: P
 def test_import_rolls_back_version_when_control_persistence_fails(tmp_path: Path) -> None:
     workbook_path = tmp_path / "aiuc.xlsx"
     write_workbook(workbook_path)
-    engine = create_engine("sqlite://")
-    GovernanceFrameworkVersion.__table__.create(engine)
-    GovernanceControlDefinition.__table__.create(engine)
+    engine = pg.fresh_engine()
     session = Session(engine)
 
     @event.listens_for(engine, "before_cursor_execute")

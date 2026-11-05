@@ -1,6 +1,6 @@
 """Registration approval never changes an existing user or organisation.
 
-The router runs against SQLite with the real users/organizations/org_members
+The router runs against PostgreSQL with the real users/organizations/org_members
 tables and migrations/016_registration_requests.sql.
 """
 
@@ -12,13 +12,11 @@ from unittest.mock import AsyncMock
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, text
-from sqlalchemy.pool import StaticPool
+from sqlalchemy import text
 
 from api.routes import registration
 from config.auth import UserRole, require_admin
-from database.connection import Base
-from database.models import Organization, OrganizationMember, User
+from tests import pg
 from tests.auth_helpers import make_token_data
 
 MIGRATION = Path(__file__).resolve().parents[1] / "migrations" / "016_registration_requests.sql"
@@ -46,8 +44,7 @@ class _Db:
 
 @pytest.fixture
 def env(monkeypatch):
-    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
-    Base.metadata.create_all(engine, tables=[User.__table__, Organization.__table__, OrganizationMember.__table__])
+    engine = pg.fresh_engine()
     with engine.begin() as conn:
         for statement in MIGRATION.read_text().split(";"):
             if statement.strip():
@@ -86,16 +83,18 @@ def _submit(client, **overrides):
 
 def _seed_account(engine, email="existing@corp.example.com", role="admin"):
     user_id, org_id = str(uuid.uuid4()), str(uuid.uuid4())
+    # users.org_id and organizations.owner_id reference each other: insert, then link.
     with engine.begin() as conn:
         conn.execute(
-            text("INSERT INTO users (id, email, username, role, password_hash, is_active, org_id) "
-                 "VALUES (:id, :email, :u, :role, 'hash-before', 1, :org)"),
-            {"id": user_id, "email": email, "u": f"u-{user_id[:6]}", "role": role, "org": org_id},
+            text("INSERT INTO users (id, email, username, role, password_hash, is_active) "
+                 "VALUES (:id, :email, :u, :role, 'hash-before', TRUE)"),
+            {"id": user_id, "email": email, "u": f"u-{user_id[:6]}", "role": role},
         )
         conn.execute(
             text("INSERT INTO organizations (id, name, slug, owner_id) VALUES (:id, 'Acme', :slug, :owner)"),
             {"id": org_id, "slug": f"acme-{org_id[:6]}", "owner": user_id},
         )
+        conn.execute(text("UPDATE users SET org_id = :org WHERE id = :id"), {"org": org_id, "id": user_id})
     return user_id, org_id
 
 
@@ -113,7 +112,7 @@ def test_approval_creates_a_new_org_owned_by_the_requester(env):
     [member] = _rows(engine, "SELECT * FROM org_members")
     assert user["email"] == "new@corp.example.com" and user["id"] == body["user_id"]
     assert user["role"] == "analyst"  # the requested 'admin' is not granted
-    assert user["password_hash"] is None
+    assert not user["password_hash"]  # no usable password until set via invite/reset
     assert str(user["org_id"]) == str(user["primary_org_id"]) == str(org["id"]) == body["org_id"]
     assert org["name"] == "Corp" and str(org["owner_id"]) == user["id"]
     assert (member["user_id"], member["role"], member["status"]) == (user["id"], "owner", "active")

@@ -1,5 +1,4 @@
 import json
-import sqlite3
 from collections.abc import Generator
 
 import pytest
@@ -8,9 +7,8 @@ from sqlalchemy import (
     ForeignKeyConstraint,
     MetaData,
     UniqueConstraint,
-    create_engine,
-    event,
 )
+from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, registry, sessionmaker
 
@@ -26,6 +24,7 @@ from database.governance_models import (
 )
 from migrations.evaluation_binding_integrity_migration import sql_for as sql_for_integrity
 from migrations.evaluation_runs_migration import sql_for
+from tests import pg
 
 
 PRODUCTION_TABLES = (
@@ -71,26 +70,22 @@ for model, table_name in (
 
 @pytest.fixture
 def db_session() -> Generator[Session, None, None]:
-    engine = create_engine("sqlite://")
-
-    @event.listens_for(engine, "connect")
-    def enable_foreign_keys(dbapi_connection, _connection_record) -> None:
-        dbapi_connection.execute("PRAGMA foreign_keys = ON")
-
-    test_metadata.create_all(engine)
-    session = sessionmaker(bind=engine)()
+    session = sessionmaker(bind=pg.fresh_engine())()
     try:
         yield session
     finally:
         session.close()
-        test_metadata.drop_all(engine)
 
 
 @pytest.fixture
-def sqlite_connection() -> Generator[sqlite3.Connection, None, None]:
-    connection = sqlite3.connect(":memory:")
-    connection.execute("PRAGMA foreign_keys = ON")
-    connection.executescript(
+def pg_connection() -> Generator[Connection, None, None]:
+    """Migration 012 applied to a minimal parent schema isolated from the ORM tables."""
+
+    engine = pg.fresh_engine(isolation_level="AUTOCOMMIT")
+    connection = engine.connect()
+    connection.exec_driver_sql("CREATE SCHEMA migration_012")
+    connection.exec_driver_sql("SET search_path TO migration_012")
+    connection.exec_driver_sql(
         """
         CREATE TABLE governance_workspaces (
             id TEXT PRIMARY KEY,
@@ -125,7 +120,7 @@ def sqlite_connection() -> Generator[sqlite3.Connection, None, None]:
         );
         """
     )
-    connection.executescript(sql_for("sqlite"))
+    connection.exec_driver_sql(sql_for("postgresql"))
     try:
         yield connection
     finally:
@@ -133,40 +128,40 @@ def sqlite_connection() -> Generator[sqlite3.Connection, None, None]:
 
 
 def seed_governance_scope(
-    connection: sqlite3.Connection,
+    connection: Connection,
     *,
     org_id: str,
     workspace_id: str,
     system_id: str,
 ) -> None:
-    connection.execute(
-        "INSERT INTO governance_workspaces (id, org_id) VALUES (?, ?)",
+    connection.exec_driver_sql(
+        "INSERT INTO governance_workspaces (id, org_id) VALUES (%s, %s)",
         (workspace_id, org_id),
     )
-    connection.execute(
-        "INSERT INTO governance_ai_systems (id, workspace_id, org_id) VALUES (?, ?, ?)",
+    connection.exec_driver_sql(
+        "INSERT INTO governance_ai_systems (id, workspace_id, org_id) VALUES (%s, %s, %s)",
         (system_id, workspace_id, org_id),
     )
 
 
 def insert_evaluation_plan(
-    connection: sqlite3.Connection,
+    connection: Connection,
     *,
     id: str,
     org_id: str,
     workspace_id: str,
     system_id: str,
 ) -> None:
-    connection.execute(
+    connection.exec_driver_sql(
         """
         INSERT INTO governance_evaluation_plans (
             id, org_id, workspace_id, system_id, name, target_kind,
             lifecycle_phases_json, execution_depth, enforcement_mode,
             delivery_mode, suite_refs_json, status, created_by, updated_by,
             created_at, updated_at
-        ) VALUES (?, ?, ?, ?, 'Plan', 'predictive_model', '["pre_deploy"]',
+        ) VALUES (%s, %s, %s, %s, 'Plan', 'predictive_model', '["pre_deploy"]',
                   'hybrid', 'human_approval', 'external_provider',
-                  '["fairmind/core@1.0.0"]', 'active', 'user-a', 'user-a', ?, ?)
+                  '["fairmind/core@1.0.0"]', 'active', 'user-a', 'user-a', %s, %s)
         """,
         (
             id,
@@ -180,7 +175,7 @@ def insert_evaluation_plan(
 
 
 def insert_evaluation_run(
-    connection: sqlite3.Connection,
+    connection: Connection,
     *,
     id: str = "run-a",
     plan_id: str,
@@ -199,15 +194,15 @@ def insert_evaluation_run(
     linked_at = (
         "2026-07-19T00:00:00+00:00" if has_link_audit else None
     )
-    connection.execute(
+    connection.exec_driver_sql(
         """
         INSERT INTO governance_evaluation_runs (
             id, org_id, workspace_id, system_id, plan_id, trigger,
             technical_status, overall_verdict, layer_verdicts_json,
             linked_evidence_run_id, linked_passport_revision_id, linked_by, linked_at,
             requested_by, started_at, completed_at, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, 'manual', ?, 'insufficient', '{}', ?, ?, ?, ?,
-                  'user-a', ?, ?, ?, ?)
+        ) VALUES (%s, %s, %s, %s, %s, 'manual', %s, 'insufficient', '{}', %s, %s, %s, %s,
+                  'user-a', %s, %s, %s, %s)
         """,
         (
             id,
@@ -258,7 +253,7 @@ def add_plan(session: Session) -> EvaluationPlan:
     return plan
 
 
-def seed_linkable_evaluation_scope(connection: sqlite3.Connection) -> None:
+def seed_linkable_evaluation_scope(connection: Connection) -> None:
     seed_governance_scope(
         connection, org_id="org-a", workspace_id="ws-a", system_id="sys-a"
     )
@@ -269,13 +264,13 @@ def seed_linkable_evaluation_scope(connection: sqlite3.Connection) -> None:
         workspace_id="ws-a",
         system_id="sys-a",
     )
-    connection.execute(
+    connection.exec_driver_sql(
         """
         INSERT INTO governance_evidence_runs (id, workspace_id, system_id, org_id)
         VALUES ('evidence-a', 'ws-a', 'sys-a', 'org-a')
         """
     )
-    connection.execute(
+    connection.exec_driver_sql(
         """
         INSERT INTO governance_evidence_passport_revisions
             (id, evidence_run_id, system_id, org_id)
@@ -423,26 +418,26 @@ def test_orm_rejects_succeeded_without_exact_passport_link(db_session: Session) 
         db_session.flush()
 
 
-def test_sqlite_migration_rejects_cross_tenant_plan_run_link(
-    sqlite_connection: sqlite3.Connection,
+def test_migration_rejects_cross_tenant_plan_run_link(
+    pg_connection: Connection,
 ) -> None:
     seed_governance_scope(
-        sqlite_connection, org_id="org-a", workspace_id="ws-a", system_id="sys-a"
+        pg_connection, org_id="org-a", workspace_id="ws-a", system_id="sys-a"
     )
     seed_governance_scope(
-        sqlite_connection, org_id="org-b", workspace_id="ws-b", system_id="sys-b"
+        pg_connection, org_id="org-b", workspace_id="ws-b", system_id="sys-b"
     )
     insert_evaluation_plan(
-        sqlite_connection,
+        pg_connection,
         id="plan-a",
         org_id="org-a",
         workspace_id="ws-a",
         system_id="sys-a",
     )
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(IntegrityError):
         insert_evaluation_run(
-            sqlite_connection,
+            pg_connection,
             plan_id="plan-a",
             org_id="org-b",
             workspace_id="ws-b",
@@ -450,26 +445,26 @@ def test_sqlite_migration_rejects_cross_tenant_plan_run_link(
         )
 
 
-def test_sqlite_migration_requires_succeeded_runs_to_have_exact_passport_link(
-    sqlite_connection: sqlite3.Connection,
+def test_migration_requires_succeeded_runs_to_have_exact_passport_link(
+    pg_connection: Connection,
 ) -> None:
     seed_governance_scope(
-        sqlite_connection, org_id="org-a", workspace_id="ws-a", system_id="sys-a"
+        pg_connection, org_id="org-a", workspace_id="ws-a", system_id="sys-a"
     )
     insert_evaluation_plan(
-        sqlite_connection,
+        pg_connection,
         id="plan-a",
         org_id="org-a",
         workspace_id="ws-a",
         system_id="sys-a",
     )
-    sqlite_connection.execute(
+    pg_connection.exec_driver_sql(
         """
         INSERT INTO governance_evidence_runs (id, workspace_id, system_id, org_id)
         VALUES ('evidence-a', 'ws-a', 'sys-a', 'org-a')
         """
     )
-    sqlite_connection.execute(
+    pg_connection.exec_driver_sql(
         """
         INSERT INTO governance_evidence_passport_revisions
             (id, evidence_run_id, system_id, org_id)
@@ -477,9 +472,9 @@ def test_sqlite_migration_requires_succeeded_runs_to_have_exact_passport_link(
         """
     )
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(IntegrityError):
         insert_evaluation_run(
-            sqlite_connection,
+            pg_connection,
             id="run-unlinked",
             plan_id="plan-a",
             org_id="org-a",
@@ -488,9 +483,9 @@ def test_sqlite_migration_requires_succeeded_runs_to_have_exact_passport_link(
             technical_status="succeeded",
         )
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(IntegrityError):
         insert_evaluation_run(
-            sqlite_connection,
+            pg_connection,
             id="run-linked-without-audit",
             plan_id="plan-a",
             org_id="org-a",
@@ -505,7 +500,7 @@ def test_sqlite_migration_requires_succeeded_runs_to_have_exact_passport_link(
         )
 
     insert_evaluation_run(
-        sqlite_connection,
+        pg_connection,
         id="run-linked",
         plan_id="plan-a",
         org_id="org-a",
@@ -518,9 +513,9 @@ def test_sqlite_migration_requires_succeeded_runs_to_have_exact_passport_link(
         completed_at="2026-07-19T00:05:00+00:00",
     )
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(IntegrityError):
         insert_evaluation_run(
-            sqlite_connection,
+            pg_connection,
             id="run-linked-but-running",
             plan_id="plan-a",
             org_id="org-a",
@@ -533,9 +528,9 @@ def test_sqlite_migration_requires_succeeded_runs_to_have_exact_passport_link(
             completed_at="2026-07-19T00:05:00+00:00",
         )
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(IntegrityError):
         insert_evaluation_run(
-            sqlite_connection,
+            pg_connection,
             id="run-wrong-revision",
             plan_id="plan-a",
             org_id="org-a",
@@ -549,13 +544,13 @@ def test_sqlite_migration_requires_succeeded_runs_to_have_exact_passport_link(
         )
 
 
-def test_sqlite_migration_allows_failed_run_to_retain_exact_passport_link(
-    sqlite_connection: sqlite3.Connection,
+def test_migration_allows_failed_run_to_retain_exact_passport_link(
+    pg_connection: Connection,
 ) -> None:
-    seed_linkable_evaluation_scope(sqlite_connection)
+    seed_linkable_evaluation_scope(pg_connection)
 
     insert_evaluation_run(
-        sqlite_connection,
+        pg_connection,
         plan_id="plan-a",
         org_id="org-a",
         workspace_id="ws-a",
@@ -595,17 +590,17 @@ def test_sqlite_migration_allows_failed_run_to_retain_exact_passport_link(
         ),
     ),
 )
-def test_sqlite_migration_accepts_valid_status_timestamp_matrix(
-    sqlite_connection: sqlite3.Connection,
+def test_migration_accepts_valid_status_timestamp_matrix(
+    pg_connection: Connection,
     technical_status: str,
     started_at: str | None,
     completed_at: str | None,
     linked: bool,
 ) -> None:
-    seed_linkable_evaluation_scope(sqlite_connection)
+    seed_linkable_evaluation_scope(pg_connection)
 
     insert_evaluation_run(
-        sqlite_connection,
+        pg_connection,
         plan_id="plan-a",
         org_id="org-a",
         workspace_id="ws-a",
@@ -646,18 +641,18 @@ def test_sqlite_migration_accepts_valid_status_timestamp_matrix(
         ("cancelled", "2026-07-19T00:00:00+00:00", None, False),
     ),
 )
-def test_sqlite_migration_rejects_invalid_status_timestamp_matrix(
-    sqlite_connection: sqlite3.Connection,
+def test_migration_rejects_invalid_status_timestamp_matrix(
+    pg_connection: Connection,
     technical_status: str,
     started_at: str | None,
     completed_at: str | None,
     linked: bool,
 ) -> None:
-    seed_linkable_evaluation_scope(sqlite_connection)
+    seed_linkable_evaluation_scope(pg_connection)
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(IntegrityError):
         insert_evaluation_run(
-            sqlite_connection,
+            pg_connection,
             plan_id="plan-a",
             org_id="org-a",
             workspace_id="ws-a",
@@ -670,29 +665,29 @@ def test_sqlite_migration_rejects_invalid_status_timestamp_matrix(
         )
 
 
-def test_sqlite_migration_rejects_evidence_link_from_another_workspace(
-    sqlite_connection: sqlite3.Connection,
+def test_migration_rejects_evidence_link_from_another_workspace(
+    pg_connection: Connection,
 ) -> None:
     seed_governance_scope(
-        sqlite_connection, org_id="org-a", workspace_id="ws-a", system_id="sys-a"
+        pg_connection, org_id="org-a", workspace_id="ws-a", system_id="sys-a"
     )
-    sqlite_connection.execute(
+    pg_connection.exec_driver_sql(
         "INSERT INTO governance_workspaces (id, org_id) VALUES ('ws-b', 'org-a')"
     )
     insert_evaluation_plan(
-        sqlite_connection,
+        pg_connection,
         id="plan-a",
         org_id="org-a",
         workspace_id="ws-a",
         system_id="sys-a",
     )
-    sqlite_connection.execute(
+    pg_connection.exec_driver_sql(
         """
         INSERT INTO governance_evidence_runs (id, workspace_id, system_id, org_id)
         VALUES ('evidence-b', 'ws-b', 'sys-a', 'org-a')
         """
     )
-    sqlite_connection.execute(
+    pg_connection.exec_driver_sql(
         """
         INSERT INTO governance_evidence_passport_revisions
             (id, evidence_run_id, system_id, org_id)
@@ -700,9 +695,9 @@ def test_sqlite_migration_rejects_evidence_link_from_another_workspace(
         """
     )
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(IntegrityError):
         insert_evaluation_run(
-            sqlite_connection,
+            pg_connection,
             id="run-cross-workspace",
             plan_id="plan-a",
             org_id="org-a",
@@ -717,10 +712,9 @@ def test_sqlite_migration_rejects_evidence_link_from_another_workspace(
 
 
 def test_migration_selector_returns_direct_dialect_sql_and_is_idempotent(
-    sqlite_connection: sqlite3.Connection,
+    pg_connection: Connection,
 ) -> None:
     postgresql_sql = sql_for("postgresql")
-    sqlite_sql = sql_for("sqlite")
 
     assert "CREATE TABLE IF NOT EXISTS governance_evaluation_plans" in postgresql_sql
     assert "CREATE TABLE IF NOT EXISTS governance_evaluation_runs" in postgresql_sql
@@ -729,15 +723,8 @@ def test_migration_selector_returns_direct_dialect_sql_and_is_idempotent(
         "FOREIGN KEY (linked_evidence_run_id, workspace_id, system_id, org_id)"
         in postgresql_sql
     )
-    assert "BOOLEAN" not in sqlite_sql
-    assert "FOREIGN KEY (plan_id, workspace_id, system_id, org_id)" in sqlite_sql
-    assert (
-        "linked_passport_revision_id, linked_evidence_run_id, system_id, org_id"
-        in sqlite_sql
-    )
-    assert "re.sub" not in sqlite_sql
 
-    sqlite_connection.executescript(sqlite_sql)
+    pg_connection.exec_driver_sql(postgresql_sql)
 
     with pytest.raises(ValueError, match="Unsupported migration dialect"):
         sql_for("mysql")
@@ -791,7 +778,7 @@ def normalize_sql(value: str) -> str:
     return normalized
 
 
-def test_named_run_lifecycle_checks_match_orm_postgresql_and_sqlite() -> None:
+def test_named_run_lifecycle_checks_match_orm_and_postgresql() -> None:
     expected_checks = {
         "ck_governance_evaluation_run_technical_status": (
             "technical_status IN ('awaiting_evidence', 'queued', 'leased', 'running', "
@@ -835,8 +822,6 @@ def test_named_run_lifecycle_checks_match_orm_postgresql_and_sqlite() -> None:
     for name, expression in expected_checks.items():
         normalized_expression = normalize_sql(expression)
         assert orm_checks[name] == normalized_expression
-        for sql in (
-            normalize_sql(sql_for_integrity("postgresql")),
-            normalize_sql(sql_for_integrity("sqlite")),
-        ):
-            assert normalize_sql(f"CONSTRAINT {name} CHECK ({expression})") in sql
+        assert normalize_sql(f"CONSTRAINT {name} CHECK ({expression})") in normalize_sql(
+            sql_for_integrity("postgresql")
+        )

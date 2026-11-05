@@ -80,7 +80,7 @@ async def lifespan(app: FastAPI):
         raise
 
     # ORM-managed tables (users, organisations, governance). Table by table,
-    # so one definition the local SQLite cannot parse does not block the rest.
+    # so one failing definition does not block the rest.
     try:
         from database.connection import db_manager as orm_db_manager
 
@@ -489,6 +489,7 @@ if settings.assurance_v2_enabled:
 else:
     logger.info("Assurance-contract v2 routes are disabled")
 _include_router("api.routes.packs", prefix="/api/v1/packs", tags=["packs"], required=True)
+_include_router("api.routes.evaluation_runs", prefix="/api/v1/packs", tags=["packs"], required=True)
 _include_router("api.routes.environmental", tags=["environmental"], required=False)
 _include_router("api.routes.settings", prefix="/api/v1", tags=["settings"], required=False)
 

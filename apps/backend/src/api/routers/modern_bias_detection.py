@@ -442,10 +442,11 @@ async def get_detection_results(m: OrgMembership = Depends(org_member)):
             
             # Get explainability analysis from recent tests
             explainability_query = text("""
-                SELECT DISTINCT explainability_method, insights
+                SELECT explainability_method, insights
                 FROM bias_test_results
                 WHERE explainability_method IS NOT NULL AND org_id = :org_id
-                ORDER BY created_at DESC
+                GROUP BY explainability_method, insights
+                ORDER BY MAX(created_at) DESC
                 LIMIT 5
             """)
             explain_results = session.execute(explainability_query, {"org_id": m.org_id})

@@ -1,6 +1,6 @@
 """
 Local Authentication Service
-Replaces Supabase Auth with a self-contained JWT implementation using SQLite.
+Replaces Supabase Auth with a self-contained JWT implementation.
 """
 
 import jwt

@@ -5,13 +5,13 @@ import uuid
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from api.main import app
+from tests import pg
 from config.auth import User as AuthUser, UserRole, auth_manager
-from database.connection import Base, get_db
+from database.connection import get_db
 from database.models import Organization, OrganizationMember, User
 
 
@@ -20,15 +20,13 @@ client = TestClient(app)
 
 @pytest.fixture(autouse=True)
 def authenticated_org_database():
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-    Base.metadata.create_all(engine)
+    engine = pg.fresh_engine()
     session_factory = sessionmaker(bind=engine)
     user_id, org_id = uuid.uuid4(), uuid.uuid4()
     session = session_factory()
     session.execute(
         User.__table__.insert().values(
+            password_hash="",
             id=user_id, email="governance@example.test", username="governance-owner"
         )
     )
@@ -82,7 +80,6 @@ def authenticated_org_database():
     finally:
         client.headers.pop("Authorization", None)
         app.dependency_overrides.clear()
-        Base.metadata.drop_all(engine)
         engine.dispose()
 
 

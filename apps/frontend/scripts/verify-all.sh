@@ -25,7 +25,7 @@ fi
 # Check if database has models
 echo ""
 echo "2️⃣  Checking Database..."
-MODEL_COUNT=$(cd apps/backend && python3 -c "import sqlite3; conn = sqlite3.connect('fairmind.db'); cursor = conn.cursor(); cursor.execute('SELECT COUNT(*) FROM models'); print(cursor.fetchone()[0])" 2>/dev/null || echo "0")
+MODEL_COUNT=$(psql "$DATABASE_URL" -tAc "SELECT COUNT(*) FROM models" 2>/dev/null || echo "0")
 if [ "$MODEL_COUNT" -gt "0" ]; then
     echo -e "${GREEN}✅ Database has $MODEL_COUNT models${NC}"
 else

@@ -5,11 +5,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import pytest
-from sqlalchemy import create_engine, event, select
+from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
-from database.connection import Base
 from database.governance_models import (
     GovernanceEvaluationAuditEvent,
     GovernanceEvaluatorRegistration,
@@ -30,7 +28,8 @@ from src.infrastructure.db.repositories.evaluation_workbench_repository import (
     SqlAlchemyEvaluatorCatalogRepository,
     SqlAlchemyEvaluatorCatalogUnitOfWork,
 )
-from tests.evaluation_workbench_sqlite import (
+from tests import pg
+from tests.evaluation_workbench_pg import (
     install_authoritative_assurance_fixtures_for_application_verifier_harness,
     public_signing_key_values_for_verifier_harness,
 )
@@ -42,17 +41,7 @@ NOW = datetime(2026, 8, 9, 12, 0, tzinfo=UTC)
 
 @pytest.fixture
 def catalog_session():
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-
-    @event.listens_for(engine, "connect")
-    def _foreign_keys(connection, _record) -> None:
-        connection.execute("PRAGMA foreign_keys = ON")
-
-    Base.metadata.create_all(engine)
+    engine = pg.fresh_engine()
     install_authoritative_assurance_fixtures_for_application_verifier_harness(engine)
     factory = sessionmaker(bind=engine)
     session = factory()

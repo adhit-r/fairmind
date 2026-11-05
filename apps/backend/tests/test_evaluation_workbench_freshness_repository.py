@@ -276,20 +276,3 @@ def test_unlinked_list_does_not_sample_or_fabricate_operational_freshness(
         for record in records
         for execution in record.suite_executions
     )
-
-
-def test_linked_sqlite_read_fails_closed_when_authoritative_classifier_is_unavailable(
-    repository_fixture,
-) -> None:
-    session, _factory = repository_fixture
-    scope = _admitted_scope(session, run_key="freshness-sqlite-linked")
-    adapter = SqlAlchemyEvaluationWorkbenchRepository(session)
-
-    with pytest.raises(EvaluationWorkbenchError) as caught:
-        adapter.get_run_record(
-            org_id=ORG,
-            system_id="system-a",
-            run_id=scope.run_id,
-        )
-
-    assert caught.value.code == "operational_freshness_postgresql_required"

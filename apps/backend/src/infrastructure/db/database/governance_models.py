@@ -12,6 +12,8 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import (
+    REAL,
+    BigInteger,
     Boolean,
     CheckConstraint,
     Column,
@@ -40,7 +42,7 @@ def _utc_now() -> datetime:
 
 
 def _lower_hex64(column: str) -> str:
-    """Portable SQLite/PostgreSQL predicate for exactly 64 lower-hex characters."""
+    """PostgreSQL predicate for exactly 64 lower-hex characters."""
     stripped = column
     for character in "0123456789abcdef":
         stripped = f"replace({stripped}, '{character}', '')"
@@ -96,7 +98,7 @@ def _canonical_utc_timestamp(column: str, *, nullable: bool = True) -> str:
         f"AND substr({column}, 11, 1) = 'T' "
         f"AND substr({column}, 14, 1) = ':' "
         f"AND substr({column}, 17, 1) = ':' "
-        f"AND substr({column}, -6) = '+00:00' "
+        f"AND right({column}, 6) = '+00:00' "
         f"AND {year} BETWEEN 1 AND 9999 "
         f"AND {month} BETWEEN 1 AND 12 "
         f"AND {day} BETWEEN 1 AND ({maximum_day}) "
@@ -470,7 +472,7 @@ class GovernanceEvidenceArtifact(Base):
     uri = Column(Text, nullable=False)
     sha256 = Column(String, nullable=False)
     media_type = Column(String, nullable=False)
-    size_bytes = Column(Integer, nullable=True)
+    size_bytes = Column(BigInteger, nullable=True)
     contains_sensitive_data = Column(Boolean, nullable=False, default=False)
     retention_policy = Column(String, nullable=True)
     redaction_note = Column(Text, nullable=True)
@@ -515,7 +517,7 @@ class GovernanceEvidencePassportRevision(Base):
     previous_revision_hash = Column(String, nullable=True)
     canonical_content_hash = Column(String, nullable=False)
     snapshot_json = Column(Text, nullable=False)
-    created_by = Column(String, nullable=False)
+    created_by = Column(String, nullable=True)
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
 
     __table_args__ = (
@@ -1066,7 +1068,6 @@ class GovernanceEvidenceTrustPolicyVersion(Base):
             "org_id",
             unique=True,
             postgresql_where=(status == "active"),
-            sqlite_where=(status == "active"),
         ),
         Index(
             "idx_governance_evidence_trust_policies_org_status_version",
@@ -2907,7 +2908,7 @@ class GovernanceEvidence(Base):
     title = Column(String, nullable=True)
     source = Column(String, nullable=True)
     content_json = Column(Text, nullable=False, default="{}")
-    confidence = Column(Float, nullable=False, default=1.0)
+    confidence = Column(REAL, nullable=False, default=1.0)
     status = Column(String, nullable=False, default="draft")
     uploaded_by = Column(String, nullable=True)
     metadata_json = Column(Text, nullable=False, default="{}")
@@ -2982,7 +2983,7 @@ class GovernanceEnvironmentalAssessment(Base):
     reviewer_state = Column(String, nullable=False, default="draft")
     exception_json = Column(Text, nullable=False, default="{}")
     payload_json = Column(Text, nullable=False, default="{}")
-    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    created_at = Column(DateTime(timezone=True), nullable=True, default=_utc_now)
 
     ai_system = relationship(
         "GovernanceAISystem",
@@ -3200,7 +3201,7 @@ class GovernanceApprovalWorkflow(Base):
     name = Column(String, nullable=False)
     entity_type = Column(String, nullable=False)
     steps_json = Column(Text, nullable=False, default="[]")
-    is_active = Column(Integer, nullable=False, default=1)
+    is_active = Column(Boolean, nullable=False, default=True)
     created_by = Column(String, nullable=True)
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
     updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
@@ -3320,7 +3321,7 @@ class GovernanceRisk(Base):
     description = Column(Text, nullable=False, default="")
     mitigation = Column(Text, nullable=False, default="")
     likelihood = Column(String, nullable=False, default="possible")
-    risk_score = Column(Float, nullable=False, default=0.0)
+    risk_score = Column(REAL, nullable=False, default=0.0)
     source = Column(String, nullable=False, default="manual")
     categories_json = Column(Text, nullable=False, default="[]")
     metadata_json = Column(Text, nullable=False, default="{}")

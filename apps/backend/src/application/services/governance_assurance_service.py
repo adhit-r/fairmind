@@ -9,7 +9,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import String, cast, insert, select, update
+from sqlalchemy import insert, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -86,8 +86,8 @@ def _uuid(value: str) -> uuid.UUID | None:
 
 
 def member_user_matches(column, user_uuid: uuid.UUID):
-    """Match a member's user id whether it is stored as a UUID or as text, dashed or plain hex."""
-    return cast(column, String).in_([str(user_uuid), user_uuid.hex])
+    """Match a varchar user id stored either dashed or as plain hex."""
+    return column.in_([str(user_uuid), user_uuid.hex])
 
 
 def _canonical_json(value: object) -> str:

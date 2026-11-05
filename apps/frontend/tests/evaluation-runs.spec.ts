@@ -91,7 +91,6 @@ type MockOptions = {
   listDelayMs?: number
   listError?: boolean
   createRunError?: boolean
-  portraitFailure?: boolean
   secondaryScope?: {
     systemId: string
     plans: Array<Record<string, unknown>>
@@ -116,9 +115,6 @@ async function mockEvaluationWorkbench(page: Page, options: MockOptions = {}) {
     window.localStorage.setItem('fairmind:selected-ai-system', 'system-1')
   })
 
-  if (options.portraitFailure !== false) {
-    await page.route(/https:\/\/ui\.shadcn\.com\/avatars\/02\.png(?:\?.*)?$/, (route) => route.abort('failed'))
-  }
   await page.route('**/api/proxy/**', async (route) => {
     const request = route.request()
     const url = new URL(request.url())
@@ -282,56 +278,39 @@ async function mockEvaluationWorkbench(page: Page, options: MockOptions = {}) {
   }
 }
 
-test('keeps Evaluation Runs inside the original shell with framed, labelled identity and controls', async ({ page }) => {
+test('keeps Evaluation Runs inside the app shell with labelled identity and controls', async ({ page }) => {
   await mockEvaluationWorkbench(page)
   await page.goto('/tests')
 
-  await expect(page.getByRole('banner')).toBeVisible()
+  await expect(page.getByRole('navigation', { name: 'Lifecycle' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Evaluation Runs', level: 1 })).toBeVisible()
   await expect(page.getByText('Acme Assurance', { exact: true })).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'Decisioning Agent', exact: true })).toBeVisible()
-  await expect(page.getByRole('link', { name: 'Evaluation Runs' })).toBeVisible()
+  await expect(page.getByText('Decisioning Agent', { exact: true })).toBeVisible()
+  await expect(page.getByText('reviewer', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible()
 
-  const navigationToggle = page.getByRole('button', { name: 'Toggle navigation' })
-  const toggleBox = await navigationToggle.boundingBox()
-  expect(toggleBox?.width).toBeGreaterThanOrEqual(44)
-  expect(toggleBox?.height).toBeGreaterThanOrEqual(44)
-  await navigationToggle.focus()
-  await expect(navigationToggle).toBeFocused()
-  expect(await navigationToggle.evaluate((element) => getComputedStyle(element).outlineStyle)).not.toBe('none')
+  const systemFile = page.getByRole('link', { name: 'System file' })
+  await expect(systemFile).toHaveAttribute('href', '/systems/system-1')
+  await systemFile.focus()
+  await expect(systemFile).toBeFocused()
+  expect(await systemFile.evaluate((element) => getComputedStyle(element).outlineStyle)).not.toBe('none')
 
-  const search = page.getByRole('searchbox')
-  await search.focus()
-  await expect(search).toBeFocused()
-  expect(await search.evaluate((element) => element.matches(':focus-visible'))).toBe(true)
-  await expect(search).toHaveCSS('outline-color', 'rgb(15, 20, 18)')
-  await expect(search).toHaveCSS('outline-style', 'solid')
-  await expect(search).toHaveCSS('outline-width', '2px')
-
-  await expect(page.getByLabel('User Name profile image unavailable; showing initials UN').first()).toBeVisible()
-  await expect(page.locator('[data-framed-icon="true"]').first()).toBeVisible()
   await expect(page.getByText('Test History', { exact: true })).toHaveCount(0)
   await expect(page.getByText('Total Tests', { exact: true })).toHaveCount(0)
   await expect(page.getByText('Passed', { exact: true })).toHaveCount(0)
 
   await page.screenshot({ path: '/tmp/fairmind-evaluation-runs-fallback.png', fullPage: true })
-
-  await navigationToggle.click()
-  await page.waitForTimeout(250)
-  const collapsedRunLink = page.getByRole('link', { name: 'Evaluation Runs' })
-  const collapsedLinkBox = await collapsedRunLink.boundingBox()
-  expect(collapsedLinkBox?.width).toBeGreaterThanOrEqual(44)
-  expect(collapsedLinkBox?.height).toBeGreaterThanOrEqual(44)
-  await expect(page.getByRole('button', { name: 'User Name profile' })).toBeVisible()
 })
 
-test('keeps the identity visible and the workbench usable in the mobile shell', async ({ page }) => {
+test('keeps the system context visible and the workbench usable in the mobile shell', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
-  await mockEvaluationWorkbench(page, { plans: [basePlan], runs: [awaitingRun], portraitFailure: false })
+  await mockEvaluationWorkbench(page, { plans: [basePlan], runs: [awaitingRun] })
   await page.goto('/tests')
 
   await expect(page.getByRole('heading', { name: 'Evaluation Runs', level: 1 })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Open user menu for User Name' })).toBeVisible()
+  await expect(page.getByText('Decisioning Agent', { exact: true })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'System file' })).toBeVisible()
+  await expect(page.getByRole('navigation', { name: 'Lifecycle' })).toBeVisible()
   const layout = await page.evaluate(() => ({
     innerWidth: window.innerWidth,
     documentScrollWidth: document.documentElement.scrollWidth,
@@ -339,10 +318,6 @@ test('keeps the identity visible and the workbench usable in the mobile shell', 
   expect(layout.documentScrollWidth).toBeLessThanOrEqual(layout.innerWidth)
   await page.evaluate(() => window.scrollTo(0, 0))
   await page.screenshot({ path: '/tmp/fairmind-evaluation-runs-mobile.png', fullPage: true })
-
-  await page.getByRole('button', { name: 'Toggle navigation' }).click()
-  await expect(page.getByRole('link', { name: 'Evaluation Runs' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'User Name profile' })).toBeVisible()
 })
 
 test('treats the synthetic fallback system as missing and makes no evaluation request', async ({ page }) => {
@@ -383,8 +358,7 @@ test('masks old-system plans and actions before delayed new-system evaluation li
   await expect(page.getByLabel('Selected plan')).toContainText(basePlan.name)
   await expect(page.getByRole('button', { name: 'Prepare evidence run' })).toBeVisible()
 
-  await page.getByRole('combobox', { name: 'System scope' }).click()
-  await page.getByRole('option', { name: secondSystem.name }).click()
+  await page.getByLabel('Switch system').selectOption({ label: secondSystem.name })
 
   await expect(page.getByText(basePlan.name, { exact: true })).toHaveCount(0, { timeout: 400 })
   await expect(page.getByRole('button', { name: 'Prepare evidence run' })).toHaveCount(0, { timeout: 400 })
@@ -466,7 +440,6 @@ test('prepares external evidence runs without conflating technical status and go
   await mockEvaluationWorkbench(page, {
     plans: [basePlan],
     runs: [reviewedRun, awaitingRun],
-    portraitFailure: false,
   })
   await page.goto('/tests')
 

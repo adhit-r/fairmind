@@ -1,23 +1,27 @@
-"""Tests for agentic pack routes, on an in-memory database with real organizations and members."""
+"""Tests for agentic pack routes, on a fresh PostgreSQL database with real organizations and members."""
 
 import copy
 import json
+import os
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, text
+from sqlalchemy import Boolean, create_engine, text
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 import api.routes.ai_governance as ai_governance
 from api.main import app
 from api.routes import pack_catalogue
 from config.auth import User as AuthUser, UserRole, auth_manager
 from database.connection import Base, get_db
+from database.governance_models import GovernanceApprovalWorkflow
 from database.models import Organization, OrganizationMember, User
 from middleware.security import RateLimitMiddleware
+from tests import pg
 
 PACKS = "/api/v1/packs"
 FOUNDATION = "PK-FOUNDATION"
@@ -39,11 +43,9 @@ def no_rate_limit():
     RateLimitMiddleware.check_rate_limit = original
 
 
-@pytest.fixture(autouse=True)
-def tmp_database():
-    import database.governance_models  # noqa: F401
-
-    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+@contextmanager
+def _serving(engine):
+    """Build every table from the models on engine and point the app at it."""
     Base.metadata.create_all(engine)
     session_factory = sessionmaker(bind=engine)
 
@@ -61,15 +63,39 @@ def tmp_database():
     yield engine
     app.dependency_overrides.clear()
     ai_governance._tables_ready = saved_ready
-    Base.metadata.drop_all(engine)
     engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def tmp_database():
+    with _serving(pg.fresh_engine()) as engine:
+        yield engine
+
+
+@pytest.fixture
+def pg_database():
+    """A fresh schema on FAIRMIND_TEST_POSTGRES_URL, built from the models alone as a new install does."""
+    database_url = os.getenv("FAIRMIND_TEST_POSTGRES_URL")
+    if not database_url:
+        pytest.skip("requires FAIRMIND_TEST_POSTGRES_URL pointing to disposable PostgreSQL")
+    schema = f"fairmind_packs_{uuid.uuid4().hex}"
+    admin = create_engine(database_url, isolation_level="AUTOCOMMIT")
+    with admin.connect() as conn:
+        conn.execute(text(f'CREATE SCHEMA "{schema}"'))
+    try:
+        with _serving(create_engine(database_url, connect_args={"options": f"-csearch_path={schema}"})) as engine:
+            yield engine
+    finally:
+        with admin.connect() as conn:
+            conn.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
+        admin.dispose()
 
 
 def _client(engine, org_id: uuid.UUID, role: str = "owner", token_role: UserRole = UserRole.ADMIN) -> TestClient:
     """A member of org_id with the given org role, signed in with a real access token."""
     user_id = uuid.uuid4()
     with engine.begin() as conn:
-        conn.execute(User.__table__.insert().values(id=user_id, email=f"{user_id}@packs.test", username=str(user_id)))
+        conn.execute(User.__table__.insert().values(password_hash="", id=user_id, email=f"{user_id}@packs.test", username=str(user_id)))
         conn.execute(
             OrganizationMember.__table__.insert().values(
                 id=uuid.uuid4(), org_id=org_id, user_id=user_id, role=role, status="active"
@@ -93,7 +119,7 @@ def _client(engine, org_id: uuid.UUID, role: str = "owner", token_role: UserRole
 def _new_org(engine) -> uuid.UUID:
     org_id, owner_id = uuid.uuid4(), uuid.uuid4()
     with engine.begin() as conn:
-        conn.execute(User.__table__.insert().values(id=owner_id, email=f"{owner_id}@packs.test", username=str(owner_id)))
+        conn.execute(User.__table__.insert().values(password_hash="", id=owner_id, email=f"{owner_id}@packs.test", username=str(owner_id)))
         conn.execute(
             Organization.__table__.insert().values(id=org_id, name="Packs test org", slug=f"packs-{org_id}", owner_id=owner_id)
         )
@@ -263,6 +289,20 @@ def test_run_starts_and_waits_on_the_first_step_that_needs_a_person(tmp_database
     assert run["chainValid"] and run["events"][0]["prevHash"] == "0" * 64
     assert client.get(f"{PACKS}/workflows/{WORKFLOW}").json()["latestRun"]["id"] == run["id"]
     assert [r["id"] for r in client.get(f"{PACKS}/runs?status=waiting").json()] == [run["id"]]
+
+
+def test_approval_workflow_is_active_matches_the_postgresql_boolean_contract():
+    column = GovernanceApprovalWorkflow.__table__.c.is_active
+    assert isinstance(column.type, Boolean) and column.default.arg is True
+    migration = (Path(__file__).parents[1] / "migrations/008_governance_canonical.sql").read_text()
+    assert "is_active BOOLEAN NOT NULL DEFAULT TRUE" in migration
+
+
+def test_a_model_built_postgres_database_opens_the_approval_gate(pg_database):
+    _, client = _installed_org(pg_database)
+    run = _to_gate(client)
+    assert (run["currentStep"], run["waitingFor"]) == (ASK_STEP, "approval")
+    assert _approval_count(pg_database, run["id"]) == 1
 
 
 def test_approved_run_acts_files_evidence_and_completes(tmp_database):
@@ -617,7 +657,8 @@ def test_india_bias_needs_an_india_attribute_and_drift_needs_a_baseline(tmp_data
     _store(tmp_database, org_id, system, "monitoring", monitoring, "2026-11-01T12:00:00")
     drift = client.get(f"{PACKS}/evaluations/EV-FAI-07").json()["results"]
     assert drift["status"] == "insufficient" and drift["systems"][0]["detail"] == "No baseline run to compare against"
-    assert client.get(f"{PACKS}/evaluations/EV-TST-01").json()["results"] is None  # no stored results to read yet
+    assert client.get(f"{PACKS}/evaluations/EV-SEC-20").json()["results"] is None  # no engine and no stored results to read
+    assert client.get(f"{PACKS}/evaluations/EV-TST-01").json()["results"]["status"] == "not_run"  # has an engine, not run yet
 
 
 def test_deciding_on_your_own_proposal_is_recorded_not_blocked(tmp_database):

@@ -402,9 +402,9 @@ def _require_system_access(
     service = GovernanceAssuranceService(db)
     membership = service.membership(str(row[0]), current_user.user_id)
     if not membership and settings.is_development and current_user.org_id and str(current_user.org_id) == str(row[0]):
-        # Local development keeps governance in SQLite while memberships live in
-        # the users database, so the lookup above finds nothing. The token's org
-        # claim was issued from that same membership table; trust it here only.
+        # Local development only: accounts signed in without an org_members row
+        # (the e2e admin, see config.auth) carry the org in their token. Trust
+        # that claim here and in _membership, never outside development.
         membership = OrgMembership(str(row[0]), current_user.user_id, current_user.role.value, tuple(current_user.permissions))
     if not membership:
         raise HTTPException(status_code=404, detail="AI system not found")
@@ -467,36 +467,11 @@ _LATE_COLUMNS = (
 
 
 def _ensure_model_link_column(db: Session) -> None:
-    """Add late columns to databases created before them.
-
-    SQLite (local development and tests): every column the governance models
-    declare but the file lacks is added, so a dev database survives model
-    changes without being recreated. Postgres: only _LATE_COLUMNS, the rest is
-    for migrations.
-    """
-    dialect = db.bind.dialect.name if db.bind is not None else "sqlite"
+    """Add late columns to databases created before them; the rest is for migrations."""
     try:
-        if dialect == "sqlite":
-            import database.governance_models as governance_models  # noqa: F401
-            from database.connection import Base
-
-            for table in Base.metadata.sorted_tables:
-                if not table.name.startswith("governance_"):
-                    continue
-                existing = {row[1] for row in db.execute(text(f"PRAGMA table_info({table.name})")).fetchall()}
-                if not existing:
-                    continue  # create_all handles tables that do not exist yet
-                for column in table.columns:
-                    if column.name in existing:
-                        continue
-                    col_type = column.type.compile(dialect=db.bind.dialect)
-                    db.execute(text(f"ALTER TABLE {table.name} ADD COLUMN {column.name} {col_type}"))
-                    if column.index:
-                        db.execute(text(f"CREATE INDEX IF NOT EXISTS idx_{table.name}_{column.name} ON {table.name} ({column.name})"))
-        else:
-            for table, column in _LATE_COLUMNS:
-                db.execute(text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} VARCHAR(255)"))
-                db.execute(text(f"CREATE INDEX IF NOT EXISTS idx_{table}_{column} ON {table} ({column})"))
+        for table, column in _LATE_COLUMNS:
+            db.execute(text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} VARCHAR(255)"))
+            db.execute(text(f"CREATE INDEX IF NOT EXISTS idx_{table}_{column} ON {table} ({column})"))
         db.commit()
     except Exception:  # pragma: no cover - never block startup on a patch attempt
         db.rollback()

@@ -11,6 +11,7 @@ try:
     validator = field_validator  # Alias for compatibility
 except ImportError:
     from pydantic import BaseSettings, validator
+from pydantic import Field
 from functools import lru_cache
 
 
@@ -49,7 +50,8 @@ class Settings(BaseSettings):
     allow_credentials: bool = True
     
     # Database
-    database_url: str = "sqlite:///./fairmind.db"
+    # PostgreSQL only, e.g. postgresql://user:pass@host/db
+    database_url: str = Field(default="", validate_default=True)
     database_echo: bool = False
     database_pool_size: int = 20
     # Seconds to wait for a pooled connection at startup. Serverless Postgres
@@ -190,6 +192,14 @@ class Settings(BaseSettings):
             return [origin.strip() for origin in self.allowed_origins.split(",")]
         return self.allowed_origins
     
+    @validator("database_url")
+    def validate_database_url(cls, v):
+        if not v.startswith("postgresql"):
+            raise ValueError(
+                "DATABASE_URL must be a PostgreSQL URL; see apps/backend/config/env.example"
+            )
+        return v
+
     @validator("environment")
     def validate_environment(cls, v):
         if v not in ["development", "staging", "production"]:

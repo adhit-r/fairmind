@@ -27,10 +27,6 @@ class ConfigValidator:
         if settings.debug:
             issues.append("Debug mode is enabled in production")
             
-        # Check database
-        if settings.database_url.startswith("sqlite"):
-            issues.append("SQLite is used in production (PostgreSQL recommended)")
-            
         # Check CORS
         allowed_origins = settings.get_allowed_origins()
         if "*" in allowed_origins:
