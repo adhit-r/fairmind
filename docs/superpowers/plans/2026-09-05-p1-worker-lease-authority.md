@@ -125,9 +125,9 @@ returns the locked attempt/suite/worker authority, or raises `lease_lost`.
    contract tuple. Existing type/depth/phase fields cannot establish evaluator
    compatibility. Missing adapter authority fails closed; do not infer an
    adapter from delivery-mode `worker_type`.
-2. Migration 015 and the catalog-admin registration binding: tenant FK,
+2. Migration 013n and the catalog-admin registration binding: tenant FK,
    one-time approved registration binding before attempts, active issuer/key,
-   operator upgrade, frozen hashes/catalog, SQLite parity/denial. Pre-015
+   operator upgrade, frozen hashes/catalog, SQLite parity/denial. Pre-013n
    attempted identities retain immutable history and cannot be silently bound;
    operator preflight must report incompatible live rows. Do not rewrite
    historical attempt failure messages.

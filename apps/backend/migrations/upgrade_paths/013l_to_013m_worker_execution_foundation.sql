@@ -1,5 +1,5 @@
 -- PostgreSQL operator upgrade from delegated separation-override integrity 013l
--- to the worker execution foundation 014.
+-- to the worker execution foundation 013m.
 
 BEGIN;
 
@@ -26,7 +26,7 @@ END;
 $fairmind_operator_schema$ LANGUAGE plpgsql;
 
 SELECT pg_catalog.pg_advisory_xact_lock(
-    pg_catalog.hashtext('fairmind:013l-to-014-worker-execution-foundation')
+    pg_catalog.hashtext('fairmind:013l-to-013m-worker-execution-foundation')
 );
 
 CREATE TABLE IF NOT EXISTS fairmind_operator_migration_ledger (
@@ -38,11 +38,11 @@ CREATE TABLE IF NOT EXISTS fairmind_operator_migration_ledger (
 DO $fairmind_operator_prerequisite$
 DECLARE
     recorded_013l TEXT;
-    recorded_014 TEXT;
+    recorded_013m TEXT;
     expected_013l CONSTANT TEXT :=
         '2dd029773f4dbe7b79cbc8db69ebe2bcdf444d82d8c9316a7f23b900ceabc4f9';
-    expected_014 CONSTANT TEXT :=
-        'c2c1260f5c60e9494e6d2ca558840dfe362a6dec6e60320fe92e6d7b8f8a83e3';
+    expected_013m CONSTANT TEXT :=
+        'ddd4818d6e8390a7be2c69540e13951098f9853d7794985005645a6bc9695312';
 BEGIN
     SELECT migration_checksum INTO recorded_013l
     FROM fairmind_operator_migration_ledger
@@ -51,11 +51,11 @@ BEGIN
     IF recorded_013l IS DISTINCT FROM expected_013l THEN
         RAISE EXCEPTION 'prerequisite checksum drift for migration 013l';
     END IF;
-    SELECT migration_checksum INTO recorded_014
+    SELECT migration_checksum INTO recorded_013m
     FROM fairmind_operator_migration_ledger
-    WHERE migration_key = '013l-to-014-worker-execution-foundation-v1';
-    IF recorded_014 IS NOT NULL AND recorded_014 <> expected_014 THEN
-        RAISE EXCEPTION 'checksum drift for migration 014';
+    WHERE migration_key = '013l-to-013m-worker-execution-foundation-v1';
+    IF recorded_013m IS NOT NULL AND recorded_013m <> expected_013m THEN
+        RAISE EXCEPTION 'checksum drift for migration 013m';
     END IF;
 END;
 $fairmind_operator_prerequisite$ LANGUAGE plpgsql;
@@ -63,12 +63,12 @@ $fairmind_operator_prerequisite$ LANGUAGE plpgsql;
 SELECT EXISTS (
     SELECT 1
     FROM fairmind_operator_migration_ledger
-    WHERE migration_key = '013l-to-014-worker-execution-foundation-v1'
-) AS fairmind_014_already_applied \gset
+    WHERE migration_key = '013l-to-013m-worker-execution-foundation-v1'
+) AS fairmind_013m_already_applied \gset
 
-\if :fairmind_014_already_applied
+\if :fairmind_013m_already_applied
 \else
-\ir ../014_worker_execution_foundation.sql
+\ir ../013m_worker_execution_foundation.sql
 \endif
 
 DO $fairmind_operator_postcondition$
@@ -82,23 +82,23 @@ DECLARE
         'governance_evaluation_cancellations'
     ];
     required_functions CONSTANT TEXT[] := ARRAY[
-        'guard_governance_evaluation_suite_queue_metadata_014',
-        'guard_governance_evaluation_worker_identity_014',
-        'guard_governance_evaluation_suite_attempt_014',
-        'guard_governance_evaluation_artifact_014'
+        'guard_governance_evaluation_suite_queue_metadata_013m',
+        'guard_governance_evaluation_worker_identity_013m',
+        'guard_governance_evaluation_suite_attempt_013m',
+        'guard_governance_evaluation_artifact_013m'
     ];
     required_triggers CONSTANT TEXT[] := ARRAY[
-        '000_014_governance_evaluation_suite_queue_metadata_guard',
-        'governance_evaluation_worker_identities_guard_update_014',
-        'governance_evaluation_worker_identities_no_delete_014',
-        'governance_evaluation_suite_attempts_guard_update_014',
-        'governance_evaluation_suite_attempts_no_delete_014',
-        'governance_evaluation_artifacts_guard_update_014',
-        'governance_evaluation_artifacts_no_delete_014',
-        'governance_evaluation_attempt_artifacts_no_update_014',
-        'governance_evaluation_attempt_artifacts_no_delete_014',
-        'governance_evaluation_cancellations_no_update_014',
-        'governance_evaluation_cancellations_no_delete_014'
+        '000_013m_governance_evaluation_suite_queue_metadata_guard',
+        'governance_evaluation_worker_identities_guard_update_013m',
+        'governance_evaluation_worker_identities_no_delete_013m',
+        'governance_evaluation_suite_attempts_guard_update_013m',
+        'governance_evaluation_suite_attempts_no_delete_013m',
+        'governance_evaluation_artifacts_guard_update_013m',
+        'governance_evaluation_artifacts_no_delete_013m',
+        'governance_evaluation_attempt_artifacts_no_update_013m',
+        'governance_evaluation_attempt_artifacts_no_delete_013m',
+        'governance_evaluation_cancellations_no_update_013m',
+        'governance_evaluation_cancellations_no_delete_013m'
     ];
 BEGIN
     IF (
@@ -144,15 +144,15 @@ BEGIN
           AND trigger_entry.tgname = ANY(required_triggers)
           AND trigger_entry.tgenabled = 'A'
     ) <> pg_catalog.array_length(required_triggers, 1) THEN
-        RAISE EXCEPTION '014 worker execution foundation postcondition failed';
+        RAISE EXCEPTION '013m worker execution foundation postcondition failed';
     END IF;
 END;
 $fairmind_operator_postcondition$ LANGUAGE plpgsql;
 
 INSERT INTO fairmind_operator_migration_ledger(migration_key, migration_checksum)
 VALUES (
-    '013l-to-014-worker-execution-foundation-v1',
-    'c2c1260f5c60e9494e6d2ca558840dfe362a6dec6e60320fe92e6d7b8f8a83e3'
+    '013l-to-013m-worker-execution-foundation-v1',
+    'ddd4818d6e8390a7be2c69540e13951098f9853d7794985005645a6bc9695312'
 )
 ON CONFLICT (migration_key) DO NOTHING;
 

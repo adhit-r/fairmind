@@ -46,7 +46,7 @@ def worker_queue_session_factory(postgres_013k_session_factory):
         assert isinstance(schema, str) and schema
         for migration_name in (
             "013l_delegated_separation_override_grant_integrity.sql",
-            "014_worker_execution_foundation.sql",
+            "013m_worker_execution_foundation.sql",
         ):
             session.execute(
                 text(

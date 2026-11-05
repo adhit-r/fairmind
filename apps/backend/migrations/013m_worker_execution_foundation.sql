@@ -1,7 +1,7 @@
--- FairMind worker execution foundation 014.
+-- FairMind worker execution foundation 013m.
 -- PostgreSQL 14 is the release authority. This migration is forward-only.
 
-DO $fairmind_014_schema_bootstrap$
+DO $fairmind_013m_schema_bootstrap$
 DECLARE
     trusted_schema TEXT := NULLIF(
         pg_catalog.current_setting('fairmind.migration_schema', true), ''
@@ -14,7 +14,7 @@ BEGIN
            SELECT 1 FROM pg_catalog.pg_namespace WHERE nspname = trusted_schema
        ) THEN
         RAISE EXCEPTION
-            'migration 014 requires an explicit trusted fairmind.migration_schema';
+            'migration 013m requires an explicit trusted fairmind.migration_schema';
     END IF;
     PERFORM pg_catalog.set_config(
         'search_path',
@@ -22,7 +22,7 @@ BEGIN
         true
     );
 END;
-$fairmind_014_schema_bootstrap$ LANGUAGE plpgsql;
+$fairmind_013m_schema_bootstrap$ LANGUAGE plpgsql;
 
 ALTER TABLE governance_evaluation_run_suite_executions
     ADD COLUMN available_at TEXT;
@@ -35,16 +35,16 @@ ALTER TABLE governance_evaluation_run_suite_executions
 ALTER TABLE governance_evaluation_run_suite_executions
     ADD COLUMN attempt_count INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE governance_evaluation_run_suite_executions
-    ADD CONSTRAINT ck_governance_evaluation_suite_execution_max_attempts_014
+    ADD CONSTRAINT ck_governance_evaluation_suite_execution_max_attempts_013m
     CHECK (max_attempts BETWEEN 1 AND 3);
 ALTER TABLE governance_evaluation_run_suite_executions
-    ADD CONSTRAINT ck_governance_evaluation_suite_execution_attempt_count_014
+    ADD CONSTRAINT ck_governance_evaluation_suite_execution_attempt_count_013m
     CHECK (attempt_count BETWEEN 0 AND max_attempts);
 ALTER TABLE governance_evaluation_run_suite_executions
-    ADD CONSTRAINT ck_governance_evaluation_suite_execution_available_at_014
+    ADD CONSTRAINT ck_governance_evaluation_suite_execution_available_at_013m
     CHECK (fairmind_is_canonical_utc_timestamp(available_at));
 
-CREATE INDEX idx_governance_evaluation_suite_execution_queue_014
+CREATE INDEX idx_governance_evaluation_suite_execution_queue_013m
     ON governance_evaluation_run_suite_executions (
         org_id, technical_status, available_at, created_at, id
     )
@@ -202,10 +202,10 @@ CREATE TABLE governance_evaluation_suite_attempts (
     )
 );
 
-CREATE UNIQUE INDEX uq_governance_evaluation_suite_active_attempt_014
+CREATE UNIQUE INDEX uq_governance_evaluation_suite_active_attempt_013m
     ON governance_evaluation_suite_attempts (suite_execution_id)
     WHERE technical_status IN ('leased', 'running');
-CREATE INDEX idx_governance_evaluation_suite_attempt_lease_expiry_014
+CREATE INDEX idx_governance_evaluation_suite_attempt_lease_expiry_013m
     ON governance_evaluation_suite_attempts (
         technical_status, lease_expires_at, suite_execution_id
     )
@@ -323,16 +323,16 @@ CREATE TABLE governance_evaluation_cancellations (
     )
 );
 
-CREATE UNIQUE INDEX uq_governance_evaluation_run_cancellation_014
+CREATE UNIQUE INDEX uq_governance_evaluation_run_cancellation_013m
     ON governance_evaluation_cancellations (run_id)
     WHERE suite_execution_id IS NULL;
-CREATE UNIQUE INDEX uq_governance_evaluation_suite_cancellation_014
+CREATE UNIQUE INDEX uq_governance_evaluation_suite_cancellation_013m
     ON governance_evaluation_cancellations (suite_execution_id)
     WHERE suite_execution_id IS NOT NULL;
-CREATE INDEX idx_governance_evaluation_cancellation_scope_014
+CREATE INDEX idx_governance_evaluation_cancellation_scope_013m
     ON governance_evaluation_cancellations (org_id, system_id, run_id);
 
-CREATE OR REPLACE FUNCTION guard_governance_evaluation_suite_queue_metadata_014()
+CREATE OR REPLACE FUNCTION guard_governance_evaluation_suite_queue_metadata_013m()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY INVOKER
@@ -363,15 +363,15 @@ BEGIN
 END;
 $function$;
 
-CREATE TRIGGER "000_014_governance_evaluation_suite_queue_metadata_guard"
+CREATE TRIGGER "000_013m_governance_evaluation_suite_queue_metadata_guard"
     BEFORE UPDATE ON governance_evaluation_run_suite_executions
     FOR EACH ROW EXECUTE FUNCTION
-        guard_governance_evaluation_suite_queue_metadata_014();
+        guard_governance_evaluation_suite_queue_metadata_013m();
 ALTER TABLE governance_evaluation_run_suite_executions
     ENABLE ALWAYS TRIGGER
-        "000_014_governance_evaluation_suite_queue_metadata_guard";
+        "000_013m_governance_evaluation_suite_queue_metadata_guard";
 
-CREATE OR REPLACE FUNCTION guard_governance_evaluation_worker_identity_014()
+CREATE OR REPLACE FUNCTION guard_governance_evaluation_worker_identity_013m()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY INVOKER
@@ -409,19 +409,19 @@ BEGIN
 END;
 $function$;
 
-CREATE TRIGGER governance_evaluation_worker_identities_guard_update_014
+CREATE TRIGGER governance_evaluation_worker_identities_guard_update_013m
     BEFORE UPDATE ON governance_evaluation_worker_identities
     FOR EACH ROW EXECUTE FUNCTION
-        guard_governance_evaluation_worker_identity_014();
-CREATE TRIGGER governance_evaluation_worker_identities_no_delete_014
+        guard_governance_evaluation_worker_identity_013m();
+CREATE TRIGGER governance_evaluation_worker_identities_no_delete_013m
     BEFORE DELETE ON governance_evaluation_worker_identities
     FOR EACH ROW EXECUTE FUNCTION reject_governance_evaluation_013b_mutation();
 ALTER TABLE governance_evaluation_worker_identities
-    ENABLE ALWAYS TRIGGER governance_evaluation_worker_identities_guard_update_014;
+    ENABLE ALWAYS TRIGGER governance_evaluation_worker_identities_guard_update_013m;
 ALTER TABLE governance_evaluation_worker_identities
-    ENABLE ALWAYS TRIGGER governance_evaluation_worker_identities_no_delete_014;
+    ENABLE ALWAYS TRIGGER governance_evaluation_worker_identities_no_delete_013m;
 
-CREATE OR REPLACE FUNCTION guard_governance_evaluation_suite_attempt_014()
+CREATE OR REPLACE FUNCTION guard_governance_evaluation_suite_attempt_013m()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY INVOKER
@@ -485,18 +485,18 @@ BEGIN
 END;
 $function$;
 
-CREATE TRIGGER governance_evaluation_suite_attempts_guard_update_014
+CREATE TRIGGER governance_evaluation_suite_attempts_guard_update_013m
     BEFORE UPDATE ON governance_evaluation_suite_attempts
-    FOR EACH ROW EXECUTE FUNCTION guard_governance_evaluation_suite_attempt_014();
-CREATE TRIGGER governance_evaluation_suite_attempts_no_delete_014
+    FOR EACH ROW EXECUTE FUNCTION guard_governance_evaluation_suite_attempt_013m();
+CREATE TRIGGER governance_evaluation_suite_attempts_no_delete_013m
     BEFORE DELETE ON governance_evaluation_suite_attempts
     FOR EACH ROW EXECUTE FUNCTION reject_governance_evaluation_013b_mutation();
 ALTER TABLE governance_evaluation_suite_attempts
-    ENABLE ALWAYS TRIGGER governance_evaluation_suite_attempts_guard_update_014;
+    ENABLE ALWAYS TRIGGER governance_evaluation_suite_attempts_guard_update_013m;
 ALTER TABLE governance_evaluation_suite_attempts
-    ENABLE ALWAYS TRIGGER governance_evaluation_suite_attempts_no_delete_014;
+    ENABLE ALWAYS TRIGGER governance_evaluation_suite_attempts_no_delete_013m;
 
-CREATE OR REPLACE FUNCTION guard_governance_evaluation_artifact_014()
+CREATE OR REPLACE FUNCTION guard_governance_evaluation_artifact_013m()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY INVOKER
@@ -528,49 +528,49 @@ BEGIN
 END;
 $function$;
 
-CREATE TRIGGER governance_evaluation_artifacts_guard_update_014
+CREATE TRIGGER governance_evaluation_artifacts_guard_update_013m
     BEFORE UPDATE ON governance_evaluation_artifacts
-    FOR EACH ROW EXECUTE FUNCTION guard_governance_evaluation_artifact_014();
-CREATE TRIGGER governance_evaluation_artifacts_no_delete_014
+    FOR EACH ROW EXECUTE FUNCTION guard_governance_evaluation_artifact_013m();
+CREATE TRIGGER governance_evaluation_artifacts_no_delete_013m
     BEFORE DELETE ON governance_evaluation_artifacts
     FOR EACH ROW EXECUTE FUNCTION reject_governance_evaluation_013b_mutation();
 ALTER TABLE governance_evaluation_artifacts
-    ENABLE ALWAYS TRIGGER governance_evaluation_artifacts_guard_update_014;
+    ENABLE ALWAYS TRIGGER governance_evaluation_artifacts_guard_update_013m;
 ALTER TABLE governance_evaluation_artifacts
-    ENABLE ALWAYS TRIGGER governance_evaluation_artifacts_no_delete_014;
+    ENABLE ALWAYS TRIGGER governance_evaluation_artifacts_no_delete_013m;
 
-CREATE TRIGGER governance_evaluation_attempt_artifacts_no_update_014
+CREATE TRIGGER governance_evaluation_attempt_artifacts_no_update_013m
     BEFORE UPDATE ON governance_evaluation_attempt_artifacts
     FOR EACH ROW EXECUTE FUNCTION reject_governance_evaluation_013b_mutation();
-CREATE TRIGGER governance_evaluation_attempt_artifacts_no_delete_014
+CREATE TRIGGER governance_evaluation_attempt_artifacts_no_delete_013m
     BEFORE DELETE ON governance_evaluation_attempt_artifacts
     FOR EACH ROW EXECUTE FUNCTION reject_governance_evaluation_013b_mutation();
 ALTER TABLE governance_evaluation_attempt_artifacts
-    ENABLE ALWAYS TRIGGER governance_evaluation_attempt_artifacts_no_update_014;
+    ENABLE ALWAYS TRIGGER governance_evaluation_attempt_artifacts_no_update_013m;
 ALTER TABLE governance_evaluation_attempt_artifacts
-    ENABLE ALWAYS TRIGGER governance_evaluation_attempt_artifacts_no_delete_014;
+    ENABLE ALWAYS TRIGGER governance_evaluation_attempt_artifacts_no_delete_013m;
 
-CREATE TRIGGER governance_evaluation_cancellations_no_update_014
+CREATE TRIGGER governance_evaluation_cancellations_no_update_013m
     BEFORE UPDATE ON governance_evaluation_cancellations
     FOR EACH ROW EXECUTE FUNCTION reject_governance_evaluation_013b_mutation();
-CREATE TRIGGER governance_evaluation_cancellations_no_delete_014
+CREATE TRIGGER governance_evaluation_cancellations_no_delete_013m
     BEFORE DELETE ON governance_evaluation_cancellations
     FOR EACH ROW EXECUTE FUNCTION reject_governance_evaluation_013b_mutation();
 ALTER TABLE governance_evaluation_cancellations
-    ENABLE ALWAYS TRIGGER governance_evaluation_cancellations_no_update_014;
+    ENABLE ALWAYS TRIGGER governance_evaluation_cancellations_no_update_013m;
 ALTER TABLE governance_evaluation_cancellations
-    ENABLE ALWAYS TRIGGER governance_evaluation_cancellations_no_delete_014;
+    ENABLE ALWAYS TRIGGER governance_evaluation_cancellations_no_delete_013m;
 
-DO $fairmind_014_harden_function_search_paths$
+DO $fairmind_013m_harden_function_search_paths$
 DECLARE
     trusted_schema TEXT := pg_catalog.current_setting('fairmind.migration_schema');
     routine_signature TEXT;
 BEGIN
     FOREACH routine_signature IN ARRAY ARRAY[
-        'guard_governance_evaluation_suite_queue_metadata_014()',
-        'guard_governance_evaluation_worker_identity_014()',
-        'guard_governance_evaluation_suite_attempt_014()',
-        'guard_governance_evaluation_artifact_014()'
+        'guard_governance_evaluation_suite_queue_metadata_013m()',
+        'guard_governance_evaluation_worker_identity_013m()',
+        'guard_governance_evaluation_suite_attempt_013m()',
+        'guard_governance_evaluation_artifact_013m()'
     ] LOOP
         EXECUTE pg_catalog.format(
             'ALTER FUNCTION %I.%s SET search_path TO pg_catalog, %I, pg_temp',
@@ -585,7 +585,7 @@ BEGIN
         );
     END LOOP;
 END;
-$fairmind_014_harden_function_search_paths$ LANGUAGE plpgsql;
+$fairmind_013m_harden_function_search_paths$ LANGUAGE plpgsql;
 
 REVOKE ALL ON TABLE governance_evaluation_worker_identities FROM PUBLIC;
 REVOKE ALL ON TABLE governance_evaluation_suite_attempts FROM PUBLIC;

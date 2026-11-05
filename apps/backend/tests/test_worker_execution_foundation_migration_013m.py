@@ -1,4 +1,4 @@
-"""Release contract for the forward-only worker execution foundation 014."""
+"""Release contract for the forward-only worker execution foundation 013m."""
 
 from __future__ import annotations
 
@@ -28,36 +28,36 @@ def test_postgresql_payload_binds_worker_records_without_storing_bearer_tokens()
     assert "lease_token_hash TEXT NOT NULL" in source
     assert "lease_token TEXT" not in source
     assert "content BYTEA" not in source
-    assert "uq_governance_evaluation_suite_active_attempt_014" in source
-    assert "uq_governance_evaluation_run_cancellation_014" in source
-    assert "uq_governance_evaluation_suite_cancellation_014" in source
+    assert "uq_governance_evaluation_suite_active_attempt_013m" in source
+    assert "uq_governance_evaluation_run_cancellation_013m" in source
+    assert "uq_governance_evaluation_suite_cancellation_013m" in source
     assert "REVOKE ALL ON TABLE governance_evaluation_worker_identities FROM PUBLIC" in source
     with pytest.raises(ValueError, match="Unsupported migration dialect"):
         sql_for("sqlite")
 
 
 def test_postgresql_payload_guards_worker_state_and_append_only_records() -> None:
-    source = (MIGRATIONS / "014_worker_execution_foundation.sql").read_text(
+    source = (MIGRATIONS / "013m_worker_execution_foundation.sql").read_text(
         encoding="utf-8"
     )
 
-    assert "guard_governance_evaluation_worker_identity_014()" in source
-    assert "guard_governance_evaluation_suite_attempt_014()" in source
-    assert "guard_governance_evaluation_artifact_014()" in source
-    assert "guard_governance_evaluation_suite_queue_metadata_014()" in source
-    assert "governance_evaluation_attempt_artifacts_no_update_014" in source
-    assert "governance_evaluation_attempt_artifacts_no_delete_014" in source
-    assert "governance_evaluation_cancellations_no_update_014" in source
-    assert "governance_evaluation_cancellations_no_delete_014" in source
+    assert "guard_governance_evaluation_worker_identity_013m()" in source
+    assert "guard_governance_evaluation_suite_attempt_013m()" in source
+    assert "guard_governance_evaluation_artifact_013m()" in source
+    assert "guard_governance_evaluation_suite_queue_metadata_013m()" in source
+    assert "governance_evaluation_attempt_artifacts_no_update_013m" in source
+    assert "governance_evaluation_attempt_artifacts_no_delete_013m" in source
+    assert "governance_evaluation_cancellations_no_update_013m" in source
+    assert "governance_evaluation_cancellations_no_delete_013m" in source
     assert (
         "ENABLE ALWAYS TRIGGER "
-        "governance_evaluation_worker_identities_guard_update_014"
+        "governance_evaluation_worker_identities_guard_update_013m"
     ) in source
     assert (
-        "ENABLE ALWAYS TRIGGER governance_evaluation_suite_attempts_guard_update_014"
+        "ENABLE ALWAYS TRIGGER governance_evaluation_suite_attempts_guard_update_013m"
     ) in source
     assert (
-        "ENABLE ALWAYS TRIGGER governance_evaluation_artifacts_guard_update_014"
+        "ENABLE ALWAYS TRIGGER governance_evaluation_artifacts_guard_update_013m"
     ) in source
     assert "SET search_path TO pg_catalog, %I, pg_temp" in source
 

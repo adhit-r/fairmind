@@ -26,7 +26,7 @@ retroactive rewrite of history.
 ## Integration Base
 
 This design is written against integrated branch commit `91bb612`, which
-contains the P0 control-plane work, migration 014, the leased PostgreSQL queue,
+contains the P0 control-plane work, migration 013m, the leased PostgreSQL queue,
 and the typed worker execution port. Commit `29eaba4` is the historical roadmap
 starting reference, not an ancestor to transplant onto this branch. The
 integrated branch is authoritative for implementation and verification.
@@ -251,12 +251,12 @@ history, and becomes available at the recovery timestamp. Otherwise the job
 becomes `timed_out` with the lease-expired terminal projection. The parent run
 is recomputed in the same transaction.
 
-Because migration 014 allowed retry only from `leased`, forward migration 015
+Because migration 013m allowed retry only from `leased`, forward migration 013n
 must add a narrowly guarded `running -> queued` recovery transition. The suite
 guard permits it only when the latest attempt has just become `timed_out`, its
 number equals `attempt_count`, retry budget remains, no cancellation exists,
 and no active attempt remains. The corresponding run transition is allowed
-only when it is the exact aggregate of its locked suite rows. Migration 015
+only when it is the exact aggregate of its locked suite rows. Migration 013n
 also narrows the queue-metadata guard so `available_at` may change during this
 one validated recovery transition; every other non-queued change remains
 rejected. No general caller may use `running -> queued` as a reset.
@@ -525,11 +525,11 @@ attempt and evidence identities, not the raw token.
 
 ## Database Enforcement
 
-Frozen migrations 013 through 014 are not edited.
+Frozen migrations 013 through 013m are not edited.
 
-### Migration 015: job-state protocol
+### Migration 013n: job-state protocol
 
-Migration 015 will add the guarded running-attempt recovery transition and
+Migration 013n will add the guarded running-attempt recovery transition and
 commit-time graph assertions for worker jobs:
 
 - worker identities gain a nullable migration-compatibility
@@ -545,7 +545,7 @@ commit-time graph assertions for worker jobs:
 - an attempted terminal job has a matching latest terminal attempt;
 - `failed`, `timed_out`, and `cancelled` attempts require their exact
   server-owned failure-code/message pair;
-- attempted worker jobs cannot enter `succeeded` until migration 016 installs
+- attempted worker jobs cannot enter `succeeded` until migration 013o installs
   the signed-completion authority; and
 - direct state changes that do not satisfy the graph fail at commit.
 
@@ -561,9 +561,9 @@ unregistered identity before signed completion arrives.
 It will provide PostgreSQL operator upgrade, frozen ledger/catalog updates,
 SQLite structural parity, and SQLite worker-write denial.
 
-### Migration 016: signed completion and cancellation precedence
+### Migration 013o: signed completion and cancellation precedence
 
-Migration 016 will:
+Migration 013o will:
 
 - extend the Passport V2 execution-binding schema and canonical builders with
   conditional `attemptId`, `attemptNumber`, and `workerIdentityId` fields for
@@ -580,8 +580,8 @@ verification receipt; matching attempt, worker, nonce, envelope, and canonical
 Passport hashes; and exactly one immutable successful worker-completion audit
 event.
 
-The migration-015 worker-registration column remains nullable only for
-compatibility, but migration-015 claim already skips an identity without an
+The migration-013n worker-registration column remains nullable only for
+compatibility, but migration-013n claim already skips an identity without an
 eligible binding. Start and completion reject a missing, changed, revoked, or
 otherwise ineligible registration. A bound registration remains immutable
 after its first assignment even if no attempt exists; operators replace the
@@ -682,7 +682,7 @@ or production readiness.
 
 ## Implementation Order
 
-1. Implement migration 015, the registration-binding prerequisite, and row-81
+1. Implement migration 013n, the registration-binding prerequisite, and row-81
    state operations by TDD.
 2. Row 82a: narrow the P0 link paths, extend the Passport contract, add the
    attempt/link schema authority, and install deferred graph constraints.

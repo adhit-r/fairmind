@@ -2,7 +2,7 @@
 
 ## Scope
 
-Migration 014 adds the persistence foundation for isolated evaluation workers. It
+Migration 013m adds the persistence foundation for isolated evaluation workers. It
 reuses `governance_evaluation_run_suite_executions` as the logical job and adds
 queue availability, retry cap, and attempt count fields. It does not introduce a
 second job state machine.
@@ -10,8 +10,9 @@ second job state machine.
 The migration adds normalized records for tenant-bound service identities,
 suite attempts, immutable artifact metadata, exact attempt-artifact bindings,
 and run- or suite-scoped cancellation requests. PostgreSQL 14 is the release
-authority. SQLite installs structurally matching objects and rejects every
-worker write so local parity cannot be mistaken for execution support.
+authority. Main is PostgreSQL-only, so there is no SQLite fixture. The migration
+was first written as 014 and renamed 013m when ported, because it continues the
+013 assurance chain and main already uses 014 for other migrations.
 
 ## Integrity and security controls
 
@@ -38,21 +39,19 @@ worker write so local parity cannot be mistaken for execution support.
 ## Migration and verification evidence
 
 - Direct migration:
-  `apps/backend/migrations/014_worker_execution_foundation.sql`
+  `apps/backend/migrations/013m_worker_execution_foundation.sql`
 - Operator upgrade:
-  `apps/backend/migrations/upgrade_paths/013l_to_014_worker_execution_foundation.sql`
-- Fail-closed SQLite fixture:
-  `apps/backend/migrations/fixtures/014_worker_execution_foundation.sqlite.sql`
+  `apps/backend/migrations/upgrade_paths/013l_to_013m_worker_execution_foundation.sql`
 - Dialect loader:
   `apps/backend/migrations/worker_execution_foundation_migration.py`
 - Focused schema/ORM tests:
-  `apps/backend/tests/test_worker_execution_foundation_migration_014.py`
+  `apps/backend/tests/test_worker_execution_foundation_migration_013m.py`
 - Frozen ledger, two-install catalog, replay, tamper, and native mutation tests:
   `apps/backend/tests/test_migration_integrity.py`
 
 Observed verification on 2026-08-30:
 
-- Four focused migration-014 tests passed.
+- Four focused migration-013m tests passed.
 - The complete local migration suites passed with 73 tests and 21 expected
   PostgreSQL-only skips.
 - The complete PostgreSQL 14-enabled migration suites passed all 94 tests.
@@ -64,7 +63,7 @@ Observed verification on 2026-08-30:
 
 ## Explicitly remaining
 
-Migration 014 is schema foundation only. The following P1 roadmap rows remain
+Migration 013m is schema foundation only. The following P1 roadmap rows remain
 open: atomic `FOR UPDATE SKIP LOCKED` claiming, 60-second leases, 20-second
 heartbeats, expiry recovery, manifest-controlled retries, worker ports and
 routes, live-token plus Passport completion, cancellation race arbitration,
