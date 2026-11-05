@@ -20,7 +20,7 @@ import { pillars } from '../../lib/catalogue';
             <div><dt>Packs</dt><dd data-count={p.packs.length}>{p.packs.length}</dd></div>
           </dl>
           <ul class="pi-packs">
-            {p.packs.map((k) => (<li><b>{k.name}</b><span>{k.description}</span></li>))}
+            {p.packs.map((k) => (<li><b>{k.name}</b><span><span>{k.description}</span></span></li>))}
           </ul>
         </article>
       ))}
