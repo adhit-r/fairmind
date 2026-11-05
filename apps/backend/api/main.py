@@ -38,7 +38,7 @@ from middleware.security import (
     JWTAuthenticationMiddleware,
 )
 from services.health import health_service
-from api.routes.org_scope import ORG_MEMBER_USER_IDS, org_member, plain_id
+from api.routes.org_scope import org_member
 from src.application.services.governance_assurance_service import OrgMembership
 
 # Get logger
@@ -531,14 +531,13 @@ async def list_audit_logs(
 ):
     """Retrieve this organisation's audit logs for compliance reporting.
 
-    audit_logs has no tenant column (migrations/001_initial_schema.sql, which is
-    also the live shape: created_at, no status), so an organisation's log is
-    what its active members did.
+    audit_logs is migrations/001_initial_schema.sql's shape (created_at, no
+    status) plus 019's org_id, the organisation each request acted in.
     """
     try:
         from config.database import get_db_connection
 
-        filters = [f"{plain_id('user_id')} IN ({ORG_MEMBER_USER_IDS})"]
+        filters = ["org_id = :org_id"]
         params = {"org_id": m.org_id, "limit": limit, "offset": offset}
 
         if action:

@@ -5,6 +5,7 @@ This middleware logs all API requests and responses for compliance auditing.
 Records user actions with context for regulatory reporting and security analysis.
 """
 
+import asyncio
 import ipaddress
 import logging
 import time
@@ -17,6 +18,10 @@ from datetime import datetime, timezone
 import json
 
 logger = logging.getLogger("fairmind.audit")
+
+# SQL condition for activity feeds: leaves out the rows of read-only requests,
+# which an audit log keeps, so a feed's own reads cannot push changes out of it.
+NOT_A_READ = "action NOT LIKE 'GET %' AND action NOT LIKE 'HEAD %' AND action NOT LIKE 'OPTIONS %'"
 
 
 class AuditLoggingMiddleware(BaseHTTPMiddleware):
@@ -44,6 +49,8 @@ class AuditLoggingMiddleware(BaseHTTPMiddleware):
     def __init__(self, app: ASGIApp):
         super().__init__(app)
         self.app = app
+        # Writes started without awaiting them; held so they are not garbage collected.
+        self._pending_writes: set = set()
 
     async def dispatch(self, request: Request, call_next) -> Response:
         """Log incoming request and outgoing response."""
@@ -74,8 +81,7 @@ class AuditLoggingMiddleware(BaseHTTPMiddleware):
         try:
             response = await call_next(request)
             process_time = time.time() - start_time
-            # Read after the route: its auth dependency may be what set request.state.user.
-            audit_context["user_id"] = self._extract_user_id(request)
+            self._add_caller_and_route(request, audit_context)
 
             # Add response information to audit context
             audit_context["status_code"] = response.status_code
@@ -92,15 +98,26 @@ class AuditLoggingMiddleware(BaseHTTPMiddleware):
             process_time = time.time() - start_time
 
             # Log error with audit context
-            audit_context["user_id"] = self._extract_user_id(request)
+            self._add_caller_and_route(request, audit_context)
             audit_context["status_code"] = 500
             audit_context["status"] = "error"
             audit_context["duration_ms"] = round(process_time * 1000, 2)
             audit_context["error"] = str(e)
 
             self._log_audit_event(audit_context)
-            await self._persist_audit_log(audit_context)
+            # Not awaited: a slow or failing database must not hold back the error response.
+            task = asyncio.create_task(self._persist_audit_log(audit_context))
+            self._pending_writes.add(task)
+            task.add_done_callback(self._pending_writes.discard)
             raise
+
+    def _add_caller_and_route(self, request: Request, context: Dict[str, Any]) -> None:
+        """Read after the route ran: its auth dependency may be what set the user and org."""
+        context["user_id"] = self._extract_user_id(request)
+        context["org_id"] = getattr(request.state, "org_id", None)
+        # The matched route's template ("/invitations/{token}"), never the raw path,
+        # whose parameters may be credentials.
+        context["route"] = getattr(request.scope.get("route"), "path", None)
 
     def _generate_request_id(self) -> str:
         """Generate a unique request ID for tracking."""
@@ -125,16 +142,13 @@ class AuditLoggingMiddleware(BaseHTTPMiddleware):
             return None
 
     def _get_client_ip(self, request: Request) -> str:
-        """Get client IP address from request."""
-        # Check X-Forwarded-For header (for proxied requests)
-        if "x-forwarded-for" in request.headers:
-            return request.headers["x-forwarded-for"].split(",")[0].strip()
+        """The connecting peer's address.
 
-        # Check X-Real-IP header
-        if "x-real-ip" in request.headers:
-            return request.headers["x-real-ip"]
-
-        # Fall back to direct connection
+        X-Forwarded-For and X-Real-IP are sent by the client, so reading them here
+        would let anyone write any address into the audit trail. Behind a proxy,
+        uvicorn/gunicorn proxy headers (FORWARDED_ALLOW_IPS naming the proxy)
+        set request.client from the header only when that proxy sent it.
+        """
         return request.client.host if request.client else "unknown"
 
     def _log_audit_event(self, context: Dict[str, Any]) -> None:
@@ -168,16 +182,20 @@ class AuditLoggingMiddleware(BaseHTTPMiddleware):
         """Write one audit_logs row for regulatory compliance.
 
         Columns are the live table's (migrations/001_initial_schema.sql: id is
-        serial, created_at, no status and no organisation column; GET
-        /api/v1/audit-logs scopes rows by user_id). Never the request body,
-        query string or headers beyond the user agent. A failed write is logged,
-        never raised, so it cannot fail the request.
+        serial, created_at, no status; org_id from 019, which GET
+        /api/v1/audit-logs scopes rows by). The action is the route template,
+        never the raw path, request body, query string or headers beyond the
+        user agent. A request no route matched reached no endpoint and is not
+        written. A failed write is logged, never raised, so it cannot fail the
+        request.
         """
+        route = context.get("route")
+        if route is None:
+            return
         try:
             from config.database import get_db_connection
 
-            path = context["path"]
-            parts = path.split("/")
+            parts = route.split("/")
             try:
                 # ip_address is INET; "unknown" or a test client name would fail the insert
                 ip = str(ipaddress.ip_address(context.get("ip_address") or ""))
@@ -185,12 +203,13 @@ class AuditLoggingMiddleware(BaseHTTPMiddleware):
                 ip = None
             async with get_db_connection() as conn:
                 await conn.execute(
-                    "INSERT INTO audit_logs (user_id, action, resource_type, details, ip_address, user_agent, created_at) "
-                    "VALUES (:user_id, :action, :resource_type, :details, :ip_address, :user_agent, :created_at)",
+                    "INSERT INTO audit_logs (user_id, org_id, action, resource_type, details, ip_address, user_agent, created_at) "
+                    "VALUES (:user_id, :org_id, :action, :resource_type, :details, :ip_address, :user_agent, :created_at)",
                     {
                         "user_id": context.get("user_id"),
-                        "action": f"{context['method']} {path}"[:255],
-                        "resource_type": parts[3][:100] if len(parts) > 3 else None,
+                        "org_id": context.get("org_id"),
+                        "action": f"{context['method']} {route}"[:255],
+                        "resource_type": parts[3][:100] if len(parts) > 3 and not parts[3].startswith("{") else None,
                         "details": json.dumps({
                             "request_id": context.get("request_id"),
                             "status_code": context.get("status_code"),

@@ -13,7 +13,8 @@ from config.database import get_database, get_db_connection
 from config.cache import cache_manager, cached, cache_key_for_model, cache_key_for_dataset
 from config.auth import get_current_active_user, require_permission, TokenData, Permissions, auth_manager
 from config.settings import settings
-from api.routes.org_scope import ORG_MEMBER_USER_IDS, org_claim, org_mutator, plain_id
+from api.routes.org_scope import org_claim, org_mutator
+from core.middleware.audit import NOT_A_READ
 from src.application.services.governance_assurance_service import OrgMembership
 
 router = APIRouter(prefix="/core", tags=["core"])
@@ -22,8 +23,8 @@ logger = logging.getLogger(__name__)
 
 # No mock data - all endpoints return real data from database or proper errors
 
-# audit_logs has no tenant column; an organisation's activity is what its active members did.
-_ORG_AUDIT_FILTER = f"{plain_id('user_id')} IN ({ORG_MEMBER_USER_IDS})"
+# What changed in the organisation: its audit rows (migrations/019) less read-only requests.
+_ORG_AUDIT_FILTER = f"org_id = :org_id AND {NOT_A_READ}"
 
 @router.get("/")
 async def root():

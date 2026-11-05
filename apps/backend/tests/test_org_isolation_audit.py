@@ -100,8 +100,6 @@ def db():
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     Base.metadata.create_all(engine)
     with engine.begin() as conn:
-        # The legacy routes read the 001_initial_schema shape of audit_logs (created_at), not the ORM's.
-        conn.execute(text("DROP TABLE audit_logs"))
         for stmt in (
             "CREATE TABLE models (id TEXT PRIMARY KEY, name TEXT, description TEXT, model_type TEXT, version TEXT, "
             "upload_date TEXT, updated_at TEXT, file_path TEXT, file_size INTEGER, tags TEXT, metadata TEXT, "
@@ -109,8 +107,6 @@ def db():
             "CREATE TABLE datasets (id TEXT PRIMARY KEY, name TEXT, description TEXT, source TEXT, size INTEGER, "
             "columns TEXT, upload_date TEXT, tags TEXT, file_path TEXT, file_type TEXT, file_size INTEGER, "
             "created_by TEXT, org_id TEXT)",
-            "CREATE TABLE audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, action TEXT, "
-            "resource_type TEXT, resource_id TEXT, details TEXT, ip_address TEXT, user_agent TEXT, created_at TEXT)",
             "CREATE TABLE geographic_bias_analyses (id TEXT PRIMARY KEY, model_id TEXT, source_country TEXT, "
             "target_country TEXT, bias_score REAL, risk_level TEXT, compliance_status TEXT, analysis_date TEXT, "
             "org_id TEXT)",
@@ -546,8 +542,8 @@ def test_core_models_and_datasets_are_per_organisation(client, legacy):
 
 def test_core_activity_lists_only_the_organisations_members(client, legacy):
     engine, _ = legacy
-    for user, action in ((OWNER_A, "a-did-this"), (OWNER_B, "b-did-this")):
-        _insert(engine, "audit_logs", user_id=user, action=action, created_at="2026-01-01")
+    for org, user, action in ((ORG_A, OWNER_A, "a-did-this"), (ORG_B, OWNER_B, "b-did-this")):
+        _insert(engine, "audit_logs", org_id=org, user_id=user, action=action, created_at="2026-01-01")
     _insert(engine, "audit_logs", user_id=None, action="system", created_at="2026-01-02")
 
     assert [a["type"] for a in client.get("/api/v1/core/activity/recent", headers=A).json()["data"]] == ["a-did-this"]
@@ -602,9 +598,9 @@ def test_database_routes_are_per_organisation(client, legacy):
         _insert(engine, "geographic_bias_analyses", id=f"geo-{model}", model_id=model, source_country="IN",
                 target_country="US", bias_score=0.1, risk_level="low", compliance_status="pending",
                 analysis_date="2026-01-01", org_id=org)
-    for user, name in ((OWNER_A, "alice"), (OWNER_B, "bob")):
+    for org, user, name in ((ORG_A, OWNER_A, "alice"), (ORG_B, OWNER_B, "bob")):
         _insert(engine, "profiles", id=user, username=name, full_name=name, role="user", created_at="2026-01-01")
-        _insert(engine, "audit_logs", user_id=user, action=f"{name}-action", created_at="2026-01-01")
+        _insert(engine, "audit_logs", org_id=org, user_id=user, action=f"{name}-action", created_at="2026-01-01")
 
     assert [m["id"] for m in client.get("/api/v1/database/models", headers=A).json()["data"]] == ["model-a"]
     assert [m["id"] for m in client.get("/api/v1/models", headers=B).json()["data"]] == ["model-b"]
