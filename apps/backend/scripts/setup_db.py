@@ -5,7 +5,7 @@
     uv run python scripts/setup_db.py verify     # check schema + reference data only
 
 Reads DATABASE_URL (apps/backend/.env). Safe to re-run. Loads reference data
-only (the AIUC-1 framework catalog); users and organizations come from signing
+only (the AIUC-1 and OECD AI Principles framework catalogs); users and organizations come from signing
 up in the app. Packs and workflows are code (src/api/routers/pack_catalogue.py)
 and need no rows.
 """
@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session  # noqa: E402
 
 MIGRATIONS = BACKEND / "migrations"
 AIUC_WORKBOOK = BACKEND / "reference_data" / "frameworks" / "aiuc-1-april-2026.xlsx"
+OECD_PRINCIPLES = BACKEND / "reference_data" / "frameworks" / "oecd-ai-principles-may-2024.json"
 
 # Clean-install order for PostgreSQL. Superseded files (007_org_rbac_schema.sql,
 # 003_*.py) and upgrade_paths/ are deliberately absent.
@@ -148,11 +149,16 @@ def load_reference_data(engine) -> None:
     from src.application.services.framework_catalog_service import FrameworkCatalogService
 
     with Session(engine) as db:
-        result = FrameworkCatalogService(db).import_workbook_bytes(
-            AIUC_WORKBOOK.read_bytes(), source_filename=AIUC_WORKBOOK.name, actor_id="setup_db"
+        service = FrameworkCatalogService(db)
+        results = (
+            service.import_workbook_bytes(
+                AIUC_WORKBOOK.read_bytes(), source_filename=AIUC_WORKBOOK.name, actor_id="setup_db"
+            ),
+            service.import_principles_json(OECD_PRINCIPLES, actor_id="setup_db"),
         )
-    print(f"reference: AIUC-1 {'imported' if result.created else 'already present'} "
-          f"({result.control_count} controls)")
+    for result in results:
+        print(f"reference: {result.framework_key} {'imported' if result.created else 'already present'} "
+              f"({result.control_count} controls)")
 
 
 def verify(engine) -> int:
@@ -165,17 +171,18 @@ def verify(engine) -> int:
             continue
         have = {c["name"] for c in insp.get_columns(name)}
         problems += [f"missing column {name}.{c}" for c in table.columns.keys() if c not in have]
+    counts = {}
     with engine.connect() as conn:
-        controls = conn.execute(text(
-            "SELECT count(*) FROM governance_control_definitions d "
-            "JOIN governance_framework_versions v ON v.id = d.framework_version_id "
-            "WHERE v.framework_key = 'aiuc-1' AND v.status = 'active'"
-        )).scalar() if "governance_control_definitions" in existing else 0
-    if not controls:
-        problems.append("AIUC-1 controls not loaded")
+        for key in ("aiuc-1", "oecd-ai"):
+            counts[key] = conn.execute(text(
+                "SELECT count(*) FROM governance_control_definitions d "
+                "JOIN governance_framework_versions v ON v.id = d.framework_version_id "
+                "WHERE v.framework_key = :key AND v.status = 'active'"
+            ), {"key": key}).scalar() if "governance_control_definitions" in existing else 0
+    problems += [f"{key} controls not loaded" for key, n in counts.items() if not n]
     for p in problems:
         print(f"FAIL {p}")
-    print(f"verify: {len(existing)} tables, AIUC-1 controls={controls}, problems={len(problems)}")
+    print(f"verify: {len(existing)} tables, controls={counts}, problems={len(problems)}")
     return 1 if problems else 0
 
 

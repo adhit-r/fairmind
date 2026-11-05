@@ -8,6 +8,8 @@ from typing import Optional, Dict, Any, List
 from fastapi import HTTPException, status, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import bcrypt
+import hashlib
+import hmac
 import logging
 import secrets
 import uuid
@@ -78,6 +80,10 @@ class PrincipalKind(str, Enum):
     SERVICE = "service"
 
 
+# Not a TokenType: verify_token refuses it, so a reset token never authenticates a request.
+PASSWORD_RESET_TOKEN_TYPE = "password_reset"
+
+
 class User(BaseModel):
     """User model."""
     id: str
@@ -114,6 +120,7 @@ class AuthManager:
         self.access_token_expire_minutes = settings.jwt_expire_minutes
         self.refresh_token_expire_days = 30
         self.api_key_expire_days = 365
+        self.password_reset_expire_minutes = 30
         
         # Initialize the JWT manager
         self.jwt_manager = init_jwt_manager(self.secret_key, self.algorithm)
@@ -179,9 +186,37 @@ class AuthManager:
             "token_type": TokenType.API_KEY.value,
             "principal_kind": PrincipalKind.HUMAN.value,
             "key_name": name,
+            # Two keys minted in the same second must still differ (api_keys.key_hash).
+            "jti": secrets.token_hex(16),
         }
         
         return self.jwt_manager.create_token(payload, expires_delta)
+
+    def password_fingerprint(self, password_hash: Optional[str]) -> str:
+        """Keyed digest of a stored password hash; it changes whenever the password does."""
+        return hmac.new(self.secret_key.encode(), (password_hash or "").encode(), hashlib.sha256).hexdigest()
+
+    def create_password_reset_token(self, user_id: str, password_hash: Optional[str]) -> str:
+        """A short-lived token that sets a new password once.
+
+        It carries the fingerprint of the current password hash, so it stops
+        working as soon as the password changes, including through its own use.
+        """
+        payload = {
+            "sub": user_id,
+            "token_type": PASSWORD_RESET_TOKEN_TYPE,
+            "pwd": self.password_fingerprint(password_hash),
+        }
+        return self.jwt_manager.create_token(payload, timedelta(minutes=self.password_reset_expire_minutes))
+
+    def read_password_reset_token(self, token: str) -> Optional[Dict[str, Any]]:
+        """Claims of a valid, unexpired password reset token, or None."""
+        claims = self.jwt_manager.verify_token(token)
+        if not claims or claims.get("token_type") != PASSWORD_RESET_TOKEN_TYPE:
+            return None
+        if not claims.get("sub") or not claims.get("pwd"):
+            return None
+        return claims
     
     async def verify_token(self, token: str) -> TokenData:
         """Verify and decode a JWT token using new JWT infrastructure."""
@@ -224,6 +259,8 @@ class AuthManager:
                 or organization_id != organization_id.strip()
             ):
                 raise InvalidTokenException("Service principal organization is invalid")
+            if token_type == TokenType.API_KEY.value and not await _api_key_is_live(token, str(user_id)):
+                raise InvalidTokenException("API key is revoked or its user is inactive")
             
             # Convert timestamps if they're datetime objects
             if isinstance(exp, datetime):
@@ -363,6 +400,24 @@ async def _fetch_user_row(where: str, key: str):
     from .database import get_db_connection
     async with get_db_connection() as db:
         return await db.fetch_one(f"SELECT {_USER_COLUMNS} FROM users u WHERE {where}", {"key": key})
+
+
+def api_key_hash(api_key: str) -> str:
+    """What api_keys.key_hash stores; the key itself is never stored."""
+    return hashlib.sha256(api_key.encode("utf-8")).hexdigest()
+
+
+async def _api_key_is_live(api_key: str, user_id: str) -> bool:
+    """A key works only while its api_keys row exists (revoking deletes it)
+    and its user still exists and is active."""
+    from .database import get_db_connection
+    async with get_db_connection() as db:
+        row = await db.fetch_one(
+            "SELECT k.id FROM api_keys k JOIN users u ON u.id = k.user_id "
+            "WHERE k.user_id = :user AND k.key_hash = :hash AND k.is_active AND u.is_active",
+            {"user": user_id, "hash": api_key_hash(api_key)},
+        )
+    return row is not None
 
 
 E2E_ADMIN_ID = "e2e-admin"

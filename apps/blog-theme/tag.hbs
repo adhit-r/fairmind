@@ -1,0 +1,15 @@
+{{!< default}}
+{{#tag}}
+<header class="page-head wrap-read">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="{{@site.url}}/">Home</a><span aria-hidden="true">/</span><a href="{{@site.url}}/frameworks/">Frameworks</a></nav>
+  <h1>{{name}}</h1>
+  {{#if description}}<p class="dek">{{description}}</p>{{/if}}
+  <p class="callout" data-topic-due="{{name}}" hidden></p>
+</header>
+{{/tag}}
+<section class="feed wrap-read" aria-labelledby="tag-feed-h">
+  <h2 class="sec" id="tag-feed-h">{{plural pagination.total empty="No guides yet" singular="% guide" plural="% guides"}}</h2>
+  {{#foreach posts}}{{> entry}}{{else}}<p class="empty">No guides published under this framework yet.</p>{{/foreach}}
+  {{pagination}}
+</section>
+<div class="wrap-read">{{> newsletter}}</div>

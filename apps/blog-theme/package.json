@@ -1,0 +1,43 @@
+{
+  "name": "chain-of-custody",
+  "description": "Ghost theme for Chain of Custody, the FairMind guides to AI regulation, security and safety.",
+  "version": "3.0.0",
+  "private": true,
+  "engines": {
+    "ghost": ">=6.0.0"
+  },
+  "author": {
+    "name": "FairMind",
+    "email": "adhithya@axonome.xyz",
+    "url": "https://fairmind.xyz"
+  },
+  "keywords": [
+    "ghost-theme"
+  ],
+  "config": {
+    "posts_per_page": 12,
+    "card_assets": true,
+    "image_sizes": {
+      "m": {
+        "width": 800
+      },
+      "xl": {
+        "width": 1600
+      }
+    },
+    "custom": {
+      "topic_tags": {
+        "type": "text",
+        "default": "eu-ai-act,india,owasp,standards,assurance"
+      },
+      "newsletter_title": {
+        "type": "text",
+        "default": "The Custody Log"
+      },
+      "newsletter_text": {
+        "type": "text",
+        "default": "A short email each Thursday with the next deadline on the docket and one AI incident we think is worth reading about."
+      }
+    }
+  }
+}

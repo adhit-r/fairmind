@@ -1,7 +1,7 @@
 """
 Monitoring Service.
 
-Handles real-time metrics collection, system health monitoring, and simulated data generation.
+Handles real-time metrics collection and system health monitoring.
 """
 
 import asyncio
@@ -37,7 +37,7 @@ class MonitoringService(AsyncBaseService):
     """
     Core monitoring service.
     
-    Handles metrics storage, health checks, and demo data generation.
+    Handles metrics storage and health checks.
     """
     
     def __init__(self, logger: Optional[ILogger] = None):
@@ -45,7 +45,6 @@ class MonitoringService(AsyncBaseService):
         self.metrics_store: Dict[str, List[Dict]] = defaultdict(list)
         self.configs: Dict[str, Dict] = {}
         self.health_status = self._initialize_health_status()
-        self._initialize_real_data()
 
     def _initialize_health_status(self) -> SystemHealth:
         return SystemHealth(
@@ -58,20 +57,6 @@ class MonitoringService(AsyncBaseService):
             last_check=datetime.now(timezone.utc),
             services={}
         )
-
-    def _initialize_real_data(self):
-        """Initialize demo data for governance metrics."""
-        # Ported from original service
-        self.governance_data = {
-            'total_models': 24,
-            'active_models': 18,
-            'critical_risks': 3,
-            'llm_safety_score': 87.5,
-            'nist_compliance': 82.3,
-            'gdpr_compliance': 91.2,
-            'eu_ai_act_compliance': 76.8
-        }
-        # ... (Other demo data would go here, simplified for brevity but keeping structure)
 
     async def record_metrics(self, metrics: Dict[str, Any]) -> Dict[str, Any]:
         """Record metrics for a model."""

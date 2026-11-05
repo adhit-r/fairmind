@@ -37,6 +37,8 @@ def render_gate(gate: Dict[str, Any]) -> str:
     for check in gate.get("checks", []):
         conf = f" {check['confidence']:.2f}" if check.get("confidence") else ""
         lines.append(f"  {STATE_MARK.get(check['state'], '?')} {check['label']}: {check['state']}{conf}")
+    if "approvalStatus" in gate:
+        lines.append(f"  Release decision: {gate['approvalStatus'].replace('_', ' ')}")
     lines.extend(f"  Reason: {reason}" for reason in gate.get("reasons", []))
     return "\n".join(lines)
 
@@ -128,7 +130,7 @@ def create_server(client: Optional[FairMind] = None) -> FastMCP:
     @server.tool()
     @guarded
     def release_gate(system_id: str) -> CallToolResult:
-        """May this AI system ship? Returns the verdict (go, conditional_go, no_go), confidence, the five checks (each proven, attested or open) and the reasons."""
+        """May this AI system ship? Returns the verdict (go, conditional_go, no_go), confidence, the five checks (each proven, attested or open), the reasons and the release decision status (not_requested, pending, approved, rejected). A release that needs sign-off may ship only when that status is approved."""
         gate = fm().gate(system_id)
         return _result(render_gate(gate), dict(gate))
 

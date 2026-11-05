@@ -3,14 +3,19 @@
 import { useEffect, useState } from "react"
 import { createRealtimeClient, type SealedLiveQuery } from "@neon/realtime/client"
 import { RealtimeProvider, useLiveQuery } from "@neon/realtime-react"
-import type { LiveNote } from "../api/live-notes/route"
+import type { LiveNote } from "@/app/api/live-notes/route"
 
 const realtimeUrl = process.env.NEXT_PUBLIC_NEON_REALTIME_URL
 
 async function fetchSealed(): Promise<SealedLiveQuery<LiveNote>> {
-  const response = await fetch("/api/live-notes", { method: "POST" })
-  if (!response.ok) throw new Error(`Could not get a live query (${response.status})`)
-  return response.json()
+  const token = window.localStorage.getItem("access_token")
+  const response = await fetch("/api/live-notes", {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  })
+  const body = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(body.error ?? `Could not get a live query (${response.status})`)
+  return body
 }
 
 function Notes({ sealedQuery }: { sealedQuery: SealedLiveQuery<LiveNote> }) {

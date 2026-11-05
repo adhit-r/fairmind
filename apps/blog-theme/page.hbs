@@ -1,0 +1,16 @@
+{{!< default}}
+{{#post}}
+<article class="post page{{#match slug "docket"}} docket-page{{/match}}">
+  {{#match @page.show_title_and_feature_image}}
+  <header class="page-head wrap-read">
+    <nav class="crumbs" aria-label="Breadcrumb"><a href="{{@site.url}}/">Home</a></nav>
+    <h1>{{title}}</h1>
+    {{#if custom_excerpt}}<p class="dek">{{custom_excerpt}}</p>{{/if}}
+  </header>
+  {{#if feature_image}}<figure class="feat wrap"><img src="{{img_url feature_image size="xl"}}" alt="{{#if feature_image_alt}}{{feature_image_alt}}{{/if}}"></figure>{{/if}}
+  {{/match}}
+  <div class="prose gh-content wrap-read">
+    {{content}}
+  </div>
+</article>
+{{/post}}
