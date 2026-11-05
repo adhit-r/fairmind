@@ -133,7 +133,9 @@ export default function LLMTestingPage() {
         ...data,
         reasoning: data.recommendations?.[0],
         evidence: modelOutputs.slice(0, 3).map((o, i) => `Output ${i + 1}: ${o.output.substring(0, 100)}...`),
-        severity: data.overall_bias_score > 0.7 ? 'high' : data.overall_bias_score > 0.4 ? 'medium' : 'low'
+        // A null score means no output was scored: leave severity unset, never "low".
+        severity: data.overall_bias_score == null ? undefined
+          : data.overall_bias_score > 0.7 ? 'high' : data.overall_bias_score > 0.4 ? 'medium' : 'low'
       })
 
       toast({

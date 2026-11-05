@@ -5,10 +5,13 @@ Each test fails against the placeholder constants these routes used to return.
 
 from __future__ import annotations
 
+import os
+import uuid
 from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timezone
 
-from sqlalchemy import text
+import pytest
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 from database.governance_models import GovernanceRisk
@@ -27,6 +30,9 @@ from tests.test_org_isolation_audit import (  # noqa: F401  (fixtures)
     legacy,
     stubbed_modules,
 )
+
+
+POSTGRES_URL = os.getenv("FAIRMIND_TEST_POSTGRES_URL")
 
 
 def _db_manager(monkeypatch, engine):
@@ -142,3 +148,62 @@ def test_core_metrics_are_computed_from_the_organisations_rows_or_left_out(clien
     assert not {"active_analyses", "security_score"} & summary.keys()
     assert (summary["bias_score"], summary["compliance_score"]) == (None, None)
 
+
+def test_detect_reports_no_score_when_no_output_could_be_scored(client, clean_bias_history):
+    # The text templates score output["text"]; these outputs carry none, so nothing is scored.
+    body = client.post("/api/v1/bias-detection/detect", headers=A, json={
+        "model_type": "text_generation",
+        "test_category": "representational",
+        "model_outputs": [
+            {"prompt": "The doctor was", "output": "The doctor was a man"},
+            {"prompt": "The nurse was", "output": "The nurse was a woman"},
+        ],
+    }).json()
+    assert body["overall_bias_score"] is None
+    assert body["test_results"]
+    assert all(r["bias_score"] is None and r["detected_bias"] is None for r in body["test_results"])
+    assert not any("Minimal bias" in r for r in body["recommendations"])
+
+
+def test_modern_bias_detection_results_average_only_the_scored_tests(db, stubbed_modules, monkeypatch):
+    engine = db[0]
+    _insert(engine, "bias_test_results", id="scored", test_name="scored", bias_score=0.8, is_biased=1,
+            category="gender", created_at="2026-01-02", org_id=ORG_A)
+    _insert(engine, "bias_test_results", id="unscored", test_name="unscored", bias_score=None, is_biased=0,
+            category="gender", created_at="2026-01-01", org_id=ORG_A)
+    _db_manager(monkeypatch, engine)
+
+    with _mini_app(db, "api.routes.modern_bias_detection") as mini:
+        a = mini.get("/api/v1/modern-bias/detection-results", headers=A).json()["data"]
+    assert a["overall_risk"] == "high"
+    assert a["compliance_status"]["fairness_score"] == pytest.approx(0.2)
+    assert a["evaluation_summary"]["total_tests_run"] == 2
+
+
+@pytest.mark.skipif(not POSTGRES_URL, reason="requires FAIRMIND_TEST_POSTGRES_URL pointing to disposable PostgreSQL")
+def test_modern_bias_detection_results_query_runs_on_postgres(db, stubbed_modules, monkeypatch):
+    schema = f"fm_detect_{uuid.uuid4().hex[:12]}"
+    admin = create_engine(POSTGRES_URL)
+    with admin.begin() as conn:
+        conn.execute(text(f'CREATE SCHEMA "{schema}"'))
+    engine = create_engine(POSTGRES_URL, connect_args={"options": f"-csearch_path={schema}"})
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("CREATE TABLE bias_test_results (id TEXT PRIMARY KEY, test_name TEXT, "
+                              "bias_score DOUBLE PRECISION, is_biased BOOLEAN, confidence DOUBLE PRECISION, "
+                              "category TEXT, explainability_method TEXT, insights TEXT, "
+                              "created_at TIMESTAMPTZ DEFAULT NOW(), org_id TEXT)"))
+        for name, method, day in (("old", "shap", "2026-01-01"), ("again", "shap", "2026-01-03"), ("lime", "lime", "2026-01-02")):
+            _insert(engine, "bias_test_results", id=name, test_name=name, bias_score=0.2, is_biased=False,
+                    explainability_method=method, insights="i", created_at=day, org_id=ORG_A)
+        _db_manager(monkeypatch, engine)
+
+        with _mini_app(db, "api.routes.modern_bias_detection") as mini:
+            response = mini.get("/api/v1/modern-bias/detection-results", headers=A)
+        assert response.status_code == 200, response.text
+        assert [e["method"] for e in response.json()["data"]["explainability_analysis"]] == ["shap", "lime"]
+    finally:
+        engine.dispose()
+        with admin.begin() as conn:
+            conn.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
+        admin.dispose()

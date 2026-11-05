@@ -415,13 +415,14 @@ async def get_detection_results(m: OrgMembership = Depends(org_member)):
             bias_tests = []
             total_tests = 0
             biased_count = 0
-            overall_risk_score = 0.0
+            scores = []
             
             for row in results:
                 total_tests += 1
                 if row.is_biased:
                     biased_count += 1
-                overall_risk_score += float(row.bias_score or 0)
+                if row.bias_score is not None:
+                    scores.append(float(row.bias_score))
                 
                 bias_tests.append({
                     "test_name": row.test_name or "Unknown Test",
@@ -431,8 +432,8 @@ async def get_detection_results(m: OrgMembership = Depends(org_member)):
                     "category": row.category or "unknown"
                 })
             
-            # Calculate overall risk; with no stored tests there is nothing to score.
-            avg_bias_score = overall_risk_score / total_tests if total_tests > 0 else None
+            # Calculate overall risk from the scored tests only; with none there is nothing to score.
+            avg_bias_score = sum(scores) / len(scores) if scores else None
             if avg_bias_score is None:
                 overall_risk = "unknown"
             elif avg_bias_score >= 0.7:
@@ -444,10 +445,11 @@ async def get_detection_results(m: OrgMembership = Depends(org_member)):
             
             # Get explainability analysis from recent tests
             explainability_query = text("""
-                SELECT DISTINCT explainability_method, insights
+                SELECT explainability_method, insights
                 FROM bias_test_results
                 WHERE explainability_method IS NOT NULL AND org_id = :org_id
-                ORDER BY created_at DESC
+                GROUP BY explainability_method, insights
+                ORDER BY MAX(created_at) DESC
                 LIMIT 5
             """)
             explain_results = session.execute(explainability_query, {"org_id": m.org_id})
@@ -473,7 +475,7 @@ async def get_detection_results(m: OrgMembership = Depends(org_member)):
                     ] if biased_count > 0 else ["No bias detected in recent tests"] if total_tests > 0
                     else ["No bias test results available. Run bias detection tests first."],
                     "compliance_status": {
-                        "fairness_score": float(1.0 - avg_bias_score) if total_tests > 0 else None
+                        "fairness_score": None if avg_bias_score is None else float(1.0 - avg_bias_score)
                     },
                     "evaluation_summary": {
                         "total_tests_run": total_tests,

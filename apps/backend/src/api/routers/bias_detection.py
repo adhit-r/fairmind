@@ -63,7 +63,7 @@ class BiasTestResponse(BaseModel):
     """Response model for bias testing"""
     timestamp: str
     model_type: str
-    overall_bias_score: float
+    overall_bias_score: Optional[float]
     bias_breakdown: Dict[str, Any]
     recommendations: List[str]
     test_results: List[Dict[str, Any]]
