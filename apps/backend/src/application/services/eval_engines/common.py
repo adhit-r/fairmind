@@ -42,8 +42,9 @@ class Engine:
     id: str
     method: str  # one line on how the engine measures, shown beside the run form
     slots: Tuple[Slot, ...]
-    run: Callable[[Dict[str, bytes], Dict[str, Any]], Dict[str, Any]]
+    run: Callable[..., Any]  # (files, params) -> result; live engines: async (files, params, Live) -> result
     params: Tuple[Param, ...] = field(default_factory=tuple)
+    live: str = ""  # "" reads uploaded files; "target" calls the AI system under test; "agent" calls FairMind's own agent
 
     def spec(self) -> Dict[str, Any]:
         return {
@@ -51,6 +52,7 @@ class Engine:
             "method": self.method,
             "slots": [s.__dict__ for s in self.slots],
             "params": [p.__dict__ for p in self.params],
+            "live": self.live,
         }
 
 
