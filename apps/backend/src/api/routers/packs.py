@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from api.routes.ai_governance import _ensure_tables, _utc_now_iso
 from api.routes import evaluation_results
 from api.routes import llm
+from src.application.services import eval_engines
 from api.routes import pack_catalogue as cat
 from api.routes.pack_catalogue import (
     BUNDLES,
@@ -420,6 +421,7 @@ def _evaluation_json(ev, installed: set, res: dict) -> dict:
         "pattern": {"id": pattern.id, "name": pattern.name},
         "pack": _pack_ref(pack_id),
         "engine": ev.engine,
+        "runnable": ev.id in eval_engines.REGISTRY,  # FairMind computes it from uploaded files
         "codeLocation": ev.codeLocation,
         "tests": [
             {"key": k, "framework": REQUIREMENTS[k].framework, "control": REQUIREMENTS[k].control, "title": REQUIREMENTS[k].title}

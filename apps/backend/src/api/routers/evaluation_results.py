@@ -125,6 +125,39 @@ def results(db: Session, org_id: str) -> Dict[str, Dict[str, Any]]:
                 }
         systems = sorted(latest.values(), key=lambda s: s["at"], reverse=True)
         out[ev_id] = {"status": _rollup(systems), "systems": systems, "latestAt": systems[0]["at"] if systems else None}
+    return {**_engine_runs(db, org_id), **out}
+
+
+def _engine_runs(db: Session, org_id: str) -> Dict[str, Dict[str, Any]]:
+    """Latest engine run per AI system for every evaluation FairMind runs itself (evaluation_runs router)."""
+    from src.application.services.eval_engines import REGISTRY
+
+    rows = db.execute(
+        text(
+            "SELECT e.id, e.system_id, e.content_json, e.created_at, s.name AS system_name "
+            "FROM governance_evidence e JOIN governance_ai_systems s ON s.id = e.system_id "
+            "WHERE s.org_id = :org_id AND e.evidence_type = 'evaluation_run' ORDER BY e.created_at DESC"
+        ),
+        {"org_id": org_id},
+    ).mappings().all()
+    latest: Dict[str, Dict[str, dict]] = {ev: {} for ev in REGISTRY}
+    for row in rows:
+        content = json.loads(row["content_json"] or "{}")
+        ev_id = content.get("evaluationId")
+        if ev_id not in latest or row["system_id"] in latest[ev_id]:
+            continue
+        latest[ev_id][row["system_id"]] = {
+            "systemId": row["system_id"],
+            "systemName": row["system_name"],
+            "status": content.get("status"),
+            "detail": content.get("summary"),
+            "evidenceId": row["id"],
+            "at": row["created_at"],
+        }
+    out = {}
+    for ev_id, by_system in latest.items():
+        systems = sorted(by_system.values(), key=lambda s: s["at"], reverse=True)
+        out[ev_id] = {"status": _rollup(systems), "systems": systems, "latestAt": systems[0]["at"] if systems else None}
     return out
 
 

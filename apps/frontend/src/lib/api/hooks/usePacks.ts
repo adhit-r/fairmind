@@ -186,6 +186,8 @@ export interface EvaluationRow {
   pattern: { id: string; name: string }
   pack: { id: string; name: string }
   engine: EngineStatus
+  /** FairMind computes this evaluation itself from files you upload. */
+  runnable: boolean
   codeLocation: string | null
   tests: Array<{ key: string; framework: string; control: string; title: string }>
   installed: boolean
@@ -420,6 +422,38 @@ export interface AIProviderTest {
 export const useAIProviders = () => useOrgResource<AIProviderOption[]>(API_ENDPOINTS.packs.aiProviders)
 export const useAIProvider = () => useOrgResource<{ config: AIProviderConfig | null }>(API_ENDPOINTS.packs.aiProvider)
 
+/** What an evaluation engine reads: one file per slot and optional settings. */
+export interface EngineSpec {
+  id: string
+  method: string
+  slots: Array<{ name: string; label: string; help: string; kind: 'csv' | 'text' | 'json' | 'binary'; required: boolean }>
+  params: Array<{ name: string; label: string; help: string; kind: 'text' | 'number' | 'json'; default: unknown; required: boolean }>
+}
+
+export interface EngineRun {
+  id: string
+  evaluationId: string
+  systemId: string
+  systemName: string
+  status: Exclude<ResultStatus, 'not_run'>
+  summary: string
+  metrics: Record<string, number | string | null>
+  files: Record<string, string>
+  createdAt: string
+  createdBy: string | null
+  params?: Record<string, unknown>
+  detail?: Array<Record<string, unknown>>
+  detailTotal?: number
+}
+
+export const useEvaluation = (evaluationId: string | undefined) =>
+  useOrgResource<EvaluationRow>(evaluationId ? API_ENDPOINTS.packs.evaluation(evaluationId) : null)
+export const useEngine = (evaluationId: string | undefined, runnable: boolean) =>
+  useOrgResource<EngineSpec>(evaluationId && runnable ? API_ENDPOINTS.packs.evaluationEngine(evaluationId) : null)
+export const useEngineRuns = (evaluationId: string | undefined, runnable: boolean) =>
+  useOrgResource<EngineRun[]>(evaluationId && runnable ? API_ENDPOINTS.packs.evaluationRuns(evaluationId) : null)
+export const useEngineRun = (runId: string | null) => useOrgResource<EngineRun>(runId ? API_ENDPOINTS.packs.evaluationRun(runId) : null)
+
 export interface MutationResult<T> {
   data: T | null
   error: string | null
@@ -457,6 +491,8 @@ export function usePackActions() {
       publishDraft: (workflowId: string) => send<Workflow>(API_ENDPOINTS.packs.publishDraft(workflowId), (p) => apiClient.post(p)),
       submitStepOutput: (runId: string, stepId: string, summary: string, route?: string) =>
         send<Run>(API_ENDPOINTS.packs.stepOutput(runId, stepId), (p) => apiClient.post(p, { summary, ...(route ? { route } : {}) })),
+      runEvaluation: (evaluationId: string, form: FormData) =>
+        send<EngineRun>(API_ENDPOINTS.packs.evaluationRuns(evaluationId), (p) => apiClient.post(p, form)),
       runAgent: (runId: string, stepId: string) => send<Run>(API_ENDPOINTS.packs.agentStep(runId, stepId), (p) => apiClient.post(p)),
       saveAIProvider: (body: AIProviderBody) =>
         send<{ config: AIProviderConfig | null }>(API_ENDPOINTS.packs.aiProvider, (p) => apiClient.put(p, body)),
