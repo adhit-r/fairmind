@@ -96,4 +96,4 @@ Please do not report vulnerabilities in public issues. See [SECURITY.md](SECURIT
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+FairMind is created and maintained by [Axonome](https://www.fairmind.xyz/about). It is released under the MIT licence; see [LICENSE](LICENSE).
