@@ -10,7 +10,6 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 import pytest
-from sqlalchemy import text
 
 from tests.test_org_isolation_audit import (  # noqa: F401  (db and client are fixtures)
     A,
@@ -20,7 +19,7 @@ from tests.test_org_isolation_audit import (  # noqa: F401  (db and client are f
     OWNER_A,
     OWNER_B,
     _insert,
-    _SqliteConnection,
+    _EngineConnection,
     client,
     db,
 )
@@ -28,63 +27,26 @@ from tests.test_org_isolation_audit import (  # noqa: F401  (db and client are f
 GOV = "/api/v1/ai-governance"
 
 
-@pytest.fixture
-def policies(client):
-    from api.routes import policies as policy_routes
-
-    policy_routes._tables_ready = False
-    yield
-    policy_routes._tables_ready = False
-
-
 # --------------------------------------------------------------------------- policies
 
 
-def _policy(client, headers, name="Release gate"):
-    return client.post(f"{GOV}/policies", headers=headers, json={"name": name, "framework": "eu_ai_act", "rules": []})
-
-
-def test_governance_policies_are_per_organisation(client, policies):
-    created = _policy(client, A)
-    assert created.status_code == 200, created.text
-    policy_id = created.json()["id"]
-
-    assert [p["id"] for p in client.get(f"{GOV}/policies", headers=A).json()] == [policy_id]
-    assert client.get(f"{GOV}/policies", headers=B).json() == []
-    assert client.get(f"{GOV}/policies?framework=eu_ai_act", headers=B).json() == []
-    assert client.get(f"{GOV}/policies/{policy_id}", headers=B).status_code == 404
-    assert client.put(f"{GOV}/policies/{policy_id}", headers=B, json={"name": "Taken"}).status_code == 404
-    assert client.post(f"{GOV}/policies/{policy_id}/submit", headers=B).status_code == 404
-    assert client.delete(f"{GOV}/policies/{policy_id}", headers=B).status_code == 404
-
-    untouched = client.get(f"{GOV}/policies/{policy_id}", headers=A).json()
-    assert untouched["name"] == "Release gate" and untouched["status"] == "draft"
-
-    # The policy manager router reads the same table and must agree.
-    assert [p["id"] for p in client.get("/api/policies", headers=A).json()] == [policy_id]
-    assert client.get("/api/policies", headers=B).json() == []
-
-
-def test_governance_policy_changes_need_mutation_permission(client, policies):
-    policy_id = _policy(client, A).json()["id"]
-    assert _policy(client, A_MEMBER, "Member policy").status_code == 403
-    assert client.put(f"{GOV}/policies/{policy_id}", headers=A_MEMBER, json={"name": "x"}).status_code == 403
-    assert client.delete(f"{GOV}/policies/{policy_id}", headers=A_MEMBER).status_code == 403
-    assert client.get(f"{GOV}/policies/{policy_id}", headers=A_MEMBER).status_code == 200
-
-
-def test_governance_policies_without_an_organisation_are_visible_to_nobody(client, db):
-    with db[1]() as session:
-        session.execute(
-            text(
-                "INSERT INTO governance_policies (id, name, framework, rules_json, status, version, created_at, updated_at) "
-                "VALUES ('legacy', 'Legacy', 'eu_ai_act', '[]', 'draft', 1, 'now', 'now')"
-            )
-        )
-        session.commit()
-    assert client.get(f"{GOV}/policies", headers=A).json() == []
-    assert client.get(f"{GOV}/policies/legacy", headers=A).status_code == 404
-    assert client.delete(f"{GOV}/policies/legacy", headers=A).status_code == 404
+@pytest.mark.parametrize(
+    "method,path",
+    [
+        ("GET", f"{GOV}/policies"),
+        ("POST", f"{GOV}/policies"),
+        ("GET", f"{GOV}/policies/p1"),
+        ("PUT", f"{GOV}/policies/p1"),
+        ("DELETE", f"{GOV}/policies/p1"),
+        ("POST", f"{GOV}/policies/p1/submit"),
+        ("GET", "/api/policies"),
+        ("POST", "/api/policies"),
+    ],
+)
+def test_legacy_policy_routes_are_gone(client, method, path):
+    # Policies live under /organizations/{org_id}/policies (policy_center). 405 is
+    # the global OPTIONS catch-all matching the path, not a policy handler.
+    assert client.request(method, path, headers=A).status_code in (404, 405)
 
 
 # --------------------------------------------------------------------------- risks and remediation
@@ -193,7 +155,7 @@ def audit_logs(db, monkeypatch):
     import config.database
 
     engine = db[0]
-    connection = _SqliteConnection(engine)
+    connection = _EngineConnection(engine)
 
     @asynccontextmanager
     async def fake_connection():

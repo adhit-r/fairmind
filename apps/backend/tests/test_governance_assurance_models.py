@@ -1,8 +1,7 @@
-import sqlite3
 from collections.abc import Generator
 
 import pytest
-from sqlalchemy import MetaData, create_engine, event
+from sqlalchemy import MetaData
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, registry, sessionmaker
 
@@ -19,6 +18,7 @@ from database.governance_models import (
     GovernanceWorkspace,
 )
 from migrations.governance_assurance_migration import sql_for
+from tests import pg
 
 PRODUCTION_TABLES = (
     GovernanceWorkspace.__table__,
@@ -85,19 +85,12 @@ for model, table_name in (
 
 @pytest.fixture
 def db_session() -> Generator[Session, None, None]:
-    engine = create_engine("sqlite://")
-
-    @event.listens_for(engine, "connect")
-    def enable_foreign_keys(dbapi_connection, _connection_record) -> None:
-        dbapi_connection.execute("PRAGMA foreign_keys = ON")
-
-    test_metadata.create_all(engine)
+    engine = pg.fresh_engine()
     session = sessionmaker(bind=engine)()
     try:
         yield session
     finally:
         session.close()
-        test_metadata.drop_all(engine)
 
 
 def add_system(session: Session, org_id: str, system_id: str) -> AISystem:
@@ -141,7 +134,7 @@ def test_framework_definition_state_is_separate_from_system_assessment(db_sessio
         external_id="A001.1",
         title="Input data policy",
         statement="Maintain an input data policy.",
-        active=True,
+        active=1,
     )
     assignment = FrameworkAssignment(
         id="fa-1",
@@ -190,7 +183,7 @@ def test_assurance_constraints_reject_cross_org_associations_and_persist_mapping
         external_id="A001.1",
         title="Input data policy",
         statement="Maintain an input data policy.",
-        active=True,
+        active=1,
     )
     assignment_a = FrameworkAssignment(
         id="fa-a",
@@ -306,60 +299,9 @@ def test_assurance_constraints_reject_cross_org_associations_and_persist_mapping
     db_session.rollback()
 
 
-def test_migration_selector_applies_sqlite_schema_and_exposes_postgresql_sql() -> None:
-    connection = sqlite3.connect(":memory:")
-    connection.execute("PRAGMA foreign_keys = ON")
-    connection.executescript("""
-        CREATE TABLE governance_workspaces (
-            id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            owner TEXT,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        );
-        CREATE TABLE governance_ai_systems (
-            id TEXT PRIMARY KEY,
-            workspace_id TEXT NOT NULL REFERENCES governance_workspaces(id),
-            name TEXT NOT NULL,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        );
-        CREATE TABLE governance_evidence (
-            id TEXT PRIMARY KEY,
-            system_id TEXT NOT NULL REFERENCES governance_ai_systems(id),
-            evidence_type TEXT NOT NULL,
-            content_json TEXT NOT NULL DEFAULT '{}',
-            created_at TEXT NOT NULL
-        );
-        """)
-    connection.executescript(sql_for("sqlite"))
-
-    for table_name in (
-        "governance_framework_versions",
-        "governance_control_definitions",
-        "governance_framework_assignments",
-        "governance_control_assessments",
-        "governance_evidence_runs",
-        "governance_control_evidence",
-    ):
-        assert connection.execute(
-            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?", (table_name,)
-        ).fetchone()
-
-    connection.execute(
-        "INSERT INTO governance_workspaces (id, org_id, name, created_at, updated_at) "
-        "VALUES ('workspace-1', 'org-1', 'Workspace', 'now', 'now')"
-    )
-    connection.execute(
-        "INSERT INTO governance_ai_systems (id, workspace_id, org_id, name, created_at, updated_at) "
-        "VALUES ('system-1', 'workspace-1', 'org-1', 'System', 'now', 'now')"
-    )
-    with pytest.raises(sqlite3.IntegrityError, match="source run must exist"):
-        connection.execute(
-            "INSERT INTO governance_evidence "
-            "(id, system_id, org_id, source_run_id, evidence_type, content_json, created_at) "
-            "VALUES ('evidence-1', 'system-1', 'org-1', 'missing-run', 'evaluation_run', '{}', 'now')"
-        )
+def test_migration_selector_exposes_postgresql_sql_only() -> None:
+    with pytest.raises(ValueError, match="Unsupported migration dialect"):
+        sql_for("mysql")
 
     postgresql_sql = sql_for("postgresql")
     assert "ADD COLUMN IF NOT EXISTS" in postgresql_sql
@@ -370,4 +312,3 @@ def test_migration_selector_applies_sqlite_schema_and_exposes_postgresql_sql() -
     assert "CREATE TRIGGER governance_evidence_passport_revisions_no_mutation" in postgresql_sql
     assert "RAISE(ABORT" not in postgresql_sql
     assert "FOREIGN KEY (evidence_id, system_id, org_id)" in postgresql_sql
-    connection.close()

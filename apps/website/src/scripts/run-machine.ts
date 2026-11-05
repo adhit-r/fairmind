@@ -798,8 +798,8 @@ export function mountRunMachine(root: HTMLElement, data: RunData) {
   const camLook = new THREE.Vector3();
   const wantPos = new THREE.Vector3();
   const wantLook = new THREE.Vector3();
-  const overviewPos = new THREE.Vector3(19.5, 12.5, 18);
-  const overviewLook = new THREE.Vector3(1.4, -1.2, 1.2);
+  const overviewPos = new THREE.Vector3(12.1, 15.9, 27.5);
+  const overviewLook = new THREE.Vector3(0, 0.4, 0);
   let yaw = 0;
   let pitch = 0;
   let narrow = false;
@@ -816,9 +816,13 @@ export function mountRunMachine(root: HTMLElement, data: RunData) {
       wantLook.copy(overviewLook);
     } else {
       const x = X(i) + (i === FILE ? 0.8 : 0);
-      const d = narrow ? 1.25 : 1;
-      wantPos.set(x + 5.2 * d, 7.2 * d, 13 * d);
-      wantLook.set(x + 1.6, -0.6, 1.2);
+      if (narrow) {
+        wantPos.set(x + 6.5, 9, 16.25);
+        wantLook.set(x + 1.6, -0.6, 1.2);
+      } else {
+        wantLook.set(x, 0.9, 0.2);
+        wantPos.set(x + 2.9, 7.1, 9.6);
+      }
     }
     // Drag orbits around the look point.
     const off = wantPos.clone().sub(wantLook);
@@ -1026,6 +1030,11 @@ export function mountRunMachine(root: HTMLElement, data: RunData) {
     // Everything below the step strip belongs to the panels.
     const strip = rel(q('.rm-stations'));
     floorY = strip ? strip.t : sr.height + 40;
+    // Centre the projection on the part of the stage the panels leave clear.
+    const ro = rel(q('.rm-readout'));
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    if (w && h) camera.setViewOffset(w, h, ro ? w / 2 - (ro.l + 70) / 2 : 0, strip ? h / 2 - strip.t / 2 : 0, w, h);
   }
 
   let sizeW = 0;
@@ -1040,7 +1049,7 @@ export function mountRunMachine(root: HTMLElement, data: RunData) {
     narrow = w < 760;
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
-    camera.fov = narrow ? 34 : 28;
+    camera.fov = narrow ? 34 : 23;
     camera.updateProjectionMatrix();
     // setSize clears the canvas; draw straight away in case no animation frame is coming.
     renderer.render(scene, camera);

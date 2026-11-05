@@ -15,6 +15,7 @@ from config.settings import settings
 from database import connection as repository_connection
 from database.governance_models import GovernanceAISystem, GovernanceWorkspace
 from database.models import Organization, OrganizationMember, User
+from tests import pg
 
 
 def _token(user_id: str) -> str:
@@ -37,6 +38,7 @@ def _seed_legacy_scope(manager: repository_connection.DatabaseManager, *, org_id
         org_uuid = uuid.UUID(org_id)
         session.execute(
             User.__table__.insert().values(
+                password_hash="",
                 id=user_uuid,
                 email=f"{user_id}@example.test",
                 username=user_id,
@@ -89,26 +91,20 @@ def _plan_payload() -> dict[str, object]:
 
 
 @pytest.mark.parametrize("database_url", [None, ""])
-def test_default_off_repository_manager_keeps_historical_sqlite_identity(
-    monkeypatch, tmp_path: Path, database_url: str | None
+def test_default_off_repository_manager_falls_back_to_configured_postgresql(
+    monkeypatch, database_url: str | None
 ) -> None:
+    configured = pg.SERVER_URL
     if database_url is None:
         monkeypatch.delenv("DATABASE_URL", raising=False)
     else:
         monkeypatch.setenv("DATABASE_URL", database_url)
     monkeypatch.setattr(settings, "assurance_v2_enabled", False)
-    monkeypatch.setattr(
-        settings,
-        "database_url",
-        f"sqlite:///{tmp_path / 'config-managed.sqlite3'}",
-    )
+    monkeypatch.setattr(settings, "database_url", configured)
 
     manager = repository_connection.DatabaseManager()
     try:
-        historical_path = (
-            Path(repository_connection.__file__).parent.parent / "fairmind.db"
-        )
-        assert str(manager.engine.url) == f"sqlite:///{historical_path}"
+        assert manager.engine.url.render_as_string(hide_password=False) == configured
     finally:
         manager.engine.dispose()
 
@@ -119,17 +115,14 @@ def test_default_off_main_lifespan_keeps_legacy_plan_write_and_read_available(
     monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.setattr(settings, "assurance_v2_enabled", False)
     monkeypatch.setattr(settings, "assurance_migration_schema", None)
-    monkeypatch.setattr(
-        settings, "database_url", f"sqlite:///{tmp_path / 'config-managed.sqlite3'}"
-    )
+    legacy_engine = pg.fresh_engine()
+    legacy_url = legacy_engine.url.render_as_string(hide_password=False)
+    monkeypatch.setattr(settings, "database_url", legacy_url)
     monkeypatch.setattr(settings, "upload_dir", str(tmp_path / "uploads"))
     monkeypatch.setattr(settings, "database_dir", str(tmp_path / "datasets"))
     monkeypatch.setattr(settings, "model_cache_dir", str(tmp_path / "model-cache"))
 
-    legacy_manager = repository_connection.DatabaseManager(
-        database_url=f"sqlite:///{tmp_path / 'legacy-repository.sqlite3'}"
-    )
-    legacy_manager.create_tables()
+    legacy_manager = repository_connection.DatabaseManager(database_url=legacy_url)
     org_id = str(uuid.uuid4())
     user_id = str(uuid.uuid4())
     _seed_legacy_scope(legacy_manager, org_id=org_id, user_id=user_id)

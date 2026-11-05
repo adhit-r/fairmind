@@ -43,10 +43,6 @@ if [ ! -z "$DATABASE_URL" ]; then
         # PostgreSQL backup
         pg_dump "$DATABASE_URL" > database.sql
         log "PostgreSQL database backed up"
-    elif [[ $DATABASE_URL == sqlite* ]]; then
-        # SQLite backup
-        sqlite3 "${DATABASE_URL#sqlite:///}" ".backup database.db"
-        log "SQLite database backed up"
     else
         warn "Unknown database type, skipping database backup"
     fi

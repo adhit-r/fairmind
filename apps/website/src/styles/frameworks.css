@@ -16,12 +16,6 @@
   font-size: clamp(1.05rem, 1.4vw, 1.25rem);
 }
 
-.fw-hero h1 em {
-  font-family: var(--font-serif);
-  font-style: italic;
-  font-weight: 400;
-}
-
 .fw-filters {
   display: flex;
   flex-wrap: wrap;

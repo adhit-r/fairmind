@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import sqlite3
 import time
 import uuid
 from pathlib import Path
@@ -12,11 +11,7 @@ from threading import Event, Thread
 
 import pytest
 
-from migrations import owner_decision_override_integrity_migration as migration_013j
-from migrations.owner_decision_override_integrity_migration import (
-    apply_sqlite as apply_013j,
-    sql_for,
-)
+from migrations.owner_decision_override_integrity_migration import sql_for
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
@@ -40,87 +35,9 @@ POSTGRES_CHAIN_THROUGH_013I = (
     "013h_idempotency_retention_integrity.sql",
     "013i_imported_evidence_delivery_integrity.sql",
 )
-SQLITE_REVIEW_TRIGGER = "governance_evidence_reviews_separation_guard_013j"
-SQLITE_DECISION_TRIGGER = (
-    "governance_evaluation_decisions_owner_override_unavailable_013j"
-)
-
-
-def _minimal_sqlite() -> sqlite3.Connection:
-    connection = sqlite3.connect(":memory:")
-    connection.execute("PRAGMA foreign_keys = ON")
-    connection.executescript(
-        """
-        CREATE TABLE governance_evaluation_runs (
-            id TEXT PRIMARY KEY, org_id TEXT NOT NULL, workspace_id TEXT NOT NULL,
-            system_id TEXT NOT NULL, requested_by TEXT NOT NULL
-        );
-        CREATE TABLE governance_evidence_admissions (
-            id TEXT PRIMARY KEY, contract_version TEXT NOT NULL,
-            run_id TEXT NOT NULL, suite_execution_id TEXT NOT NULL,
-            evidence_run_id TEXT NOT NULL, passport_revision_id TEXT NOT NULL,
-            workspace_id TEXT NOT NULL, system_id TEXT NOT NULL, org_id TEXT NOT NULL,
-            submitted_by TEXT NOT NULL
-        );
-        CREATE TABLE governance_evaluation_suite_evidence_links (
-            id TEXT PRIMARY KEY, admission_id TEXT NOT NULL,
-            admission_contract_version TEXT NOT NULL, run_id TEXT NOT NULL,
-            suite_execution_id TEXT NOT NULL, evidence_run_id TEXT NOT NULL,
-            passport_revision_id TEXT NOT NULL, workspace_id TEXT NOT NULL,
-            system_id TEXT NOT NULL, org_id TEXT NOT NULL, linked_by TEXT NOT NULL
-        );
-        CREATE TABLE governance_evidence_reviews (
-            id TEXT PRIMARY KEY, admission_id TEXT NOT NULL,
-            admission_contract_version TEXT NOT NULL, run_id TEXT NOT NULL,
-            suite_execution_id TEXT NOT NULL, evidence_run_id TEXT NOT NULL,
-            passport_revision_id TEXT NOT NULL, workspace_id TEXT NOT NULL,
-            system_id TEXT NOT NULL, org_id TEXT NOT NULL, reviewed_by TEXT NOT NULL,
-            separation_override_reason TEXT
-        );
-        CREATE TABLE governance_evaluation_decisions (
-            id TEXT PRIMARY KEY, owner_override_reason TEXT
-        );
-        INSERT INTO governance_evaluation_runs
-            VALUES ('run-a', 'org-a', 'workspace-a', 'system-a', 'requester-a');
-        INSERT INTO governance_evidence_admissions VALUES (
-            'admission-a', '2.0.0', 'run-a', 'execution-a', 'evidence-a',
-            'revision-a', 'workspace-a', 'system-a', 'org-a', 'submitter-a'
-        );
-        INSERT INTO governance_evaluation_suite_evidence_links VALUES (
-            'link-a', 'admission-a', '2.0.0', 'run-a', 'execution-a',
-            'evidence-a', 'revision-a', 'workspace-a', 'system-a', 'org-a',
-            'linker-a'
-        );
-        """
-    )
-    return connection
-
-
-def _insert_review(
-    connection: sqlite3.Connection,
-    *,
-    reviewer: str,
-    separation_override_reason: str | None = None,
-) -> None:
-    connection.execute(
-        """
-        INSERT INTO governance_evidence_reviews VALUES (
-            'review-a', 'admission-a', '2.0.0', 'run-a', 'execution-a',
-            'evidence-a', 'revision-a', 'workspace-a', 'system-a', 'org-a', ?, ?
-        )
-        """,
-        (reviewer, separation_override_reason),
-    )
-
-
 def test_013j_artifacts_and_loader_contract() -> None:
     assert (MIGRATIONS / "013j_owner_decision_override_integrity.sql").is_file()
-    assert (
-        MIGRATIONS / "fixtures" / "013j_owner_decision_override_integrity.sqlite.sql"
-    ).is_file()
     assert "fairmind_owner_decision_override_authorized_013j" in sql_for("postgresql")
-    assert SQLITE_REVIEW_TRIGGER in sql_for("sqlite")
-    assert SQLITE_DECISION_TRIGGER in sql_for("sqlite")
     with pytest.raises(ValueError, match="Unsupported migration dialect"):
         sql_for("mysql")
 
@@ -138,83 +55,6 @@ def test_013j_operator_packaging_contract() -> None:
     assert "013i-to-013j-owner-decision-override-integrity-v1" in source
     assert "83c77841beb21dbf96d1e40260534d262dbf21941b21fac4121964a065e36f94" in source
     assert "bc5deb123981ee968061ec695821e8d00a8cc860d3c2169f9ca81ae6805846b5" in source
-
-
-def test_sqlite_013j_loader_requires_foreign_keys_and_is_idempotent() -> None:
-    disabled = _minimal_sqlite()
-    disabled.execute("PRAGMA foreign_keys = OFF")
-    with pytest.raises(RuntimeError, match="foreign key enforcement"):
-        apply_013j(disabled)
-
-    connection = _minimal_sqlite()
-    apply_013j(connection)
-    apply_013j(connection)
-    installed = {
-        row[0]
-        for row in connection.execute(
-            "SELECT name FROM sqlite_master WHERE type='trigger'"
-        )
-    }
-    assert {SQLITE_REVIEW_TRIGGER, SQLITE_DECISION_TRIGGER} <= installed
-
-
-def test_sqlite_013j_loader_rolls_back_partial_trigger_installation(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    broken_payload = sql_for("sqlite").replace(
-        f"DROP TRIGGER IF EXISTS {SQLITE_DECISION_TRIGGER};",
-        "THIS IS NOT VALID SQLITE;\n"
-        f"DROP TRIGGER IF EXISTS {SQLITE_DECISION_TRIGGER};",
-    )
-    broken_path = tmp_path / "broken_013j.sqlite.sql"
-    broken_path.write_text(broken_payload, encoding="utf-8")
-    monkeypatch.setattr(migration_013j, "_SQLITE_PATH", broken_path)
-
-    connection = _minimal_sqlite()
-    with pytest.raises(sqlite3.OperationalError, match="near \"THIS\""):
-        migration_013j.apply_sqlite(connection)
-
-    installed = {
-        row[0]
-        for row in connection.execute(
-            "SELECT name FROM sqlite_master WHERE type='trigger'"
-        )
-    }
-    assert SQLITE_REVIEW_TRIGGER not in installed
-    assert SQLITE_DECISION_TRIGGER not in installed
-
-
-def test_sqlite_013j_rejects_every_review_override_reason() -> None:
-    connection = _minimal_sqlite()
-    apply_013j(connection)
-    with pytest.raises(sqlite3.IntegrityError, match="review separation failed"):
-        _insert_review(
-            connection,
-            reviewer="independent-reviewer",
-            separation_override_reason="forbidden",
-        )
-
-
-@pytest.mark.parametrize("reviewer", ("submitter-a", "linker-a", "requester-a"))
-def test_sqlite_013j_enforces_all_review_relationships(reviewer: str) -> None:
-    connection = _minimal_sqlite()
-    apply_013j(connection)
-    with pytest.raises(sqlite3.IntegrityError, match="review separation failed"):
-        _insert_review(connection, reviewer=reviewer)
-
-
-def test_sqlite_013j_allows_independent_review_and_rejects_decision_override() -> None:
-    connection = _minimal_sqlite()
-    apply_013j(connection)
-    _insert_review(connection, reviewer="independent-reviewer")
-    with pytest.raises(
-        sqlite3.IntegrityError,
-        match="owner decision override requires PostgreSQL",
-    ):
-        connection.execute(
-            "INSERT INTO governance_evaluation_decisions VALUES ('decision-a', 'why')"
-        )
 
 
 @pytest.fixture

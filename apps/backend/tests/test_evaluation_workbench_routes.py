@@ -11,9 +11,8 @@ from types import SimpleNamespace
 import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, event, func, select, text, update
+from sqlalchemy import func, select, text, update
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from api.routes.evaluation_workbench import (
     governance_decision_router,
@@ -30,7 +29,7 @@ from api.routes.governance_assurance import organization_membership
 from api.routes.governance_assurance import router as governance_assurance_router
 from config.auth import TokenData, TokenType, UserRole, get_current_active_user
 from config.settings import settings
-from database.connection import Base, get_db
+from database.connection import get_db
 from database.governance_models import (
     GovernanceAISystem,
     GovernanceEvaluationAuditEvent,
@@ -51,7 +50,8 @@ from api.routes.evaluation_workbench import (
     get_verified_evidence_admission_service,
     get_verified_evidence_review_service,
 )
-from tests.evaluation_workbench_sqlite import (
+from tests import pg
+from tests.evaluation_workbench_pg import (
     active_trust_policy_values_for_verifier_harness,
     allow_deliberate_check_constraint_corruption,
     install_authoritative_assurance_fixtures_for_application_verifier_harness,
@@ -128,27 +128,20 @@ def _token(
 @pytest.fixture
 def workbench_client(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(settings, "assurance_v2_enabled", True)
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-
-    @event.listens_for(engine, "connect")
-    def _foreign_keys(connection, _record):
-        connection.execute("PRAGMA foreign_keys = ON")
-
-    Base.metadata.create_all(engine)
+    engine = pg.fresh_engine()
     install_authoritative_assurance_fixtures_for_application_verifier_harness(engine)
     factory = sessionmaker(bind=engine)
     session = factory()
     for user_id in (USER, VIEWER, REVIEWER):
         session.execute(
             User.__table__.insert().values(
+                password_hash="",
                 id=uuid.UUID(user_id), email=f"{user_id}@example.test", username=user_id
             )
         )
     session.execute(
         Organization.__table__.insert().values(
-            id=uuid.UUID(ORG), name="Org", slug=ORG, owner_id=uuid.UUID(USER)
+            id=uuid.UUID(ORG), name="Org", slug=ORG, owner_id=USER
         )
     )
     session.execute(
@@ -156,7 +149,7 @@ def workbench_client(monkeypatch: pytest.MonkeyPatch):
             id=uuid.UUID(FOREIGN_ORG),
             name="Foreign Org",
             slug=FOREIGN_ORG,
-            owner_id=uuid.UUID(USER),
+            owner_id=USER,
         )
     )
     for user_id, role in ((USER, "admin"), (VIEWER, "viewer"), (REVIEWER, "reviewer")):
@@ -164,7 +157,7 @@ def workbench_client(monkeypatch: pytest.MonkeyPatch):
             OrganizationMember.__table__.insert().values(
                 id=uuid.uuid4(),
                 org_id=uuid.UUID(ORG),
-                user_id=uuid.UUID(user_id),
+                user_id=user_id,
                 role=role,
                 status="active",
             )
@@ -173,7 +166,7 @@ def workbench_client(monkeypatch: pytest.MonkeyPatch):
         OrganizationMember.__table__.insert().values(
             id=uuid.uuid4(),
             org_id=uuid.UUID(FOREIGN_ORG),
-            user_id=uuid.UUID(USER),
+            user_id=USER,
             role="admin",
             status="active",
         )
@@ -465,7 +458,7 @@ def _set_membership_role(user_id: str, role: str) -> None:
             update(OrganizationMember)
             .where(
                 OrganizationMember.__table__.c.org_id == uuid.UUID(ORG),
-                OrganizationMember.__table__.c.user_id == uuid.UUID(user_id),
+                OrganizationMember.__table__.c.user_id == user_id,
             )
             .values(role=role)
         )
@@ -2781,56 +2774,54 @@ def test_privileged_suite_projection_corruption_returns_generic_409(
     session = next(session_iterator)
     timestamp = run["createdAt"]
     try:
-        session.execute(text("PRAGMA foreign_keys = OFF"))
-        session.execute(text("PRAGMA ignore_check_constraints = ON"))
-        execution_table = GovernanceEvaluationRunSuiteExecution.__table__
-        execution_update: dict[str, object]
-        if corruption == "partial-link":
-            execution_update = {"linked_at": timestamp}
-        elif corruption == "malformed-result-json":
-            execution_update = {"result_summary_json": '{"FM_SENTINEL":'}
-        elif corruption == "orphan-result-summary":
-            execution_update = {"result_summary_json": canonical_json({"status": "complete"})}
-        else:
-            execution_update = {
-                "technical_status": "succeeded",
-                "evidence_result_status": "failed",
-                "admission_status": "verified",
-                "evidence_run_id": str(uuid.uuid4()),
-                "passport_revision_id": str(uuid.uuid4()),
-                "linked_by": USER,
-                "linked_at": timestamp,
-                "started_at": timestamp,
-                "completed_at": timestamp,
-                "updated_at": timestamp,
-            }
-            if corruption == "malformed-link-id":
-                execution_update["evidence_run_id"] = "FM SENTINEL INVALID ID"
-            elif corruption == "malformed-link-time":
-                execution_update["linked_at"] = "FM_SENTINEL_INVALID_TIME"
-        if corruption != "succeeded-parent-with-pending-child":
-            session.execute(
-                execution_table.update()
-                .where(execution_table.c.run_id == run["id"])
-                .values(**execution_update)
-            )
-        if corruption in {
-            "malformed-link-id",
-            "malformed-link-time",
-            "succeeded-parent-with-pending-child",
-        }:
-            session.execute(
-                GovernanceEvaluationRun.__table__.update()
-                .where(GovernanceEvaluationRun.id == run["id"])
-                .values(
-                    technical_status="succeeded",
-                    started_at=timestamp,
-                    completed_at=timestamp,
-                    updated_at=timestamp,
+        with allow_deliberate_check_constraint_corruption(session, ignore_foreign_keys=True):
+            execution_table = GovernanceEvaluationRunSuiteExecution.__table__
+            execution_update: dict[str, object]
+            if corruption == "partial-link":
+                execution_update = {"linked_at": timestamp}
+            elif corruption == "malformed-result-json":
+                execution_update = {"result_summary_json": '{"FM_SENTINEL":'}
+            elif corruption == "orphan-result-summary":
+                execution_update = {"result_summary_json": canonical_json({"status": "complete"})}
+            else:
+                execution_update = {
+                    "technical_status": "succeeded",
+                    "evidence_result_status": "failed",
+                    "admission_status": "verified",
+                    "evidence_run_id": str(uuid.uuid4()),
+                    "passport_revision_id": str(uuid.uuid4()),
+                    "linked_by": USER,
+                    "linked_at": timestamp,
+                    "started_at": timestamp,
+                    "completed_at": timestamp,
+                    "updated_at": timestamp,
+                }
+                if corruption == "malformed-link-id":
+                    execution_update["evidence_run_id"] = "FM SENTINEL INVALID ID"
+                elif corruption == "malformed-link-time":
+                    execution_update["linked_at"] = "FM_SENTINEL_INVALID_TIME"
+            if corruption != "succeeded-parent-with-pending-child":
+                session.execute(
+                    execution_table.update()
+                    .where(execution_table.c.run_id == run["id"])
+                    .values(**execution_update)
                 )
-            )
-        session.commit()
-        session.execute(text("PRAGMA foreign_keys = ON"))
+            if corruption in {
+                "malformed-link-id",
+                "malformed-link-time",
+                "succeeded-parent-with-pending-child",
+            }:
+                session.execute(
+                    GovernanceEvaluationRun.__table__.update()
+                    .where(GovernanceEvaluationRun.id == run["id"])
+                    .values(
+                        technical_status="succeeded",
+                        started_at=timestamp,
+                        completed_at=timestamp,
+                        updated_at=timestamp,
+                    )
+                )
+            session.commit()
     finally:
         session_iterator.close()
 

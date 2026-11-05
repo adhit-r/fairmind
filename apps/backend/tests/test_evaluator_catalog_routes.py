@@ -8,10 +8,10 @@ from datetime import datetime, timezone
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, event, update
+from sqlalchemy import update
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
+from tests import pg
 from api.composition.evaluator_catalog import build_evaluator_catalog_service
 from api.routes.evaluator_catalog import (
     evaluator_catalog_router,
@@ -20,7 +20,7 @@ from api.routes.evaluator_catalog import (
 from config.auth import TokenData, TokenType, UserRole, get_current_active_user
 from config.jwt_exceptions import JWT_EXCEPTION_HANDLERS
 from config.settings import settings
-from database.connection import Base, get_db
+from database.connection import get_db
 from database.models import Organization, OrganizationMember, OrganizationRole, User
 from src.application.ports.evaluation_workbench import (
     EvaluationWorkbenchError,
@@ -191,23 +191,14 @@ def _catalog_service() -> EvaluatorCatalogService:
 
 @pytest.fixture
 def catalog_client():
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-
-    @event.listens_for(engine, "connect")
-    def _foreign_keys(connection, _record) -> None:
-        connection.execute("PRAGMA foreign_keys = ON")
-
-    Base.metadata.create_all(engine)
+    engine = pg.fresh_engine()
     factory = sessionmaker(bind=engine)
     session = factory()
     try:
         for user_id in (USER, OWNER, REVIEWER, INACTIVE_USER):
             session.execute(
                 User.__table__.insert().values(
+                    password_hash="",
                     id=uuid.UUID(user_id),
                     email=f"{user_id}@example.test",
                     username=user_id,
@@ -219,7 +210,7 @@ def catalog_client():
                     id=uuid.UUID(org_id),
                     name=name,
                     slug=org_id,
-                    owner_id=uuid.UUID(USER),
+                    owner_id=USER,
                 )
             )
         for role in ("admin", "reviewer"):
@@ -241,7 +232,7 @@ def catalog_client():
                 OrganizationMember.__table__.insert().values(
                     id=uuid.uuid4(),
                     org_id=uuid.UUID(ORG),
-                    user_id=uuid.UUID(user_id),
+                    user_id=user_id,
                     role=role,
                     status=status,
                 )
@@ -675,7 +666,7 @@ def test_catalog_get_list_and_transitions_do_not_disclose_foreign_registrations(
 
 
 def test_catalog_composition_uses_the_audited_catalog_unit_of_work() -> None:
-    engine = create_engine("sqlite://")
+    engine = pg.fresh_engine()
     session = sessionmaker(bind=engine)()
     try:
         service = build_evaluator_catalog_service(session)

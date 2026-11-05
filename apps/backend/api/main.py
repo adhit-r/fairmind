@@ -80,7 +80,7 @@ async def lifespan(app: FastAPI):
         raise
 
     # ORM-managed tables (users, organisations, governance). Table by table,
-    # so one definition the local SQLite cannot parse does not block the rest.
+    # so one failing definition does not block the rest.
     try:
         from database.connection import db_manager as orm_db_manager
 
@@ -405,6 +405,7 @@ _include_router("api.routes.fairness_runs", prefix="/api/v1/ai-governance", tags
 _include_router("api.routes.evidence_packs", prefix="/api/v1/ai-governance", tags=["evidence-packs"], required=True)
 _include_router("api.routes.evidence_packs", prefix="/api/v1/public", tags=["evidence-packs-public"], attr="public_router", required=True)
 _include_router("api.routes.governance_assurance", prefix="/api/v1/ai-governance", tags=["governance-assurance"], required=True)
+_include_router("api.routes.policy_center", prefix="/api/v1/ai-governance", tags=["policies"], required=True)
 if settings.assurance_v2_enabled:
     _include_router(
         "api.routes.evaluation_workbench",
@@ -490,6 +491,7 @@ else:
 _include_router("api.routes.packs", prefix="/api/v1/packs", tags=["packs"], required=True)
 _include_router("api.routes.evaluation_runs", prefix="/api/v1/packs", tags=["packs"], required=True)
 _include_router("api.routes.system_targets", prefix="/api/v1/packs", tags=["packs"], required=True)
+_include_router("api.routes.platform_connections", prefix="/api/v1/packs", tags=["packs"], required=True)
 _include_router("api.routes.environmental", tags=["environmental"], required=False)
 _include_router("api.routes.settings", prefix="/api/v1", tags=["settings"], required=False)
 
@@ -513,7 +515,6 @@ _include_router("api.routes.registration", prefix="/api/v1", tags=["registration
 _include_router("api.routes.org_management", tags=["organization-management"], required=False)
 _include_router("api.routes.compliance", tags=["compliance"], required=False)
 _include_router("api.routes.compliance_audit", tags=["compliance-audit"], required=False)
-_include_router("api.routes.policies", tags=["policies"], required=False)
 # The legacy /api/approvals router writes the same approval tables without the
 # tenant and actor guarantees enforced by the primary governance API. Keep it
 # unmounted; clients must use /api/v1/ai-governance approval endpoints.

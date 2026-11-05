@@ -1,7 +1,9 @@
 """Run a catalogue evaluation on uploaded files and keep the result as measured evidence.
 
 GET  /evaluations/{id}/engine        the files and settings the engine takes; 404 when FairMind cannot run it
-POST /evaluations/{id}/runs          multipart: system_id, params (JSON), one file per slot, mode=live for an alternate
+POST /evaluations/{id}/runs          multipart: system_id, params (JSON), source, then one file per slot;
+                                     source=connection reads the organisation's agent platform instead of files,
+                                     mode=live runs an evaluation's alternate behaviour test
 GET  /evaluations/{id}/runs          recent runs, optionally for one AI system
 GET  /evaluation-runs/{evidence_id}  one run in full
 GET  /evaluation-jobs/{job_id}       a behaviour test in progress
@@ -21,20 +23,22 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
+import anyio
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from api.routes import llm
 from api.routes.ai_governance import _ensure_tables, _utc_now_iso
+from api.routes import llm, platform_connections
 from api.routes.packs import AGENT_SCHEMA, AGENT_SYSTEM, _ai_row, _manager, _member, _stored_connection
 from api.routes.pack_catalogue import EVALUATIONS
 from api.routes.system_targets import Target, TargetError, ask, stored_target
 from database.connection import get_db
-from src.application.services.eval_engines import ALTERNATES, REGISTRY, EngineError
+from src.application.services.eval_engines import ALTERNATES, REGISTRY, EngineError, Judge
 from src.application.services.eval_engines.behaviour import CallError, Live
+from src.application.services.eval_engines.platform import load_export
 from src.application.services.governance_assurance_service import OrgMembership
 
 logger = logging.getLogger(__name__)
@@ -43,6 +47,7 @@ router = APIRouter()
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 EVIDENCE_TYPE = "evaluation_run"
 STALE_AFTER = timedelta(minutes=5)  # a running job that has not reported for this long died with its worker
+PLATFORM = "claude_managed_agents"  # ponytail: the one connector; take it from the form when a second platform lands
 
 
 def _engine(evaluation_id: str, mode: str = ""):
@@ -52,6 +57,23 @@ def _engine(evaluation_id: str, mode: str = ""):
     if not engine:
         raise HTTPException(status_code=404, detail="FairMind cannot run this evaluation yet")
     return engine
+
+
+def _judge(db: Session, org_id: str) -> Optional[Judge]:
+    """The organisation's own model as a judge, called from the engine's worker thread; None when none is set."""
+    row = _ai_row(db, org_id)
+    if not row or not row["enabled"]:
+        return None
+    conn = _stored_connection(row)
+
+    def judge(system: str, user: str, schema: Dict[str, Any]) -> Dict[str, Any]:
+        try:
+            return anyio.from_thread.run(llm.complete, conn, system, user, schema)[0]
+        except llm.LLMError:
+            # ponytail: the provider's reason is dropped here; the AI provider test in settings shows it
+            raise EngineError("Your model could not judge this; test it under organization settings, AI provider")
+
+    return judge
 
 
 def _run_json(row, full: bool) -> Dict[str, Any]:
@@ -65,6 +87,7 @@ def _run_json(row, full: bool) -> Dict[str, Any]:
         "summary": content.get("summary"),
         "metrics": content.get("metrics", {}),
         "files": content.get("files", {}),
+        "source": content.get("source", "upload"),
         "createdAt": row["created_at"],
         "createdBy": row["uploaded_by"],
     }
@@ -109,8 +132,11 @@ async def create_run(
         assert isinstance(params, dict)
     except (ValueError, AssertionError):
         raise HTTPException(status_code=422, detail="params must be a JSON object")
+    source = str(form.get("source") or "upload")
+    if source not in ("upload", "connection") or (source == "connection" and not engine.platform):
+        raise HTTPException(status_code=422, detail="source must be upload, or connection for an evaluation that reads platform configuration")
     files, names = {}, {}
-    for slot in engine.slots:
+    for slot in engine.slots if source == "upload" else ():
         upload = form.get(slot.name)
         if upload is None or not hasattr(upload, "read"):
             if slot.required:
@@ -125,12 +151,24 @@ async def create_run(
             raise HTTPException(status_code=422, detail=f"Set {p.label.lower()}")
     if engine.live:
         return _start_job(db, background, m, evaluation_id, engine, system, system_id, files, names, params)
-    db.rollback()  # hold no transaction open while the engine computes
+    reads_platform = source == "connection" or engine.run is None
+    judge = _judge(db, m.org_id) if engine.judge and reads_platform else None
+    key = None
+    if source == "connection":
+        key = platform_connections.stored_key(db, m.org_id, PLATFORM)
+        names = {"connection": platform_connections.PLATFORMS[PLATFORM]["name"]}
+    db.rollback()  # hold no transaction open while the platform answers or the engine computes
     try:
-        outcome = await run_in_threadpool(engine.run, files, params)
+        if reads_platform:
+            snap = await platform_connections.snapshot(key) if key else load_export(files["export"])
+            outcome = await run_in_threadpool(engine.platform, snap, params, judge)
+        else:
+            outcome = await run_in_threadpool(engine.run, files, params)
+    except platform_connections.PlatformError as exc:
+        raise HTTPException(status_code=422, detail=platform_connections.public_message(exc))
     except EngineError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    evidence_id = _store_run(db, m.org_id, m.user_id, system_id, evaluation_id, {**outcome, "params": params, "files": names})
+    evidence_id = _store_run(db, m.org_id, m.user_id, system_id, evaluation_id, {**outcome, "params": params, "files": names, "source": source})
     row = db.execute(text(_RUN_COLS + "WHERE e.id = :id"), {"id": evidence_id}).mappings().fetchone()
     return _run_json(row, full=True)
 
@@ -155,7 +193,7 @@ def _store_run(db: Session, org_id: str, user_id: str, system_id: str, evaluatio
             "content": json.dumps(content, default=str),
             "confidence": 1.0 if outcome["status"] != "insufficient" else 0.5,
             "by": user_id,
-            "metadata": json.dumps({"provenance_class": "measured", "engine": evaluation_id, "computed_at": now}),
+            "metadata": json.dumps({"provenance_class": "measured", "engine": evaluation_id, "source": outcome.get("source", "upload"), "computed_at": now}),
             "now": now,
         },
     )

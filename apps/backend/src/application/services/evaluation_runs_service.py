@@ -344,7 +344,7 @@ class EvaluationRunsService:
             insert(OrganizationAuditLog.__table__).values(
                 id=uuid.uuid4(),
                 org_id=uuid.UUID(org_id),
-                user_id=uuid.UUID(actor_id),
+                user_id=actor_id,
                 action=action,
                 resource_type=resource_type,
                 resource_id=uuid.UUID(resource_id),

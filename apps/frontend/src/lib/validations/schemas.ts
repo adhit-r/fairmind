@@ -77,14 +77,6 @@ export const riskAssessmentSchema = z.object({
   description: z.string().min(1, 'Description is required'),
 })
 
-// Policy Creation
-export const policySchema = z.object({
-  name: z.string().min(1, 'Policy name is required'),
-  framework: z.string().min(1, 'Framework is required'),
-  description: z.string().optional(),
-  rules: z.array(z.any()).min(1, 'At least one rule is required'),
-})
-
 // Dataset Upload
 export const datasetSchema = z.object({
   name: z.string().min(1, 'Dataset name is required'),
@@ -123,7 +115,6 @@ export type SecurityScanFormData = z.infer<typeof securityScanSchema>
 export type LifecycleFormData = z.infer<typeof lifecycleSchema>
 export type EvidenceFormData = z.infer<typeof evidenceSchema>
 export type RiskAssessmentFormData = z.infer<typeof riskAssessmentSchema>
-export type PolicyFormData = z.infer<typeof policySchema>
 export type DatasetFormData = z.infer<typeof datasetSchema>
 export type AdvancedBiasFormData = z.infer<typeof advancedBiasSchema>
 export type BenchmarkFormData = z.infer<typeof benchmarkSchema>

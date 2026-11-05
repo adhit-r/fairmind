@@ -37,13 +37,24 @@ class Param:
     required: bool = False
 
 
+# (system, user, JSON schema) -> the organisation's model's JSON answer; raises EngineError
+Judge = Callable[[str, str, Dict[str, Any]], Dict[str, Any]]
+
+
 @dataclass(frozen=True)
 class Engine:
     id: str
     method: str  # one line on how the engine measures, shown beside the run form
     slots: Tuple[Slot, ...]
-    run: Callable[..., Any]  # (files, params) -> result; live engines: async (files, params, Live) -> result
+    # Reads the uploaded files: (files, params) -> result; live engines are async (files, params, Live) -> result.
+    # None for an engine that only reads an agent platform's configuration, whose one slot is that
+    # configuration exported as JSON.
+    run: Optional[Callable[..., Any]] = None
     params: Tuple[Param, ...] = field(default_factory=tuple)
+    # Reads an agent platform snapshot (platform.snapshot shape), from a connection or an export.
+    platform: Optional[Callable[[Dict[str, Any], Dict[str, Any], Optional[Judge]], Dict[str, Any]]] = None
+    platform_method: str = ""
+    judge: bool = False  # the platform check asks the organisation's model
     live: str = ""  # "" reads uploaded files; "target" calls the AI system under test; "agent" calls FairMind's own agent
 
     def spec(self) -> Dict[str, Any]:
@@ -53,6 +64,9 @@ class Engine:
             "slots": [s.__dict__ for s in self.slots],
             "params": [p.__dict__ for p in self.params],
             "live": self.live,
+            "platform": self.platform is not None,
+            "platformMethod": self.platform_method or self.method,
+            "judge": self.judge,
         }
 
 

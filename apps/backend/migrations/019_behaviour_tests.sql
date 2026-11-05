@@ -1,4 +1,4 @@
--- 018_behaviour_tests.sql
+-- 019_behaviour_tests.sql
 -- Behaviour tests: how FairMind calls an AI system under test, and the background jobs that run the tests.
 -- The target's auth value is encrypted by the backend before it is stored.
 --

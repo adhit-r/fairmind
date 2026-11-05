@@ -11,17 +11,15 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from sqlalchemy import create_engine, event, func, select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 import src.application.services.evaluation_catalog_versions_service as evaluation_catalog_versions_service_module
 import src.application.services.evaluation_plan_service as evaluation_plan_service_module
 import src.application.services.evaluation_run_service as evaluation_run_service_module
 import src.application.evaluation_workbench_contracts as evaluation_service_module
 import src.domain.assurance.evaluation_v2 as evaluation_v2_module
-from database.connection import Base, DatabaseManager
 from database.governance_models import (
     GovernanceAISystem,
     GovernanceEvaluationAuditEvent,
@@ -38,7 +36,6 @@ from database.governance_models import (
 from database.models import Organization, OrganizationMember, User
 from src.application.ports.evaluation_workbench import FrozenJsonObject
 from src.application.ports.evidence_freshness import EvidenceFreshnessClassification
-from src.application.ports.governance_decision import GovernanceDecisionScope
 from src.application.evaluation_workbench_contracts import (
     EvaluationWorkbenchError,
     assurance_request_hash,
@@ -57,7 +54,8 @@ from src.infrastructure.db.repositories.evaluation_workbench_repository import (
     SqlAlchemyEvaluationWorkbenchRepository,
     SqlAlchemyEvaluationWorkbenchUnitOfWork,
 )
-from tests.evaluation_workbench_sqlite import (
+from tests import pg
+from tests.evaluation_workbench_pg import (
     active_trust_policy_values_for_verifier_harness,
     allow_deliberate_check_constraint_corruption,
     install_authoritative_assurance_fixtures_for_application_verifier_harness,
@@ -109,40 +107,6 @@ def _service(
     )
 
 
-def test_sqlite_repository_explicitly_rejects_governance_decision_authority(
-    repository_fixture,
-) -> None:
-    session, _factory = repository_fixture
-    repository = SqlAlchemyEvaluationWorkbenchRepository(session)
-
-    with pytest.raises(EvaluationWorkbenchError) as caught:
-        repository.load_governance_decision_authority_for_update(
-            scope=GovernanceDecisionScope(
-                organization_id=ORG,
-                workspace_id="workspace-a",
-                system_id="system-a",
-                run_id="run-a",
-            )
-        )
-
-    assert caught.value.code == "governance_decision_postgresql_required"
-
-
-def test_sqlite_repository_explicitly_rejects_owner_override_authorization(
-    repository_fixture,
-) -> None:
-    session, _factory = repository_fixture
-    repository = SqlAlchemyEvaluationWorkbenchRepository(session)
-
-    with pytest.raises(EvaluationWorkbenchError) as caught:
-        repository.authorize_owner_decision_override_for_update(
-            organization_id=ORG,
-            actor_id=USER,
-        )
-
-    assert caught.value.code == "governance_decision_postgresql_required"
-
-
 @pytest.mark.parametrize(
     ("message", "expected_code", "expected_status"),
     (
@@ -178,23 +142,13 @@ def test_owner_override_trigger_errors_map_to_expected_rejections(
 
 @pytest.fixture
 def repository_fixture():
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-
-    @event.listens_for(engine, "connect")
-    def _foreign_keys(connection, _record):
-        connection.execute("PRAGMA foreign_keys = ON")
-
-    Base.metadata.create_all(engine)
+    engine = pg.fresh_engine()
     install_authoritative_assurance_fixtures_for_application_verifier_harness(engine)
     factory = sessionmaker(bind=engine)
     session = factory()
     user_uuid = uuid.UUID(USER)
     session.execute(
-        User.__table__.insert().values(id=user_uuid, email="actor@example.test", username=USER)
+        User.__table__.insert().values(password_hash="", id=user_uuid, email="actor@example.test", username=USER)
     )
     for org_id, workspace_id, system_id in (
         (ORG, "workspace-a", "system-a"),
@@ -1007,7 +961,9 @@ def test_run_read_rejects_invalid_stored_envelope_encodings(
 
 @pytest.mark.parametrize(
     "encoding_case",
-    ["duplicate-name", "noncanonical-whitespace", "oversized-payload"],
+    # Not whitespace: on PostgreSQL migration 013b writes this column itself, so
+    # reads canonicalize instead of rejecting non-canonical spacing.
+    ["duplicate-name", "oversized-payload"],
 )
 def test_run_read_rejects_invalid_layer_verdict_encodings_before_verification(
     repository_fixture,
@@ -1020,16 +976,15 @@ def test_run_read_rejects_invalid_layer_verdict_encodings_before_verification(
     execution_id = run["suiteExecutions"][0]["id"]
     if encoding_case == "duplicate-name":
         raw = "{" f'"{execution_id}":"insufficient",' f'"{execution_id}":"insufficient"' "}"
-    elif encoding_case == "noncanonical-whitespace":
-        raw = canonical_json(run["layerVerdicts"]) + "\n"
     else:
         raw = canonical_json({"x" * (8 * 1024): "insufficient"})
-    session.execute(
-        GovernanceEvaluationRun.__table__.update()
-        .where(GovernanceEvaluationRun.id == run["id"])
-        .values(layer_verdicts_json=raw)
-    )
-    session.commit()
+    with allow_deliberate_check_constraint_corruption(session):
+        session.execute(
+            GovernanceEvaluationRun.__table__.update()
+            .where(GovernanceEvaluationRun.id == run["id"])
+            .values(layer_verdicts_json=raw)
+        )
+        session.commit()
 
     def verifier_must_not_run(*_args, **_kwargs):
         raise AssertionError("stored JSON must be rejected before application verification")
@@ -1329,24 +1284,26 @@ def test_run_verifier_rejects_incoherent_state_version_time_and_failure_fields(
     assert caught.value.detail() == BINDING_INTEGRITY_DETAIL
 
 
-def test_run_read_maps_raw_malformed_suite_ordinal_to_generic_integrity_error(
+def test_run_read_maps_out_of_range_suite_ordinal_to_generic_integrity_error(
     repository_fixture,
 ) -> None:
+    """PostgreSQL integers cannot hold text, so the stored corruption is an invalid ordinal."""
+
     session, _ = repository_fixture
     service = _service(session)
     _, run = _create_active_plan_and_run(service)
-    session.execute(
-        GovernanceEvaluationRunSuiteExecution.__table__.update()
-        .where(GovernanceEvaluationRunSuiteExecution.id == run["suiteExecutions"][0]["id"])
-        .values(ordinal="FM_SENTINEL_ORDINAL")
-    )
-    session.commit()
+    with allow_deliberate_check_constraint_corruption(session):
+        session.execute(
+            GovernanceEvaluationRunSuiteExecution.__table__.update()
+            .where(GovernanceEvaluationRunSuiteExecution.id == run["suiteExecutions"][0]["id"])
+            .values(ordinal=-1)
+        )
+        session.commit()
 
     with pytest.raises(EvaluationWorkbenchError) as caught:
         service.get_run(org_id=ORG, system_id="system-a", run_id=run["id"])
 
     assert caught.value.detail() == BINDING_INTEGRITY_DETAIL
-    assert "FM_SENTINEL" not in caught.value.message
 
 
 def _tampered_suite_state(record, case: str):
@@ -2705,7 +2662,10 @@ def test_run_reads_fail_closed_when_the_audit_chain_is_tampered(
 
     if tamper == "head-hash":
         session.execute(
-            text("DROP TRIGGER IF EXISTS " "governance_evaluation_audit_chain_heads_guard_update")
+            text(
+                "DROP TRIGGER IF EXISTS governance_evaluation_audit_chain_heads_guard_update "
+                "ON governance_evaluation_audit_chain_heads"
+            )
         )
         session.execute(
             text(
@@ -2716,7 +2676,10 @@ def test_run_reads_fail_closed_when_the_audit_chain_is_tampered(
         )
     else:
         session.execute(
-            text("DROP TRIGGER IF EXISTS " "governance_evaluation_audit_events_no_update")
+            text(
+                "DROP TRIGGER IF EXISTS governance_evaluation_audit_events_no_update "
+                "ON governance_evaluation_audit_events"
+            )
         )
         if tamper == "event-payload":
             session.execute(
@@ -2885,16 +2848,6 @@ def test_non_catalog_integrity_error_remains_atomic_persistence_failure(
     assert session.scalar(select(func.count()).select_from(GovernanceEvaluationTargetVersion)) == 0
     assert session.scalar(select(func.count()).select_from(GovernanceIdempotencyRecord)) == 0
     assert session.scalar(select(func.count()).select_from(GovernanceEvaluationAuditEvent)) == 0
-
-
-def test_database_manager_enables_sqlite_foreign_keys(monkeypatch) -> None:
-    monkeypatch.setenv("DATABASE_URL", "sqlite://")
-    manager = DatabaseManager()
-    try:
-        with manager.engine.connect() as connection:
-            assert connection.scalar(text("PRAGMA foreign_keys")) == 1
-    finally:
-        manager.engine.dispose()
 
 
 def test_successful_evaluator_can_report_failed_model_without_governance_autodecision(

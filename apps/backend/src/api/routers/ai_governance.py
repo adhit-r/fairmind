@@ -31,6 +31,7 @@ from database.models import OrganizationMember
 from src.application.services.governance_assurance_service import (
     GovernanceAssuranceService,
     OrgMembership,
+    member_user_matches,
 )
 
 
@@ -63,7 +64,7 @@ def _resolve_caller_org(request: Request, db: Session) -> None:
     members = OrganizationMember.__table__.c
     org = db.execute(
         select(members.org_id)
-        .where(members.user_id == user_uuid, members.status == "active")
+        .where(member_user_matches(members.user_id, user_uuid), members.status == "active")
         .order_by(members.created_at)
         .limit(1)
     ).scalar_one_or_none()
@@ -150,8 +151,8 @@ async def org_mutator(membership: OrgMembership = Depends(org_member)) -> OrgMem
 
 # Records addressed by their own ids are scoped by their route: through the
 # system they belong to (approval requests, evidence items, remediation tasks,
-# reports) or their own org_id (policies). Approval workflows and framework
-# controls are a platform catalogue that only platform admins write.
+# reports). Approval workflows and framework controls are a platform catalogue
+# that only platform admins write.
 router = APIRouter(tags=["ai-governance"], dependencies=[Depends(_enforce_org_scope)])
 
 SYSTEM_APPROVAL_WORKFLOW_ID = "fairmind-system-release-v1"
@@ -401,9 +402,9 @@ def _require_system_access(
     service = GovernanceAssuranceService(db)
     membership = service.membership(str(row[0]), current_user.user_id)
     if not membership and settings.is_development and current_user.org_id and str(current_user.org_id) == str(row[0]):
-        # Local development keeps governance in SQLite while memberships live in
-        # the users database, so the lookup above finds nothing. The token's org
-        # claim was issued from that same membership table; trust it here only.
+        # Local development only: accounts signed in without an org_members row
+        # (the e2e admin, see config.auth) carry the org in their token. Trust
+        # that claim here and in _membership, never outside development.
         membership = OrgMembership(str(row[0]), current_user.user_id, current_user.role.value, tuple(current_user.permissions))
     if not membership:
         raise HTTPException(status_code=404, detail="AI system not found")
@@ -466,54 +467,14 @@ _LATE_COLUMNS = (
 
 
 def _ensure_model_link_column(db: Session) -> None:
-    """Add late columns to databases created before them.
-
-    SQLite (local development and tests): every column the governance models
-    declare but the file lacks is added, so a dev database survives model
-    changes without being recreated. Postgres: only _LATE_COLUMNS, the rest is
-    for migrations.
-    """
-    dialect = db.bind.dialect.name if db.bind is not None else "sqlite"
+    """Add late columns to databases created before them; the rest is for migrations."""
     try:
-        if dialect == "sqlite":
-            import database.governance_models as governance_models  # noqa: F401
-            from database.connection import Base
-
-            for table in Base.metadata.sorted_tables:
-                if not table.name.startswith("governance_"):
-                    continue
-                existing = {row[1] for row in db.execute(text(f"PRAGMA table_info({table.name})")).fetchall()}
-                if not existing:
-                    continue  # create_all handles tables that do not exist yet
-                for column in table.columns:
-                    if column.name in existing:
-                        continue
-                    col_type = column.type.compile(dialect=db.bind.dialect)
-                    db.execute(text(f"ALTER TABLE {table.name} ADD COLUMN {column.name} {col_type}"))
-                    if column.index:
-                        db.execute(text(f"CREATE INDEX IF NOT EXISTS idx_{table.name}_{column.name} ON {table.name} ({column.name})"))
-        else:
-            for table, column in _LATE_COLUMNS:
-                db.execute(text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} VARCHAR(255)"))
-                db.execute(text(f"CREATE INDEX IF NOT EXISTS idx_{table}_{column} ON {table} ({column})"))
+        for table, column in _LATE_COLUMNS:
+            db.execute(text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} VARCHAR(255)"))
+            db.execute(text(f"CREATE INDEX IF NOT EXISTS idx_{table}_{column} ON {table} ({column})"))
         db.commit()
     except Exception:  # pragma: no cover - never block startup on a patch attempt
         db.rollback()
-
-
-class PolicyCreateRequest(BaseModel):
-    name: str = Field(min_length=1)
-    framework: str = Field(min_length=1)
-    description: str = ""
-    rules: List[Dict[str, Any]] = Field(default_factory=list)
-
-
-class PolicyUpdateRequest(BaseModel):
-    name: Optional[str] = None
-    framework: Optional[str] = None
-    description: Optional[str] = None
-    rules: Optional[List[Dict[str, Any]]] = None
-    status: Optional[str] = Field(default=None, pattern="^(draft|awaiting_approval|approved|rejected|archived)$")
 
 
 class ApprovalWorkflowCreateRequest(BaseModel):
@@ -1724,196 +1685,6 @@ async def create_system_approval(
         "createdAt": now,
         "updatedAt": now,
     }
-
-
-# governance_policies is shared with api.routes.policies: both filter on org_id.
-@router.get("/policies")
-async def list_policies(
-    framework: Optional[str] = Query(default=None),
-    membership: OrgMembership = Depends(org_member),
-    db: Session = Depends(get_db),
-):
-    _ensure_tables(db)
-    if framework:
-        rows = db.execute(
-            text(
-                "SELECT id, name, framework, description, rules_json, status, created_at FROM governance_policies "
-                "WHERE framework = :framework AND org_id = :org_id ORDER BY created_at DESC"
-            ),
-            {"framework": framework, "org_id": membership.org_id},
-        ).fetchall()
-    else:
-        rows = db.execute(
-            text(
-                "SELECT id, name, framework, description, rules_json, status, created_at FROM governance_policies "
-                "WHERE org_id = :org_id ORDER BY created_at DESC"
-            ),
-            {"org_id": membership.org_id},
-        ).fetchall()
-
-    return [
-        {
-            "id": row[0],
-            "name": row[1],
-            "framework": row[2],
-            "description": row[3] or "",
-            "rules": json.loads(row[4]),
-            "status": row[5],
-            "createdAt": row[6],
-        }
-        for row in rows
-    ]
-
-
-@router.post("/policies")
-async def create_policy(
-    request: PolicyCreateRequest,
-    membership: OrgMembership = Depends(org_mutator),
-    db: Session = Depends(get_db),
-):
-    _ensure_tables(db)
-    policy_id = str(uuid.uuid4())
-    now = _utc_now_iso()
-    db.execute(
-        text(
-            "INSERT INTO governance_policies "
-            "(id, org_id, name, framework, description, rules_json, status, version, created_at, updated_at) "
-            "VALUES (:id, :org_id, :name, :framework, :description, :rules_json, :status, 1, :created_at, :updated_at)"
-        ),
-        {
-            "id": policy_id,
-            "org_id": membership.org_id,
-            "name": request.name,
-            "framework": request.framework,
-            "description": request.description,
-            "rules_json": json.dumps(request.rules),
-            "status": "draft",
-            "created_at": now,
-            "updated_at": now,
-        },
-    )
-    db.commit()
-
-    return {
-        "id": policy_id,
-        "name": request.name,
-        "framework": request.framework,
-        "description": request.description,
-        "rules": request.rules,
-        "status": "draft",
-        "createdAt": now,
-    }
-
-
-@router.get("/policies/{policy_id}")
-async def get_policy(
-    policy_id: str,
-    membership: OrgMembership = Depends(org_member),
-    db: Session = Depends(get_db),
-):
-    _ensure_tables(db)
-    row = db.execute(
-        text(
-            "SELECT id, name, framework, description, rules_json, status, created_at, updated_at "
-            "FROM governance_policies WHERE id = :id AND org_id = :org_id"
-        ),
-        {"id": policy_id, "org_id": membership.org_id},
-    ).fetchone()
-    if not row:
-        raise HTTPException(status_code=404, detail="Policy not found")
-
-    return {
-        "id": row[0],
-        "name": row[1],
-        "framework": row[2],
-        "description": row[3] or "",
-        "rules": json.loads(row[4]),
-        "status": row[5],
-        "createdAt": row[6],
-        "updatedAt": row[7],
-    }
-
-
-@router.put("/policies/{policy_id}")
-async def update_policy(
-    policy_id: str,
-    request: PolicyUpdateRequest,
-    membership: OrgMembership = Depends(org_mutator),
-    db: Session = Depends(get_db),
-):
-    _ensure_tables(db)
-    existing = db.execute(
-        text("SELECT id, status FROM governance_policies WHERE id = :id AND org_id = :org_id"),
-        {"id": policy_id, "org_id": membership.org_id},
-    ).fetchone()
-    if not existing:
-        raise HTTPException(status_code=404, detail="Policy not found")
-
-    if existing[1] == "approved":
-        raise HTTPException(status_code=409, detail="Approved policies are immutable; create a new version")
-
-    updates = {
-        "name": request.name,
-        "framework": request.framework,
-        "description": request.description,
-        "rules_json": json.dumps(request.rules) if request.rules is not None else None,
-        "status": request.status,
-    }
-    set_parts = []
-    params: Dict[str, Any] = {"id": policy_id, "org_id": membership.org_id, "updated_at": _utc_now_iso()}
-    for key, value in updates.items():
-        if value is not None:
-            set_parts.append(f"{key} = :{key}")
-            params[key] = value
-
-    if not set_parts:
-        return await get_policy(policy_id, membership, db)
-
-    set_parts.append("updated_at = :updated_at")
-    db.execute(
-        text(f"UPDATE governance_policies SET {', '.join(set_parts)} WHERE id = :id AND org_id = :org_id"),
-        params,
-    )
-    db.commit()
-    return await get_policy(policy_id, membership, db)
-
-
-@router.delete("/policies/{policy_id}")
-async def delete_policy(
-    policy_id: str,
-    membership: OrgMembership = Depends(org_mutator),
-    db: Session = Depends(get_db),
-):
-    _ensure_tables(db)
-    result = db.execute(
-        text("DELETE FROM governance_policies WHERE id = :id AND org_id = :org_id"),
-        {"id": policy_id, "org_id": membership.org_id},
-    )
-    if result.rowcount == 0:
-        raise HTTPException(status_code=404, detail="Policy not found")
-    db.commit()
-    return {"id": policy_id, "deleted": True}
-
-
-@router.post("/policies/{policy_id}/submit")
-async def submit_policy_for_approval(
-    policy_id: str,
-    membership: OrgMembership = Depends(org_mutator),
-    db: Session = Depends(get_db),
-):
-    _ensure_tables(db)
-    now = _utc_now_iso()
-    result = db.execute(
-        text(
-            "UPDATE governance_policies SET status = :status, updated_at = :updated_at "
-            "WHERE id = :id AND org_id = :org_id"
-        ),
-        {"status": "awaiting_approval", "updated_at": now, "id": policy_id, "org_id": membership.org_id},
-    )
-    if result.rowcount == 0:
-        raise HTTPException(status_code=404, detail="Policy not found")
-    db.commit()
-    return {"id": policy_id, "status": "awaiting_approval", "updatedAt": now}
 
 
 @router.post("/approval-workflows")

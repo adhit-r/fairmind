@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import sqlite3
 import subprocess
 import uuid
 from pathlib import Path
@@ -23,20 +22,9 @@ from config.migration_integrity import (
     FROZEN_013I_OPERATOR_CHECKSUM,
     FROZEN_ASSURANCE_MIGRATIONS,
     FROZEN_POSTGRESQL_ASSURANCE_CATALOGS,
-    FROZEN_SQLITE_013C_FIXTURE_CHECKSUM,
-    FROZEN_SQLITE_013D_FIXTURE_CHECKSUM,
-    FROZEN_SQLITE_013E_FIXTURE_CHECKSUM,
-    FROZEN_SQLITE_013F_FIXTURE_CHECKSUM,
-    FROZEN_SQLITE_013G_FIXTURE_CHECKSUM,
-    FROZEN_SQLITE_013H_FIXTURE_CHECKSUM,
-    FROZEN_SQLITE_013I_FIXTURE_CHECKSUM,
     POSTGRESQL_ASSURANCE_CATALOG_SPEC,
     POSTGRESQL_ASSURANCE_FUNCTIONS,
     POSTGRESQL_ASSURANCE_REQUIRED_TRIGGERS,
-    SQLITE_ASSURANCE_INDEXES,
-    SQLITE_ASSURANCE_TABLES,
-    SQLITE_ASSURANCE_TRIGGERS,
-    SQLITE_ASSURANCE_VIEWS,
     FrozenMigration,
     FrozenPostgreSQLCatalog,
     MigrationIntegrityError,
@@ -53,8 +41,8 @@ from config.migration_integrity import (
     verify_database_identities,
     verify_postgresql_assurance_catalog,
     verify_postgresql_migration_ledger,
-    verify_sqlite_assurance_schema,
 )
+from tests import pg
 
 MIGRATIONS = Path(__file__).parents[1] / "migrations"
 POSTGRES_URL = os.getenv("FAIRMIND_TEST_POSTGRES_URL")
@@ -161,55 +149,6 @@ POSTGRESQL_013B_RETAINED_PREREQUISITE_CONSTRAINTS = POSTGRESQL_013B_PREREQUISITE
         "ck_governance_evaluation_suite_execution_projection_freeze",
     ),
 }
-
-
-def _install_sqlite_assurance_chain(database_path: Path) -> None:
-    from migrations.evaluator_catalog_migration import apply_sqlite as apply_013d
-    from migrations.environmental_tenant_scope_migration import apply_sqlite as apply_013e
-    from migrations.evaluation_assurance_v2_migration import sql_for as sql_013
-    from migrations.evaluation_binding_integrity_migration import sql_for as sql_013a
-    from migrations.evaluation_runs_migration import sql_for as sql_012
-    from migrations.evidence_verification_receipt_migration import sql_for as sql_013c
-    from migrations.governance_assurance_migration import sql_for as sql_011
-    from migrations.trust_authority_integrity_migration import apply_sqlite as apply_013f
-    from migrations.operational_evidence_freshness_migration import (
-        apply_sqlite as apply_013g,
-    )
-    from migrations.idempotency_retention_integrity_migration import (
-        apply_sqlite as apply_013h,
-    )
-    from migrations.imported_evidence_delivery_integrity_migration import (
-        apply_sqlite as apply_013i,
-    )
-    from migrations.owner_decision_override_integrity_migration import (
-        apply_sqlite as apply_013j,
-    )
-
-    connection = sqlite3.connect(database_path)
-    try:
-        connection.execute("PRAGMA foreign_keys = ON")
-        connection.executescript(
-            (MIGRATIONS / "008_governance_canonical.sql").read_text(encoding="utf-8")
-        )
-        connection.executescript(sql_011("sqlite"))
-        connection.executescript(sql_012("sqlite"))
-        connection.executescript(sql_013("sqlite"))
-        connection.executescript(sql_013a("sqlite"))
-        connection.executescript(
-            (
-                MIGRATIONS / "fixtures/013b_evaluation_assurance_trust_integrity.sqlite.sql"
-            ).read_text(encoding="utf-8")
-        )
-        connection.executescript(sql_013c("sqlite"))
-        apply_013d(connection)
-        apply_013e(connection)
-        apply_013f(connection)
-        apply_013g(connection)
-        apply_013h(connection)
-        apply_013i(connection)
-        apply_013j(connection)
-    finally:
-        connection.close()
 
 
 def _install_postgresql_base_through_012(
@@ -355,9 +294,9 @@ def test_postgresql_ledger_requires_every_exact_frozen_checksum() -> None:
         FrozenMigration("migration-a", "a" * 64, Path("a.sql")),
         FrozenMigration("migration-b", "b" * 64, Path("b.sql")),
     )
-    engine = create_engine("sqlite:///:memory:")
+    engine = pg.fresh_engine()
     with engine.begin() as connection:
-        connection.exec_driver_sql("ATTACH DATABASE ':memory:' AS trusted")
+        connection.exec_driver_sql("CREATE SCHEMA trusted")
         connection.execute(
             text(
                 "CREATE TABLE trusted.fairmind_operator_migration_ledger ("
@@ -400,10 +339,10 @@ def test_postgresql_ledger_requires_every_exact_frozen_checksum() -> None:
 
 def test_postgresql_ledger_uses_only_the_validated_trusted_schema() -> None:
     expected = (FrozenMigration("migration-a", "a" * 64, Path("a.sql")),)
-    engine = create_engine("sqlite:///:memory:")
+    engine = pg.fresh_engine()
     with engine.begin() as connection:
-        connection.exec_driver_sql("ATTACH DATABASE ':memory:' AS trusted")
-        connection.exec_driver_sql("ATTACH DATABASE ':memory:' AS shadow")
+        connection.exec_driver_sql("CREATE SCHEMA trusted")
+        connection.exec_driver_sql("CREATE SCHEMA shadow")
         for schema in ("trusted", "shadow"):
             connection.exec_driver_sql(
                 f"CREATE TABLE {schema}.fairmind_operator_migration_ledger "
@@ -432,7 +371,7 @@ def test_postgresql_ledger_uses_only_the_validated_trusted_schema() -> None:
 
 def test_postgresql_ledger_rejects_untrusted_or_missing_schema() -> None:
     expected = (FrozenMigration("migration-a", "a" * 64, Path("a.sql")),)
-    engine = create_engine("sqlite:///:memory:")
+    engine = pg.fresh_engine()
     with engine.connect() as connection:
         for schema in ("", "pg_catalog", "information_schema", "pg_temp_attack"):
             with pytest.raises(MigrationIntegrityError, match="trusted.*schema"):
@@ -510,42 +449,6 @@ def test_postgresql_database_identity_rejects_multi_host_routing(
 ) -> None:
     with pytest.raises(MigrationIntegrityError, match="ambiguous endpoint routing"):
         normalized_database_identity(database_url)
-
-
-def test_sqlite_database_identity_uses_one_canonical_absolute_path(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.chdir(tmp_path)
-    expected = normalized_database_identity("sqlite:///runtime/fairmind.sqlite3")
-    absolute = normalized_database_identity(
-        f"sqlite:///{tmp_path / 'runtime' / 'fairmind.sqlite3'}"
-    )
-    assert expected == absolute
-
-    with pytest.raises(
-        MigrationIntegrityError,
-        match="^SQLite runtime database identities differ$",
-    ):
-        verify_database_identities(
-            "sqlite:///runtime/fairmind.sqlite3",
-            "sqlite:///other/fairmind.sqlite3",
-        )
-
-
-def test_sqlite_in_memory_identity_requires_the_same_engine_instance() -> None:
-    first = create_engine("sqlite:///:memory:")
-    second = create_engine("sqlite:///:memory:")
-    try:
-        verify_database_identities(first, first)
-        with pytest.raises(
-            MigrationIntegrityError,
-            match="^SQLite runtime database identities differ$",
-        ):
-            verify_database_identities(first, second)
-    finally:
-        first.dispose()
-        second.dispose()
 
 
 def test_postgresql_runtime_search_path_is_fixed_and_identifier_safe() -> None:
@@ -677,10 +580,10 @@ def test_postgresql_catalog_selection_fails_closed_for_unsupported_major() -> No
 
 
 def test_postgresql_ledger_missing_table_fails_closed() -> None:
-    engine = create_engine("sqlite:///:memory:")
+    engine = pg.fresh_engine()
     expected = (FrozenMigration("migration-a", "a" * 64, Path("a.sql")),)
     with engine.connect() as connection:
-        connection.exec_driver_sql("ATTACH DATABASE ':memory:' AS trusted")
+        connection.exec_driver_sql("CREATE SCHEMA trusted")
         with pytest.raises(MigrationIntegrityError, match="ledger is unavailable"):
             verify_postgresql_migration_ledger(
                 connection, trusted_schema="trusted", expected=expected
@@ -713,25 +616,11 @@ def test_013c_operator_source_checksum_is_frozen() -> None:
     assert hashlib.sha256(operator.read_bytes()).hexdigest() == (FROZEN_013C_OPERATOR_CHECKSUM)
 
 
-def test_sqlite_013c_fixture_source_checksum_is_frozen() -> None:
-    import hashlib
-
-    fixture = MIGRATIONS / "fixtures/013c_evidence_verification_receipt.sqlite.sql"
-    assert hashlib.sha256(fixture.read_bytes()).hexdigest() == (FROZEN_SQLITE_013C_FIXTURE_CHECKSUM)
-
-
 def test_013d_operator_source_checksum_is_frozen() -> None:
     import hashlib
 
     operator = MIGRATIONS / "upgrade_paths/013c_to_013d_evaluator_catalog.sql"
     assert hashlib.sha256(operator.read_bytes()).hexdigest() == (FROZEN_013D_OPERATOR_CHECKSUM)
-
-
-def test_sqlite_013d_fixture_source_checksum_is_frozen() -> None:
-    import hashlib
-
-    fixture = MIGRATIONS / "fixtures/013d_evaluator_catalog.sqlite.sql"
-    assert hashlib.sha256(fixture.read_bytes()).hexdigest() == (FROZEN_SQLITE_013D_FIXTURE_CHECKSUM)
 
 
 def test_013e_operator_source_checksum_is_frozen() -> None:
@@ -761,13 +650,6 @@ def test_013e_direct_payload_and_operator_ledger_chain_are_frozen() -> None:
     assert frozen.checksum in operator_source
 
 
-def test_sqlite_013e_fixture_source_checksum_is_frozen() -> None:
-    import hashlib
-
-    fixture = MIGRATIONS / "fixtures/013e_environmental_tenant_scope.sqlite.sql"
-    assert hashlib.sha256(fixture.read_bytes()).hexdigest() == (FROZEN_SQLITE_013E_FIXTURE_CHECKSUM)
-
-
 def test_013b_v2_operator_source_checksum_and_c_collation_are_frozen() -> None:
     import hashlib
 
@@ -778,7 +660,7 @@ def test_013b_v2_operator_source_checksum_and_c_collation_are_frozen() -> None:
     assert payload.count('COLLATE pg_catalog."C"') == 7
 
 
-def test_013h_operator_direct_ledger_and_fixture_sources_are_frozen() -> None:
+def test_013h_operator_direct_and_ledger_sources_are_frozen() -> None:
     import hashlib
 
     direct = MIGRATIONS / "013h_idempotency_retention_integrity.sql"
@@ -786,11 +668,6 @@ def test_013h_operator_direct_ledger_and_fixture_sources_are_frozen() -> None:
         MIGRATIONS
         / "upgrade_paths"
         / "013g_to_013h_idempotency_retention_integrity.sql"
-    )
-    fixture = (
-        MIGRATIONS
-        / "fixtures"
-        / "013h_idempotency_retention_integrity.sqlite.sql"
     )
     frozen = next(
         item
@@ -804,15 +681,12 @@ def test_013h_operator_direct_ledger_and_fixture_sources_are_frozen() -> None:
     assert hashlib.sha256(operator.read_bytes()).hexdigest() == (
         FROZEN_013H_OPERATOR_CHECKSUM
     )
-    assert hashlib.sha256(fixture.read_bytes()).hexdigest() == (
-        FROZEN_SQLITE_013H_FIXTURE_CHECKSUM
-    )
     assert "\\ir ../013h_idempotency_retention_integrity.sql" in operator_source
     assert frozen.ledger_key in operator_source
     assert frozen.checksum in operator_source
 
 
-def test_013i_operator_direct_ledger_and_fixture_sources_are_frozen() -> None:
+def test_013i_operator_direct_and_ledger_sources_are_frozen() -> None:
     import hashlib
 
     direct = MIGRATIONS / "013i_imported_evidence_delivery_integrity.sql"
@@ -820,11 +694,6 @@ def test_013i_operator_direct_ledger_and_fixture_sources_are_frozen() -> None:
         MIGRATIONS
         / "upgrade_paths"
         / "013h_to_013i_imported_evidence_delivery_integrity.sql"
-    )
-    fixture = (
-        MIGRATIONS
-        / "fixtures"
-        / "013i_imported_evidence_delivery_integrity.sqlite.sql"
     )
     frozen = next(
         item
@@ -838,24 +707,16 @@ def test_013i_operator_direct_ledger_and_fixture_sources_are_frozen() -> None:
     assert hashlib.sha256(operator.read_bytes()).hexdigest() == (
         FROZEN_013I_OPERATOR_CHECKSUM
     )
-    assert hashlib.sha256(fixture.read_bytes()).hexdigest() == (
-        FROZEN_SQLITE_013I_FIXTURE_CHECKSUM
-    )
     assert "\\ir ../013i_imported_evidence_delivery_integrity.sql" in operator_source
     assert frozen.ledger_key in operator_source
     assert frozen.checksum in operator_source
 
 
-def test_013j_operator_direct_ledger_and_fixture_sources_are_frozen() -> None:
+def test_013j_operator_direct_and_ledger_sources_are_frozen() -> None:
     import hashlib
 
     direct = MIGRATIONS / "013j_owner_decision_override_integrity.sql"
     operator = MIGRATIONS / POSTGRES_013J_OPERATOR
-    fixture = (
-        MIGRATIONS
-        / "fixtures"
-        / "013j_owner_decision_override_integrity.sqlite.sql"
-    )
     frozen = next(
         item
         for item in FROZEN_ASSURANCE_MIGRATIONS
@@ -868,10 +729,6 @@ def test_013j_operator_direct_ledger_and_fixture_sources_are_frozen() -> None:
     assert hashlib.sha256(operator.read_bytes()).hexdigest() == getattr(
         migration_integrity,
         "FROZEN_013J_OPERATOR_CHECKSUM",
-    )
-    assert hashlib.sha256(fixture.read_bytes()).hexdigest() == getattr(
-        migration_integrity,
-        "FROZEN_SQLITE_013J_FIXTURE_CHECKSUM",
     )
     assert operator_source.count(
         "\\ir ../013j_owner_decision_override_integrity.sql"
@@ -894,200 +751,6 @@ def test_013j_catalog_manifest_covers_owner_authority_and_guards() -> None:
         "governance_evaluation_decisions_guard_insert",
         "governance_evaluation_decisions_owner_override_audit_013j",
     } <= POSTGRESQL_ASSURANCE_REQUIRED_TRIGGERS
-    assert {
-        "governance_evidence_reviews_separation_guard_013j",
-        "governance_evaluation_decisions_owner_override_unavailable_013j",
-    } <= SQLITE_ASSURANCE_TRIGGERS
-
-
-def test_sqlite_two_clean_full_chain_installs_match_the_frozen_013j_catalog(
-    tmp_path: Path,
-) -> None:
-    database_paths = (
-        tmp_path / "assurance-first.sqlite3",
-        tmp_path / "assurance-second.sqlite3",
-    )
-    for database_path in database_paths:
-        _install_sqlite_assurance_chain(database_path)
-
-    connections = tuple(sqlite3.connect(path) for path in database_paths)
-    try:
-        digests: list[str] = []
-        for connection in connections:
-            connection.execute("PRAGMA foreign_keys = ON")
-            rows = connection.execute(
-                "SELECT type, name, sql FROM sqlite_master "
-                "WHERE type IN ('table', 'index', 'trigger', 'view') "
-                "AND sql IS NOT NULL"
-            ).fetchall()
-            installed = {
-                (object_type, name): sql
-                for object_type, name, sql in rows
-            }
-            selected = (
-                (object_type, name, installed[(object_type, name)])
-                for object_type, names in (
-                    migration_integrity._SQLITE_ASSURANCE_OBJECTS.items()
-                )
-                for name in names
-            )
-            digests.append(migration_integrity._sqlite_catalog_digest(selected))
-
-        assert digests[0] == digests[1]
-        assert digests[0] == migration_integrity.SQLITE_ASSURANCE_CATALOG_DIGEST
-    finally:
-        for connection in connections:
-            connection.close()
-
-
-def test_sqlite_startup_check_accepts_the_frozen_013j_catalog(
-    tmp_path: Path,
-) -> None:
-    database_path = tmp_path / "assurance.sqlite3"
-    _install_sqlite_assurance_chain(database_path)
-    engine = create_engine(f"sqlite:///{database_path}")
-    with engine.connect() as connection:
-        connection.exec_driver_sql("PRAGMA foreign_keys = ON")
-        verify_sqlite_assurance_schema(connection)
-
-
-def test_sqlite_startup_check_rejects_fixture_source_checksum_drift(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    database_path = tmp_path / "assurance.sqlite3"
-    _install_sqlite_assurance_chain(database_path)
-    engine = create_engine(f"sqlite:///{database_path}")
-    monkeypatch.setattr(
-        "config.migration_integrity.FROZEN_SQLITE_013C_FIXTURE_CHECKSUM",
-        "0" * 64,
-    )
-    with engine.connect() as connection:
-        connection.exec_driver_sql("PRAGMA foreign_keys = ON")
-        with pytest.raises(
-            MigrationIntegrityError,
-            match="bundled fixture checksum drift",
-        ):
-            verify_sqlite_assurance_schema(connection)
-
-
-def test_sqlite_startup_check_rejects_names_with_empty_tables_and_noop_guards() -> None:
-    engine = create_engine("sqlite:///:memory:")
-    with engine.connect() as connection:
-        connection.exec_driver_sql("PRAGMA foreign_keys = ON")
-        for table_name in sorted(SQLITE_ASSURANCE_TABLES):
-            connection.exec_driver_sql(f'CREATE TABLE "{table_name}" (id TEXT PRIMARY KEY)')
-        anchor = sorted(SQLITE_ASSURANCE_TABLES)[0]
-        for index_name in sorted(SQLITE_ASSURANCE_INDEXES):
-            connection.exec_driver_sql(f'CREATE INDEX "{index_name}" ON "{anchor}" (id)')
-        for trigger_name in sorted(SQLITE_ASSURANCE_TRIGGERS):
-            connection.exec_driver_sql(
-                f'CREATE TRIGGER "{trigger_name}" BEFORE UPDATE ON "{anchor}" '
-                "BEGIN SELECT 1; END"
-            )
-        for view_name in sorted(SQLITE_ASSURANCE_VIEWS):
-            connection.exec_driver_sql(f'CREATE VIEW "{view_name}" AS SELECT id FROM "{anchor}"')
-
-        with pytest.raises(MigrationIntegrityError, match="catalog definition drift"):
-            verify_sqlite_assurance_schema(connection)
-
-
-def test_sqlite_startup_check_requires_foreign_key_enforcement(
-    tmp_path: Path,
-) -> None:
-    database_path = tmp_path / "assurance.sqlite3"
-    _install_sqlite_assurance_chain(database_path)
-    engine = create_engine(f"sqlite:///{database_path}")
-    with engine.connect() as connection:
-        connection.exec_driver_sql("PRAGMA foreign_keys = OFF")
-        with pytest.raises(MigrationIntegrityError, match="foreign_keys must be enabled"):
-            verify_sqlite_assurance_schema(connection)
-
-
-def test_sqlite_startup_check_rejects_noop_replacement_of_real_guard(
-    tmp_path: Path,
-) -> None:
-    database_path = tmp_path / "assurance.sqlite3"
-    _install_sqlite_assurance_chain(database_path)
-    engine = create_engine(f"sqlite:///{database_path}")
-    with engine.connect() as connection:
-        connection.exec_driver_sql("PRAGMA foreign_keys = ON")
-        connection.exec_driver_sql("DROP TRIGGER governance_evaluation_decisions_no_delete")
-        connection.exec_driver_sql(
-            "CREATE TRIGGER governance_evaluation_decisions_no_delete "
-            "BEFORE DELETE ON governance_evaluation_decisions "
-            "BEGIN SELECT 1; END"
-        )
-        with pytest.raises(MigrationIntegrityError, match="catalog definition drift"):
-            verify_sqlite_assurance_schema(connection)
-
-
-def test_sqlite_startup_check_rejects_hostile_eligibility_view_replacement(
-    tmp_path: Path,
-) -> None:
-    database_path = tmp_path / "assurance.sqlite3"
-    _install_sqlite_assurance_chain(database_path)
-    engine = create_engine(f"sqlite:///{database_path}")
-    with engine.connect() as connection:
-        connection.exec_driver_sql("PRAGMA foreign_keys = ON")
-        connection.exec_driver_sql("DROP VIEW governance_evidence_admission_v2_current_eligibility")
-        connection.exec_driver_sql(
-            "CREATE VIEW governance_evidence_admission_v2_current_eligibility "
-            "AS SELECT id AS admission_id FROM governance_evidence_admissions"
-        )
-        with pytest.raises(MigrationIntegrityError, match="catalog definition drift"):
-            verify_sqlite_assurance_schema(connection)
-
-
-@pytest.mark.parametrize(
-    "table_name",
-    (
-        "governance_idempotency_records",
-        "governance_evidence_admission_013b_replay_state",
-        "governance_evidence_admission_013b_replay_anchor",
-        "governance_evidence_verification_receipts",
-    ),
-)
-def test_sqlite_startup_check_rejects_missing_assurance_authority_table(
-    tmp_path: Path,
-    table_name: str,
-) -> None:
-    database_path = tmp_path / "assurance.sqlite3"
-    _install_sqlite_assurance_chain(database_path)
-    engine = create_engine(f"sqlite:///{database_path}")
-    with engine.connect() as connection:
-        connection.exec_driver_sql("PRAGMA foreign_keys = ON")
-        connection.exec_driver_sql(f'DROP TABLE "{table_name}"')
-        with pytest.raises(MigrationIntegrityError, match="missing required tables"):
-            verify_sqlite_assurance_schema(connection)
-
-
-@pytest.mark.parametrize(
-    "trigger_name",
-    (
-        "governance_evidence_reviews_guard_insert",
-        "governance_evidence_admission_replay_state_conflict",
-        "governance_evidence_admission_replay_state_no_update",
-        "governance_evidence_admission_replay_state_no_delete",
-        "governance_evidence_admission_replay_anchor_conflict",
-        "governance_evidence_admission_replay_anchor_no_update",
-        "governance_evidence_admission_replay_anchor_no_delete",
-        "governance_evidence_admissions_require_receipt_013c",
-        "governance_evidence_verification_receipts_guard_insert",
-    ),
-)
-def test_sqlite_startup_check_rejects_missing_evidence_authority_guard(
-    tmp_path: Path,
-    trigger_name: str,
-) -> None:
-    database_path = tmp_path / "assurance.sqlite3"
-    _install_sqlite_assurance_chain(database_path)
-    engine = create_engine(f"sqlite:///{database_path}")
-    with engine.connect() as connection:
-        connection.exec_driver_sql("PRAGMA foreign_keys = ON")
-        connection.exec_driver_sql(f'DROP TRIGGER "{trigger_name}"')
-        with pytest.raises(MigrationIntegrityError, match="missing required triggers"):
-            verify_sqlite_assurance_schema(connection)
 
 
 def test_startup_verifier_is_disabled_explicitly_and_rejects_unknown_dialect() -> None:
@@ -1184,47 +847,6 @@ def test_postgresql_startup_verifies_path_ledger_then_frozen_catalog(
         "catalog:trusted",
         "disconnect",
     ]
-
-
-@pytest.mark.anyio
-async def test_database_initialization_invokes_enabled_assurance_gate(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from config import database as database_module
-
-    class FakeDatabase:
-        instances: list["FakeDatabase"] = []
-
-        def __init__(self, _url: str, **_kwargs) -> None:
-            self.is_connected = False
-            self.statements: list[str] = []
-            self.__class__.instances.append(self)
-
-        async def connect(self) -> None:
-            self.is_connected = True
-
-        async def execute(self, statement: str) -> None:
-            self.statements.append(statement)
-
-        async def disconnect(self) -> None:
-            self.is_connected = False
-
-    monkeypatch.setattr(database_module, "Database", FakeDatabase)
-    monkeypatch.setattr(database_module.settings, "database_url", "sqlite:///:memory:")
-    monkeypatch.setattr(database_module.settings, "assurance_v2_enabled", True)
-
-    manager = database_module.DatabaseManager()
-    monkeypatch.setattr(
-        database_module,
-        "_get_repository_database_manager",
-        lambda: type("RepositoryManager", (), {"engine": manager.engine})(),
-    )
-    with pytest.raises(MigrationIntegrityError, match="missing required tables"):
-        await manager.initialize()
-    assert FakeDatabase.instances[0].statements == ["PRAGMA foreign_keys = ON"]
-    assert not FakeDatabase.instances[0].is_connected
-    assert manager.database is None
-    assert manager.engine is None
 
 
 @pytest.mark.anyio
@@ -1520,7 +1142,11 @@ async def test_database_initialization_sanitizes_connection_failures(
             pass
 
     monkeypatch.setattr(database_module, "Database", FakeDatabase)
-    monkeypatch.setattr(database_module.settings, "database_url", "sqlite:///:memory:")
+    monkeypatch.setattr(
+        database_module.settings,
+        "database_url",
+        "postgresql://user:password@localhost/fairmind",
+    )
     monkeypatch.setattr(database_module.settings, "assurance_v2_enabled", False)
 
     manager = database_module.DatabaseManager()
@@ -1530,104 +1156,6 @@ async def test_database_initialization_sanitizes_connection_failures(
     assert str(caught.value) == "Database initialization failed"
     assert secret not in str(caught.value)
     assert secret not in caplog.text
-
-
-@pytest.mark.anyio
-async def test_sqlite_v2_startup_rejects_a_different_repository_database(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    from config import database as database_module
-
-    primary_path = tmp_path / "primary.sqlite3"
-    repository_path = tmp_path / "repository.sqlite3"
-
-    class FakeDatabase:
-        def __init__(self, _url: str, **_options) -> None:
-            self.is_connected = False
-
-        async def connect(self) -> None:
-            self.is_connected = True
-
-        async def execute(self, _statement: str) -> None:
-            pass
-
-        async def disconnect(self) -> None:
-            self.is_connected = False
-
-    class FakeDialect:
-        name = "sqlite"
-
-    class FakeEngine:
-        dialect = FakeDialect()
-
-        def __init__(self, url: str) -> None:
-            self.url = url
-
-        def dispose(self) -> None:
-            pass
-
-    primary_engine = FakeEngine(f"sqlite:///{primary_path}")
-    repository_engine = FakeEngine(f"sqlite:///{repository_path}")
-
-    class FakeRepositoryManager:
-        engine = repository_engine
-
-    monkeypatch.setattr(database_module, "Database", FakeDatabase)
-    monkeypatch.setattr(database_module, "create_engine", lambda *_args, **_kwargs: primary_engine)
-    monkeypatch.setattr(database_module.event, "listen", lambda *_args: None)
-    monkeypatch.setattr(
-        database_module, "_get_repository_database_manager", lambda: FakeRepositoryManager()
-    )
-    monkeypatch.setattr(
-        database_module, "verify_assurance_migration_integrity", lambda *_args, **_kwargs: None
-    )
-    monkeypatch.setattr(database_module.settings, "database_url", f"sqlite:///{primary_path}")
-    monkeypatch.setattr(database_module.settings, "assurance_v2_enabled", True)
-
-    manager = database_module.DatabaseManager()
-    with pytest.raises(
-        MigrationIntegrityError,
-        match="^SQLite runtime database identities differ$",
-    ):
-        await manager.initialize()
-    assert not FakeDatabase.__dict__.get("is_connected", False)
-    assert manager.database is None
-    assert manager.engine is None
-
-
-@pytest.mark.anyio
-async def test_async_sqlite_enforces_foreign_keys_on_every_acquired_connection(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    """The databases SQLite backend opens and closes a connection per query."""
-    from config import database as database_module
-
-    database_path = tmp_path / "async-foreign-keys.sqlite3"
-    monkeypatch.setattr(
-        database_module.settings,
-        "database_url",
-        f"sqlite:///{database_path}",
-    )
-    monkeypatch.setattr(database_module.settings, "assurance_v2_enabled", False)
-
-    manager = database_module.DatabaseManager()
-    try:
-        await manager.initialize()
-        assert manager.database is not None
-        await manager.database.execute("CREATE TABLE async_fk_parent (id TEXT PRIMARY KEY)")
-        await manager.database.execute(
-            "CREATE TABLE async_fk_child ("
-            "id TEXT PRIMARY KEY, parent_id TEXT NOT NULL, "
-            "FOREIGN KEY (parent_id) REFERENCES async_fk_parent(id))"
-        )
-        with pytest.raises(Exception, match="FOREIGN KEY constraint failed"):
-            await manager.database.execute(
-                "INSERT INTO async_fk_child (id, parent_id) " "VALUES ('child-a', 'missing-parent')"
-            )
-    finally:
-        await manager.disconnect()
 
 
 @pytest.mark.skipif(

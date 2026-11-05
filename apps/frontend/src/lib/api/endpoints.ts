@@ -113,8 +113,7 @@ export const API_ENDPOINTS = {
 
   // AI Governance
   aiGovernance: {
-    policies: '/api/v1/ai-governance/policies',
-    evaluatePolicy: (ruleId: string) => `/api/v1/ai-governance/policies/${ruleId}/evaluate`,
+    policies: (orgId: string) => `/api/v1/ai-governance/organizations/${orgId}/policies`,
     complianceAssess: '/api/v1/ai-governance/compliance/assess',
     complianceFrameworks: '/api/v1/ai-governance/compliance/frameworks',
     frameworkControls: (framework: string) => `/api/v1/ai-governance/compliance/frameworks/${framework}/controls`,
@@ -372,6 +371,9 @@ export const API_ENDPOINTS = {
     aiProviders: '/api/v1/packs/ai-providers',
     aiProvider: '/api/v1/packs/ai-provider',
     aiProviderTest: '/api/v1/packs/ai-provider/test',
+    platformConnections: '/api/v1/packs/platform-connections',
+    platformConnection: (platform: string) => `/api/v1/packs/platform-connections/${encodeURIComponent(platform)}`,
+    platformConnectionTest: (platform: string) => `/api/v1/packs/platform-connections/${encodeURIComponent(platform)}/test`,
   },
 
   // Organizations (Multi-org support)
