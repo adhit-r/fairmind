@@ -1,7 +1,9 @@
 """Org AI policies: lifecycle, policy-as-code enforcement, distribution, framework coverage."""
 
 from database.governance_models import GovernanceApprovalRequest, GovernanceApprovalWorkflow, GovernanceAISystem
+from src.application.services.framework_catalog_service import FrameworkCatalogService
 from src.application.services.policy_service import evaluate_rule, validate_rules
+from tests.test_framework_catalog_service import OECD_PRINCIPLES
 from tests.test_governance_assurance_routes import (  # noqa: F401  (fixture)
     ORG_A,
     ORG_B,
@@ -68,6 +70,10 @@ def test_policy_lifecycle_enforcement_distribution_and_coverage(assurance_client
     policy = created.json()
     assert policy["status"] == "draft" and policy["controlRefs"] == ["aiuc-1:A001.1"]
     url = f"{BASE}/{policy['id']}"
+    coverage = lambda: client.get(f"{BASE}/coverage").json()[0]  # noqa: E731
+    control = lambda: next(c for c in coverage()["controls"] if c["ref"] == "aiuc-1:A001.1")  # noqa: E731
+    # A draft maps to nothing yet: only the published, enforced version counts.
+    assert coverage()["coveredControls"] == 0 and control()["status"] == "unmapped"
 
     act = lambda action: client.post(f"{url}/actions", json={"action": action})  # noqa: E731
     assert act("publish").status_code == 409
@@ -82,6 +88,7 @@ def test_policy_lifecycle_enforcement_distribution_and_coverage(assurance_client
     assert [(r["systemId"], r["outcome"]) for r in results] == [("system-a", "fail")]
     gate = client.get(f"{BASE}/gate/system-a").json()
     assert gate["allowed"] is False and gate["blocking"][0]["ruleId"] == "high-risk-approval"
+    assert control()["status"] == "failing" and coverage()["failingControls"] == 1
 
     with session_factory() as session:
         session.execute(GovernanceApprovalWorkflow.__table__.insert().values(id="wf", name="wf", entity_type="ai_system", steps_json="[]"))
@@ -92,6 +99,7 @@ def test_policy_lifecycle_enforcement_distribution_and_coverage(assurance_client
         )
         session.commit()
     assert client.get(f"{BASE}/gate/system-a").json()["allowed"] is True
+    assert control()["status"] == "passing" and control()["coveredBy"][0]["passingSystems"] == 1
 
     # Distribution: the published version is acknowledged per member.
     assert published["acknowledgement"] == {"required": 1, "acknowledged": 0, "mine": False}
@@ -104,8 +112,8 @@ def test_policy_lifecycle_enforcement_distribution_and_coverage(assurance_client
     assert client.patch(url, json={"rules": [APPROVAL_RULE, OWNER_RULE]}).status_code == 200
     assert client.delete(url).status_code == 409
 
-    coverage = client.get(f"{BASE}/coverage").json()
-    assert coverage[0]["totalControls"] == 2 and coverage[0]["coveredControls"] == 1
+    totals = coverage()
+    assert (totals["totalControls"], totals["coveredControls"], totals["passingControls"]) == (2, 1, 1)
 
     # Another org cannot see or act on it.
     active["value"] = _token(USER_B)
@@ -147,3 +155,18 @@ def test_membership_matches_user_ids_stored_as_text(assurance_client):
             assert service.membership(ORG_A, USER_A).role == "admin", stored
         assert service.membership(ORG_A, USER_B) is None
     assert client.get(BASE).status_code == 200
+
+
+def test_rules_map_to_oecd_ai_principles(assurance_client):
+    client, session_factory, _ = assurance_client
+    with session_factory() as session:
+        _seed_org(session, ORG_A, USER_A, role="admin")
+        FrameworkCatalogService(session).import_principles_json(OECD_PRINCIPLES, actor_id="test")
+
+    assert client.post(BASE, json={"name": "P", "rules": [{**OWNER_RULE, "controls": ["oecd-ai:2.1"]}]}).status_code == 422
+    created = client.post(BASE, json={"name": "P", "rules": [{**OWNER_RULE, "controls": ["oecd-ai:1.5"]}]})
+    assert created.status_code == 201, created.text
+    oecd = next(f for f in client.get(f"{BASE}/coverage").json() if f["frameworkKey"] == "oecd-ai")
+    assert (oecd["name"], oecd["versionLabel"], oecd["totalControls"]) == ("OECD AI Principles", "May 2024", 5)
+    accountability = next(c for c in oecd["controls"] if c["ref"] == "oecd-ai:1.5")
+    assert accountability["title"] == "Accountability"

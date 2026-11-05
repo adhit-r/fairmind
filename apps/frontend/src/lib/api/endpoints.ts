@@ -370,6 +370,9 @@ export const API_ENDPOINTS = {
     aiProviders: '/api/v1/packs/ai-providers',
     aiProvider: '/api/v1/packs/ai-provider',
     aiProviderTest: '/api/v1/packs/ai-provider/test',
+    platformConnections: '/api/v1/packs/platform-connections',
+    platformConnection: (platform: string) => `/api/v1/packs/platform-connections/${encodeURIComponent(platform)}`,
+    platformConnectionTest: (platform: string) => `/api/v1/packs/platform-connections/${encodeURIComponent(platform)}/test`,
   },
 
   // Organizations (Multi-org support)

@@ -422,12 +422,37 @@ export interface AIProviderTest {
 export const useAIProviders = () => useOrgResource<AIProviderOption[]>(API_ENDPOINTS.packs.aiProviders)
 export const useAIProvider = () => useOrgResource<{ config: AIProviderConfig | null }>(API_ENDPOINTS.packs.aiProvider)
 
-/** What an evaluation engine reads: one file per slot and optional settings. */
+/** An agent platform the organisation lets FairMind read for configuration audits. The key never comes back. */
+export interface PlatformConnection {
+  platform: string
+  name: string
+  docs: string
+  connected: boolean
+  keyHint?: string | null
+  keyReadable?: boolean
+  testedOk?: boolean | null
+  testedAt?: string | null
+  testMessage?: string | null
+  updatedAt?: string
+}
+
+export interface PlatformTest {
+  ok: boolean
+  message: string
+  counts: Record<string, number> | null
+}
+
+export const usePlatformConnections = () => useOrgResource<PlatformConnection[]>(API_ENDPOINTS.packs.platformConnections)
+
+/** What an evaluation engine reads: one file per slot and optional settings, or, when `platform`, a platform connection. */
 export interface EngineSpec {
   id: string
   method: string
   slots: Array<{ name: string; label: string; help: string; kind: 'csv' | 'text' | 'json' | 'binary'; required: boolean }>
   params: Array<{ name: string; label: string; help: string; kind: 'text' | 'number' | 'json'; default: unknown; required: boolean }>
+  platform: boolean
+  platformMethod: string
+  judge: boolean
 }
 
 export interface EngineRun {
@@ -439,6 +464,7 @@ export interface EngineRun {
   summary: string
   metrics: Record<string, number | string | null>
   files: Record<string, string>
+  source: 'upload' | 'connection'
   createdAt: string
   createdBy: string | null
   params?: Record<string, unknown>
@@ -498,6 +524,12 @@ export function usePackActions() {
         send<{ config: AIProviderConfig | null }>(API_ENDPOINTS.packs.aiProvider, (p) => apiClient.put(p, body)),
       deleteAIProvider: () => send<{ config: null }>(API_ENDPOINTS.packs.aiProvider, (p) => apiClient.delete(p)),
       testAIProvider: (body: AIProviderBody) => send<AIProviderTest>(API_ENDPOINTS.packs.aiProviderTest, (p) => apiClient.post(p, body)),
+      savePlatformConnection: (platform: string, apiKey: string) =>
+        send<PlatformConnection>(API_ENDPOINTS.packs.platformConnection(platform), (p) => apiClient.put(p, { apiKey })),
+      deletePlatformConnection: (platform: string) =>
+        send<PlatformConnection>(API_ENDPOINTS.packs.platformConnection(platform), (p) => apiClient.delete(p)),
+      testPlatformConnection: (platform: string) =>
+        send<PlatformTest>(API_ENDPOINTS.packs.platformConnectionTest(platform), (p) => apiClient.post(p)),
     }
   }, [orgId])
 }

@@ -37,13 +37,23 @@ class Param:
     required: bool = False
 
 
+# (system, user, JSON schema) -> the organisation's model's JSON answer; raises EngineError
+Judge = Callable[[str, str, Dict[str, Any]], Dict[str, Any]]
+
+
 @dataclass(frozen=True)
 class Engine:
     id: str
     method: str  # one line on how the engine measures, shown beside the run form
     slots: Tuple[Slot, ...]
-    run: Callable[[Dict[str, bytes], Dict[str, Any]], Dict[str, Any]]
+    # Reads the uploaded files. None for an engine that only reads an agent platform's configuration,
+    # whose one slot is that configuration exported as JSON.
+    run: Optional[Callable[[Dict[str, bytes], Dict[str, Any]], Dict[str, Any]]] = None
     params: Tuple[Param, ...] = field(default_factory=tuple)
+    # Reads an agent platform snapshot (platform.snapshot shape), from a connection or an export.
+    platform: Optional[Callable[[Dict[str, Any], Dict[str, Any], Optional[Judge]], Dict[str, Any]]] = None
+    platform_method: str = ""
+    judge: bool = False  # the platform check asks the organisation's model
 
     def spec(self) -> Dict[str, Any]:
         return {
@@ -51,6 +61,9 @@ class Engine:
             "method": self.method,
             "slots": [s.__dict__ for s in self.slots],
             "params": [p.__dict__ for p in self.params],
+            "platform": self.platform is not None,
+            "platformMethod": self.platform_method or self.method,
+            "judge": self.judge,
         }
 
 

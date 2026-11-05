@@ -490,6 +490,7 @@ else:
     logger.info("Assurance-contract v2 routes are disabled")
 _include_router("api.routes.packs", prefix="/api/v1/packs", tags=["packs"], required=True)
 _include_router("api.routes.evaluation_runs", prefix="/api/v1/packs", tags=["packs"], required=True)
+_include_router("api.routes.platform_connections", prefix="/api/v1/packs", tags=["packs"], required=True)
 _include_router("api.routes.environmental", tags=["environmental"], required=False)
 _include_router("api.routes.settings", prefix="/api/v1", tags=["settings"], required=False)
 
@@ -599,7 +600,7 @@ async def health_check():
         return {
             "status": "unhealthy",
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "error": str(e),
+            "error": "Health check failed; see the server log",
             "message": "Health check service error"
         }
 

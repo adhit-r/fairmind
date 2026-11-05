@@ -1,0 +1,32 @@
+{{!< default}}
+{{#is "home"}}
+<h1 class="sr">{{@site.title}}: {{@site.description}}</h1>
+{{#foreach posts limit="1"}}
+<article class="lead wrap-read">
+  <h2 class="lead-title"><a href="{{url}}">{{title}}</a></h2>
+  <p class="lead-dek">{{excerpt words="60"}}</p>
+  <p class="meta">{{#primary_tag}}<a href="{{url}}">{{name}}</a>{{/primary_tag}}<span>{{primary_author.name}}</span><time datetime="{{date published_at format="YYYY-MM-DD"}}">{{date published_at format="D MMM YYYY"}}</time><span>{{reading_time minute="1 min read" minutes="% min read"}}</span></p>
+  <a class="read-link" href="{{url}}">Read the guide {{> icon name="arrow" size="16"}}</a>
+</article>
+{{/foreach}}
+<div class="wrap-read"><p class="next-due" data-next-due hidden></p></div>
+{{#match pagination.total ">" 1}}
+<section class="feed wrap-read" aria-labelledby="latest-h">
+  <h2 class="sec" id="latest-h">Latest guides</h2>
+  {{#foreach posts from="2"}}{{> entry}}{{/foreach}}
+  {{#if pagination.next}}<a class="more" href="{{page_url pagination.next}}">Older guides {{> icon name="arrow" size="16"}}</a>{{/if}}
+</section>
+{{/match}}
+<div class="wrap-read">{{> newsletter}}</div>
+<section class="browse wrap-read" aria-labelledby="browse-h">
+  <h2 class="sec" id="browse-h">Browse by framework</h2>
+  {{> topics}}
+</section>
+{{else}}
+<div class="wrap-read listing">
+  <h1>Latest guides</h1>
+  <p class="meta">Page {{pagination.page}} of {{pagination.pages}}</p>
+  {{#foreach posts}}{{> entry}}{{/foreach}}
+  {{pagination}}
+</div>
+{{/is}}

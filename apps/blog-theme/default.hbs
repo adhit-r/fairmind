@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="{{@site.locale}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>{{meta_title}}</title>
+<link rel="preload" href="{{asset "fonts/literata-latin.woff2"}}" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="{{asset "css/screen.css"}}">
+{{ghost_head}}
+</head>
+<body class="{{body_class}}">
+<a class="skip" href="#main">Skip to content</a>
+<header class="mast">
+  <div class="wrap mast-in">
+    <a class="brand" href="{{@site.url}}">
+      <span class="name">{{@site.title}}</span>
+      <span class="sub">AI regulation guides from FairMind</span>
+    </a>
+    {{navigation}}
+    <div class="acts">
+      <button class="icon-btn" type="button" data-ghost-search aria-label="Search guides" aria-haspopup="dialog">{{> icon name="search" size="20"}}</button>
+      {{#if @site.members_enabled}}{{#unless @member}}<a class="btn" href="#/portal/signup" data-portal="signup">Subscribe</a>{{/unless}}{{/if}}
+    </div>
+  </div>
+</header>
+
+<main id="main">
+{{{body}}}
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-in">
+    <div class="foot-about">
+      <a class="name" href="{{@site.url}}">{{@site.title}}</a>
+      <p>{{@site.description}}</p>
+    </div>
+    <nav aria-label="Frameworks">
+      <h2>Frameworks</h2>
+      <ul>{{#get "tags" filter="slug:[{{@custom.topic_tags}}]" include="count.posts" limit="20"}}{{#foreach tags}}{{#if count.posts}}<li><a href="{{url}}">{{name}}</a></li>{{/if}}{{/foreach}}{{/get}}</ul>
+    </nav>
+    <nav aria-label="Blog">
+      <h2>Blog</h2>
+      <ul>{{#foreach @site.navigation}}<li><a href="{{url absolute="true"}}">{{label}}</a></li>{{/foreach}}<li><a href="{{@site.url}}/rss/">RSS</a></li></ul>
+    </nav>
+    <nav aria-label="FairMind">
+      <h2>FairMind</h2>
+      <ul><li><a href="https://fairmind.xyz">Product</a></li><li><a href="https://fairmind.xyz/request-access?utm_source=blog&utm_medium=footer&utm_campaign=blog">Request access</a></li></ul>
+    </nav>
+  </div>
+  <p class="wrap small">Published by FairMind. The guides are engineering readings of public texts and are not legal advice.</p>
+</footer>
+{{#get "pages" filter="slug:docket" limit="1"}}{{#foreach pages}}<template id="docket-src">{{content}}</template>{{/foreach}}{{/get}}
+<script src="{{asset "js/main.js"}}" defer></script>
+{{ghost_foot}}
+</body>
+</html>

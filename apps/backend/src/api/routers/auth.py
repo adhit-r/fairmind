@@ -717,7 +717,7 @@ async def create_api_key(
                 },
             )
         
-        logger.info(f"API key created for user {current_user.email}: {api_key_data.name}")
+        logger.info("API key created for user %s", current_user.user_id)
         
         return APIKeyResponse(
             api_key=api_key,
@@ -877,7 +877,7 @@ async def auth_health_check():
         logger.error(f"Auth health check error: {e}")
         return {
             "status": "unhealthy",
-            "error": str(e),
+            "error": "Health check failed; see the server log",
             "timestamp": datetime.utcnow().isoformat()
         }
 

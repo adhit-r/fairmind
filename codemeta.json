@@ -1,0 +1,26 @@
+{
+  "@context": "https://w3id.org/codemeta/3.0",
+  "@type": "SoftwareSourceCode",
+  "name": "FairMind",
+  "description": "Open-source AI assurance workbench for models and agents: map governance frameworks (AIUC-1, NIST AI RMF, EU AI Act, DPDP) to controls, collect evaluation evidence, review findings and produce audit-ready evidence trails.",
+  "url": "https://www.fairmind.xyz",
+  "codeRepository": "https://github.com/adhit-r/fairmind",
+  "issueTracker": "https://github.com/adhit-r/fairmind/issues",
+  "license": "https://spdx.org/licenses/MIT",
+  "dateCreated": "2025-07-23",
+  "developmentStatus": "active",
+  "programmingLanguage": ["Python", "TypeScript"],
+  "applicationCategory": "AI governance and assurance",
+  "keywords": ["ai-governance", "ai-assurance", "ai-audit", "ai-compliance", "responsible-ai", "agentic-ai", "eu-ai-act", "nist-ai-rmf", "iso-42001", "dpdp"],
+  "author": [
+    {
+      "@type": "Person",
+      "@id": "https://orcid.org/0009-0004-1682-7958",
+      "givenName": "Adhithya",
+      "familyName": "Rajasekaran",
+      "email": "adhithya@axonome.xyz",
+      "affiliation": { "@type": "Organization", "name": "Axonome" }
+    }
+  ],
+  "producer": { "@type": "Organization", "name": "Axonome" }
+}

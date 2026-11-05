@@ -3,7 +3,16 @@
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
-import { useEngine, useEngineRun, useEngineRuns, useEvaluation, usePackActions, type EngineRun, type EngineSpec } from '@/lib/api/hooks/usePacks'
+import {
+  useEngine,
+  useEngineRun,
+  useEngineRuns,
+  useEvaluation,
+  usePackActions,
+  usePlatformConnections,
+  type EngineRun,
+  type EngineSpec,
+} from '@/lib/api/hooks/usePacks'
 import { useSystemContext } from '@/components/workflow/SystemContext'
 import { BTN_P, Crumbs, EnginePill, ErrorNote, Heading, LABEL, Loading, MUTED, Pill, ResultPill, when } from '@/components/packs/parts'
 
@@ -75,7 +84,7 @@ function RunResult({ run }: { run: EngineRun }) {
         <ResultPill status={run.status} />
         <span className={`text-[13px] ${MUTED}`}>
           {run.systemName}, {when(run.createdAt)}
-          {Object.values(run.files).length > 0 && `, from ${Object.values(run.files).join(' and ')}`}
+          {Object.values(run.files).length > 0 && `, from ${run.source === 'connection' ? 'the connection to ' : ''}${Object.values(run.files).join(' and ')}`}
         </span>
       </div>
       <p className="m-0 leading-normal text-[var(--fm-ink)]">{run.summary}</p>
@@ -108,12 +117,17 @@ function RunForm({ evaluationId, spec, onDone }: { evaluationId: string; spec: E
   const [params, setParams] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
+  const connections = usePlatformConnections()
+  const connection = connections.data?.find((c) => c.connected && c.keyReadable) ?? null
+  const [source, setSource] = useState<'upload' | 'connection' | null>(null)
+  const from = spec.platform ? source ?? (connection ? 'connection' : 'upload') : 'upload'
 
   useEffect(() => {
     if (!systemId && selectedSystem?.id) setSystemId(selectedSystem.id)
   }, [selectedSystem, systemId])
 
-  const ready = !!systemId && spec.slots.every((s) => !s.required || files[s.name]) && spec.params.every((p) => !p.required || (params[p.name] ?? '').trim())
+  const filesReady = from === 'connection' ? !!connection : spec.slots.every((s) => !s.required || files[s.name])
+  const ready = !!systemId && filesReady && spec.params.every((p) => !p.required || (params[p.name] ?? '').trim())
 
   async function submit() {
     setBusy(true)
@@ -136,7 +150,8 @@ function RunForm({ evaluationId, spec, onDone }: { evaluationId: string; spec: E
     const form = new FormData()
     form.append('system_id', systemId)
     form.append('params', JSON.stringify(values))
-    for (const s of spec.slots) if (files[s.name]) form.append(s.name, files[s.name] as File)
+    form.append('source', from)
+    if (from === 'upload') for (const s of spec.slots) if (files[s.name]) form.append(s.name, files[s.name] as File)
     const res = await runEvaluation(evaluationId, form)
     setBusy(false)
     if (res.error || !res.data) setFailure(res.error)
@@ -151,7 +166,39 @@ function RunForm({ evaluationId, spec, onDone }: { evaluationId: string; spec: E
         submit()
       }}
     >
-      <p className={`m-0 text-[13px] leading-normal ${MUTED}`}>{spec.method}</p>
+      <p className={`m-0 text-[13px] leading-normal ${MUTED}`}>{from === 'connection' ? spec.platformMethod : spec.method}</p>
+      {spec.platform && (
+        <fieldset className="m-0 flex flex-col gap-1.5 border-0 p-0">
+          <legend className="mb-1.5 text-[13px] font-semibold text-[var(--fm-ink)]">Read from</legend>
+          <div className="flex flex-wrap gap-2" role="radiogroup">
+            {(['connection', 'upload'] as const).map((value) => (
+              <button
+                key={value}
+                type="button"
+                role="radio"
+                aria-checked={from === value}
+                onClick={() => setSource(value)}
+                className={`rounded-full border px-3.5 py-1.5 text-[13px] font-semibold ${
+                  from === value ? 'border-[var(--fm-ink)] bg-[var(--fm-ink)] text-white' : 'border-[var(--fm-line)] bg-white text-[var(--fm-ink)]'
+                }`}
+              >
+                {value === 'connection' ? `From connection${connection ? `: ${connection.name}` : ''}` : 'Upload'}
+              </button>
+            ))}
+          </div>
+          {from === 'connection' && !connection && !connections.loading && (
+            <span className={`text-xs ${MUTED}`}>
+              No agent platform is connected. Connect one in <Link href="/org-admin/settings#platform-connections" className="font-semibold underline">organization settings</Link>, or upload an export.
+            </span>
+          )}
+          {from === 'connection' && connection && (
+            <span className={`text-xs ${MUTED}`}>FairMind lists the platform's agents, environments, vaults, memory stores, deployments and recent sessions with read-only calls when you run.</span>
+          )}
+          {spec.judge && (
+            <span className={`text-xs ${MUTED}`}>Uses your model from organization settings, AI provider, when one is set.</span>
+          )}
+        </fieldset>
+      )}
       <div className="flex flex-col gap-1.5">
         <label htmlFor="eval-system" className="text-[13px] font-semibold text-[var(--fm-ink)]">AI system</label>
         <select id="eval-system" value={systemId} onChange={(e) => setSystemId(e.target.value)} className={FIELD} required>
@@ -166,7 +213,7 @@ function RunForm({ evaluationId, spec, onDone }: { evaluationId: string; spec: E
           </span>
         )}
       </div>
-      {spec.slots.map((s) => (
+      {from === 'upload' && spec.slots.map((s) => (
         <div key={s.name} className="flex flex-col gap-1.5">
           <label htmlFor={`slot-${s.name}`} className="text-[13px] font-semibold text-[var(--fm-ink)]">
             {s.label}{s.required ? '' : ' (optional)'}
