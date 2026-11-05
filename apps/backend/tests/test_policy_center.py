@@ -1,7 +1,9 @@
 """Org AI policies: lifecycle, policy-as-code enforcement, distribution, framework coverage."""
 
 from database.governance_models import GovernanceApprovalRequest, GovernanceApprovalWorkflow, GovernanceAISystem
+from src.application.services.framework_catalog_service import FrameworkCatalogService
 from src.application.services.policy_service import evaluate_rule, validate_rules
+from tests.test_framework_catalog_service import OECD_PRINCIPLES
 from tests.test_governance_assurance_routes import (  # noqa: F401  (fixture)
     ORG_A,
     ORG_B,
@@ -153,3 +155,18 @@ def test_membership_matches_user_ids_stored_as_text(assurance_client):
             assert service.membership(ORG_A, USER_A).role == "admin", stored
         assert service.membership(ORG_A, USER_B) is None
     assert client.get(BASE).status_code == 200
+
+
+def test_rules_map_to_oecd_ai_principles(assurance_client):
+    client, session_factory, _ = assurance_client
+    with session_factory() as session:
+        _seed_org(session, ORG_A, USER_A, role="admin")
+        FrameworkCatalogService(session).import_principles_json(OECD_PRINCIPLES, actor_id="test")
+
+    assert client.post(BASE, json={"name": "P", "rules": [{**OWNER_RULE, "controls": ["oecd-ai:2.1"]}]}).status_code == 422
+    created = client.post(BASE, json={"name": "P", "rules": [{**OWNER_RULE, "controls": ["oecd-ai:1.5"]}]})
+    assert created.status_code == 201, created.text
+    oecd = next(f for f in client.get(f"{BASE}/coverage").json() if f["frameworkKey"] == "oecd-ai")
+    assert (oecd["name"], oecd["versionLabel"], oecd["totalControls"]) == ("OECD AI Principles", "May 2024", 5)
+    accountability = next(c for c in oecd["controls"] if c["ref"] == "oecd-ai:1.5")
+    assert accountability["title"] == "Accountability"
