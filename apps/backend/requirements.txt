@@ -253,7 +253,7 @@ pyjwt==2.15.1
     # via fairmind-backend (pyproject.toml)
 pyparsing==3.3.2
     # via matplotlib
-python-dateutil==2.9.0.post0
+python-dateutil==4.0.0
     # via
     #   arrow
     #   botocore
