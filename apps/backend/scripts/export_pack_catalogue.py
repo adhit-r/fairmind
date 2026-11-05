@@ -1,14 +1,21 @@
-"""Export the agentic packs catalogue workbook to the JSON file the backend loads.
+"""Export the agentic packs catalogue workbook to the JSON files the backend ships.
 
 Usage: uv run --with openpyxl python scripts/export_pack_catalogue.py <workbook.xlsx> <out.json>
 
 The workbook (docs/product/FairMind_agentic_packs_catalogue_v2.3.xlsx) is the source of truth;
-the JSON is static reference data, never written to the database.
+the JSON is static reference data, never written to the database. Writes:
+
+* <out.json>: the structured catalogue the backend parses at import, with
+  additions.json (entries not yet in the workbook) merged in;
+* workbook.json beside it: every sheet verbatim (rows as lists, header first),
+  so nothing in the workbook is lost even where no code reads it yet.
 """
 
+import datetime
 import json
 import re
 import sys
+from pathlib import Path
 
 from openpyxl import load_workbook
 
@@ -50,6 +57,37 @@ def parse_next(v):
 
 def text(v):
     return None if v is None else str(v).strip() or None
+
+
+def merge_additions(data, path):
+    """Insert additions.json's framework and requirements after its 'after' framework; append its crosswalk."""
+    if not path.exists():
+        return
+    add = json.loads(path.read_text(encoding="utf-8"))
+    keys = {f["key"] for f in data["frameworks"]}
+    for f in add["frameworks"]:
+        if f["key"] in keys:
+            raise SystemExit(f"{path.name}: {f['key']} is now in the workbook; remove it from {path.name}")
+    i = next(n for n, f in enumerate(data["frameworks"]) if f["key"] == add["after"]) + 1
+    data["frameworks"][i:i] = add["frameworks"]
+    j = max(n for n, r in enumerate(data["requirements"]) if r["framework"] == add["after"]) + 1
+    data["requirements"][j:j] = add["requirements"]
+    data["crosswalk"] += add["crosswalk"]
+
+
+def cell(v):
+    return v.isoformat() if isinstance(v, (datetime.date, datetime.datetime, datetime.time)) else v
+
+
+def export_sheets(wb, out):
+    sheets = {
+        ws.title: [[cell(c) for c in r] for r in ws.iter_rows(values_only=True) if any(c not in (None, "") for c in r)]
+        for ws in wb.worksheets
+    }
+    with open(out, "w") as f:
+        json.dump({"source": "docs/product/FairMind_agentic_packs_catalogue_v2.3.xlsx", "sheets": sheets}, f, ensure_ascii=False)
+        f.write("\n")
+    print({"workbook sheets": len(sheets), "rows": sum(len(r) for r in sheets.values())})
 
 
 def main(src, out):
@@ -113,10 +151,12 @@ def main(src, out):
     data = {"version": "2.3", "source": "docs/product/FairMind_agentic_packs_catalogue_v2.3.xlsx", "pillars": pillars, "frameworks": frameworks,
             "requirements": requirements, "commonControls": common, "crosswalk": crosswalk, "workflows": workflows, "evaluations": evaluations,
             "patterns": patterns, "packs": packs, "bundles": list(bundles.values())}
+    merge_additions(data, Path(out).parent / "additions.json")
     with open(out, "w") as f:
         json.dump(data, f, indent=1, ensure_ascii=False)
         f.write("\n")
     print({k: len(v) for k, v in data.items() if isinstance(v, list)})
+    export_sheets(wb, Path(out).parent / "workbook.json")
 
 
 if __name__ == "__main__":
