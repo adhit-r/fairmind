@@ -27,7 +27,7 @@ function shortDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
 }
 
-function workflow(systemId: string, cron: string, attributes: string[]) {
+export function workflow(systemId: string, cron: string, attributes: string[]) {
   const columns = attributes.length ? attributes.join(',') : '${{ vars.FAIRMIND_ATTRIBUTES }}'
   return `name: FairMind monitoring
 on:
@@ -50,7 +50,7 @@ jobs:
           FAIRMIND_API_URL: \${{ vars.FAIRMIND_API_URL }}
           FAIRMIND_API_KEY: \${{ secrets.FAIRMIND_API_KEY }}
         run: |
-          pipx install ./apps/cli
+          pipx install "git+https://github.com/adhit-r/fairmind.git#subdirectory=apps/cli"
           fairmind monitor --system ${systemId} --file artifacts/decisions.csv \\
             --attributes "${columns}" --prediction "\${{ vars.FAIRMIND_PREDICTION_COLUMN }}"
 `
