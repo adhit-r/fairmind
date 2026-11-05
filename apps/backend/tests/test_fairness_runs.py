@@ -224,6 +224,10 @@ def test_gate_reads_the_newest_record_per_check():
     gate = release_gate("low", [run("old-pass", 30, 0.97, True), run("new-fail", 1, 0.85, False)], now=now)
     assert fairness(gate)["evidenceId"] == "new-fail" and fairness(gate)["detail"]["all_checks_pass"] is False
     assert "Measured fairness checks fail on at least one attribute" in gate["reasons"]
+    # A newer measured failure below 0.70 still replaces the older proven pass; it only lowers the state to attested.
+    weak = release_gate("low", [run("old-pass", 30, 0.95, True), run("new-weak-fail", 1, 0.65, False)], now=now)
+    assert fairness(weak)["evidenceId"] == "new-weak-fail" and fairness(weak)["state"] == "attested"
+    assert "Measured fairness checks fail on at least one attribute" in weak["reasons"]
     # Same timestamp: the higher confidence breaks the tie.
     assert fairness(release_gate("low", [run("a", 1, 0.80, True), run("b", 1, 0.90, True)], now=now))["evidenceId"] == "b"
 
@@ -234,7 +238,8 @@ def test_a_rejected_release_decision_makes_the_gate_no_go():
     assert baseline["approvalStatus"] == "not_requested" and baseline["verdict"] != "no_go"
     assert release_gate("low", evidence, approval_status="pending")["verdict"] == baseline["verdict"]
     rejected = release_gate("low", evidence, approval_status="rejected")
-    assert rejected["verdict"] == "no_go" and rejected["reasons"][0].startswith("The release decision was rejected")
+    assert rejected["verdict"] == "no_go" and rejected["reasons"][0].startswith("The last release decision was rejected")
+    assert release_gate("low", evidence, approval_status="pending", last_decision="rejected")["verdict"] == "no_go"
 
     client = TestClient(app, client=(f"rej-{uuid.uuid4().hex[:8]}", 50000), headers=auth_headers())
     ws = client.post("/api/v1/ai-governance/workspaces", json={"name": "Reject ws", "owner": "owner"}).json()
@@ -247,7 +252,7 @@ def test_a_rejected_release_decision_makes_the_gate_no_go():
     after = gate()
     assert after["approvalStatus"] == "rejected" and after["verdict"] == "no_go"
     client.post(f"/api/v1/ai-governance/approval/system/{sid}/request", json={})
-    assert gate()["approvalStatus"] == "pending"
+    assert gate()["approvalStatus"] == "pending" and gate()["verdict"] == "no_go"
 
 
 def test_clause_map_reads_the_gate_per_framework_clause():

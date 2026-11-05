@@ -699,6 +699,7 @@ def _serialize_remediation_task_row(row: Any) -> Dict[str, Any]:
 
 
 ACTIVE_REMEDIATION_STATUSES = ("open", "in_progress", "blocked", "ready_for_retest")
+CLOSED_RISK_STATUSES = ("accepted", "closed", "resolved", "mitigated")
 
 
 def _summarize_remediation_tasks(tasks: List[Dict[str, Any]], system_id: str) -> Dict[str, Any]:
@@ -831,7 +832,7 @@ def _risk_dashboard(rows: List[Any], system_id: Optional[str]) -> Dict[str, Any]
         "suggested": suggested,
         "summary": {
             "total": len(risks),
-            "open": len([risk for risk in risks if risk["status"] != "accepted"]),
+            "open": len([risk for risk in risks if risk["status"] not in CLOSED_RISK_STATUSES]),
             # Raised by FairMind itself (drift, environmental impact), not typed in by a person.
             "automated": len([risk for risk in risks if risk.get("source") != "manual_assessment"]),
             "bySeverity": severity_counts,
@@ -864,7 +865,7 @@ def _fetch_stored_risk_summary(db: Session, system_id: str) -> Dict[str, Any]:
     for row in rows:
         severity = row[0] if row[0] in severity_counts else "medium"
         severity_counts[severity] += 1
-        if row[1] != "accepted":
+        if row[1] not in CLOSED_RISK_STATUSES:
             open_count += 1
             if severity in ("high", "critical"):
                 open_high_or_critical += 1
@@ -2116,7 +2117,8 @@ async def make_approval_decision(
         from api.routes.fairness_runs import _gate_payload  # function-level: that router imports this one
 
         system = db.execute(text("SELECT risk_tier FROM governance_ai_systems WHERE id = :id"), {"id": approval_system_id}).fetchone()
-        gate = _gate_payload(db, approval_system_id, system[0] if system else "medium")
+        # The evidence alone: an earlier rejection must not stop the reviewer approving this request.
+        gate = _gate_payload(db, approval_system_id, system[0] if system else "medium", with_decision=False)
         if new_status == "approved":
             blocked = _gate_decision_block(gate, request.notes)
             if blocked:
@@ -2962,6 +2964,30 @@ async def create_remediation_task(
     }
 
 
+def _task_risk_ids(task: Dict[str, Any]) -> set:
+    ids = set(task.get("linkedRiskIds") or [])
+    if task.get("sourceType") == "risk" and task.get("sourceId"):
+        ids.add(task["sourceId"])
+    return ids
+
+
+def _sync_task_findings(db: Session, system_id: str, risk_ids: set) -> None:
+    """A finding resolves once no remediation task linked to it is active, and opens again while one is.
+
+    Only open or resolved findings move; one accepted, mitigated or closed stays as set.
+    """
+    tasks = _fetch_remediation_tasks(db, system_id)
+    for risk_id in risk_ids:
+        active = any(risk_id in _task_risk_ids(t) and (t.get("status") or "open") in ACTIVE_REMEDIATION_STATUSES for t in tasks)
+        db.execute(
+            text(
+                "UPDATE governance_risks SET status = :status, updated_at = :updated_at "
+                "WHERE id = :id AND system_id = :system_id AND status IN ('open', 'resolved') AND status != :status"
+            ),
+            {"status": "open" if active else "resolved", "updated_at": _utc_now_iso(), "id": risk_id, "system_id": system_id},
+        )
+
+
 @router.patch("/remediation/{task_id}")
 async def update_remediation_task(
     task_id: str,
@@ -2998,6 +3024,8 @@ async def update_remediation_task(
         text(f"UPDATE governance_remediation_tasks SET {', '.join(set_parts)} WHERE id = :id"),
         updates,
     )
+    if request.status is not None:
+        _sync_task_findings(db, str(row[1]), _task_risk_ids(_serialize_remediation_task_row(row)))
     db.commit()
 
     updated_row = db.execute(

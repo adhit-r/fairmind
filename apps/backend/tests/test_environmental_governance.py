@@ -279,3 +279,49 @@ def test_approval_is_refused_while_findings_or_critical_tasks_are_open(environme
     assert detail["blockers"] == {"openHighOrCriticalFindings": 1, "activeCriticalTasks": 1}
     assert detail["message"].startswith("Approval is blocked by 1 open high or critical finding and 1 active critical remediation task")
     assert client.post(url, json={"decision": "rejected", "notes": "Findings open."}).status_code == 200
+
+
+def test_resolving_the_linked_task_closes_the_finding_and_unblocks_approval(environmental_governance_client):
+    client, org_id = environmental_governance_client
+    system_id = _create_system(client, org_id)
+    _set_low_tier(environmental_governance_client, system_id)
+    blocked = client.post(
+        f"{_environmental_base(org_id, system_id)}/assess",
+        json={"assessment": _assessment(provenance_class="unknown", confidence_score=0.5, mitigation_readiness="missing", mitigations_json=[])},
+    )
+    assert blocked.status_code == 200 and blocked.json()["recommendation"] == "no_go"
+    assert client.post(f"{_environmental_base(org_id, system_id)}/assess", json={"assessment": _assessment()}).status_code == 200
+    task = next(t for t in client.get(f"/api/v1/ai-governance/remediation?system_id={system_id}").json()["tasks"] if t["sourceType"] == "environmental_assessment")
+    request_id = client.post(f"/api/v1/ai-governance/approval/system/{system_id}/request", json={}).json()["request"]["id"]
+    url = f"/api/v1/ai-governance/approval-requests/{request_id}/decision"
+    approve = {"decision": "approved", "notes": "Environmental mitigation documented."}
+    assert client.post(url, json=approve).json()["detail"]["blockers"]["openHighOrCriticalFindings"] == 1
+
+    assert client.patch(f"/api/v1/ai-governance/remediation/{task['id']}", json={"status": "resolved"}).status_code == 200
+    risks = client.get(f"/api/v1/ai-governance/dashboard/risk?system_id={system_id}").json()
+    assert [r["status"] for r in risks["risks"] if r["id"] in task["linkedRiskIds"]] == ["resolved"]
+    assert client.post(url, json=approve).status_code == 200
+
+
+def test_a_rejection_stands_until_a_reviewer_approves_a_new_request(environmental_governance_client):
+    client, org_id = environmental_governance_client
+    system_id = _create_system(client, org_id)
+    _set_low_tier(environmental_governance_client, system_id)
+    assert client.post(f"{_environmental_base(org_id, system_id)}/assess", json={"assessment": _assessment()}).status_code == 200
+    gate = lambda: client.get(f"/api/v1/ai-governance/systems/{system_id}/gate").json()
+    decide = lambda decision: client.post(
+        f"/api/v1/ai-governance/approval-requests/{client.post(f'/api/v1/ai-governance/approval/system/{system_id}/request', json={}).json()['request']['id']}/decision",
+        json={"decision": decision, "notes": "Environmental mitigation documented."},
+    )
+    evidence_verdict = gate()["verdict"]
+    assert evidence_verdict != "no_go"
+    assert decide("rejected").status_code == 200
+
+    client.post(f"/api/v1/ai-governance/approval/system/{system_id}/request", json={})
+    pending = gate()
+    assert pending["approvalStatus"] == "pending" and pending["verdict"] == "no_go"
+    assert pending["reasons"][0].startswith("The last release decision was rejected")
+
+    assert decide("approved").status_code == 200
+    approved = gate()
+    assert approved["approvalStatus"] == "approved" and approved["verdict"] == evidence_verdict

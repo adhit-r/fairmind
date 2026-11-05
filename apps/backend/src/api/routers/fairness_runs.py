@@ -24,6 +24,7 @@ from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
 from api.routes.ai_governance import (
+    CLOSED_RISK_STATUSES,
     _authenticated_actor,
     _caller_org,
     _enforce_org_scope,
@@ -86,7 +87,6 @@ def _environmental_assessed(db: Session, system_id: str) -> bool:
 DEFAULT_CADENCE_HOURS = 168
 DEFAULT_DRIFT_WINDOW = 3
 WATCH_SOURCE = "fairmind.watch"
-CLOSED_RISK_STATUSES = ("accepted", "closed", "resolved", "mitigated")
 
 
 def _monitoring_policy(db: Session, system_id: str) -> Dict[str, Any]:
@@ -99,13 +99,20 @@ def _monitoring_policy(db: Session, system_id: str) -> Dict[str, Any]:
     return {"cadenceHours": row[0], "driftWindow": row[1], "updatedBy": row[2], "updatedAt": row[3], "isDefault": False}
 
 
-def _gate_payload(db: Session, system_id: str, risk_tier: str) -> Dict[str, Any]:
+def _gate_payload(db: Session, system_id: str, risk_tier: str, *, with_decision: bool = True) -> Dict[str, Any]:
+    """The release gate; ``with_decision=False`` reads the evidence alone, as the reviewer deciding a request needs it."""
     records = _fetch_evidence_records(db, system_id)
     cadence = _monitoring_policy(db, system_id)["cadenceHours"]
-    approval = _fetch_latest_system_approval(db, system_id)
+    approval = decided = None
+    if with_decision:
+        approval = _fetch_latest_system_approval(db, system_id)
+        decided = db.execute(
+            text("SELECT status FROM governance_approval_requests WHERE entity_type = 'ai_system' AND entity_id = :id AND status IN ('approved', 'rejected') ORDER BY created_at DESC LIMIT 1"),
+            {"id": system_id},
+        ).fetchone()
     gate = release_gate(
         risk_tier, records, environmental_assessed=_environmental_assessed(db, system_id), monitoring_cadence_hours=cadence,
-        approval_status=approval["status"] if approval else "not_requested",
+        approval_status=approval["status"] if approval else "not_requested", last_decision=decided[0] if decided else None,
     )
     gate["systemId"] = system_id
     gate["riskTier"] = risk_tier

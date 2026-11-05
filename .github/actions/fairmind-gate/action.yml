@@ -99,6 +99,7 @@ runs:
           exit 1
         fi
         if [ "$verdict" = "go" ]; then exit 0; fi
-        if [ "$verdict" = "conditional_go" ] && [ "${{ inputs.allow-conditional }}" = "true" ]; then exit 0; fi
+        # An approved conditional go passes require-approval: the reviewer accepted its conditions.
+        if [ "$verdict" = "conditional_go" ] && { [ "${{ inputs.allow-conditional }}" = "true" ] || [ "${{ inputs.require-approval }}" = "true" ]; }; then exit 0; fi
         echo "::error title=FairMind release gate::$verdict for system ${{ inputs.system }}"
         exit 1
