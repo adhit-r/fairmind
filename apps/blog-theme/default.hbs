@@ -3,30 +3,27 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
 <title>{{meta_title}}</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Noto+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="preload" href="{{asset "fonts/literata-latin.woff2"}}" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="{{asset "css/screen.css"}}">
 {{ghost_head}}
 </head>
 <body class="{{body_class}}">
 <a class="skip" href="#main">Skip to content</a>
-<header class="top">
-  <div class="wrap top-in">
+<header class="mast">
+  <div class="wrap mast-in">
     <a class="brand" href="{{@site.url}}">
       <span class="name">{{@site.title}}</span>
       <span class="sub">AI regulation guides from FairMind</span>
     </a>
-    <button class="search" type="button" data-ghost-search aria-label="Search guides">{{> icon name="search"}}<span>Search guides, articles and controls</span></button>
+    {{navigation}}
     <div class="acts">
-      <a class="act" href="{{@site.url}}/docket/" aria-label="Deadlines">{{> icon name="calendar" size="20"}}<span>Deadlines</span><b class="badge" data-due-badge hidden></b></a>
-      <a class="btn line" href="https://fairmind.xyz">FairMind</a>
-      {{#if @site.members_enabled}}{{#unless @member}}<a class="btn red" href="#/portal/signup" data-portal="signup">Subscribe</a>{{/unless}}{{/if}}
+      <button class="icon-btn" type="button" data-ghost-search aria-label="Search guides" aria-haspopup="dialog">{{> icon name="search" size="20"}}</button>
+      {{#if @site.members_enabled}}{{#unless @member}}<a class="btn" href="#/portal/signup" data-portal="signup">Subscribe</a>{{/unless}}{{/if}}
     </div>
   </div>
 </header>
-{{navigation}}
 
 <main id="main">
 {{{body}}}
@@ -34,24 +31,24 @@
 
 <footer class="foot">
   <div class="wrap foot-in">
-    <div>
-      <span class="name">{{@site.title}}</span>
+    <div class="foot-about">
+      <a class="name" href="{{@site.url}}">{{@site.title}}</a>
       <p>{{@site.description}}</p>
     </div>
-    <div>
+    <nav aria-label="Frameworks">
       <h2>Frameworks</h2>
-      <ul>{{#get "tags" filter="slug:[{{@custom.topic_tags}}]" limit="20"}}{{#foreach tags}}<li><a href="{{url}}">{{name}}</a></li>{{/foreach}}{{/get}}</ul>
-    </div>
-    <div>
+      <ul>{{#get "tags" filter="slug:[{{@custom.topic_tags}}]" include="count.posts" limit="20"}}{{#foreach tags}}{{#if count.posts}}<li><a href="{{url}}">{{name}}</a></li>{{/if}}{{/foreach}}{{/get}}</ul>
+    </nav>
+    <nav aria-label="Blog">
       <h2>Blog</h2>
-      <ul><li><a href="{{@site.url}}/docket/">Deadlines</a></li><li><a href="{{@site.url}}/rss/">RSS</a></li></ul>
-    </div>
-    <div>
+      <ul>{{#foreach @site.navigation}}<li><a href="{{url absolute="true"}}">{{label}}</a></li>{{/foreach}}<li><a href="{{@site.url}}/rss/">RSS</a></li></ul>
+    </nav>
+    <nav aria-label="FairMind">
       <h2>FairMind</h2>
       <ul><li><a href="https://fairmind.xyz">Product</a></li><li><a href="https://fairmind.xyz/request-access?utm_source=blog&utm_medium=footer&utm_campaign=blog">Request access</a></li></ul>
-    </div>
+    </nav>
   </div>
-  <div class="wrap small">Published by FairMind. Guides support readiness work and are not legal advice.</div>
+  <p class="wrap small">Published by FairMind. The guides are engineering readings of public texts and are not legal advice.</p>
 </footer>
 {{#get "pages" filter="slug:docket" limit="1"}}{{#foreach pages}}<template id="docket-src">{{content}}</template>{{/foreach}}{{/get}}
 <script src="{{asset "js/main.js"}}" defer></script>

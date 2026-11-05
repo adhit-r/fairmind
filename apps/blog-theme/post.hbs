@@ -1,50 +1,52 @@
 {{!< default}}
 {{#post}}
-<div class="progress" aria-hidden="true"></div>
-<div class="wrap article">
-  <aside class="toc-col">
-    <nav class="mod toc" aria-label="On this page" hidden>
-      <h2 class="rail-h">{{> icon name="list"}}On this page</h2>
-    </nav>
-  </aside>
-  <article class="doc">
-    <nav class="crumbs" aria-label="Breadcrumb"><a href="{{@site.url}}/">Home</a>{{#primary_tag}}{{> icon name="chevron" size="12"}}<a href="{{url}}">{{name}}</a>{{/primary_tag}}</nav>
+<div class="progress" aria-hidden="true"><i></i></div>
+<article class="post">
+  <header class="post-head wrap-read">
+    <nav class="crumbs" aria-label="Breadcrumb"><a href="{{@site.url}}/">Home</a>{{#primary_tag}}<span aria-hidden="true">/</span><a href="{{url}}">{{name}}</a>{{/primary_tag}}</nav>
     <h1>{{title}}</h1>
     {{#if custom_excerpt}}<p class="dek">{{custom_excerpt}}</p>{{/if}}
-    <p class="byline">{{#has tag="deadline"}}<b class="lbl dl">Deadline</b>{{/has}}{{authors separator=", "}} <span>Updated {{date updated_at format="D MMM YYYY"}}</span><span>{{reading_time minute="1 min read" minutes="% min read"}}</span><span hidden><span data-sources></span> primary sources</span></p>
-    <details class="toc-m" hidden><summary>{{> icon name="list"}}On this page</summary></details>
-    {{#if feature_image}}
-    <figure class="feat"><img src="{{img_url feature_image size="xl"}}" alt="{{#if feature_image_alt}}{{feature_image_alt}}{{else}}{{title}}{{/if}}">{{#if feature_image_caption}}<figcaption>{{feature_image_caption}}</figcaption>{{/if}}</figure>
-    {{/if}}
-    <div class="prose gh-content" data-post>
-      {{content}}
+    <p class="meta byline">{{#primary_author}}<a href="{{url}}">{{name}}</a>{{/primary_author}}<time datetime="{{date published_at format="YYYY-MM-DD"}}">Published {{date published_at format="D MMM YYYY"}}</time><span>Updated {{date updated_at format="D MMM YYYY"}}</span><span>{{reading_time minute="1 min read" minutes="% min read"}}</span><span hidden><span data-sources></span> primary sources</span></p>
+    {{#primary_tag}}<p class="callout" data-topic-due="{{name}}" hidden></p>{{/primary_tag}}
+  </header>
+  {{#if feature_image}}
+  <figure class="feat wrap">
+    <img srcset="{{img_url feature_image size="m"}} 800w, {{img_url feature_image size="xl"}} 1600w" sizes="(max-width: 900px) 100vw, 68rem" src="{{img_url feature_image size="xl"}}" alt="{{#if feature_image_alt}}{{feature_image_alt}}{{/if}}">
+    {{#if feature_image_caption}}<figcaption>{{feature_image_caption}}</figcaption>{{/if}}
+  </figure>
+  {{/if}}
+  <div class="post-body">
+    <nav class="toc" aria-labelledby="toc-h" hidden><h2 id="toc-h">On this page</h2></nav>
+    <div class="post-main">
+      <details class="toc-m" hidden><summary>{{> icon name="list"}}On this page</summary></details>
+      <div class="prose gh-content" data-post>
+        {{content}}
+      </div>
     </div>
-  </article>
-  <aside class="side">
-    <section class="mod facts-mod">
-      <header class="mh"><h2>This guide</h2></header>
-      <dl class="facts">
-        <div><dt>Published</dt><dd>{{date published_at format="D MMM YYYY"}}</dd></div>
-        <div><dt>Last updated</dt><dd>{{date updated_at format="D MMM YYYY"}}</dd></div>
-        <div hidden><dt>Primary sources</dt><dd data-sources></dd></div>
-        <div><dt>Reading time</dt><dd>{{reading_time minute="1 min" minutes="% min"}}</dd></div>
-      </dl>
+  </div>
+  <footer class="post-end wrap-read">
+    <section class="cite" aria-labelledby="cite-h">
+      <h2 id="cite-h">Cite this guide</h2>
+      <p class="cite-text" data-cite>{{primary_author.name}}. "{{title}}". Chain of Custody, FairMind, {{date published_at format="D MMMM YYYY"}}, updated {{date updated_at format="D MMMM YYYY"}}. {{url absolute="true"}}</p>
+      <button class="btn quiet" type="button" data-copy>{{> icon name="copy" size="16"}}<span>Copy citation</span></button>
+      <span class="copied" role="status" aria-live="polite"></span>
     </section>
-    {{#if primary_tag}}
-    {{#get "posts" filter="primary_tag:{{primary_tag.slug}}+id:-{{id}}" limit="4" as |more|}}{{#if more}}
-    <section class="mod more">
-      <header class="mh"><h2>More on {{../primary_tag.name}}</h2><a href="{{../primary_tag.url}}">View all {{> icon name="chevron" size="12"}}</a></header>
-      <ul>{{#foreach more}}<li><a href="{{url}}">{{title}}</a><span class="m">{{reading_time minute="1 min" minutes="% min"}}</span></li>{{/foreach}}</ul>
+    {{#primary_author}}
+    <section class="author" aria-label="About the author">
+      {{#if profile_image}}<img src="{{img_url profile_image size="m"}}" alt="" width="56" height="56">{{/if}}
+      <div>
+        <p class="author-name">Written by <a href="{{url}}">{{name}}</a></p>
+        {{#if bio}}<p>{{bio}}</p>{{/if}}
+        <p><a href="{{@site.url}}/about/">How we write and check these guides</a></p>
+      </div>
     </section>
-    {{/if}}{{/get}}
-    {{/if}}
-    {{> due limit="3"}}
-    <section class="mod promo">
-      <h2>{{@custom.cta_title}}</h2>
-      <p>{{@custom.cta_text}}</p>
-      <a class="btn red" href="https://fairmind.xyz/request-access?utm_source=blog&utm_medium=post&utm_campaign={{slug}}">Request access {{> icon name="arrow" size="14"}}</a>
+    {{/primary_author}}
+    <section class="keep" aria-labelledby="keep-h">
+      <h2 class="sec" id="keep-h">Keep reading</h2>
+      <div class="keep-same">{{#get "posts" filter="primary_tag:{{primary_tag.slug}}+id:-{{id}}" include="tags,authors" limit="3" as |same|}}{{#foreach same}}{{> entry}}{{/foreach}}{{/get}}</div>
+      <div class="keep-latest">{{#get "posts" filter="id:-{{id}}" include="tags,authors" limit="3" as |latest|}}{{#foreach latest}}{{> entry}}{{/foreach}}{{/get}}</div>
     </section>
-  </aside>
-</div>
-<div class="wrap after">{{> newsletter}}</div>
+    {{> newsletter}}
+  </footer>
+</article>
 {{/post}}

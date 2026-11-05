@@ -1,15 +1,17 @@
 {{#if @site.members_enabled}}{{#unless @member}}
-<section class="mod news" id="subscribe">
-  <header class="mh"><h2>{{@custom.newsletter_title}}</h2></header>
-  <div class="mb">
-    <p>{{@custom.newsletter_text}}</p>
-    <form data-members-form="subscribe">
-      <label class="sr" for="news-email">Work email</label>
-      <input id="news-email" data-members-email type="email" required placeholder="Work email" autocomplete="email">
-      <button class="btn red" type="submit">Subscribe</button>
-    </form>
-    <p class="msg ok">Check your inbox to confirm your subscription.</p>
-    <p class="msg err">That did not go through. Check the address and try again.</p>
-  </div>
+<section class="news" id="subscribe" aria-labelledby="news-h">
+  <h2 id="news-h">{{@custom.newsletter_title}}</h2>
+  <p>{{@custom.newsletter_text}}</p>
+  <form data-members-form="subscribe">
+    <label for="news-email-{{#if id}}{{id}}{{else}}site{{/if}}">Work email</label>
+    <div class="news-row">
+      <input id="news-email-{{#if id}}{{id}}{{else}}site{{/if}}" data-members-email type="email" required autocomplete="email" aria-describedby="news-status-{{#if id}}{{id}}{{else}}site{{/if}}">
+      <button class="btn" type="submit">Subscribe</button>
+    </div>
+    <div class="news-status" id="news-status-{{#if id}}{{id}}{{else}}site{{/if}}" role="status" aria-live="polite">
+      <p class="msg ok">Check your inbox to confirm your subscription.</p>
+      <p class="msg err">That did not go through. <span data-members-error></span></p>
+    </div>
+  </form>
 </section>
 {{/unless}}{{/if}}

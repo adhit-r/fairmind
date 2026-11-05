@@ -1,315 +1,294 @@
 ---
 name: Chain of Custody
-description: AI regulation guides from FairMind, set as a packed reference portal on white with one utility red.
+description: A calm editorial publication of AI regulation guides, published by FairMind.
 colors:
-  utility-red: "#e60012"
-  red-deep: "#b8000e"
-  red-tint: "#fdecee"
-  ink: "#111111"
-  ink-soft: "#3a3a3a"
-  prose-ink: "#222222"
-  gray: "#6b6b6b"
-  rule-mid: "#d6d6d6"
-  hairline: "#e0e0e0"
-  panel: "#f2f2f2"
-  row-wash: "#fafafa"
-  white: "#ffffff"
-  confirm-green: "#1d6b3a"
+  accent: "#0b6b52"
+  accent-strong: "#08513e"
+  due: "#b42318"
+  on-accent: "#ffffff"
+  paper: "#fcfcfb"
+  ink: "#1c1d1f"
+  ink-2: "#45474b"
+  muted: "#65676b"
+  rule: "#e5e5e1"
+  field: "#8c8e92"
+  surface: "#f3f3f0"
+  dark-paper: "#141517"
+  dark-ink: "#ebebe8"
+  dark-ink-2: "#c6c7c9"
+  dark-muted: "#9c9ea2"
+  dark-rule: "#2c2e31"
+  dark-field: "#76787c"
+  dark-surface: "#1d1f22"
+  dark-accent: "#5fcfa9"
+  dark-accent-strong: "#8be0c3"
+  dark-due: "#ff8f80"
+  dark-on-accent: "#0b1f19"
 typography:
   display:
-    fontFamily: "Barlow Condensed, Noto Sans, sans-serif"
-    fontSize: "clamp(2.1rem, 3.4vw, 3.1rem)"
-    fontWeight: 800
-    lineHeight: 1.02
-    letterSpacing: "-0.005em"
-  numeral:
-    fontFamily: "Barlow Condensed, Noto Sans, sans-serif"
-    fontSize: "2rem"
-    fontWeight: 700
-    lineHeight: 1
-  wordmark:
-    fontFamily: "Barlow Condensed, Noto Sans, sans-serif"
-    fontSize: "1.65rem"
-    fontWeight: 700
-    lineHeight: 1
-    letterSpacing: "0.01em"
+    fontFamily: "Literata, Georgia, serif"
+    fontSize: "clamp(2.1rem, 4.4vw, 3.2rem)"
+    fontWeight: 600
+    lineHeight: 1.12
+    letterSpacing: "-0.02em"
   headline:
-    fontFamily: "Noto Sans, system-ui, sans-serif"
+    fontFamily: "Literata, Georgia, serif"
+    fontSize: "clamp(2rem, 4.2vw, 3rem)"
+    fontWeight: 600
+    lineHeight: 1.15
+    letterSpacing: "-0.016em"
+  title:
+    fontFamily: "Literata, Georgia, serif"
     fontSize: "1.5rem"
-    fontWeight: 700
+    fontWeight: 600
     lineHeight: 1.25
     letterSpacing: "-0.01em"
-  title:
-    fontFamily: "Noto Sans, system-ui, sans-serif"
-    fontSize: "1.06rem"
-    fontWeight: 700
-    lineHeight: 1.35
-  module-head:
-    fontFamily: "Noto Sans, system-ui, sans-serif"
-    fontSize: "1rem"
-    fontWeight: 700
-  prose:
-    fontFamily: "Noto Sans, system-ui, sans-serif"
-    fontSize: "1.0625rem"
-    fontWeight: 400
-    lineHeight: 1.75
-  body:
-    fontFamily: "Noto Sans, system-ui, sans-serif"
-    fontSize: "14px"
+  title-sm:
+    fontFamily: "Literata, Georgia, serif"
+    fontSize: "1.3rem"
+    fontWeight: 600
+    lineHeight: 1.3
+  prose-h2:
+    fontFamily: "Literata, Georgia, serif"
+    fontSize: "1.65rem"
+    fontWeight: 600
+    lineHeight: 1.25
+    letterSpacing: "-0.01em"
+  dek:
+    fontFamily: "Literata, Georgia, serif"
+    fontSize: "1.25rem"
     fontWeight: 400
     lineHeight: 1.6
-    fontFeature: "\"tnum\""
-  meta:
-    fontFamily: "Noto Sans, system-ui, sans-serif"
-    fontSize: "0.76rem"
+  body:
+    fontFamily: "Literata, Georgia, serif"
+    fontSize: "1.1875rem"
     fontWeight: 400
+    lineHeight: 1.72
+  ui:
+    fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, Arial, sans-serif"
+    fontSize: "1rem"
+    fontWeight: 400
+    lineHeight: 1.6
+  meta:
+    fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, Arial, sans-serif"
+    fontSize: "0.875rem"
+    fontWeight: 400
+    fontFeature: "tnum"
   label:
-    fontFamily: "Noto Sans, system-ui, sans-serif"
-    fontSize: "0.72rem"
-    fontWeight: 700
-    letterSpacing: "0.04em"
+    fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, Arial, sans-serif"
+    fontSize: "0.8125rem"
+    fontWeight: 600
 rounded:
-  none: "0px"
-  badge: "999px"
+  pill: "999px"
+  code: "4px"
+  pre: "8px"
+  avatar: "50%"
 spacing:
-  xs: "0.35rem"
-  sm: "0.75rem"
-  md: "1rem"
-  gap: "1.25rem"
-  lg: "1.75rem"
-  rail: "15.5rem"
-  aside: "19rem"
-  column: "46rem"
-  measure: "40rem"
-  max: "90rem"
+  read: "40rem"
+  wide: "68rem"
+  gutter: "clamp(1.25rem, 5vw, 2.5rem)"
+  prose-flow: "1.3rem"
+  entry: "1.75rem"
+  topic: "1.5rem"
+  section: "clamp(3rem, 7vw, 4.5rem)"
+  lead-top: "clamp(3rem, 8vw, 5.5rem)"
   target: "2.75rem"
 components:
-  button-primary:
-    backgroundColor: "{colors.utility-red}"
-    textColor: "{colors.white}"
-    rounded: "{rounded.none}"
-    padding: "0 1.1rem"
+  button-pill:
+    backgroundColor: "{colors.accent}"
+    textColor: "{colors.on-accent}"
+    typography: "{typography.ui}"
+    rounded: "{rounded.pill}"
+    padding: "0 1.15rem"
     height: "2.75rem"
-    typography: "{typography.module-head}"
-  button-primary-hover:
-    backgroundColor: "{colors.red-deep}"
-  button-line:
-    backgroundColor: "{colors.white}"
+  button-pill-hover:
+    backgroundColor: "{colors.accent-strong}"
+  button-quiet:
+    backgroundColor: "transparent"
     textColor: "{colors.ink}"
-    rounded: "{rounded.none}"
-    padding: "0 1.1rem"
-    height: "2.75rem"
-  module:
-    backgroundColor: "{colors.white}"
-    rounded: "{rounded.none}"
-  module-header:
-    padding: "0.8rem 1rem"
-    typography: "{typography.module-head}"
-  rail-header:
-    backgroundColor: "{colors.utility-red}"
-    textColor: "{colors.white}"
-    padding: "0.75rem 1rem"
-  rail-item:
-    textColor: "{colors.ink}"
-    padding: "0.55rem 0.75rem 0.55rem 1rem"
-    height: "2.75rem"
-  rail-item-current:
-    backgroundColor: "{colors.red-tint}"
-    textColor: "{colors.red-deep}"
-  tab:
-    textColor: "{colors.ink-soft}"
+    rounded: "{rounded.pill}"
     padding: "0 1rem"
-    height: "2.875rem"
-  tab-current:
-    textColor: "{colors.utility-red}"
-  label-new:
-    backgroundColor: "{colors.utility-red}"
-    textColor: "{colors.white}"
-    typography: "{typography.label}"
-    height: "1.3rem"
-    padding: "0 0.45rem"
-  label-deadline:
-    textColor: "{colors.utility-red}"
-    typography: "{typography.label}"
-    height: "1.3rem"
-    padding: "0 0.45rem"
-  chip-topic:
-    backgroundColor: "{colors.panel}"
-    textColor: "{colors.ink-soft}"
-    padding: "0.1rem 0.5rem"
-  due-count:
+    height: "2.75rem"
+  icon-button:
+    textColor: "{colors.ink-2}"
+    rounded: "{rounded.pill}"
+    size: "2.75rem"
+  icon-button-hover:
+    backgroundColor: "{colors.surface}"
     textColor: "{colors.ink}"
-    typography: "{typography.numeral}"
-    width: "3.4rem"
-  due-count-urgent:
-    textColor: "{colors.utility-red}"
-  promo:
-    backgroundColor: "{colors.ink}"
-    textColor: "{colors.white}"
-    padding: "1.1rem"
-  input:
-    backgroundColor: "{colors.white}"
-    textColor: "{colors.ink}"
-    rounded: "{rounded.none}"
+  menu-link:
+    textColor: "{colors.ink-2}"
+    rounded: "{rounded.pill}"
     padding: "0 0.8rem"
     height: "2.75rem"
+  menu-link-hover:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.ink}"
+  input-email:
+    backgroundColor: "{colors.paper}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.pill}"
+    padding: "0 0.9rem"
+    height: "2.75rem"
+  progress-bar:
+    backgroundColor: "{colors.accent}"
+    height: "3px"
 ---
 
 # Design System: Chain of Custody
 
 ## Overview
 
-**Creative North Star: "The Reference Counter"**
+**Creative North Star: "The Quiet Column"**
 
-Chain of Custody is a packed reference portal, not a magazine. Every framework, the newest guides and the next deadlines sit in one viewport, each inside its own hairline-ruled module with a small bold header and an optional "View all" link. The page reads like a well-run information desk: white ground, near-black ink, a family of four grays doing all the structural work, and a single utility red that marks what is current, what is new, what is due soon and what to press.
+Chain of Custody is a calm publication, not a portal. A reader meets one strong lead guide set large in Literata, scrolls one dated feed, opens a guide and reads in a single 40rem column, then finishes on one ending: citation, author, the next guides, the newsletter. Every surface sits on the same centred reading axis, so the home page and the guide feel like the same sheet of paper.
 
-Density is the point. Body copy is compact (14px gothic sans) and modules butt against each other on a 1.25rem gap so the reader scans instead of scrolls. The one place the system slows down is the guide itself: a calm 40rem column of 17px prose with generous leading, flanked by an on-this-page rail and a side column of facts, related guides, deadlines and the FairMind promo.
+The material is near-white paper and soft ink. Structure comes only from whitespace and 1px hairline rules; there are no cards, no filled panels, no shadows. One deep green carries every link and action. A single warm red appears only when a deadline is inside 30 days, so its appearance is itself the news. The type is upright throughout: a self-hosted serif for headlines and long reading, the platform sans for meta and controls. Light and dark follow the reader's system.
 
-The world is flat and square. Depth comes only from hairlines, the one ink-filled promo block and the red rail header. Condensed bold display type is reserved for headlines, the wordmark and the deadline day counts, which are the system's loudest numerals.
+This world replaces an earlier high-density portal (red, condensed display type, modules) that the owner rejected; nothing of it survives. It also refuses the newspaper costume and the SaaS hero.
 
 **Key Characteristics:**
-- White ground, #111 ink, four structural grays, one utility red.
-- Every content group is a 1px hairline module with a header bar; no floating cards, no shadows.
-- Condensed bold display for headlines and day-count numerals; compact Noto Sans for everything else.
-- Square corners throughout; the deadline badge is the only rounded form.
-- No italics anywhere, including inside prose.
+- One 40rem centred reading axis across home, feed, guide, tag and pages.
+- Whitespace and hairline rules only; no boxes, fills or shadows.
+- One green accent; red reserved for deadlines inside 30 days.
+- Literata for reading and headlines, platform sans for meta and controls, never italic.
+- Pill-shaped controls with 44px targets; everything else unframed.
 
 ## Colors
 
-A white-and-ink utility palette in which red is a signal, never a fill for decoration.
+A near-neutral paper-and-ink palette with one green voice and one conditional red.
 
 ### Primary
-- **Utility Red** (utility-red): the active tab and its 3px underline, the rail header block, New and Deadline labels, day counts 30 or fewer days out, the next-deadline date in the rail, primary buttons (Subscribe, Request access, Search), and the shared hover, focus ring, selection and reading-progress state.
-- **Deep Red** (red-deep): hover on primary buttons; text of the current rail item and current table-of-contents entry; prose links at rest.
-- **Red Tint** (red-tint): background wash behind the current or hovered rail item and the current table-of-contents entry. Never a panel fill.
+- **Custody Green** (`{colors.accent}`): links, the pill button, the read link, the active contents marker, the progress bar, focus rings, text selection and success messages. It comes from Ghost's accent colour setting (`--ghost-accent-color`), with this value as the default; the theme must keep working with whatever accent the owner sets. **Deep Custody Green** (`{colors.accent-strong}`) is its hover state only.
+- **Dark-mode Green** (`{colors.dark-accent}`, hover `{colors.dark-accent-strong}`): a lighter mint that holds contrast on the dark paper; text on it is `{colors.dark-on-accent}`.
+
+### Secondary
+- **Deadline Red** (`{colors.due}`, dark `{colors.dark-due}`): the days-left count of a deadline 30 days away or less, a topic's "Next date" when it is that close, and the newsletter error message. Nothing else.
 
 ### Neutral
-- **Ink** (ink): headlines, body, the promo block fill, the footer's 3px top rule, code blocks.
-- **Soft Ink** (ink-soft): secondary text, tab labels at rest, ledes and deks, chip text.
-- **Prose Ink** (prose-ink): long-form guide body only; a hair softer than ink for sustained reading.
-- **Gray** (gray): metadata, dates, counts, captions, placeholders. Darkened from the contract's #7A7A7A to keep small meta text legible on white.
-- **Mid Rule** (rule-mid): outlined button and input borders, search field borders, table head rule.
-- **Hairline** (hairline): every module border, header divider and list-row separator.
-- **Panel** (panel): topic chips, table heads, inline code, footer ground.
-- **Row Wash** (row-wash): list-row hover, zebra table rows, the sources box.
-- **Confirm Green** (confirm-green): the newsletter success message only.
+- **Paper** (`{colors.paper}`, dark `{colors.dark-paper}`): the page ground and the email field background.
+- **Ink** (`{colors.ink}`, dark `{colors.dark-ink}`): headlines, prose, strong text inside the deadline lines.
+- **Soft Ink** (`{colors.ink-2}`, dark `{colors.dark-ink-2}`): deks, callout and next-deadline text, menu links, footer text, blockquotes.
+- **Muted Ink** (`{colors.muted}`, dark `{colors.dark-muted}`): meta lines, breadcrumbs, section headings, contents links, captions, list markers.
+- **Hairline** (`{colors.rule}`, dark `{colors.dark-rule}`): every 1px rule, the masthead and footer borders, the contents spine.
+- **Field Line** (`{colors.field}`, dark `{colors.dark-field}`): the border of the quiet button and the email input, dark enough to read as a control.
+- **Wash** (`{colors.surface}`, dark `{colors.dark-surface}`): hover tint on menu links and the search button, and the ground of inline code and code blocks. Never a panel.
 
 ### Named Rules
-**The One Signal Rule.** Red marks state and urgency: current location, New, Deadline, 30 days or fewer, the primary action, and hover/focus. If an element is red and none of those apply, it is wrong.
+**The One Voice Rule.** Green is the only accent. Links and actions are green; nothing is green for decoration.
 
-**The Gray Structure Rule.** Hierarchy between regions is carried by hairlines and gray text, never by tinted panels or colored section backgrounds.
+**The Thirty Days Rule.** Red appears only when a dated deadline is 30 days away or less (or a form has failed). A deadline further out is set in ink. If red is on screen, something is due soon.
 
 ## Typography
 
-**Display Font:** Barlow Condensed 600/700/800 (Ghost heading font override, falling back to Noto Sans)
-**Body Font:** Noto Sans 400/500/600/700 (Ghost body font override, falling back to system-ui)
+**Display Font:** Literata, self-hosted variable woff2 (200 to 900, upright only), with Georgia, serif. Ghost's heading font setting (`--gh-font-heading`) may override it.
+**Body Font:** Literata for prose and deks; the platform sans (system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, Arial) for meta, controls, tables, captions and the sources list. Ghost's body font setting (`--gh-font-body`) may override the sans.
 
-**Character:** A tall condensed gothic for the few things that must shout, over a plain, sturdy sans that disappears into data. Tabular numerals are on site-wide so dates, counts and day numbers align.
+**Character:** A bookish, slightly warm serif does the reading and the headlines; a neutral system sans does the bookkeeping. Weight, not style, carries emphasis.
 
 ### Hierarchy
-- **Display** (800, clamp 2.1rem to 3.1rem, 1.02): the guide title. The home lead uses the same face at clamp 2rem to 2.9rem / 1.0; topic heroes go up to 3.6rem at 700.
-- **Numeral** (700, 2rem, 1.0): deadline day counts, right-aligned in their column; topic fact values at 1.5rem.
-- **Wordmark** (700, 1.65rem, uppercase, 0.01em): site name in header and footer; the promo heading uses the same uppercase condensed treatment at 1.35rem.
-- **Headline** (700 sans, 1.5rem, 1.25): prose H2, preceded by a hairline rule and 1rem of air. Prose H3 is 1.15rem.
-- **Title** (700 sans, 1.06rem, 1.35): guide titles in list rows; 0.95rem in New guides, 0.875rem in the due list.
-- **Module head** (700 sans, 1rem): module header titles.
-- **Prose** (400, 1.0625rem, 1.75, 40rem measure): guide body.
-- **Body** (400, 14px, 1.6): all UI copy.
-- **Meta** (400, 0.75 to 0.78rem, gray): dates, reading time, counts, breadcrumbs.
-- **Label** (700, 0.72rem, 0.04em, uppercase): New and Deadline labels only.
+- **Display** (600, clamp 2.1 to 3.2rem, 1.12, -0.02em, balanced): the home lead guide title only.
+- **Headline** (600, clamp 2 to 3rem, 1.15, -0.016em, balanced): guide and page titles; listing titles use 600 2.4rem.
+- **Title** (600, 1.5rem, 1.25): feed entry titles. **Title small** (600, 1.3rem, 1.3): topic names, the citation heading and prose h3. The newsletter heading is 600 1.6rem.
+- **Prose h2** (600, 1.65rem, 1.25, 3rem above).
+- **Dek** (400, 1.25rem serif, 1.55 to 1.6, Soft Ink): the guide standfirst and the lead dek; feed entry deks drop to 1.0625rem.
+- **Body** (400, 1.1875rem serif, 1.72; 1.125rem under 760px): guide prose, 1.3rem between blocks.
+- **UI** (400, 1rem sans, 1.6): page default and form text. Controls use 500 0.9375rem.
+- **Meta** (400, 0.875rem sans, Muted Ink, tabular figures): bylines, dates, read times, breadcrumbs.
+- **Label** (600, 0.8125rem sans, Muted Ink, sentence case): "On this page" and footer column headings. Section headings ("Latest guides", "Browse by framework", "Keep reading") are 600 0.875rem sans over a hairline; they head the list below them, not a title.
 
 ### Named Rules
-**The Upright Rule.** No italics anywhere. Prose em, i and cite render upright; emphasis is carried by weight (strong at 700 in ink).
+**The Upright Rule.** No italics anywhere. `em`, `i` and `cite` render upright; emphasis is weight 600 or nothing.
 
-**The No Kicker Rule.** Nothing sits above a heading to introduce it: no eyebrow, no category line, no small caps label. Labels and chips go in the meta line below the headline or inline before a list title.
-
-**The Condensed Is Loud Rule.** Barlow Condensed is for titles, the wordmark and numerals. Never set running text, buttons, labels or module headers in it.
+**The Heading Stands Alone Rule.** Nothing labels a heading from above: no kicker, eyebrow or category tag set over a title. The topic of a guide lives in its meta line and breadcrumb, never stacked on top of the title.
 
 ## Layout
 
-A 90rem max container with a fluid gutter (clamp 1rem to 1.75rem). The home and topic views use a two-track grid: a 15.5rem sticky rail plus a content grid of three tracks (1.9fr / 1fr / 1fr) holding the lead, New guides and Coming due, with the list spanning two tracks and the side stack (newsletter, deadlines) in the third. The guide view uses three tracks: 15.5rem on-this-page rail, a fluid 46rem-max document column, and a 19rem side column that turns sticky on screens at least 880px tall.
+One centred axis. The reading measure is 40rem (`{spacing.read}`) plus the fluid gutter (1.25 to 2.5rem) on each side; the lead, the next-deadline line, the feed, the newsletter, the topics list, the guide header, the guide body and the guide ending all sit on it. The wide measure (68rem) is used only for the masthead, the footer and feature images.
 
-Every gap between modules is 1.25rem. Module internals use 1rem horizontal padding; list rows use 0.75 to 1.1rem vertical padding with hairline separators. The header is 4.5rem tall; the tab row is 2.875rem and sticky at the top; rails stick at tab height plus 1.25rem.
+Vertical rhythm is generous and fluid: the lead opens with 3 to 5.5rem of space, sections are separated by 3 to 5.5rem clamps, feed entries carry 1.75rem above and below, topics 1.5rem. Prose blocks are 1.3rem apart; headings get 3rem (h2) and 2.25rem (h3) above and 0.8rem below.
 
-Responsive: at 1200px the content grid becomes two columns and side stacks sit two-up below; the guide drops to a 13rem rail plus document. At 900px everything is a single column, the rail moves below content, the table of contents becomes a collapsible "On this page" disclosure, the header search collapses to an icon button and the FairMind outlined button hides. At 520px the wordmark shrinks to 1.2rem and the subtitle and Deadlines action hide.
+On a guide at 1181px and wider, the body is a three-column grid with the reading column in the middle and the contents list sticky in the left margin (up to 15rem, 2rem from the top). At 1180px and below, the margin contents disappear and a collapsible "On this page" sits above the prose. At 760px and below, the menu becomes a horizontally scrolling row under the brand, the footer drops from four columns to two, and prose steps down to 1.125rem. At 420px the brand sub-line hides.
 
-**The One Glance Rule.** On desktop the first viewport shows the framework rail, the lead guide with search, New guides and Coming due together. Do not push any of them below the fold with a hero.
+**The Shared Axis Rule.** Home and guide share one 40rem centred axis. No surface introduces a second column width for content; only chrome and images go wide.
 
 ## Elevation & Depth
 
-Flat. There are no box shadows anywhere in the system. Depth is conveyed by 1px hairline borders, the ink-filled promo block, the red rail header, and the 3px ink rule that opens the footer. Hover states change border color (mid rule to ink) or apply the row wash; they never lift.
+The system is flat. There are no shadows of any kind and no tonal layering of panels; depth is conveyed by whitespace, by type scale and weight, and by 1px hairlines that open and close a region. The only element that sits above the page is the 3px reading-progress bar, fixed to the top edge.
 
-**The Hairline Rule.** Separation is a 1px hairline. Heavier strokes are reserved for the 3px tab underline, the 3px reading-progress bar, the 3px footer top rule and the 2px sources heading rule.
+**The No Box Rule.** Whitespace and hairlines only. No cards, no bordered or filled containers, no shadows. A region that needs separation gets a hairline above (and below, for the callout, next-deadline line and mobile contents), never a frame. The only fills are a control's own pill (button, hover tint) and the wash behind code, which is the code's native material.
 
 ## Shapes
 
-Square corners on every surface, button, input, label and chip (0px). The single exception is the deadline count badge in the header, a red pill (999px) so it reads as a counter rather than a label. Icons are 1.6px-stroke line drawings on a 24px grid, round caps and joins, rendered at 12 to 20px in currentColor.
+Two shapes. Interactive controls are pills (999px): the primary and quiet buttons, the email input, menu links on hover and the search button. Everything else has no corners because it has no frame: entries, topics, callouts and the citation are open text between rules. Small exceptions: inline code (4px), code blocks (8px), the author photo (circle) and the 2px-radius focus ring. Rules are always 1px; a table head rule uses Ink, all others use Hairline.
 
 ## Components
 
 ### Buttons
-Plain, rectangular, 2.75rem tall.
-- **Shape:** square (0px), 2.75rem minimum height, 600 weight at 0.875rem.
-- **Primary:** utility red fill, white text; hover to deep red. Used for Subscribe, Request access and the inline Search.
-- **Line (secondary):** white with a mid-rule 1px border; hover darkens the border to ink. A full-width 2.5rem variant closes the due module ("All deadlines").
-- **Focus:** 2px utility red outline, 2px offset (site-wide).
+Quiet, rounded, and few.
+- **Shape:** full pill (999px), 2.75rem minimum height.
+- **Pill (primary):** Custody Green ground, white text, 500 0.9375rem sans, 0 1.15rem padding. Used for Subscribe in the masthead and newsletter.
+- **Hover / Focus:** ground deepens to Deep Custody Green over 0.2s; focus is a 2px green outline offset 3px.
+- **Quiet:** no ground, Ink text, 1px Field Line border, 0 1rem padding; the border turns Ink on hover. Used for Copy citation.
+- **Icon button:** 2.75rem round target in Soft Ink; Wash tint and Ink on hover. Used for search.
 
-### Modules
-The system's container. Every content group lives in one.
-- **Border:** 1px hairline, white ground, square.
-- **Header bar:** module-head title left, a meta-sized "View all"/"Calendar" link with a 12px chevron or a gray count right; 0.8rem by 1rem padding; hairline below.
-- **Body:** 1rem padding, or flush lists with hairline row separators.
-- **Promo:** the one inverted module, ink fill, uppercase condensed heading, light gray copy, full-width primary button.
+### Inputs / Fields
+- **Style:** the newsletter email field is a pill with a 1px Field Line border on Paper, 2.75rem tall, 0 0.9rem padding, 1rem sans, with a visible label above ("Work email").
+- **Focus:** 2px green outline offset 2px.
+- **Error / Success:** a status line below; success in green, failure in Deadline Red.
 
-### Rail
-- **Header:** solid utility red block, white 700 0.9rem text with a list icon.
-- **Items:** 2.75rem rows, 18px framework line icon, name, optional red next-deadline date, gray post count (or "Soon"). Hover and current: red tint wash with deep red text.
-- **Reused** as the on-this-page table of contents on guides (0.8rem items; current entry in deep red on tint, 700).
+### Navigation
+- **Masthead:** a slim bar (4.75rem minimum) closed by a hairline: the publication name in 600 1.3rem Literata with a 0.8125rem muted sub-line, the menu (Latest, Frameworks, Deadlines, About) as 0.9375rem Soft Ink links that tint with Wash on hover, the current page in Ink 600, then search and Subscribe.
+- **Breadcrumb:** 0.875rem muted links with a slash separator, above the guide title; links go green and underlined on hover.
+- **Footer:** a hairline, then the name and a short about, and three link columns under 0.8125rem labels; a final hairline above the 0.8125rem legal line.
+- **Pagination:** muted 0.875rem row with green 500 links.
 
-### Tabs
-- **Style:** 0.875rem 500 soft ink, 1rem side padding, horizontally scrollable without a scrollbar.
-- **Hover:** text to ink, the red underline grows to 40% from the left.
-- **Current:** utility red 700 text with a full 3px red underline sitting on the hairline.
+### Lead
+The home page's single strong guide: Display title whose underline draws in from the left on hover (1px, 0.5s), a 1.25rem serif dek capped at 38rem, the meta line (topic, author, date, read time), then a green underlined "Read the guide" link with an arrow.
 
-### Labels and Chips
-- **New:** solid red, white uppercase label type, 1.3rem tall; shown for guides 14 days old or less.
-- **Deadline:** 1px red outline, red uppercase label type.
-- **Topic chip:** panel gray ground, soft ink 600 at 0.72rem, sentence case; hover text to red.
+### Next-deadline line and callout
+One sentence between two hairlines (1rem vertical padding on the home page, 0.9rem on a guide): "Next deadline: **Title**, date, in N days. All deadlines". Text is Soft Ink, the title Ink, the days count Ink 600, turning Deadline Red inside 30 days; the closing link is green. On a guide the same line names the framework's next date. It is filled from real docket data and stays hidden when there is none.
 
-### Due list
-- **Row:** a 3.4rem right-aligned condensed day count with "days" in small gray sans beneath, then a bold title, a 600 date and gray context lines. Wide variant on the deadlines page uses a 4.5rem count column.
-- **Urgent:** counts of 30 days or fewer turn utility red; the header badge counts the same set.
+### Feed entry
+An open entry closed by a hairline, 1.75rem above and below: Title in Literata (green on hover), a 1.0625rem serif dek, then the meta line.
 
-### Lists
-- **Guide row:** date column (6.5rem), title + excerpt (62ch) + meta line, right column for reading time and source count; hover applies the row wash. Collapses to one column at 900px.
+### Topics list
+Frameworks as a plain list, each item closed by a hairline with 1.5rem padding: name in Literata 1.3rem, an optional 0.9375rem Soft Ink description, and a meta line with the latest guide and the next date (red inside 30 days).
 
-### Inputs
-- **Style:** 2.75rem, 1px mid rule, white, square, 0.9rem body text, gray placeholder.
-- **Focus:** border turns utility red.
-- **Search triggers:** the header and lead search are buttons styled as fields (mid rule border, hover to ink); the lead version carries an inset red Search block.
+### Contents
+- **Desktop:** in the left margin, sticky, with an "On this page" label and a 1px Hairline spine; links are 0.8125rem muted, the current section turns Ink 500 with its spine segment in green.
+- **Mobile:** a disclosure between two hairlines above the prose, with a list icon and a drawn chevron that rotates open; links are 0.9375rem Soft Ink.
 
 ### Prose
-- 40rem measure, 1.0625rem / 1.75, prose ink.
-- H2 with a hairline above; links in deep red with a 1px underline offset 0.2em, hover to red; strong in ink at 700.
-- Blockquote: 1px ink left rule, soft ink text, upright.
-- Tables: full width, hairline frame, panel head with a mid-rule underline, zebra row wash.
-- Code: inline on panel gray; blocks on ink with light text.
-- Sources list: hairline box on row wash, under a heading with a 2px ink rule.
+Literata 1.1875rem/1.72 in the 40rem column. Links green, underlined 1px, thickening to 2px on hover. Blockquotes get a 1px green left rule and Soft Ink text. Tables are sans 0.9375rem with an Ink head rule and Hairline row rules and no fills. The sources list is set in 0.9375rem sans.
+
+### Citation block
+Opens 4rem below the prose with a hairline: "Cite this guide" in Literata 1.3rem, the citation in 0.9375rem Soft Ink (wrapping anywhere), and a quiet Copy citation button with a green status message.
+
+### Author block
+A hairline, then a 3.5rem round photo (when present) beside "Written by" with the author name as a green link, the bio in Soft Ink, and a link to how the guides are written and checked.
+
+### Newsletter
+No panel: a 600 1.6rem Literata heading, a Soft Ink line capped at 34rem, the labelled pill input and pill Subscribe button in one wrapping row.
+
+### Progress bar
+A 3px green bar fixed to the top edge of a guide, scaled from the left as the reader scrolls; decorative and hidden from assistive tech.
 
 ## Do's and Don'ts
 
 ### Do:
-- **Do** put every new content group in a hairline module with a header bar, 1.25rem from its neighbours.
-- **Do** keep utility red to tabs, labels, urgent day counts (30 days or fewer), primary actions, the rail header and hover/focus/current states.
-- **Do** carry emphasis with weight and ink; set em, i and cite upright.
-- **Do** place labels and topic chips in the meta line below a headline or inline before a list title.
-- **Do** use 1.6px line icons in currentColor, 12 to 20px.
-- **Do** keep interactive targets at least 2.75rem tall.
+- **Do** keep every content surface on the 40rem centred axis; go wide (68rem) only for masthead, footer and images.
+- **Do** separate regions with 1px hairlines and whitespace.
+- **Do** take the accent from Ghost's accent colour (default #0b6b52) and use it only for links, actions and active states.
+- **Do** set the days count of a deadline 30 days away or less in Deadline Red, and every other date in ink.
+- **Do** keep controls as pills with 2.75rem targets and a visible 2px green focus ring.
+- **Do** use tabular figures for dates, meta and day counts.
+- **Do** follow the reader's system for light and dark, using the dark token set.
 
 ### Don't:
-- **Don't** use italics anywhere.
-- **Don't** put a kicker, eyebrow or label above a heading.
-- **Don't** use shadows, gradients or rounded corners (the header badge is the only pill).
-- **Don't** use red for decoration, panel fills or body text.
-- **Don't** set running text, buttons or labels in Barlow Condensed.
-- **Don't** lead a page with a full-width hero or a card grid; the first viewport is modules.
+- **Don't** use italics anywhere, for emphasis, titles or citations.
+- **Don't** use boxes, cards, block fills or shadows; the wash is for hover tints and code only.
+- **Don't** add a second accent, or use red for anything but near deadlines and form errors.
+- **Don't** label a heading from above with a kicker, eyebrow or category tag.
+- **Don't** bring back the portal: no condensed display type, no modules, no widget dashboard, no newspaper costume, no SaaS hero.
+- **Don't** use emoji or glyph icons; icons are inline 1.6-stroke SVG.
