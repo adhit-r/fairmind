@@ -9,6 +9,7 @@ Claude Managed Agents is read through the official anthropic SDK, with list call
 Mounted under /api/v1/packs beside the packs router and sharing its organisation checks.
 """
 
+import logging
 from typing import Any, Dict, List, Optional
 
 import anthropic
@@ -24,6 +25,7 @@ from database.connection import get_db
 from src.application.services.governance_assurance_service import OrgMembership
 
 router = APIRouter()
+log = logging.getLogger(__name__)
 
 PLATFORMS: Dict[str, Dict[str, str]] = {
     "claude_managed_agents": {"name": "Claude Managed Agents", "docs": "https://platform.claude.com/settings/keys"},
@@ -35,21 +37,50 @@ MAX_MEMORIES = 200  # per store
 
 
 class PlatformError(Exception):
-    """A failure the person configuring the connection can act on. Never carries the key."""
+    """The platform could not be read. Never carries the key; what the person sees comes from FIXES."""
+
+
+class KeyRejected(PlatformError):
+    pass
+
+
+class NotPermitted(PlatformError):
+    pass
+
+
+class RateLimited(PlatformError):
+    pass
+
+
+class TimedOut(PlatformError):
+    pass
+
+
+# What the person is told; the upstream detail goes to the server log. The last entry catches the rest.
+FIXES = (
+    (KeyRejected, "Anthropic rejected the key"),
+    (NotPermitted, "This key may not read Managed Agents"),
+    (RateLimited, "Anthropic is rate limiting this key"),
+    (TimedOut, "Anthropic did not answer in time"),
+    (PlatformError, "Could not read Anthropic; try again shortly"),
+)
+
+
+def public_message(e: PlatformError) -> str:
+    return next(text for kind, text in FIXES if isinstance(e, kind))
 
 
 def _error(e: Exception) -> PlatformError:
+    log.warning("Managed Agents read failed: %s %s", type(e).__name__, getattr(e, "status_code", ""))
     if isinstance(e, anthropic.AuthenticationError):
-        return PlatformError("Anthropic rejected the key")
+        return KeyRejected()
     if isinstance(e, anthropic.PermissionDeniedError):
-        return PlatformError("This key may not read Managed Agents")
+        return NotPermitted()
     if isinstance(e, anthropic.RateLimitError):
-        return PlatformError("Anthropic is rate limiting this key")
+        return RateLimited()
     if isinstance(e, anthropic.APITimeoutError):
-        return PlatformError("Anthropic did not answer in time")
-    if isinstance(e, anthropic.APIStatusError):
-        return PlatformError(f"Anthropic responded {e.status_code}")
-    return PlatformError("Could not reach Anthropic")
+        return TimedOut()
+    return PlatformError()
 
 
 async def _take(pages: Any, limit: int) -> List[Dict[str, Any]]:
@@ -199,7 +230,7 @@ async def test_connection(platform: str, m: OrgMembership = Depends(_manager), d
         message = "Read " + ", ".join(f"{n} {'memory stores' if k == 'memoryStores' else k}" for k, n in found.items())
         ok = True
     except PlatformError as e:
-        found, message, ok = None, str(e), False
+        found, message, ok = None, public_message(e), False
     db.execute(
         text("UPDATE org_platform_connections SET tested_ok = :ok, tested_at = :now, test_message = :msg WHERE org_id = :org AND platform = :p"),
         {"ok": ok, "now": _utc_now_iso(), "msg": message[:300], "org": m.org_id, "p": platform},

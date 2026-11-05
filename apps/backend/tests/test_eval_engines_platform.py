@@ -242,7 +242,7 @@ def test_the_reader_lists_everything_and_drops_session_copies_of_agents(fake_pla
     assert next(kw for name, _, kw in fake_platform if name == "memories")["view"] == "full"
 
 
-def test_a_connection_is_stored_encrypted_tested_and_runs_evaluations(tmp_database, fake_platform):
+def test_a_connection_is_stored_encrypted_tested_and_runs_evaluations(tmp_database, fake_platform, monkeypatch):
     org_id, client = _org(tmp_database)
     system = _system(tmp_database, org_id)
     url = f"{PACKS}/platform-connections/claude_managed_agents"
@@ -268,4 +268,13 @@ def test_a_connection_is_stored_encrypted_tested_and_runs_evaluations(tmp_databa
                          files={"export": ("env.json", json.dumps({"id": "env_2", "config": {"type": "cloud", "networking": {"type": "unrestricted"}}}))})
     assert upload.status_code == 200 and upload.json()["status"] == "failed" and upload.json()["source"] == "upload"
     assert client.post(f"{PACKS}/evaluations/EV-DAT-01/runs", data={**run}).status_code == 422  # reads files, not platforms
+
+    from api.routes import platform_connections
+
+    async def rejected(key):
+        raise platform_connections.KeyRejected()
+
+    monkeypatch.setattr(platform_connections, "snapshot", rejected)
+    assert client.post(f"{url}/test").json() == {"ok": False, "message": "Anthropic rejected the key", "counts": None}
+    assert client.post(f"{PACKS}/evaluations/EV-SEC-06/runs", data=run).json()["detail"] == "Anthropic rejected the key"
     assert client.delete(url).json()["connected"] is False

@@ -54,8 +54,9 @@ def _judge(db: Session, org_id: str) -> Optional[Judge]:
     def judge(system: str, user: str, schema: Dict[str, Any]) -> Dict[str, Any]:
         try:
             return anyio.from_thread.run(llm.complete, conn, system, user, schema)[0]
-        except llm.LLMError as e:
-            raise EngineError(f"Your model could not judge this: {e}")
+        except llm.LLMError:
+            # ponytail: the provider's reason is dropped here; the AI provider test in settings shows it
+            raise EngineError("Your model could not judge this; test it under organization settings, AI provider")
 
     return judge
 
@@ -138,7 +139,7 @@ async def create_run(evaluation_id: str, request: Request, m: OrgMembership = De
         else:
             outcome = await run_in_threadpool(engine.run, files, params)
     except platform_connections.PlatformError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
+        raise HTTPException(status_code=422, detail=platform_connections.public_message(exc))
     except EngineError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
