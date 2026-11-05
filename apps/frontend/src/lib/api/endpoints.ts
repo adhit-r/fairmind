@@ -16,6 +16,8 @@ export const API_ENDPOINTS = {
     refresh: '/api/v1/auth/refresh',
     logout: '/api/v1/auth/logout',
     me: '/api/v1/auth/me',
+    requestPasswordReset: '/api/v1/auth/password-reset/request',
+    resetPassword: '/api/v1/auth/password-reset',
     apiKeys: '/api/v1/auth/api-keys',
     createApiKey: '/api/v1/auth/api-keys',
     deleteApiKey: (keyName: string) => `/api/v1/auth/api-keys/${keyName}`,

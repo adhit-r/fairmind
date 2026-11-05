@@ -7,6 +7,7 @@ only mints new tokens and must never open a route.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -45,7 +46,9 @@ def test_human_route_refuses_a_refresh_token(existing_user) -> None:
 
 
 @pytest.mark.parametrize("credential_kind", ("access", "api_key"))
-def test_human_route_accepts_access_tokens_and_api_keys(existing_user, credential_kind: str) -> None:
+def test_human_route_accepts_access_tokens_and_api_keys(existing_user, credential_kind: str, monkeypatch) -> None:
+    # Only the token's purpose is under test; tests/test_api_keys.py covers the stored-key check.
+    monkeypatch.setattr(auth_module, "_api_key_is_live", AsyncMock(return_value=True))
     token = (
         auth_manager.create_access_token(existing_user)
         if credential_kind == "access"
