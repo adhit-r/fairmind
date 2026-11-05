@@ -582,33 +582,26 @@
 /* ---------- Four pillars: an index, not cards ---------- */
 
 .pi-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   border-top: 1px solid var(--ink);
 }
 
+/* Subgrid rows keep descriptions, counts and pack lists level across the four columns. */
 .pi-col {
-  flex: 1 1 0;
+  display: grid;
+  grid-row: span 5;
+  grid-template-rows: subgrid;
+  align-content: start;
   min-width: 0;
   padding: 1.5rem 1.75rem 2rem;
   border-left: var(--line);
   outline: none;
-  transition: flex-grow 700ms var(--ease-out), background-color 400ms;
 }
 
 .pi-col:first-child {
   padding-left: 0;
   border-left: 0;
-}
-
-.pi-row:hover .pi-col,
-.pi-row:focus-within .pi-col {
-  flex-grow: 0.8;
-}
-
-.pi-row .pi-col:hover,
-.pi-row .pi-col:focus-visible,
-.pi-row .pi-col:focus-within {
-  flex-grow: 1.9;
 }
 
 .pi-n {
@@ -627,7 +620,6 @@
 }
 
 .pi-desc {
-  min-height: 7.75em;
   margin: 0 0 1.75rem;
   color: var(--ink2);
   font-size: 0.95rem;
@@ -635,10 +627,9 @@
 }
 
 .pi-stats {
-  display: grid;
-  grid-template-columns: repeat(3, auto);
-  justify-content: start;
-  gap: 1.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.1rem;
   margin: 0 0 1.75rem;
 }
 
@@ -649,8 +640,8 @@
 
 .pi-stats dt {
   color: var(--ink3);
-  font-size: 0.72rem;
-  letter-spacing: 0.06em;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
@@ -665,6 +656,7 @@
 
 .pi-packs {
   display: grid;
+  align-content: start;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -681,7 +673,7 @@
   font-weight: 500;
 }
 
-.pi-packs span {
+.pi-packs li > span {
   display: grid;
   grid-template-rows: 0fr;
   overflow: hidden;
@@ -691,9 +683,13 @@
   transition: grid-template-rows 600ms var(--ease-out), opacity 400ms, margin 600ms var(--ease-out);
 }
 
-.pi-col:hover .pi-packs span,
-.pi-col:focus-within .pi-packs span,
-.pi-col:focus-visible .pi-packs span {
+.pi-packs li > span > span {
+  min-height: 0;
+}
+
+.pi-col:hover .pi-packs li > span,
+.pi-col:focus-within .pi-packs li > span,
+.pi-col:focus-visible .pi-packs li > span {
   grid-template-rows: 1fr;
   margin-top: 0.2rem;
   opacity: 1;
@@ -1295,7 +1291,7 @@
   }
 
   .pi-row {
-    flex-direction: column;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .pi-col,
@@ -1309,11 +1305,7 @@
     margin-bottom: 1rem;
   }
 
-  .pi-desc {
-    min-height: 0;
-  }
-
-  .pi-packs span {
+  .pi-packs li > span {
     grid-template-rows: 1fr;
     margin-top: 0.2rem;
     opacity: 1;
