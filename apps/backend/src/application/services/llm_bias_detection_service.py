@@ -58,9 +58,10 @@ class BiasTestResult:
     template_id: str
     test_name: str
     bias_score: float
-    fairness_metrics: Dict[str, float]
     detected_bias: bool
-    confidence: float
+    # Requested fairness metrics and the confidence figure: the outputs carry no
+    # labels or group membership to compute them from, so they are named, not scored.
+    not_computed: List[str]
     recommendations: List[str]
     raw_outputs: List[Dict[str, Any]]
     timestamp: datetime
@@ -72,7 +73,6 @@ class LLMBiasDetectionService:
     - Uses configurable test templates (no hardcoding)
     - Supports multiple bias types and categories
     - Implements industry-standard testing algorithms
-    - Provides statistical rigor with confidence intervals
     - Generates actionable recommendations
     """
     
@@ -197,7 +197,6 @@ class LLMBiasDetectionService:
                     results["bias_breakdown"][template.id] = {
                         "bias_score": test_result.bias_score,
                         "detected_bias": test_result.detected_bias,
-                        "confidence": test_result.confidence
                     }
                     
                     total_bias_score += test_result.bias_score * template.weight
@@ -221,24 +220,19 @@ class LLMBiasDetectionService:
         try:
             # Analyze outputs based on template
             bias_score = await self._calculate_bias_score(template, model_outputs)
-            fairness_metrics = await self._calculate_fairness_metrics(template, model_outputs)
             
             # Determine if bias is detected
             detected_bias = bias_score > template.threshold
             
-            # Calculate confidence based on sample size and variance
-            confidence = self._calculate_confidence(model_outputs)
-            
             # Generate recommendations
-            recommendations = self._generate_test_recommendations(template, bias_score, fairness_metrics)
+            recommendations = self._generate_test_recommendations(template, bias_score)
             
             return BiasTestResult(
                 template_id=template.id,
                 test_name=template.name,
                 bias_score=bias_score,
-                fairness_metrics=fairness_metrics,
                 detected_bias=detected_bias,
-                confidence=confidence,
+                not_computed=[*template.fairness_metrics, "confidence"],
                 recommendations=recommendations,
                 raw_outputs=model_outputs,
                 timestamp=datetime.now(),
@@ -386,102 +380,6 @@ class LLMBiasDetectionService:
             logger.error(f"Error calculating generic bias score: {e}")
             return 0.0
     
-    async def _calculate_fairness_metrics(self, template: BiasTestTemplate, model_outputs: List[Dict[str, Any]]) -> Dict[str, float]:
-        """Calculate fairness metrics based on template requirements"""
-        try:
-            metrics = {}
-            
-            for metric in template.fairness_metrics:
-                if metric == "statistical_parity":
-                    metrics[metric] = await self._calculate_statistical_parity(template, model_outputs)
-                elif metric == "equalized_odds":
-                    metrics[metric] = await self._calculate_equalized_odds(template, model_outputs)
-                elif metric == "demographic_parity":
-                    metrics[metric] = await self._calculate_demographic_parity(template, model_outputs)
-                elif metric == "hand_preference_parity":
-                    metrics[metric] = await self._calculate_hand_preference_parity(template, model_outputs)
-                elif metric == "visual_representation_fairness":
-                    metrics[metric] = await self._calculate_visual_representation_fairness(template, model_outputs)
-                else:
-                    metrics[metric] = 0.0
-            
-            return metrics
-            
-        except Exception as e:
-            logger.error(f"Error calculating fairness metrics: {e}")
-            return {}
-    
-    async def _calculate_statistical_parity(self, template: BiasTestTemplate, model_outputs: List[Dict[str, Any]]) -> float:
-        """Calculate statistical parity across sensitive attributes"""
-        try:
-            # Implementation would depend on the specific metric and data structure
-            # This is a placeholder for the actual calculation
-            return 0.85  # Placeholder value
-        except Exception as e:
-            logger.error(f"Error calculating statistical parity: {e}")
-            return 0.0
-    
-    async def _calculate_equalized_odds(self, template: BiasTestTemplate, model_outputs: List[Dict[str, Any]]) -> float:
-        """Calculate equalized odds across sensitive attributes"""
-        try:
-            # Implementation would depend on the specific metric and data structure
-            return 0.92  # Placeholder value
-        except Exception as e:
-            logger.error(f"Error calculating equalized odds: {e}")
-            return 0.0
-    
-    async def _calculate_demographic_parity(self, template: BiasTestTemplate, model_outputs: List[Dict[str, Any]]) -> float:
-        """Calculate demographic parity across sensitive attributes"""
-        try:
-            # Implementation would depend on the specific metric and data structure
-            return 0.88  # Placeholder value
-        except Exception as e:
-            logger.error(f"Error calculating demographic parity: {e}")
-            return 0.0
-    
-    async def _calculate_hand_preference_parity(self, template: BiasTestTemplate, model_outputs: List[Dict[str, Any]]) -> float:
-        """Calculate hand preference parity for image generation models"""
-        try:
-            # This would analyze image outputs for left vs right hand representation
-            # Integration with computer vision libraries would be needed
-            return 0.75  # Placeholder value
-        except Exception as e:
-            logger.error(f"Error calculating hand preference parity: {e}")
-            return 0.0
-    
-    async def _calculate_visual_representation_fairness(self, template: BiasTestTemplate, model_outputs: List[Dict[str, Any]]) -> float:
-        """Calculate visual representation fairness"""
-        try:
-            # This would analyze visual diversity and representation
-            return 0.82  # Placeholder value
-        except Exception as e:
-            logger.error(f"Error calculating visual representation fairness: {e}")
-            return 0.0
-    
-    def _calculate_confidence(self, model_outputs: List[Dict[str, Any]]) -> float:
-        """Calculate confidence level based on sample size and variance"""
-        try:
-            if not model_outputs:
-                return 0.0
-            
-            # Simple confidence calculation based on sample size
-            # In practice, this would use statistical methods
-            sample_size = len(model_outputs)
-            if sample_size >= 100:
-                return 0.95
-            elif sample_size >= 50:
-                return 0.90
-            elif sample_size >= 20:
-                return 0.80
-            elif sample_size >= 10:
-                return 0.70
-            else:
-                return 0.50
-                
-        except Exception as e:
-            logger.error(f"Error calculating confidence: {e}")
-            return 0.0
-    
     def _generate_recommendations(self, results: Dict[str, Any]) -> List[str]:
         """Generate actionable recommendations based on bias analysis"""
         recommendations = []
@@ -507,7 +405,7 @@ class LLMBiasDetectionService:
         
         return recommendations
     
-    def _generate_test_recommendations(self, template: BiasTestTemplate, bias_score: float, fairness_metrics: Dict[str, float]) -> List[str]:
+    def _generate_test_recommendations(self, template: BiasTestTemplate, bias_score: float) -> List[str]:
         """Generate specific recommendations for a test"""
         recommendations = []
         
@@ -520,11 +418,6 @@ class LLMBiasDetectionService:
             elif template.category == BiasCategory.TEXT_GENERATION:
                 recommendations.append("Review text generation for stereotypical associations.")
                 recommendations.append("Implement prompt engineering for fairness.")
-        
-        # Add fairness metric specific recommendations
-        for metric, score in fairness_metrics.items():
-            if score < 0.8:
-                recommendations.append(f"Improve {metric}: current score {score:.3f}")
         
         return recommendations
     

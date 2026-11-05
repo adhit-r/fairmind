@@ -280,17 +280,25 @@ async def get_governance_metrics(
                 AND created_at > NOW() - INTERVAL '30 days'
             """
             fairness_result = await conn.fetch_one(fairness_query, params)
-            fairness_score = float(fairness_result["avg_fairness"]) if fairness_result and fairness_result["avg_fairness"] else 0.0
+            # No bias tests in the window: no fairness score, not a zero one.
+            fairness_score = float(fairness_result["avg_fairness"]) if fairness_result and fairness_result["avg_fairness"] is not None else None
+
+            # Recorded critical risks on the organisation's AI systems that nobody has accepted.
+            critical_query = """
+                SELECT COUNT(*) as critical_risks
+                FROM governance_risks r
+                JOIN governance_ai_systems s ON s.id = r.system_id
+                WHERE s.org_id = :org_id AND r.severity = 'critical' AND r.status != 'accepted'
+            """
+            critical_result = await conn.fetch_one(critical_query, params)
             
             result = {
                 "success": True,
                 "data": {
-                    "totalModels": model_metrics["total_models"] if model_metrics else 2,
-                    "activeModels": model_metrics["active_models"] if model_metrics else 2,
-                    "totalDatasets": dataset_metrics["total_datasets"] if dataset_metrics else 2,
-                    "criticalRisks": 2,
-                    "llmSafetyScore": 85,
-                    "nistCompliance": 78,
+                    "totalModels": model_metrics["total_models"],
+                    "activeModels": model_metrics["active_models"],
+                    "totalDatasets": dataset_metrics["total_datasets"],
+                    "criticalRisks": critical_result["critical_risks"],
                     "biasAlerts": bias_alerts,
                     "fairnessScore": fairness_score,
                     "lastUpdated": datetime.now().isoformat()
@@ -341,8 +349,9 @@ async def get_metrics_summary(m: OrgMembership = Depends(org_claim)):
                 "total_models": int(model_count_row["total_models"]) if model_count_row else 0,
                 "total_datasets": int(dataset_count_row["total_datasets"]) if dataset_count_row else 0,
                 "total_simulations": int(simulation_count_row["total_simulations"]) if simulation_count_row else 0,
-                "fairness_score": float(fairness_row["fairness_score"]) if fairness_row and fairness_row["fairness_score"] else 0.0,
-                "compliance_score": float(compliance_row["compliance_score"]) if compliance_row and compliance_row["compliance_score"] else 0.0,
+                # None when nothing was scored in the window, rather than a zero score.
+                "fairness_score": float(fairness_row["fairness_score"]) if fairness_row and fairness_row["fairness_score"] is not None else None,
+                "compliance_score": float(compliance_row["compliance_score"]) if compliance_row and compliance_row["compliance_score"] is not None else None,
             }
 
         return {
@@ -351,8 +360,6 @@ async def get_metrics_summary(m: OrgMembership = Depends(org_claim)):
                 "total_models": metrics["total_models"],
                 "total_datasets": metrics["total_datasets"],
                 "total_simulations": metrics["total_simulations"],
-                "active_analyses": 3,  # This would come from active simulation runs
-                "security_score": 85.0,  # This would be calculated from security scans
                 "compliance_score": metrics["compliance_score"],
                 "bias_score": metrics["fairness_score"],
                 "last_updated": datetime.now().isoformat()
