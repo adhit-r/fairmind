@@ -1,0 +1,491 @@
+{
+ "_note": "Catalogue entries not in the workbook. scripts/export_pack_catalogue.py merges them in after the 'after' framework; add them to the workbook to retire this file.",
+ "after": "INDAI",
+ "frameworks": [
+  {
+   "key": "RBIFREEAI",
+   "name": "RBI FREE-AI: Framework for Responsible and Ethical Enablement of AI in the Financial Sector",
+   "publisher": "Reserve Bank of India (FREE-AI Committee)",
+   "version": "Committee report, 13 Aug 2025 (RBI press release 2025-2026/902)",
+   "type": "Committee report (recommendations)",
+   "jurisdiction": "India (RBI-regulated entities)",
+   "binding": "Recommendations. Not enforceable until the RBI adopts them through directions.",
+   "status": "Current. Published 13 Aug 2025 with 7 sutras, 6 pillars and 26 recommendations; no RBI direction adopting them was found as of Nov 2026. Recommendation titles follow the report's own list as reproduced in KPMG's Sept 2025 summary; confirm against the RBI PDF before external use. Recommendations 1-9 and 11-13 are addressed to regulators, government or industry bodies and are not mapped to common controls. Sources: https://www.rbi.org.in/scripts/BS_PressReleaseDisplay.aspx?prid=61018 ; https://rbidocs.rbi.org.in/rdocs/PublicationReport/PDFs/FREEAIR130820250A24FF2D4578453F824C72ED9F5D5851.PDF ; https://assets.kpmg.com/content/dam/kpmgsites/in/pdf/2025/09/rbis-free-ai-committee-report-in-the-financial-sector.pdf",
+   "granularity": "7 sutras + 26 recommendations in 6 pillars",
+   "licence": "Regulator publication. Paraphrase.",
+   "priority": "P0",
+   "pillar": "GOVERN"
+  }
+ ],
+ "requirements": [
+  {
+   "key": "RBIFREEAI|Sutra 1",
+   "framework": "RBIFREEAI",
+   "control": "Sutra 1",
+   "title": "Trust is the foundation",
+   "group": "Sutra",
+   "active": true,
+   "status": "Active"
+  },
+  {
+   "key": "RBIFREEAI|Sutra 2",
+   "framework": "RBIFREEAI",
+   "control": "Sutra 2",
+   "title": "People first",
+   "group": "Sutra",
+   "active": true,
+   "status": "Active"
+  },
+  {
+   "key": "RBIFREEAI|Sutra 3",
+   "framework": "RBIFREEAI",
+   "control": "Sutra 3",
+   "title": "Innovation over restraint",
+   "group": "Sutra",
+   "active": true,
+   "status": "Active"
+  },
+  {
+   "key": "RBIFREEAI|Sutra 4",
+   "framework": "RBIFREEAI",
+   "control": "Sutra 4",
+   "title": "Fairness and equity",
+   "group": "Sutra",
+   "active": true,
+   "status": "Active"
+  },
+  {
+   "key": "RBIFREEAI|Sutra 5",
+   "framework": "RBIFREEAI",
+   "control": "Sutra 5",
+   "title": "Accountability",
+   "group": "Sutra",
+   "active": true,
+   "status": "Active"
+  },
+  {
+   "key": "RBIFREEAI|Sutra 6",
+   "framework": "RBIFREEAI",
+   "control": "Sutra 6",
+   "title": "Understandable by design",
+   "group": "Sutra",
+   "active": true,
+   "status": "Active"
+  },
+  {
+   "key": "RBIFREEAI|Sutra 7",
+   "framework": "RBIFREEAI",
+   "control": "Sutra 7",
+   "title": "Safety, resilience and sustainability",
+   "group": "Sutra",
+   "active": true,
+   "status": "Active"
+  },
+  {
+   "key": "RBIFREEAI|Rec 1",
+   "framework": "RBIFREEAI",
+   "control": "Rec 1",
+   "title": "Financial sector data infrastructure",
+   "group": "Infrastructure pillar",
+   "active": true,
+   "status": "Active"
+  },
+  {
+   "key": "RBIFREEAI|Rec 2",
+   "framework": "RBIFREEAI",
+   "control": "Rec 2",
+   "title": "AI innovation sandbox",
+   "group": "Infrastructure pillar",
+   "active": true,
+   "status": "Active"
+  },
+  {
+   "key": "RBIFREEAI|Rec 3",
+   "framework": "RBIFREEAI",
+   "control": "Rec 3",
+   "title": "Incentives and funding support",
+   "group": "Infrastructure pillar",
+   "active": true,
+   "status": "Active"
+  },
+  {
+   "key": "RBIFREEAI|Rec 4",
+   "framework": "RBIFREEAI",
+   "control": "Rec 4",
+   "title": "Indigenous financial sector specific AI models",
+   "group": "Infrastructure pillar",
+   "active": true,
+   "status": "Active"
+  },
+  {
+   "key": "RBIFREEAI|Rec 5",
+   "framework": "RBIFREEAI",
+   "control": "Rec 5",
+   "title": "Integrating AI with DPI",
+   "group": "Infrastructure pillar",
+   "active": true,
+   "status": "Active"
+  },
+  {
+   "key": "RBIFREEAI|Rec 6",
+   "framework": "RBIFREEAI",
+   "control": "Rec 6",
+   "title": "Adaptive and enabling policies",
+   "group": "Policy pillar",
+   "active": true,
+   "status": "Active"
+  },
+  {
+   "key": "RBIFREEAI|Rec 7",
+   "framework": "RBIFREEAI",
+   "control": "Rec 7",
+   "title": "Enabling AI-based affirmative action",
+   "group": "Policy pillar",
+   "active": true,
+   "status": "Active"
+  },
+  {
+   "key": "RBIFREEAI|Rec 8",
+   "framework": "RBIFREEAI",
+   "control": "Rec 8",
+   "title": "AI liability framework",
+   "group": "Policy pillar",
+   "active": true,
+   "status": "Active"
+  },
+  {
+   "key": "RBIFREEAI|Rec 9",
+   "framework": "RBIFREEAI",
+   "control": "Rec 9",
+   "title": "AI institutional framework",
+   "group": "Policy pillar",
+   "active": true,
+   "status": "Active"
+  },
+  {
+   "key": "RBIFREEAI|Rec 10",
+   "framework": "RBIFREEAI",
+   "control": "Rec 10",
+   "title": "Capacity building within REs",
+   "group": "Capacity pillar",
+   "active": true,
+   "status": "Active"
+  },
+  {
+   "key": "RBIFREEAI|Rec 11",
+   "framework": "RBIFREEAI",
+   "control": "Rec 11",
+   "title": "Capacity building for regulators and supervisors",
+   "group": "Capacity pillar",
+   "active": true,
+   "status": "Active"
+  },
+  {
+   "key": "RBIFREEAI|Rec 12",
+   "framework": "RBIFREEAI",
+   "control": "Rec 12",
+   "title": "Framework for sharing best practices",
+   "group": "Capacity pillar",
+   "active": true,
+   "status": "Active"
+  },
+  {
+   "key": "RBIFREEAI|Rec 13",
+   "framework": "RBIFREEAI",
+   "control": "Rec 13",
+   "title": "Recognise and reward responsible AI innovation",
+   "group": "Capacity pillar",
+   "active": true,
+   "status": "Active"
+  },
+  {
+   "key": "RBIFREEAI|Rec 14",
+   "framework": "RBIFREEAI",
+   "control": "Rec 14",
+   "title": "Board-approved AI policy",
+   "group": "Governance pillar",
+   "active": true,
+   "status": "Active"
+  },
+  {
+   "key": "RBIFREEAI|Rec 15",
+   "framework": "RBIFREEAI",
+   "control": "Rec 15",
+   "title": "Data lifecycle governance",
+   "group": "Governance pillar",
+   "active": true,
+   "status": "Active"
+  },
+  {
+   "key": "RBIFREEAI|Rec 16",
+   "framework": "RBIFREEAI",
+   "control": "Rec 16",
+   "title": "AI system governance framework",
+   "group": "Governance pillar",
+   "active": true,
+   "status": "Active"
+  },
+  {
+   "key": "RBIFREEAI|Rec 17",
+   "framework": "RBIFREEAI",
+   "control": "Rec 17",
+   "title": "Product approval process",
+   "group": "Governance pillar",
+   "active": true,
+   "status": "Active"
+  },
+  {
+   "key": "RBIFREEAI|Rec 18",
+   "framework": "RBIFREEAI",
+   "control": "Rec 18",
+   "title": "Consumer protection",
+   "group": "Protection pillar",
+   "active": true,
+   "status": "Active"
+  },
+  {
+   "key": "RBIFREEAI|Rec 19",
+   "framework": "RBIFREEAI",
+   "control": "Rec 19",
+   "title": "Cybersecurity measures",
+   "group": "Protection pillar",
+   "active": true,
+   "status": "Active"
+  },
+  {
+   "key": "RBIFREEAI|Rec 20",
+   "framework": "RBIFREEAI",
+   "control": "Rec 20",
+   "title": "Red teaming",
+   "group": "Protection pillar",
+   "active": true,
+   "status": "Active"
+  },
+  {
+   "key": "RBIFREEAI|Rec 21",
+   "framework": "RBIFREEAI",
+   "control": "Rec 21",
+   "title": "Business continuity plan for AI systems",
+   "group": "Protection pillar",
+   "active": true,
+   "status": "Active"
+  },
+  {
+   "key": "RBIFREEAI|Rec 22",
+   "framework": "RBIFREEAI",
+   "control": "Rec 22",
+   "title": "AI incident reporting and sectoral risk intelligence framework",
+   "group": "Protection pillar",
+   "active": true,
+   "status": "Active"
+  },
+  {
+   "key": "RBIFREEAI|Rec 23",
+   "framework": "RBIFREEAI",
+   "control": "Rec 23",
+   "title": "AI inventory within REs and sector-wide repository",
+   "group": "Assurance pillar",
+   "active": true,
+   "status": "Active"
+  },
+  {
+   "key": "RBIFREEAI|Rec 24",
+   "framework": "RBIFREEAI",
+   "control": "Rec 24",
+   "title": "AI audit framework",
+   "group": "Assurance pillar",
+   "active": true,
+   "status": "Active"
+  },
+  {
+   "key": "RBIFREEAI|Rec 25",
+   "framework": "RBIFREEAI",
+   "control": "Rec 25",
+   "title": "Disclosures by REs",
+   "group": "Assurance pillar",
+   "active": true,
+   "status": "Active"
+  },
+  {
+   "key": "RBIFREEAI|Rec 26",
+   "framework": "RBIFREEAI",
+   "control": "Rec 26",
+   "title": "AI toolkit",
+   "group": "Assurance pillar",
+   "active": true,
+   "status": "Active"
+  }
+ ],
+ "crosswalk": [
+  {
+   "commonControl": "FMC-GOV-02",
+   "key": "RBIFREEAI|Sutra 1",
+   "relation": "Supports"
+  },
+  {
+   "commonControl": "FMC-OVS-01",
+   "key": "RBIFREEAI|Sutra 2",
+   "relation": "Partially satisfies"
+  },
+  {
+   "commonControl": "FMC-TRN-01",
+   "key": "RBIFREEAI|Sutra 2",
+   "relation": "Supports"
+  },
+  {
+   "commonControl": "FMC-FAI-01",
+   "key": "RBIFREEAI|Sutra 4",
+   "relation": "Partially satisfies"
+  },
+  {
+   "commonControl": "FMC-GOV-03",
+   "key": "RBIFREEAI|Sutra 5",
+   "relation": "Partially satisfies"
+  },
+  {
+   "commonControl": "FMC-TRN-01",
+   "key": "RBIFREEAI|Sutra 6",
+   "relation": "Partially satisfies"
+  },
+  {
+   "commonControl": "FMC-MON-01",
+   "key": "RBIFREEAI|Sutra 7",
+   "relation": "Partially satisfies"
+  },
+  {
+   "commonControl": "FMC-ENV-01",
+   "key": "RBIFREEAI|Sutra 7",
+   "relation": "Aligns with"
+  },
+  {
+   "commonControl": "FMC-GOV-04",
+   "key": "RBIFREEAI|Rec 10",
+   "relation": "Partially satisfies"
+  },
+  {
+   "commonControl": "FMC-GOV-02",
+   "key": "RBIFREEAI|Rec 14",
+   "relation": "Partially satisfies"
+  },
+  {
+   "commonControl": "FMC-RSK-01",
+   "key": "RBIFREEAI|Rec 14",
+   "relation": "Supports"
+  },
+  {
+   "commonControl": "FMC-DAT-01",
+   "key": "RBIFREEAI|Rec 15",
+   "relation": "Partially satisfies"
+  },
+  {
+   "commonControl": "FMC-PRV-01",
+   "key": "RBIFREEAI|Rec 15",
+   "relation": "Supports"
+  },
+  {
+   "commonControl": "FMC-REL-01",
+   "key": "RBIFREEAI|Rec 16",
+   "relation": "Partially satisfies"
+  },
+  {
+   "commonControl": "FMC-MON-01",
+   "key": "RBIFREEAI|Rec 16",
+   "relation": "Partially satisfies"
+  },
+  {
+   "commonControl": "FMC-TST-01",
+   "key": "RBIFREEAI|Rec 16",
+   "relation": "Supports"
+  },
+  {
+   "commonControl": "FMC-GOV-05",
+   "key": "RBIFREEAI|Rec 16",
+   "relation": "Supports"
+  },
+  {
+   "commonControl": "FMC-AGT-01",
+   "key": "RBIFREEAI|Rec 16",
+   "relation": "Supports"
+  },
+  {
+   "commonControl": "FMC-OVS-01",
+   "key": "RBIFREEAI|Rec 16",
+   "relation": "Supports"
+  },
+  {
+   "commonControl": "FMC-REL-01",
+   "key": "RBIFREEAI|Rec 17",
+   "relation": "Supports"
+  },
+  {
+   "commonControl": "FMC-RSK-01",
+   "key": "RBIFREEAI|Rec 17",
+   "relation": "Supports"
+  },
+  {
+   "commonControl": "FMC-TRN-01",
+   "key": "RBIFREEAI|Rec 18",
+   "relation": "Supports"
+  },
+  {
+   "commonControl": "FMC-FAI-01",
+   "key": "RBIFREEAI|Rec 18",
+   "relation": "Supports"
+  },
+  {
+   "commonControl": "FMC-INC-01",
+   "key": "RBIFREEAI|Rec 18",
+   "relation": "Supports"
+  },
+  {
+   "commonControl": "FMC-AGT-02",
+   "key": "RBIFREEAI|Rec 19",
+   "relation": "Supports"
+  },
+  {
+   "commonControl": "FMC-AGT-02",
+   "key": "RBIFREEAI|Rec 20",
+   "relation": "Supports"
+  },
+  {
+   "commonControl": "FMC-INC-01",
+   "key": "RBIFREEAI|Rec 22",
+   "relation": "Partially satisfies"
+  },
+  {
+   "commonControl": "FMC-INV-01",
+   "key": "RBIFREEAI|Rec 23",
+   "relation": "Partially satisfies"
+  },
+  {
+   "commonControl": "FMC-GOV-06",
+   "key": "RBIFREEAI|Rec 24",
+   "relation": "Supports"
+  },
+  {
+   "commonControl": "FMC-FAI-01",
+   "key": "RBIFREEAI|Rec 24",
+   "relation": "Supports"
+  },
+  {
+   "commonControl": "FMC-DAT-01",
+   "key": "RBIFREEAI|Rec 24",
+   "relation": "Supports"
+  },
+  {
+   "commonControl": "FMC-TST-01",
+   "key": "RBIFREEAI|Rec 24",
+   "relation": "Supports"
+  },
+  {
+   "commonControl": "FMC-TRN-01",
+   "key": "RBIFREEAI|Rec 25",
+   "relation": "Supports"
+  },
+  {
+   "commonControl": "FMC-TST-01",
+   "key": "RBIFREEAI|Rec 26",
+   "relation": "Aligns with"
+  }
+ ]
+}
