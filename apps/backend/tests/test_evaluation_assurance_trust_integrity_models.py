@@ -205,8 +205,15 @@ def test_013b_models_expose_exact_columns_and_structural_keys():
             "id", "org_id", "workspace_id", "system_id", "run_id",
             "run_contract_version", "envelope_id", "envelope_hash", "verdict_version",
             "overall_verdict", "layer_verdicts_schema_version", "layer_verdicts_json",
-            "rationale", "decided_by", "owner_override_reason", "evidence_set_json",
-            "evidence_set_hash", "decided_at",
+            "rationale", "decided_by", "owner_override_reason",
+            "separation_override_grant_id", "evidence_set_json", "evidence_set_hash",
+            "decided_at",
+        ),
+        "GovernanceSeparationOverrideGrant": (
+            "id", "org_id", "workspace_id", "system_id", "run_id",
+            "run_contract_version", "envelope_id", "envelope_hash", "evidence_set_json",
+            "evidence_set_hash", "expected_verdict_version", "granted_by",
+            "grantee_actor_id", "reason", "granted_at", "expires_at",
         ),
         "GovernanceEvaluationAuditChainHead": (
             "org_id", "last_sequence_number", "last_event_hash", "updated_at",
@@ -291,6 +298,47 @@ def test_013b_models_expose_exact_columns_and_structural_keys():
     ]
     assert "substr(trim(evidence_set_json), 1, 1) = '{'" in evidence_set_object
     assert "substr(trim(evidence_set_json), -1, 1) = '}'" in evidence_set_object
+
+    grant = governance_models.GovernanceSeparationOverrideGrant
+    assert _named_constraints(grant, UniqueConstraint)[
+        "uq_governance_separation_override_grant_exact_graph"
+    ] == (
+        "id", "org_id", "workspace_id", "system_id", "run_id",
+        "run_contract_version", "envelope_id", "envelope_hash", "evidence_set_hash",
+    )
+    assert _named_constraints(grant, ForeignKeyConstraint)[
+        "fk_governance_separation_override_grant_run"
+    ] == (
+        "run_id", "run_contract_version", "envelope_id", "envelope_hash",
+        "workspace_id", "system_id", "org_id",
+    )
+    grant_checks = _named_checks(grant)
+    assert "expected_verdict_version >= 0" in grant_checks[
+        "ck_governance_separation_override_grant_verdict_version"
+    ]
+    assert "granted_by <> grantee_actor_id" in grant_checks[
+        "ck_governance_separation_override_grant_distinct_actors"
+    ]
+    assert "length(reason) BETWEEN 1 AND 2000" in grant_checks[
+        "ck_governance_separation_override_grant_reason"
+    ]
+    assert _named_indexes(grant)["idx_governance_separation_override_grants_scope"] == (
+        "org_id", "system_id", "run_id", "grantee_actor_id",
+    )
+
+    assert _named_constraints(decision, UniqueConstraint)[
+        "uq_governance_evaluation_decision_separation_override_grant"
+    ] == ("separation_override_grant_id",)
+    assert _named_constraints(decision, ForeignKeyConstraint)[
+        "fk_governance_evaluation_decision_separation_override_grant"
+    ] == (
+        "separation_override_grant_id", "org_id", "workspace_id", "system_id",
+        "run_id", "run_contract_version", "envelope_id", "envelope_hash",
+        "evidence_set_hash",
+    )
+    assert "owner_override_reason IS NULL OR separation_override_grant_id IS NULL" in decision_checks[
+        "ck_governance_evaluation_decision_override_kind"
+    ]
 
     head = governance_models.GovernanceEvaluationAuditChainHead
     assert _named_constraints(head, ForeignKeyConstraint)[
@@ -400,6 +448,9 @@ def test_013b_named_constraints_are_exact_and_postgresql_safe():
             "ck_governance_evaluation_decision_layer_verdicts",
             "ck_governance_evaluation_decision_rationale",
             "ck_governance_evaluation_decision_owner_override",
+            "uq_governance_evaluation_decision_separation_override_grant",
+            "fk_governance_evaluation_decision_separation_override_grant",
+            "ck_governance_evaluation_decision_override_kind",
             "ck_governance_evaluation_decision_evidence_set_hash",
             "ck_governance_evaluation_decision_evidence_set_size",
         },
@@ -407,6 +458,19 @@ def test_013b_named_constraints_are_exact_and_postgresql_safe():
             "fk_governance_evaluation_audit_chain_head_tail",
             "ck_governance_evaluation_audit_chain_head_sequence",
             "ck_governance_evaluation_audit_chain_head_hash",
+        },
+        "GovernanceSeparationOverrideGrant": {
+            "uq_governance_separation_override_grant_exact_graph",
+            "fk_governance_separation_override_grant_run",
+            "ck_governance_separation_override_grant_contract",
+            "ck_governance_separation_override_grant_verdict_version",
+            "ck_governance_separation_override_grant_distinct_actors",
+            "ck_governance_separation_override_grant_reason",
+            "ck_governance_separation_override_grant_envelope_hash",
+            "ck_governance_separation_override_grant_evidence_hash",
+            "ck_governance_separation_override_grant_evidence_set",
+            "ck_governance_separation_override_grant_granted_at",
+            "ck_governance_separation_override_grant_expires_at",
         },
     }
     for model_name, required_names in expected.items():

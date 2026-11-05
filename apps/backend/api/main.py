@@ -383,12 +383,42 @@ _include_router("api.routes.evidence_packs", prefix="/api/v1/public", tags=["evi
 _include_router("api.routes.governance_assurance", prefix="/api/v1/ai-governance", tags=["governance-assurance"], required=True)
 _include_router("api.routes.policy_center", prefix="/api/v1/ai-governance", tags=["policies"], required=True)
 if settings.assurance_v2_enabled:
-    _include_router(
-        "api.routes.evaluation_workbench",
-        prefix="/api/v1/ai-governance",
-        tags=["evaluation-workbench-v2"],
-        required=True,
-    )
+    for enabled, router_attr, tag, disabled_message in (
+        (
+            settings.assurance_v2_target_versions_enabled,
+            "target_versions_router",
+            "evaluation-workbench-v2-target-versions",
+            "Target-version routes are disabled",
+        ),
+        (
+            settings.assurance_v2_suite_versions_enabled,
+            "suite_versions_router",
+            "evaluation-workbench-v2-suite-versions",
+            "Suite-version routes are disabled",
+        ),
+        (
+            settings.assurance_v2_plans_enabled,
+            "plans_router",
+            "evaluation-workbench-v2-plans",
+            "Evaluation-plan routes are disabled",
+        ),
+        (
+            settings.assurance_v2_runs_enabled,
+            "runs_router",
+            "evaluation-workbench-v2-runs",
+            "Evaluation-run routes are disabled",
+        ),
+    ):
+        if enabled:
+            _include_router(
+                "api.routes.evaluation_workbench",
+                prefix="/api/v1/ai-governance",
+                tags=[tag],
+                attr=router_attr,
+                required=True,
+            )
+        else:
+            logger.info(disabled_message)
     if settings.assurance_v2_evidence_submit_enabled:
         _include_router(
             "api.routes.evaluation_workbench",
@@ -398,7 +428,17 @@ if settings.assurance_v2_enabled:
             required=True,
         )
     else:
-        logger.info("Verified Evidence Passport admission route is disabled")
+        logger.info("Verified Evidence Passport submission route is disabled")
+    if settings.assurance_v2_evidence_link_enabled:
+        _include_router(
+            "api.routes.evaluation_workbench",
+            prefix="/api/v1/ai-governance",
+            tags=["evaluation-workbench-v2-evidence-link"],
+            attr="verified_evidence_link_router",
+            required=True,
+        )
+    else:
+        logger.info("Verified Evidence Passport link route is disabled")
     if settings.assurance_v2_evidence_import_enabled:
         _include_router(
             "api.routes.imported_evidence",

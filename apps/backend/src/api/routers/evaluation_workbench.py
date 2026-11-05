@@ -17,6 +17,9 @@ from api.composition.governance_decision import build_governance_decision_servic
 from api.composition.verified_evidence_admission import (
     build_verified_evidence_admission_service,
 )
+from api.composition.verified_evidence_link import (
+    build_verified_evidence_link_service,
+)
 from api.composition.verified_evidence_review import (
     build_verified_evidence_review_service,
 )
@@ -37,6 +40,7 @@ from src.api.routers.governance_assurance import (
     organization_membership,
 )
 from src.application.ports.evidence_admission import EvidenceAdmissionScope
+from src.application.ports.evidence_link import EvidenceLinkScope
 from src.application.ports.evidence_review import EvidenceReviewScope
 from src.application.ports.governance_decision import GovernanceDecisionScope
 from src.application.services.evaluation_catalog_versions_service import (
@@ -53,20 +57,23 @@ from src.application.evaluation_workbench_contracts import (
 from src.application.services.verified_evidence_admission_service import (
     VerifiedEvidenceAdmissionService,
 )
+from src.application.services.verified_evidence_link_service import (
+    VerifiedEvidenceLinkService,
+)
 from src.application.services.verified_evidence_review_service import (
     VerifiedEvidenceReviewService,
 )
 from src.application.services.governance_assurance_service import OrgMembership
 from src.application.services.governance_decision_service import GovernanceDecisionService
 
-router = APIRouter(
-    prefix="/organizations/{org_id}",
-    tags=["evaluation-workbench-v2"],
-    dependencies=[Depends(require_assurance_v2_enabled)],
-)
+router = APIRouter(tags=["evaluation-workbench-v2"])
 verified_evidence_router = APIRouter(
     prefix="/organizations/{org_id}",
     tags=["evaluation-workbench-v2-evidence"],
+)
+verified_evidence_link_router = APIRouter(
+    prefix="/organizations/{org_id}",
+    tags=["evaluation-workbench-v2-evidence-link"],
 )
 verified_evidence_review_router = APIRouter(
     prefix="/organizations/{org_id}",
@@ -427,19 +434,36 @@ class EvaluationRunV2Response(StrictModel):
     updated_at: str = Field(alias="updatedAt")
 
 
-class EvidenceAdmissionResponse(StrictModel):
-    """Safe response projection for one suite-specific verified admission."""
+class EvidenceSubmissionResponse(StrictModel):
+    """Safe response for a verified admission that is not linked yet."""
 
     admission_id: str = Field(alias="admissionId")
     evidence_run_id: str = Field(alias="evidenceRunId")
     passport_revision_id: str = Field(alias="passportRevisionId")
     verification_receipt_id: str = Field(alias="verificationReceiptId")
     nonce_claim_id: str = Field(alias="nonceClaimId")
-    suite_evidence_link_id: str = Field(alias="suiteEvidenceLinkId")
     run_id: str = Field(alias="runId")
     suite_execution_id: str = Field(alias="suiteExecutionId")
     envelope_hash: str = Field(alias="envelopeHash", pattern="^[0-9a-f]{64}$")
     passport_content_hash: str = Field(alias="passportContentHash", pattern="^[0-9a-f]{64}$")
+    technical_status: TechnicalStatus = Field(alias="technicalStatus")
+    evidence_result_status: EvidenceResultStatus = Field(alias="evidenceResultStatus")
+    admission_status: AdmissionStatus = Field(alias="admissionStatus")
+    freshness_status: FreshnessStatus = Field(alias="freshnessStatus")
+    link_status: Literal["pending"] = Field(alias="linkStatus")
+    effective_expires_at: str = Field(alias="effectiveExpiresAt")
+    verified_at: str = Field(alias="verifiedAt")
+
+
+class EvidenceLinkResponse(StrictModel):
+    """Safe response projection for one independently persisted link."""
+
+    admission_id: str = Field(alias="admissionId")
+    evidence_run_id: str = Field(alias="evidenceRunId")
+    passport_revision_id: str = Field(alias="passportRevisionId")
+    suite_evidence_link_id: str = Field(alias="suiteEvidenceLinkId")
+    run_id: str = Field(alias="runId")
+    suite_execution_id: str = Field(alias="suiteExecutionId")
     technical_status: TechnicalStatus = Field(alias="technicalStatus")
     evidence_result_status: EvidenceResultStatus = Field(alias="evidenceResultStatus")
     admission_status: AdmissionStatus = Field(alias="admissionStatus")
@@ -449,8 +473,8 @@ class EvidenceAdmissionResponse(StrictModel):
     run_evidence_outcome: EvidenceResultStatus = Field(alias="runEvidenceOutcome")
     overall_verdict: GovernanceVerdict = Field(alias="overallVerdict")
     verdict_version: int = Field(alias="verdictVersion", ge=0)
-    effective_expires_at: str = Field(alias="effectiveExpiresAt")
-    verified_at: str = Field(alias="verifiedAt")
+    linked_by: str = Field(alias="linkedBy")
+    linked_at: str = Field(alias="linkedAt")
 
 
 class EvidenceReviewRequest(StrictModel):
@@ -516,6 +540,25 @@ class OwnerDecisionOverrideRequest(GovernanceDecisionRequest):
         return value
 
 
+class SeparationOverrideGrantRequest(StrictModel):
+    grantee_actor_id: str = Field(
+        alias="granteeActorId", min_length=1, max_length=128
+    )
+    expected_verdict_version: int = Field(alias="expectedVerdictVersion", ge=0)
+    separation_override_reason: str = Field(
+        alias="separationOverrideReason", min_length=1, max_length=2000
+    )
+
+    @field_validator("separation_override_reason")
+    @classmethod
+    def _validate_separation_override_reason(cls, value: str) -> str:
+        try:
+            validate_owner_override_reason_input(value)
+        except EvaluationWorkbenchInputError as error:
+            raise ValueError("separation override reason is unsafe") from error
+        return value
+
+
 class GovernanceDecisionSuiteFreshnessResponse(StrictModel):
     suite_execution_id: str = Field(alias="suiteExecutionId")
     recorded_freshness_status: FreshnessStatus = Field(alias="recordedFreshnessStatus")
@@ -554,6 +597,21 @@ class GovernanceDecisionResponse(StrictModel):
 
 class OwnerDecisionOverrideResponse(GovernanceDecisionResponse):
     owner_override_applied: Literal[True] = Field(alias="ownerOverrideApplied")
+
+
+class SeparationOverrideGrantResponse(StrictModel):
+    grant_id: str = Field(alias="grantId")
+    run_id: str = Field(alias="runId")
+    expected_verdict_version: int = Field(alias="expectedVerdictVersion", ge=0)
+    granted_by: str = Field(alias="grantedBy")
+    grantee_actor_id: str = Field(alias="granteeActorId")
+    granted_at: str = Field(alias="grantedAt")
+    expires_at: str = Field(alias="expiresAt")
+
+
+class DelegatedSeparationOverrideDecisionResponse(GovernanceDecisionResponse):
+    separation_override_applied: Literal[True] = Field(alias="separationOverrideApplied")
+    separation_override_grant_id: str = Field(alias="separationOverrideGrantId")
 
 
 def _depth(value: Any, level: int = 0) -> int:
@@ -631,6 +689,17 @@ async def _read_request_body(request: Request) -> bytes:
     return bytes(body)
 
 
+async def _require_empty_request_body(request: Request) -> None:
+    if await _read_request_body(request):
+        raise HTTPException(
+            422,
+            detail={
+                "code": "request_body_not_allowed",
+                "message": "This mutation does not accept a request body.",
+            },
+        )
+
+
 async def _payload(request: Request, model: type[StrictModel]) -> dict[str, Any]:
     media_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
     if media_type != "application/json" and not media_type.endswith("+json"):
@@ -694,6 +763,14 @@ def get_verified_evidence_admission_service(
     return build_verified_evidence_admission_service(db)
 
 
+def get_verified_evidence_link_service(
+    db: Session = Depends(get_db),
+) -> VerifiedEvidenceLinkService:
+    """Resolve independently scoped verified-evidence linking."""
+
+    return build_verified_evidence_link_service(db)
+
+
 def get_verified_evidence_review_service(
     db: Session = Depends(get_db),
 ) -> VerifiedEvidenceReviewService:
@@ -723,12 +800,86 @@ def _require_assurance_v2_capability(child_enabled: bool, message: str) -> None:
         )
 
 
+def _require_target_versions_enabled() -> None:
+    """Hide target-version reads and writes until their child gate passes."""
+
+    _require_assurance_v2_capability(
+        settings.assurance_v2_target_versions_enabled,
+        "Target versions are not enabled.",
+    )
+
+
+def _require_suite_versions_enabled() -> None:
+    """Hide suite-version reads and writes until their child gate passes."""
+
+    _require_assurance_v2_capability(
+        settings.assurance_v2_suite_versions_enabled,
+        "Suite versions are not enabled.",
+    )
+
+
+def _require_plans_enabled() -> None:
+    """Hide evaluation-plan reads and writes until their child gate passes."""
+
+    _require_assurance_v2_capability(
+        settings.assurance_v2_plans_enabled,
+        "Evaluation plans are not enabled.",
+    )
+
+
+def _require_runs_enabled() -> None:
+    """Hide evaluation-run reads and writes until their child gate passes."""
+
+    _require_assurance_v2_capability(
+        settings.assurance_v2_runs_enabled,
+        "Evaluation runs are not enabled.",
+    )
+
+
+def _core_capability_router(child_dependency: Any, tag: str) -> APIRouter:
+    return APIRouter(
+        prefix="/organizations/{org_id}",
+        tags=[tag],
+        dependencies=[
+            Depends(require_assurance_v2_enabled),
+            Depends(child_dependency),
+        ],
+    )
+
+
+target_versions_router = _core_capability_router(
+    _require_target_versions_enabled,
+    "evaluation-workbench-v2-target-versions",
+)
+suite_versions_router = _core_capability_router(
+    _require_suite_versions_enabled,
+    "evaluation-workbench-v2-suite-versions",
+)
+plans_router = _core_capability_router(
+    _require_plans_enabled,
+    "evaluation-workbench-v2-plans",
+)
+runs_router = _core_capability_router(
+    _require_runs_enabled,
+    "evaluation-workbench-v2-runs",
+)
+
+
 def _require_verified_evidence_submit_enabled() -> None:
     """Hide the route until its independent execution/admission gate passes."""
 
     _require_assurance_v2_capability(
         settings.assurance_v2_evidence_submit_enabled,
         "Verified evidence submission is not enabled.",
+    )
+
+
+def _require_verified_evidence_link_enabled() -> None:
+    """Hide linking until its independent authority gate passes."""
+
+    _require_assurance_v2_capability(
+        settings.assurance_v2_evidence_link_enabled,
+        "Verified evidence linking is not enabled.",
     )
 
 
@@ -912,7 +1063,7 @@ def _request_body_schema(model: type[StrictModel]) -> dict[str, Any]:
     }
 
 
-@router.post(
+@target_versions_router.post(
     "/systems/{system_id}/evaluation-v2/target-versions",
     status_code=201,
     response_model=TargetVersionResponse,
@@ -939,7 +1090,7 @@ async def create_target(
         _raise(error)
 
 
-@router.get(
+@target_versions_router.get(
     "/systems/{system_id}/evaluation-v2/target-versions",
     response_model=list[TargetVersionResponse],
 )
@@ -960,7 +1111,7 @@ def list_targets(
     return result
 
 
-@router.get(
+@target_versions_router.get(
     "/systems/{system_id}/evaluation-v2/target-versions/{target_version_id}",
     response_model=TargetVersionResponse,
 )
@@ -983,7 +1134,7 @@ def get_target(
     return result
 
 
-@router.post(
+@suite_versions_router.post(
     "/evaluation-v2/suite-versions",
     status_code=201,
     response_model=SuiteVersionResponse,
@@ -1008,7 +1159,7 @@ async def create_suite(
         _raise(error)
 
 
-@router.get(
+@suite_versions_router.get(
     "/evaluation-v2/suite-versions",
     response_model=list[SuiteVersionResponse],
 )
@@ -1022,7 +1173,7 @@ def list_suites(
         _raise(error)
 
 
-@router.get(
+@suite_versions_router.get(
     "/evaluation-v2/suite-versions/{suite_version_id}",
     response_model=SuiteVersionResponse,
 )
@@ -1043,7 +1194,7 @@ def get_suite(
     return result
 
 
-@router.post(
+@suite_versions_router.post(
     "/evaluation-v2/suite-versions/{suite_version_id}/activate",
     response_model=SuiteVersionResponse,
 )
@@ -1068,7 +1219,7 @@ def activate_suite(
         _raise(error)
 
 
-@router.post(
+@plans_router.post(
     "/systems/{system_id}/evaluation-v2/plans",
     status_code=201,
     response_model=EvaluationPlanV2Response,
@@ -1095,7 +1246,7 @@ async def create_plan(
         _raise(error)
 
 
-@router.get(
+@plans_router.get(
     "/systems/{system_id}/evaluation-v2/plans",
     response_model=list[EvaluationPlanV2Response],
 )
@@ -1116,7 +1267,7 @@ def list_plans(
     return result
 
 
-@router.get(
+@plans_router.get(
     "/systems/{system_id}/evaluation-v2/plans/{plan_id}",
     response_model=EvaluationPlanV2Response,
 )
@@ -1139,7 +1290,7 @@ def get_plan(
     return result
 
 
-@router.post(
+@plans_router.post(
     "/systems/{system_id}/evaluation-v2/plans/{plan_id}/activate",
     response_model=EvaluationPlanV2Response,
 )
@@ -1166,7 +1317,7 @@ def activate_plan(
         _raise(error)
 
 
-@router.get(
+@plans_router.get(
     "/systems/{system_id}/evaluation-v2/plans/{plan_id}/preflight",
     response_model=EvaluationPreflightResponse,
 )
@@ -1191,7 +1342,7 @@ def preflight(
     return result
 
 
-@router.post(
+@runs_router.post(
     "/systems/{system_id}/evaluation-v2/plans/{plan_id}/runs",
     status_code=201,
     response_model=EvaluationRunV2Response,
@@ -1220,7 +1371,7 @@ async def create_run(
         _raise(error)
 
 
-@router.get(
+@runs_router.get(
     "/systems/{system_id}/evaluation-v2/runs",
     response_model=list[EvaluationRunV2Response],
 )
@@ -1241,7 +1392,7 @@ def list_runs(
     return result
 
 
-@router.get(
+@runs_router.get(
     "/systems/{system_id}/evaluation-v2/runs/{run_id}",
     response_model=EvaluationRunV2Response,
 )
@@ -1264,11 +1415,20 @@ def get_run(
     return result
 
 
+for capability_router in (
+    target_versions_router,
+    suite_versions_router,
+    plans_router,
+    runs_router,
+):
+    router.include_router(capability_router)
+
+
 @verified_evidence_router.post(
     "/workspaces/{workspace_id}/systems/{system_id}/evaluation-v2/runs/{run_id}"
     "/suite-executions/{suite_execution_id}/evidence",
     status_code=201,
-    response_model=EvidenceAdmissionResponse,
+    response_model=EvidenceSubmissionResponse,
     dependencies=[Depends(_require_verified_evidence_submit_enabled)],
     openapi_extra={
         "requestBody": {
@@ -1298,7 +1458,7 @@ async def submit_verified_evidence(
         get_verified_evidence_admission_service
     ),
 ):
-    """Admit one signed Passport to one exact suite execution.
+    """Verify one signed Passport without linking it to run projections.
 
     The submitted bytes remain opaque at this transport boundary. The
     admission service parses and authenticates them only after resolving the
@@ -1306,7 +1466,6 @@ async def submit_verified_evidence(
     """
 
     require_evaluation_permission(membership, EVALUATION_EVIDENCE_SUBMIT_PERMISSION)
-    require_evaluation_permission(membership, EVALUATION_EVIDENCE_LINK_PERMISSION)
     if membership.org_id != org_id:
         _missing("evidence_scope")
     _require_evidence_scope(
@@ -1328,7 +1487,7 @@ async def submit_verified_evidence(
         )
     raw_passport = await _read_request_body(request)
     try:
-        result = admission_service.admit_verified_passport_v2(
+        result = admission_service.submit_verified_passport_v2(
             scope=EvidenceAdmissionScope(
                 organization_id=membership.org_id,
                 system_id=system_id,
@@ -1339,7 +1498,63 @@ async def submit_verified_evidence(
             idempotency_key=idempotency_key,
             raw_passport=raw_passport,
         )
-        return _respond(result, EvidenceAdmissionResponse)
+        return _respond(result, EvidenceSubmissionResponse)
+    except EvaluationWorkbenchError as error:
+        _raise(error)
+
+
+@verified_evidence_link_router.post(
+    "/workspaces/{workspace_id}/systems/{system_id}/evaluation-v2/runs/{run_id}"
+    "/suite-executions/{suite_execution_id}/evidence-admissions/{admission_id}"
+    "/passport-revisions/{passport_revision_id}/link",
+    status_code=201,
+    response_model=EvidenceLinkResponse,
+    dependencies=[Depends(_require_verified_evidence_link_enabled)],
+)
+async def link_verified_evidence(
+    org_id: str,
+    workspace_id: str,
+    system_id: str,
+    run_id: str,
+    suite_execution_id: str,
+    admission_id: str,
+    passport_revision_id: str,
+    request: Request,
+    idempotency_key: str = Header(alias="Idempotency-Key"),
+    membership: OrgMembership = Depends(organization_membership),
+    db: Session = Depends(get_db),
+    link_service: VerifiedEvidenceLinkService = Depends(
+        get_verified_evidence_link_service
+    ),
+):
+    """Link one exact stored verified admission to its suite execution."""
+
+    require_evaluation_permission(membership, EVALUATION_EVIDENCE_LINK_PERMISSION)
+    if membership.org_id != org_id:
+        _missing("evidence_scope")
+    _require_evidence_scope(
+        db=db,
+        organization_id=membership.org_id,
+        workspace_id=workspace_id,
+        system_id=system_id,
+        run_id=run_id,
+        suite_execution_id=suite_execution_id,
+    )
+    await _require_empty_request_body(request)
+    try:
+        result = link_service.link_verified_evidence(
+            scope=EvidenceLinkScope(
+                organization_id=membership.org_id,
+                system_id=system_id,
+                run_id=run_id,
+                suite_execution_id=suite_execution_id,
+                admission_id=admission_id,
+                passport_revision_id=passport_revision_id,
+            ),
+            actor_id=membership.user_id,
+            idempotency_key=idempotency_key,
+        )
+        return _respond(result, EvidenceLinkResponse)
     except EvaluationWorkbenchError as error:
         _raise(error)
 
@@ -1455,6 +1670,111 @@ async def create_governance_decision(
             rationale=payload["rationale"],
         )
         return _respond(result, GovernanceDecisionResponse)
+    except EvaluationWorkbenchError as error:
+        _raise(error)
+
+
+@governance_decision_override_router.post(
+    "/workspaces/{workspace_id}/systems/{system_id}/evaluation-v2/runs/{run_id}"
+    "/separation-override-grants",
+    status_code=201,
+    response_model=SeparationOverrideGrantResponse,
+    dependencies=[Depends(_require_owner_decision_override_enabled)],
+    openapi_extra=_request_body_schema(SeparationOverrideGrantRequest),
+)
+async def create_separation_override_grant(
+    org_id: str,
+    workspace_id: str,
+    system_id: str,
+    run_id: str,
+    request: Request,
+    idempotency_key: str = Header(alias="Idempotency-Key"),
+    membership: OrgMembership = Depends(organization_membership),
+    db: Session = Depends(get_db),
+    decision_service: GovernanceDecisionService = Depends(get_governance_decision_service),
+):
+    """Create one immutable, named, exact-run decision exception grant."""
+
+    require_evaluation_permission(membership, EVALUATION_DECISION_PERMISSION)
+    if membership.org_id != org_id:
+        _missing("decision_scope")
+    _require_decision_scope(
+        db=db,
+        organization_id=membership.org_id,
+        workspace_id=workspace_id,
+        system_id=system_id,
+        run_id=run_id,
+    )
+    payload = await _payload(request, SeparationOverrideGrantRequest)
+    try:
+        result = decision_service.create_separation_override_grant(
+            scope=GovernanceDecisionScope(
+                organization_id=membership.org_id,
+                workspace_id=workspace_id,
+                system_id=system_id,
+                run_id=run_id,
+            ),
+            actor_id=membership.user_id,
+            idempotency_key=idempotency_key,
+            grantee_actor_id=payload["granteeActorId"],
+            expected_verdict_version=payload["expectedVerdictVersion"],
+            reason=payload["separationOverrideReason"],
+        )
+        return _respond(result, SeparationOverrideGrantResponse)
+    except EvaluationWorkbenchError as error:
+        _raise(error)
+
+
+@governance_decision_override_router.post(
+    "/workspaces/{workspace_id}/systems/{system_id}/evaluation-v2/runs/{run_id}"
+    "/separation-override-grants/{grant_id}/decision",
+    status_code=201,
+    response_model=DelegatedSeparationOverrideDecisionResponse,
+    dependencies=[Depends(_require_owner_decision_override_enabled)],
+    openapi_extra=_request_body_schema(GovernanceDecisionRequest),
+)
+async def create_delegated_separation_override_decision(
+    org_id: str,
+    workspace_id: str,
+    system_id: str,
+    run_id: str,
+    grant_id: str,
+    request: Request,
+    idempotency_key: str = Header(alias="Idempotency-Key"),
+    membership: OrgMembership = Depends(organization_membership),
+    db: Session = Depends(get_db),
+    decision_service: GovernanceDecisionService = Depends(get_governance_decision_service),
+):
+    """Consume one named grant by appending its immutable decision receipt."""
+
+    require_evaluation_permission(membership, EVALUATION_DECISION_PERMISSION)
+    if membership.org_id != org_id:
+        _missing("decision_scope")
+    _require_decision_scope(
+        db=db,
+        organization_id=membership.org_id,
+        workspace_id=workspace_id,
+        system_id=system_id,
+        run_id=run_id,
+    )
+    payload = await _payload(request, GovernanceDecisionRequest)
+    try:
+        result = decision_service.decide_delegated_override(
+            scope=GovernanceDecisionScope(
+                organization_id=membership.org_id,
+                workspace_id=workspace_id,
+                system_id=system_id,
+                run_id=run_id,
+            ),
+            actor_id=membership.user_id,
+            idempotency_key=idempotency_key,
+            grant_id=grant_id,
+            expected_verdict_version=payload["expectedVerdictVersion"],
+            overall_verdict=payload["overallVerdict"],
+            layer_verdicts=payload["layerVerdicts"],
+            rationale=payload["rationale"],
+        )
+        return _respond(result, DelegatedSeparationOverrideDecisionResponse)
     except EvaluationWorkbenchError as error:
         _raise(error)
 

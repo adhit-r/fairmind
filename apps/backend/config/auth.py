@@ -73,6 +73,13 @@ class TokenType(str, Enum):
     API_KEY = "api_key"
 
 
+class PrincipalKind(str, Enum):
+    """Security boundary between interactive users and service identities."""
+
+    HUMAN = "human"
+    SERVICE = "service"
+
+
 # Not a TokenType: verify_token refuses it, so a reset token never authenticates a request.
 PASSWORD_RESET_TOKEN_TYPE = "password_reset"
 
@@ -96,6 +103,8 @@ class TokenData(BaseModel):
     email: str
     role: UserRole
     token_type: TokenType
+    principal_kind: PrincipalKind = PrincipalKind.HUMAN
+    organization_id: Optional[str] = None
     exp: datetime
     iat: datetime
     permissions: List[str] = []
@@ -142,6 +151,7 @@ class AuthManager:
             "roles": [user.role.value],
             "permissions": user.permissions,
             "token_type": TokenType.ACCESS.value,
+            "principal_kind": PrincipalKind.HUMAN.value,
         }
         
         return self.jwt_manager.create_token(payload, expires_delta)
@@ -157,6 +167,7 @@ class AuthManager:
             "email": user.email,
             "roles": [user.role.value],
             "token_type": TokenType.REFRESH.value,
+            "principal_kind": PrincipalKind.HUMAN.value,
         }
         
         return self.jwt_manager.create_token(payload, expires_delta)
@@ -173,6 +184,7 @@ class AuthManager:
             "roles": [user.role.value],
             "permissions": user.permissions,
             "token_type": TokenType.API_KEY.value,
+            "principal_kind": PrincipalKind.HUMAN.value,
             "key_name": name,
             # Two keys minted in the same second must still differ (api_keys.key_hash).
             "jti": secrets.token_hex(16),
@@ -226,6 +238,8 @@ class AuthManager:
             email = payload.get("email")
             roles = payload.get("roles", [])
             token_type = payload.get("token_type", TokenType.ACCESS.value)
+            principal_kind = payload.get("principal_kind", PrincipalKind.HUMAN.value)
+            organization_id = payload.get("organization_id")
             exp = payload.get("exp")
             iat = payload.get("iat")
             permissions = payload.get("permissions", [])
@@ -235,6 +249,16 @@ class AuthManager:
                 raise InvalidTokenException("Invalid token payload")
             if not str(user_id).strip() or str(subject) != str(user_id):
                 raise InvalidTokenException("Token subject does not match user identity")
+            try:
+                parsed_principal_kind = PrincipalKind(principal_kind)
+            except (TypeError, ValueError) as error:
+                raise InvalidTokenException("Invalid principal kind") from error
+            if parsed_principal_kind is PrincipalKind.SERVICE and (
+                not isinstance(organization_id, str)
+                or not organization_id.strip()
+                or organization_id != organization_id.strip()
+            ):
+                raise InvalidTokenException("Service principal organization is invalid")
             if token_type == TokenType.API_KEY.value and not await _api_key_is_live(token, str(user_id)):
                 raise InvalidTokenException("API key is revoked or its user is inactive")
             
@@ -257,6 +281,8 @@ class AuthManager:
                 email=email,
                 role=UserRole(primary_role),
                 token_type=TokenType(token_type),
+                principal_kind=parsed_principal_kind,
+                organization_id=organization_id,
                 exp=exp_dt,
                 iat=iat_dt,
                 permissions=permissions,
@@ -276,6 +302,8 @@ class AuthManager:
             
             if token_data.token_type != TokenType.REFRESH:
                 raise InvalidTokenException("Invalid token type for refresh")
+            if token_data.principal_kind is not PrincipalKind.HUMAN:
+                raise InvalidTokenException("Human refresh token required")
             
             # Get user data (in production, this would come from database)
             user = await self.get_user_by_id(token_data.user_id)
@@ -451,11 +479,11 @@ auth_manager = AuthManager()
 
 
 # FastAPI Dependencies
-async def get_current_user(
+async def get_verified_principal(
     request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(HTTPBearer(auto_error=False)),
 ) -> TokenData:
-    """Get current authenticated user using new JWT infrastructure."""
+    """Project one signature-verified bearer without assuming its purpose."""
     # JWTAuthenticationMiddleware already verified this request (or signed it in
     # for local development); reuse its result instead of verifying twice.
     state_user = getattr(request.state, "user", None)
@@ -477,14 +505,29 @@ async def get_current_user(
         raise InvalidTokenException("Authentication failed")
 
 
+async def get_current_user(
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(HTTPBearer(auto_error=False)),
+) -> TokenData:
+    """Return a verified human principal for legacy user-facing dependencies."""
+
+    current_principal = await get_verified_principal(request, credentials)
+    if current_principal.principal_kind is not PrincipalKind.HUMAN:
+        raise InvalidTokenException("Human principal required")
+    return current_principal
+
+
 async def get_current_active_user(
     current_user: TokenData = Depends(get_current_user)
 ) -> TokenData:
     """Return a human session authenticated with an access token."""
     # API keys (POST /api/v1/auth/api-keys) authorise requests like access tokens;
-    # only refresh tokens are turned away here.
-    if current_user.token_type not in (TokenType.ACCESS, TokenType.API_KEY):
-        raise InvalidTokenException("Access token required")
+    # only refresh tokens and service principals are turned away here.
+    if (
+        current_user.token_type not in (TokenType.ACCESS, TokenType.API_KEY)
+        or current_user.principal_kind is not PrincipalKind.HUMAN
+    ):
+        raise InvalidTokenException("Human access token required")
     # In production, you might want to check if user is still active in database
     return current_user
 

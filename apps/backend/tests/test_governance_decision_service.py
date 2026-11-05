@@ -16,6 +16,7 @@ from src.application.ports.governance_decision import (
     GovernanceDecisionAuthorityRecord,
     GovernanceDecisionRecord,
     GovernanceDecisionScope,
+    SeparationOverrideGrantRecord,
 )
 from src.application.ports.evidence_freshness import EvidenceFreshnessClassification
 from src.application.services.governance_decision_service import GovernanceDecisionService
@@ -23,6 +24,7 @@ from src.application.services.governance_decision_service import GovernanceDecis
 UTC = timezone.utc
 NOW = datetime(2026, 8, 9, 12, 0, tzinfo=UTC)
 DECISION_ID = UUID("11111111-1111-4111-8111-111111111111")
+GRANT_ID = "22222222-2222-4222-8222-222222222222"
 HASH_A = "a" * 64
 HASH_B = "b" * 64
 EVIDENCE_SET_HASH = "f7294527727d1c756664b89154efac6a18413586d048622629b9e23e149b29cc"
@@ -81,8 +83,10 @@ def _authority() -> GovernanceDecisionAuthorityRecord:
         },
         requested_by="requester-a",
         evidence_submitters=("submitter-a",),
+        evidence_linkers=("linker-a",),
         suite_execution_ids=("suite-execution-a",),
         admission_ids=("admission-a",),
+        admission_linkers=("linker-a",),
         evidence_set=EVIDENCE_SET,
         evidence_set_hash=EVIDENCE_SET_HASH,
         operational_freshness=(
@@ -105,10 +109,15 @@ def _authority() -> GovernanceDecisionAuthorityRecord:
 class _FakeRepository:
     authority: GovernanceDecisionAuthorityRecord
     owner_authorized: bool = False
+    separation_override_grant: SeparationOverrideGrantRecord | None = None
+    decision_actor_authorized: bool = True
 
     def __post_init__(self) -> None:
         self.persisted: list[object] = []
         self.owner_authorization_calls: list[tuple[str, str]] = []
+        self.grant_load_calls: list[tuple[GovernanceDecisionScope, str, str]] = []
+        self.decision_actor_authorization_calls: list[tuple[str, str]] = []
+        self.persisted_grants: list[object] = []
 
     def read_fresh_utc_now(self) -> datetime:
         return NOW
@@ -121,6 +130,36 @@ class _FakeRepository:
     ) -> bool:
         self.owner_authorization_calls.append((organization_id, actor_id))
         return self.owner_authorized
+
+    def load_separation_override_grant_for_update(self, *, scope, grant_id, actor_id):
+        self.grant_load_calls.append((scope, grant_id, actor_id))
+        grant = self.separation_override_grant
+        if grant is None or grant.scope != scope or grant.grant_id != grant_id:
+            return None
+        return grant
+
+    def authorize_governance_decision_actor_for_update(
+        self, *, organization_id: str, actor_id: str
+    ) -> bool:
+        self.decision_actor_authorization_calls.append((organization_id, actor_id))
+        return self.decision_actor_authorized
+
+    def persist_separation_override_grant(self, command):
+        self.persisted_grants.append(command)
+        return SeparationOverrideGrantRecord.create(
+            grant_id=command.grant_id,
+            scope=command.scope,
+            run_contract_version=command.authority.run_contract_version,
+            envelope_id=command.authority.envelope_id,
+            envelope_hash=command.authority.envelope_hash,
+            evidence_set_hash=command.authority.evidence_set_hash,
+            expected_verdict_version=command.expected_verdict_version,
+            granted_by=command.granted_by,
+            grantee_actor_id=command.grantee_actor_id,
+            reason=command.reason,
+            granted_at=command.granted_at,
+            expires_at=command.expires_at,
+        )
 
     def persist_governance_decision(self, command):
         self.persisted.append(command)
@@ -145,6 +184,7 @@ class _FakeRepository:
             decided_at=decided_at,
             suite_execution_ids=command.authority.suite_execution_ids,
             operational_freshness=operational_freshness,
+            separation_override_grant_id=command.separation_override_grant_id,
         )
         if command.owner_override_reason is None:
             return record
@@ -215,6 +255,27 @@ def test_decision_appends_server_bound_record_and_advances_expected_version() ->
     assert repository.owner_authorization_calls == []
 
 
+def test_decision_rejects_the_actor_who_linked_the_governing_evidence() -> None:
+    repository = _FakeRepository(_authority())
+    service = GovernanceDecisionService(
+        _FakeUnitOfWork(repository), uuid_factory=lambda: DECISION_ID
+    )
+
+    with pytest.raises(EvaluationWorkbenchError) as caught:
+        service.decide(
+            scope=SCOPE,
+            actor_id="linker-a",
+            idempotency_key="decision-linker-conflict",
+            expected_verdict_version=0,
+            overall_verdict="conditional",
+            layer_verdicts=LAYERS,
+            rationale="Linked evidence cannot be self-decided.",
+        )
+
+    assert caught.value.code == "governance_decision_separation_required"
+    assert repository.persisted == []
+
+
 def test_owner_override_records_exact_waived_relationships_without_raw_reason() -> None:
     repository = _FakeRepository(
         replace(
@@ -266,6 +327,164 @@ def test_owner_override_records_exact_waived_relationships_without_raw_reason() 
     assert "No independent decision owner" not in repr(details)
     assert repository.persisted[0].owner_override_reason == (
         "No independent decision owner is available."
+    )
+
+
+def test_owner_linker_override_records_the_exact_linked_admissions() -> None:
+    repository = _FakeRepository(
+        replace(
+            _authority(),
+            evidence_linkers=("owner-a",),
+            admission_submitters=("submitter-a",),
+            admission_linkers=("owner-a",),
+        ),
+        owner_authorized=True,
+    )
+    unit_of_work = _FakeUnitOfWork(repository)
+    service = GovernanceDecisionService(unit_of_work, uuid_factory=lambda: DECISION_ID)
+
+    result = service.decide_owner_override(
+        scope=SCOPE,
+        actor_id="owner-a",
+        idempotency_key="owner-linker-override-key",
+        expected_verdict_version=0,
+        overall_verdict="conditional",
+        layer_verdicts=LAYERS,
+        rationale="Current evidence supports a conditional verdict.",
+        owner_override_reason="The canonical owner linked the evidence.",
+    )
+
+    assert result.status == 201
+    details = unit_of_work.outcome.audit_details.to_dict()
+    assert details["waivedRelationships"] == [
+        {
+            "relationshipType": "evidence_linker",
+            "actorId": "owner-a",
+            "resourceType": "evidence_admission",
+            "resourceIds": ["admission-a"],
+        }
+    ]
+
+
+def test_delegated_override_consumes_one_exact_run_grant_without_exposing_reason() -> None:
+    authority = replace(
+        _authority(),
+        requested_by="delegate-a",
+        admission_submitters=("submitter-a",),
+    )
+    grant = SeparationOverrideGrantRecord.create(
+        grant_id=GRANT_ID,
+        scope=SCOPE,
+        run_contract_version="2.0.0",
+        envelope_id="envelope-a",
+        envelope_hash=HASH_A,
+        evidence_set_hash=EVIDENCE_SET_HASH,
+        expected_verdict_version=0,
+        granted_by="owner-a",
+        grantee_actor_id="delegate-a",
+        reason="No independent decision owner is available for this exact run.",
+        granted_at=NOW - timedelta(minutes=1),
+        expires_at=NOW + timedelta(minutes=29),
+    )
+    repository = _FakeRepository(authority, separation_override_grant=grant)
+    unit_of_work = _FakeUnitOfWork(repository)
+    service = GovernanceDecisionService(unit_of_work, uuid_factory=lambda: DECISION_ID)
+
+    result = service.decide_delegated_override(
+        scope=SCOPE,
+        actor_id="delegate-a",
+        idempotency_key="delegated-override-key",
+        grant_id=GRANT_ID,
+        expected_verdict_version=0,
+        overall_verdict="conditional",
+        layer_verdicts=LAYERS,
+        rationale="Current evidence supports a conditional verdict.",
+    )
+
+    assert result.status == 201
+    assert result.body["separationOverrideApplied"] is True
+    assert result.body["separationOverrideGrantId"] == GRANT_ID
+    assert "separationOverrideReason" not in result.body
+    assert unit_of_work.command.operation == (
+        "evaluation-v2.governance-decision.delegated-separation-override"
+    )
+    assert unit_of_work.outcome.audit_action == (
+        "evaluation_v2.governance_decision.delegated_separation_override_created"
+    )
+    assert repository.grant_load_calls == [(SCOPE, GRANT_ID, "delegate-a")]
+    persisted = repository.persisted[0]
+    assert persisted.separation_override_grant_id == GRANT_ID
+    assert persisted.owner_override_reason is None
+    details = unit_of_work.outcome.audit_details.to_dict()
+    assert details["contractVersion"] == "2.0.0"
+    assert details["envelopeId"] == "envelope-a"
+    assert details["envelopeHash"] == HASH_A
+    assert details["grantorActorId"] == "owner-a"
+    assert details["granteeActorId"] == "delegate-a"
+    assert details["waivedRelationships"] == [
+        {
+            "relationshipType": "run_requester",
+            "actorId": "delegate-a",
+            "resourceType": "evaluation_run",
+            "resourceIds": ["run-a"],
+        }
+    ]
+    assert "No independent decision owner" not in repr(details)
+
+
+def test_owner_issues_one_immutable_exact_graph_grant_to_a_named_decider() -> None:
+    authority = replace(
+        _authority(),
+        requested_by="delegate-a",
+        admission_submitters=("submitter-a",),
+    )
+    repository = _FakeRepository(authority, owner_authorized=True)
+    unit_of_work = _FakeUnitOfWork(repository)
+    service = GovernanceDecisionService(
+        unit_of_work,
+        uuid_factory=lambda: UUID(GRANT_ID),
+    )
+
+    result = service.create_separation_override_grant(
+        scope=SCOPE,
+        actor_id="owner-a",
+        idempotency_key="separation-grant-key",
+        grantee_actor_id="delegate-a",
+        expected_verdict_version=0,
+        reason="No independent decision owner is available for this exact run.",
+    )
+
+    assert result.status == 201
+    assert result.body == {
+        "grantId": GRANT_ID,
+        "runId": "run-a",
+        "expectedVerdictVersion": 0,
+        "grantedBy": "owner-a",
+        "granteeActorId": "delegate-a",
+        "grantedAt": NOW.isoformat(),
+        "expiresAt": (NOW + timedelta(minutes=30)).isoformat(),
+    }
+    assert unit_of_work.command.operation == (
+        "evaluation-v2.governance-decision.separation-override-grant.create"
+    )
+    assert unit_of_work.outcome.audit_action == (
+        "evaluation_v2.governance_decision.separation_override_grant_created"
+    )
+    assert repository.owner_authorization_calls == [("org-a", "owner-a")]
+    assert repository.decision_actor_authorization_calls == [
+        ("org-a", "delegate-a")
+    ]
+    details = unit_of_work.outcome.audit_details.to_dict()
+    assert details["workspaceId"] == "workspace-a"
+    assert details["systemId"] == "system-a"
+    assert details["contractVersion"] == "2.0.0"
+    assert details["envelopeId"] == "envelope-a"
+    persisted = repository.persisted_grants[0]
+    assert persisted.authority.envelope_hash == HASH_A
+    assert persisted.authority.evidence_set_hash == EVIDENCE_SET_HASH
+    assert persisted.expires_at - persisted.granted_at == timedelta(minutes=30)
+    assert "No independent decision owner" not in repr(
+        details
     )
 
 

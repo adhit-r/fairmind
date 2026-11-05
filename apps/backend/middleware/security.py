@@ -370,7 +370,7 @@ class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
     def __init__(self, app):
         super().__init__(app)
         # Import here to avoid circular imports
-        from config.auth import auth_manager
+        from config.auth import PrincipalKind, auth_manager
         from config.jwt_exceptions import (
             TokenExpiredException,
             InvalidTokenException,
@@ -378,6 +378,7 @@ class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
             log_jwt_security_event
         )
         self.auth_manager = auth_manager
+        self.PrincipalKind = PrincipalKind
         self.TokenExpiredException = TokenExpiredException
         self.InvalidTokenException = InvalidTokenException
         self.TokenMissingException = TokenMissingException
@@ -478,6 +479,8 @@ class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
             token_data = await self.auth_manager.verify_token(token)
             if token_data.token_type.value == "refresh":
                 raise self.InvalidTokenException("Refresh tokens cannot authorize requests")
+            if token_data.principal_kind is not self.PrincipalKind.HUMAN:
+                raise self.InvalidTokenException("Human principal required")
             
             # Add user information to request state
             request.state.user = token_data
@@ -570,12 +573,16 @@ security = HTTPBearer()
 
 async def get_current_user_from_request(request: Request):
     """Get current user from request state (set by JWT middleware)."""
+    from config.auth import PrincipalKind, auth_manager
+    from config.jwt_exceptions import InvalidTokenException
+
     if hasattr(request.state, 'user') and request.state.authenticated:
-        return request.state.user
+        token_data = request.state.user
+        if token_data.principal_kind is not PrincipalKind.HUMAN:
+            raise InvalidTokenException("Human principal required")
+        return token_data
     
     # Fallback to manual token verification if middleware wasn't used
-    from config.auth import auth_manager
-    
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
         raise HTTPException(
@@ -584,4 +591,7 @@ async def get_current_user_from_request(request: Request):
         )
     
     token = auth_header.split(" ")[1]
-    return await auth_manager.verify_token(token)
+    token_data = await auth_manager.verify_token(token)
+    if token_data.principal_kind is not PrincipalKind.HUMAN:
+        raise InvalidTokenException("Human principal required")
+    return token_data

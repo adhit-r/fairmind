@@ -250,7 +250,11 @@ class EvaluationPreflightResponse(BaseModel):
     can_prepare_run: bool = Field(alias="canPrepareRun")
     fairmind_execution_available: bool = Field(alias="fairmindExecutionAvailable")
     code: Literal[
-        "contract_upgrade_required", "executor_unavailable", "evidence_link_required"
+        "automatic_enforcement_disabled",
+        "contract_upgrade_required",
+        "executor_unavailable",
+        "evidence_link_required",
+        "legacy_evidence_linking_disabled",
     ]
     message: str
     next_action: str = Field(alias="nextAction")
