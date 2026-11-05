@@ -3431,6 +3431,22 @@ class OrgAIProvider(Base):
     updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
 
 
+class OrgPlatformConnection(Base):
+    """An organization's key for an agent platform it lets FairMind read for configuration audits, encrypted at rest."""
+
+    __tablename__ = "org_platform_connections"
+
+    org_id = Column(String, primary_key=True)
+    platform = Column(String, primary_key=True)  # claude_managed_agents
+    api_key_enc = Column(Text, nullable=False)
+    key_hint = Column(String, nullable=True)
+    tested_ok = Column(Boolean, nullable=True)
+    tested_at = Column(String, nullable=True)
+    test_message = Column(String, nullable=True)
+    updated_by = Column(String, nullable=True)
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+
 class GovernanceEvidencePack(Base):
     """An inspection pack: a frozen, hashed manifest of chosen systems and frameworks.
 
