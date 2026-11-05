@@ -1,9 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-
-const BACKEND_BASE_URL =
-  process.env.BACKEND_INTERNAL_URL ||
-  process.env.BACKEND_API_URL ||
-  'http://fairmind.railway.internal:8000'
+import { BACKEND_BASE_URL } from '@/lib/backend-url'
 
 async function proxy(request: NextRequest, path: string[]) {
   try {
