@@ -387,12 +387,17 @@ POSTGRESQL_ASSURANCE_CATALOG_SPEC = PostgreSQLCatalogSpec(
 # the role authority graph around the schema owner, and on Neon every project
 # role is a member of neon_superuser: adding or removing a project role changes
 # this digest, and startup then fails closed until it is re-measured.
+#
+# The PostgreSQL 18 digest below is still the 013j measurement. It includes the
+# Neon role graph, so it cannot be reproduced on a local PostgreSQL 18. After
+# 013k and 013l are applied to Neon, re-measure it there before setting
+# assurance_v2_enabled; until then startup with assurance on fails closed.
 FROZEN_POSTGRESQL_ASSURANCE_CATALOGS: Mapping[int, FrozenPostgreSQLCatalog] = MappingProxyType(
     {
         14: FrozenPostgreSQLCatalog(
             spec=POSTGRESQL_ASSURANCE_CATALOG_SPEC,
             postgresql_major=14,
-            digest=("c181fd00d2c65009cd17a673c0462d92d557c73dc7976f800a4bcb83ae4c6fd2"),
+            digest=("18acdb1569c601bf99c45b22d5de45fe3b749acaf4bb7bb5644a7eba265e2f3a"),
         ),
         18: FrozenPostgreSQLCatalog(
             spec=POSTGRESQL_ASSURANCE_CATALOG_SPEC,

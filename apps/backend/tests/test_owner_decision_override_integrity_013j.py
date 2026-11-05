@@ -639,7 +639,13 @@ def test_postgresql14_013j_preserves_normal_governance_decisions(
 ) -> None:
     from tests.test_operational_freshness_postgres import _decide
 
+    from sqlalchemy import text
+
     factory = postgresql_013j_session_factory
+    # The decision ORM maps 013l's grant column; this 013j schema only needs the column.
+    with factory() as session:
+        session.execute(text("ALTER TABLE governance_evaluation_decisions ADD COLUMN IF NOT EXISTS separation_override_grant_id TEXT"))
+        session.commit()
     graph = _ready_graph(factory)
     result = _decide(factory, graph, decider_id=str(uuid.uuid4()))
     assert result["verdictVersion"] == 1

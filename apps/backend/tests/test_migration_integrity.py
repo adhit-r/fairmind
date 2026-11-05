@@ -551,7 +551,7 @@ def test_production_postgresql_manifest_covers_audit_immutability() -> None:
     assert isinstance(FROZEN_POSTGRESQL_ASSURANCE_CATALOGS, MappingProxyType)
     assert set(FROZEN_POSTGRESQL_ASSURANCE_CATALOGS) == {14, 18}
     expected_digests = {
-        14: "c181fd00d2c65009cd17a673c0462d92d557c73dc7976f800a4bcb83ae4c6fd2",
+        14: "18acdb1569c601bf99c45b22d5de45fe3b749acaf4bb7bb5644a7eba265e2f3a",
         18: "ca00ef6d75a35294ac915de43d8f1a188a77a784060065d3947f982e8e6920a4",
     }
     for major, digest in expected_digests.items():

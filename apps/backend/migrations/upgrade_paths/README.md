@@ -124,7 +124,7 @@ psql -X -w -v ON_ERROR_STOP=1 -f ../011_governance_assurance.sql "$DATABASE_URL"
 psql -X -w -v ON_ERROR_STOP=1 -f ../012_evaluation_runs.sql "$DATABASE_URL"
 ```
 
-Then run `012_to_013` through `013i_to_013j` in order, using the
+Then run `012_to_013` through `013k_to_013l` in order, using the
 `013a_to_013b` `_v2` wrapper. 011 and 012 are not transactional: if either
 fails, restore the branch rather than retrying in place.
 

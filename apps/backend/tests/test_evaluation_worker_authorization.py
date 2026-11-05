@@ -243,7 +243,18 @@ async def test_legacy_untyped_access_token_remains_human_during_migration() -> N
 
 
 @pytest.mark.asyncio
-async def test_legacy_untyped_refresh_token_remains_exchangeable() -> None:
+async def test_legacy_untyped_refresh_token_remains_exchangeable(monkeypatch) -> None:
+    async def _active_user(user_id: str) -> User:
+        return User(
+            id=user_id,
+            email="legacy-human-a@example.test",
+            username="legacy-human-a",
+            role=UserRole.VIEWER,
+            created_at=NOW,
+        )
+
+    # Refresh loads the user from the users table; this unit test has no database.
+    monkeypatch.setattr(auth_manager, "get_user_by_id", _active_user)
     access_token = await auth_manager.refresh_access_token(
         _signed_legacy_human_token(TokenType.REFRESH)
     )
