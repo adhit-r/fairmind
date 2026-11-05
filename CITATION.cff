@@ -1,6 +1,7 @@
 cff-version: 1.2.0
 message: "If you use FairMind, please cite it using the metadata below."
 type: software
+doi: 10.5281/zenodo.23982915
 title: FairMind
 abstract: >-
   Open-source AI assurance workbench for models and agents: map governance
