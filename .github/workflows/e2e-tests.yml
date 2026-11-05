@@ -30,15 +30,15 @@ jobs:
           --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
     - name: Set up Python
-      uses: actions/setup-python@v5.1.0
+      uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.1.0
       with:
         python-version: '3.11'
 
     - name: Set up uv
-      uses: astral-sh/setup-uv@v4.0.0
+      uses: astral-sh/setup-uv@d8db0a86d3d88f3017a4e6b8a1e2b234e7a0a1b5 # v4.0.0
       with:
         version: "latest"
 
@@ -102,7 +102,7 @@ jobs:
     
     - name: Upload test artifacts
       if: always()
-      uses: actions/upload-artifact@v4.4.0
+      uses: actions/upload-artifact@50769540e7f4bd5e21e526ee35c689e35e0d6874 # v4.4.0
       with:
         name: e2e-screenshots
         path: apps/backend/tests/e2e/screenshots/
@@ -110,7 +110,7 @@ jobs:
     
     - name: Upload test videos
       if: always()
-      uses: actions/upload-artifact@v4.4.0
+      uses: actions/upload-artifact@50769540e7f4bd5e21e526ee35c689e35e0d6874 # v4.4.0
       with:
         name: e2e-videos
         path: apps/backend/tests/e2e/videos/
@@ -132,15 +132,15 @@ jobs:
           --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
     - name: Set up Python
-      uses: actions/setup-python@v5.1.0
+      uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.1.0
       with:
         python-version: '3.11'
 
     - name: Set up uv
-      uses: astral-sh/setup-uv@v4.0.0
+      uses: astral-sh/setup-uv@d8db0a86d3d88f3017a4e6b8a1e2b234e7a0a1b5 # v4.0.0
       with:
         version: "latest"
 
