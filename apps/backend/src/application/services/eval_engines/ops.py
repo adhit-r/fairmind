@@ -54,8 +54,8 @@ def _extra_clauses(value: Any) -> Dict[str, List[str]]:
     return {str(c["name"]): [str(c["pattern"])] for c in value}
 
 
-def system_prompt(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[str, Any]:
-    text = read_text(files["system_prompt"], "The system prompt")
+def clause_rows(text: str, params: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """One row per required clause: whether the prompt has it and the text that matched."""
     clauses = {**CLAUSES, **_extra_clauses(params.get("extra_clauses"))}
     rows = []
     for name, patterns in clauses.items():
@@ -64,6 +64,11 @@ def system_prompt(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[str, 
         except re.error as exc:
             raise EngineError(f"The pattern for clause '{name}' is not a valid regex: {exc}")
         rows.append({"clause": name, "present": bool(match), "matched": _scrub(match.group(0), 80) if match else ""})
+    return rows
+
+
+def system_prompt(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[str, Any]:
+    rows = clause_rows(read_text(files["system_prompt"], "The system prompt"), params)
     missing = [r["clause"] for r in rows if not r["present"]]
     present = len(rows) - len(missing)
     metrics = {"requiredClauses": len(rows), "present": present, "missing": len(missing), "coverage": round(present / len(rows), 4)}
