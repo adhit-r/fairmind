@@ -364,6 +364,6 @@ async def health_check():
             "success": False,
             "status": "unhealthy",
             "service": "advanced_bias_detection",
-            "error": str(e),
+            "error": "Health check failed; see the server log",
             "timestamp": datetime.now()
         }

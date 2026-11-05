@@ -627,6 +627,6 @@ async def bias_detection_health():
         logger.error(f"Health check failed: {e}")
         return {
             "status": "unhealthy",
-            "error": str(e),
+            "error": "Health check failed; see the server log",
             "timestamp": datetime.now().isoformat()
         }

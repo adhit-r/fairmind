@@ -345,8 +345,8 @@ async def database_health():
         logger.error(f"Database health check failed: {e}")
         return {
             "success": False,
-            "status": "disconnected", 
-            "message": str(e)
+            "status": "disconnected",
+            "message": "Database is not reachable; see the server log"
         }
 
 # Main API endpoints (accessible at /api/v1/*)
