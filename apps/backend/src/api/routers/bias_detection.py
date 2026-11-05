@@ -63,11 +63,10 @@ class BiasTestResponse(BaseModel):
     """Response model for bias testing"""
     timestamp: str
     model_type: str
-    overall_bias_score: float
+    overall_bias_score: Optional[float]
     bias_breakdown: Dict[str, Any]
     recommendations: List[str]
     test_results: List[Dict[str, Any]]
-    confidence: float
     metadata: Dict[str, Any]
     
     class Config:
@@ -91,20 +90,14 @@ class BiasTestResponse(BaseModel):
                         "status": "biased"
                     }
                 ],
-                "confidence": 0.85,
                 "metadata": {"test_version": "1.0"}
             }
         }
-
-class CustomTemplateRequest(BaseModel):
-    """Request model for adding custom bias test templates"""
-    template: Dict[str, Any]
 
 class TemplateResponse(BaseModel):
     """Response model for template operations"""
     success: bool
     message: str
-    template_id: Optional[str] = None
     templates: Optional[List[Dict[str, Any]]] = None
 
 @router.post("/detect", response_model=BiasTestResponse)
@@ -160,7 +153,6 @@ async def detect_bias(request: BiasTestRequest, m: OrgMembership = Depends(org_m
           "status": "biased"
         }
       ],
-      "confidence": 0.85,
       "metadata": {"test_version": "1.0"}
     }
     ```
@@ -211,12 +203,6 @@ async def detect_bias(request: BiasTestRequest, m: OrgMembership = Depends(org_m
         # The service returns BiasTestResult dataclasses; the response wants plain dicts.
         test_results = [asdict(r) if is_dataclass(r) else r for r in results["test_results"]]
 
-        # Calculate overall confidence
-        overall_confidence = 0.0
-        if test_results:
-            confidences = [result.get("confidence", 0.0) for result in test_results]
-            overall_confidence = sum(confidences) / len(confidences) if confidences else 0.0
-        
         return BiasTestResponse(
             timestamp=results["timestamp"],
             model_type=request.model_type,
@@ -224,7 +210,6 @@ async def detect_bias(request: BiasTestRequest, m: OrgMembership = Depends(org_m
             bias_breakdown=results["bias_breakdown"],
             recommendations=results["recommendations"],
             test_results=test_results,
-            confidence=overall_confidence,
             metadata={
                 "templates_tested": results["templates_tested"],
                 "category": results["category"]
@@ -451,26 +436,10 @@ async def analyze_text_bias(
         logger.error(f"Error analyzing text bias: {e}")
         raise HTTPException(status_code=500, detail=f"Text bias analysis failed: {str(e)}")
 
-@router.post("/templates", response_model=TemplateResponse)
-async def add_custom_template(request: CustomTemplateRequest):
-    """Add a custom bias test template"""
-    try:
-        # This would create a BiasTestTemplate object from the request
-        # For now, we'll just return success
-        template_id = f"custom_{datetime.now().timestamp()}"
-        
-        return TemplateResponse(
-            success=True,
-            message="Custom template added successfully",
-            template_id=template_id
-        )
-        
-    except Exception as e:
-        logger.error(f"Error adding custom template: {e}")
-        return TemplateResponse(
-            success=False,
-            message=f"Failed to add template: {str(e)}"
-        )
+@router.post("/templates")
+async def add_custom_template():
+    """Custom templates are not stored: /detect runs the built-in templates only."""
+    raise HTTPException(status_code=501, detail="Custom bias test templates are not stored; /detect runs the built-in templates only")
 
 @router.get("/templates", response_model=TemplateResponse)
 async def get_test_templates():

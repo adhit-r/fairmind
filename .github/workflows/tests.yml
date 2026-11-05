@@ -1,0 +1,78 @@
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45  # the full suite takes about 30 minutes on PostgreSQL
+    services:
+      postgres:
+        # The *_postgres.py suites assert server_version 14, the release authority.
+        image: postgres:14
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust  # disposable container, no credentials
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: apps/backend
+    env:
+      UV_PYTHON: "3.11"
+      # A server the tests may create and drop databases on; tests/pg.py builds the app database
+      # and sets DATABASE_URL itself.
+      FAIRMIND_TEST_POSTGRES_URL: postgresql://postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4.0.0
+      - name: Unit and Postgres tests
+        run: uv run --frozen --extra test pytest -q -rfEs tests --ignore=tests/e2e
+
+  frontend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: 22  # matches apps/frontend/Dockerfile
+          cache: npm
+          cache-dependency-path: apps/frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: Type-check
+        run: npx tsc --noEmit -p .
+      - name: Unit tests
+        run: npx --yes tsx@4.23.15 --test 'src/**/*.test.ts'
+
+  packages:
+    name: ${{ matrix.package }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [ cli, sdk, mcp ]
+    defaults:
+      run:
+        working-directory: apps/${{ matrix.package }}
+    env:
+      UV_PYTHON: "3.11"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4.0.0
+      - name: Tests
+        run: uv run --with pytest pytest -q -p no:cacheprovider tests

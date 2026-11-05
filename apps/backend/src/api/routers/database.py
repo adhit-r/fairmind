@@ -12,6 +12,7 @@ import json
 # Direct access to database manager instead of broken service
 from database.connection import db_manager
 from api.routes.org_scope import ORG_MEMBER_USER_IDS, org_member, plain_id
+from core.middleware.audit import NOT_A_READ
 from src.application.services.governance_assurance_service import OrgMembership
 
 # Every read is limited to the caller's organisation (org_id columns, or the
@@ -113,7 +114,7 @@ async def get_audit_logs(limit: int = 10, m: OrgMembership = Depends(org_member)
                 result = session.execute(text(f"""
                     SELECT id, user_id, action, resource_type, resource_id, details, ip_address, created_at
                     FROM audit_logs
-                    WHERE {plain_id('user_id')} IN ({ORG_MEMBER_USER_IDS})
+                    WHERE org_id = :org_id
                     ORDER BY created_at DESC
                     LIMIT :limit
                 """), {"org_id": m.org_id, "limit": limit})
@@ -218,7 +219,7 @@ async def get_dashboard_stats(m: OrgMembership = Depends(org_member)):
                 result = session.execute(text(f"""
                     SELECT id, action, resource_type, resource_id, created_at, user_id
                     FROM audit_logs
-                    WHERE {plain_id('user_id')} IN ({ORG_MEMBER_USER_IDS})
+                    WHERE org_id = :org_id AND {NOT_A_READ}
                     ORDER BY created_at DESC
                     LIMIT 5
                 """), {"org_id": m.org_id})

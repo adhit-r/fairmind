@@ -5,6 +5,11 @@ services:
     build: ../../apps/backend
     image: fairmind-backend
     env_file: backend.env
+    environment:
+      # Only the frontend's proxy is trusted to say who the caller is (X-Forwarded-For);
+      # rate limits and the audit trail read the address uvicorn derives from it.
+      FORWARDED_ALLOW_IPS: 172.28.0.0/24
+    networks: [app]
     volumes:
       - uploads:/app/uploads
       - datasets:/app/datasets
@@ -23,6 +28,7 @@ services:
     env_file: frontend.env
     environment:
       BACKEND_INTERNAL_URL: http://backend:8000
+    networks: [app]
     depends_on: [backend]
     restart: unless-stopped
 
@@ -33,8 +39,16 @@ services:
     volumes:
       - ./tunnel.yml:/etc/cloudflared/tunnel.yml:ro
       - ./tunnel.json:/etc/cloudflared/creds.json:ro
+    networks: [app]
     depends_on: [frontend]
     restart: unless-stopped
+
+networks:
+  # Fixed subnet so the backend's FORWARDED_ALLOW_IPS can name its proxies.
+  app:
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
 
 volumes:
   uploads:

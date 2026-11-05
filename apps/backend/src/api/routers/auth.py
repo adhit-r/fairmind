@@ -2,16 +2,18 @@
 Authentication routes for JWT-based security and Authentik OAuth2 integration.
 """
 
-from fastapi import APIRouter, HTTPException, status, Depends, Query
+from fastapi import APIRouter, HTTPException, status, Depends, Query, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr
 from typing import Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+import asyncio
 import logging
 import httpx
 import re
 import secrets
+import time
 import uuid
 
 from config.auth import (
@@ -21,7 +23,9 @@ from config.auth import (
     User, 
     UserRole, 
     TokenData,
-    require_admin
+    require_admin,
+    api_key_hash,
+    E2E_ADMIN_ID,
 )
 from config.cache import cache_manager
 from config.jwt_exceptions import (
@@ -89,13 +93,6 @@ class RefreshResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     expires_in: int
-
-
-class CreateUserRequest(BaseModel):
-    email: EmailStr
-    username: str
-    password: str
-    role: UserRole = UserRole.VIEWER
 
 
 class CreateAPIKeyRequest(BaseModel):
@@ -240,13 +237,18 @@ class SignupRequest(BaseModel):
     org_name: str
 
 
+def _check_password_length(password: str) -> None:
+    """Signup and password reset share one rule; bcrypt reads at most 72 bytes."""
+    if not 12 <= len(password.encode("utf-8")) <= 72:
+        raise HTTPException(status_code=422, detail="Password must be 12 to 72 bytes long")
+
+
 @router.post("/register", response_model=LoginResponse, status_code=status.HTTP_201_CREATED)
 async def signup(payload: SignupRequest):
     """Self-serve signup: creates a new organization owned by the new user."""
     from config.database import get_db_transaction
 
-    if not 12 <= len(payload.password.encode("utf-8")) <= 72:
-        raise HTTPException(status_code=422, detail="Password must be 12 to 72 bytes long")
+    _check_password_length(payload.password)
     name, org_name = payload.name.strip(), payload.org_name.strip()
     if not name or not org_name:
         raise HTTPException(status_code=422, detail="Name and organization are required")
@@ -356,6 +358,104 @@ async def logout(
         )
 
 
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+
+class PasswordResetConfirm(BaseModel):
+    token: str
+    password: str
+
+
+_RESET_ANSWER = {"message": (
+    "If that email belongs to an active account that signs in with a password, a link to reset it is on its way. "
+    "Accounts that use single sign-on change their password with their identity provider."
+)}
+_RESET_WINDOW_SECONDS = 15 * 60
+_RESET_MAX_PER_WINDOW = 5
+_reset_requests: dict[str, list[float]] = {}
+
+
+def _reset_rate_limited(*keys: str) -> bool:
+    """True when any key already made _RESET_MAX_PER_WINDOW requests in the window."""
+    # ponytail: per-process memory, so N workers allow N times the limit; move it to Redis when that matters.
+    now = time.monotonic()
+    if len(_reset_requests) > 10_000:
+        for key in [k for k, times in _reset_requests.items() if now - times[-1] > _RESET_WINDOW_SECONDS]:
+            del _reset_requests[key]
+    recent = {k: [t for t in _reset_requests.get(k, []) if now - t < _RESET_WINDOW_SECONDS] for k in keys}
+    if any(len(times) >= _RESET_MAX_PER_WINDOW for times in recent.values()):
+        return True
+    for key, times in recent.items():
+        _reset_requests[key] = [*times, now]
+    return False
+
+
+@router.post("/password-reset/request", status_code=status.HTTP_202_ACCEPTED)
+async def request_password_reset(payload: PasswordResetRequest, request: Request):
+    """Email a single-use reset link. The answer is the same whether or not the account exists."""
+    from config.database import get_db_connection
+    from middleware.security import client_ip
+    from src.application.services.api_boundary_dependencies import email_service
+
+    if _reset_rate_limited(f"email:{payload.email.lower()}", f"ip:{client_ip(request)}"):
+        raise HTTPException(status_code=429, detail="Too many reset requests. Try again in a few minutes.")
+
+    # Only accounts that already sign in with a password: an SSO-only row (no
+    # password_hash) must not gain a password that skips the identity provider.
+    async with get_db_connection() as db:
+        user = await db.fetch_one(
+            "SELECT id, email, password_hash FROM users "
+            "WHERE lower(email) = lower(:email) AND is_active AND COALESCE(password_hash, '') <> ''",
+            {"email": payload.email},
+        )
+    if user:
+        token = auth_manager.create_password_reset_token(str(user["id"]), user["password_hash"])
+        # The token rides in the fragment, which browsers never send to a server.
+        reset_url = f"{settings.frontend_url}/reset-password#token={token}"
+        if email_service.api_key:
+            asyncio.create_task(email_service.send_password_reset_email(
+                user["email"], reset_url, auth_manager.password_reset_expire_minutes
+            ))
+        else:
+            logger.warning("Password reset requested for an existing account but RESEND_API_KEY is not set; no email was sent")
+    return _RESET_ANSWER
+
+
+@router.post("/password-reset")
+async def reset_password(payload: PasswordResetConfirm):
+    """Set a new password with a token from /password-reset/request; the token then stops working."""
+    from config.database import get_db_connection
+
+    _check_password_length(payload.password)
+    invalid = HTTPException(status_code=400, detail="This reset link is invalid or has expired. Request a new one.")
+    claims = auth_manager.read_password_reset_token(payload.token)
+    if not claims:
+        raise invalid
+    async with get_db_connection() as db:
+        user = await db.fetch_one(
+            "SELECT password_hash FROM users WHERE id = :id AND is_active AND COALESCE(password_hash, '') <> ''",
+            {"id": claims["sub"]},
+        )
+        if not user or not secrets.compare_digest(
+            claims["pwd"], auth_manager.password_fingerprint(user["password_hash"])
+        ):
+            raise invalid
+        # Compare-and-set on the old hash: of two concurrent uses of one token, only one lands.
+        changed = await db.fetch_one(
+            "UPDATE users SET password_hash = :new WHERE id = :id AND password_hash = :old RETURNING id",
+            {
+                "new": auth_manager.get_password_hash(payload.password),
+                "id": claims["sub"],
+                "old": user["password_hash"],
+            },
+        )
+    if not changed:
+        raise invalid
+    logger.info(f"Password reset for user {claims['sub']}")
+    return {"message": "Your password has been changed. Sign in with the new password."}
+
+
 @router.post("/callback", response_model=AuthentikCallbackResponse)
 async def authentik_oauth_callback(
     code: str = Query(..., description="Authorization code from Authentik"),
@@ -386,6 +486,17 @@ async def authentik_oauth_callback(
             detail="Authentik is not enabled"
         )
 
+    if not (settings.authentik_server_url and settings.authentik_oauth_client_id
+            and settings.authentik_oauth_client_secret and settings.authentik_oauth_redirect_uri):
+        logger.error(
+            "Authentik callback refused: set AUTHENTIK_SERVER_URL, AUTHENTIK_OAUTH_CLIENT_ID, "
+            "AUTHENTIK_OAUTH_CLIENT_SECRET and AUTHENTIK_OAUTH_REDIRECT_URI"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentik sign-in is not configured on this server"
+        )
+
     if not code or not state:
         logger.warning("Authentik callback missing code or state")
         raise HTTPException(
@@ -403,9 +514,9 @@ async def authentik_oauth_callback(
                 data={
                     "grant_type": "authorization_code",
                     "code": code,
-                    "redirect_uri": settings.authentik_oauth_redirect_uri or "http://localhost:3000/auth/callback",
-                    "client_id": settings.authentik_oauth_client_id or "fairmind-frontend",
-                    "client_secret": settings.authentik_oauth_client_secret or "fairmind-frontend-secret",
+                    "redirect_uri": settings.authentik_oauth_redirect_uri,
+                    "client_id": settings.authentik_oauth_client_id,
+                    "client_secret": settings.authentik_oauth_client_secret,
                 },
                 timeout=10.0
             )
@@ -565,7 +676,9 @@ async def create_api_key(
     api_key_data: CreateAPIKeyRequest,
     current_user: TokenData = Depends(get_current_active_user)
 ):
-    """Create an API key for programmatic access."""
+    """Create an API key for programmatic access. Only its hash is stored."""
+    from config.database import get_db_transaction
+
     try:
         # Get full user data
         user_data = await auth_manager.get_user_by_id(current_user.user_id)
@@ -574,32 +687,43 @@ async def create_api_key(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found"
             )
+        if user_data.id == E2E_ADMIN_ID:
+            # Keys are rows tied to a users row, and the E2E admin is never stored.
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="The E2E admin has no stored account, so it cannot hold API keys. Sign in as a registered user."
+            )
         
-        # Create API key
         api_key = auth_manager.create_api_key(user_data, api_key_data.name)
-        
-        # Store API key metadata in cache
-        api_key_meta = {
-            "name": api_key_data.name,
-            "description": api_key_data.description,
-            "user_id": current_user.user_id,
-            "created_at": datetime.utcnow().isoformat(),
-            "expires_at": (datetime.utcnow() + timedelta(days=365)).isoformat(),
-        }
-        
-        await cache_manager.set(
-            f"api_key:{current_user.user_id}:{api_key_data.name}",
-            api_key_meta,
-            ttl=365 * 24 * 3600  # 1 year
-        )
+        created_at = datetime.now(timezone.utc)  # api_keys timestamps are timestamptz
+        expires_at = created_at + timedelta(days=auth_manager.api_key_expire_days)
+        async with get_db_transaction() as db:
+            if await db.fetch_one(
+                "SELECT id FROM api_keys WHERE user_id = :user AND name = :name",
+                {"user": current_user.user_id, "name": api_key_data.name},
+            ):
+                raise HTTPException(status_code=409, detail="You already have an API key with this name")
+            await db.execute(
+                "INSERT INTO api_keys (id, user_id, name, description, key_hash, is_active, created_at, expires_at) "
+                "VALUES (:id, :user, :name, :description, :hash, TRUE, :created, :expires)",
+                {
+                    "id": str(uuid.uuid4()),
+                    "user": current_user.user_id,
+                    "name": api_key_data.name,
+                    "description": api_key_data.description,
+                    "hash": api_key_hash(api_key),
+                    "created": created_at,
+                    "expires": expires_at,
+                },
+            )
         
         logger.info("API key created for user %s", current_user.user_id)
         
         return APIKeyResponse(
             api_key=api_key,
             name=api_key_data.name,
-            created_at=datetime.utcnow(),
-            expires_at=datetime.utcnow() + timedelta(days=365)
+            created_at=created_at,
+            expires_at=expires_at
         )
         
     except HTTPException:
@@ -614,14 +738,27 @@ async def create_api_key(
 
 @router.get("/api-keys")
 async def list_api_keys(current_user: TokenData = Depends(get_current_active_user)):
-    """List user's API keys."""
+    """List the caller's API keys (never the keys themselves)."""
+    from config.database import get_db_connection
+
     try:
-        # In production, fetch from database
-        # For now, return cached API key metadata
-        pattern = f"api_key:{current_user.user_id}:*"
-        # This would need to be implemented with proper key scanning
-        
-        return {"api_keys": []}  # Placeholder
+        async with get_db_connection() as db:
+            rows = await db.fetch_all(
+                "SELECT name, description, created_at, expires_at FROM api_keys "
+                "WHERE user_id = :user ORDER BY created_at DESC",
+                {"user": current_user.user_id},
+            )
+        return {
+            "api_keys": [
+                {
+                    "name": r["name"],
+                    "description": r["description"],
+                    "created_at": r["created_at"],
+                    "expires_at": r["expires_at"],
+                }
+                for r in rows
+            ]
+        }
         
     except Exception as e:
         logger.error(f"List API keys error: {e}")
@@ -636,15 +773,24 @@ async def revoke_api_key(
     key_name: str,
     current_user: TokenData = Depends(get_current_active_user)
 ):
-    """Revoke an API key."""
+    """Revoke an API key. Deleting its row makes the key fail on its next request."""
+    from config.database import get_db_connection
+
     try:
-        # Remove API key metadata from cache
-        await cache_manager.delete(f"api_key:{current_user.user_id}:{key_name}")
+        async with get_db_connection() as db:
+            revoked = await db.fetch_one(
+                "DELETE FROM api_keys WHERE user_id = :user AND name = :name RETURNING id",
+                {"user": current_user.user_id, "name": key_name},
+            )
+        if not revoked:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="API key not found")
         
         logger.info(f"API key revoked for user {current_user.email}: {key_name}")
         
         return {"message": f"API key '{key_name}' revoked successfully"}
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Revoke API key error: {e}")
         raise HTTPException(
@@ -653,46 +799,15 @@ async def revoke_api_key(
         )
 
 
-@router.post("/users", response_model=UserResponse)
-async def create_user(
-    user_data: CreateUserRequest,
-    current_user: TokenData = Depends(require_admin)
-):
-    """Create a new user (admin only)."""
-    try:
-        # In production, this would create user in database
-        # For now, return a mock response
-        
-        new_user = User(
-            id=f"user_{user_data.username}",
-            email=user_data.email,
-            username=user_data.username,
-            role=user_data.role,
-            is_active=True,
-            created_at=datetime.utcnow(),
-            permissions=[]
-        )
-        
-        logger.info(f"User created by {current_user.email}: {user_data.email}")
-        
-        return UserResponse(
-            id=new_user.id,
-            email=new_user.email,
-            username=new_user.username,
-            role=new_user.role,
-            is_active=new_user.is_active,
-            created_at=new_user.created_at,
-            last_login=None
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Create user error: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create user"
-        )
+@router.post("/users", status_code=status.HTTP_501_NOT_IMPLEMENTED)
+async def create_user():
+    """Not implemented. Accounts come from signup (POST /api/v1/auth/register), approved
+    access requests (POST /api/v1/registrations/{id}/approve) and organisation
+    invitations (POST /api/v1/organizations/{org_id}/members/invite)."""
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail="Users are not created here. Invite them with POST /api/v1/organizations/{org_id}/members/invite.",
+    )
 
 
 @router.get("/users")

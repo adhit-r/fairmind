@@ -165,7 +165,7 @@ export default function SystemFilePage() {
   const line = businessLine(s?.metadata)
   const source = (s?.metadata?.source as string | undefined) || 'manual'
   // risks are this system's recorded findings; taxonomy suggestions come apart.
-  const recordedOpen = (risks?.risks ?? []).filter((r) => r.status !== 'accepted')
+  const recordedOpen = (risks?.risks ?? []).filter((r) => !['accepted', 'closed', 'resolved', 'mitigated'].includes(r.status))
   const recordedSevere = recordedOpen.filter((r) => r.severity === 'high' || r.severity === 'critical')
   const suggested = risks?.suggested?.length ?? 0
   const req = approval?.request ?? null
