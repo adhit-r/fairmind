@@ -68,6 +68,10 @@ def test_policy_lifecycle_enforcement_distribution_and_coverage(assurance_client
     policy = created.json()
     assert policy["status"] == "draft" and policy["controlRefs"] == ["aiuc-1:A001.1"]
     url = f"{BASE}/{policy['id']}"
+    coverage = lambda: client.get(f"{BASE}/coverage").json()[0]  # noqa: E731
+    control = lambda: next(c for c in coverage()["controls"] if c["ref"] == "aiuc-1:A001.1")  # noqa: E731
+    # A draft maps to nothing yet: only the published, enforced version counts.
+    assert coverage()["coveredControls"] == 0 and control()["status"] == "unmapped"
 
     act = lambda action: client.post(f"{url}/actions", json={"action": action})  # noqa: E731
     assert act("publish").status_code == 409
@@ -82,6 +86,7 @@ def test_policy_lifecycle_enforcement_distribution_and_coverage(assurance_client
     assert [(r["systemId"], r["outcome"]) for r in results] == [("system-a", "fail")]
     gate = client.get(f"{BASE}/gate/system-a").json()
     assert gate["allowed"] is False and gate["blocking"][0]["ruleId"] == "high-risk-approval"
+    assert control()["status"] == "failing" and coverage()["failingControls"] == 1
 
     with session_factory() as session:
         session.execute(GovernanceApprovalWorkflow.__table__.insert().values(id="wf", name="wf", entity_type="ai_system", steps_json="[]"))
@@ -92,6 +97,7 @@ def test_policy_lifecycle_enforcement_distribution_and_coverage(assurance_client
         )
         session.commit()
     assert client.get(f"{BASE}/gate/system-a").json()["allowed"] is True
+    assert control()["status"] == "passing" and control()["coveredBy"][0]["passingSystems"] == 1
 
     # Distribution: the published version is acknowledged per member.
     assert published["acknowledgement"] == {"required": 1, "acknowledged": 0, "mine": False}
@@ -104,8 +110,8 @@ def test_policy_lifecycle_enforcement_distribution_and_coverage(assurance_client
     assert client.patch(url, json={"rules": [APPROVAL_RULE, OWNER_RULE]}).status_code == 200
     assert client.delete(url).status_code == 409
 
-    coverage = client.get(f"{BASE}/coverage").json()
-    assert coverage[0]["totalControls"] == 2 and coverage[0]["coveredControls"] == 1
+    totals = coverage()
+    assert (totals["totalControls"], totals["coveredControls"], totals["passingControls"]) == (2, 1, 1)
 
     # Another org cannot see or act on it.
     active["value"] = _token(USER_B)
