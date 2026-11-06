@@ -1,6 +1,7 @@
 ---
 import Layout from '../../layouts/Layout.astro';
 import { frameworks, type Framework } from '../../lib/frameworks';
+import { registry } from '../../lib/registry';
 import '../../styles/frameworks.css';
 
 export function getStaticPaths() {
@@ -10,6 +11,8 @@ export function getStaticPaths() {
 const { framework: f } = Astro.props as { framework: Framework };
 const url = `https://fairmind.xyz/frameworks/${f.slug}/`;
 const related = frameworks.filter((other) => other.slug !== f.slug);
+const entry = registry.find((e) => e.guide === f.slug);
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 const structuredData = [
   {
@@ -55,20 +58,37 @@ const structuredData = [
       <p class="kicker">{f.region} · {f.type}</p>
       <h1>{f.title}</h1>
       <p class="fw-lead">{f.summary}</p>
+      {entry && entry.requirements > 0 && (
+        <p class="fw-counts">
+          In the FairMind catalogue: {plural(entry.requirements, 'requirement')} mapped to{' '}
+          {plural(entry.workflows, 'workflow')}{entry.evaluations > 0 && ` and ${plural(entry.evaluations, 'evaluation')}`}.
+        </p>
+      )}
+      {f.sources && (
+        <p class="fw-sources">
+          Source:{' '}
+          {f.sources.map((s, i) => (
+            <>{i > 0 && '; '}<a href={s.url} rel="noopener">{s.label}</a></>
+          ))}
+        </p>
+      )}
     </div>
   </section>
 
   <section class="section section-white">
     <div class="wrap">
       <header class="section-heading">
-        <h2>What the {f.shortName} asks of AI systems</h2>
-        <p>The obligations most relevant to bias, risk, and accountability, summarised from the {f.name}.</p>
+        <h2>{f.shortName}: what it asks of AI systems</h2>
+        <p>The parts most relevant to governing AI systems and agents, summarised from the {f.name}.</p>
       </header>
       <dl class="fw-reqs">
         {f.requirements.map((r) => (
           <div>
             <dt><span class="chip">{r.ref}</span>{r.label}</dt>
-            <dd>{r.detail}</dd>
+            <dd>
+              {r.detail}
+              {r.controls && r.controls.length > 0 && <span class="fw-controls">Mapped to: {r.controls.join(', ')}</span>}
+            </dd>
           </div>
         ))}
       </dl>

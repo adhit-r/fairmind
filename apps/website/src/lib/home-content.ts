@@ -12,14 +12,14 @@ export const registry = [
   { b: 'EU AI Act', s: '2024/1689', href: '/frameworks/eu-ai-act/' },
   { b: 'ISO/IEC 42001', s: '', href: '/frameworks/iso-42001/' },
   { b: 'NIST AI RMF', s: '', href: '/frameworks/nist-ai-rmf/' },
-  { b: 'OWASP', s: 'Agentic Top 10', href: '/frameworks/' },
-  { b: 'AIUC-1', s: '', href: '/frameworks/' },
-  { b: 'OWASP', s: 'LLM Top 10', href: '/frameworks/' },
-  { b: 'MITRE ATLAS', s: '', href: '/frameworks/' },
-  { b: 'NIST AI 600-1', s: '', href: '/frameworks/nist-ai-rmf/' },
-  { b: 'ISO/IEC 42005', s: '', href: '/frameworks/iso-42001/' },
-  { b: 'CSA', s: 'MAESTRO', href: '/frameworks/' },
-  { b: 'OWASP', s: 'MCP Top 10', href: '/frameworks/' },
+  { b: 'OWASP', s: 'Agentic Top 10', href: '/frameworks/owasp-agentic-top-10/' },
+  { b: 'AIUC-1', s: '', href: '/frameworks/aiuc-1/' },
+  { b: 'OWASP', s: 'LLM Top 10', href: '/frameworks/owasp-llm-top-10/' },
+  { b: 'MITRE ATLAS', s: '', href: '/frameworks/mitre-atlas/' },
+  { b: 'NIST AI 600-1', s: '', href: '/frameworks/nist-ai-600-1/' },
+  { b: 'ISO/IEC 42005', s: '', href: '/frameworks/iso-42005/' },
+  { b: 'CSA', s: 'MAESTRO', href: '/frameworks/csa-maestro/' },
+  { b: 'OWASP', s: 'MCP Top 10', href: '/frameworks/owasp-mcp-top-10/' },
 ];
 
 export const faqs = [

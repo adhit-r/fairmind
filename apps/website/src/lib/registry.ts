@@ -19,6 +19,8 @@ export interface RegistryEntry {
   kind: RegistryKind;
   requirements: number;
   workflows: number;
+  controls: number;
+  evaluations: number;
   guide?: string;
 }
 
@@ -28,6 +30,14 @@ const guides: Record<string, string> = {
   ISO42001: 'iso-42001',
   NISTRMF: 'nist-ai-rmf',
   RBIFREEAI: 'rbi-free-ai',
+  OWASPLLM: 'owasp-llm-top-10',
+  OWASPAG: 'owasp-agentic-top-10',
+  ATLAS: 'mitre-atlas',
+  AIUC1: 'aiuc-1',
+  NIST600: 'nist-ai-600-1',
+  ISO42005: 'iso-42005',
+  OWASPMCP: 'owasp-mcp-top-10',
+  MAESTRO: 'csa-maestro',
 };
 
 const requirementsByFramework = new Map<string, number>();
@@ -64,6 +74,8 @@ export const registry: RegistryEntry[] = catalogue.frameworks
       kind: kindOf(f, requirements),
       requirements,
       workflows,
+      controls: controls.size,
+      evaluations: catalogue.evaluations.filter((e) => e.tests.some((t) => t.startsWith(`${f.key}|`))).length,
       guide: guides[f.key],
     };
   })
