@@ -60,6 +60,24 @@ def test_gate_exit_codes(verdict, allow, expected, monkeypatch):
     assert "Fairness measured" in text and "Monitoring in place" in text
 
 
+@pytest.mark.parametrize("approval,verdict,expected", [
+    ("approved", "go", EXIT_GO),
+    ("approved", "conditional_go", EXIT_GO),
+    ("pending", "go", EXIT_NO_GO),
+    ("not_requested", "go", EXIT_NO_GO),
+    ("rejected", "no_go", EXIT_NO_GO),
+    (None, "go", EXIT_NO_GO),
+])
+def test_gate_require_approval(approval, verdict, expected, monkeypatch, capsys):
+    body = {**GATE, "verdict": verdict, **({"approvalStatus": approval} if approval else {})}
+    code, text, _ = run_cli(["gate", "--system", "sys-1", "--api-key", "k", "--require-approval"], lambda r: httpx.Response(200, json=body), monkeypatch=monkeypatch)
+    assert code == expected
+    if approval:
+        assert "Release decision" in text
+    if expected == EXIT_NO_GO and approval != "rejected":
+        assert "--require-approval" in capsys.readouterr().err
+
+
 def test_gate_json_and_auth_errors(monkeypatch, capsys):
     code, text, _ = run_cli(["gate", "--system", "sys-1", "--json", "--api-key", "k"], lambda r: httpx.Response(200, json=GATE), monkeypatch=monkeypatch)
     assert code == EXIT_CONDITIONAL and json.loads(text)["verdict"] == "conditional_go"

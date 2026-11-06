@@ -13,7 +13,7 @@ This service provides comprehensive AI governance capabilities including:
 from fastapi import Depends, FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from contextlib import asynccontextmanager
 import logging
@@ -31,13 +31,14 @@ from core.middleware.auth import NeonAuthMiddleware
 from core.middleware.audit import AuditLoggingMiddleware
 from core.middleware.org_isolation import OrgIsolationMiddleware
 from core.middleware import ErrorHandlingMiddleware, RequestLoggingMiddleware
+from core.middleware.error_handling import public_validation_errors
 from middleware.security import (
     SecurityHeadersMiddleware,
     RateLimitMiddleware,
     JWTAuthenticationMiddleware,
 )
 from services.health import health_service
-from api.routes.org_scope import ORG_MEMBER_USER_IDS, org_member, plain_id
+from api.routes.org_scope import org_member
 from src.application.services.governance_assurance_service import OrgMembership
 
 # Get logger
@@ -79,7 +80,7 @@ async def lifespan(app: FastAPI):
         raise
 
     # ORM-managed tables (users, organisations, governance). Table by table,
-    # so one definition the local SQLite cannot parse does not block the rest.
+    # so one failing definition does not block the rest.
     try:
         from database.connection import db_manager as orm_db_manager
 
@@ -254,22 +255,6 @@ See the request/response examples in each endpoint for code samples in Python, J
 )
 
 # Add CORS middleware FIRST (order matters!)
-# CORS must be before other middleware to handle preflight OPTIONS requests
-# In development, allow all localhost origins
-cors_origins = settings.get_allowed_origins()
-# Development: any loopback origin, whatever port the dev server picked.
-cors_origin_regex = r"^https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$" if settings.is_development else None
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=cors_origins,
-    allow_origin_regex=cors_origin_regex,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allow_headers=["*"],
-    expose_headers=["*"],
-)
-
 # Add production-ready middleware (order matters!)
 app.add_middleware(AuditLoggingMiddleware)  # Audit logging for compliance
 app.add_middleware(ErrorHandlingMiddleware)
@@ -316,43 +301,36 @@ try:
         return response
 except Exception as e:
     logger.warning(f"Could not load versioning middleware: {e}")
-@app.options("/{full_path:path}")
-async def options_handler(request: Request):
-    """Handle OPTIONS preflight requests."""
-    origin = request.headers.get("origin")
-    allowed_origins = settings.get_allowed_origins()
-    
-    # Check if origin is allowed
-    if origin and origin in allowed_origins:
-        allow_origin = origin
-    elif settings.is_development:
-        # In development, allow localhost origins
-        allow_origin = origin if origin and "localhost" in origin else "*"
-    else:
-        allow_origin = "*"
-    
-    return Response(
-        status_code=200,
-        headers={
-            "Access-Control-Allow-Origin": allow_origin,
-            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
-            "Access-Control-Allow-Headers": "*",
-            "Access-Control-Allow-Credentials": "true",
-            "Access-Control-Max-Age": "600",
-        }
-    )
+
+# CORS is added last so it is the outermost middleware: preflights are answered
+# here, and every response, including a 401 from the auth middleware or a 429
+# from the rate limiter, carries the CORS headers the browser needs to read it.
+cors_origins = settings.get_allowed_origins()
+# Development: any loopback origin, whatever port the dev server picked.
+cors_origin_regex = r"^https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$" if settings.is_development else None
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins,
+    allow_origin_regex=cors_origin_regex,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allow_headers=["*"],
+    expose_headers=["*"],
+)
 
 # Custom exception handlers
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     """Handle validation errors."""
-    logger.warning(f"Validation error: {exc.errors()}")
+    errors = public_validation_errors(exc.errors())
+    logger.warning(f"Validation error: {errors}")
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={
             "error": "Validation error",
             "message": "Invalid request data",
-            "details": exc.errors() if settings.debug else None,
+            "details": errors,
         }
     )
 
@@ -403,13 +381,44 @@ _include_router("api.routes.fairness_runs", prefix="/api/v1/ai-governance", tags
 _include_router("api.routes.evidence_packs", prefix="/api/v1/ai-governance", tags=["evidence-packs"], required=True)
 _include_router("api.routes.evidence_packs", prefix="/api/v1/public", tags=["evidence-packs-public"], attr="public_router", required=True)
 _include_router("api.routes.governance_assurance", prefix="/api/v1/ai-governance", tags=["governance-assurance"], required=True)
+_include_router("api.routes.policy_center", prefix="/api/v1/ai-governance", tags=["policies"], required=True)
 if settings.assurance_v2_enabled:
-    _include_router(
-        "api.routes.evaluation_workbench",
-        prefix="/api/v1/ai-governance",
-        tags=["evaluation-workbench-v2"],
-        required=True,
-    )
+    for enabled, router_attr, tag, disabled_message in (
+        (
+            settings.assurance_v2_target_versions_enabled,
+            "target_versions_router",
+            "evaluation-workbench-v2-target-versions",
+            "Target-version routes are disabled",
+        ),
+        (
+            settings.assurance_v2_suite_versions_enabled,
+            "suite_versions_router",
+            "evaluation-workbench-v2-suite-versions",
+            "Suite-version routes are disabled",
+        ),
+        (
+            settings.assurance_v2_plans_enabled,
+            "plans_router",
+            "evaluation-workbench-v2-plans",
+            "Evaluation-plan routes are disabled",
+        ),
+        (
+            settings.assurance_v2_runs_enabled,
+            "runs_router",
+            "evaluation-workbench-v2-runs",
+            "Evaluation-run routes are disabled",
+        ),
+    ):
+        if enabled:
+            _include_router(
+                "api.routes.evaluation_workbench",
+                prefix="/api/v1/ai-governance",
+                tags=[tag],
+                attr=router_attr,
+                required=True,
+            )
+        else:
+            logger.info(disabled_message)
     if settings.assurance_v2_evidence_submit_enabled:
         _include_router(
             "api.routes.evaluation_workbench",
@@ -419,7 +428,17 @@ if settings.assurance_v2_enabled:
             required=True,
         )
     else:
-        logger.info("Verified Evidence Passport admission route is disabled")
+        logger.info("Verified Evidence Passport submission route is disabled")
+    if settings.assurance_v2_evidence_link_enabled:
+        _include_router(
+            "api.routes.evaluation_workbench",
+            prefix="/api/v1/ai-governance",
+            tags=["evaluation-workbench-v2-evidence-link"],
+            attr="verified_evidence_link_router",
+            required=True,
+        )
+    else:
+        logger.info("Verified Evidence Passport link route is disabled")
     if settings.assurance_v2_evidence_import_enabled:
         _include_router(
             "api.routes.imported_evidence",
@@ -486,6 +505,9 @@ if settings.assurance_v2_enabled:
 else:
     logger.info("Assurance-contract v2 routes are disabled")
 _include_router("api.routes.packs", prefix="/api/v1/packs", tags=["packs"], required=True)
+_include_router("api.routes.evaluation_runs", prefix="/api/v1/packs", tags=["packs"], required=True)
+_include_router("api.routes.system_targets", prefix="/api/v1/packs", tags=["packs"], required=True)
+_include_router("api.routes.platform_connections", prefix="/api/v1/packs", tags=["packs"], required=True)
 _include_router("api.routes.environmental", tags=["environmental"], required=False)
 _include_router("api.routes.settings", prefix="/api/v1", tags=["settings"], required=False)
 
@@ -509,7 +531,6 @@ _include_router("api.routes.registration", prefix="/api/v1", tags=["registration
 _include_router("api.routes.org_management", tags=["organization-management"], required=False)
 _include_router("api.routes.compliance", tags=["compliance"], required=False)
 _include_router("api.routes.compliance_audit", tags=["compliance-audit"], required=False)
-_include_router("api.routes.policies", tags=["policies"], required=False)
 # The legacy /api/approvals router writes the same approval tables without the
 # tenant and actor guarantees enforced by the primary governance API. Keep it
 # unmounted; clients must use /api/v1/ai-governance approval endpoints.
@@ -528,14 +549,13 @@ async def list_audit_logs(
 ):
     """Retrieve this organisation's audit logs for compliance reporting.
 
-    audit_logs has no tenant column (migrations/001_initial_schema.sql, which is
-    also the live shape: created_at, no status), so an organisation's log is
-    what its active members did.
+    audit_logs is migrations/001_initial_schema.sql's shape (created_at, no
+    status) plus 019's org_id, the organisation each request acted in.
     """
     try:
         from config.database import get_db_connection
 
-        filters = [f"{plain_id('user_id')} IN ({ORG_MEMBER_USER_IDS})"]
+        filters = ["org_id = :org_id"]
         params = {"org_id": m.org_id, "limit": limit, "offset": offset}
 
         if action:
@@ -597,7 +617,7 @@ async def health_check():
         return {
             "status": "unhealthy",
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "error": str(e),
+            "error": "Health check failed; see the server log",
             "message": "Health check service error"
         }
 

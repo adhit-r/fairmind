@@ -64,7 +64,7 @@ _REVISION_LOCKS: WeakValueDictionary[str, threading.Lock] = WeakValueDictionary(
 
 
 def _revision_lock(run_id: str) -> threading.Lock:
-    """Serialize SQLite/in-process reviews; PostgreSQL also takes a row lock."""
+    """Serialize in-process reviews; PostgreSQL also takes a row lock."""
     with _REVISION_LOCKS_GUARD:
         return _REVISION_LOCKS.setdefault(run_id, threading.Lock())
 
@@ -161,8 +161,7 @@ class SqlAlchemyEvidenceIngestionStore:
 
         # End any read transaction opened by membership/lookup before waiting.
         # Once inside the process lock, PostgreSQL's FOR UPDATE provides the
-        # cross-worker run-wide serialization boundary; SQLite uses this lock
-        # and a fresh transaction so it cannot retain a stale revision view.
+        # cross-worker run-wide serialization boundary.
         run_id = row["evidence_id"]
         self.db.rollback()
         lock = _revision_lock(run_id)

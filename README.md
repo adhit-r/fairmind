@@ -13,6 +13,8 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Good first issues](https://img.shields.io/github/issues/adhit-r/fairmind/good%20first%20issue)](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
 [![Contributors](https://img.shields.io/github/contributors/adhit-r/fairmind)](https://github.com/adhit-r/fairmind/graphs/contributors)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23982915.svg)](https://doi.org/10.5281/zenodo.23982915)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/adhit-r/fairmind/badge)](https://scorecard.dev/viewer/?uri=github.com/adhit-r/fairmind)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
 [Website](https://fairmind.xyz) | [Docs](https://docs.fairmind.xyz) | [Contributing](CONTRIBUTING.md) | [Discussions](https://github.com/adhit-r/fairmind/discussions) | [Leer en español](README.es-ES.md)
@@ -31,7 +33,7 @@ FairMind supports readiness and review. It does not certify compliance, approve 
 
 ## Quickstart
 
-You need Python 3.11+, [uv](https://docs.astral.sh/uv/getting-started/installation/), Node.js 20+ and npm. No database server is required: the backend uses a local SQLite file by default.
+You need Python 3.11+, [uv](https://docs.astral.sh/uv/getting-started/installation/), Node.js 20+ and npm. You also need PostgreSQL 14+ (local, Docker, or a Neon branch) with an empty database.
 
 ```bash
 git clone https://github.com/adhit-r/fairmind.git
@@ -42,12 +44,13 @@ cd fairmind
 
 ```bash
 cd apps/backend
-cp config/env.example .env
+cp config/env.example .env        # set DATABASE_URL to your empty PostgreSQL database
 uv sync
+uv run python scripts/setup_db.py # schema + AIUC-1 reference data; safe to re-run
 uv run uvicorn api.main:app --reload --port 8000
 ```
 
-The first start takes about a minute while it creates the SQLite tables. When it is ready, the API docs are at http://localhost:8000/docs.
+When it is ready, the API docs are at http://localhost:8000/docs.
 
 **Frontend** (second terminal):
 
@@ -94,4 +97,4 @@ Please do not report vulnerabilities in public issues. See [SECURITY.md](SECURIT
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+FairMind is created and maintained by [Axonome](https://www.fairmind.xyz/about). It is released under the MIT licence; see [LICENSE](LICENSE).

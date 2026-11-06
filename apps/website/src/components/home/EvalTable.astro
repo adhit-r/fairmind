@@ -1,0 +1,95 @@
+---
+import { evaluations, evalGroups, evalFilters, engineCounts, frameworkLabel } from '../../lib/catalogue';
+
+const engineLabel = { exists: 'Engine in FairMind', partial: 'Partial engine', none: 'Specified, not built yet' };
+const featured = evaluations.findIndex((e) => e.id === 'EV-FAI-01');
+const data = evaluations.map((e) => ({
+  ...e,
+  tests: e.tests.map((t) => {
+    const [fw, ref] = t.split('|');
+    return `${frameworkLabel(fw)} ${ref}`;
+  }),
+}));
+let index = 0;
+---
+
+<section class="et" id="evaluations" data-eval-table aria-labelledby="et-title">
+  <div class="wrap">
+    <header class="section-heading">
+      <p class="label reveal">{evaluations.length} evaluations</p>
+      <h2 id="et-title" class="reveal">Tests for the systems you actually run. <em>Thresholds declared first.</em></h2>
+      <p class="reveal">
+        Every evaluation in the catalogue, with its metric, its threshold and where that threshold comes from. The fill
+        shows what FairMind can run today, so you can see the gaps as well as the coverage.
+      </p>
+    </header>
+
+    <div class="et-bar">
+      <div class="et-filters" role="group" aria-label="Filter by what the evaluation applies to">
+        {evalFilters.map((f, i) => (
+          <button type="button" data-et-filter={f.key} data-match={f.match} aria-pressed={i === 0 ? 'true' : 'false'}>
+            {f.label} <span>{f.count}</span>
+          </button>
+        ))}
+      </div>
+      <ul class="et-legend" aria-label="Engine status">
+        <li><i class="et-swatch" data-engine="exists"></i>{engineLabel.exists} <b>{engineCounts.exists}</b></li>
+        <li><i class="et-swatch" data-engine="partial"></i>{engineLabel.partial} <b>{engineCounts.partial}</b></li>
+        <li><i class="et-swatch" data-engine="none"></i>{engineLabel.none} <b>{engineCounts.none}</b></li>
+      </ul>
+    </div>
+
+    <div class="et-body">
+      <div class="et-grid" data-et-grid>
+        {evalGroups.map((g) => (
+          <div class="et-group">
+            <p class="et-group-h">{g.label} <span>{g.items.length}</span></p>
+            <div class="et-cells">
+              {g.items.map((e) => {
+                const i = evaluations.indexOf(e);
+                const d = index++;
+                return (
+                  <button
+                    type="button"
+                    class="et-cell"
+                    data-et-cell={i}
+                    data-engine={e.engine}
+                    data-applies={e.appliesTo}
+                    style={`--d:${d}`}
+                    aria-label={`${e.id}: ${e.name}. ${engineLabel[e.engine]}.`}
+                    aria-pressed={i === featured ? 'true' : 'false'}
+                  >
+                    <span>{e.code.replace('-', ' ')}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <aside class="et-detail" aria-live="polite" data-et-detail>
+        <p class="et-code" data-et="code"></p>
+        <h3 data-et="name"></h3>
+        <p class="et-measures" data-et="measures"></p>
+        <p class="et-threshold" data-et="threshold"></p>
+        <p class="et-source" data-et="source"></p>
+        <dl>
+          <div><dt>Metric</dt><dd data-et="metric"></dd></div>
+          <div><dt>Applies to</dt><dd data-et="applies"></dd></div>
+          <div><dt>In FairMind</dt><dd data-et="engine"></dd></div>
+        </dl>
+        <p class="et-tests-h">Tests these requirements</p>
+        <ul class="et-tests" data-et="tests"></ul>
+      </aside>
+    </div>
+  </div>
+  <script type="application/json" data-et-data set:html={JSON.stringify({ items: data, featured, engineLabel })} />
+</section>
+
+<script>
+  import { mountEvalTable } from '../../scripts/eval-table';
+  const root = document.querySelector<HTMLElement>('[data-eval-table]');
+  const raw = root?.querySelector('[data-et-data]')?.textContent;
+  if (root && raw) mountEvalTable(root, JSON.parse(raw));
+</script>

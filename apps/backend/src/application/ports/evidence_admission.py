@@ -137,8 +137,8 @@ class ApprovedEvaluatorRegistration:
 
 
 @dataclass(frozen=True, slots=True)
-class PersistVerifiedPassportV2Command:
-    """Closed atomic write command for one first-revision verified graph."""
+class PersistVerifiedPassportV2SubmissionCommand:
+    """Closed atomic write command for one verified but unlinked submission."""
 
     scope: EvidenceAdmissionScope
     actor_id: str
@@ -147,7 +147,6 @@ class PersistVerifiedPassportV2Command:
     verification_receipt_id: str
     admission_id: str
     nonce_claim_id: str
-    suite_evidence_link_id: str
     authority: EvidenceAdmissionAuthorityRecord
     initial_authority_hash: str
     verified_authority_hash: str
@@ -179,17 +178,11 @@ class PersistVerifiedPassportV2Command:
     previous_revision_hash: None
     evidence_created_at: datetime
     revision_created_at: datetime
-    suite_started_at: datetime | None
-    suite_completed_at: datetime
-    run_technical_status: str
-    run_evidence_outcome: str
-    run_started_at: datetime | None
-    run_completed_at: datetime | None
 
 
 @dataclass(frozen=True, slots=True)
-class VerifiedPassportV2Record:
-    """Safe admission result; raw signed material is never returned."""
+class VerifiedPassportV2SubmissionRecord:
+    """Safe result for a verified submission that is not linked yet."""
 
     organization_id: str
     workspace_id: str
@@ -201,18 +194,12 @@ class VerifiedPassportV2Record:
     verification_receipt_id: str
     admission_id: str
     nonce_claim_id: str
-    suite_evidence_link_id: str
     envelope_hash: str
     passport_content_hash: str
     technical_status: str
     evidence_result_status: str
     admission_status: str
-    review_status: str
     freshness_status: str
-    run_technical_status: str
-    run_evidence_outcome: str
-    overall_verdict: str
-    verdict_version: int
     effective_expires_at: datetime
     verified_at: datetime
 
@@ -251,10 +238,10 @@ class EvidenceAdmissionRepository(Protocol):
         verified_at: datetime,
     ) -> ApprovedEvaluatorRegistration | None: ...
 
-    def persist_verified_passport_v2(
+    def persist_verified_passport_v2_submission(
         self,
-        command: PersistVerifiedPassportV2Command,
-    ) -> VerifiedPassportV2Record: ...
+        command: PersistVerifiedPassportV2SubmissionCommand,
+    ) -> VerifiedPassportV2SubmissionRecord: ...
 
     def force_evidence_admission_constraints(self) -> None: ...
 

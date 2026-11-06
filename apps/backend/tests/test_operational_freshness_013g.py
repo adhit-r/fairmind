@@ -1,13 +1,11 @@
 """Database contract tests for 013g operational evidence freshness.
 
 These tests intentionally exercise the migration artifacts rather than the
-application freshness service.  PostgreSQL is the release authority; SQLite
-is a parity fixture for the parts it can faithfully represent.
+application freshness service.  PostgreSQL is the release authority.
 """
 
 import hashlib
 import os
-import sqlite3
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -43,7 +41,7 @@ def _policy_json(maximum_age: int = 3600) -> str:
 
 
 def test_013g_operational_freshness_migration_artifacts_exist() -> None:
-    """The forward, upgrade, and SQLite parity artifacts are one deployable unit."""
+    """The forward and upgrade artifacts are one deployable unit."""
     assert (BACKEND_ROOT / "migrations" / "013g_operational_evidence_freshness.sql").is_file()
     assert (
         BACKEND_ROOT
@@ -117,16 +115,6 @@ def test_013g_source_declares_common_lock_and_authoritative_mutation_gates() -> 
         "000_013g_evaluation_decisions_freshness_gate",
     ):
         assert trigger_name in source
-
-
-def test_013g_sqlite_fixture_is_explicitly_operational_freshness_unavailable() -> None:
-    """SQLite is a structural parity fixture, never a freshness authority."""
-    source = (
-        MIGRATIONS / "fixtures" / "013g_operational_evidence_freshness.sqlite.sql"
-    ).read_text(encoding="utf-8")
-    assert "operational freshness is unavailable in SQLite parity" in source
-    assert "governance_evidence_reviews_freshness_unavailable_013g" in source
-    assert "governance_evaluation_decisions_freshness_unavailable_013g" in source
 
 
 @pytest.fixture
@@ -509,12 +497,11 @@ def test_postgresql14_013g_classifier_rejects_lexically_invalid_timestamp_before
     connection.rollback()
 
 
-def test_013g_direct_operator_and_sqlite_sources_are_checksum_managed() -> None:
+def test_013g_direct_and_operator_sources_are_checksum_managed() -> None:
     from config import migration_integrity
 
     direct = MIGRATIONS / "013g_operational_evidence_freshness.sql"
     operator = MIGRATIONS / "upgrade_paths/013f_to_013g_operational_evidence_freshness.sql"
-    fixture = MIGRATIONS / "fixtures/013g_operational_evidence_freshness.sqlite.sql"
     frozen = next(
         item
         for item in migration_integrity.FROZEN_ASSURANCE_MIGRATIONS
@@ -524,51 +511,3 @@ def test_013g_direct_operator_and_sqlite_sources_are_checksum_managed() -> None:
     assert migration_integrity.FROZEN_013G_OPERATOR_CHECKSUM == hashlib.sha256(
         operator.read_bytes()
     ).hexdigest()
-    assert migration_integrity.FROZEN_SQLITE_013G_FIXTURE_CHECKSUM == hashlib.sha256(
-        fixture.read_bytes()
-    ).hexdigest()
-
-
-def test_013g_sqlite_is_not_an_operational_freshness_authority() -> None:
-    """The migration loader must keep SQLite writes unavailable instead of simulating DB time."""
-    from migrations.operational_evidence_freshness_migration import apply_sqlite
-    from migrations.trust_authority_integrity_migration import apply_sqlite as apply_013f
-    from migrations.evaluator_catalog_migration import apply_sqlite as apply_013d
-    from migrations.evidence_verification_receipt_migration import sql_for as sql_013c
-    from migrations.evaluation_assurance_trust_integrity_migration import sql_for as sql_013b
-    from migrations.evaluation_assurance_v2_migration import sql_for as sql_013
-    from migrations.evaluation_binding_integrity_migration import sql_for as sql_013a
-    from migrations.evaluation_runs_migration import sql_for as sql_012
-    from migrations.governance_assurance_migration import sql_for as sql_011
-
-    connection = sqlite3.connect(":memory:")
-    try:
-        connection.execute("PRAGMA foreign_keys = ON")
-        connection.executescript((MIGRATIONS / "008_governance_canonical.sql").read_text())
-        connection.executescript(sql_011("sqlite"))
-        connection.executescript(sql_012("sqlite"))
-        connection.executescript(sql_013("sqlite"))
-        connection.executescript(sql_013a("sqlite"))
-        connection.executescript(sql_013b("sqlite"))
-        connection.executescript(sql_013c("sqlite"))
-        apply_013d(connection)
-        apply_013f(connection)
-        apply_sqlite(connection)
-        triggers = {
-            row[0]
-            for row in connection.execute(
-                "SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE '%freshness_unavailable_013g'"
-            )
-        }
-        assert triggers == {
-            "governance_evidence_reviews_freshness_unavailable_013g",
-            "governance_evaluation_decisions_freshness_unavailable_013g",
-        }
-    finally:
-        connection.close()
-    assert (
-        BACKEND_ROOT
-        / "migrations"
-        / "fixtures"
-        / "013g_operational_evidence_freshness.sqlite.sql"
-    ).is_file()

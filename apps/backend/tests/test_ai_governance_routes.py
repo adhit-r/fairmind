@@ -5,13 +5,14 @@ import uuid
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from api.main import app
+from tests import pg
 from config.auth import User as AuthUser, UserRole, auth_manager
-from database.connection import Base, get_db
+from config.settings import Settings, settings
+from database.connection import get_db
 from database.models import Organization, OrganizationMember, User
 
 
@@ -19,16 +20,19 @@ client = TestClient(app)
 
 
 @pytest.fixture(autouse=True)
-def authenticated_org_database():
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+def authenticated_org_database(monkeypatch):
+    monkeypatch.setattr(
+        settings,
+        "untrusted_external_evidence_linking_enabled",
+        False,
     )
-    Base.metadata.create_all(engine)
+    engine = pg.fresh_engine()
     session_factory = sessionmaker(bind=engine)
     user_id, org_id = uuid.uuid4(), uuid.uuid4()
     session = session_factory()
     session.execute(
         User.__table__.insert().values(
+            password_hash="",
             id=user_id, email="governance@example.test", username="governance-owner"
         )
     )
@@ -82,7 +86,6 @@ def authenticated_org_database():
     finally:
         client.headers.pop("Authorization", None)
         app.dependency_overrides.clear()
-        Base.metadata.drop_all(engine)
         engine.dispose()
 
 
@@ -115,6 +118,28 @@ def _create_scoped_system(test_context, name: str) -> str:
     system_id = system.json()["id"]
     _scope_system(test_context, system_id)
     return system_id
+
+
+UNTRUSTED_LINKING_DISABLED_DETAIL = {
+    "code": "untrusted_external_evidence_linking_disabled",
+    "message": "Untrusted external evidence linking is disabled.",
+    "nextAction": (
+        "Remove the external URL or direct entity link, or use the Assurance V2 "
+        "evidence-admission workflow."
+    ),
+}
+
+
+def _assert_untrusted_linking_disabled(response) -> None:
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"] == UNTRUSTED_LINKING_DISABLED_DETAIL
+
+
+def test_untrusted_external_evidence_linking_setting_defaults_disabled() -> None:
+    assert (
+        Settings.model_fields["untrusted_external_evidence_linking_enabled"].default
+        is False
+    )
 
 
 def test_ai_governance_frameworks_endpoint():
@@ -174,6 +199,38 @@ def test_ai_governance_workspace_and_system_registry():
     assert fetched_system["lifecycleSummary"]["stage"] == fetched_system["lifecycleStage"]
 
 
+def test_ai_governance_new_system_without_evidence_reads_zero_readiness_everywhere(
+    authenticated_org_database,
+):
+    workspace = client.post(
+        "/api/v1/ai-governance/workspaces",
+        json={"name": "Readiness workspace", "owner": "owner@acme.ai"},
+    ).json()
+    created = client.post(
+        "/api/v1/ai-governance/systems",
+        json={
+            "workspace_id": workspace["id"],
+            "name": "Brand new system",
+            "owner": "risk@acme.ai",
+            "risk_tier": "high",
+            "lifecycle_stage": "onboard",
+            "metadata": {"business_line": "Retail"},
+        },
+    )
+    assert created.status_code == 200
+    system_id = created.json()["id"]
+    _scope_system(authenticated_org_database, system_id)
+
+    # The create response carries the same readiness as every later read, so the
+    # client never has to estimate one.
+    assert created.json()["readiness"] == 0
+    assert created.json()["lifecycleSummary"]["readiness"] == 0
+    listed = client.get("/api/v1/ai-governance/systems").json()
+    assert [item["readiness"] for item in listed if item["id"] == system_id] == [0]
+    assert client.get(f"/api/v1/ai-governance/systems/{system_id}").json()["readiness"] == 0
+    assert client.get(f"/api/v1/ai-governance/lifecycle/{system_id}/summary").json()["readiness"] == 0
+
+
 def test_ai_governance_lifecycle_summary_persists_stage_progression(authenticated_org_database):
     workspace_resp = client.post(
         "/api/v1/ai-governance/workspaces",
@@ -208,7 +265,7 @@ def test_ai_governance_lifecycle_summary_persists_stage_progression(authenticate
         json={
             "systemId": system_id,
             "riskType": "bias",
-            "severity": "high",
+            "severity": "medium",
             "description": "Approval disparity detected.",
         },
     )
@@ -301,25 +358,24 @@ def test_ai_governance_lifecycle_summary_persists_stage_progression(authenticate
     assert persisted_operate.json()["lifecycleStage"] == "operate"
 
 
-def test_ai_governance_policy_create_and_list():
-    create_resp = client.post(
-        "/api/v1/ai-governance/policies",
+def test_ai_governance_open_high_risk_puts_system_in_remediate(authenticated_org_database):
+    system_id = _create_scoped_system(authenticated_org_database, "High finding system")
+    risk_resp = client.post(
+        "/api/v1/ai-governance/risks/assess",
         json={
-            "name": "Model Transparency Policy",
-            "framework": "eu_ai_act",
-            "description": "Ensure explainability artifacts exist",
-            "rules": [{"id": "R1", "text": "publish model card"}],
+            "systemId": system_id,
+            "riskType": "bias",
+            "severity": "high",
+            "description": "Approval disparity detected.",
         },
     )
-    assert create_resp.status_code == 200
-    created = create_resp.json()
-    assert created["name"] == "Model Transparency Policy"
-    assert created["status"] == "draft"
+    assert risk_resp.status_code == 200
 
-    list_resp = client.get("/api/v1/ai-governance/policies?framework=eu_ai_act")
-    assert list_resp.status_code == 200
-    policies = list_resp.json()
-    assert any(p["id"] == created["id"] for p in policies)
+    # SYSTEM_JOURNEY.md: Remediate lasts until no open high or critical risk remains,
+    # so the spine and Today (both read the system list) count it there, not under Govern.
+    assert client.get(f"/api/v1/ai-governance/lifecycle/{system_id}/summary").json()["stage"] == "remediate"
+    listed = client.get("/api/v1/ai-governance/systems").json()
+    assert [item["lifecycleStage"] for item in listed if item["id"] == system_id] == ["remediate"]
 
 
 def test_ai_governance_workflow_and_request_decision(authenticated_org_database):
@@ -450,14 +506,257 @@ def test_ai_governance_evidence_endpoints_require_authentication(authenticated_o
         client.headers["Authorization"] = authorization
 
 
-def test_ai_governance_risk_dashboard_and_assessment(authenticated_org_database):
+def test_untrusted_external_evidence_writes_default_deny_without_persistence(
+    authenticated_org_database,
+):
+    system_id = _create_scoped_system(
+        authenticated_org_database,
+        "Default-off external evidence",
+    )
+    narrative = client.post(
+        "/api/v1/ai-governance/evidence/collect-v2",
+        json={
+            "system_id": system_id,
+            "type": "review_note",
+            "title": "Scoped narrative",
+            "content": {"text": "Collected without an external pointer."},
+            "artifact_kind": "narrative",
+        },
+    )
+    assert narrative.status_code == 200, narrative.text
+    evidence_id = narrative.json()["id"]
+    opaque_url_content = client.post(
+        "/api/v1/ai-governance/evidence/collect-v2",
+        json={
+            "system_id": system_id,
+            "type": "machine_observation",
+            "title": "Opaque URL-shaped content",
+            "content": {"url": "urn:internal:observation"},
+            "artifact_kind": "narrative",
+        },
+    )
+    assert opaque_url_content.status_code == 200, opaque_url_content.text
+    opaque_url_content_id = opaque_url_content.json()["id"]
+
+    responses = [
+        client.post(
+            "/api/v1/ai-governance/evidence/collect-v2",
+            json={
+                "system_id": system_id,
+                "type": "external_report",
+                "title": "External report",
+                "content": {"url": "https://untrusted.example.test/report"},
+                "artifact_kind": "url",
+                "file_url": "https://untrusted.example.test/report",
+            },
+        ),
+        client.post(
+            "/api/v1/ai-governance/evidence/collect-v2",
+            json={
+                "system_id": system_id,
+                "type": "external_report",
+                "title": "Split-field external report",
+                "content": {"url": "https://untrusted.example.test/split-v2"},
+                "artifact_kind": "url",
+                "file_url": "",
+            },
+        ),
+        client.post(
+            "/api/v1/ai-governance/evidence/collect",
+            json={
+                "system_id": system_id,
+                "type": "external_report",
+                "content": {},
+                "metadata": {"file_url": "https://untrusted.example.test/v1"},
+            },
+        ),
+        client.post(
+            "/api/v1/ai-governance/evidence/collect",
+            json={
+                "system_id": system_id,
+                "type": "external_report",
+                "content": {"url": "https://untrusted.example.test/split-v1"},
+                "metadata": {"artifact_kind": "url"},
+            },
+        ),
+        client.post(
+            "/api/v1/ai-governance/evidence/upload",
+            json={
+                "system_id": system_id,
+                "type": "external_report",
+                "content": {},
+                "metadata": {"file_url": "https://untrusted.example.test/upload"},
+            },
+        ),
+        client.post(
+            "/api/v1/ai-governance/evidence/upload",
+            json={
+                "system_id": system_id,
+                "type": "external_report",
+                "content": {"url": "https://untrusted.example.test/split-upload"},
+                "metadata": {"artifact_kind": "url"},
+            },
+        ),
+        client.patch(
+            f"/api/v1/ai-governance/evidence-item/{evidence_id}",
+            json={"file_url": "https://untrusted.example.test/patch"},
+        ),
+        client.patch(
+            f"/api/v1/ai-governance/evidence-item/{opaque_url_content_id}",
+            json={"artifact_kind": "url"},
+        ),
+        client.post(
+            f"/api/v1/ai-governance/evidence-item/{evidence_id}/links",
+            json={"entity_type": "policy", "entity_id": "policy-1"},
+        ),
+        client.post(
+            "/api/v1/ai-governance/evidence/collections",
+            json={
+                "evidence_id": evidence_id,
+                "entity_type": "policy",
+                "entity_id": "policy-1",
+            },
+        ),
+        client.post(
+            f"/api/v1/ai-governance/systems/{system_id}/evidence",
+            json={
+                "control_id": "control-1",
+                "evidence_type": "review_note",
+                "content": {},
+            },
+        ),
+    ]
+
+    for response in responses:
+        _assert_untrusted_linking_disabled(response)
+
+    session = authenticated_org_database["session_factory"]()
+    try:
+        assert session.execute(
+            text("SELECT id FROM governance_evidence ORDER BY id")
+        ).fetchall() == sorted([(evidence_id,), (opaque_url_content_id,)])
+        assert session.execute(
+            text("SELECT id FROM governance_evidence_links")
+        ).fetchall() == []
+    finally:
+        session.close()
+
+
+def test_historical_untrusted_evidence_remains_readable_and_removable(
+    authenticated_org_database,
+):
+    system_id = _create_scoped_system(
+        authenticated_org_database,
+        "Historical external evidence",
+    )
+    evidence_id = str(uuid.uuid4())
+    link_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    session = authenticated_org_database["session_factory"]()
+    try:
+        session.execute(
+            text(
+                "INSERT INTO governance_evidence "
+                "(id, system_id, org_id, evidence_type, title, content_json, confidence, "
+                "status, metadata_json, captured_at, created_at) "
+                "VALUES (:id, :system_id, :org_id, 'external_report', 'Historical report', "
+                "'{}', 0.5, 'draft', :metadata_json, :now, :now)"
+            ),
+            {
+                "id": evidence_id,
+                "system_id": system_id,
+                "org_id": authenticated_org_database["org_id"],
+                "metadata_json": (
+                    '{"artifact_kind":"url","file_url":'
+                    '"https://legacy.example.test/report"}'
+                ),
+                "now": now,
+            },
+        )
+        session.execute(
+            text(
+                "INSERT INTO governance_evidence_links "
+                "(id, evidence_id, entity_type, entity_id, created_at) "
+                "VALUES (:id, :evidence_id, 'policy', 'policy-legacy', :now)"
+            ),
+            {"id": link_id, "evidence_id": evidence_id, "now": now},
+        )
+        session.commit()
+    finally:
+        session.close()
+
+    fetched = client.get(f"/api/v1/ai-governance/evidence-item/{evidence_id}")
+    assert fetched.status_code == 200
+    assert fetched.json()["fileUrl"] == "https://legacy.example.test/report"
+    assert fetched.json()["linkedEntities"][0]["id"] == link_id
+
+    cleared = client.patch(
+        f"/api/v1/ai-governance/evidence-item/{evidence_id}",
+        json={"file_url": ""},
+    )
+    assert cleared.status_code == 200
+    assert cleared.json()["fileUrl"] == ""
+
+    removed = client.delete(
+        f"/api/v1/ai-governance/evidence-item/{evidence_id}/links/{link_id}"
+    )
+    assert removed.status_code == 200
+    assert removed.json() == {"deleted": True, "id": link_id}
+
+
+def test_reviewed_untrusted_linking_capability_can_be_explicitly_enabled(
+    authenticated_org_database,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        settings,
+        "untrusted_external_evidence_linking_enabled",
+        True,
+    )
+    system_id = _create_scoped_system(
+        authenticated_org_database,
+        "Reviewed external evidence",
+    )
+
+    collected = client.post(
+        "/api/v1/ai-governance/evidence/collect-v2",
+        json={
+            "system_id": system_id,
+            "type": "external_report",
+            "title": "Reviewed source",
+            "content": {"url": "https://reviewed.example.test/report"},
+            "artifact_kind": "url",
+            "file_url": "https://reviewed.example.test/report",
+        },
+    )
+    assert collected.status_code == 200, collected.text
+
+    linked = client.post(
+        f"/api/v1/ai-governance/evidence-item/{collected.json()['id']}/links",
+        json={"entity_type": "policy", "entity_id": "policy-reviewed"},
+    )
+    assert linked.status_code == 200, linked.text
+
+
+def test_ai_governance_risk_dashboard_and_assessment(authenticated_org_database, monkeypatch):
+    # The MIT and IBM library files are not in the repository, so the test brings its own two entries.
+    library = [
+        {"library_id": f"{source}-1", "source": source, "title": f"{source} library risk", "description": "",
+         "severity": "high", "likelihood": "possible", "risk_categories": [], "risk_score": 0.5}
+        for source in ("mit", "ibm")
+    ]
+    monkeypatch.setattr("api.routes.ai_governance._load_risk_library", lambda: library)
     system_id = _create_scoped_system(authenticated_org_database, "Acme credit")
     dashboard_resp = client.get(f"/api/v1/ai-governance/dashboard/risk?system_id={system_id}")
     assert dashboard_resp.status_code == 200
     dashboard = dashboard_resp.json()
-    assert "risks" in dashboard
-    assert "summary" in dashboard
-    assert isinstance(dashboard["risks"], list)
+    # A new system has no findings: library suggestions are listed apart and never counted.
+    assert dashboard["risks"] == []
+    assert {s["title"] for s in dashboard["suggested"]} == {"mit library risk", "ibm library risk"}
+    assert dashboard["summary"]["total"] == dashboard["summary"]["open"] == 0
+    assert dashboard["summary"]["suggested"] == len(dashboard["suggested"])
+    org_wide = client.get("/api/v1/ai-governance/dashboard/risk").json()
+    assert org_wide["risks"] == [] and org_wide["suggested"] == []
 
     create_resp = client.post(
         "/api/v1/ai-governance/risks/assess",
@@ -478,7 +777,8 @@ def test_ai_governance_risk_dashboard_and_assessment(authenticated_org_database)
     refreshed_resp = client.get(f"/api/v1/ai-governance/dashboard/risk?system_id={system_id}")
     assert refreshed_resp.status_code == 200
     refreshed = refreshed_resp.json()
-    assert any(risk["id"] == created["id"] for risk in refreshed["risks"])
+    assert [risk["id"] for risk in refreshed["risks"]] == [created["id"]]
+    assert refreshed["summary"]["open"] == 1 and refreshed["summary"]["automated"] == 0
 
 
 def test_ai_governance_remediation_task_loop(authenticated_org_database):

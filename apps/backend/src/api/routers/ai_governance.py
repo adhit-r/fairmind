@@ -31,6 +31,7 @@ from database.models import OrganizationMember
 from src.application.services.governance_assurance_service import (
     GovernanceAssuranceService,
     OrgMembership,
+    member_user_matches,
 )
 
 
@@ -63,7 +64,7 @@ def _resolve_caller_org(request: Request, db: Session) -> None:
     members = OrganizationMember.__table__.c
     org = db.execute(
         select(members.org_id)
-        .where(members.user_id == user_uuid, members.status == "active")
+        .where(member_user_matches(members.user_id, user_uuid), members.status == "active")
         .order_by(members.created_at)
         .limit(1)
     ).scalar_one_or_none()
@@ -150,14 +151,47 @@ async def org_mutator(membership: OrgMembership = Depends(org_member)) -> OrgMem
 
 # Records addressed by their own ids are scoped by their route: through the
 # system they belong to (approval requests, evidence items, remediation tasks,
-# reports) or their own org_id (policies). Approval workflows and framework
-# controls are a platform catalogue that only platform admins write.
+# reports). Approval workflows and framework controls are a platform catalogue
+# that only platform admins write.
 router = APIRouter(tags=["ai-governance"], dependencies=[Depends(_enforce_org_scope)])
 
 SYSTEM_APPROVAL_WORKFLOW_ID = "fairmind-system-release-v1"
 SYSTEM_APPROVAL_WORKFLOW_STEPS = [
     {"order": 1, "role": "organization_mutator", "permission": "model:write"}
 ]
+
+UNTRUSTED_EXTERNAL_EVIDENCE_LINKING_DISABLED_DETAIL = {
+    "code": "untrusted_external_evidence_linking_disabled",
+    "message": "Untrusted external evidence linking is disabled.",
+    "nextAction": (
+        "Remove the external URL or direct entity link, or use the Assurance V2 "
+        "evidence-admission workflow."
+    ),
+}
+
+
+def _require_untrusted_external_evidence_linking_enabled() -> None:
+    if not settings.untrusted_external_evidence_linking_enabled:
+        raise HTTPException(
+            status_code=409,
+            detail=UNTRUSTED_EXTERNAL_EVIDENCE_LINKING_DISABLED_DETAIL,
+        )
+
+
+def _has_nonblank_external_url(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _requests_external_url_artifact(
+    *,
+    artifact_kind: Any,
+    file_url: Any,
+    content: Dict[str, Any],
+) -> bool:
+    return _has_nonblank_external_url(file_url) or (
+        artifact_kind == "url"
+        and _has_nonblank_external_url(content.get("url"))
+    )
 
 
 FRAMEWORKS: List[Dict[str, Any]] = [
@@ -401,9 +435,9 @@ def _require_system_access(
     service = GovernanceAssuranceService(db)
     membership = service.membership(str(row[0]), current_user.user_id)
     if not membership and settings.is_development and current_user.org_id and str(current_user.org_id) == str(row[0]):
-        # Local development keeps governance in SQLite while memberships live in
-        # the users database, so the lookup above finds nothing. The token's org
-        # claim was issued from that same membership table; trust it here only.
+        # Local development only: accounts signed in without an org_members row
+        # (the e2e admin, see config.auth) carry the org in their token. Trust
+        # that claim here and in _membership, never outside development.
         membership = OrgMembership(str(row[0]), current_user.user_id, current_user.role.value, tuple(current_user.permissions))
     if not membership:
         raise HTTPException(status_code=404, detail="AI system not found")
@@ -466,54 +500,14 @@ _LATE_COLUMNS = (
 
 
 def _ensure_model_link_column(db: Session) -> None:
-    """Add late columns to databases created before them.
-
-    SQLite (local development and tests): every column the governance models
-    declare but the file lacks is added, so a dev database survives model
-    changes without being recreated. Postgres: only _LATE_COLUMNS, the rest is
-    for migrations.
-    """
-    dialect = db.bind.dialect.name if db.bind is not None else "sqlite"
+    """Add late columns to databases created before them; the rest is for migrations."""
     try:
-        if dialect == "sqlite":
-            import database.governance_models as governance_models  # noqa: F401
-            from database.connection import Base
-
-            for table in Base.metadata.sorted_tables:
-                if not table.name.startswith("governance_"):
-                    continue
-                existing = {row[1] for row in db.execute(text(f"PRAGMA table_info({table.name})")).fetchall()}
-                if not existing:
-                    continue  # create_all handles tables that do not exist yet
-                for column in table.columns:
-                    if column.name in existing:
-                        continue
-                    col_type = column.type.compile(dialect=db.bind.dialect)
-                    db.execute(text(f"ALTER TABLE {table.name} ADD COLUMN {column.name} {col_type}"))
-                    if column.index:
-                        db.execute(text(f"CREATE INDEX IF NOT EXISTS idx_{table.name}_{column.name} ON {table.name} ({column.name})"))
-        else:
-            for table, column in _LATE_COLUMNS:
-                db.execute(text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} VARCHAR(255)"))
-                db.execute(text(f"CREATE INDEX IF NOT EXISTS idx_{table}_{column} ON {table} ({column})"))
+        for table, column in _LATE_COLUMNS:
+            db.execute(text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} VARCHAR(255)"))
+            db.execute(text(f"CREATE INDEX IF NOT EXISTS idx_{table}_{column} ON {table} ({column})"))
         db.commit()
     except Exception:  # pragma: no cover - never block startup on a patch attempt
         db.rollback()
-
-
-class PolicyCreateRequest(BaseModel):
-    name: str = Field(min_length=1)
-    framework: str = Field(min_length=1)
-    description: str = ""
-    rules: List[Dict[str, Any]] = Field(default_factory=list)
-
-
-class PolicyUpdateRequest(BaseModel):
-    name: Optional[str] = None
-    framework: Optional[str] = None
-    description: Optional[str] = None
-    rules: Optional[List[Dict[str, Any]]] = None
-    status: Optional[str] = Field(default=None, pattern="^(draft|awaiting_approval|approved|rejected|archived)$")
 
 
 class ApprovalWorkflowCreateRequest(BaseModel):
@@ -698,6 +692,10 @@ def _serialize_remediation_task_row(row: Any) -> Dict[str, Any]:
     }
 
 
+ACTIVE_REMEDIATION_STATUSES = ("open", "in_progress", "blocked", "ready_for_retest")
+CLOSED_RISK_STATUSES = ("accepted", "closed", "resolved", "mitigated")
+
+
 def _summarize_remediation_tasks(tasks: List[Dict[str, Any]], system_id: str) -> Dict[str, Any]:
     status_counts = {
         "open": 0,
@@ -722,7 +720,7 @@ def _summarize_remediation_tasks(tasks: List[Dict[str, Any]], system_id: str) ->
             retest_required += 1
         linked_risk_refs += len(task.get("linkedRiskIds") or [])
 
-    active = sum(status_counts[key] for key in ("open", "in_progress", "blocked", "ready_for_retest"))
+    active = sum(status_counts[key] for key in ACTIVE_REMEDIATION_STATUSES)
     completed = status_counts["resolved"] + status_counts["closed"]
 
     return {
@@ -801,6 +799,42 @@ def _fetch_remediation_tasks(db: Session, system_id: str) -> List[Dict[str, Any]
     return [_serialize_remediation_task_row(row) for row in rows]
 
 
+def _risk_dashboard(rows: List[Any], system_id: Optional[str]) -> Dict[str, Any]:
+    """Recorded findings, counted; taxonomy suggestions listed apart and never counted.
+
+    A suggestion is a MIT or IBM library entry that might apply, not a finding
+    about the system, so it is offered for one system only and dropped once a
+    recorded risk carries its title.
+    """
+    risks = sorted(
+        (_serialize_risk_row(row) for row in rows),
+        key=lambda item: (_severity_rank(item["severity"]), item.get("riskScore", 0.0)),
+        reverse=True,
+    )
+    recorded_titles = {risk["title"].strip().lower() for risk in risks}
+    suggested = (
+        [s for s in _generate_automated_risks(system_id) if s["title"].strip().lower() not in recorded_titles]
+        if system_id
+        else []
+    )
+    severity_counts = {"low": 0, "medium": 0, "high": 0, "critical": 0}
+    for risk in risks:
+        severity_counts[risk["severity"]] = severity_counts.get(risk["severity"], 0) + 1
+
+    return {
+        "risks": risks,
+        "suggested": suggested,
+        "summary": {
+            "total": len(risks),
+            "open": len([risk for risk in risks if risk["status"] not in CLOSED_RISK_STATUSES]),
+            # Raised by FairMind itself (drift, environmental impact), not typed in by a person.
+            "automated": len([risk for risk in risks if risk.get("source") != "manual_assessment"]),
+            "bySeverity": severity_counts,
+            "suggested": len(suggested),
+        },
+    }
+
+
 def _fetch_risk_dashboard_payload(db: Session, system_id: str) -> Dict[str, Any]:
     rows = db.execute(
         text(
@@ -809,34 +843,7 @@ def _fetch_risk_dashboard_payload(db: Session, system_id: str) -> Dict[str, Any]
         ),
         {"system_id": system_id},
     ).fetchall()
-
-    stored_risks = [_serialize_risk_row(row) for row in rows]
-    automated_risks = _generate_automated_risks(system_id)
-
-    deduped: Dict[str, Dict[str, Any]] = {}
-    for risk in stored_risks + automated_risks:
-        key = f"{risk['systemId']}::{risk['title'].strip().lower()}"
-        if key not in deduped:
-            deduped[key] = risk
-
-    risks = sorted(
-        deduped.values(),
-        key=lambda item: (_severity_rank(item["severity"]), item.get("riskScore", 0.0)),
-        reverse=True,
-    )
-    severity_counts = {"low": 0, "medium": 0, "high": 0, "critical": 0}
-    for risk in risks:
-        severity_counts[risk["severity"]] = severity_counts.get(risk["severity"], 0) + 1
-
-    return {
-        "risks": risks,
-        "summary": {
-            "total": len(risks),
-            "open": len([risk for risk in risks if risk["status"] != "accepted"]),
-            "automated": len([risk for risk in risks if risk.get("source") in {"mit", "ibm"}]),
-            "bySeverity": severity_counts,
-        },
-    }
+    return _risk_dashboard(rows, system_id)
 
 
 def _fetch_stored_risk_summary(db: Session, system_id: str) -> Dict[str, Any]:
@@ -848,14 +855,18 @@ def _fetch_stored_risk_summary(db: Session, system_id: str) -> Dict[str, Any]:
     ).fetchall()
     severity_counts = {"low": 0, "medium": 0, "high": 0, "critical": 0}
     open_count = 0
+    open_high_or_critical = 0
     for row in rows:
         severity = row[0] if row[0] in severity_counts else "medium"
         severity_counts[severity] += 1
-        if row[1] != "accepted":
+        if row[1] not in CLOSED_RISK_STATUSES:
             open_count += 1
+            if severity in ("high", "critical"):
+                open_high_or_critical += 1
     return {
         "total": len(rows),
         "open": open_count,
+        "openHighOrCritical": open_high_or_critical,
         "automated": 0,
         "bySeverity": severity_counts,
     }
@@ -876,7 +887,12 @@ def _derive_lifecycle_status(
 
     if approval_request and approval_request.get("status") == "approved":
         stage = "operate"
-    elif remediation_summary.get("activeTasks", 0) > 0 or remediation_summary.get("byStatus", {}).get("blocked", 0) > 0:
+    # SYSTEM_JOURNEY.md: Remediate lasts until no open high or critical risk and no active task.
+    elif (
+        risk_summary.get("openHighOrCritical", 0) > 0
+        or remediation_summary.get("activeTasks", 0) > 0
+        or remediation_summary.get("byStatus", {}).get("blocked", 0) > 0
+    ):
         stage = "remediate"
     elif (
         risk_summary.get("total", 0) > 0
@@ -894,15 +910,21 @@ def _derive_lifecycle_status(
         "remediate": 52,
         "operate": 88,
     }
-    readiness = stage_base.get(stage, 18)
-    readiness += min(int(evidence_summary.get("linkedEvidence", 0)) * 6, 18)
-    readiness += 14 if evidence_summary.get("decisionReadiness") == "review_ready" else 0
-    readiness += 10 if approval_request and approval_request.get("status") == "approved" else 0
-    readiness -= int(risk_summary.get("bySeverity", {}).get("critical", 0)) * 18
-    readiness -= int(risk_summary.get("bySeverity", {}).get("high", 0)) * 10
-    readiness -= int(remediation_summary.get("activeTasks", 0)) * 8
-    readiness -= max(0, len(evidence_summary.get("missingSignals", [])) - 1) * 5
-    readiness = _clamp(round(readiness), 5, 100)
+    # Readiness credits lifecycle progress only once evidence backs it: a system
+    # with no evidence reads 0, whatever stage it was registered at.
+    if int(evidence_summary.get("totalEvidence", 0)) == 0:
+        readiness = 0
+    else:
+        readiness = stage_base.get(stage, 18)
+        readiness += min(int(evidence_summary.get("linkedEvidence", 0)) * 6, 18)
+        readiness += 14 if evidence_summary.get("decisionReadiness") == "review_ready" else 0
+        readiness += 10 if approval_request and approval_request.get("status") == "approved" else 0
+        readiness -= int(risk_summary.get("bySeverity", {}).get("critical", 0)) * 18
+        readiness -= int(risk_summary.get("bySeverity", {}).get("high", 0)) * 10
+        readiness -= int(remediation_summary.get("activeTasks", 0)) * 8
+        readiness -= max(0, len(evidence_summary.get("missingSignals", [])) - 1) * 5
+        # Floor of 5 once evidence exists, so 0% only ever means "no evidence yet".
+        readiness = _clamp(round(readiness), 5, 100)
 
     failed_controls = (
         int(risk_summary.get("open", 0))
@@ -1225,17 +1247,14 @@ async def create_ai_system(request: AISystemCreateRequest, http: Request, db: Se
         },
     )
     db.commit()
-    return {
-        "id": system_id,
-        "workspaceId": request.workspace_id,
-        "name": request.name,
-        "owner": request.owner,
-        "riskTier": request.risk_tier,
-        "lifecycleStage": request.lifecycle_stage,
-        "metadata": request.metadata,
-        "createdAt": now,
-        "updatedAt": now,
-    }
+    row = db.execute(
+        text(
+            "SELECT id, workspace_id, name, owner, risk_tier, lifecycle_stage, metadata_json, created_at, updated_at "
+            "FROM governance_ai_systems WHERE id = :id"
+        ),
+        {"id": system_id},
+    ).fetchone()
+    return _build_ai_system_payload(db, row)
 
 
 @router.get("/systems")
@@ -1319,34 +1338,7 @@ async def get_risk_dashboard(
             ),
             {"org_id": membership.org_id},
         ).fetchall()
-
-    stored_risks = [_serialize_risk_row(row) for row in rows]
-    automated_risks = _generate_automated_risks(system_id or "org-default")
-
-    deduped: Dict[str, Dict[str, Any]] = {}
-    for risk in stored_risks + automated_risks:
-        key = f"{risk['systemId']}::{risk['title'].strip().lower()}"
-        if key not in deduped:
-            deduped[key] = risk
-
-    risks = sorted(
-        deduped.values(),
-        key=lambda item: (_severity_rank(item["severity"]), item.get("riskScore", 0.0)),
-        reverse=True,
-    )
-    severity_counts = {"low": 0, "medium": 0, "high": 0, "critical": 0}
-    for risk in risks:
-        severity_counts[risk["severity"]] = severity_counts.get(risk["severity"], 0) + 1
-
-    return {
-        "risks": risks,
-        "summary": {
-            "total": len(risks),
-            "open": len([risk for risk in risks if risk["status"] != "accepted"]),
-            "automated": len([risk for risk in risks if risk.get("source") in {"mit", "ibm"}]),
-            "bySeverity": severity_counts,
-        },
-    }
+        return _risk_dashboard(rows, None)
 
 
 @router.post("/risks/assess")
@@ -1591,6 +1583,7 @@ async def create_system_evidence(
         db, system_id, current_user, mutate=True
     )
     if request.control_id:
+        _require_untrusted_external_evidence_linking_enabled()
         _validate_control_link_scope(
             db, membership, system_id, "control", request.control_id
         )
@@ -1730,196 +1723,6 @@ async def create_system_approval(
         "createdAt": now,
         "updatedAt": now,
     }
-
-
-# governance_policies is shared with api.routes.policies: both filter on org_id.
-@router.get("/policies")
-async def list_policies(
-    framework: Optional[str] = Query(default=None),
-    membership: OrgMembership = Depends(org_member),
-    db: Session = Depends(get_db),
-):
-    _ensure_tables(db)
-    if framework:
-        rows = db.execute(
-            text(
-                "SELECT id, name, framework, description, rules_json, status, created_at FROM governance_policies "
-                "WHERE framework = :framework AND org_id = :org_id ORDER BY created_at DESC"
-            ),
-            {"framework": framework, "org_id": membership.org_id},
-        ).fetchall()
-    else:
-        rows = db.execute(
-            text(
-                "SELECT id, name, framework, description, rules_json, status, created_at FROM governance_policies "
-                "WHERE org_id = :org_id ORDER BY created_at DESC"
-            ),
-            {"org_id": membership.org_id},
-        ).fetchall()
-
-    return [
-        {
-            "id": row[0],
-            "name": row[1],
-            "framework": row[2],
-            "description": row[3] or "",
-            "rules": json.loads(row[4]),
-            "status": row[5],
-            "createdAt": row[6],
-        }
-        for row in rows
-    ]
-
-
-@router.post("/policies")
-async def create_policy(
-    request: PolicyCreateRequest,
-    membership: OrgMembership = Depends(org_mutator),
-    db: Session = Depends(get_db),
-):
-    _ensure_tables(db)
-    policy_id = str(uuid.uuid4())
-    now = _utc_now_iso()
-    db.execute(
-        text(
-            "INSERT INTO governance_policies "
-            "(id, org_id, name, framework, description, rules_json, status, version, created_at, updated_at) "
-            "VALUES (:id, :org_id, :name, :framework, :description, :rules_json, :status, 1, :created_at, :updated_at)"
-        ),
-        {
-            "id": policy_id,
-            "org_id": membership.org_id,
-            "name": request.name,
-            "framework": request.framework,
-            "description": request.description,
-            "rules_json": json.dumps(request.rules),
-            "status": "draft",
-            "created_at": now,
-            "updated_at": now,
-        },
-    )
-    db.commit()
-
-    return {
-        "id": policy_id,
-        "name": request.name,
-        "framework": request.framework,
-        "description": request.description,
-        "rules": request.rules,
-        "status": "draft",
-        "createdAt": now,
-    }
-
-
-@router.get("/policies/{policy_id}")
-async def get_policy(
-    policy_id: str,
-    membership: OrgMembership = Depends(org_member),
-    db: Session = Depends(get_db),
-):
-    _ensure_tables(db)
-    row = db.execute(
-        text(
-            "SELECT id, name, framework, description, rules_json, status, created_at, updated_at "
-            "FROM governance_policies WHERE id = :id AND org_id = :org_id"
-        ),
-        {"id": policy_id, "org_id": membership.org_id},
-    ).fetchone()
-    if not row:
-        raise HTTPException(status_code=404, detail="Policy not found")
-
-    return {
-        "id": row[0],
-        "name": row[1],
-        "framework": row[2],
-        "description": row[3] or "",
-        "rules": json.loads(row[4]),
-        "status": row[5],
-        "createdAt": row[6],
-        "updatedAt": row[7],
-    }
-
-
-@router.put("/policies/{policy_id}")
-async def update_policy(
-    policy_id: str,
-    request: PolicyUpdateRequest,
-    membership: OrgMembership = Depends(org_mutator),
-    db: Session = Depends(get_db),
-):
-    _ensure_tables(db)
-    existing = db.execute(
-        text("SELECT id, status FROM governance_policies WHERE id = :id AND org_id = :org_id"),
-        {"id": policy_id, "org_id": membership.org_id},
-    ).fetchone()
-    if not existing:
-        raise HTTPException(status_code=404, detail="Policy not found")
-
-    if existing[1] == "approved":
-        raise HTTPException(status_code=409, detail="Approved policies are immutable; create a new version")
-
-    updates = {
-        "name": request.name,
-        "framework": request.framework,
-        "description": request.description,
-        "rules_json": json.dumps(request.rules) if request.rules is not None else None,
-        "status": request.status,
-    }
-    set_parts = []
-    params: Dict[str, Any] = {"id": policy_id, "org_id": membership.org_id, "updated_at": _utc_now_iso()}
-    for key, value in updates.items():
-        if value is not None:
-            set_parts.append(f"{key} = :{key}")
-            params[key] = value
-
-    if not set_parts:
-        return await get_policy(policy_id, membership, db)
-
-    set_parts.append("updated_at = :updated_at")
-    db.execute(
-        text(f"UPDATE governance_policies SET {', '.join(set_parts)} WHERE id = :id AND org_id = :org_id"),
-        params,
-    )
-    db.commit()
-    return await get_policy(policy_id, membership, db)
-
-
-@router.delete("/policies/{policy_id}")
-async def delete_policy(
-    policy_id: str,
-    membership: OrgMembership = Depends(org_mutator),
-    db: Session = Depends(get_db),
-):
-    _ensure_tables(db)
-    result = db.execute(
-        text("DELETE FROM governance_policies WHERE id = :id AND org_id = :org_id"),
-        {"id": policy_id, "org_id": membership.org_id},
-    )
-    if result.rowcount == 0:
-        raise HTTPException(status_code=404, detail="Policy not found")
-    db.commit()
-    return {"id": policy_id, "deleted": True}
-
-
-@router.post("/policies/{policy_id}/submit")
-async def submit_policy_for_approval(
-    policy_id: str,
-    membership: OrgMembership = Depends(org_mutator),
-    db: Session = Depends(get_db),
-):
-    _ensure_tables(db)
-    now = _utc_now_iso()
-    result = db.execute(
-        text(
-            "UPDATE governance_policies SET status = :status, updated_at = :updated_at "
-            "WHERE id = :id AND org_id = :org_id"
-        ),
-        {"status": "awaiting_approval", "updated_at": now, "id": policy_id, "org_id": membership.org_id},
-    )
-    if result.rowcount == 0:
-        raise HTTPException(status_code=404, detail="Policy not found")
-    db.commit()
-    return {"id": policy_id, "status": "awaiting_approval", "updatedAt": now}
 
 
 @router.post("/approval-workflows")
@@ -2071,6 +1874,25 @@ def _gate_decision_block(gate: dict, notes: Optional[str]):
     return None
 
 
+def _release_blockers(db: Session, system_id: str) -> Optional[Dict[str, Any]]:
+    """None when nothing blocks approval, else the 409 detail: open high or critical findings, active critical tasks."""
+    findings = _fetch_stored_risk_summary(db, system_id)["openHighOrCritical"]
+    tasks = sum(
+        1 for task in _fetch_remediation_tasks(db, system_id)
+        if task.get("priority") == "critical" and (task.get("status") or "open") in ACTIVE_REMEDIATION_STATUSES
+    )
+    if not findings and not tasks:
+        return None
+    parts = [
+        f"{findings} open high or critical finding{'' if findings == 1 else 's'}" if findings else "",
+        f"{tasks} active critical remediation task{'' if tasks == 1 else 's'}" if tasks else "",
+    ]
+    return {
+        "message": "Approval is blocked by " + " and ".join(p for p in parts if p) + ". Close them first; the release can still be rejected.",
+        "blockers": {"openHighOrCriticalFindings": findings, "activeCriticalTasks": tasks},
+    }
+
+
 @router.post("/approval-requests/{request_id}/decision")
 async def make_approval_decision(
     request_id: str,
@@ -2100,7 +1922,8 @@ async def make_approval_decision(
         from api.routes.fairness_runs import _gate_payload  # function-level: that router imports this one
 
         system = db.execute(text("SELECT risk_tier FROM governance_ai_systems WHERE id = :id"), {"id": approval_system_id}).fetchone()
-        gate = _gate_payload(db, approval_system_id, system[0] if system else "medium")
+        # The evidence alone: an earlier rejection must not stop the reviewer approving this request.
+        gate = _gate_payload(db, approval_system_id, system[0] if system else "medium", with_decision=False)
         if new_status == "approved":
             blocked = _gate_decision_block(gate, request.notes)
             if blocked:
@@ -2127,6 +1950,9 @@ async def make_approval_decision(
                     "environmentalGate": environmental_gate,
                 },
             )
+        blockers = _release_blockers(db, approval_system_id)
+        if blockers:
+            raise HTTPException(status_code=409, detail=blockers)
     actor = _authenticated_actor(current_user)
     result = db.execute(
         text(
@@ -2602,13 +2428,22 @@ async def update_evidence_item(
     _ensure_tables(db)
     _require_evidence_item_access(db, evidence_id, current_user, mutate=True)
     row = db.execute(
-        text("SELECT id, metadata_json FROM governance_evidence WHERE id = :id"),
+        text(
+            "SELECT id, metadata_json, content_json "
+            "FROM governance_evidence WHERE id = :id"
+        ),
         {"id": evidence_id},
     ).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Evidence not found")
 
     metadata = _load_json_value(row[1], {})
+    content = _load_json_value(row[2], {})
+    if _has_nonblank_external_url(request.file_url) or (
+        request.artifact_kind == "url"
+        and _has_nonblank_external_url(content.get("url"))
+    ):
+        _require_untrusted_external_evidence_linking_enabled()
     if request.tags is not None:
         metadata["tags"] = request.tags
     if request.folder is not None:
@@ -2651,6 +2486,7 @@ async def add_evidence_item_link(
     system_id, membership = _require_evidence_item_access(
         db, evidence_id, current_user, mutate=True
     )
+    _require_untrusted_external_evidence_linking_enabled()
     _validate_control_link_scope(
         db, membership, system_id, request.entity_type, request.entity_id
     )
@@ -2704,6 +2540,12 @@ async def collect_evidence_v2(
     membership = _require_evidence_system_access(
         db, request.system_id, current_user, mutate=True
     )
+    if _requests_external_url_artifact(
+        artifact_kind=request.artifact_kind,
+        file_url=request.file_url,
+        content=request.content,
+    ):
+        _require_untrusted_external_evidence_linking_enabled()
     evidence_id = str(uuid.uuid4())
     now = _utc_now_iso()
     metadata: Dict[str, Any] = {
@@ -2750,6 +2592,12 @@ async def collect_evidence(
     membership = _require_evidence_system_access(
         db, request.system_id, current_user, mutate=True
     )
+    if _requests_external_url_artifact(
+        artifact_kind=request.metadata.get("artifact_kind"),
+        file_url=request.metadata.get("file_url"),
+        content=request.content,
+    ):
+        _require_untrusted_external_evidence_linking_enabled()
     evidence_id = str(uuid.uuid4())
     now = _utc_now_iso()
     db.execute(
@@ -2810,6 +2658,7 @@ async def link_evidence_to_entity(
     system_id, membership = _require_evidence_item_access(
         db, request.evidence_id, current_user, mutate=True
     )
+    _require_untrusted_external_evidence_linking_enabled()
     _validate_control_link_scope(
         db, membership, system_id, request.entity_type, request.entity_id
     )
@@ -2943,6 +2792,30 @@ async def create_remediation_task(
     }
 
 
+def _task_risk_ids(task: Dict[str, Any]) -> set:
+    ids = set(task.get("linkedRiskIds") or [])
+    if task.get("sourceType") == "risk" and task.get("sourceId"):
+        ids.add(task["sourceId"])
+    return ids
+
+
+def _sync_task_findings(db: Session, system_id: str, risk_ids: set) -> None:
+    """A finding resolves once no remediation task linked to it is active, and opens again while one is.
+
+    Only open or resolved findings move; one accepted, mitigated or closed stays as set.
+    """
+    tasks = _fetch_remediation_tasks(db, system_id)
+    for risk_id in risk_ids:
+        active = any(risk_id in _task_risk_ids(t) and (t.get("status") or "open") in ACTIVE_REMEDIATION_STATUSES for t in tasks)
+        db.execute(
+            text(
+                "UPDATE governance_risks SET status = :status, updated_at = :updated_at "
+                "WHERE id = :id AND system_id = :system_id AND status IN ('open', 'resolved') AND status != :status"
+            ),
+            {"status": "open" if active else "resolved", "updated_at": _utc_now_iso(), "id": risk_id, "system_id": system_id},
+        )
+
+
 @router.patch("/remediation/{task_id}")
 async def update_remediation_task(
     task_id: str,
@@ -2979,6 +2852,8 @@ async def update_remediation_task(
         text(f"UPDATE governance_remediation_tasks SET {', '.join(set_parts)} WHERE id = :id"),
         updates,
     )
+    if request.status is not None:
+        _sync_task_findings(db, str(row[1]), _task_risk_ids(_serialize_remediation_task_row(row)))
     db.commit()
 
     updated_row = db.execute(

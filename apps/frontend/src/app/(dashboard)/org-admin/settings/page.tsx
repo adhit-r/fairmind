@@ -4,6 +4,8 @@ import React, { useEffect, useState } from 'react';
 import { useOrg } from '@/context/OrgContext';
 import { apiClient as api } from '@/lib/api/api-client';
 import { IconCheck, IconX } from '@tabler/icons-react';
+import { AIProviderSettings } from '@/components/packs/AIProviderSettings';
+import { PlatformConnectionSettings } from '@/components/packs/PlatformConnectionSettings';
 
 interface OrgSettings {
   id: string;
@@ -248,6 +250,10 @@ export default function OrgSettingsPage() {
             </button>
           </div>
         </form>
+
+        <AIProviderSettings />
+
+        <PlatformConnectionSettings />
 
         {/* Organization Info Box */}
         <div className="mt-8 p-6 fm-card">

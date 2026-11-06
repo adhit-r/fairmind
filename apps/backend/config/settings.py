@@ -11,6 +11,7 @@ try:
     validator = field_validator  # Alias for compatibility
 except ImportError:
     from pydantic import BaseSettings, validator
+from pydantic import Field
 from functools import lru_cache
 
 
@@ -49,7 +50,8 @@ class Settings(BaseSettings):
     allow_credentials: bool = True
     
     # Database
-    database_url: str = "sqlite:///./fairmind.db"
+    # PostgreSQL only, e.g. postgresql://user:pass@host/db
+    database_url: str = Field(default="", validate_default=True)
     database_echo: bool = False
     database_pool_size: int = 20
     # Seconds to wait for a pooled connection at startup. Serverless Postgres
@@ -58,9 +60,18 @@ class Settings(BaseSettings):
     database_max_overflow: int = 30
     database_timeout: int = 30
     assurance_v2_enabled: bool = False
+    # Core assurance surfaces stay separately hidden until their exact
+    # release gate is deliberately enabled with the master switch.
+    assurance_v2_target_versions_enabled: bool = False
+    assurance_v2_suite_versions_enabled: bool = False
+    assurance_v2_plans_enabled: bool = False
+    assurance_v2_runs_enabled: bool = False
     # Verified Evidence Passport admission remains independently disabled until
     # the route, trust catalog, and reviewer workflow pass their release gate.
     assurance_v2_evidence_submit_enabled: bool = False
+    # Linking a verified admission is a separate mutation and remains hidden
+    # until its PostgreSQL authority and separation controls pass release gates.
+    assurance_v2_evidence_link_enabled: bool = False
     # Unsigned reports are separately disabled by default. When enabled, they
     # remain explicitly unverified, human-review-only material.
     assurance_v2_evidence_import_enabled: bool = False
@@ -80,6 +91,9 @@ class Settings(BaseSettings):
     # Issuer, public-key, and trust-policy administration remains independently
     # hidden until PostgreSQL 013f and the literal trust-admin permission release.
     assurance_v2_trust_administration_enabled: bool = False
+    # Generic Evidence Hub URLs and direct entity links are untrusted until a
+    # reviewed deployment explicitly enables this compatibility capability.
+    untrusted_external_evidence_linking_enabled: bool = False
     assurance_migration_schema: Optional[str] = None
     
     # Neon Auth + Data API
@@ -99,9 +113,9 @@ class Settings(BaseSettings):
     authentik_jwt_algorithm: str = "RS256"
     authentik_jwks_cache_ttl: int = 3600
     jwt_validation_mode: str = "internal"  # "internal" (HS256) or "authentik" (RS256)
-    authentik_oauth_client_id: Optional[str] = "fairmind-frontend"
+    authentik_oauth_client_id: Optional[str] = None
     authentik_oauth_client_secret: Optional[str] = None
-    authentik_oauth_redirect_uri: Optional[str] = "http://localhost:3000/auth/callback"
+    authentik_oauth_redirect_uri: Optional[str] = None
     authentik_token_endpoint: Optional[str] = None  # Will default to {authentik_server_url}/application/o/token/
     authentik_refresh_token_ttl: int = 604800  # 7 days in seconds
     
@@ -190,6 +204,14 @@ class Settings(BaseSettings):
             return [origin.strip() for origin in self.allowed_origins.split(",")]
         return self.allowed_origins
     
+    @validator("database_url")
+    def validate_database_url(cls, v):
+        if not v.startswith("postgresql"):
+            raise ValueError(
+                "DATABASE_URL must be a PostgreSQL URL; see apps/backend/config/env.example"
+            )
+        return v
+
     @validator("environment")
     def validate_environment(cls, v):
         if v not in ["development", "staging", "production"]:

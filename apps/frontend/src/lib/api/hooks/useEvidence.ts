@@ -93,6 +93,17 @@ const EMPTY_SUMMARY: EvidenceSummary = {
   recommendedNextStep: '',
 }
 
+function toSummary(returned: EvidenceSummary | null, targetSystemId: string): EvidenceSummary {
+  return {
+    ...EMPTY_SUMMARY,
+    ...(returned || {}),
+    systemId: returned?.systemId || targetSystemId,
+    missingSignals: Array.isArray(returned?.missingSignals) ? returned.missingSignals : [],
+    evidenceTypes: Array.isArray(returned?.evidenceTypes) ? returned.evidenceTypes : [],
+    metadataSources: Array.isArray(returned?.metadataSources) ? returned.metadataSources : [],
+  }
+}
+
 function sortEvidence(records: Evidence[]) {
   return [...records].sort((left, right) => {
     const leftTime = new Date(left.timestamp).getTime()
@@ -131,17 +142,7 @@ export function useEvidence(systemId?: string) {
 
       if (recordsResponse.success && recordsResponse.data) {
         setData(sortEvidence(recordsResponse.data))
-        const returnedSummary = summaryResponse.success && summaryResponse.data
-          ? summaryResponse.data
-          : null
-        setSummary({
-          ...EMPTY_SUMMARY,
-          ...(returnedSummary || {}),
-          systemId: returnedSummary?.systemId || targetSystemId,
-          missingSignals: Array.isArray(returnedSummary?.missingSignals) ? returnedSummary.missingSignals : [],
-          evidenceTypes: Array.isArray(returnedSummary?.evidenceTypes) ? returnedSummary.evidenceTypes : [],
-          metadataSources: Array.isArray(returnedSummary?.metadataSources) ? returnedSummary.metadataSources : [],
-        })
+        setSummary(toSummary(summaryResponse.success && summaryResponse.data ? summaryResponse.data : null, targetSystemId))
       } else {
         throw new Error(recordsResponse.error || 'Failed to fetch evidence')
       }
@@ -185,9 +186,23 @@ export function useEvidence(systemId?: string) {
     return loadEvidence(systemId)
   }, [loadEvidence, systemId])
 
+  // Link changes alter the server's gap list but not the records, so reload only the summary. A failed
+  // reload reads as "summary unavailable" rather than leaving the old, now wrong, gaps on screen.
+  const refreshSummary = useCallback(async () => {
+    if (!systemId) return
+    const version = requestVersion.current
+    let next = toSummary(null, systemId)
+    try {
+      const response = await apiClient.get<EvidenceSummary>(API_ENDPOINTS.aiGovernance.evidenceSummary(systemId))
+      if (response.success && response.data) next = toSummary(response.data, systemId)
+    } catch {
+      // keep the unavailable summary
+    }
+    if (version === requestVersion.current) setSummary(next)
+  }, [systemId])
+
   const collectEvidence = useCallback(async (params: CollectEvidenceInput): Promise<Evidence> => {
     setCollecting(true)
-    setError(null)
     try {
       const response: ApiResponse<Evidence> = await apiClient.post(
         API_ENDPOINTS.aiGovernance.evidenceCollectV2,
@@ -214,9 +229,8 @@ export function useEvidence(systemId?: string) {
       }
       throw new Error(response.error || 'Evidence collection failed')
     } catch (err) {
-      const e = err instanceof Error ? err : new Error('Evidence collection failed')
-      setError(e)
-      throw e
+      // Thrown to the caller (the uploader shows it); `error` stays the load error only.
+      throw err instanceof Error ? err : new Error('Evidence collection failed')
     } finally {
       setCollecting(false)
     }
@@ -260,10 +274,11 @@ export function useEvidence(systemId?: string) {
           return { ...e, linkedEntities: newLinks, linkedEntityCount: newLinks.length, workflowState: 'linked' }
         })
       )
+      void refreshSummary()
       return link
     }
     throw new Error(response.error || 'Failed to add link')
-  }, [])
+  }, [refreshSummary])
 
   const removeLink = useCallback(async (evidenceId: string, linkId: string): Promise<void> => {
     const response: ApiResponse<{ deleted: boolean }> = await apiClient.delete(
@@ -277,19 +292,22 @@ export function useEvidence(systemId?: string) {
           return { ...e, linkedEntities: newLinks, linkedEntityCount: newLinks.length, workflowState: newLinks.length > 0 ? 'linked' : 'collected' }
         })
       )
+      void refreshSummary()
       return
     }
     throw new Error(response.error || 'Failed to remove link')
-  }, [])
+  }, [refreshSummary])
 
   const scopeMatches = dataSystemId === (systemId || '')
 
   return {
     data: scopeMatches ? data : [],
     summary: scopeMatches ? summary : { ...EMPTY_SUMMARY, systemId: systemId || '' },
-    loading,
+    // Until the effect starts the load for a new system the held state belongs to the previous one,
+    // so a system whose load has not begun is loading, never empty.
+    loading: loading || !scopeMatches,
     collecting,
-    error,
+    error: scopeMatches ? error : null,
     collectEvidence,
     updateEvidence,
     addLink,

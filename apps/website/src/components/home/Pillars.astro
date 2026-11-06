@@ -1,0 +1,53 @@
+---
+import { pillars } from '../../lib/catalogue';
+---
+
+<section class="pi" id="packs" aria-labelledby="pi-title">
+  <div class="wrap">
+    <header class="section-heading">
+      <p class="label reveal">Four pillars</p>
+      <h2 id="pi-title" class="reveal">Install the packs your systems <em>need.</em></h2>
+    </header>
+    <div class="pi-row">
+      {pillars.map((p, i) => (
+        <article class="pi-col reveal" tabindex="0" style={`transition-delay:${i * 90}ms`} aria-labelledby={`pi-${p.id}`}>
+          <p class="pi-n">{String(i + 1).padStart(2, '0')}</p>
+          <h3 id={`pi-${p.id}`}>{p.name}</h3>
+          <p class="pi-desc">{p.description}</p>
+          <dl class="pi-stats">
+            <div><dt>Workflows</dt><dd data-count={p.workflows}>{p.workflows}</dd></div>
+            <div><dt>Evaluations</dt><dd data-count={p.evaluations}>{p.evaluations}</dd></div>
+            <div><dt>Packs</dt><dd data-count={p.packs.length}>{p.packs.length}</dd></div>
+          </dl>
+          <ul class="pi-packs">
+            {p.packs.map((k) => (<li><b>{k.name}</b><span><span>{k.description}</span></span></li>))}
+          </ul>
+        </article>
+      ))}
+    </div>
+  </div>
+</section>
+
+<script>
+  // Counts run up once when the row arrives.
+  const row = document.querySelector<HTMLElement>('.pi-row');
+  if (row && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    const nums = Array.from(row.querySelectorAll<HTMLElement>('[data-count]'));
+    nums.forEach((n) => (n.textContent = '0'));
+    new IntersectionObserver(
+      ([e], obs) => {
+        if (!e.isIntersecting) return;
+        obs.disconnect();
+        const t0 = performance.now();
+        const tick = (now: number) => {
+          const p = Math.min(1, (now - t0) / 1400);
+          const k = 1 - Math.pow(1 - p, 4);
+          nums.forEach((n) => (n.textContent = String(Math.round(Number(n.dataset.count) * k))));
+          if (p < 1) requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      },
+      { threshold: 0.3 },
+    ).observe(row);
+  }
+</script>

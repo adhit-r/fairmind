@@ -58,7 +58,8 @@ const siteSchema = [
   },
 ];
 const pageSchema = structuredData ? [structuredData].flat() : [];
-const appUrl = import.meta.env.PUBLIC_APP_URL;
+// Sign in target. fairmind.xyz is the marketing site; the app lives at app.fairmind.xyz.
+const appUrl = import.meta.env.PUBLIC_APP_URL ?? 'https://app.fairmind.xyz';
 ---
 
 <!doctype html>
@@ -98,7 +99,7 @@ const appUrl = import.meta.env.PUBLIC_APP_URL;
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Instrument+Serif:ital@1&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap"
     />
 
     {[...siteSchema, ...pageSchema].map((schema) => (

@@ -1,31 +1,23 @@
 """Database contract tests for imported-evidence delivery integrity 013i.
 
-PostgreSQL 14 is the release authority. SQLite is only a fail-closed parity
-fixture for the relational delivery binding.
+PostgreSQL 14 is the release authority.
 """
 
 from __future__ import annotations
 
-import hashlib
-import json
 import os
-import sqlite3
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Iterator
 
 import pytest
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 MIGRATIONS = BACKEND_ROOT / "migrations"
-CAPTURED = datetime.now(timezone.utc)
-NOW = CAPTURED.isoformat(timespec="microseconds")
-EXPIRES = (CAPTURED + timedelta(days=1)).isoformat(timespec="microseconds")
 HASH_A = "a" * 64
 HASH_B = "b" * 64
-NONCE = "A" * 43
 POSTGRES_URL = os.getenv("FAIRMIND_TEST_POSTGRES_URL")
 POSTGRES_DIRECT_CHAIN_THROUGH_013H = (
     "001_initial_schema.sql",
@@ -47,540 +39,6 @@ POSTGRES_DIRECT_CHAIN_THROUGH_013H = (
 DIRECT_013I_CHECKSUM = (
     "83c77841beb21dbf96d1e40260534d262dbf21941b21fac4121964a065e36f94"
 )
-
-
-def _install_sqlite_through_013h() -> sqlite3.Connection:
-    from migrations.evaluator_catalog_migration import apply_sqlite as apply_013d
-    from migrations.environmental_tenant_scope_migration import (
-        apply_sqlite as apply_013e,
-    )
-    from migrations.evaluation_assurance_trust_integrity_migration import (
-        sql_for as sql_013b,
-    )
-    from migrations.evaluation_assurance_v2_migration import sql_for as sql_013
-    from migrations.evaluation_binding_integrity_migration import sql_for as sql_013a
-    from migrations.evaluation_runs_migration import sql_for as sql_012
-    from migrations.evidence_verification_receipt_migration import sql_for as sql_013c
-    from migrations.governance_assurance_migration import sql_for as sql_011
-    from migrations.idempotency_retention_integrity_migration import (
-        apply_sqlite as apply_013h,
-    )
-    from migrations.operational_evidence_freshness_migration import (
-        apply_sqlite as apply_013g,
-    )
-    from migrations.trust_authority_integrity_migration import apply_sqlite as apply_013f
-
-    connection = sqlite3.connect(":memory:")
-    connection.execute("PRAGMA foreign_keys = ON")
-    connection.executescript(
-        (MIGRATIONS / "008_governance_canonical.sql").read_text(encoding="utf-8")
-    )
-    connection.executescript(sql_011("sqlite"))
-    connection.executescript(sql_012("sqlite"))
-    connection.executescript(sql_013("sqlite"))
-    connection.executescript(sql_013a("sqlite"))
-    connection.executescript(sql_013b("sqlite"))
-    connection.executescript(sql_013c("sqlite"))
-    apply_013d(connection)
-    apply_013e(connection)
-    apply_013f(connection)
-    apply_013g(connection)
-    apply_013h(connection)
-    return connection
-
-
-def _policy_json(unsigned_import_policy: str = "manual_review") -> str:
-    return json.dumps(
-        {
-            "maximumEvidenceAgeSeconds": 86400,
-            "schemaVersion": "1.0.0",
-            "unsignedImportPolicy": unsigned_import_policy,
-        },
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-
-
-def _seed_sqlite_import_graph(
-    connection: sqlite3.Connection,
-    *,
-    delivery_mode: str,
-    unsigned_import_policy: str = "manual_review",
-    activate_policy: bool = True,
-    capability_state: str = "available",
-    assurance_source: str = "evaluation",
-    envelope_delivery_mode: str | None = None,
-    evidence_run_binding: str = "execution-a",
-    evidence_result: str = "passed",
-    snapshot_result: str = "passed",
-    snapshot_technical_status: str = "succeeded",
-    evidence_content_hash: str = HASH_B,
-    snapshot_content_hash: str = HASH_B,
-    evidence_captured_at: str = NOW,
-    snapshot_captured_at: str = NOW,
-    evidence_expires_at: str = EXPIRES,
-    snapshot_expires_at: str = EXPIRES,
-) -> dict[str, str]:
-    policy_json = _policy_json(unsigned_import_policy)
-    policy_hash = hashlib.sha256(policy_json.encode("utf-8")).hexdigest()
-    connection.execute(
-        "INSERT INTO governance_workspaces "
-        "(id, org_id, name, created_at, updated_at) "
-        "VALUES ('workspace-a', 'org-a', 'Workspace', ?, ?)",
-        (NOW, NOW),
-    )
-    connection.execute(
-        "INSERT INTO governance_ai_systems "
-        "(id, workspace_id, org_id, name, risk_tier, lifecycle_stage, "
-        "metadata_json, created_at, updated_at) "
-        "VALUES ('system-a', 'workspace-a', 'org-a', 'System', 'minimal', "
-        "'design', '{}', ?, ?)",
-        (NOW, NOW),
-    )
-    connection.execute(
-        """
-        INSERT INTO governance_evaluation_target_versions (
-            id, org_id, workspace_id, system_id, target_key, target_kind,
-            version, system_version, subject_kind, subject_id, subject_version,
-            subject_digest, manifest_json, manifest_digest, status, created_by,
-            created_at
-        ) VALUES (
-            'target-a', 'org-a', 'workspace-a', 'system-a', 'primary',
-            'predictive_model', '1.0.0', 'system-v1', 'model', 'subject-a',
-            'subject-v1', ?, '{}', ?, 'active', 'actor-a', ?
-        )
-        """,
-        (HASH_A, HASH_B, NOW),
-    )
-    connection.execute(
-        """
-        INSERT INTO governance_evidence_trust_policy_versions (
-            id, org_id, version, policy_json, policy_hash,
-            maximum_evidence_age_seconds, unsigned_import_policy, status,
-            created_by, policy_schema_version, created_at
-        ) VALUES (
-            'policy-a', 'org-a', '1.0.0', ?, ?, 86400, ?, 'draft',
-            'actor-a', '1.0.0', ?
-        )
-        """,
-        (policy_json, policy_hash, unsigned_import_policy, NOW),
-    )
-    if activate_policy:
-        connection.execute(
-            "UPDATE governance_evidence_trust_policy_versions "
-            "SET status='active', activated_by='actor-a', activated_at=? "
-            "WHERE id='policy-a'",
-            (NOW,),
-        )
-    connection.execute(
-        """
-        INSERT INTO governance_evaluation_suite_versions (
-            id, owner_org_id, owner_scope, namespace, name, version, suite_ref,
-            manifest_json, manifest_digest, target_kinds_json, subject_kinds_json,
-            lifecycle_phases_json, execution_depths_json, delivery_modes_json,
-            worker_type, runner_image_digest, adapter_name, adapter_version,
-            configuration_schema_json, configuration_defaults_json,
-            required_input_roles_json, default_budgets_json,
-            result_contract_version, status, created_by, created_at
-        ) VALUES (
-            'suite-a', NULL, 'platform', 'fairmind', 'import', '1.0.0',
-            'fairmind/import@1.0.0', '{}', ?, '["predictive_model"]', '["model"]',
-            '["pre_deploy"]', '["deep"]', ?, ?, NULL, 'report-import', '1.0.0',
-            '{}', '{}', '[]', '{}', '1.0.0', 'active', 'actor-a', ?
-        )
-        """,
-        (HASH_A, json.dumps([delivery_mode]), delivery_mode, NOW),
-    )
-    connection.execute(
-        """
-        INSERT INTO governance_evaluation_plans (
-            id, org_id, workspace_id, system_id, name, target_kind,
-            lifecycle_phases_json, execution_depth, enforcement_mode,
-            delivery_mode, suite_refs_json, status, created_by, updated_by,
-            created_at, updated_at, contract_version, target_version_id,
-            plan_content_hash, trust_policy_version_id
-        ) VALUES (
-            'plan-a', 'org-a', 'workspace-a', 'system-a', 'Plan',
-            'predictive_model', '["pre_deploy"]', 'deep', 'human_approval', ?,
-            '["fairmind/import@1.0.0"]', 'draft', 'actor-a', 'actor-a', ?, ?,
-            '2.0.0', 'target-a', ?, 'policy-a'
-        )
-        """,
-        (delivery_mode, NOW, NOW, HASH_B),
-    )
-    connection.execute(
-        """
-        INSERT INTO governance_evaluation_plan_suites (
-            id, org_id, workspace_id, system_id, plan_id, suite_version_id,
-            suite_owner_scope, ordinal, configuration_json, configuration_hash,
-            created_at
-        ) VALUES (
-            'selection-a', 'org-a', 'workspace-a', 'system-a', 'plan-a',
-            'suite-a', 'platform', 0, '{}', ?, ?
-        )
-        """,
-        (HASH_A, NOW),
-    )
-    connection.execute(
-        "UPDATE governance_evaluation_plans SET status='active', "
-        "updated_by='actor-b', updated_at='2026-08-14T00:00:01+00:00' "
-        "WHERE id='plan-a'"
-    )
-    envelope = {
-        "schemaVersion": "2.0.0",
-        "envelopeId": "envelope-a",
-        "runId": "run-a",
-        "organizationId": "org-a",
-        "workspaceId": "workspace-a",
-        "systemId": "system-a",
-        "planId": "plan-a",
-        "planContentHash": HASH_B,
-        "deliveryMode": envelope_delivery_mode or delivery_mode,
-        "trustPolicy": {
-            "id": "policy-a",
-            "version": "1.0.0",
-            "policyHash": policy_hash,
-        },
-        "nonce": NONCE,
-        "requestedAt": NOW,
-    }
-    envelope_json = json.dumps(envelope, sort_keys=True, separators=(",", ":"))
-    envelope_hash = hashlib.sha256(envelope_json.encode("utf-8")).hexdigest()
-    layers = json.dumps(
-        {
-            "suites": {"execution-a": "insufficient"},
-            "modalities": {},
-            "components": {},
-            "riskDimensions": {},
-        },
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-    # The frozen 013b SQLite fixture has a known unrelated NEW.admission_status
-    # reference in its run INSERT trigger. Preserve that immutable artifact,
-    # bypass it only while seeding this dedicated 013i parity scenario, and
-    # restore its exact definition before exercising the new guard.
-    run_guard_sql = connection.execute(
-        "SELECT sql FROM sqlite_master WHERE type='trigger' "
-        "AND name='governance_evaluation_runs_v2_guard_insert'"
-    ).fetchone()[0]
-    connection.execute("DROP TRIGGER governance_evaluation_runs_v2_guard_insert")
-    connection.execute(
-        """
-        INSERT INTO governance_evaluation_runs (
-            id, org_id, workspace_id, system_id, plan_id, contract_version,
-            trigger, technical_status, overall_verdict, layer_verdicts_json,
-            linked_evidence_run_id, linked_passport_revision_id, linked_by,
-            linked_at, requested_by, started_at, completed_at, failure_code,
-            failure_message, created_at, updated_at, lifecycle_phase, envelope_id,
-            envelope_json, envelope_hash, envelope_nonce, evidence_outcome,
-            verdict_version, layer_verdicts_schema_version
-        ) VALUES (
-            'run-a', 'org-a', 'workspace-a', 'system-a', 'plan-a', '2.0.0',
-            'manual', 'awaiting_evidence', 'insufficient', ?, NULL, NULL, NULL,
-            NULL, 'actor-a', NULL, NULL, NULL, NULL, ?, ?, 'pre_deploy',
-            'envelope-a', ?, ?, ?, 'pending', 0, '1.0.0'
-        )
-        """,
-        (layers, NOW, NOW, envelope_json, envelope_hash, NONCE),
-    )
-    connection.execute(run_guard_sql)
-    connection.execute(
-        """
-        INSERT INTO governance_evaluation_run_suite_executions (
-            id, org_id, workspace_id, system_id, run_id, suite_version_id,
-            suite_owner_scope, ordinal, technical_status, evidence_result_status,
-            admission_status, review_status, freshness_status, created_at,
-            updated_at
-        ) VALUES (
-            'execution-a', 'org-a', 'workspace-a', 'system-a', 'run-a',
-            'suite-a', 'platform', 0, 'awaiting_evidence', 'pending', 'pending',
-            'pending', 'current', ?, ?
-        )
-        """,
-        (NOW, NOW),
-    )
-    snapshot = {
-        "schemaVersion": "1.0.0",
-        "sourceType": "imported_report",
-        "resultAuthority": "claimed",
-        "humanReviewOnly": True,
-        "decisionEvidenceEligible": False,
-        "organizationId": "org-a",
-        "workspaceId": "workspace-a",
-        "systemId": "system-a",
-        "runId": "run-a",
-        "envelope": {
-            "id": "envelope-a",
-            "hash": envelope_hash,
-            "nonce": NONCE,
-        },
-        "plan": {
-            "id": "plan-a",
-            "contentHash": HASH_B,
-            "deliveryMode": "imported_report",
-        },
-        "target": {
-            "id": "target-a",
-            "subjectDigest": HASH_A,
-            "manifestDigest": HASH_B,
-        },
-        "suite": {
-            "executionId": "execution-a",
-            "versionId": "suite-a",
-            "ownerScope": "platform",
-            "ordinal": 0,
-            "adapterName": "report-import",
-            "adapterVersion": "1.0.0",
-            "resultContractVersion": "1.0.0",
-        },
-        "trustPolicy": {
-            "id": "policy-a",
-            "hash": policy_hash,
-            "maximumEvidenceAgeSeconds": 86400,
-            "unsignedImportPolicy": "manual_review",
-        },
-        "report": {
-            "id": "report-a",
-            "contentHash": snapshot_content_hash,
-            "capturedAt": snapshot_captured_at,
-            "effectiveExpiresAt": snapshot_expires_at,
-            "claimedTechnicalStatus": snapshot_technical_status,
-            "claimedEvidenceResultStatus": snapshot_result,
-            "claimedResultSummary": {},
-            "artifactRefs": [],
-            "limitations": [],
-        },
-    }
-    snapshot_json = json.dumps(snapshot, sort_keys=True, separators=(",", ":"))
-    snapshot_hash = hashlib.sha256(snapshot_json.encode("utf-8")).hexdigest()
-    provenance_json = json.dumps(
-        {
-            "sourceType": "imported_report",
-            "resultAuthority": "claimed",
-            "humanReviewOnly": True,
-            "decisionEvidenceEligible": False,
-            "importSnapshotHash": snapshot_hash,
-        },
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-    connection.execute(
-        """
-        INSERT INTO governance_evidence_runs (
-            id, org_id, system_id, workspace_id, passport_id, schema_version,
-            capability_state, assurance_source, source_type, source_identifier,
-            run_id, content_hash, result, provenance_json, artifact_refs_json,
-            limitations_json, captured_at, expires_at, evidence_id, created_at
-        ) VALUES (
-            'evidence-a', 'org-a', 'system-a', 'workspace-a', 'passport-a',
-            '2.0.0', ?, ?, 'imported_report', 'report-a',
-            ?, ?, ?, ?, '[]', '[]', ?, ?, NULL, ?
-        )
-        """,
-        (
-            capability_state,
-            assurance_source,
-            evidence_run_binding,
-            evidence_content_hash,
-            evidence_result,
-            provenance_json,
-            evidence_captured_at,
-            evidence_expires_at,
-            NOW,
-        ),
-    )
-    connection.execute(
-        """
-        INSERT INTO governance_evidence_passport_revisions (
-            id, org_id, system_id, evidence_run_id, passport_id,
-            passport_revision, previous_revision_hash, canonical_content_hash,
-            snapshot_json, created_by, created_at
-        ) VALUES (
-            'revision-a', 'org-a', 'system-a', 'evidence-a', 'passport-a', 1,
-            NULL, ?, ?, 'actor-a', ?
-        )
-        """,
-        (snapshot_hash, snapshot_json, NOW),
-    )
-    return {"envelope_hash": envelope_hash, "snapshot_hash": snapshot_hash}
-
-
-def _insert_unverified_admission(
-    connection: sqlite3.Connection,
-    *,
-    envelope_hash: str,
-    captured_at: str = NOW,
-    effective_expires_at: str = EXPIRES,
-) -> None:
-    connection.execute(
-        """
-        INSERT INTO governance_evidence_admissions (
-            id, org_id, workspace_id, system_id, evidence_run_id,
-            passport_revision_id, trust_policy_version_id, suite_execution_id,
-            envelope_hash, admission_status, freshness_status, issuer_id,
-            signing_key_id, signer_key_id, signer_algorithm, reasons_json,
-            checked_by, checked_at, created_at, contract_version, run_id,
-            envelope_id, envelope_nonce, submitted_by, captured_at, signed_at,
-            effective_expires_at
-        ) VALUES (
-            'admission-a', 'org-a', 'workspace-a', 'system-a', 'evidence-a',
-            'revision-a', 'policy-a', 'execution-a', ?, 'unverified', 'current',
-            NULL, NULL, NULL, NULL, '["unverified_import_manual_review"]',
-            'fairmind/imported-evidence-service', ?, ?, '2.0.0',
-            'run-a', 'envelope-a', ?, 'actor-a', ?, NULL, ?
-        )
-        """,
-        (
-            envelope_hash,
-            NOW,
-            NOW,
-            NONCE,
-            captured_at,
-            effective_expires_at,
-        ),
-    )
-
-
-def test_sqlite_013i_rejects_unverified_import_on_cross_mode_run() -> None:
-    """Removing the 013i parity trigger would allow unsigned cross-mode laundering."""
-
-    from migrations.imported_evidence_delivery_integrity_migration import apply_sqlite
-
-    connection = _install_sqlite_through_013h()
-    try:
-        graph = _seed_sqlite_import_graph(
-            connection,
-            delivery_mode="external_provider",
-        )
-        apply_sqlite(connection)
-        with pytest.raises(
-            sqlite3.IntegrityError,
-            match="unverified evidence delivery binding failed",
-        ):
-            _insert_unverified_admission(
-                connection,
-                envelope_hash=graph["envelope_hash"],
-            )
-    finally:
-        connection.close()
-
-
-def test_sqlite_013i_allows_exact_manual_review_import_without_receipt() -> None:
-    from migrations.imported_evidence_delivery_integrity_migration import apply_sqlite
-
-    connection = _install_sqlite_through_013h()
-    try:
-        graph = _seed_sqlite_import_graph(
-            connection,
-            delivery_mode="imported_report",
-        )
-        apply_sqlite(connection)
-        _insert_unverified_admission(
-            connection,
-            envelope_hash=graph["envelope_hash"],
-        )
-        assert connection.execute(
-            "SELECT count(*) FROM governance_evidence_verification_receipts "
-            "WHERE admission_id='admission-a'"
-        ).fetchone() == (0,)
-    finally:
-        connection.close()
-
-
-@pytest.mark.parametrize(
-    ("seed_overrides", "case"),
-    [
-        ({"unsigned_import_policy": "reject"}, "reject policy"),
-        ({"activate_policy": False}, "inactive policy"),
-        ({"capability_state": "unavailable"}, "unavailable evidence"),
-        ({"assurance_source": "user_asserted"}, "non-evaluation evidence"),
-        ({"envelope_delivery_mode": "external_provider"}, "cross-paired envelope"),
-    ],
-)
-def test_sqlite_013i_rejects_non_authoritative_import_graphs(
-    seed_overrides: dict[str, object],
-    case: str,
-) -> None:
-    from migrations.imported_evidence_delivery_integrity_migration import apply_sqlite
-
-    connection = _install_sqlite_through_013h()
-    try:
-        graph = _seed_sqlite_import_graph(
-            connection,
-            delivery_mode="imported_report",
-            **seed_overrides,
-        )
-        apply_sqlite(connection)
-        with pytest.raises(
-            sqlite3.IntegrityError,
-            match="unverified evidence delivery binding failed",
-        ):
-            _insert_unverified_admission(
-                connection,
-                envelope_hash=graph["envelope_hash"],
-            )
-    finally:
-        connection.close()
-
-
-@pytest.mark.parametrize(
-    ("seed_overrides", "admission_overrides", "case"),
-    [
-        ({"evidence_run_binding": "other-execution"}, {}, "cross execution"),
-        ({"evidence_result": "failed"}, {}, "claimed result"),
-        ({"evidence_content_hash": HASH_A}, {}, "report content"),
-        (
-            {"evidence_captured_at": (CAPTURED - timedelta(seconds=1)).isoformat(timespec="microseconds")},
-            {},
-            "captured time",
-        ),
-        (
-            {
-                "evidence_expires_at": (
-                    CAPTURED + timedelta(hours=23)
-                ).isoformat(timespec="microseconds"),
-                "snapshot_expires_at": (
-                    CAPTURED + timedelta(hours=23)
-                ).isoformat(timespec="microseconds"),
-            },
-            {
-                "effective_expires_at": (
-                    CAPTURED + timedelta(hours=23)
-                ).isoformat(timespec="microseconds")
-            },
-            "policy-derived expiry",
-        ),
-    ],
-)
-def test_sqlite_013i_rejects_snapshot_laundering(
-    seed_overrides: dict[str, str],
-    admission_overrides: dict[str, str],
-    case: str,
-) -> None:
-    """Removing one exact snapshot predicate would admit the named laundering case."""
-
-    from migrations.imported_evidence_delivery_integrity_migration import apply_sqlite
-
-    connection = _install_sqlite_through_013h()
-    try:
-        graph = _seed_sqlite_import_graph(
-            connection,
-            delivery_mode="imported_report",
-            **seed_overrides,
-        )
-        apply_sqlite(connection)
-        with pytest.raises(
-            sqlite3.IntegrityError,
-            match="unverified evidence delivery binding failed",
-        ):
-            _insert_unverified_admission(
-                connection,
-                envelope_hash=graph["envelope_hash"],
-                **admission_overrides,
-            )
-    finally:
-        connection.close()
 
 
 def test_postgresql_013i_payload_declares_exact_admission_guard() -> None:
@@ -1570,3 +1028,43 @@ def test_native_postgresql_013i_rejects_reject_and_retired_policy(
         )
     with pytest.raises(DBAPIError):
         _insert_postgresql_unverified_import(postgresql_013i_engine, retired_graph)
+
+
+def test_native_postgresql_013k_preserves_exact_unverified_import_links(
+    postgresql_013i_engine: object,
+) -> None:
+    """013k must layer verified-link authority without replacing the 013b/013i path."""
+    from sqlalchemy import text
+
+    with postgresql_013i_engine.begin() as connection:
+        schema_name = str(connection.scalar(text("SELECT current_schema()")))
+        for migration_name in (
+            "013j_owner_decision_override_integrity.sql",
+            "013k_verified_evidence_link_integrity.sql",
+        ):
+            connection.execute(
+                text(
+                    "SELECT pg_catalog.set_config"
+                    "('fairmind.migration_schema', :schema_name, false)"
+                ),
+                {"schema_name": schema_name},
+            )
+            connection.execute(
+                text((MIGRATIONS / migration_name).read_text(encoding="utf-8"))
+            )
+
+    graph = _seed_postgresql_run(
+        postgresql_013i_engine,
+        delivery_mode="imported_report",
+    )
+    _insert_postgresql_unverified_import(postgresql_013i_engine, graph)
+    _project_postgresql_unverified_import(postgresql_013i_engine, graph)
+
+    with postgresql_013i_engine.connect() as connection:
+        assert connection.scalar(
+            text(
+                "SELECT count(*) FROM governance_evaluation_suite_evidence_links "
+                "WHERE suite_execution_id=:execution_id"
+            ),
+            graph,
+        ) == 1

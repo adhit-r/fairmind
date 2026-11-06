@@ -483,6 +483,9 @@ def _record_time(record: Dict[str, Any]) -> Optional[datetime]:
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
+_NO_TIME = datetime.min.replace(tzinfo=timezone.utc)
+
+
 def _span(hours: float) -> str:
     """"12 days" or "30 hours": whole days once a span passes two days."""
     if hours >= 48:
@@ -499,13 +502,18 @@ def release_gate(
     environmental_assessed: bool = False,
     monitoring_cadence_hours: Optional[int] = None,
     now: Optional[datetime] = None,
+    approval_status: str = "not_requested",
+    last_decision: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Verdict, confidence and the state of each check from the evidence on file.
 
-    A check is proven when measured or tool-estimated evidence with confidence
-    at or above 0.70 backs it, attested when any other evidence does, open when
-    nothing does. The verdict comes from the impact-by-confidence matrix; a
-    measured fairness failure never lets a system through as a plain go.
+    Each check reads its newest record (the higher confidence breaks a tie): proven
+    when that record is measured or tool-estimated with confidence at or above
+    0.70, attested when it is anything else, open when nothing is on file. The
+    verdict comes from the impact-by-confidence matrix; a measured fairness failure
+    never lets a system through as a plain go. A rejected release decision makes it
+    no go, and ``last_decision`` (the newest decided request) keeps a rejection
+    standing while a newer request waits for a reviewer.
 
     With ``monitoring_cadence_hours`` the monitoring check is proven only while
     the newest qualifying snapshot is within 1.5 cadences old; past that it is open.
@@ -525,25 +533,26 @@ def release_gate(
                 if age_hours > STALE_AFTER_CADENCES * monitoring_cadence_hours:
                     stale_for = age_hours
                     reasons.append(f"Latest monitoring snapshot is {_span(age_hours)} old; the cadence is {_span(monitoring_cadence_hours)}")
-        for record in ([] if stale_for is not None else sorted(matching, key=lambda r: float(r.get("confidence") or 0.0), reverse=True)):
+        if matching and stale_for is None:
+            record = max(matching, key=lambda r: (_record_time(r) or _NO_TIME, float(r.get("confidence") or 0.0)))
             prov = _provenance(record)
-            conf = cap_confidence_for_provenance(float(record.get("confidence") or 0.0), prov if prov in PROVEN_CLASSES else "manual")
-            if prov in PROVEN_CLASSES and conf >= 0.70:
-                state, confidence, evidence_id = "proven", conf, record.get("id")
-                content = record.get("content") or {}
-                if key in ("fairness", "monitoring") and isinstance(content, dict):
-                    detail = {"all_checks_pass": content.get("all_checks_pass"), "rows": content.get("rows"), "attributes": [a.get("attribute") for a in content.get("attributes", [])]}
-                    if content.get("all_checks_pass") is False:
-                        reasons.append("Measured fairness checks fail on at least one attribute" if key == "fairness" else "Latest monitoring snapshot shows drift or disparity outside thresholds")
-                break
-            if state == "open":
-                state, confidence, evidence_id = "attested", conf, record.get("id")
+            confidence = cap_confidence_for_provenance(float(record.get("confidence") or 0.0), prov if prov in PROVEN_CLASSES else "manual")
+            state = "proven" if prov in PROVEN_CLASSES and confidence >= 0.70 else "attested"
+            evidence_id = record.get("id")
+            content = record.get("content") or {}
+            if key in ("fairness", "monitoring") and prov in PROVEN_CLASSES and isinstance(content, dict):
+                detail = {"all_checks_pass": content.get("all_checks_pass"), "rows": content.get("rows"), "attributes": [a.get("attribute") for a in content.get("attributes", [])]}
+                if content.get("all_checks_pass") is False:
+                    reasons.append("Measured fairness checks fail on at least one attribute" if key == "fairness" else "Latest monitoring snapshot shows drift or disparity outside thresholds")
         checks.append({"key": key, "label": label, "state": state, "confidence": round(confidence, 2), "evidenceId": evidence_id, "detail": detail, **({"stale": True} if stale_for is not None else {})})
 
     overall = round(sum(c["confidence"] for c in checks) / len(checks), 2) if checks else 0.0
     verdict = get_recommendation(TIER_TO_IMPACT.get(str(risk_tier).lower(), "high"), overall)
     if reasons and verdict == "go":
         verdict = "conditional_go"
+    if approval_status == "rejected" or last_decision == "rejected":
+        verdict = "no_go"
+        reasons.insert(0, "The last release decision was rejected; it stands until a reviewer approves a new request")
     open_checks = [c["label"] for c in checks if c["state"] == "open"]
     missing = [c["label"] for c in checks if c["state"] == "open" and not c.get("stale")]
     if missing:
@@ -557,4 +566,5 @@ def release_gate(
         "proven": sum(1 for c in checks if c["state"] == "proven"),
         "attested": sum(1 for c in checks if c["state"] == "attested"),
         "open": len(open_checks),
+        "approvalStatus": approval_status,
     }

@@ -22,16 +22,16 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from api.main import app
 from config.auth import TokenData, TokenType, User as AuthUser, UserRole, auth_manager
 from config.jwt_exceptions import JWT_EXCEPTION_HANDLERS
-from database.connection import Base, get_db
+from database.connection import get_db
 from database.governance_models import GovernanceAISystem, GovernanceWorkspace
 from database.models import Organization, OrganizationMember, User
+from tests import pg
 
 ORG_A = str(uuid.uuid4())
 ORG_B = str(uuid.uuid4())
@@ -62,7 +62,9 @@ def _bearer(user_id: str, role: UserRole = UserRole.ANALYST) -> dict:
             role=data.role,
             created_at=data.iat,
             permissions=data.permissions,
-        )
+        ),
+        # Minted once at import, so it must outlive a full suite run (about 30 minutes on PostgreSQL).
+        expires_delta=timedelta(hours=6),
     )
     return {"Authorization": f"Bearer {token}"}
 
@@ -96,12 +98,13 @@ def _seed_member(session, org_id: str, user_id: str, role: str) -> None:
 
 @pytest.fixture
 def db():
-    """In-memory database with both tenants, one registered AI system each, and the legacy tables."""
-    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
-    Base.metadata.create_all(engine)
+    """Fresh PostgreSQL database with both tenants, one registered AI system each, and the legacy tables."""
+    engine = pg.fresh_engine()
     with engine.begin() as conn:
-        # The legacy routes read the 001_initial_schema shape of audit_logs (created_at), not the ORM's.
-        conn.execute(text("DROP TABLE audit_logs"))
+        # The legacy routes read the 001_initial_schema shape of these tables, not the ORM's. audit_logs is
+        # left as the ORM builds it: the model now has the live shape (001 plus 019's org_id).
+        for table in ("models", "datasets", "geographic_bias_analyses", "profiles", "bias_test_results"):
+            conn.execute(text(f"DROP TABLE IF EXISTS {table} CASCADE"))
         for stmt in (
             "CREATE TABLE models (id TEXT PRIMARY KEY, name TEXT, description TEXT, model_type TEXT, version TEXT, "
             "upload_date TEXT, updated_at TEXT, file_path TEXT, file_size INTEGER, tags TEXT, metadata TEXT, "
@@ -109,15 +112,13 @@ def db():
             "CREATE TABLE datasets (id TEXT PRIMARY KEY, name TEXT, description TEXT, source TEXT, size INTEGER, "
             "columns TEXT, upload_date TEXT, tags TEXT, file_path TEXT, file_type TEXT, file_size INTEGER, "
             "created_by TEXT, org_id TEXT)",
-            "CREATE TABLE audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, action TEXT, "
-            "resource_type TEXT, resource_id TEXT, details TEXT, ip_address TEXT, user_agent TEXT, created_at TEXT)",
             "CREATE TABLE geographic_bias_analyses (id TEXT PRIMARY KEY, model_id TEXT, source_country TEXT, "
-            "target_country TEXT, bias_score REAL, risk_level TEXT, compliance_status TEXT, analysis_date TEXT, "
+            "target_country TEXT, bias_score DOUBLE PRECISION, risk_level TEXT, compliance_status TEXT, analysis_date TEXT, "
             "org_id TEXT)",
             "CREATE TABLE profiles (id TEXT PRIMARY KEY, username TEXT, full_name TEXT, avatar_url TEXT, "
             "role TEXT, created_at TEXT)",
-            "CREATE TABLE bias_test_results (id TEXT PRIMARY KEY, test_name TEXT, bias_score REAL, is_biased INTEGER, "
-            "confidence REAL, category TEXT, explainability_method TEXT, insights TEXT, created_at TEXT, org_id TEXT)",
+            "CREATE TABLE bias_test_results (id TEXT PRIMARY KEY, test_name TEXT, bias_score DOUBLE PRECISION, is_biased BOOLEAN, "
+            "confidence DOUBLE PRECISION, category TEXT, explainability_method TEXT, insights TEXT, created_at TIMESTAMPTZ, org_id TEXT)",
         ):
             conn.execute(text(stmt))
     factory = sessionmaker(bind=engine)
@@ -163,8 +164,6 @@ def db():
         yield engine, factory, override_db
     finally:
         app.dependency_overrides.clear()
-        Base.metadata.drop_all(engine)
-        engine.dispose()
 
 
 @pytest.fixture
@@ -220,7 +219,7 @@ def _mini_app(db, module: str, prefix: str = "/api/v1") -> TestClient:
 # --------------------------------------------------------------------------- legacy-table adapters
 
 
-class _SqliteConnection:
+class _EngineConnection:
     """The slice of config.database.get_db_connection() the core routes use, over the test engine."""
 
     def __init__(self, engine):
@@ -235,6 +234,11 @@ class _SqliteConnection:
     async def fetch_one(self, query, params=None):
         rows = await self.fetch_all(query, params)
         return rows[0] if rows else None
+
+    async def execute(self, query, params=None):
+        self.queries.append((query, params or {}))
+        with self.engine.begin() as conn:
+            conn.execute(text(query), params or {})
 
 
 class _Cache:
@@ -258,7 +262,7 @@ def legacy(db, monkeypatch):
     from api.routes import database as database_routes
 
     engine = db[0]
-    connection = _SqliteConnection(engine)
+    connection = _EngineConnection(engine)
 
     @asynccontextmanager
     async def fake_connection():
@@ -318,8 +322,6 @@ UNSIGNED = [
     ("GET", "/api/v1/database/audit-logs"),
     ("GET", "/api/v1/models"),
     ("GET", "/api/v1/integrations"),
-    ("GET", "/api/policies"),
-    ("POST", "/api/policies"),
     ("POST", "/api/v1/india/check"),
     ("GET", "/api/v1/india/trends?system_id=system-a&framework=dpdp_act_2023"),
 ]
@@ -460,60 +462,6 @@ def test_mlops_logging_needs_mutation_permission_and_tags_the_organisation(clien
     assert seen["metadata"]["org_id"] == ORG_A
 
 
-# --------------------------------------------------------------------------- policies
-
-
-@pytest.fixture
-def policies(client):
-    from api.routes import policies as policy_routes
-
-    policy_routes._tables_ready = False
-    yield
-    policy_routes._tables_ready = False
-
-
-def _policy(client, headers, name="Release gate"):
-    return client.post(
-        "/api/policies", headers=headers, json={"name": name, "framework": "eu_ai_act", "rules": [{"id": "r1"}]}
-    )
-
-
-def test_policies_are_per_organisation(client, policies):
-    created = _policy(client, A)
-    assert created.status_code == 200
-    policy_id = created.json()["id"]
-
-    assert [p["id"] for p in client.get("/api/policies", headers=A).json()] == [policy_id]
-    assert client.get("/api/policies", headers=B).json() == []
-    assert client.get(f"/api/policies/{policy_id}", headers=B).status_code == 404
-    assert client.get(f"/api/policies/{policy_id}/versions", headers=B).status_code == 404
-    assert client.patch(f"/api/policies/{policy_id}", headers=B, json={"status": "review"}).status_code == 404
-
-    untouched = client.get(f"/api/policies/{policy_id}", headers=A).json()
-    assert untouched["status"] == "draft" and untouched["version"] == 1
-
-
-def test_policy_changes_need_mutation_permission(client, policies):
-    policy_id = _policy(client, A).json()["id"]
-    assert _policy(client, A_MEMBER, "Member policy").status_code == 403
-    assert client.patch(f"/api/policies/{policy_id}", headers=A_MEMBER, json={"status": "review"}).status_code == 403
-    assert client.get(f"/api/policies/{policy_id}", headers=A_MEMBER).status_code == 200
-
-
-def test_a_policy_with_no_organisation_is_visible_to_nobody(client, policies, db):
-    assert client.get("/api/policies", headers=A).status_code == 200  # creates the org_id column
-    with db[1]() as session:
-        session.execute(
-            text(
-                "INSERT INTO governance_policies (id, name, framework, rules_json, status, version, created_at, updated_at) "
-                "VALUES ('legacy', 'Legacy', 'eu_ai_act', '[]', 'draft', 1, 'now', 'now')"
-            )
-        )
-        session.commit()
-    assert client.get("/api/policies", headers=A).json() == []
-    assert client.get("/api/policies/legacy", headers=B).status_code == 404
-
-
 # --------------------------------------------------------------------------- core and database legacy tables
 
 
@@ -541,8 +489,8 @@ def test_core_models_and_datasets_are_per_organisation(client, legacy):
 
 def test_core_activity_lists_only_the_organisations_members(client, legacy):
     engine, _ = legacy
-    for user, action in ((OWNER_A, "a-did-this"), (OWNER_B, "b-did-this")):
-        _insert(engine, "audit_logs", user_id=user, action=action, created_at="2026-01-01")
+    for org, user, action in ((ORG_A, OWNER_A, "a-did-this"), (ORG_B, OWNER_B, "b-did-this")):
+        _insert(engine, "audit_logs", org_id=org, user_id=user, action=action, created_at="2026-01-01")
     _insert(engine, "audit_logs", user_id=None, action="system", created_at="2026-01-02")
 
     assert [a["type"] for a in client.get("/api/v1/core/activity/recent", headers=A).json()["data"]] == ["a-did-this"]
@@ -597,9 +545,9 @@ def test_database_routes_are_per_organisation(client, legacy):
         _insert(engine, "geographic_bias_analyses", id=f"geo-{model}", model_id=model, source_country="IN",
                 target_country="US", bias_score=0.1, risk_level="low", compliance_status="pending",
                 analysis_date="2026-01-01", org_id=org)
-    for user, name in ((OWNER_A, "alice"), (OWNER_B, "bob")):
+    for org, user, name in ((ORG_A, OWNER_A, "alice"), (ORG_B, OWNER_B, "bob")):
         _insert(engine, "profiles", id=user, username=name, full_name=name, role="user", created_at="2026-01-01")
-        _insert(engine, "audit_logs", user_id=user, action=f"{name}-action", created_at="2026-01-01")
+        _insert(engine, "audit_logs", org_id=org, user_id=user, action=f"{name}-action", created_at="2026-01-01")
 
     assert [m["id"] for m in client.get("/api/v1/database/models", headers=A).json()["data"]] == ["model-a"]
     assert [m["id"] for m in client.get("/api/v1/models", headers=B).json()["data"]] == ["model-b"]
@@ -857,7 +805,7 @@ def test_modern_bias_results_are_per_organisation_and_configuration_is_admin_onl
 
     engine = db[0]
     for org, name in ((ORG_A, "a-test"), (ORG_B, "b-test")):
-        _insert(engine, "bias_test_results", id=name, test_name=name, bias_score=0.2, is_biased=0, confidence=0.9,
+        _insert(engine, "bias_test_results", id=name, test_name=name, bias_score=0.2, is_biased=False, confidence=0.9,
                 category="gender", explainability_method="shap", insights=name, created_at="2026-01-01", org_id=org)
 
     class FakeManager:

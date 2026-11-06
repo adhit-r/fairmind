@@ -16,6 +16,8 @@ export const API_ENDPOINTS = {
     refresh: '/api/v1/auth/refresh',
     logout: '/api/v1/auth/logout',
     me: '/api/v1/auth/me',
+    requestPasswordReset: '/api/v1/auth/password-reset/request',
+    resetPassword: '/api/v1/auth/password-reset',
     apiKeys: '/api/v1/auth/api-keys',
     createApiKey: '/api/v1/auth/api-keys',
     deleteApiKey: (keyName: string) => `/api/v1/auth/api-keys/${keyName}`,
@@ -113,8 +115,7 @@ export const API_ENDPOINTS = {
 
   // AI Governance
   aiGovernance: {
-    policies: '/api/v1/ai-governance/policies',
-    evaluatePolicy: (ruleId: string) => `/api/v1/ai-governance/policies/${ruleId}/evaluate`,
+    policies: (orgId: string) => `/api/v1/ai-governance/organizations/${orgId}/policies`,
     complianceAssess: '/api/v1/ai-governance/compliance/assess',
     complianceFrameworks: '/api/v1/ai-governance/compliance/frameworks',
     frameworkControls: (framework: string) => `/api/v1/ai-governance/compliance/frameworks/${framework}/controls`,
@@ -354,6 +355,12 @@ export const API_ENDPOINTS = {
     installFramework: (frameworkKey: string) => `/api/v1/packs/journeys/${encodeURIComponent(frameworkKey)}/install`,
     evaluations: '/api/v1/packs/evaluations',
     evaluation: (evaluationId: string) => `/api/v1/packs/evaluations/${encodeURIComponent(evaluationId)}`,
+    evaluationEngine: (evaluationId: string) => `/api/v1/packs/evaluations/${encodeURIComponent(evaluationId)}/engine`,
+    evaluationRuns: (evaluationId: string) => `/api/v1/packs/evaluations/${encodeURIComponent(evaluationId)}/runs`,
+    evaluationRun: (runId: string) => `/api/v1/packs/evaluation-runs/${runId}`,
+    evaluationJob: (jobId: string) => `/api/v1/packs/evaluation-jobs/${jobId}`,
+    systemTarget: (systemId: string) => `/api/v1/packs/ai-systems/${systemId}/target`,
+    systemTargetTest: (systemId: string) => `/api/v1/packs/ai-systems/${systemId}/target/test`,
     workflow: (workflowId: string) => `/api/v1/packs/workflows/${workflowId}`,
     startRun: (workflowId: string) => `/api/v1/packs/workflows/${workflowId}/runs`,
     draft: (workflowId: string) => `/api/v1/packs/workflows/${workflowId}/draft`,
@@ -362,6 +369,13 @@ export const API_ENDPOINTS = {
     run: (runId: string) => `/api/v1/packs/runs/${runId}`,
     stepOutput: (runId: string, stepId: string) => `/api/v1/packs/runs/${runId}/steps/${stepId}/output`,
     decision: (runId: string) => `/api/v1/packs/runs/${runId}/decision`,
+    agentStep: (runId: string, stepId: string) => `/api/v1/packs/runs/${runId}/steps/${stepId}/agent`,
+    aiProviders: '/api/v1/packs/ai-providers',
+    aiProvider: '/api/v1/packs/ai-provider',
+    aiProviderTest: '/api/v1/packs/ai-provider/test',
+    platformConnections: '/api/v1/packs/platform-connections',
+    platformConnection: (platform: string) => `/api/v1/packs/platform-connections/${encodeURIComponent(platform)}`,
+    platformConnectionTest: (platform: string) => `/api/v1/packs/platform-connections/${encodeURIComponent(platform)}/test`,
   },
 
   // Organizations (Multi-org support)

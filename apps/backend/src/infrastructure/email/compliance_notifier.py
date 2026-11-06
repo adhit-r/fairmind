@@ -9,6 +9,7 @@ Handles email and webhook notifications for:
 """
 
 import logging
+from urllib.parse import urlparse
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from enum import Enum
@@ -579,7 +580,8 @@ class ComplianceNotifier:
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 # Check if it's a Slack webhook (special formatting)
-                if "slack.com" in url:
+                host = (urlparse(url).hostname or "").lower()
+                if host == "slack.com" or host.endswith(".slack.com"):
                     payload = self._format_slack_webhook(payload)
 
                 response = await client.post(url, json=payload)

@@ -1,8 +1,7 @@
 """Fail-closed startup verification for the assurance migration chain.
 
 PostgreSQL is the release authority and therefore verifies the operator ledger
-against a frozen source manifest. SQLite is a development/parity fixture and
-verifies only the installed schema and foreign-key enforcement.
+against a frozen source manifest. Any other dialect fails closed.
 """
 
 from __future__ import annotations
@@ -73,50 +72,30 @@ FROZEN_013B_OPERATOR_V2_CHECKSUM = (
 )
 _FROZEN_013C_CHECKSUM = "b121f3d1d8723da5b932231e234270cf037dfa239151ec5a518184915032dbae"
 FROZEN_013C_OPERATOR_CHECKSUM = "8f7ec1bda9041f16a03ace75202e590fc8a92947495a792f1b886a55fe621040"
-FROZEN_SQLITE_013C_FIXTURE_CHECKSUM = (
-    "876c377bfb6063b063c0f6cbd20d31089187f0ceae7d40d5ba1ab44c81ecb50d"
-)
 _FROZEN_013D_CHECKSUM = "d5d167dabc3d2458aa5aab6d2cb120ae9c90f798bf4ace6b193b58d4660c6cb9"
 FROZEN_013D_OPERATOR_CHECKSUM = "7a1d368fc1556e6286e047bf73c47878ab69fb31d2b25e7cf139b6919a00d77d"
-FROZEN_SQLITE_013D_FIXTURE_CHECKSUM = (
-    "1d88a2c78cb10871259471fda2b9336043756d0a989941afbc616e10df5e015f"
-)
 _FROZEN_013E_CHECKSUM = "95f5b016fa9abbffab7d7ff45547c888364ccf0d29d26b9f22d4440ce0a3cf32"
 FROZEN_013E_OPERATOR_CHECKSUM = "6397810191ab919a0bf3246a17d04284344afa96acfd291b9485e361c4fcb1e6"
-FROZEN_SQLITE_013E_FIXTURE_CHECKSUM = (
-    "055b763555474740fa72cdc16b6e351906d7716e3b980c83ec986ae04314779e"
-)
 _FROZEN_013F_CHECKSUM = "c6cd4b77875b3fe3cc9c2140d9ca1f619e17adbefbedc37a31cea342dbc64fb6"
 FROZEN_013F_OPERATOR_CHECKSUM = (
     "55cae25a29e05bcb538b049dbe743994d8e19f759dd0c19992ed494405f1120d"
-)
-FROZEN_SQLITE_013F_FIXTURE_CHECKSUM = (
-    "0b0b7ba6d7bb5616445b1ea9c00cf1dbe18ffb3f213a3f5037883ba341434c25"
 )
 _FROZEN_013G_CHECKSUM = "ec8c29cabc98906d43c44aaf138e0d5e6a4458e86702298170b3b5964849ebf8"
 FROZEN_013G_OPERATOR_CHECKSUM = (
     "4d7e1db2453832b409b9dcc8dcf9f8027e589a0f081dd1a64a4d0806cf2541f3"
 )
-FROZEN_SQLITE_013G_FIXTURE_CHECKSUM = (
-    "9d0a3df360936577e08dfa25fb249e180bafa208053b0cc646e67ce74abf9e61"
-)
 _FROZEN_013H_CHECKSUM = "9798cca6bae5e66036ff08caf3eeebcb9d8ed78e5ea669ec403a4bf06e4df84b"
 FROZEN_013H_OPERATOR_CHECKSUM = (
     "71c58297d218c9da7c54d0f13887eec1250d11e463c02bbca2f3981b2b13e180"
 )
-FROZEN_SQLITE_013H_FIXTURE_CHECKSUM = (
-    "33e6eb96c95c9734a8efe50c760c59bd225099aa5ab2fb3a0441c3fe706fdf78"
-)
 _FROZEN_013I_CHECKSUM = "83c77841beb21dbf96d1e40260534d262dbf21941b21fac4121964a065e36f94"
 FROZEN_013I_OPERATOR_CHECKSUM = "69c4bda5b5485da32f522d8dffd690f3875c05fe3bba576a21338cd814159c8d"
-FROZEN_SQLITE_013I_FIXTURE_CHECKSUM = (
-    "fda2fcf715e0622aa8bfde7e07ff2c37dca4028e7ae56511357e01b6ee9befc2"
-)
 _FROZEN_013J_CHECKSUM = "bc5deb123981ee968061ec695821e8d00a8cc860d3c2169f9ca81ae6805846b5"
 FROZEN_013J_OPERATOR_CHECKSUM = "3a3cab3184178958bacd67c6573dedc9b624293b3b5cb773d899b20e02eb2f53"
-FROZEN_SQLITE_013J_FIXTURE_CHECKSUM = (
-    "60e6377e21e739ab1ce845d265ed736fb50d74af47846a227a628182f6ebc746"
-)
+_FROZEN_013K_CHECKSUM = "f81a4b888d5b86a9e9675561b319c19e0470d61d2cb486442b8e4e6bf6022acf"
+FROZEN_013K_OPERATOR_CHECKSUM = "8bdbf13e15452949b7a4e002fe152f0a90c7cb8c1c343a126271f6a6b8d9d322"
+_FROZEN_013L_CHECKSUM = "2dd029773f4dbe7b79cbc8db69ebe2bcdf444d82d8c9316a7f23b900ceabc4f9"
+FROZEN_013L_OPERATOR_CHECKSUM = "b8942f7baf21bc21cfabea04f33ab020c1aa55f531be3effee571e1eb2a7eda1"
 
 FROZEN_ASSURANCE_MIGRATIONS = (
     FrozenMigration(
@@ -174,6 +153,16 @@ FROZEN_ASSURANCE_MIGRATIONS = (
         _FROZEN_013J_CHECKSUM,
         _MIGRATIONS / "013j_owner_decision_override_integrity.sql",
     ),
+    FrozenMigration(
+        "013j-to-013k-verified-evidence-link-integrity-v1",
+        _FROZEN_013K_CHECKSUM,
+        _MIGRATIONS / "013k_verified_evidence_link_integrity.sql",
+    ),
+    FrozenMigration(
+        "013k-to-013l-delegated-separation-override-grant-integrity-v1",
+        _FROZEN_013L_CHECKSUM,
+        _MIGRATIONS / "013l_delegated_separation_override_grant_integrity.sql",
+    ),
 )
 
 POSTGRESQL_ASSURANCE_RELATIONS = frozenset(
@@ -208,6 +197,7 @@ POSTGRESQL_ASSURANCE_RELATIONS = frozenset(
         "governance_idempotency_records",
         "governance_evaluation_audit_events",
         "governance_evaluation_audit_chain_heads",
+        "governance_separation_override_grants",
     }
 )
 
@@ -251,6 +241,14 @@ POSTGRESQL_ASSURANCE_FUNCTIONS = frozenset(
         "fairmind_owner_permission_array_is_valid_013j",
         "fairmind_owner_decision_override_authorized_013j",
         "fairmind_validate_owner_override_audit_013j",
+        "fairmind_verified_evidence_link_is_valid_013k",
+        "fairmind_guard_verified_evidence_link_013k",
+        "fairmind_governance_decision_actor_authorized_013l",
+        "fairmind_separation_override_relationships_013l",
+        "fairmind_delegated_separation_override_authorized_013l",
+        "guard_governance_separation_override_grant_013l",
+        "fairmind_validate_separation_override_grant_audit_013l",
+        "fairmind_validate_delegated_decision_audit_013l",
         "fairmind_initial_layer_verdicts_v1_for_run",
         "fairmind_is_canonical_utc_timestamp",
         "fairmind_is_initial_layer_verdicts",
@@ -313,6 +311,12 @@ POSTGRESQL_ASSURANCE_REQUIRED_TRIGGERS = frozenset(
         "governance_evaluation_runs_v2_guard_insert",
         "governance_evaluation_runs_v2_guard_update",
         "governance_evaluation_suite_evidence_links_guard_insert",
+        "governance_evaluation_suite_evidence_links_verified_guard_013k",
+        "governance_separation_override_grants_guard_insert",
+        "governance_separation_override_grants_immutable_update",
+        "governance_separation_override_grants_immutable_delete",
+        "governance_separation_override_grants_audit_013l",
+        "governance_evaluation_decisions_delegated_override_audit_013l",
         "governance_evaluation_suite_evidence_links_no_delete",
         "governance_evaluation_suite_evidence_links_no_update",
         "governance_evaluation_suite_executions_guard_delete",
@@ -370,7 +374,7 @@ POSTGRESQL_ASSURANCE_CATALOG_SPEC = PostgreSQLCatalogSpec(
     required_triggers=POSTGRESQL_ASSURANCE_REQUIRED_TRIGGERS,
 )
 
-# Measured from two independent full operator-chain installations through 013j on
+# Measured from two independent full operator-chain installations through 013l on
 # PostgreSQL 14 and cross-checked against a direct-payload installation. The
 # PostgreSQL major is part of the canonical catalog payload because PostgreSQL
 # deparser output can change across major versions.
@@ -383,12 +387,17 @@ POSTGRESQL_ASSURANCE_CATALOG_SPEC = PostgreSQLCatalogSpec(
 # the role authority graph around the schema owner, and on Neon every project
 # role is a member of neon_superuser: adding or removing a project role changes
 # this digest, and startup then fails closed until it is re-measured.
+#
+# The PostgreSQL 18 digest below is still the 013j measurement. It includes the
+# Neon role graph, so it cannot be reproduced on a local PostgreSQL 18. After
+# 013k and 013l are applied to Neon, re-measure it there before setting
+# assurance_v2_enabled; until then startup with assurance on fails closed.
 FROZEN_POSTGRESQL_ASSURANCE_CATALOGS: Mapping[int, FrozenPostgreSQLCatalog] = MappingProxyType(
     {
         14: FrozenPostgreSQLCatalog(
             spec=POSTGRESQL_ASSURANCE_CATALOG_SPEC,
             postgresql_major=14,
-            digest=("c181fd00d2c65009cd17a673c0462d92d557c73dc7976f800a4bcb83ae4c6fd2"),
+            digest=("18acdb1569c601bf99c45b22d5de45fe3b749acaf4bb7bb5644a7eba265e2f3a"),
         ),
         18: FrozenPostgreSQLCatalog(
             spec=POSTGRESQL_ASSURANCE_CATALOG_SPEC,
@@ -397,193 +406,6 @@ FROZEN_POSTGRESQL_ASSURANCE_CATALOGS: Mapping[int, FrozenPostgreSQLCatalog] = Ma
         ),
     }
 )
-
-SQLITE_ASSURANCE_TABLES = frozenset(
-    {
-        "governance_workspaces",
-        "governance_ai_systems",
-        "governance_evidence",
-        "governance_environmental_assessments",
-        "governance_evaluation_target_versions",
-        "governance_evaluation_suite_versions",
-        "governance_evaluation_plans",
-        "governance_evaluation_plan_suites",
-        "governance_evaluation_runs",
-        "governance_evaluation_run_suite_executions",
-        "governance_evidence_issuers",
-        "governance_evidence_signing_keys",
-        "governance_evidence_trust_policy_versions",
-        "governance_evidence_runs",
-        "governance_evidence_artifacts",
-        "governance_evidence_passport_revisions",
-        "governance_evidence_admissions",
-        "governance_evidence_verification_receipts",
-        "governance_evaluator_registrations",
-        "governance_evidence_reviews",
-        "governance_evidence_nonce_claims",
-        "governance_evaluation_suite_evidence_links",
-        "governance_evaluation_decisions",
-        "governance_idempotency_records",
-        "governance_evaluation_audit_events",
-        "governance_evaluation_audit_chain_heads",
-        "governance_evidence_admission_013b_replay_state",
-        "governance_evidence_admission_013b_replay_anchor",
-    }
-)
-
-SQLITE_ASSURANCE_INDEXES = frozenset(
-    {
-        "uq_governance_workspace_org",
-        "uq_governance_ai_system_tenant",
-        "uq_governance_ai_system_workspace_tenant",
-        "uq_governance_evidence_tenant",
-        "idx_governance_env_assessments_org_system_version",
-        "idx_governance_env_assessments_recommendation",
-        "idx_governance_evaluation_targets_scope_created_keyset",
-        "uq_governance_evaluation_target_kind_tenant",
-        "idx_governance_evaluation_targets_scope_status",
-        "idx_governance_evaluation_suites_owner_identity_keyset",
-        "idx_governance_evaluation_plans_scope_contract_created_keyset",
-        "idx_governance_evaluation_runs_scope_created",
-        "idx_governance_evaluation_runs_status_verdict",
-        "idx_governance_evaluation_runs_scope_contract_created_keyset",
-        "uq_governance_evaluation_run_v2_envelope_scope",
-        "uq_governance_evaluation_run_v2_envelope_nonce_scope",
-        "uq_governance_evaluation_run_org_envelope_nonce",
-        "idx_governance_evidence_issuers_org_status",
-        "idx_governance_evidence_signing_keys_org_issuer_key_revoked",
-        "uq_governance_evidence_signing_key_fingerprint",
-        "idx_governance_evidence_trust_policies_org_status_version",
-        "uq_governance_evidence_trust_policy_active_org",
-        "idx_governance_evidence_runs_org_system_schema_created",
-        "uq_governance_evidence_run_workspace_tenant",
-        "idx_evidence_passport_revisions_tenant_run",
-        "idx_governance_evidence_admissions_scope_execution_created",
-        "idx_governance_evidence_verification_receipts_scope",
-        "idx_governance_evaluator_registrations_org_status",
-        "idx_governance_evidence_receipts_catalog_registration",
-        "idx_governance_evidence_reviews_admission_version",
-        "idx_governance_evidence_nonce_claims_scope_admission",
-        "idx_governance_evaluation_suite_evidence_links_scope",
-        "idx_governance_evaluation_decisions_scope_version",
-    }
-)
-
-SQLITE_ASSURANCE_TRIGGERS = frozenset(
-    {
-        "governance_ai_systems_org_insert",
-        "governance_ai_systems_org_update",
-        "governance_evaluation_target_versions_guard_update",
-        "governance_evaluation_target_versions_guard_delete",
-        "governance_evaluation_suite_versions_guard_insert",
-        "governance_evaluation_suite_versions_guard_update",
-        "governance_evaluation_suite_versions_guard_delete",
-        "governance_evaluation_plans_v2_guard_update",
-        "governance_evaluation_plans_v2_guard_delete",
-        "governance_evaluation_plan_suites_guard_insert",
-        "governance_evaluation_plan_suites_guard_update",
-        "governance_evaluation_plan_suites_guard_delete",
-        "governance_evaluation_runs_v2_guard_insert",
-        "governance_evaluation_runs_v2_guard_update",
-        "governance_evaluation_runs_v2_guard_delete",
-        "governance_evaluation_suite_executions_guard_insert",
-        "governance_evaluation_suite_executions_guard_layer_graph",
-        "governance_evaluation_suite_executions_guard_update",
-        "governance_evaluation_suite_executions_guard_delete",
-        "governance_evaluation_suite_executions_timestamps_insert",
-        "governance_evaluation_suite_executions_timestamps_update_013b",
-        "governance_evidence_admissions_capture_013b_replay_insert",
-        "governance_evidence_admissions_verified_signer_guard",
-        "governance_evidence_admission_replay_state_conflict",
-        "governance_evidence_admission_replay_state_no_update",
-        "governance_evidence_admission_replay_state_no_delete",
-        "governance_evidence_admission_replay_anchor_conflict",
-        "governance_evidence_admission_replay_anchor_no_update",
-        "governance_evidence_admission_replay_anchor_no_delete",
-        "governance_evidence_admissions_no_update",
-        "governance_evidence_admissions_no_delete",
-        "governance_evidence_admissions_require_receipt_013c",
-        "governance_evidence_admissions_require_receipt_update_013c",
-        "governance_evidence_verification_receipts_guard_insert",
-        "governance_evidence_verification_receipts_no_update",
-        "governance_evidence_verification_receipts_no_delete",
-        "governance_evaluator_registrations_guard_insert",
-        "governance_evaluator_registrations_guard_update",
-        "governance_evaluator_registrations_no_delete",
-        "governance_evidence_verification_receipts_catalog_guard_013d",
-        "governance_evidence_reviews_guard_insert",
-        "governance_evidence_reviews_no_update",
-        "governance_evidence_reviews_no_delete",
-        "governance_evidence_nonce_claims_guard_insert",
-        "governance_evidence_nonce_claims_no_update",
-        "governance_evidence_nonce_claims_no_delete",
-        "governance_evaluation_suite_evidence_links_guard_insert",
-        "governance_evaluation_suite_evidence_links_no_update",
-        "governance_evaluation_suite_evidence_links_no_delete",
-        "governance_evaluation_decisions_guard_insert",
-        "governance_evaluation_decisions_no_update",
-        "governance_evaluation_decisions_no_delete",
-        "governance_evidence_trust_policies_guard_insert_013f",
-        "governance_evidence_trust_policies_guard_update_013f",
-        "governance_evidence_trust_policies_lineage_activate_013f",
-        "governance_evidence_trust_policies_guard_delete_013f",
-        "governance_evidence_issuers_guard_insert_013f",
-        "governance_evidence_issuers_guard_update_013f",
-        "governance_evidence_issuers_guard_delete_013f",
-        "governance_evidence_signing_keys_guard_insert_013f",
-        "governance_evidence_signing_keys_guard_update_013f",
-        "governance_evidence_signing_keys_guard_delete_013f",
-        "governance_evidence_runs_schema_source_guard_insert",
-        "governance_evidence_runs_immutable_update",
-        "governance_evidence_runs_immutable_delete",
-        "governance_evidence_source_run_insert",
-        "governance_evidence_source_run_update",
-        "governance_evidence_passport_revisions_immutable_update",
-        "governance_evidence_passport_revisions_immutable_delete",
-        "governance_evidence_artifacts_immutable_update",
-        "governance_evidence_artifacts_immutable_delete",
-        "governance_evidence_reviews_freshness_unavailable_013g",
-        "governance_evaluation_decisions_freshness_unavailable_013g",
-        "governance_idempotency_records_insert_unavailable_013h",
-        "governance_idempotency_records_update_unavailable_013h",
-        "governance_idempotency_records_delete_unavailable_013h",
-        "governance_evidence_admissions_import_delivery_guard_013i",
-        "governance_evaluation_suite_executions_import_projection_guard_013i",
-        "governance_evidence_reviews_separation_guard_013j",
-        "governance_evaluation_decisions_owner_override_unavailable_013j",
-        "governance_evidence_org_insert",
-        "governance_evidence_org_update",
-        "governance_evaluation_audit_events_no_update",
-        "governance_evaluation_audit_events_no_delete",
-        "governance_evaluation_audit_events_guard_insert_head",
-        "governance_evaluation_audit_events_advance_head",
-        "governance_evaluation_audit_chain_heads_guard_insert",
-        "governance_evaluation_audit_chain_heads_guard_update",
-        "governance_evaluation_audit_chain_heads_guard_delete",
-    }
-)
-
-SQLITE_ASSURANCE_VIEWS = frozenset(
-    {
-        "governance_evidence_admission_v2_current_eligibility",
-        "governance_evidence_verification_receipt_admission_matches_013c",
-    }
-)
-
-# SHA-256 over the whitespace-normalized sqlite_master SQL for every object
-# named above, sorted by object type and name.  Unlike a name-only inventory,
-# this freezes table columns/checks/FKs, explicit indexes, trigger bodies, and
-# security-critical view definitions.
-# Measured after the complete 013j SQLite fail-closed fixture was installed
-# twice and its source checksum was frozen.
-SQLITE_ASSURANCE_CATALOG_DIGEST = "90e595b216e7907a92872dcfc4e0478c831298eabd5536919cb05eb85fdfc6c7"
-
-_SQLITE_ASSURANCE_OBJECTS = {
-    "table": SQLITE_ASSURANCE_TABLES,
-    "index": SQLITE_ASSURANCE_INDEXES,
-    "trigger": SQLITE_ASSURANCE_TRIGGERS,
-    "view": SQLITE_ASSURANCE_VIEWS,
-}
 
 _TRUSTED_SCHEMA_SENTINEL = "__fairmind_trusted_schema__"
 
@@ -705,12 +527,7 @@ def normalized_database_identity(source) -> DatabaseIdentity:
             port=int(url.port or 5432),
             database=url.database,
         )
-    if backend == "sqlite":
-        database = url.database
-        if database not in {None, "", ":memory:"}:
-            database = str(Path(database).expanduser().resolve(strict=False))
-        return DatabaseIdentity(backend="sqlite", database=database)
-    return DatabaseIdentity(backend=backend, database=url.database)
+    raise MigrationIntegrityError(f"unsupported database backend: {backend}")
 
 
 def verify_database_identities(*sources) -> None:
@@ -718,17 +535,9 @@ def verify_database_identities(*sources) -> None:
     identities = tuple(normalized_database_identity(source) for source in sources)
     if len(identities) < 2:
         raise MigrationIntegrityError("at least two runtime database identities are required")
-    if identities[0].backend == "sqlite" and identities[0].database in {None, "", ":memory:"}:
-        if all(source is sources[0] for source in sources[1:]):
-            return
-        raise MigrationIntegrityError("SQLite runtime database identities differ")
     if all(identity == identities[0] for identity in identities[1:]):
         return
-    if all(identity.backend == "postgresql" for identity in identities):
-        raise MigrationIntegrityError("PostgreSQL runtime database identities differ")
-    if all(identity.backend == "sqlite" for identity in identities):
-        raise MigrationIntegrityError("SQLite runtime database identities differ")
-    raise MigrationIntegrityError("runtime database families differ")
+    raise MigrationIntegrityError("PostgreSQL runtime database identities differ")
 
 
 def _normalize_postgresql_definition(
@@ -1435,102 +1244,6 @@ def verify_postgresql_migration_ledger(
             raise MigrationIntegrityError(f"{item.ledger_key} checksum drift")
 
 
-def _normalize_sqlite_schema_sql(sql: str) -> str:
-    return " ".join(sql.split())
-
-
-def _sqlite_catalog_digest(
-    rows: Iterable[tuple[str, str, str]],
-) -> str:
-    payload = "\n".join(
-        f"{object_type}\0{name}\0{_normalize_sqlite_schema_sql(sql)}"
-        for object_type, name, sql in sorted(rows)
-    )
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
-
-
-def verify_sqlite_assurance_schema(connection) -> None:
-    """Validate the parity fixture without inventing a PostgreSQL ledger."""
-    fixtures = (
-        (
-            "013c",
-            _MIGRATIONS / "fixtures" / "013c_evidence_verification_receipt.sqlite.sql",
-            FROZEN_SQLITE_013C_FIXTURE_CHECKSUM,
-        ),
-        (
-            "013d",
-            _MIGRATIONS / "fixtures" / "013d_evaluator_catalog.sqlite.sql",
-            FROZEN_SQLITE_013D_FIXTURE_CHECKSUM,
-        ),
-        (
-            "013e",
-            _MIGRATIONS / "fixtures" / "013e_environmental_tenant_scope.sqlite.sql",
-            FROZEN_SQLITE_013E_FIXTURE_CHECKSUM,
-        ),
-        (
-            "013f",
-            _MIGRATIONS / "fixtures" / "013f_trust_authority_integrity.sqlite.sql",
-            FROZEN_SQLITE_013F_FIXTURE_CHECKSUM,
-        ),
-        (
-            "013g",
-            _MIGRATIONS / "fixtures" / "013g_operational_evidence_freshness.sqlite.sql",
-            FROZEN_SQLITE_013G_FIXTURE_CHECKSUM,
-        ),
-        (
-            "013h",
-            _MIGRATIONS / "fixtures" / "013h_idempotency_retention_integrity.sqlite.sql",
-            FROZEN_SQLITE_013H_FIXTURE_CHECKSUM,
-        ),
-        (
-            "013i",
-            _MIGRATIONS / "fixtures" / "013i_imported_evidence_delivery_integrity.sqlite.sql",
-            FROZEN_SQLITE_013I_FIXTURE_CHECKSUM,
-        ),
-        (
-            "013j",
-            _MIGRATIONS / "fixtures" / "013j_owner_decision_override_integrity.sqlite.sql",
-            FROZEN_SQLITE_013J_FIXTURE_CHECKSUM,
-        ),
-    )
-    for version, fixture_path, frozen_checksum in fixtures:
-        try:
-            fixture_checksum = hashlib.sha256(fixture_path.read_bytes()).hexdigest()
-        except OSError as error:
-            raise MigrationIntegrityError(
-                f"SQLite {version} bundled fixture source is unavailable"
-            ) from error
-        if fixture_checksum != frozen_checksum:
-            raise MigrationIntegrityError(
-                f"SQLite {version} bundled fixture checksum drift"
-            )
-
-    foreign_keys = connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one()
-    if foreign_keys != 1:
-        raise MigrationIntegrityError("SQLite foreign_keys must be enabled")
-
-    rows = connection.exec_driver_sql(
-        "SELECT type, name, sql FROM sqlite_master "
-        "WHERE type IN ('table', 'index', 'trigger', 'view') AND sql IS NOT NULL"
-    ).all()
-    installed = {(object_type, name): sql for object_type, name, sql in rows}
-    selected: list[tuple[str, str, str]] = []
-    for object_type, required_names in _SQLITE_ASSURANCE_OBJECTS.items():
-        missing = sorted(name for name in required_names if (object_type, name) not in installed)
-        if missing:
-            raise MigrationIntegrityError(
-                f"SQLite assurance schema is missing required {object_type}s: " + ", ".join(missing)
-            )
-        selected.extend(
-            (object_type, name, installed[(object_type, name)]) for name in required_names
-        )
-    if _sqlite_catalog_digest(selected) != SQLITE_ASSURANCE_CATALOG_DIGEST:
-        raise MigrationIntegrityError("SQLite assurance catalog definition drift")
-    violations = connection.exec_driver_sql("PRAGMA foreign_key_check").first()
-    if violations is not None:
-        raise MigrationIntegrityError("SQLite assurance foreign-key check failed")
-
-
 def verify_assurance_migration_integrity(
     engine,
     *,
@@ -1555,9 +1268,5 @@ def verify_assurance_migration_integrity(
                 trusted_schema=trusted_schema,
                 frozen_by_major=FROZEN_POSTGRESQL_ASSURANCE_CATALOGS,
             )
-        return
-    if dialect == "sqlite":
-        with engine.connect() as connection:
-            verify_sqlite_assurance_schema(connection)
         return
     raise MigrationIntegrityError(f"unsupported database dialect for assurance v2: {dialect}")

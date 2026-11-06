@@ -14,23 +14,37 @@ from datetime import datetime, timezone
 from pathlib import Path
 import uuid
 
+from tests import pg
+
+if not pg.SERVER_URL:
+    pytest.exit(
+        "Set FAIRMIND_TEST_POSTGRES_URL to a disposable PostgreSQL server the tests "
+        "may create databases on, e.g. postgresql://postgres@localhost:5432/postgres",
+        returncode=4,
+    )
+# Before the app imports settings: the app runs against a migrated session database.
+os.environ["DATABASE_URL"] = pg.create_app_database()
+
 from api.main import app
+import config.database as _app_database
+import database.connection as _repository_database
+
+assert _repository_database.db_manager.engine.url.render_as_string(hide_password=False) == os.environ["DATABASE_URL"]
+assert _app_database.settings.database_url == os.environ["DATABASE_URL"]
 from config.auth import User as AuthUser, UserRole, auth_manager
 from config.settings import Settings
-from database.connection import Base, get_db
+from database.connection import get_db
 from database.governance_models import GovernanceAISystem, GovernanceWorkspace
 from database.models import Organization, OrganizationMember, User
 from middleware.security import RateLimitMiddleware
-from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 
 class TestSettings(Settings):
     """Test-specific settings."""
     environment: str = "development"
     debug: bool = True
-    database_url: str = "sqlite:///./test.db"
+    database_url: str = os.environ["DATABASE_URL"]
     secret_key: str = "test-secret-key"
     jwt_secret: str = "test-jwt-secret"
     upload_dir: str = "test_uploads"
@@ -53,6 +67,13 @@ def _reset_in_memory_rate_limit() -> None:
             middleware.fallback_clients.clear()
             return
         middleware = getattr(middleware, "app", None)
+
+
+@pytest.fixture(autouse=True)
+def drop_test_databases() -> Generator[None, None, None]:
+    """Drop every database pg.fresh_engine() created during the test."""
+    yield
+    pg.drop_test_databases()
 
 
 @pytest.fixture(autouse=True)
@@ -111,10 +132,7 @@ class EnvironmentalGovernanceFixture:
 @pytest.fixture
 def environmental_governance_client() -> Generator[EnvironmentalGovernanceFixture, None, None]:
     """Provide a bearer-authenticated client with an isolated organization fixture."""
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-    Base.metadata.create_all(engine)
+    engine = pg.fresh_engine()
     session_factory = sessionmaker(bind=engine)
     org_id = str(uuid.uuid4())
     user_id = uuid.uuid4()
@@ -142,11 +160,13 @@ def environmental_governance_client() -> Generator[EnvironmentalGovernanceFixtur
                 "id": user_id,
                 "email": "environment-owner@example.test",
                 "username": "environment-owner",
+                "password_hash": "",
             },
             {
                 "id": foreign_user_id,
                 "email": "environment-foreign@example.test",
                 "username": "environment-foreign",
+                "password_hash": "",
             },
         ],
     )
@@ -233,8 +253,6 @@ def environmental_governance_client() -> Generator[EnvironmentalGovernanceFixtur
             )
     finally:
         app.dependency_overrides.clear()
-        Base.metadata.drop_all(engine)
-        engine.dispose()
 
 
 @pytest_asyncio.fixture(scope="function")

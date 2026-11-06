@@ -1,23 +1,27 @@
-"""Tests for agentic pack routes, on an in-memory database with real organizations and members."""
+"""Tests for agentic pack routes, on a fresh PostgreSQL database with real organizations and members."""
 
 import copy
 import json
+import os
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, text
+from sqlalchemy import Boolean, create_engine, text
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 import api.routes.ai_governance as ai_governance
 from api.main import app
 from api.routes import pack_catalogue
 from config.auth import User as AuthUser, UserRole, auth_manager
 from database.connection import Base, get_db
+from database.governance_models import GovernanceApprovalWorkflow
 from database.models import Organization, OrganizationMember, User
 from middleware.security import RateLimitMiddleware
+from tests import pg
 
 PACKS = "/api/v1/packs"
 FOUNDATION = "PK-FOUNDATION"
@@ -39,11 +43,9 @@ def no_rate_limit():
     RateLimitMiddleware.check_rate_limit = original
 
 
-@pytest.fixture(autouse=True)
-def tmp_database():
-    import database.governance_models  # noqa: F401
-
-    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+@contextmanager
+def _serving(engine):
+    """Build every table from the models on engine and point the app at it."""
     Base.metadata.create_all(engine)
     session_factory = sessionmaker(bind=engine)
 
@@ -61,15 +63,39 @@ def tmp_database():
     yield engine
     app.dependency_overrides.clear()
     ai_governance._tables_ready = saved_ready
-    Base.metadata.drop_all(engine)
     engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def tmp_database():
+    with _serving(pg.fresh_engine()) as engine:
+        yield engine
+
+
+@pytest.fixture
+def pg_database():
+    """A fresh schema on FAIRMIND_TEST_POSTGRES_URL, built from the models alone as a new install does."""
+    database_url = os.getenv("FAIRMIND_TEST_POSTGRES_URL")
+    if not database_url:
+        pytest.skip("requires FAIRMIND_TEST_POSTGRES_URL pointing to disposable PostgreSQL")
+    schema = f"fairmind_packs_{uuid.uuid4().hex}"
+    admin = create_engine(database_url, isolation_level="AUTOCOMMIT")
+    with admin.connect() as conn:
+        conn.execute(text(f'CREATE SCHEMA "{schema}"'))
+    try:
+        with _serving(create_engine(database_url, connect_args={"options": f"-csearch_path={schema}"})) as engine:
+            yield engine
+    finally:
+        with admin.connect() as conn:
+            conn.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
+        admin.dispose()
 
 
 def _client(engine, org_id: uuid.UUID, role: str = "owner", token_role: UserRole = UserRole.ADMIN) -> TestClient:
     """A member of org_id with the given org role, signed in with a real access token."""
     user_id = uuid.uuid4()
     with engine.begin() as conn:
-        conn.execute(User.__table__.insert().values(id=user_id, email=f"{user_id}@packs.test", username=str(user_id)))
+        conn.execute(User.__table__.insert().values(password_hash="", id=user_id, email=f"{user_id}@packs.test", username=str(user_id)))
         conn.execute(
             OrganizationMember.__table__.insert().values(
                 id=uuid.uuid4(), org_id=org_id, user_id=user_id, role=role, status="active"
@@ -93,7 +119,7 @@ def _client(engine, org_id: uuid.UUID, role: str = "owner", token_role: UserRole
 def _new_org(engine) -> uuid.UUID:
     org_id, owner_id = uuid.uuid4(), uuid.uuid4()
     with engine.begin() as conn:
-        conn.execute(User.__table__.insert().values(id=owner_id, email=f"{owner_id}@packs.test", username=str(owner_id)))
+        conn.execute(User.__table__.insert().values(password_hash="", id=owner_id, email=f"{owner_id}@packs.test", username=str(owner_id)))
         conn.execute(
             Organization.__table__.insert().values(id=org_id, name="Packs test org", slug=f"packs-{org_id}", owner_id=owner_id)
         )
@@ -263,6 +289,20 @@ def test_run_starts_and_waits_on_the_first_step_that_needs_a_person(tmp_database
     assert run["chainValid"] and run["events"][0]["prevHash"] == "0" * 64
     assert client.get(f"{PACKS}/workflows/{WORKFLOW}").json()["latestRun"]["id"] == run["id"]
     assert [r["id"] for r in client.get(f"{PACKS}/runs?status=waiting").json()] == [run["id"]]
+
+
+def test_approval_workflow_is_active_matches_the_postgresql_boolean_contract():
+    column = GovernanceApprovalWorkflow.__table__.c.is_active
+    assert isinstance(column.type, Boolean) and column.default.arg is True
+    migration = (Path(__file__).parents[1] / "migrations/008_governance_canonical.sql").read_text()
+    assert "is_active BOOLEAN NOT NULL DEFAULT TRUE" in migration
+
+
+def test_a_model_built_postgres_database_opens_the_approval_gate(pg_database):
+    _, client = _installed_org(pg_database)
+    run = _to_gate(client)
+    assert (run["currentStep"], run["waitingFor"]) == (ASK_STEP, "approval")
+    assert _approval_count(pg_database, run["id"]) == 1
 
 
 def test_approved_run_acts_files_evidence_and_completes(tmp_database):
@@ -617,7 +657,8 @@ def test_india_bias_needs_an_india_attribute_and_drift_needs_a_baseline(tmp_data
     _store(tmp_database, org_id, system, "monitoring", monitoring, "2026-11-01T12:00:00")
     drift = client.get(f"{PACKS}/evaluations/EV-FAI-07").json()["results"]
     assert drift["status"] == "insufficient" and drift["systems"][0]["detail"] == "No baseline run to compare against"
-    assert client.get(f"{PACKS}/evaluations/EV-TST-01").json()["results"] is None  # no stored results to read yet
+    assert client.get(f"{PACKS}/evaluations/EV-SEC-22").json()["results"] is None  # no engine and no stored results to read
+    assert client.get(f"{PACKS}/evaluations/EV-TST-01").json()["results"]["status"] == "not_run"  # has an engine, not run yet
 
 
 def test_deciding_on_your_own_proposal_is_recorded_not_blocked(tmp_database):
@@ -634,3 +675,149 @@ def test_deciding_on_your_own_proposal_is_recorded_not_blocked(tmp_database):
     other = _decide(reviewer, _to_gate(author), "approve")
     gate = next(e for e in reversed(other["events"]) if e["kind"] == "gate.decided")
     assert "selfReview" not in gate["payload"]
+
+
+# --- the agent and the organisation's model -------------------------------------
+
+
+def _agent(client, run):
+    response = client.post(f"{PACKS}/runs/{run['id']}/steps/{run['currentStep']}/agent")
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def _completed(run, step_id):
+    return next(e["payload"] for e in reversed(run["events"]) if e["kind"] == "step.completed" and e["stepId"] == step_id)
+
+
+def _save_provider(client, **body):
+    return client.put(f"{PACKS}/ai-provider", json={"provider": "anthropic", "apiKey": "sk-ant-test-key-wxyz", **body})
+
+
+def test_without_a_provider_the_agent_does_steps_by_rules(tmp_database):
+    org_id, client = _installed_org(tmp_database)
+    system = _system(tmp_database, org_id)
+    _store(tmp_database, org_id, system, "fairness_test", _fairness(False), "2026-11-01T10:00:00")
+    run = _start(client, system_id=system)
+    collected = _agent(client, run)
+    payload = _completed(collected, "collect")
+    assert (payload["mode"], payload["source"], payload["submittedBy"]) == ("rules", "agent", "agent")
+    assert payload["requestedBy"] and "Evidence on file: 1 records (1 fairness_test)" in payload["summary"]
+    assert "failed" in payload["summary"] and collected["currentStep"] != "collect"
+    while collected["waitingFor"] == "input":
+        collected = _agent(client, collected)
+    assert collected["waitingFor"] == "approval" and collected["proposalBy"] == "agent"
+
+
+def test_rules_send_a_run_with_gaps_down_the_exception_branch(tmp_database):
+    org_id, client = _org(tmp_database)
+    client.post(f"{PACKS}/{MONITORING}/install")
+    run = _start(client, "agent_activity_monitoring")  # no system and no evidence: a gap
+    while run["currentStep"] != "suggest":
+        run = _agent(client, run)
+    run = _agent(client, run)
+    assert _completed(run, "suggest")["route"] == "exception" and run["currentStep"] == "ask"
+
+
+def test_a_saved_provider_never_returns_its_key_and_keeps_it_when_left_blank(tmp_database):
+    org_id, client = _org(tmp_database)
+    providers = {p["id"] for p in client.get(f"{PACKS}/ai-providers").json()}
+    assert {"anthropic", "openai", "azure_openai", "bedrock", "google", "sarvam", "ollama"} <= providers
+    assert client.get(f"{PACKS}/ai-provider").json() == {"config": None}
+
+    config = _save_provider(client).json()["config"]
+    assert (config["provider"], config["model"], config["keyHint"], config["hasKey"]) == ("anthropic", "claude-opus-5-5", "...wxyz", True)
+    assert "sk-ant-test-key-wxyz" not in json.dumps(config)
+    with tmp_database.connect() as conn:
+        stored = conn.execute(text("SELECT api_key_enc FROM org_ai_providers")).scalar()
+    assert stored and "sk-ant-test-key-wxyz" not in stored
+
+    kept = client.put(f"{PACKS}/ai-provider", json={"provider": "anthropic", "model": "claude-sonnet-5-5"}).json()["config"]
+    assert (kept["model"], kept["keyHint"]) == ("claude-sonnet-5-5", "...wxyz")
+    assert client.put(f"{PACKS}/ai-provider", json={"provider": "openai"}).status_code == 422  # a new provider needs its own key
+
+    member = _client(tmp_database, org_id, role="member", token_role=UserRole.ANALYST)
+    assert member.get(f"{PACKS}/ai-provider").json()["config"]["keyHint"] == "...wxyz"
+    assert _save_provider(member).status_code == 403
+    assert client.delete(f"{PACKS}/ai-provider").json() == {"config": None}
+
+
+def test_endpoints_must_be_public_https(tmp_database):
+    _, client = _org(tmp_database)
+    for url in ("http://models.example.com/v1", "https://localhost:11434/v1", "https://127.0.0.1/v1", "https://169.254.169.254/v1"):
+        response = client.put(f"{PACKS}/ai-provider", json={"provider": "ollama", "baseUrl": url, "model": "llama3"})
+        assert response.status_code == 422, url
+    assert client.put(f"{PACKS}/ai-provider", json={"provider": "bedrock", "apiKey": "k" * 12, "region": "nowhere"}).status_code == 422
+
+
+def test_testing_a_provider_reports_the_result_and_records_it(tmp_database, monkeypatch):
+    from api.routes import llm
+
+    _, client = _org(tmp_database)
+    _save_provider(client)
+
+    async def models(conn):
+        assert conn.api_key == "sk-ant-test-key-wxyz"  # the stored key, since the form left it blank
+        return ["claude-opus-5-5", "claude-sonnet-5-5"]
+
+    async def answer(conn, system, user, schema):
+        return {"ok": True}, {"model": conn.model, "latencyMs": 1, "usage": {}}
+
+    monkeypatch.setattr(llm, "list_models", models)
+    monkeypatch.setattr(llm, "complete", answer)
+    result = client.post(f"{PACKS}/ai-provider/test", json={"provider": "anthropic"}).json()
+    assert result["ok"] and result["models"] == ["claude-opus-5-5", "claude-sonnet-5-5"]
+    assert client.get(f"{PACKS}/ai-provider").json()["config"]["testedOk"] is True
+
+    async def rejected(conn):
+        raise llm.LLMError("Anthropic rejected the key")
+
+    monkeypatch.setattr(llm, "list_models", rejected)
+    result = client.post(f"{PACKS}/ai-provider/test", json={"provider": "anthropic"}).json()
+    assert (result["ok"], result["message"]) == (False, "Anthropic rejected the key")
+    assert client.get(f"{PACKS}/ai-provider").json()["config"]["testMessage"] == "Anthropic rejected the key"
+
+
+def test_with_a_provider_the_model_does_the_step_and_the_trace_is_on_the_ledger(tmp_database, monkeypatch):
+    from api.routes import llm
+
+    org_id, client = _org(tmp_database)
+    client.post(f"{PACKS}/{MONITORING}/install")
+    _save_provider(client)
+    seen = {}
+
+    async def answer(conn, system, user, schema):
+        seen["facts"] = json.loads(user)
+        route = "routine" if seen["facts"]["step"]["branches"] else ""
+        return {"summary": "Model output", "route": route, "confidence": "high"}, {
+            "model": conn.model, "latencyMs": 12, "usage": {"inputTokens": 10, "outputTokens": 5}}
+
+    monkeypatch.setattr(llm, "complete", answer)
+    run = _start(client, "agent_activity_monitoring")
+    run = _agent(client, run)
+    payload = _completed(run, "collect")
+    assert (payload["mode"], payload["model"], payload["confidence"], payload["summary"]) == ("llm", "claude-opus-5-5", "high", "Model output")
+    assert len(payload["promptHash"]) == 64 and seen["facts"]["workflow"]["name"]
+    while run["currentStep"] != "suggest":
+        run = _agent(client, run)
+    run = _agent(client, run)
+    assert _completed(run, "suggest")["route"] == "routine" and run["currentStep"] == "record"
+    assert run["chainValid"]
+
+    async def failing(conn, system, user, schema):
+        raise llm.LLMError("Anthropic is rate limiting this key")
+
+    monkeypatch.setattr(llm, "complete", failing)
+    waiting = _start(client, "agent_activity_monitoring")
+    response = client.post(f"{PACKS}/runs/{waiting['id']}/steps/collect/agent")
+    assert response.status_code == 502 and response.json()["detail"] == "Anthropic is rate limiting this key"
+    assert client.get(f"{PACKS}/runs/{waiting['id']}").json()["currentStep"] == "collect"
+
+    client.put(f"{PACKS}/ai-provider", json={"provider": "anthropic", "enabled": False})
+    assert _completed(_agent(client, waiting), "collect")["mode"] == "rules"  # switched off: rules again
+
+
+def test_the_agent_only_does_a_step_that_is_waiting_for_output(tmp_database):
+    _, client = _installed_org(tmp_database)
+    gate = _to_gate(client)
+    assert client.post(f"{PACKS}/runs/{gate['id']}/steps/{gate['currentStep']}/agent").status_code == 409

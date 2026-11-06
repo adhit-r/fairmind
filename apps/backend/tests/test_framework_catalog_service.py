@@ -6,13 +6,15 @@ from pathlib import Path
 
 import pytest
 from openpyxl import Workbook
-from sqlalchemy import create_engine, event, func, select
+from sqlalchemy import event, func, select
 from sqlalchemy.orm import Session
 
+from tests import pg
 from src.application.services.framework_catalog_service import (
     FrameworkCatalogService,
     WorkbookValidationError,
     parse_aiuc_workbook,
+    parse_principles_json,
 )
 from database.governance_models import (
     GovernanceControlDefinition,
@@ -135,9 +137,7 @@ def test_parse_aiuc_workbook_rejects_reordered_or_wrong_headers(
 def test_import_is_idempotent_and_persists_catalog_in_one_transaction(tmp_path: Path) -> None:
     workbook_path = tmp_path / "aiuc.xlsx"
     write_workbook(workbook_path)
-    engine = create_engine("sqlite://")
-    GovernanceFrameworkVersion.__table__.create(engine)
-    GovernanceControlDefinition.__table__.create(engine)
+    engine = pg.fresh_engine()
     session = Session(engine)
     service = FrameworkCatalogService(session, strict=False, expected_counts=(2, 2))
 
@@ -164,9 +164,7 @@ def test_import_workbook_bytes_persists_an_immutable_source_snapshot(tmp_path: P
     workbook_path = tmp_path / "aiuc.xlsx"
     write_workbook(workbook_path)
     payload = workbook_path.read_bytes()
-    engine = create_engine("sqlite://")
-    GovernanceFrameworkVersion.__table__.create(engine)
-    GovernanceControlDefinition.__table__.create(engine)
+    engine = pg.fresh_engine()
     session = Session(engine)
     service = FrameworkCatalogService(session, strict=False, expected_counts=(2, 2))
 
@@ -184,9 +182,7 @@ def test_import_workbook_bytes_persists_an_immutable_source_snapshot(tmp_path: P
 def test_import_rolls_back_version_when_control_persistence_fails(tmp_path: Path) -> None:
     workbook_path = tmp_path / "aiuc.xlsx"
     write_workbook(workbook_path)
-    engine = create_engine("sqlite://")
-    GovernanceFrameworkVersion.__table__.create(engine)
-    GovernanceControlDefinition.__table__.create(engine)
+    engine = pg.fresh_engine()
     session = Session(engine)
 
     @event.listens_for(engine, "before_cursor_execute")
@@ -200,3 +196,40 @@ def test_import_rolls_back_version_when_control_persistence_fails(tmp_path: Path
         )
 
     assert session.execute(select(func.count()).select_from(GovernanceFrameworkVersion.__table__)).scalar() == 0
+
+
+OECD_PRINCIPLES = Path(__file__).resolve().parents[1] / "reference_data" / "frameworks" / "oecd-ai-principles-may-2024.json"
+
+
+def test_oecd_principles_reference_file_imports_idempotently() -> None:
+    session = Session(pg.fresh_engine())
+    service = FrameworkCatalogService(session)
+
+    created = service.import_principles_json(OECD_PRINCIPLES, actor_id="actor-1")
+    repeated = service.import_principles_json(OECD_PRINCIPLES, actor_id="actor-2")
+
+    assert (created.created, repeated.created) == (True, False)
+    assert repeated.version_id == created.version_id
+    assert (created.framework_key, created.version_label, created.control_count) == ("oecd-ai", "May 2024", 5)
+    version = session.execute(select(GovernanceFrameworkVersion.__table__)).mappings().one()
+    assert version["source_uri"] == "https://legalinstruments.oecd.org/en/instruments/OECD-LEGAL-0449"
+    assert json.loads(version["metadata_json"]) == {"parser": "principles-json"}
+    controls = session.execute(
+        select(GovernanceControlDefinition.__table__).order_by("external_id")
+    ).mappings().all()
+    assert [c["external_id"] for c in controls] == ["1.1", "1.2", "1.3", "1.4", "1.5"]
+    robustness = controls[3]
+    assert robustness["title"] == "Robustness, security and safety"
+    assert robustness["evidence_kind"] == "Principle"
+    assert robustness["parent_requirement_id"] == "1"
+    assert robustness["source_cell"] == "https://oecd.ai/en/dashboards/ai-principles/P8"
+
+
+def test_parse_principles_json_rejects_unknown_parent_and_duplicate_ids() -> None:
+    base = json.loads(OECD_PRINCIPLES.read_bytes())
+    orphan = {**base, "controls": [{**base["controls"][0], "requirement_id": "9"}]}
+    duplicate = {**base, "controls": [base["controls"][0], base["controls"][0]]}
+    with pytest.raises(WorkbookValidationError, match="unknown requirement 9"):
+        parse_principles_json(json.dumps(orphan).encode())
+    with pytest.raises(WorkbookValidationError, match="duplicate control id 1.1"):
+        parse_principles_json(json.dumps(duplicate).encode())

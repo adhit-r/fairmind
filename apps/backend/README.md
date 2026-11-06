@@ -17,9 +17,6 @@
 # Install dependencies
 uv sync
 
-# Create developer account (dev@fairmind.ai / dev)
-uv run python scripts/create_dev_user.py
-
 # Start the backend
 uv run python -m uvicorn api.main:app --reload --port 8000
 ```
@@ -117,7 +114,7 @@ asyncio.run(test_sample_simulation())
 -  **Frontend**: Live at https://app-demo.fairmind.xyz
 -  **Frontend**: Live at https://app-demo.fairmind.xyz
 -  **Backend**: Phase 2 deployment pending
--  **API**: Will be live at https://api.fairmind.xyz
+-  **API**: served by the app at https://app.fairmind.xyz/api/proxy (no separate API host)
 
 ##  **Documentation**
 

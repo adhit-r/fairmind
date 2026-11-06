@@ -10,6 +10,9 @@ from config.settings import settings
 
 logger = logging.getLogger(__name__)
 
+_HUMAN_PRINCIPAL_KIND = "human"
+
+
 class NeonAuthMiddleware(BaseHTTPMiddleware):
     """
     Middleware to verify Neon JWT tokens and inject user info into request.
@@ -67,6 +70,15 @@ class NeonAuthMiddleware(BaseHTTPMiddleware):
                     "JWT verification configuration missing",
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 )
+
+            if (
+                payload.get("principal_kind", _HUMAN_PRINCIPAL_KIND)
+                != _HUMAN_PRINCIPAL_KIND
+            ):
+                return Response(
+                    "Service principals require a dedicated route",
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                )
                 
             request.state.user = payload
             
@@ -90,6 +102,8 @@ class NeonAuthMiddleware(BaseHTTPMiddleware):
             "/openapi.json",
             "/api/v1/auth/login",
             "/api/v1/auth/register",
+            "/api/v1/auth/password-reset",
+            "/api/v1/auth/password-reset/request",
             "/",
             "/api"
         ]

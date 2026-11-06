@@ -86,7 +86,7 @@ def plain_id(column: str) -> str:
 
 
 # Ids of the active members of the organisation bound as :org_id, for tables that
-# record a user (audit_logs, profiles) but no organisation.
+# record a user (profiles, users) but no organisation.
 ORG_MEMBER_USER_IDS = (
     f"SELECT {plain_id('m.user_id')} FROM org_members m "
     f"WHERE {plain_id('m.org_id')} = REPLACE(:org_id, '-', '') AND m.status = 'active'"

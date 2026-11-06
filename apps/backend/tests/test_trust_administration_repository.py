@@ -5,13 +5,10 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import pytest
-from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
-from database.connection import Base
+from tests import pg
 from database.governance_models import GovernanceEvidenceIssuer
-from src.application.ports.evaluation_workbench import EvaluationWorkbenchError
 from src.application.ports.trust_administration import EvidenceIssuerRecord
 from src.infrastructure.db.repositories.trust_administration_repository import (
     SqlAlchemyTrustAdministrationRepository,
@@ -23,12 +20,7 @@ NOW = datetime(2026, 8, 13, 10, 0, tzinfo=timezone.utc)
 
 @pytest.fixture
 def repository():
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(engine)
+    engine = pg.fresh_engine()
     session = sessionmaker(bind=engine)()
     try:
         session.execute(
@@ -57,7 +49,7 @@ def repository():
         engine.dispose()
 
 
-def test_reads_are_tenant_scoped_on_sqlite(repository) -> None:
+def test_reads_are_tenant_scoped(repository) -> None:
     own = repository.get_issuer(
         organization_id="org-a",
         issuer_id="11111111-1111-4111-8111-111111111111",
@@ -74,7 +66,7 @@ def test_reads_are_tenant_scoped_on_sqlite(repository) -> None:
     assert foreign is None
 
 
-def test_all_trust_mutations_fail_closed_without_postgresql(repository) -> None:
+def test_inserted_issuer_is_read_back_only_inside_its_tenant(repository) -> None:
     record = EvidenceIssuerRecord(
         id="22222222-2222-4222-8222-222222222222",
         organization_id="org-a",
@@ -90,8 +82,9 @@ def test_all_trust_mutations_fail_closed_without_postgresql(repository) -> None:
         updated_at=NOW,
     )
 
-    with pytest.raises(EvaluationWorkbenchError) as captured:
-        repository.insert_issuer(record)
+    repository.insert_issuer(record)
 
-    assert captured.value.code == "trust_administration_postgresql_required"
-    assert captured.value.status_code == 503
+    own = repository.get_issuer(organization_id="org-a", issuer_id=record.id, lock=False)
+    foreign = repository.get_issuer(organization_id="org-b", issuer_id=record.id, lock=False)
+    assert own is not None and own.issuer_key == "provider-b"
+    assert foreign is None

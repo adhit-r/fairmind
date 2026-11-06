@@ -60,12 +60,11 @@ dependencies = [
     "bcrypt>=5.0.0",
     "sentry-sdk[fastapi]>=2.43.0",
     "aiosmtplib>=5.1.0",
-    "jinja2>=3.1.6",  # compliance email templates (src/infrastructure/email/compliance_notifier.py)
+    "jinja2>=3.1.6", # compliance email templates (src/infrastructure/email/compliance_notifier.py)
     "boto3>=1.42.0",
     "httpx>=0.28.1",
     "gunicorn>=25.0.0",
     "aiohttp>=3.13.3",
-    "aiosqlite>=0.22.0",
     "cryptography>=43.0.0",
     "reportlab>=4.0.0",
     "python-docx>=0.8.11",
@@ -77,6 +76,7 @@ dependencies = [
     "openpyxl>=3.1.5",
     "rfc8785>=0.1.4,<1",
     "jsonschema[format-nongpl]>=4.23,<5",
+    "anthropic>=2.4.0",  # Claude provider for the packs agent (src/api/routers/llm.py)
 ]
 
 [project.optional-dependencies]

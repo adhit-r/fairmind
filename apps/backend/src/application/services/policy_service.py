@@ -1,0 +1,779 @@
+"""Organization AI policies: drafting, distribution, framework mapping and enforcement.
+
+A policy is a written document plus a list of rules (policy as code). Each rule
+is plain JSON, never executed code:
+
+    {
+      "id": "high-risk-approval",
+      "title": "High-risk systems need a release approval",
+      "severity": "high",                 # low | medium | high | critical
+      "enforcement": "block",             # block fails the policy gate, warn only reports
+      "when":  {"fact": "system.risk_tier", "op": "in", "value": ["high", "unacceptable"]},
+      "check": {"fact": "approval.status", "op": "eq", "value": "approved"},
+      "controls": ["aiuc-1:A001.1"]       # framework_key:control external id
+    }
+
+Conditions nest with {"all": [...]}, {"any": [...]} and {"not": {...}}. Facts are
+read per AI system from the governance tables (see FACTS).
+"""
+
+from __future__ import annotations
+
+import json
+import uuid
+from datetime import datetime, timezone
+from typing import Any
+
+from sqlalchemy import delete, func, insert, select, update
+from sqlalchemy.orm import Session
+
+from database.governance_models import (
+    GovernanceAISystem,
+    GovernanceApprovalRequest,
+    GovernanceControlDefinition,
+    GovernanceEvidenceRun,
+    GovernanceFrameworkAssignment,
+    GovernanceFrameworkVersion,
+    GovernanceRemediationTask,
+    GovernanceRisk,
+    OrgPolicy,
+    OrgPolicyAcknowledgement,
+    OrgPolicyEvaluation,
+    OrgPolicyVersion,
+)
+from database.models import OrganizationMember, User
+from src.application.services.governance_assurance_service import GovernanceAssuranceService
+
+SEVERITIES = ("low", "medium", "high", "critical")
+ENFORCEMENTS = ("block", "warn")
+OPS = ("eq", "ne", "gt", "gte", "lt", "lte", "in", "not_in", "contains", "exists")
+FACTS = {
+    "system.risk_tier": "Risk tier recorded for the system",
+    "system.lifecycle_stage": "Lifecycle stage of the system",
+    "system.status": "Operational status of the system",
+    "system.owner": "Named owner of the system",
+    "system.system_type": "Kind of system",
+    "approval.status": "Latest release approval: none, pending, approved or rejected",
+    "risks.open": "Open risks on the system",
+    "risks.open_high": "Open high-severity risks",
+    "risks.open_critical": "Open critical risks",
+    "remediation.open": "Remediation tasks not yet resolved",
+    "evidence.total": "Evidence runs recorded",
+    "evidence.passed": "Evidence runs that passed",
+    "evidence.failed": "Evidence runs that failed",
+    "evidence.expired": "Evidence runs past their expiry",
+    "evidence.sources_passed": "Evidence source types with a passing run",
+    "frameworks.assigned": "Framework keys assigned to the system",
+    "controls.applicable": "Applicable controls across assigned frameworks",
+    "controls.accepted": "Controls accepted",
+    "controls.accepted_ratio": "Accepted share of applicable controls, 0 to 1",
+    "controls.missing_evidence": "Applicable controls with no accepted passing evidence",
+    "controls.stale_evidence": "Controls whose evidence is past its review frequency",
+    "controls.blocking_findings": "Controls rejected by a reviewer",
+}
+METADATA_PREFIX = "system.metadata."
+STATUSES = ("draft", "in_review", "approved", "published", "retired")
+TRANSITIONS = {
+    "submit": ({"draft"}, "in_review"),
+    "reject": ({"in_review"}, "draft"),
+    "approve": ({"in_review"}, "approved"),
+    "publish": ({"approved"}, "published"),
+    "revise": ({"published"}, "draft"),
+    "retire": ({"draft", "in_review", "approved", "published"}, "retired"),
+}
+_CLOSED = {"resolved", "closed", "mitigated", "accepted"}
+
+
+class PolicyStateError(ValueError):
+    """Raised when a lifecycle action is not allowed from the current status."""
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _same_id(value: Any) -> str:
+    """One spelling for a user id stored dashed, as plain hex, or as a UUID."""
+    try:
+        return uuid.UUID(str(value)).hex
+    except ValueError:
+        return str(value)
+
+
+# ---------------------------------------------------------------------------
+# Rules: validation and evaluation (pure)
+# ---------------------------------------------------------------------------
+
+
+def _validate_condition(cond: Any, where: str) -> None:
+    if not isinstance(cond, dict):
+        raise ValueError(f"{where}: condition must be an object")
+    if "all" in cond or "any" in cond:
+        key = "all" if "all" in cond else "any"
+        items = cond[key]
+        if not isinstance(items, list) or not items:
+            raise ValueError(f"{where}: '{key}' needs a non-empty list")
+        for index, child in enumerate(items):
+            _validate_condition(child, f"{where}.{key}[{index}]")
+        return
+    if "not" in cond:
+        _validate_condition(cond["not"], f"{where}.not")
+        return
+    fact, op = cond.get("fact"), cond.get("op")
+    if fact not in FACTS and not (isinstance(fact, str) and fact.startswith(METADATA_PREFIX) and len(fact) > len(METADATA_PREFIX)):
+        raise ValueError(f"{where}: unknown fact {fact!r}")
+    if op not in OPS:
+        raise ValueError(f"{where}: unknown op {op!r}, use one of {', '.join(OPS)}")
+    if op != "exists" and "value" not in cond:
+        raise ValueError(f"{where}: op '{op}' needs a value")
+    if op in ("in", "not_in") and not isinstance(cond["value"], list):
+        raise ValueError(f"{where}: op '{op}' needs a list value")
+
+
+def validate_rules(rules: Any) -> list[dict]:
+    """Return the rules normalized, or raise ValueError naming the first problem."""
+    if not isinstance(rules, list):
+        raise ValueError("rules must be a list")
+    seen: set[str] = set()
+    normalized = []
+    for index, rule in enumerate(rules):
+        where = f"rules[{index}]"
+        if not isinstance(rule, dict):
+            raise ValueError(f"{where}: rule must be an object")
+        rule_id = rule.get("id")
+        if not isinstance(rule_id, str) or not rule_id.strip():
+            raise ValueError(f"{where}: id is required")
+        if rule_id in seen:
+            raise ValueError(f"{where}: duplicate id {rule_id!r}")
+        seen.add(rule_id)
+        if not isinstance(rule.get("title"), str) or not rule["title"].strip():
+            raise ValueError(f"{where}: title is required")
+        severity = rule.get("severity", "medium")
+        enforcement = rule.get("enforcement", "warn")
+        if severity not in SEVERITIES:
+            raise ValueError(f"{where}: severity must be one of {', '.join(SEVERITIES)}")
+        if enforcement not in ENFORCEMENTS:
+            raise ValueError(f"{where}: enforcement must be block or warn")
+        if "check" not in rule:
+            raise ValueError(f"{where}: check is required")
+        _validate_condition(rule["check"], f"{where}.check")
+        if rule.get("when") is not None:
+            _validate_condition(rule["when"], f"{where}.when")
+        controls = rule.get("controls", [])
+        if not isinstance(controls, list) or not all(isinstance(c, str) and ":" in c for c in controls):
+            raise ValueError(f"{where}: controls must be a list of 'framework:control' references")
+        normalized.append(
+            {
+                "id": rule_id,
+                "title": rule["title"],
+                "severity": severity,
+                "enforcement": enforcement,
+                **({"when": rule["when"]} if rule.get("when") is not None else {}),
+                "check": rule["check"],
+                "controls": controls,
+            }
+        )
+    return normalized
+
+
+def _fact(facts: dict, path: str) -> Any:
+    if path.startswith(METADATA_PREFIX):
+        value: Any = facts.get("system.metadata", {})
+        for key in path[len(METADATA_PREFIX):].split("."):
+            value = value.get(key) if isinstance(value, dict) else None
+        return value
+    return facts.get(path)
+
+
+def _compare(actual: Any, op: str, expected: Any) -> bool:
+    if op == "exists":
+        return actual not in (None, "", [], {})
+    if op == "eq":
+        return actual == expected
+    if op == "ne":
+        return actual != expected
+    if op == "in":
+        return actual in expected
+    if op == "not_in":
+        return actual not in expected
+    if op == "contains":
+        return isinstance(actual, (list, str)) and expected in actual
+    try:
+        a, b = float(actual), float(expected)
+    except (TypeError, ValueError):
+        return False
+    return {"gt": a > b, "gte": a >= b, "lt": a < b, "lte": a <= b}[op]
+
+
+def evaluate_condition(cond: dict, facts: dict, notes: list[str]) -> bool:
+    """Evaluate a validated condition; failing leaves append what was observed."""
+    if "all" in cond:
+        return all([evaluate_condition(c, facts, notes) for c in cond["all"]])
+    if "any" in cond:
+        branch: list[str] = []
+        passed = any([evaluate_condition(c, facts, branch) for c in cond["any"]])
+        if not passed:
+            notes.append("none of: " + "; ".join(branch))
+        return passed
+    if "not" in cond:
+        inner: list[str] = []
+        passed = not evaluate_condition(cond["not"], facts, inner)
+        if not passed:
+            notes.append(f"expected the opposite of {cond['not']}")
+        return passed
+    actual = _fact(facts, cond["fact"])
+    passed = _compare(actual, cond["op"], cond.get("value"))
+    if not passed:
+        expected = "" if cond["op"] == "exists" else f" {json.dumps(cond.get('value'))}"
+        notes.append(f"{cond['fact']} is {json.dumps(actual)}, expected {cond['op']}{expected}")
+    return passed
+
+
+def evaluate_rule(rule: dict, facts: dict) -> tuple[str, str]:
+    """Return (outcome, detail) for one rule against one system's facts."""
+    if rule.get("when") is not None and not evaluate_condition(rule["when"], facts, []):
+        return "not_applicable", "Rule does not apply to this system"
+    notes: list[str] = []
+    if evaluate_condition(rule["check"], facts, notes):
+        return "pass", "All conditions met"
+    return "fail", "; ".join(notes)
+
+
+# ---------------------------------------------------------------------------
+# Persistence
+# ---------------------------------------------------------------------------
+
+
+class PolicyService:
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    # -- reading ------------------------------------------------------------
+
+    def _row(self, org_id: str, policy_id: str) -> dict | None:
+        p = OrgPolicy.__table__
+        row = self.db.execute(select(p).where(p.c.id == policy_id, p.c.org_id == org_id)).mappings().first()
+        return dict(row) if row else None
+
+    def _member_count(self, org_id: str) -> int:
+        m = OrganizationMember.__table__.c
+        return self.db.execute(
+            select(func.count()).select_from(OrganizationMember.__table__).where(
+                m.org_id == uuid.UUID(org_id), m.status == "active"
+            )
+        ).scalar_one()
+
+    def _serialize(self, row: dict, user_id: str, members: int) -> dict:
+        a = OrgPolicyAcknowledgement.__table__.c
+        acked: list[str] = []
+        if row["published_version"]:
+            acked = list(
+                self.db.execute(
+                    select(a.user_id).where(a.policy_id == row["id"], a.version == row["published_version"])
+                ).scalars()
+            )
+        rules = json.loads(row["rules_json"])
+        return {
+            "id": row["id"],
+            "name": row["name"],
+            "summary": row["summary"],
+            "body": row["body"],
+            "owner": row["owner"],
+            "status": row["status"],
+            "version": row["version"],
+            "publishedVersion": row["published_version"],
+            "enforced": row["status"] != "retired" and row["published_version"] is not None,
+            "rules": rules,
+            "controlRefs": sorted({ref for rule in rules for ref in rule.get("controls", [])}),
+            "createdBy": row["created_by"],
+            "submittedBy": row["submitted_by"],
+            "approvedBy": row["approved_by"],
+            "approvedAt": row["approved_at"],
+            "createdAt": row["created_at"],
+            "updatedAt": row["updated_at"],
+            "acknowledgement": {
+                "required": members if row["published_version"] else 0,
+                "acknowledged": len(acked),
+                "mine": user_id in acked,
+            },
+        }
+
+    def list(self, org_id: str, user_id: str) -> list[dict]:
+        p = OrgPolicy.__table__
+        members = self._member_count(org_id)
+        rows = self.db.execute(select(p).where(p.c.org_id == org_id).order_by(p.c.updated_at.desc())).mappings()
+        return [self._serialize(dict(r), user_id, members) for r in rows]
+
+    def get(self, org_id: str, policy_id: str, user_id: str) -> dict | None:
+        row = self._row(org_id, policy_id)
+        return self._serialize(row, user_id, self._member_count(org_id)) if row else None
+
+    def versions(self, org_id: str, policy_id: str) -> list[dict] | None:
+        if not self._row(org_id, policy_id):
+            return None
+        v = OrgPolicyVersion.__table__
+        rows = self.db.execute(
+            select(v).where(v.c.policy_id == policy_id, v.c.org_id == org_id).order_by(v.c.version.desc())
+        ).mappings()
+        return [
+            {
+                "version": r["version"],
+                "name": r["name"],
+                "summary": r["summary"],
+                "body": r["body"],
+                "rules": json.loads(r["rules_json"]),
+                "approvedBy": r["approved_by"],
+                "publishedBy": r["published_by"],
+                "publishedAt": r["published_at"],
+            }
+            for r in rows
+        ]
+
+    def acknowledgements(self, org_id: str, policy_id: str) -> list[dict] | None:
+        row = self._row(org_id, policy_id)
+        if not row:
+            return None
+        m, u, a = OrganizationMember.__table__.c, User.__table__.c, OrgPolicyAcknowledgement.__table__.c
+        acked = {
+            _same_id(r["user_id"]): r["acknowledged_at"]
+            for r in self.db.execute(
+                select(a.user_id, a.acknowledged_at).where(
+                    a.policy_id == policy_id, a.version == (row["published_version"] or -1)
+                )
+            ).mappings()
+        }
+        members = self.db.execute(
+            select(m.user_id, m.role, u.email, u.name)
+            .outerjoin(User.__table__, u.id == m.user_id)
+            .where(m.org_id == uuid.UUID(org_id), m.status == "active")
+            .order_by(u.email)
+        ).mappings()
+        return [
+            {
+                "userId": str(r["user_id"]),
+                "email": r["email"] or str(r["user_id"]),
+                "name": r["name"],
+                "role": r["role"],
+                "acknowledgedAt": acked.get(_same_id(r["user_id"])),
+            }
+            for r in members
+        ]
+
+    # -- framework mapping --------------------------------------------------
+
+    def _latest_versions(self) -> list[dict]:
+        fv = GovernanceFrameworkVersion.__table__
+        latest: dict[str, dict] = {}
+        for row in self.db.execute(select(fv).order_by(fv.c.imported_at.desc())).mappings():
+            latest.setdefault(row["framework_key"], dict(row))
+        return list(latest.values())
+
+    def _controls_by_ref(self) -> dict[str, dict]:
+        cd = GovernanceControlDefinition.__table__
+        refs: dict[str, dict] = {}
+        for version in self._latest_versions():
+            for row in self.db.execute(
+                select(cd.c.external_id, cd.c.title, cd.c.parent_requirement_id, cd.c.parent_requirement_title)
+                .where(cd.c.framework_version_id == version["id"], cd.c.active == 1)
+                .order_by(cd.c.external_id)
+            ).mappings():
+                refs[f"{version['framework_key']}:{row['external_id']}"] = {
+                    **dict(row),
+                    "framework_key": version["framework_key"],
+                }
+        return refs
+
+    def _check_refs(self, rules: list[dict]) -> None:
+        known = self._controls_by_ref()
+        for rule in rules:
+            unknown = [ref for ref in rule["controls"] if ref not in known]
+            if unknown:
+                raise ValueError(f"rule {rule['id']!r}: unknown framework control {unknown[0]!r}")
+
+    def coverage(self, org_id: str) -> list[dict]:
+        """Each framework control, the published rules mapped to it, and whether they hold.
+
+        A control is failing when any mapped rule fails on any system, passing when
+        mapped rules pass and none fail, and unchecked when no system was assessed.
+        Drafts do not count: only the published, enforced version of a policy does.
+        """
+        outcomes: dict[tuple, list[str]] = {}
+        for r in self.latest_results(org_id):
+            outcomes.setdefault((r["policyId"], r["policyVersion"], r["ruleId"]), []).append(r["outcome"])
+        covering: dict[str, list[dict]] = {}
+        for policy in self._enforced(org_id, None):
+            for rule in json.loads(policy["rules_json"]):
+                seen = outcomes.get((policy["id"], policy["version"], rule["id"]), [])
+                entry = {
+                    "policyId": policy["id"],
+                    "policyName": policy["name"],
+                    "policyVersion": policy["version"],
+                    "ruleId": rule["id"],
+                    "ruleTitle": rule["title"],
+                    "enforcement": rule["enforcement"],
+                    "passingSystems": seen.count("pass"),
+                    "failingSystems": seen.count("fail"),
+                }
+                for ref in rule.get("controls", []):
+                    covering.setdefault(ref, []).append(entry)
+        controls = self._controls_by_ref()
+        out = []
+        for version in self._latest_versions():
+            key = version["framework_key"]
+            items = []
+            for ref, c in controls.items():
+                if c["framework_key"] != key:
+                    continue
+                rules = covering.get(ref, [])
+                if any(r["failingSystems"] for r in rules):
+                    status = "failing"
+                elif any(r["passingSystems"] for r in rules):
+                    status = "passing"
+                else:
+                    status = "unchecked" if rules else "unmapped"
+                items.append(
+                    {
+                        "ref": ref,
+                        "externalId": c["external_id"],
+                        "title": c["title"],
+                        "requirementId": c["parent_requirement_id"],
+                        "requirementTitle": c["parent_requirement_title"],
+                        "status": status,
+                        "coveredBy": rules,
+                    }
+                )
+            count = lambda status: sum(1 for i in items if i["status"] == status)  # noqa: E731
+            out.append(
+                {
+                    "frameworkKey": key,
+                    "name": version["name"],
+                    "versionLabel": version["version_label"],
+                    "totalControls": len(items),
+                    "coveredControls": len(items) - count("unmapped"),
+                    "passingControls": count("passing"),
+                    "failingControls": count("failing"),
+                    "uncheckedControls": count("unchecked"),
+                    "controls": items,
+                }
+            )
+        return out
+
+    # -- writing ------------------------------------------------------------
+
+    def create(self, org_id: str, actor: str, values: dict) -> dict:
+        rules = validate_rules(values.get("rules", []))
+        self._check_refs(rules)
+        now, policy_id = _now(), str(uuid.uuid4())
+        self.db.execute(
+            insert(OrgPolicy.__table__).values(
+                id=policy_id,
+                org_id=org_id,
+                name=values["name"],
+                summary=values.get("summary") or "",
+                body=values.get("body") or "",
+                owner=values.get("owner"),
+                status="draft",
+                version=1,
+                rules_json=json.dumps(rules),
+                created_by=actor,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        self.db.commit()
+        return self.get(org_id, policy_id, actor)
+
+    def update(self, org_id: str, policy_id: str, actor: str, values: dict) -> dict | None:
+        row = self._row(org_id, policy_id)
+        if not row:
+            return None
+        if row["status"] != "draft":
+            raise PolicyStateError("Only draft policies can be edited; revise a published policy first")
+        changes = {k: values[k] for k in ("name", "summary", "body", "owner") if k in values and values[k] is not None}
+        if values.get("rules") is not None:
+            rules = validate_rules(values["rules"])
+            self._check_refs(rules)
+            changes["rules_json"] = json.dumps(rules)
+        if changes:
+            p = OrgPolicy.__table__
+            self.db.execute(update(p).where(p.c.id == policy_id).values(**changes, updated_at=_now()))
+            self.db.commit()
+        return self.get(org_id, policy_id, actor)
+
+    def transition(self, org_id: str, policy_id: str, actor: str, action: str) -> dict | None:
+        row = self._row(org_id, policy_id)
+        if not row:
+            return None
+        allowed_from, target = TRANSITIONS[action]
+        if row["status"] not in allowed_from:
+            raise PolicyStateError(f"Cannot {action} a policy that is {row['status']}")
+        now = _now()
+        values: dict[str, Any] = {"status": target, "updated_at": now}
+        if action == "submit":
+            if not json.loads(row["rules_json"]) and not row["body"].strip():
+                raise PolicyStateError("Write the policy text or add a rule before submitting")
+            values["submitted_by"] = actor
+        elif action == "approve":
+            values.update(approved_by=actor, approved_at=now)
+        elif action == "revise":
+            values.update(version=row["version"] + 1, submitted_by=None, approved_by=None, approved_at=None)
+        elif action == "publish":
+            values["published_version"] = row["version"]
+            self.db.execute(
+                insert(OrgPolicyVersion.__table__).values(
+                    id=str(uuid.uuid4()),
+                    org_id=org_id,
+                    policy_id=policy_id,
+                    version=row["version"],
+                    name=row["name"],
+                    summary=row["summary"],
+                    body=row["body"],
+                    rules_json=row["rules_json"],
+                    approved_by=row["approved_by"],
+                    published_by=actor,
+                    published_at=now,
+                )
+            )
+        p = OrgPolicy.__table__
+        self.db.execute(update(p).where(p.c.id == policy_id).values(**values))
+        self.db.commit()
+        if action == "publish":
+            self.enforce(org_id, policy_id=policy_id)
+        return self.get(org_id, policy_id, actor)
+
+    def delete(self, org_id: str, policy_id: str) -> bool:
+        row = self._row(org_id, policy_id)
+        if not row:
+            return False
+        if row["published_version"] is not None:
+            raise PolicyStateError("A policy that was published is part of the audit record; retire it instead")
+        self.db.execute(delete(OrgPolicy.__table__).where(OrgPolicy.__table__.c.id == policy_id))
+        self.db.commit()
+        return True
+
+    def acknowledge(self, org_id: str, policy_id: str, user_id: str) -> dict | None:
+        row = self._row(org_id, policy_id)
+        if not row:
+            return None
+        if not row["published_version"] or row["status"] == "retired":
+            raise PolicyStateError("Only a published policy can be acknowledged")
+        a = OrgPolicyAcknowledgement.__table__
+        exists = self.db.execute(
+            select(a.c.id).where(a.c.policy_id == policy_id, a.c.version == row["published_version"], a.c.user_id == user_id)
+        ).first()
+        if not exists:
+            self.db.execute(
+                insert(a).values(
+                    id=str(uuid.uuid4()),
+                    org_id=org_id,
+                    policy_id=policy_id,
+                    version=row["published_version"],
+                    user_id=user_id,
+                    acknowledged_at=_now(),
+                )
+            )
+            self.db.commit()
+        return self.get(org_id, policy_id, user_id)
+
+    # -- enforcement --------------------------------------------------------
+
+    def system_facts(self, org_id: str, system: dict) -> dict:
+        system_id = system["id"]
+        ar = GovernanceApprovalRequest.__table__.c
+        approval = self.db.execute(
+            select(ar.status)
+            .where(ar.entity_type == "ai_system", ar.entity_id == system_id)
+            .order_by(ar.created_at.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        r = GovernanceRisk.__table__.c
+        open_risks = [
+            s
+            for s, status in self.db.execute(select(r.severity, r.status).where(r.system_id == system_id))
+            if (status or "").lower() not in _CLOSED
+        ]
+        rt = GovernanceRemediationTask.__table__.c
+        open_tasks = sum(
+            1 for (status,) in self.db.execute(select(rt.status).where(rt.system_id == system_id)) if (status or "").lower() not in _CLOSED
+        )
+        ev = GovernanceEvidenceRun.__table__.c
+        runs = list(
+            self.db.execute(
+                select(ev.result, ev.source_type, ev.expires_at).where(ev.org_id == org_id, ev.system_id == system_id)
+            ).mappings()
+        )
+        now = _now()
+        fa, fv = GovernanceFrameworkAssignment.__table__.c, GovernanceFrameworkVersion.__table__.c
+        assignments = list(
+            self.db.execute(
+                select(fa.id, fv.framework_key)
+                .join(GovernanceFrameworkVersion.__table__, fv.id == fa.framework_version_id)
+                .where(fa.org_id == org_id, fa.system_id == system_id)
+            ).mappings()
+        )
+        totals = {"applicable": 0, "accepted": 0, "missingEvidence": 0, "staleEvidence": 0, "blockingFindings": 0}
+        assurance = GovernanceAssuranceService(self.db)
+        for assignment in assignments:
+            counts = assurance.readiness(org_id, assignment["id"]) or {}
+            for key in totals:
+                totals[key] += counts.get(key, 0)
+        try:
+            metadata = json.loads(system.get("metadata_json") or "{}")
+        except ValueError:
+            metadata = {}
+        return {
+            "system.risk_tier": system.get("risk_tier"),
+            "system.lifecycle_stage": system.get("lifecycle_stage"),
+            "system.status": system.get("status"),
+            "system.owner": system.get("owner"),
+            "system.system_type": system.get("system_type"),
+            "system.metadata": metadata if isinstance(metadata, dict) else {},
+            "approval.status": approval or "none",
+            "risks.open": len(open_risks),
+            "risks.open_high": sum(1 for s in open_risks if s == "high"),
+            "risks.open_critical": sum(1 for s in open_risks if s == "critical"),
+            "remediation.open": open_tasks,
+            "evidence.total": len(runs),
+            "evidence.passed": sum(1 for x in runs if x["result"] == "passed"),
+            "evidence.failed": sum(1 for x in runs if x["result"] == "failed"),
+            "evidence.expired": sum(1 for x in runs if x["expires_at"] and x["expires_at"] < now),
+            "evidence.sources_passed": sorted({x["source_type"] for x in runs if x["result"] == "passed"}),
+            "frameworks.assigned": sorted({a["framework_key"] for a in assignments}),
+            "controls.applicable": totals["applicable"],
+            "controls.accepted": totals["accepted"],
+            "controls.accepted_ratio": round(totals["accepted"] / totals["applicable"], 4) if totals["applicable"] else 0.0,
+            "controls.missing_evidence": totals["missingEvidence"],
+            "controls.stale_evidence": totals["staleEvidence"],
+            "controls.blocking_findings": totals["blockingFindings"],
+        }
+
+    def _enforced(self, org_id: str, policy_id: str | None) -> list[dict]:
+        p, v = OrgPolicy.__table__, OrgPolicyVersion.__table__
+        query = (
+            select(p.c.id, p.c.name, v.c.version, v.c.rules_json)
+            .join(v, (v.c.policy_id == p.c.id) & (v.c.version == p.c.published_version))
+            .where(p.c.org_id == org_id, p.c.status != "retired")
+        )
+        if policy_id:
+            query = query.where(p.c.id == policy_id)
+        return [dict(r) for r in self.db.execute(query).mappings()]
+
+    def enforce(self, org_id: str, policy_id: str | None = None, system_id: str | None = None) -> dict | None:
+        """Evaluate published policies against the org's systems and record each result."""
+        s = GovernanceAISystem.__table__
+        query = select(s).where(s.c.org_id == org_id)
+        if system_id:
+            query = query.where(s.c.id == system_id)
+        systems = [dict(r) for r in self.db.execute(query).mappings()]
+        if system_id and not systems:
+            return None
+        run_id, now = str(uuid.uuid4()), _now()
+        policies = self._enforced(org_id, policy_id)
+        results = []
+        for system in systems:
+            facts = self.system_facts(org_id, system)
+            for policy in policies:
+                for rule in json.loads(policy["rules_json"]):
+                    outcome, detail = evaluate_rule(rule, facts)
+                    results.append(
+                        {
+                            "policyId": policy["id"],
+                            "policyName": policy["name"],
+                            "policyVersion": policy["version"],
+                            "systemId": system["id"],
+                            "systemName": system["name"],
+                            "ruleId": rule["id"],
+                            "ruleTitle": rule["title"],
+                            "severity": rule["severity"],
+                            "enforcement": rule["enforcement"],
+                            "controls": rule.get("controls", []),
+                            "outcome": outcome,
+                            "detail": detail,
+                        }
+                    )
+        if results:
+            self.db.execute(
+                insert(OrgPolicyEvaluation.__table__),
+                [
+                    {
+                        "id": str(uuid.uuid4()),
+                        "org_id": org_id,
+                        "run_id": run_id,
+                        "policy_id": r["policyId"],
+                        "policy_version": r["policyVersion"],
+                        "system_id": r["systemId"],
+                        "rule_id": r["ruleId"],
+                        "outcome": r["outcome"],
+                        "severity": r["severity"],
+                        "enforcement": r["enforcement"],
+                        "detail": r["detail"],
+                        "evaluated_at": now,
+                    }
+                    for r in results
+                ],
+            )
+            self.db.commit()
+        failed = [r for r in results if r["outcome"] == "fail"]
+        return {
+            "runId": run_id,
+            "evaluatedAt": now,
+            "systems": len(systems),
+            "policies": len(policies),
+            "passed": sum(1 for r in results if r["outcome"] == "pass"),
+            "failed": len(failed),
+            "notApplicable": sum(1 for r in results if r["outcome"] == "not_applicable"),
+            "blocking": sum(1 for r in failed if r["enforcement"] == "block"),
+            "results": results,
+        }
+
+    def gate(self, org_id: str, system_id: str) -> dict | None:
+        """Evaluate one system now; it may proceed only if no blocking rule fails."""
+        run = self.enforce(org_id, system_id=system_id)
+        if run is None:
+            return None
+        failed = [r for r in run["results"] if r["outcome"] == "fail"]
+        return {
+            "systemId": system_id,
+            "allowed": not any(r["enforcement"] == "block" for r in failed),
+            "blocking": [r for r in failed if r["enforcement"] == "block"],
+            "warnings": [r for r in failed if r["enforcement"] == "warn"],
+            "runId": run["runId"],
+            "evaluatedAt": run["evaluatedAt"],
+        }
+
+    def latest_results(self, org_id: str, policy_id: str | None = None) -> list[dict]:
+        """The most recent result for each (policy, system, rule)."""
+        e, s = OrgPolicyEvaluation.__table__, GovernanceAISystem.__table__
+        query = (
+            select(e, s.c.name.label("system_name"))
+            .join(s, s.c.id == e.c.system_id)
+            .where(e.c.org_id == org_id)
+            .order_by(e.c.evaluated_at.desc())
+        )
+        if policy_id:
+            query = query.where(e.c.policy_id == policy_id)
+        seen: set[tuple] = set()
+        newest_version: dict[str, int] = {}
+        out = []
+        # ponytail: scans full history; add a latest-result table if evaluations grow large.
+        for r in self.db.execute(query).mappings():
+            key = (r["policy_id"], r["system_id"], r["rule_id"])
+            # Rules dropped by a newer published version no longer count.
+            if key in seen or r["policy_version"] < newest_version.setdefault(r["policy_id"], r["policy_version"]):
+                continue
+            seen.add(key)
+            out.append(
+                {
+                    "policyId": r["policy_id"],
+                    "policyVersion": r["policy_version"],
+                    "systemId": r["system_id"],
+                    "systemName": r["system_name"],
+                    "ruleId": r["rule_id"],
+                    "outcome": r["outcome"],
+                    "severity": r["severity"],
+                    "enforcement": r["enforcement"],
+                    "detail": r["detail"],
+                    "evaluatedAt": r["evaluated_at"],
+                }
+            )
+        return out

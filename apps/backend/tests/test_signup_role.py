@@ -5,30 +5,20 @@ management), so a public endpoint must not hand it out.
 """
 
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
 from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, event, text
-from sqlalchemy.pool import StaticPool
 
 from api.routes import auth
-from database.connection import Base
-from database.models import Organization, OrganizationMember, User
+from tests import pg
 from tests.test_registration_approval import _Db, _rows
 
 
 @pytest.fixture
 def env(monkeypatch):
-    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
-
-    @event.listens_for(engine, "connect")
-    def _now(dbapi_conn, _):
-        dbapi_conn.create_function("now", 0, lambda: datetime.now(timezone.utc).isoformat())
-
-    Base.metadata.create_all(engine, tables=[User.__table__, Organization.__table__, OrganizationMember.__table__])
+    engine = pg.fresh_engine()
     db = _Db(engine)
 
     @asynccontextmanager

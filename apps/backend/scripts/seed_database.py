@@ -446,7 +446,7 @@ def seed_database():
                 inserted_datasets += 1
             except Exception as e:
                 print(f"  ✗ Error inserting {dataset['name']}: {e}")
-                # Try to create table if it doesn't exist (fallback for SQLite)
+                # Try to create table if it doesn't exist
                 if "no such table: datasets" in str(e):
                     print("  ! Attempting to create datasets table...")
                     try:
@@ -651,7 +651,7 @@ def seed_database():
                 inserted_logs += 1
             except Exception as e:
                 print(f"  ✗ Error inserting audit log: {e}")
-                # Try to create table if it doesn't exist (fallback for SQLite)
+                # Try to create table if it doesn't exist
                 if "no such table: audit_logs" in str(e):
                     print("  ! Attempting to create audit_logs table...")
                     try:

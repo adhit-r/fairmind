@@ -67,7 +67,8 @@ export interface RemediationStatus {
 
 export interface RiskStatus {
   risks: Array<{ id: string; title?: string; severity: string; status: string; source?: string | null }>
-  summary: { total: number; open: number; automated: number; bySeverity: Record<'low' | 'medium' | 'high' | 'critical', number> }
+  suggested: Array<{ id: string; title: string; severity: string; source: string }>
+  summary: { total: number; open: number; automated: number; suggested: number; bySeverity: Record<'low' | 'medium' | 'high' | 'critical', number> }
 }
 
 export interface AuditReport {

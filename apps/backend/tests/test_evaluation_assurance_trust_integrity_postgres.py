@@ -3934,6 +3934,9 @@ def test_postgresql_decision_repository_commits_canonical_cas_and_rejects_stale(
     }
     assert json.loads(upgraded_layer_verdicts_json) == upgraded_layers
     assert upgraded_layer_verdicts_json != canonical_json(upgraded_layers)
+    # The decision ORM maps 013l's grant column; this 013b schema only needs the column.
+    with connection.cursor() as cursor:
+        cursor.execute("ALTER TABLE governance_evaluation_decisions ADD COLUMN IF NOT EXISTS separation_override_grant_id TEXT")
 
     engine = create_engine(
         POSTGRES_URL,

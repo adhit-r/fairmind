@@ -1,5 +1,4 @@
 import Link from 'next/link'
-import './iso.css'
 import type { ReactNode } from 'react'
 import type { EngineStatus, ReqStatus, ResultStatus, RunStatus } from '@/lib/api/hooks/usePacks'
 import { cn } from '@/lib/utils'

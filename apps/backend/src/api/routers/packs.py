@@ -3,6 +3,7 @@
 import hashlib
 import json
 import uuid
+from collections import Counter
 from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -13,6 +14,8 @@ from sqlalchemy.orm import Session
 
 from api.routes.ai_governance import _ensure_tables, _utc_now_iso
 from api.routes import evaluation_results
+from api.routes import llm
+from src.application.services import eval_engines
 from api.routes import pack_catalogue as cat
 from api.routes.pack_catalogue import (
     BUNDLES,
@@ -418,6 +421,7 @@ def _evaluation_json(ev, installed: set, res: dict) -> dict:
         "pattern": {"id": pattern.id, "name": pattern.name},
         "pack": _pack_ref(pack_id),
         "engine": ev.engine,
+        "runnable": ev.id in eval_engines.REGISTRY,  # FairMind computes it from uploaded files
         "codeLocation": ev.codeLocation,
         "tests": [
             {"key": k, "framework": REQUIREMENTS[k].framework, "control": REQUIREMENTS[k].control, "title": REQUIREMENTS[k].title}
@@ -1015,6 +1019,311 @@ async def submit_step_output(
     _advance(db, run, target, m.user_id)
     db.commit()
     return _run_json(db, run_id)
+
+
+# --- the agent ---------------------------------------------------------------
+# The organisation's own model (bring your own key) does a waiting work step when
+# one is set up and switched on; otherwise rules do it from what is on file. Either
+# way the output lands on the ledger with how it was made, and every gate still
+# waits for a person.
+
+AGENT_SYSTEM = (
+    "You are FairMind's governance agent. You do one step of an AI governance workflow for an organisation "
+    "and a person reviews your work at the next approval gate. Use only the facts you are given. When "
+    "something the step needs is not in the facts, say exactly what is missing instead of assuming it. "
+    "Write the step's output as plain prose a compliance reviewer can read: what you found, what it means "
+    "for this step, and what is missing. When the step lists branches, choose one and say why; otherwise "
+    "set route to an empty string. Rate your confidence low, medium or high."
+)
+AGENT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "summary": {"type": "string"},
+        "route": {"type": "string"},
+        "confidence": {"type": "string", "enum": ["low", "medium", "high"]},
+    },
+    "required": ["summary", "route", "confidence"],
+    "additionalProperties": False,
+}
+
+
+def _agent_facts(db: Session, run, step: Step, labels: List[str]) -> dict:
+    """What the agent may know: the workflow and step, the AI system, its evidence and results, and the run so far."""
+    wf = WORKFLOWS[run["workflow_id"]]
+    org_id, system_id = run["org_id"], run["ai_system_id"]
+    system = None
+    if system_id:
+        row = db.execute(
+            text(
+                "SELECT name, system_type, version, owner, risk_tier, lifecycle_stage, framework "
+                "FROM governance_ai_systems WHERE id = :id AND org_id = :org"
+            ),
+            {"id": system_id, "org": org_id},
+        ).mappings().fetchone()
+        system = dict(row) if row else None
+    evidence = db.execute(
+        text(
+            "SELECT e.evidence_type, e.title, e.status, e.source, e.created_at, s.name AS system "
+            "FROM governance_evidence e JOIN governance_ai_systems s ON s.id = e.system_id "
+            "WHERE s.org_id = :org AND (:sys IS NULL OR e.system_id = :sys) ORDER BY e.created_at DESC LIMIT 25"
+        ),
+        {"org": org_id, "sys": system_id},
+    ).mappings().all()
+    evaluations = []
+    for ev_id, res in evaluation_results.results(db, org_id).items():
+        mine = [x for x in res["systems"] if x["systemId"] == system_id] if system_id else []
+        status, detail = (mine[0]["status"], mine[0]["detail"]) if mine else (res["status"], None)
+        if status != "not_run":
+            evaluations.append({"name": EVALUATIONS[ev_id].name, "status": status, "detail": detail})
+    titles = {s.id: s.title for s in _run_steps(db, run)}
+    history = []
+    for e in db.execute(
+        text("SELECT kind, step_id, payload_json FROM workflow_run_events WHERE run_id = :id ORDER BY seq"), {"id": run["id"]}
+    ).mappings():
+        payload = json.loads(e["payload_json"])
+        if e["kind"] == "step.completed" and payload.get("summary"):
+            history.append({"step": titles.get(e["step_id"], e["step_id"]), "output": payload["summary"]})
+        elif e["kind"] == "gate.decided":
+            history.append({"decision": payload["decision"], "notes": payload.get("notes", "")})
+    return {
+        "workflow": {"name": wf.name, "description": wf.description, "evidence": wf.evidence, "gate": wf.gate, "approver": wf.approver},
+        "step": {"title": step.title, "kind": step.kind, "does": step.detail, "output": step.output, "onFailure": step.failure, "branches": labels},
+        "aiSystem": system,
+        "evidence": [dict(r) for r in evidence],
+        "evaluations": evaluations,
+        "runSoFar": history,
+    }
+
+
+def _rules_draft(facts: dict, step: Step, labels: List[str]) -> tuple:
+    """The step from what is on file, without a model: counts, failing results and gaps. It lists; it does not reason."""
+    system = facts["aiSystem"]
+    subject = system["name"] if system else "the organisation"
+    evidence, evals = facts["evidence"], facts["evaluations"]
+    failed = [e["name"] for e in evals if e["status"] == "failed"]
+    gaps = (["no evidence is on file"] if not evidence else []) + [f"{n} failed" for n in failed]
+    found = ", ".join(f"{n} {t}" for t, n in Counter(e["evidence_type"] for e in evidence).most_common()) or "none"
+    if step.kind == "collect":
+        lines = [f"Collected for {subject}."]
+        if system:
+            lines.append(f"Risk tier {system['risk_tier']}, lifecycle stage {system['lifecycle_stage']}.")
+        lines.append(f"Evidence on file: {len(evidence)} records ({found})." if evidence else "No evidence is on file.")
+        passed = sum(e["status"] == "passed" for e in evals)
+        lines.append(f"Evaluation results: {passed} passed, {len(failed)} failed{': ' + ', '.join(failed) if failed else ''}.")
+    elif step.kind in ("check", "verify", "preflight"):
+        lines = [f"Checked {subject} against what is on file: " + ("no gaps found." if not gaps else "; ".join(gaps) + ".")]
+    elif step.kind == "suggest":
+        lines = [f"Drafted by rules for {subject}."]
+        lines.append("Gaps to resolve: " + "; ".join(gaps) + "." if gaps else "No gaps found in the evidence on file.")
+        notes = next((h["notes"] for h in reversed(facts["runSoFar"]) if h.get("decision") and h.get("notes")), None)
+        if notes:
+            lines.append(f"Changes asked: {notes}")
+        lines.append("Rules list what is on file and what is missing; the reviewer supplies the judgement.")
+    else:
+        lines = [f"{step.title}: recorded from the approved proposal."]
+    route = None
+    if labels:
+        want = "exception" if gaps else "routine"
+        route = next((l for l in labels if want in l.lower()), labels[-1] if gaps else labels[0])
+    return " ".join(lines), route
+
+
+def _stored_connection(row) -> llm.Connection:
+    provider = llm.BY_ID.get(row["provider"])
+    if not provider:
+        raise HTTPException(status_code=409, detail="The organisation's AI provider is no longer supported; choose another")
+    key = llm.decrypt(row["api_key_enc"])
+    if row["api_key_enc"] and key is None:
+        raise HTTPException(status_code=409, detail="The stored API key can no longer be read; enter it again in organization settings")
+    try:
+        base = llm.base_url(provider, json.loads(row["fields_json"] or "{}"))
+    except llm.LLMError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    return llm.Connection(provider, base, key, row["model"] or provider.default_model)
+
+
+@router.post("/runs/{run_id}/steps/{step_id}/agent")
+async def agent_step(run_id: str, step_id: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+    _ensure_tables(db)
+    run = dict(_run_or_404(db, m.org_id, run_id))
+    step = next((s for s in _run_steps(db, run) if s.id == step_id), None)
+    if not step:
+        raise HTTPException(status_code=404, detail="Step not found")
+    if run["status"] != "waiting" or run["current_step"] != step_id or step.kind in GATE_KINDS:
+        raise HTTPException(status_code=409, detail="This step is not waiting for output")
+    labels = [e.label or "" for e in step.next] if len(step.next) > 1 else []
+    facts = _agent_facts(db, run, step, labels)
+    row = _ai_row(db, m.org_id)
+    if row and row["enabled"]:
+        conn = _stored_connection(row)
+        prompt = json.dumps(facts, default=str, sort_keys=True)
+        db.rollback()  # hold no transaction open while the model works
+        try:
+            data, meta = await llm.complete(conn, AGENT_SYSTEM, prompt, AGENT_SCHEMA)
+        except llm.LLMError as e:
+            raise HTTPException(status_code=502, detail=str(e))
+        summary = str(data.get("summary") or "").strip()[:20000]
+        if not summary:
+            raise HTTPException(status_code=502, detail="The model returned an empty answer")
+        route = data.get("route") if data.get("route") in labels else None
+        payload = {
+            "mode": "llm",
+            "provider": conn.provider.id,
+            "model": meta["model"],
+            "confidence": data.get("confidence") if data.get("confidence") in ("low", "medium", "high") else None,
+            "usage": meta["usage"],
+            "latencyMs": meta["latencyMs"],
+            "promptHash": hashlib.sha256(f"{AGENT_SYSTEM}\n{prompt}".encode()).hexdigest(),
+        }
+        if labels and route is None:
+            route = _rules_draft(facts, step, labels)[1]  # the model named no listed branch; rules choose
+            payload["routeBy"] = "rules"
+    else:
+        summary, route = _rules_draft(facts, step, labels)
+        payload = {"mode": "rules"}
+    _claim(db, run_id, step_id)
+    payload.update({"summary": summary, "source": "agent", "submittedBy": "agent", "requestedBy": m.user_id})
+    if labels:
+        payload["route"] = route
+    _append(db, run_id, "step.completed", step_id, payload)
+    _advance(db, run, next(e.to for e in step.next if e.label == route) if labels else _edge(step), m.user_id)
+    db.commit()
+    return _run_json(db, run_id)
+
+
+# --- the organisation's model (bring your own key) -------------------------
+
+
+class AIProviderBody(BaseModel):
+    provider: str
+    model: str = Field(default="", max_length=200)
+    apiKey: Optional[str] = Field(default=None, max_length=4000)  # omitted on save: keep the stored key
+    baseUrl: Optional[str] = Field(default=None, max_length=500)
+    endpoint: Optional[str] = Field(default=None, max_length=500)
+    region: Optional[str] = Field(default=None, max_length=40)
+    enabled: bool = True
+
+
+def _ai_row(db: Session, org_id: str):
+    return db.execute(text("SELECT * FROM org_ai_providers WHERE org_id = :org"), {"org": org_id}).mappings().fetchone()
+
+
+def _ai_json(row) -> Optional[dict]:
+    if not row:
+        return None
+    provider = llm.BY_ID.get(row["provider"])
+    return {
+        "provider": row["provider"],
+        "providerName": provider.name if provider else row["provider"],
+        "model": row["model"],
+        **json.loads(row["fields_json"] or "{}"),
+        "hasKey": bool(row["api_key_enc"]),
+        "keyHint": row["key_hint"],
+        "keyReadable": not row["api_key_enc"] or llm.decrypt(row["api_key_enc"]) is not None,
+        "enabled": bool(row["enabled"]),
+        "testedOk": None if row["tested_ok"] is None else bool(row["tested_ok"]),
+        "testedAt": row["tested_at"],
+        "testMessage": row["test_message"],
+        "updatedAt": row["updated_at"],
+    }
+
+
+def _body_connection(body: AIProviderBody, stored) -> tuple:
+    """The connection the form describes, reusing the stored key when the form leaves it blank."""
+    provider = llm.BY_ID.get(body.provider)
+    if not provider:
+        raise HTTPException(status_code=422, detail="Unknown provider")
+    fields = {k: (getattr(body, k) or "").strip() for k in provider.needs}
+    key = (body.apiKey or "").strip() or None
+    if key is None and stored and stored["provider"] == body.provider:
+        key = llm.decrypt(stored["api_key_enc"])
+    if provider.key == "required" and not key:
+        raise HTTPException(status_code=422, detail="Enter the API key")
+    try:
+        base = llm.base_url(provider, fields)
+    except llm.LLMError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return llm.Connection(provider, base, key, body.model.strip() or provider.default_model), fields
+
+
+@router.get("/ai-providers")
+async def list_ai_providers(_m: OrgMembership = Depends(_member)):
+    return llm.catalogue()
+
+
+@router.get("/ai-provider")
+async def get_ai_provider(m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+    _ensure_tables(db)
+    return {"config": _ai_json(_ai_row(db, m.org_id))}
+
+
+@router.put("/ai-provider")
+async def save_ai_provider(body: AIProviderBody, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+    _ensure_tables(db)
+    stored = _ai_row(db, m.org_id)
+    conn, fields = _body_connection(body, stored)
+    same = stored and stored["provider"] == body.provider and stored["model"] == conn.model and json.loads(stored["fields_json"] or "{}") == fields
+    new_key = bool((body.apiKey or "").strip())
+    params = {
+        "org": m.org_id,
+        "provider": body.provider,
+        "model": conn.model,
+        "fields": json.dumps(fields, sort_keys=True),
+        "key": llm.encrypt(conn.api_key) if conn.api_key else None,
+        "hint": llm.key_hint(conn.api_key) if conn.api_key else None,
+        "enabled": body.enabled,
+        # A test result only stands while nothing it tested has changed.
+        "tested_ok": stored["tested_ok"] if same and not new_key else None,
+        "tested_at": stored["tested_at"] if same and not new_key else None,
+        "test_message": stored["test_message"] if same and not new_key else None,
+        "by": m.user_id,
+        "now": _utc_now_iso(),
+    }
+    db.execute(
+        text(
+            "INSERT INTO org_ai_providers (org_id, provider, model, fields_json, api_key_enc, key_hint, enabled, "
+            "tested_ok, tested_at, test_message, updated_by, updated_at) VALUES (:org, :provider, :model, :fields, :key, "
+            ":hint, :enabled, :tested_ok, :tested_at, :test_message, :by, :now) "
+            "ON CONFLICT (org_id) DO UPDATE SET provider = excluded.provider, model = excluded.model, "
+            "fields_json = excluded.fields_json, api_key_enc = excluded.api_key_enc, key_hint = excluded.key_hint, "
+            "enabled = excluded.enabled, tested_ok = excluded.tested_ok, tested_at = excluded.tested_at, "
+            "test_message = excluded.test_message, updated_by = excluded.updated_by, updated_at = excluded.updated_at"
+        ),
+        params,
+    )
+    db.commit()
+    return {"config": _ai_json(_ai_row(db, m.org_id))}
+
+
+@router.delete("/ai-provider")
+async def delete_ai_provider(m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+    _ensure_tables(db)
+    db.execute(text("DELETE FROM org_ai_providers WHERE org_id = :org"), {"org": m.org_id})
+    db.commit()
+    return {"config": None}
+
+
+@router.post("/ai-provider/test")
+async def test_ai_provider(body: AIProviderBody, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+    _ensure_tables(db)
+    stored = _ai_row(db, m.org_id)
+    conn, fields = _body_connection(body, stored)
+    db.rollback()  # hold no transaction open while the provider answers
+    result = await llm.test(conn)
+    stored = _ai_row(db, m.org_id)
+    if (
+        stored
+        and stored["provider"] == body.provider
+        and stored["model"] == conn.model
+        and json.loads(stored["fields_json"] or "{}") == fields
+        and not (body.apiKey or "").strip()
+    ):
+        db.execute(
+            text("UPDATE org_ai_providers SET tested_ok = :ok, tested_at = :now, test_message = :msg WHERE org_id = :org"),
+            {"ok": result["ok"], "now": _utc_now_iso(), "msg": result["message"][:300], "org": m.org_id},
+        )
+        db.commit()
+    return result
 
 
 @router.post("/runs/{run_id}/decision")

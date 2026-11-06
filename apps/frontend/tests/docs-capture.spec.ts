@@ -198,10 +198,12 @@ const RISK_RESPONSE = {
       timestamp: '2026-07-31T10:00:00Z',
     },
   ],
+  suggested: [],
   summary: {
     total: 1,
     open: 1,
     automated: 0,
+    suggested: 0,
     bySeverity: { low: 0, medium: 0, high: 1, critical: 0 },
   },
 }

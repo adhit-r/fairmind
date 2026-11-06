@@ -26,7 +26,6 @@
   --content-width: 80rem;
   --font-display: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-serif: 'Instrument Serif', Georgia, serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --z-sticky: 30;
@@ -105,12 +104,22 @@ h3 {
   letter-spacing: -0.025em;
 }
 
+/* No italics anywhere. Emphasis in a heading is a quieter tone of the same face. */
 em,
-.serif {
-  font-family: var(--font-serif);
-  font-style: italic;
-  font-weight: 400;
-  letter-spacing: -0.02em;
+i,
+cite,
+dfn,
+address {
+  font-style: normal;
+}
+
+em {
+  font-weight: 600;
+}
+
+:is(h1, h2, h3) em {
+  color: color-mix(in srgb, currentColor 48%, transparent);
+  font-weight: inherit;
 }
 
 p {

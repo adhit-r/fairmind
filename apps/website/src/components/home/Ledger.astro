@@ -1,0 +1,60 @@
+---
+// The trace of a governed run. Decisions made at the gate in the run machine above are chained here.
+const example = [
+  ['collect', '14 items · scopes: read, short-lived'],
+  ['check', '12 pass · 1 fail · 1 cannot conclude'],
+  ['suggest', 'go 5% → 25% → all · confidence 0.78 to 0.84'],
+  ['dry run', 'blast radius 1 release · rollback path confirmed'],
+  ['ask', 'approver: AI system owner + Risk · releaser is not the approver'],
+  ['act', 'signed approval posted to the CI/CD gate'],
+  ['verify', 'target re-read · match'],
+  ['file', 'evidence → ISO/IEC 42001 8.1, AIUC-1 E004, NIST AI RMF MANAGE 1.1, EU AI Act Art 43'],
+];
+---
+
+<section class="lg" id="governed-agent" aria-labelledby="lg-title">
+  <div class="wrap lg-split">
+    <header>
+      <p class="label reveal">The agent is governed too</p>
+      <h2 id="lg-title" class="reveal">Twenty controls on <em>our own</em> agent.</h2>
+      <p class="lg-lead reveal">
+        Per-step scoped identity. A deterministic tool allowlist prompts cannot widen. Collected content treated as data,
+        never instructions. A hash-chained trace of every call. A kill switch per run. You can see our agent's metrics and
+        incidents; we cannot hide them.
+      </p>
+    </header>
+    <div class="lg-trace" data-ledger>
+      <p class="lg-h"><span>Ledger</span> deployment_release_gate</p>
+      <ol class="lg-yours" data-ledger-list aria-live="polite" aria-label="Your decisions, newest first"></ol>
+      <p class="lg-empty" data-ledger-empty>Decide at the gate above. Your decision is hashed and chained here, on top of the run before it.</p>
+      <ol class="lg-example" aria-label="Example trace">
+        {example.map(([k, v]) => (<li><i>{k}</i><span>{v}</span></li>))}
+        <li class="lg-dim"><i>trace</i><span>sha256 e1b0…9a44 · chained to the previous run</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<script>
+  import type { RunEvent } from '../../scripts/run-machine';
+  const list = document.querySelector<HTMLOListElement>('[data-ledger-list]');
+  const empty = document.querySelector<HTMLElement>('[data-ledger-empty]');
+  const words: Record<string, string> = {
+    approved: 'approved by you',
+    edited: 'approved with your edits',
+    changes: 'changes requested by you',
+    rejected: 'rejected by you · reason filed',
+    escalated: 'escalated · nothing recorded or changed',
+  };
+  addEventListener('fm:run', (e) => {
+    const d = (e as CustomEvent<RunEvent>).detail;
+    if (!list) return;
+    empty?.remove();
+    const li = document.createElement('li');
+    li.dataset.decision = d.decision;
+    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    li.innerHTML = `<i>${d.run}</i><span>${words[d.decision]}${d.round ? ` · round ${d.round + 1}` : ''}</span><code>${d.hash.slice(0, 8)}…${d.hash.slice(-4)} ← ${d.prev.slice(0, 6)}</code><time>${time}</time>`;
+    list.prepend(li);
+    while (list.children.length > 6) list.lastElementChild?.remove();
+  });
+</script>
