@@ -7,27 +7,22 @@
 
 # Redirects for old URLs
 [[redirects]]
-  from = "https://blog.fairmind.xyz/*"
-  to = "https://fairmind.xyz/blog/:splat"
-  status = 301
-  force = true
-
-[[redirects]]
   from = "/docs"
   to = "https://docs.fairmind.xyz"
   status = 301
   force = true
 
-# Research notes moved from /blog/. 302 until blog.fairmind.xyz is live, then point /blog/* there with a 301.
+# The blog lives on blog.fairmind.xyz. Old /blog/<slug> notes became /research/.
 [[redirects]]
   from = "/blog"
-  to = "/research/"
-  status = 302
+  to = "https://blog.fairmind.xyz/"
+  status = 301
+  force = true
 
 [[redirects]]
   from = "/blog/*"
   to = "/research/"
-  status = 302
+  status = 301
 
 # Security headers
 [[headers]]

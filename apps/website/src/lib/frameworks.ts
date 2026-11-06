@@ -240,7 +240,7 @@ export const frameworks: Framework[] = [
     shortName: 'GDPR',
     region: 'European Union',
     type: 'Binding regulation',
-    title: 'GDPR and AI: automated decisions, DPIAs, and fairness evidence',
+    title: 'GDPR and AI: automated decisions, DPIAs, fairness evidence',
     description:
       'Document GDPR obligations for AI systems: fairness and accuracy principles, Article 22 automated decisions, and Data Protection Impact Assessments.',
     summary:
