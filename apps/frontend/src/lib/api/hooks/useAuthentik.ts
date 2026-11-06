@@ -144,6 +144,11 @@ export function useAuthentik(options: UseAuthentikOptions = {}) {
 
       // Redirect to Authentik
       const authUrl = `${authentikUrl}/application/o/authorize/?${params}`;
+      // Only ever navigate to an http(s) URL — guards against a misconfigured
+      // authentikUrl carrying a javascript:/data: scheme into location.href.
+      if (!/^https?:\/\//i.test(authUrl)) {
+        throw new Error("Refusing to redirect to a non-http(s) authorization URL");
+      }
       window.location.href = authUrl;
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
@@ -239,6 +244,9 @@ export function useAuthentik(options: UseAuthentikOptions = {}) {
         const logoutUrl = `${authentikUrl}/application/o/logout/?redirect_uri=${encodeURIComponent(
           redirectUri || "/"
         )}`;
+        if (!/^https?:\/\//i.test(logoutUrl)) {
+          throw new Error("Refusing to redirect to a non-http(s) logout URL");
+        }
         window.location.href = logoutUrl;
       } else {
         // Fallback if no Authentik URL

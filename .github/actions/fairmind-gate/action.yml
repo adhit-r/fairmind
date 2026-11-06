@@ -49,9 +49,14 @@ outputs:
 runs:
   using: composite
   steps:
+    # Every input is passed through env vars and referenced as a shell variable.
+    # Interpolating ${{ inputs.* }} directly into a run: script lets a crafted
+    # input value inject shell commands on the runner (template injection).
     - name: Install the fairmind CLI
       shell: bash
-      run: python -m pip install --quiet "${{ inputs.cli-source }}"
+      env:
+        CLI_SOURCE: ${{ inputs.cli-source }}
+      run: python -m pip install --quiet "$CLI_SOURCE"
 
     - name: Run the fairness test
       if: inputs.predictions != ''
@@ -59,10 +64,16 @@ runs:
       env:
         FAIRMIND_API_URL: ${{ inputs.api-url }}
         FAIRMIND_API_KEY: ${{ inputs.api-key }}
+        SYSTEM: ${{ inputs.system }}
+        PREDICTIONS: ${{ inputs.predictions }}
+        OUTCOME: ${{ inputs.outcome }}
+        ATTRIBUTES: ${{ inputs.attributes }}
+        PREDICTION: ${{ inputs.prediction }}
+        SCORE: ${{ inputs.score }}
       run: |
-        args=(test --system "${{ inputs.system }}" --file "${{ inputs.predictions }}" --outcome "${{ inputs.outcome }}" --attributes "${{ inputs.attributes }}")
-        [ -n "${{ inputs.prediction }}" ] && args+=(--prediction "${{ inputs.prediction }}")
-        [ -n "${{ inputs.score }}" ] && args+=(--score "${{ inputs.score }}")
+        args=(test --system "$SYSTEM" --file "$PREDICTIONS" --outcome "$OUTCOME" --attributes "$ATTRIBUTES")
+        [ -n "$PREDICTION" ] && args+=(--prediction "$PREDICTION")
+        [ -n "$SCORE" ] && args+=(--score "$SCORE")
         # The test's own exit code is informational here; the gate below decides.
         fairmind "${args[@]}" || true
 
@@ -72,16 +83,18 @@ runs:
       env:
         FAIRMIND_API_URL: ${{ inputs.api-url }}
         FAIRMIND_API_KEY: ${{ inputs.api-key }}
+        SYSTEM: ${{ inputs.system }}
+        ALLOW_CONDITIONAL: ${{ inputs.allow-conditional }}
       run: |
         set +e
-        fairmind gate --system "${{ inputs.system }}" --json > gate.json
+        fairmind gate --system "$SYSTEM" --json > gate.json
         code=$?
         set -e
         if [ "$code" -eq 3 ]; then cat gate.json; exit 3; fi
         verdict=$(python -c 'import json; print(json.load(open("gate.json"))["verdict"])')
         echo "verdict=$verdict" >> "$GITHUB_OUTPUT"
-        fairmind gate --system "${{ inputs.system }}" || true
+        fairmind gate --system "$SYSTEM" || true
         if [ "$verdict" = "go" ]; then exit 0; fi
-        if [ "$verdict" = "conditional_go" ] && [ "${{ inputs.allow-conditional }}" = "true" ]; then exit 0; fi
-        echo "::error title=FairMind release gate::$verdict for system ${{ inputs.system }}"
+        if [ "$verdict" = "conditional_go" ] && [ "$ALLOW_CONDITIONAL" = "true" ]; then exit 0; fi
+        echo "::error title=FairMind release gate::$verdict for system $SYSTEM"
         exit 1

@@ -397,6 +397,16 @@ async def authentik_oauth_callback(
         # Exchange authorization code for access token
         token_url = f"{settings.authentik_server_url}/application/o/token/"
 
+        # The client secret must be configured — never fall back to a hardcoded
+        # default, which is a published secret that defeats OAuth confidentiality.
+        client_secret = settings.authentik_oauth_client_secret
+        if not client_secret:
+            logger.error("authentik_oauth_client_secret is not configured")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="OAuth is not configured",
+            )
+
         async with httpx.AsyncClient() as client:
             token_response = await client.post(
                 token_url,
@@ -405,7 +415,7 @@ async def authentik_oauth_callback(
                     "code": code,
                     "redirect_uri": settings.authentik_oauth_redirect_uri or "http://localhost:3000/auth/callback",
                     "client_id": settings.authentik_oauth_client_id or "fairmind-frontend",
-                    "client_secret": settings.authentik_oauth_client_secret or "fairmind-frontend-secret",
+                    "client_secret": client_secret,
                 },
                 timeout=10.0
             )
