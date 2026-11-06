@@ -10,7 +10,7 @@ import '../styles/home.css';
 import '../styles/home-v2.css';
 
 const stats = [
-  { n: String(registryTotals.frameworks), t: 'Frameworks in the registry, EU AI Act to OWASP Agentic' },
+  { n: String(registryTotals.frameworks), t: 'Frameworks, standards and risk lists, EU AI Act to OWASP Agentic' },
   { n: '90', t: 'Governance workflows agents can run' },
   { n: '109', t: 'Evaluations mapped to requirement IDs' },
   { n: '21', t: 'Packs across Govern, Evaluate, Secure, Comply' },
@@ -26,7 +26,7 @@ const structuredData = [
     operatingSystem: 'Web',
     url: 'https://fairmind.xyz',
     description:
-      `Agentic AI governance platform: 90 governance workflows, 109 evaluations and ${registryTotals.frameworks} frameworks, with a human gate in every workflow and a hash-chained record of each run. Covers EU AI Act, ISO/IEC 42001, NIST AI RMF, OWASP LLM and Agentic Top 10, MITRE ATLAS and AIUC-1.`,
+      `Agentic AI governance platform: 90 governance workflows, 109 evaluations and ${registryTotals.frameworks} frameworks, standards and risk lists, with a human gate in every workflow and a hash-chained record of each run. Covers EU AI Act, ISO/IEC 42001, NIST AI RMF, OWASP LLM and Agentic Top 10, MITRE ATLAS and AIUC-1.`,
     publisher: { '@id': 'https://fairmind.xyz/#organization' },
   },
   {
@@ -43,7 +43,7 @@ const structuredData = [
 
 <Layout
   title="FairMind: agentic AI governance platform"
-  description={`Agentic AI governance: 90 workflows, 109 evaluations and ${registryTotals.frameworks} frameworks, each with a human approval gate. EU AI Act, ISO/IEC 42001, NIST AI RMF, OWASP.`}
+  description={`Agentic AI governance: 90 workflows, 109 evaluations and ${registryTotals.frameworks} frameworks, standards and risk lists, each workflow gated by a human. EU AI Act, ISO 42001, NIST.`}
   structuredData={structuredData}
 >
   <div class="story" data-story>

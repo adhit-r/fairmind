@@ -29,7 +29,7 @@ export const GET: APIRoute = () => {
     '## Framework guides',
     '',
     ...frameworks.map((f) => `- [${f.shortName}](${site}/frameworks/${f.slug}/): ${f.description}`),
-    `- [All ${registryTotals.frameworks} frameworks](${site}/frameworks/): ${registry.slice(0, 12).map((r) => r.name).join(', ')} and more`,
+    `- [All ${registryTotals.frameworks} frameworks, standards and risk lists](${site}/frameworks/): ${registry.slice(0, 12).map((r) => r.name).join(', ')} and more`,
     '',
     '## Optional',
     '',
