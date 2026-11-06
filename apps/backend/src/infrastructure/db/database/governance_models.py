@@ -98,7 +98,7 @@ def _canonical_utc_timestamp(column: str, *, nullable: bool = True) -> str:
         f"AND substr({column}, 11, 1) = 'T' "
         f"AND substr({column}, 14, 1) = ':' "
         f"AND substr({column}, 17, 1) = ':' "
-        f"AND right({column}, 6) = '+00:00' "
+        f"AND substr({column}, length({column}) - 5, 6) = '+00:00' "
         f"AND {year} BETWEEN 1 AND 9999 "
         f"AND {month} BETWEEN 1 AND 12 "
         f"AND {day} BETWEEN 1 AND ({maximum_day}) "
