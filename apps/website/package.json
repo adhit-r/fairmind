@@ -24,10 +24,10 @@
     "astro": "astro"
   },
   "dependencies": {
-    "@astrojs/sitemap": "^3.7.3",
-    "astro": "^7.1.6",
-    "posthog-js": "^1.409.5",
-    "three": "^0.160.0"
+    "@astrojs/sitemap": "^3.7.4",
+    "astro": "^7.4.5",
+    "posthog-js": "^1.445.1",
+    "three": "^0.187.0"
   },
   "overrides": {
     "brace-expansion": "^5.0.6",
@@ -45,6 +45,6 @@
     "yaml": "^2.8.3"
   },
   "devDependencies": {
-    "@types/three": "^0.160.0"
+    "@types/three": "^0.187.0"
   }
 }
