@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useMemo, useState } from 'react'
-import { BTN, BTN_P, Empty, ErrorNote, Heading, Loading, MUTED, Pill, when } from '@/components/packs/parts'
+import { BTN, BTN_P, Empty, ErrorNote, Heading, Loading, MUTED, Pill } from '@/components/packs/parts'
 import { OutcomePill, PolicyStatusPill } from '@/components/policies/PolicyPills'
 import { useOrgId } from '@/lib/api/hooks/useOrgId'
 import {
@@ -85,14 +85,13 @@ function Enforcement({ evaluations, policies, onRun }: { evaluations: Evaluation
   const [busy, setBusy] = useState(false)
   const names = new Map(policies.map((p) => [p.id, p]))
   const failing = evaluations.filter((e) => e.outcome === 'fail')
-  const last = evaluations.reduce((acc, e) => (e.evaluatedAt > acc ? e.evaluatedAt : acc), '')
   return (
     <section aria-labelledby="enf" className="flex flex-col gap-3.5">
       <div className="flex flex-wrap items-center justify-between gap-2.5">
         <div>
           <h2 id="enf" className="m-0 text-lg font-semibold">Enforcement</h2>
           <span className={`text-[13px] ${MUTED}`}>
-            Published rules run against every AI system on publish and on demand.{last && ` Last run ${when(last)}.`}
+            Published rules checked against every AI system as its data stands now. A failing blocking rule stops the release approval. Running enforcement records these results for the audit trail.
           </span>
         </div>
         <button type="button" className={BTN} disabled={busy} onClick={async () => { setBusy(true); await onRun(); setBusy(false) }}>
@@ -153,7 +152,7 @@ function Coverage({ coverage }: { coverage: FrameworkCoverage[] }) {
       <div>
         <h2 id="cov" className="m-0 text-lg font-semibold">Framework coverage</h2>
         <span className={`text-[13px] ${MUTED}`}>
-          Controls mapped to a published policy rule, and whether that rule holds on every system it applies to at the last enforcement run.
+          Controls mapped to a published policy rule, and whether that rule holds on every system it applies to right now.
         </span>
       </div>
       {!coverage.length ? (

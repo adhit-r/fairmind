@@ -398,7 +398,7 @@ class PolicyService:
         Drafts do not count: only the published, enforced version of a policy does.
         """
         outcomes: dict[tuple, list[str]] = {}
-        for r in self.latest_results(org_id):
+        for r in self.current_results(org_id):
             outcomes.setdefault((r["policyId"], r["policyVersion"], r["ruleId"]), []).append(r["outcome"])
         covering: dict[str, list[dict]] = {}
         for policy in self._enforced(org_id, None):
@@ -658,8 +658,13 @@ class PolicyService:
             query = query.where(p.c.id == policy_id)
         return [dict(r) for r in self.db.execute(query).mappings()]
 
-    def enforce(self, org_id: str, policy_id: str | None = None, system_id: str | None = None) -> dict | None:
-        """Evaluate published policies against the org's systems and record each result."""
+    def _evaluate(
+        self, org_id: str, policy_id: str | None = None, system_id: str | None = None, assume: dict | None = None
+    ) -> tuple[list[dict], list[dict], list[dict]] | None:
+        """Evaluate published policies against the org's systems now, recording nothing.
+
+        ``assume`` overrides facts, so a release check can ask "would this pass once approved?".
+        """
         s = GovernanceAISystem.__table__
         query = select(s).where(s.c.org_id == org_id)
         if system_id:
@@ -667,11 +672,10 @@ class PolicyService:
         systems = [dict(r) for r in self.db.execute(query).mappings()]
         if system_id and not systems:
             return None
-        run_id, now = str(uuid.uuid4()), _now()
         policies = self._enforced(org_id, policy_id)
         results = []
-        for system in systems:
-            facts = self.system_facts(org_id, system)
+        for system in systems if policies else []:
+            facts = {**self.system_facts(org_id, system), **(assume or {})}
             for policy in policies:
                 for rule in json.loads(policy["rules_json"]):
                     outcome, detail = evaluate_rule(rule, facts)
@@ -691,6 +695,33 @@ class PolicyService:
                             "detail": detail,
                         }
                     )
+        return systems, policies, results
+
+    def current_results(self, org_id: str, policy_id: str | None = None) -> list[dict]:
+        """Each published rule's outcome on each system as the data stands now."""
+        # ponytail: re-evaluates every system per read; cache by data version if orgs reach hundreds of systems.
+        _, _, results = self._evaluate(org_id, policy_id)
+        now = _now()
+        return [{**r, "evaluatedAt": now} for r in results]
+
+    def release_check(self, org_id: str, system_id: str) -> dict | None:
+        """Published rules that fail for a system once its release is approved: blocking and warnings."""
+        evaluated = self._evaluate(org_id, system_id=system_id, assume={"approval.status": "approved"})
+        if evaluated is None:
+            return None
+        failed = [r for r in evaluated[2] if r["outcome"] == "fail"]
+        return {
+            "blocking": [r for r in failed if r["enforcement"] == "block"],
+            "warnings": [r for r in failed if r["enforcement"] == "warn"],
+        }
+
+    def enforce(self, org_id: str, policy_id: str | None = None, system_id: str | None = None) -> dict | None:
+        """Evaluate published policies against the org's systems and record each result."""
+        evaluated = self._evaluate(org_id, policy_id, system_id)
+        if evaluated is None:
+            return None
+        systems, policies, results = evaluated
+        run_id, now = str(uuid.uuid4()), _now()
         if results:
             self.db.execute(
                 insert(OrgPolicyEvaluation.__table__),
@@ -740,40 +771,3 @@ class PolicyService:
             "runId": run["runId"],
             "evaluatedAt": run["evaluatedAt"],
         }
-
-    def latest_results(self, org_id: str, policy_id: str | None = None) -> list[dict]:
-        """The most recent result for each (policy, system, rule)."""
-        e, s = OrgPolicyEvaluation.__table__, GovernanceAISystem.__table__
-        query = (
-            select(e, s.c.name.label("system_name"))
-            .join(s, s.c.id == e.c.system_id)
-            .where(e.c.org_id == org_id)
-            .order_by(e.c.evaluated_at.desc())
-        )
-        if policy_id:
-            query = query.where(e.c.policy_id == policy_id)
-        seen: set[tuple] = set()
-        newest_version: dict[str, int] = {}
-        out = []
-        # ponytail: scans full history; add a latest-result table if evaluations grow large.
-        for r in self.db.execute(query).mappings():
-            key = (r["policy_id"], r["system_id"], r["rule_id"])
-            # Rules dropped by a newer published version no longer count.
-            if key in seen or r["policy_version"] < newest_version.setdefault(r["policy_id"], r["policy_version"]):
-                continue
-            seen.add(key)
-            out.append(
-                {
-                    "policyId": r["policy_id"],
-                    "policyVersion": r["policy_version"],
-                    "systemId": r["system_id"],
-                    "systemName": r["system_name"],
-                    "ruleId": r["rule_id"],
-                    "outcome": r["outcome"],
-                    "severity": r["severity"],
-                    "enforcement": r["enforcement"],
-                    "detail": r["detail"],
-                    "evaluatedAt": r["evaluated_at"],
-                }
-            )
-        return out

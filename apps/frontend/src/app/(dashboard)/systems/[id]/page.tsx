@@ -336,6 +336,21 @@ export default function SystemFilePage() {
                 }}
               />
             )}
+            {gate.policy && gate.policy.blocking.length + gate.policy.warnings.length > 0 && (
+              <>
+                <div className="mt-3 text-[11px] font-semibold uppercase tracking-[.08em] text-[var(--fm-ink3)]">Policy rules</div>
+                <ul className="mt-1 flex flex-col gap-1">
+                  {[...gate.policy.blocking.map((r) => ({ ...r, blocks: true })), ...gate.policy.warnings.map((r) => ({ ...r, blocks: false }))].map((r) => (
+                    <li key={`${r.policyId}:${r.ruleId}`} className="flex flex-wrap items-baseline gap-x-2 text-[12.5px]">
+                      <span className={r.blocks ? 'font-semibold text-[#b4232c]' : 'font-semibold text-[#a14d00]'}>{r.blocks ? 'Blocks release' : 'Warning'}</span>
+                      <span>{r.ruleTitle}</span>
+                      <Link href={`/policies/${r.policyId}`} className="text-[var(--fm-ink2)] underline-offset-2 hover:underline">{r.policyName}</Link>
+                      {r.detail && <span className="text-[var(--fm-ink3)]">{r.detail}</span>}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
             {gate.reasons.length > 0 && <p className="mt-2 text-[12.5px] text-[var(--fm-ink2)]">{gate.reasons.join('. ')}.</p>}
           </div>
         )}
