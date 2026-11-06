@@ -98,6 +98,8 @@ def test_policy_lifecycle_enforcement_distribution_and_coverage(assurance_client
             )
         )
         session.commit()
+    # Results are read live, so the approval shows at once, before any enforcement run.
+    assert [r["outcome"] for r in client.get(f"{url}/evaluations").json()] == ["pass"]
     assert client.get(f"{BASE}/gate/system-a").json()["allowed"] is True
     assert control()["status"] == "passing" and control()["coveredBy"][0]["passingSystems"] == 1
 
@@ -170,3 +172,37 @@ def test_rules_map_to_oecd_ai_principles(assurance_client):
     assert (oecd["name"], oecd["versionLabel"], oecd["totalControls"]) == ("OECD AI Principles", "May 2024", 5)
     accountability = next(c for c in oecd["controls"] if c["ref"] == "oecd-ai:1.5")
     assert accountability["title"] == "Accountability"
+
+
+def test_release_gate_enforces_published_blocking_rules(assurance_client):
+    client, session_factory, _ = assurance_client
+    with session_factory() as session:
+        _seed_org(session, ORG_A, USER_A, role="admin")
+        _seed_catalog_and_system(session)
+    release_gate = "/api/v1/ai-governance/systems/system-a/gate"
+    dpia = {
+        "id": "dpia",
+        "title": "A DPIA is on file",
+        "enforcement": "block",
+        "check": {"fact": "system.metadata.dpia", "op": "eq", "value": True},
+    }
+    # A rule on the approval itself must not block the approval it asks for.
+    for rules in ([APPROVAL_RULE], [dpia, {**OWNER_RULE, "enforcement": "warn"}]):
+        policy = client.post(BASE, json={"name": rules[0]["id"], "rules": rules}).json()
+        for action in ("submit", "approve", "publish"):
+            assert client.post(f"{BASE}/{policy['id']}/actions", json={"action": action}).status_code == 200
+    gate = client.get(release_gate).json()
+    assert [r["ruleId"] for r in gate["policy"]["blocking"]] == ["dpia"]
+    assert [r["ruleId"] for r in gate["policy"]["warnings"]] == ["named-owner"]
+    assert gate["verdict"] == "no_go" and gate["reasons"][0] == "Policy rule 'A DPIA is on file' (dpia) fails"
+
+    with session_factory() as session:
+        session.execute(
+            GovernanceAISystem.__table__.update()
+            .where(GovernanceAISystem.__table__.c.id == "system-a")
+            .values(metadata_json='{"dpia": true}', owner="Risk office")
+        )
+        session.commit()
+    gate = client.get(release_gate).json()
+    assert gate["policy"] == {"blocking": [], "warnings": []}
+    assert not any(r.startswith("Policy rule") for r in gate["reasons"])
