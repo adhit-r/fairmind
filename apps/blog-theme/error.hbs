@@ -1,6 +1,9 @@
 {{!< default}}
-<header class="page-head wrap-read">
-  <h1>{{#match statusCode 404}}This page is not here{{else}}Something went wrong{{/match}}</h1>
-  <p class="dek">{{#match statusCode 404}}The address may be mistyped, or the guide may have moved.{{else}}{{message}}{{/match}} Search the guides or start from the <a href="{{@site.url}}/">latest guides</a>.</p>
-  <button class="btn" type="button" data-ghost-search aria-haspopup="dialog">{{> icon name="search" size="16"}} Search guides</button>
-</header>
+<div class="wrap article page">
+  <aside class="toc-col"></aside>
+  <article class="doc">
+    <h1>{{#match statusCode 404}}This page is not in the index{{else}}Something went wrong{{/match}}</h1>
+    <p class="dek">{{message}}. Search the guides or go back to the <a href="{{@site.url}}/">home page</a>.</p>
+    <button class="bigsearch" type="button" data-ghost-search>{{> icon name="search" size="18"}}<span>Search guides</span><b>Search</b></button>
+  </article>
+</div>

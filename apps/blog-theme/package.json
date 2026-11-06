@@ -1,7 +1,7 @@
 {
   "name": "chain-of-custody",
   "description": "Ghost theme for Chain of Custody, the FairMind guides to AI regulation, security and safety.",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "private": true,
   "engines": {
     "ghost": ">=6.0.0"
@@ -37,6 +37,14 @@
       "newsletter_text": {
         "type": "text",
         "default": "A short email each Thursday with the next deadline on the docket and one AI incident we think is worth reading about."
+      },
+      "cta_title": {
+        "type": "text",
+        "default": "Run these checks with FairMind"
+      },
+      "cta_text": {
+        "type": "text",
+        "default": "Agents run 90 governance workflows and 109 evaluations across 51 frameworks. Every workflow stops at a human approval gate."
       }
     }
   }

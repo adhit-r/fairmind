@@ -1,0 +1,14 @@
+<section class="mod lead">
+  <header class="mh"><h2>Start here</h2><span class="count">Latest guide</span></header>
+  <div class="lead-in">
+    <h1><a href="{{url}}">{{title}}</a></h1>
+    <p class="lede">{{excerpt words="60"}}</p>
+    <p class="meta-line">{{> flags}}{{#primary_tag}}<a class="chip" href="{{url}}">{{name}}</a>{{/primary_tag}}<span>{{date published_at format="D MMM YYYY"}}</span><span>{{reading_time minute="1 min" minutes="% min"}}</span><span hidden><span data-sources></span> sources</span></p>
+    <template>{{content}}</template>
+    <button class="bigsearch" type="button" data-ghost-search>{{> icon name="search" size="18"}}<span>Search a framework, article or control</span><b>Search</b></button>
+    <div class="types">
+      <span>Browse by type</span>
+      {{#get "tags" filter="slug:[governance,security,safety]" include="count.posts" limit="3"}}{{#foreach tags}}{{#if count.posts}}<a href="{{url}}">{{name}} <i>{{count.posts}}</i></a>{{/if}}{{/foreach}}{{/get}}
+    </div>
+  </div>
+</section>
