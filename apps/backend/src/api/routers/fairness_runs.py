@@ -114,9 +114,27 @@ def _gate_payload(db: Session, system_id: str, risk_tier: str, *, with_decision:
         risk_tier, records, environmental_assessed=_environmental_assessed(db, system_id), monitoring_cadence_hours=cadence,
         approval_status=approval["status"] if approval else "not_requested", last_decision=decided[0] if decided else None,
     )
+    _apply_policy_rules(db, system_id, gate)
     gate["systemId"] = system_id
     gate["riskTier"] = risk_tier
     return gate
+
+
+def _apply_policy_rules(db: Session, system_id: str, gate: Dict[str, Any]) -> None:
+    """Fold the org's published policy rules into the gate: a failing blocking rule is no go, a warning is conditional."""
+    from src.application.services.policy_service import PolicyService
+
+    row = db.execute(text("SELECT org_id FROM governance_ai_systems WHERE id = :id"), {"id": system_id}).fetchone()
+    check = PolicyService(db).release_check(row[0], system_id) if row and row[0] else None
+    gate["policy"] = check or {"blocking": [], "warnings": []}
+    describe = lambda r: f"Policy rule '{r['ruleTitle']}' ({r['policyName']}) fails"  # noqa: E731
+    if gate["policy"]["blocking"]:
+        gate["verdict"] = "no_go"
+        gate["reasons"][:0] = [describe(r) for r in gate["policy"]["blocking"]]
+    if gate["policy"]["warnings"]:
+        gate["reasons"] += [describe(r) for r in gate["policy"]["warnings"]]
+        if gate["verdict"] == "go":
+            gate["verdict"] = "conditional_go"
 
 
 @router.post("/systems/{system_id}/fairness-runs/inspect")

@@ -161,6 +161,21 @@
   color: var(--ink-78);
 }
 
+.fw-controls {
+  display: block;
+  margin-top: 0.4rem;
+  color: var(--ink2);
+  font-size: 0.85rem;
+}
+
+.fw-counts,
+.fw-sources {
+  max-width: 48rem;
+  margin: 1rem 0 0;
+  color: var(--ink2);
+  font-size: 0.95rem;
+}
+
 .fw-split {
   display: grid;
   align-items: start;

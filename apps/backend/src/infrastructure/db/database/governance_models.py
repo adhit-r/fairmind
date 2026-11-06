@@ -98,7 +98,7 @@ def _canonical_utc_timestamp(column: str, *, nullable: bool = True) -> str:
         f"AND substr({column}, 11, 1) = 'T' "
         f"AND substr({column}, 14, 1) = ':' "
         f"AND substr({column}, 17, 1) = ':' "
-        f"AND right({column}, 6) = '+00:00' "
+        f"AND substr({column}, length({column}) - 5, 6) = '+00:00' "
         f"AND {year} BETWEEN 1 AND 9999 "
         f"AND {month} BETWEEN 1 AND 12 "
         f"AND {day} BETWEEN 1 AND ({maximum_day}) "
@@ -4108,6 +4108,45 @@ class OrgPlatformConnection(Base):
     tested_at = Column(String, nullable=True)
     test_message = Column(String, nullable=True)
     updated_by = Column(String, nullable=True)
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+
+class GovernanceAISystemTarget(Base):
+    """How FairMind calls an AI system for behaviour tests: one per system, auth encrypted at rest."""
+
+    __tablename__ = "governance_ai_system_targets"
+
+    system_id = Column(String, ForeignKey("governance_ai_systems.id"), primary_key=True)
+    org_id = Column(String, nullable=False, index=True)
+    kind = Column(String, nullable=False)  # openai (Chat Completions) or http (JSON in, JSON out)
+    url = Column(String, nullable=False)
+    fields_json = Column(Text, nullable=False, default="{}")  # model, systemPrompt, intendedUse, authHeader, requestTemplate, responsePath
+    auth_enc = Column(Text, nullable=True)
+    auth_hint = Column(String, nullable=True)
+    tested_ok = Column(Boolean, nullable=True)
+    tested_at = Column(String, nullable=True)
+    test_message = Column(String, nullable=True)
+    updated_by = Column(String, nullable=True)
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+
+class GovernanceEvaluationJob(Base):
+    """A behaviour test running in the background, so progress can be read while it calls the system under test."""
+
+    __tablename__ = "governance_evaluation_jobs"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    system_id = Column(String, nullable=False)
+    evaluation_id = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="running")  # running | done | failed
+    phase = Column(String, nullable=True)
+    done = Column(Integer, nullable=False, default=0)
+    total = Column(Integer, nullable=False, default=0)
+    error = Column(Text, nullable=True)
+    evidence_id = Column(String, nullable=True)
+    created_by = Column(String, nullable=True)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
     updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
 
 

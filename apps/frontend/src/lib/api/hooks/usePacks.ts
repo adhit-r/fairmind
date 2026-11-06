@@ -453,7 +453,60 @@ export interface EngineSpec {
   platform: boolean
   platformMethod: string
   judge: boolean
+  /** '' reads uploaded files; 'target' calls the AI system under test; 'agent' calls FairMind's own agent. */
+  live: '' | 'target' | 'agent'
+  /** A second way to run the same evaluation, against the live system. */
+  alternate?: EngineSpec | null
 }
+
+/** A behaviour test running in the background. */
+export interface EvaluationJob {
+  id: string
+  evaluationId: string
+  systemId: string
+  status: 'running' | 'done' | 'failed'
+  phase: string | null
+  done: number
+  total: number
+  error: string | null
+  evidenceId: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+/** How FairMind calls an AI system for behaviour tests. The auth value never comes back, only a hint. */
+export interface SystemTarget {
+  kind: 'openai' | 'http'
+  url: string
+  model?: string
+  systemPrompt?: string
+  intendedUse?: string
+  authHeader?: string
+  requestTemplate?: string
+  responsePath?: string
+  hasAuth: boolean
+  authHint: string | null
+  authReadable: boolean
+  testedOk: boolean | null
+  testedAt: string | null
+  testMessage: string | null
+  updatedAt: string
+}
+
+export interface SystemTargetBody {
+  kind: 'openai' | 'http'
+  url: string
+  model: string
+  systemPrompt: string
+  intendedUse: string
+  authHeader: string
+  authValue?: string
+  requestTemplate: string
+  responsePath: string
+}
+
+export const useSystemTarget = (systemId: string | undefined) =>
+  useOrgResource<{ target: SystemTarget | null }>(systemId ? API_ENDPOINTS.packs.systemTarget(systemId) : null)
 
 export interface EngineRun {
   id: string
@@ -470,6 +523,8 @@ export interface EngineRun {
   params?: Record<string, unknown>
   detail?: Array<Record<string, unknown>>
   detailTotal?: number
+  judge?: { provider: string; model: string }
+  target?: { kind: string; url?: string }
 }
 
 export const useEvaluation = (evaluationId: string | undefined) =>
@@ -518,7 +573,14 @@ export function usePackActions() {
       submitStepOutput: (runId: string, stepId: string, summary: string, route?: string) =>
         send<Run>(API_ENDPOINTS.packs.stepOutput(runId, stepId), (p) => apiClient.post(p, { summary, ...(route ? { route } : {}) })),
       runEvaluation: (evaluationId: string, form: FormData) =>
-        send<EngineRun>(API_ENDPOINTS.packs.evaluationRuns(evaluationId), (p) => apiClient.post(p, form)),
+        send<EngineRun | { job: EvaluationJob }>(API_ENDPOINTS.packs.evaluationRuns(evaluationId), (p) => apiClient.post(p, form)),
+      getJob: (jobId: string) => send<EvaluationJob>(API_ENDPOINTS.packs.evaluationJob(jobId), (p) => apiClient.get(p)),
+      getRun: (runId: string) => send<EngineRun>(API_ENDPOINTS.packs.evaluationRun(runId), (p) => apiClient.get(p)),
+      saveTarget: (systemId: string, body: SystemTargetBody) =>
+        send<{ target: SystemTarget | null }>(API_ENDPOINTS.packs.systemTarget(systemId), (p) => apiClient.put(p, body)),
+      deleteTarget: (systemId: string) => send<{ target: null }>(API_ENDPOINTS.packs.systemTarget(systemId), (p) => apiClient.delete(p)),
+      testTarget: (systemId: string) =>
+        send<{ ok: boolean; message: string; answer: string; latencyMs: number | null }>(API_ENDPOINTS.packs.systemTargetTest(systemId), (p) => apiClient.post(p)),
       runAgent: (runId: string, stepId: string) => send<Run>(API_ENDPOINTS.packs.agentStep(runId, stepId), (p) => apiClient.post(p)),
       saveAIProvider: (body: AIProviderBody) =>
         send<{ config: AIProviderConfig | null }>(API_ENDPOINTS.packs.aiProvider, (p) => apiClient.put(p, body)),
