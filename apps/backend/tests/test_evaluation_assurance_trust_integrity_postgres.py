@@ -36,6 +36,7 @@ from src.domain.assurance.evaluation_v2 import canonical_json
 from src.infrastructure.db.repositories.evaluation_workbench_repository import (
     SqlAlchemyEvaluationWorkbenchRepository,
 )
+from tests.pg import ORM_COLUMNS_AFTER_PARTIAL_CHAIN
 
 MIGRATIONS = Path(__file__).parents[1] / "migrations"
 DIRECT_PATH = MIGRATIONS / "013b_evaluation_assurance_trust_integrity.sql"
@@ -3934,9 +3935,8 @@ def test_postgresql_decision_repository_commits_canonical_cas_and_rejects_stale(
     }
     assert json.loads(upgraded_layer_verdicts_json) == upgraded_layers
     assert upgraded_layer_verdicts_json != canonical_json(upgraded_layers)
-    # The decision ORM maps 013l's grant column; this 013b schema only needs the column.
     with connection.cursor() as cursor:
-        cursor.execute("ALTER TABLE governance_evaluation_decisions ADD COLUMN IF NOT EXISTS separation_override_grant_id TEXT")
+        cursor.execute(ORM_COLUMNS_AFTER_PARTIAL_CHAIN)
 
     engine = create_engine(
         POSTGRES_URL,

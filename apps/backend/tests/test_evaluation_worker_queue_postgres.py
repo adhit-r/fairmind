@@ -23,6 +23,7 @@ from src.domain.assurance.evaluation_v2 import canonical_json
 from src.infrastructure.db.repositories.evaluation_worker_queue_repository import (
     PostgresEvaluationWorkerQueue,
 )
+from tests.pg import DROP_ORM_COLUMNS_AFTER_PARTIAL_CHAIN
 from tests.test_verified_evidence_admission_postgres import (
     _seed_scenario,
     postgres_013k_session_factory,
@@ -44,6 +45,7 @@ def worker_queue_session_factory(postgres_013k_session_factory):
     try:
         schema = session.scalar(text("SELECT current_schema()"))
         assert isinstance(schema, str) and schema
+        session.execute(text(DROP_ORM_COLUMNS_AFTER_PARTIAL_CHAIN))
         for migration_name in (
             "013l_delegated_separation_override_grant_integrity.sql",
             "013m_worker_execution_foundation.sql",

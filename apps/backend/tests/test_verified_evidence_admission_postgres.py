@@ -52,6 +52,7 @@ from src.infrastructure.db.repositories.evaluation_workbench_repository import (
 )
 from src.infrastructure.security import Ed25519EvidenceVerifier
 from tests.evaluation_result_contract_cases import TERMINAL_RESULT_AXIS_CASES
+from tests.pg import ORM_COLUMNS_AFTER_PARTIAL_CHAIN
 
 POSTGRES_URL = os.getenv("FAIRMIND_TEST_POSTGRES_URL")
 pytestmark = pytest.mark.skipif(
@@ -202,6 +203,7 @@ def postgres_session_factory():
                         (schema_name,),
                     )
                 cursor.execute((MIGRATIONS / migration_name).read_text(encoding="utf-8"))
+            cursor.execute(ORM_COLUMNS_AFTER_PARTIAL_CHAIN)
         migration_connection.commit()
     finally:
         migration_connection.close()
@@ -1141,7 +1143,7 @@ def test_link_revalidates_live_authority_after_verified_submission(
                 scenario,
                 submission=submission,
                 idempotency_key=f"link-after-{resource}-{uuid.uuid4()}",
-                actor_id=f"linker-{uuid.uuid4()}",
+                actor_id=str(uuid.uuid4()),
             )
         assert caught.value.code == "verified_evidence_link_ineligible"
     finally:
