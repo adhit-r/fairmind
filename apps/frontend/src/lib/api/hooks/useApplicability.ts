@@ -113,8 +113,10 @@ export function draftOf(
   const frameworks = [...new Set([...suggested.filter((k) => !choice.removed.includes(k)), ...choice.added])]
   const needsReason = !!suggestion?.tier && (choice.tier !== suggestion.tier || suggested.some((k) => choice.removed.includes(k)))
   const reason = choice.reason.trim()
+  // Only send a reason the person can see: the textarea shows when one is needed or suggestions failed.
+  const sent = needsReason || state.failed ? reason : ''
   const answered = !!choice.answers.use && choice.answers.decidesAboutPeople !== null
-  const body = answered ? { answers: choice.answers, tier: choice.tier, frameworks, ...(reason ? { reason } : {}) } : null
+  const body = answered ? { answers: choice.answers, tier: choice.tier, frameworks, ...(sent ? { reason: sent } : {}) } : null
   const ready = !!body && !state.loading && !state.failed && !!suggestion?.tier && (!needsReason || reason.length >= MIN_REASON)
   return { body, tier: choice.tier, frameworks, needsReason, ready, failed: state.failed }
 }
@@ -130,7 +132,7 @@ const GOV = API_ENDPOINTS.aiGovernance
 
 export async function suggestApplicability(answers: Partial<ApplicabilityAnswers>) {
   const res = await apiClient.post<ApplicabilitySuggestion>(GOV.applicabilitySuggest, answers)
-  if (!res.success || !res.data) throw new Error(res.error || 'Could not load suggestions')
+  if (!res.success || !res.data) throw new Error(res.error || 'the server sent no suggestion')
   return res.data
 }
 

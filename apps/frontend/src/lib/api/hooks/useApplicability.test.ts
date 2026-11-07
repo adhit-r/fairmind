@@ -41,6 +41,12 @@ test('another tier needs a reason of 12 characters or more, sent trimmed', () =>
   assert.equal(ok.body?.reason, 'reviewed by the credit committee')
 })
 
+test('a reason left from an earlier change is not sent once the choice matches the suggestion', () => {
+  const d = draftOf({ ...keep, answers: answered, tier: 'high', reason: 'reviewed by the credit committee' }, suggestion, idle)
+  assert.equal(d.needsReason, false)
+  assert.equal(d.body?.reason, undefined)
+})
+
 test('dropping a suggested framework needs a reason; added ones are appended once', () => {
   const d = draftOf({ answers: answered, tier: 'high', removed: ['INDAI'], added: ['EUAIA', 'EUAIA'], reason: '' }, suggestion, idle)
   assert.equal(d.needsReason, true)
