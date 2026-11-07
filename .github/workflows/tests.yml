@@ -94,3 +94,21 @@ jobs:
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
       - name: Tests
         run: uv run --with pytest pytest -q -p no:cacheprovider tests
+
+  fuzz:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: apps/backend
+    env:
+      UV_PYTHON: "3.12"  # atheris ships wheels for 3.12+ on Linux only
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - name: Fuzz fairness metrics for 60 seconds
+        run: >-
+          uv run --no-project
+          --with atheris==3.1.0 --with numpy==2.4.6 --with pandas==3.1.1
+          --with scikit-learn==1.9.1 --with scipy==1.17.1
+          python fuzz/fuzz_metrics.py -max_total_time=60
