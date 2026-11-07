@@ -429,7 +429,7 @@ FROZEN_POSTGRESQL_ASSURANCE_CATALOGS: Mapping[int, FrozenPostgreSQLCatalog] = Ma
         18: FrozenPostgreSQLCatalog(
             spec=POSTGRESQL_ASSURANCE_CATALOG_SPEC,
             postgresql_major=18,
-            digest=("ca00ef6d75a35294ac915de43d8f1a188a77a784060065d3947f982e8e6920a4"),
+            digest=("30ee9664500a32310839bacdf81acbf5ecf725f58e0f28ca23dc1f802269ae1f"),
         ),
     }
 )
@@ -663,7 +663,11 @@ def _postgresql_assurance_catalog_payload(
         column_rows = _mapping_rows(
             connection.execute(
                 text(
-                    "SELECT c.relname, a.attnum, a.attname, "
+                    # Position among live columns, not raw attnum: a dropped
+                    # column leaves an attnum gap that does not change layout.
+                    "SELECT c.relname, "
+                    "pg_catalog.row_number() OVER (PARTITION BY c.oid ORDER BY a.attnum) AS attnum, "
+                    "a.attname, "
                     "pg_catalog.format_type(a.atttypid, a.atttypmod) AS data_type, "
                     "a.attnotnull, a.attidentity, a.attgenerated, "
                     "pg_catalog.pg_get_expr(d.adbin, d.adrelid, true) AS default_expr, "

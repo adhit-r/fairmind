@@ -133,3 +133,14 @@ the schema owner. On Neon every project role is a member of `neon_superuser`,
 so adding or removing a project role changes the fingerprint, and startup with
 `assurance_v2_enabled` fails closed until it is re-measured from a clean
 install on a branch that has the same roles.
+
+## ORM-provisioned 013k to 013l drift cleanup (Neon)
+
+`create_all()` gave Neon production an empty `governance_separation_override_grants`
+table and an all-NULL `governance_evaluation_decisions.separation_override_grant_id`
+column before 013l, so 013l fails with "relation already exists". After
+`013j_to_013k`, run `013k_to_013l_orm_drift_cleanup.sql` (it stops if either holds
+data), then `013k_to_013l` and `013l_to_013m`. It also revokes PUBLIC's grants on
+the schema and drops an index 013e retired, so the catalog matches a clean
+install. The catalog fingerprint compares live-column order, so the attnum gap
+the dropped column leaves does not count.
