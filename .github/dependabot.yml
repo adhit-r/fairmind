@@ -27,6 +27,16 @@ updates:
       npm-minor-patch:
         update-types: [minor, patch]
 
+  - package-ecosystem: docker
+    directories: [/apps/backend, /apps/frontend, /apps/website]
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      docker-images:
+        patterns: ["*"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
