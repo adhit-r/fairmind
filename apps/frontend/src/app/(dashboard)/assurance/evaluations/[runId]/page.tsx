@@ -13,9 +13,21 @@ import {
   useEvaluationWorkbenchV2,
   type EvaluationRunV2,
 } from '@/lib/api/hooks/useEvaluationWorkbenchV2'
+import {
+  evaluationScopeKey,
+  readEvaluationScopeState,
+  writeEvaluationScopeState,
+  type EvaluationScopeState,
+} from '@/lib/evaluation-scope-state'
 
 interface PageProps {
   params: Promise<{ runId: string }>
+}
+
+type RunDetailState = {
+  run: EvaluationRunV2 | null
+  loading: boolean
+  error: Error | null
 }
 
 const ASSURANCE_V2_UI_ENABLED = process.env.NEXT_PUBLIC_ASSURANCE_V2_UI_ENABLED === 'true'
@@ -32,42 +44,95 @@ export default function AssuranceEvaluationDetailPage({ params }: PageProps) {
     ASSURANCE_V2_RUN_UI_ENABLED ? realSystem?.workspaceId : undefined,
     ASSURANCE_V2_RUN_UI_ENABLED ? realSystem?.id : undefined,
   )
-  const scopeKey = [selectedOrg?.id ?? '', realSystem?.workspaceId ?? '', realSystem?.id ?? '', runId].join(':')
-  const [runState, setRunState] = useState<{ scopeKey: string; run: EvaluationRunV2 | null }>({
-    scopeKey,
-    run: null,
+  const scopeKey = evaluationScopeKey({
+    organizationId: selectedOrg?.id,
+    workspaceId: realSystem?.workspaceId,
+    systemId: realSystem?.id,
+    runId,
   })
-  const [detailLoading, setDetailLoading] = useState(false)
-  const [detailError, setDetailError] = useState<Error | null>(null)
+  const [detailState, setDetailState] = useState<EvaluationScopeState<RunDetailState>>({
+    scopeKey,
+    value: { run: null, loading: false, error: null },
+  })
 
-  // Do not render a prior-scope result for even one paint while the route or
-  // selected organization/system changes. The effect below owns fetching;
-  // this derived value owns the synchronous masking boundary.
-  const run = runState.scopeKey === scopeKey ? runState.run : null
+  const scopeCanLoad = Boolean(
+    ASSURANCE_V2_RUN_UI_ENABLED
+      && selectedOrg?.id
+      && realSystem?.workspaceId
+      && realSystem.id,
+  )
+  // Keep payload, loading, and failure state on the same exact scope key.
+  const {
+    run,
+    loading: detailLoading,
+    error: detailError,
+  } = readEvaluationScopeState(detailState, scopeKey, {
+    run: null,
+    loading: scopeCanLoad,
+    error: null,
+  })
 
   useEffect(() => {
     let current = true
-    setRunState({ scopeKey, run: null })
-    setDetailError(null)
+    setDetailState({
+      scopeKey,
+      value: { run: null, loading: scopeCanLoad, error: null },
+    })
     if (!ASSURANCE_V2_RUN_UI_ENABLED || !selectedOrg?.id || !realSystem?.workspaceId || !realSystem.id) {
       return () => { current = false }
     }
 
-    setDetailLoading(true)
     void workbench.getRun(runId)
       .then((result) => {
-        if (current) setRunState({ scopeKey, run: result })
+        if (current) {
+          setDetailState({
+            scopeKey,
+            value: { run: result, loading: false, error: null },
+          })
+        }
       })
       .catch((reason) => {
         if (!current || reason instanceof StaleEvaluationWorkbenchResultError) return
-        setDetailError(reason instanceof Error ? reason : new Error('Unable to load evaluation evidence.'))
-      })
-      .finally(() => {
-        if (current) setDetailLoading(false)
+        setDetailState({
+          scopeKey,
+          value: {
+            run: null,
+            loading: false,
+            error: reason instanceof Error ? reason : new Error('Unable to load evaluation evidence.'),
+          },
+        })
       })
 
     return () => { current = false }
-  }, [realSystem?.id, realSystem?.workspaceId, runId, scopeKey, selectedOrg?.id, workbench.getRun])
+  }, [realSystem?.id, realSystem?.workspaceId, runId, scopeCanLoad, scopeKey, selectedOrg?.id, workbench.getRun])
+
+  const retry = () => {
+    const retryScopeKey = scopeKey
+    setDetailState({
+      scopeKey: retryScopeKey,
+      value: { run: null, loading: true, error: null },
+    })
+    void workbench.getRun(runId)
+      .then((result) => {
+        setDetailState((current) => writeEvaluationScopeState(
+          current,
+          retryScopeKey,
+          { run: result, loading: false, error: null },
+        ))
+      })
+      .catch((reason) => {
+        if (reason instanceof StaleEvaluationWorkbenchResultError) return
+        setDetailState((current) => writeEvaluationScopeState(
+          current,
+          retryScopeKey,
+          {
+            run: null,
+            loading: false,
+            error: reason instanceof Error ? reason : new Error('Unable to load evaluation evidence.'),
+          },
+        ))
+      })
+  }
 
   const initialLoading = orgLoading || systemLoading || detailLoading || (!run && !detailError && Boolean(
     ASSURANCE_V2_RUN_UI_ENABLED && selectedOrg?.id && realSystem?.workspaceId && realSystem.id,
@@ -128,14 +193,7 @@ export default function AssuranceEvaluationDetailPage({ params }: PageProps) {
       ) : detailError ? (
         <EvaluationWorkbenchStatusNotice
           error={detailError}
-          onRetry={() => {
-            setDetailError(null)
-            setDetailLoading(true)
-            void workbench.getRun(runId)
-              .then((result) => setRunState({ scopeKey, run: result }))
-              .catch((reason) => setDetailError(reason instanceof Error ? reason : new Error('Unable to load evaluation evidence.')))
-              .finally(() => setDetailLoading(false))
-          }}
+          onRetry={retry}
         />
       ) : run ? (
         <EvidenceTrustPanel run={run} />
