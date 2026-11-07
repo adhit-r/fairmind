@@ -16,6 +16,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from contextlib import asynccontextmanager
+import asyncio
 import logging
 import os
 from pathlib import Path
@@ -43,6 +44,20 @@ from src.application.services.governance_assurance_service import OrgMembership
 
 # Get logger
 logger = get_logger("main")
+
+
+async def _policy_alert_loop(interval: int) -> None:
+    """Re-check published policy rules on a timer and email the owner when one starts failing."""
+    from database.connection import db_manager as orm_db_manager
+    from src.application.services.policy_service import sweep_policy_alerts
+    from src.infrastructure.email.resend_service import email_service
+
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            await sweep_policy_alerts(orm_db_manager.SessionLocal, email_service.send_policy_alert, settings.frontend_url)
+        except Exception as e:  # a failed sweep must not stop the next one
+            logger.warning(f"Policy alert sweep failed: {e}")
 
 
 @asynccontextmanager
@@ -108,6 +123,10 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Compliance automation scheduler not started: {e}")
     
+    policy_alerts = None
+    if settings.policy_alert_interval_seconds > 0:
+        policy_alerts = asyncio.create_task(_policy_alert_loop(settings.policy_alert_interval_seconds))
+
     logger.info("Application startup complete")
     
     # Log all registered routes
@@ -119,6 +138,8 @@ async def lifespan(app: FastAPI):
     
     # Shutdown
     logger.info("Starting application shutdown")
+    if policy_alerts:
+        policy_alerts.cancel()
     
     # Close database connections
     try:

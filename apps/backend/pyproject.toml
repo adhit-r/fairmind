@@ -46,8 +46,8 @@ dependencies = [
     "pandas>=2.3.3",
     "numpy>=2.4.0",
     "psycopg2-binary>=2.9.11",
-    # SQLAlchemy 2.1 maps postgresql:// to psycopg 3; we ship psycopg2. Lift with a driver switch.
-    "sqlalchemy>=2.0.44,<2.1",
+    "psycopg[binary]>=3.2",
+    "sqlalchemy>=2.1",
     "alembic>=1.18.0",
     "requests>=2.32.5",
     "scikit-learn>=1.7.2",

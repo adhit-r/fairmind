@@ -131,6 +131,22 @@ async def draft_policy(
     return {**policy, "draft": {"provider": conn.provider.id, "model": meta["model"], "dropped": dropped}}
 
 
+@router.get("/alerts")
+def list_alerts(
+    include_resolved: bool = False,
+    membership: OrgMembership = Depends(organization_membership),
+    db: Session = Depends(get_db),
+) -> list[dict]:
+    return PolicyService(db).alerts(membership.org_id, include_resolved)
+
+
+@router.post("/alerts/{alert_id}/acknowledge")
+def acknowledge_alert(
+    alert_id: str, membership: OrgMembership = Depends(organization_membership), db: Session = Depends(get_db)
+) -> dict:
+    return _found(_mutator(membership, db).acknowledge_alert(membership.org_id, alert_id, membership.user_id), "Alert")
+
+
 @router.get("/coverage")
 def framework_coverage(membership: OrgMembership = Depends(organization_membership), db: Session = Depends(get_db)) -> list[dict]:
     return PolicyService(db).coverage(membership.org_id)
@@ -140,9 +156,10 @@ def framework_coverage(membership: OrgMembership = Depends(organization_membersh
 def enforce(
     request: EnforceRequest, membership: OrgMembership = Depends(organization_membership), db: Session = Depends(get_db)
 ) -> dict:
-    return _found(
-        _mutator(membership, db).enforce(membership.org_id, request.policy_id, request.system_id), "System"
-    )
+    service = _mutator(membership, db)
+    run = _found(service.enforce(membership.org_id, request.policy_id, request.system_id), "System")
+    service.sync_alerts(membership.org_id)  # alerts show at once; the next sweep emails them
+    return run
 
 
 @router.get("/evaluations")

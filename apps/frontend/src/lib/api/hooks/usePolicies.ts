@@ -134,6 +134,27 @@ export type PolicyDraft = Partial<Pick<Policy, 'name' | 'summary' | 'body' | 'ow
 /** A policy the organisation's model drafted: saved as a draft, with the rules validation left out. */
 export type AIDraftedPolicy = Policy & { draft: { provider: string; model: string; dropped: string[] } }
 
+/** A published rule that started failing on a system; resolved once it passes again. */
+export interface PolicyAlert {
+  id: string
+  policyId: string
+  policyName: string
+  policyVersion: number
+  systemId: string
+  systemName: string
+  ruleId: string
+  ruleTitle: string
+  severity: string
+  enforcement: 'block' | 'warn'
+  detail: string
+  status: 'open' | 'resolved'
+  openedAt: string
+  resolvedAt: string | null
+  notifiedAt: string | null
+  acknowledgedBy: string | null
+  acknowledgedAt: string | null
+}
+
 function unwrap<T>(response: ApiResponse<T>): T {
   if (!response.success) throw new Error(response.error || 'Policy request failed')
   return response.data as T
@@ -171,6 +192,7 @@ export function usePolicyActions(orgId: string | null) {
     remove: async (id: string) => unwrap(await apiClient.delete<{ deleted: boolean }>(`${base}/${id}`)),
     act: async (id: string, action: PolicyAction) => unwrap(await apiClient.post<Policy>(`${base}/${id}/actions`, { action })),
     acknowledge: async (id: string) => unwrap(await apiClient.post<Policy>(`${base}/${id}/acknowledge`)),
+    acknowledgeAlert: async (id: string) => unwrap(await apiClient.post<PolicyAlert>(`${base}/alerts/${id}/acknowledge`)),
     enforce: async (policyId?: string) => unwrap(await apiClient.post<EnforcementRun>(`${base}/enforce`, policyId ? { policyId } : {})),
   }
 }
