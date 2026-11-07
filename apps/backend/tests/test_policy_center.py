@@ -237,3 +237,49 @@ def test_policy_results_are_evidence_for_assigned_framework_controls(assurance_c
     assert passing["evidenceTrace"][0]["label"] == "Every system has a named owner (Ownership v1)"
     assert (passing["acceptedEvidenceCount"], passing["freshness"]) == (1, "current")
     assert controls()["A001.2"]["evidenceTrace"] == [] and readiness()["missingEvidence"] == 1
+
+
+def test_newly_failing_rules_raise_one_alert_and_email_the_owner_once(assurance_client):
+    import asyncio
+
+    from src.application.services.policy_service import PolicyService, sweep_policy_alerts
+
+    client, session_factory, _ = assurance_client
+    with session_factory() as session:
+        _seed_org(session, ORG_A, USER_A, role="admin")
+        _seed_catalog_and_system(session)
+    rule = {**OWNER_RULE, "title": "Every system has a <b>named</b> owner", "enforcement": "block"}
+    policy = client.post(BASE, json={"name": "Ownership", "owner": "risk@org-a.test", "rules": [rule]}).json()
+    for action in ("submit", "approve", "publish"):
+        assert client.post(f"{BASE}/{policy['id']}/actions", json={"action": action}).status_code == 200
+
+    sent = []
+
+    async def send(to, subject, html):
+        sent.append((to, subject, html))
+        return True
+
+    sweep = lambda: asyncio.run(sweep_policy_alerts(session_factory, send, "https://app.test"))  # noqa: E731
+    assert sweep() == 1 and sweep() == 0
+    to, subject, html = sent[0]
+    assert to == "risk@org-a.test" and "System A" in subject
+    assert "&lt;b&gt;named&lt;/b&gt;" in html and "<b>named</b>" not in html
+    assert f"https://app.test/policies/{policy['id']}" in html
+    with session_factory() as session:
+        assert PolicyService(session).sync_alerts(ORG_A) == 0  # already open: never raised twice
+
+    alerts = client.get(f"{BASE}/alerts").json()
+    assert [(a["systemName"], a["ruleId"], a["status"]) for a in alerts] == [("System A", "named-owner", "open")]
+    assert alerts[0]["notifiedAt"] is not None
+    acked = client.post(f"{BASE}/alerts/{alerts[0]['id']}/acknowledge").json()
+    assert acked["acknowledgedAt"] is not None
+    assert client.post(f"{BASE}/alerts/missing/acknowledge").status_code == 404
+
+    with session_factory() as session:
+        session.execute(
+            GovernanceAISystem.__table__.update().where(GovernanceAISystem.__table__.c.id == "system-a").values(owner="Risk office")
+        )
+        session.commit()
+    assert sweep() == 0 and client.get(f"{BASE}/alerts").json() == []
+    resolved = client.get(f"{BASE}/alerts", params={"include_resolved": "true"}).json()
+    assert resolved[0]["status"] == "resolved" and resolved[0]["resolvedAt"] is not None
