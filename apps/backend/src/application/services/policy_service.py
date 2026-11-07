@@ -244,6 +244,80 @@ def evaluate_rule(rule: dict, facts: dict) -> tuple[str, str]:
     return "fail", "; ".join(notes)
 
 
+def _conditions(items: Any) -> dict | None:
+    """A model's flat list of conditions as one condition: all of them must hold."""
+    if not isinstance(items, list):
+        return None
+    conds = [
+        {k: v for k, v in c.items() if not (k == "value" and c.get("op") == "exists")}
+        for c in items
+        if isinstance(c, dict)
+    ]
+    if not conds:
+        return None
+    return conds[0] if len(conds) == 1 else {"all": conds}
+
+
+_CONDITION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "fact": {"type": "string"},
+        "op": {"type": "string", "enum": list(OPS)},
+        "value": {
+            "anyOf": [
+                {"type": "string"},
+                {"type": "number"},
+                {"type": "boolean"},
+                {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "number"}]}},
+                {"type": "null"},
+            ]
+        },
+    },
+    "required": ["fact", "op", "value"],
+    "additionalProperties": False,
+}
+DRAFT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "name": {"type": "string"},
+        "summary": {"type": "string"},
+        "body": {"type": "string"},
+        "rules": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string"},
+                    "title": {"type": "string"},
+                    "severity": {"type": "string", "enum": list(SEVERITIES)},
+                    "enforcement": {"type": "string", "enum": list(ENFORCEMENTS)},
+                    "when": {"type": "array", "items": _CONDITION_SCHEMA},
+                    "check": {"type": "array", "items": _CONDITION_SCHEMA},
+                    "controls": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["id", "title", "severity", "enforcement", "when", "check", "controls"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["name", "summary", "body", "rules"],
+    "additionalProperties": False,
+}
+DRAFT_SYSTEM = """You draft AI governance policies for an organization.
+Write the policy text in plain Markdown: purpose, scope, the requirements, roles and responsibilities,
+and exceptions. Keep it specific to the brief and the organization's AI systems; do not invent facts
+about the organization.
+Then turn each requirement that the platform can check into a rule. A rule has:
+- id: short kebab-case, unique; title: one plain sentence
+- severity: low, medium, high or critical; enforcement: block (stops a release approval) or warn
+- when: conditions that decide whether the rule applies to a system (empty list: every system)
+- check: conditions that must all hold for the system to pass
+- controls: references from the controls list that the rule gives evidence for (only listed refs)
+A condition is {fact, op, value}. Use only the listed facts, or system.metadata.<key> for a value
+recorded in the system's metadata. Use null as the value for the exists op, a list for in and not_in.
+Only write rules for requirements these facts can express; leave the rest as policy text."""
+
+
 # ---------------------------------------------------------------------------
 # Persistence
 # ---------------------------------------------------------------------------
@@ -462,6 +536,80 @@ class PolicyService:
                 }
             )
         return out
+
+    def draft_context(self, org_id: str, brief: str) -> str:
+        """What the model may know to draft a policy: the brief, the rule language, controls, systems."""
+        s = GovernanceAISystem.__table__
+        systems = [
+            dict(r)
+            for r in self.db.execute(
+                select(s.c.name, s.c.system_type, s.c.risk_tier, s.c.lifecycle_stage)
+                .where(s.c.org_id == org_id)
+                .order_by(s.c.name)
+                .limit(50)
+            ).mappings()
+        ]
+        p = OrgPolicy.__table__
+        existing = list(self.db.execute(select(p.c.name).where(p.c.org_id == org_id, p.c.status != "retired")).scalars())
+        controls = [
+            {"ref": ref, "title": c["title"], "requirement": c["parent_requirement_title"]}
+            for ref, c in self._controls_by_ref().items()
+        ]
+        return json.dumps(
+            {
+                "brief": brief,
+                "facts": FACTS,
+                "ops": list(OPS),
+                "controls": controls,
+                "aiSystems": systems,
+                "existingPolicies": existing,
+            },
+            default=str,
+        )
+
+    def create_from_draft(self, org_id: str, actor: str, data: dict) -> tuple[dict, list[str]]:
+        """Save a model's draft as a draft policy, keeping only rules that pass validation."""
+        known = self._controls_by_ref()
+        rules, dropped, seen = [], [], set()
+        for raw in data.get("rules") or []:
+            if not isinstance(raw, dict):
+                continue
+            label = str(raw.get("title") or raw.get("id") or "Untitled rule")
+            when = _conditions(raw.get("when"))
+            candidate = {
+                "id": raw.get("id"),
+                "title": raw.get("title"),
+                "severity": raw.get("severity", "medium"),
+                "enforcement": raw.get("enforcement", "warn"),
+                "check": _conditions(raw.get("check")),
+                **({"when": when} if when else {}),
+                "controls": [c for c in raw.get("controls") or [] if c in known],
+            }
+            if candidate["check"] is None:
+                candidate.pop("check")
+            try:
+                rule = validate_rules([candidate])[0]
+            except ValueError as error:
+                dropped.append(f"{label}: {str(error).removeprefix('rules[0]').lstrip('.: ')}")
+                continue
+            if rule["id"] in seen:
+                dropped.append(f"{label}: duplicate id {rule['id']!r}")
+                continue
+            seen.add(rule["id"])
+            rules.append(rule)
+        name = str(data.get("name") or "").strip()[:200] or "Untitled AI policy"
+        policy = self.create(
+            org_id,
+            actor,
+            {
+                "name": name,
+                "summary": str(data.get("summary") or "")[:2000],
+                "body": str(data.get("body") or "")[:200_000],
+                "owner": None,
+                "rules": rules,
+            },
+        )
+        return policy, dropped
 
     # -- writing ------------------------------------------------------------
 
