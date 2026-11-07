@@ -388,7 +388,7 @@ export const frameworks: Framework[] = [
     name: 'NIST AI 600-1, AI Risk Management Framework: Generative Artificial Intelligence Profile',
     shortName: 'NIST AI 600-1',
     region: 'United States',
-    type: 'Voluntary framework',
+    type: 'Risk profile',
     title: 'NIST AI 600-1 Generative AI Profile: the 12 risks, mapped',
     description:
       'Govern generative AI and LLM agents against the 12 risks in NIST AI 600-1, from confabulation to information security, with evidence for each.',

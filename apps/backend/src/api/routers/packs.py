@@ -555,6 +555,7 @@ async def list_journeys(m: OrgMembership = Depends(_member), db: Session = Depen
             "coveredAll": EVERY_PACK.count(fk),
             "coveredInstalled": org.count(fk),
             "contributingPacks": [p for p in PACKS if FRAMEWORK_KEYS[fk] & cat.PACK_DONE[p]],
+            "type": fw.type,
             "binding": fw.binding,
             **_framework_workflows(fk, installed, latest),
         }
@@ -654,6 +655,7 @@ async def get_journey(framework_key: str, m: OrgMembership = Depends(_member), d
         "name": fw.name,
         "pillar": fw.pillar,
         "version": fw.version,
+        "type": fw.type,
         "binding": fw.binding,
         "status": fw.status,
         "active": len(keys),
