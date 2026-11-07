@@ -53,7 +53,11 @@ def test_attribute_hints_match_whole_tokens():
 
     for name in ("statement_date", "mortgage", "usage", "sussex", "customer_tier", "premium_tier", "category", "agent_id"):
         assert _attribute_hint(name) is None, name
-    for name, hint in (("tier", "tier"), ("CityTier", "city_tier"), ("applicant_age_band", "age_band"), ("dateOfBirth", "date_of_birth"), ("DOB", "dob"), ("home_state", "state"), ("maritalStatus", "marital")):
+    for name, hint in (
+        ("tier", "tier"), ("CityTier", "city_tier"), ("city tier", "city_tier"), ("applicant_age_band", "age_band"), ("dateOfBirth", "date_of_birth"),
+        ("date of birth", "date_of_birth"), ("birth_date", "birth_date"), ("birthdate", "birthdate"), ("DOB", "dob"), ("social_category", "social_category"),
+        ("home_state", "state"), ("maritalStatus", "marital"),
+    ):
         assert _attribute_hint(name) == hint, name
 
 
@@ -66,7 +70,7 @@ def test_inspect_reads_values_flags_binning_and_lists_uncovered_grounds():
         "CityTier": rng.choice(["1", "2", "3"], size=n),
         "applicantAgeBand": rng.choice(["18-25", "26-35", "36-45"], size=n),
         "dateOfBirth": [f"19{50 + i % 50}-01-{1 + i % 28:02d}" for i in range(n)],
-        "cat": rng.choice(["GEN", "OBC", "SC", "ST"], size=n),
+        "category": rng.choice(["GEN", "OBC", "SC", "ST"], size=n),
         "sx": rng.choice(["M", "F"], size=n),
         "label": rng.integers(0, 2, size=n),
         "prediction": rng.integers(0, 2, size=n),
@@ -75,13 +79,17 @@ def test_inspect_reads_values_flags_binning_and_lists_uncovered_grounds():
     out = inspect_csv(data)
     attr = {c["name"]: c["attribute"] for c in out["columns"]}
     assert out["fileSha256"] == hashlib.sha256(data).hexdigest()
-    assert out["suggested"]["attributes"] == ["CityTier", "applicantAgeBand", "cat", "sx"]
-    assert attr["cat"]["basis"] == "The values look like reservation categories"
+    assert out["suggested"]["attributes"] == ["CityTier", "applicantAgeBand", "category", "sx"]
+    assert attr["category"]["basis"] == "The values look like reservation categories"
     assert attr["sx"]["basis"] == "The values look like gender"
     assert attr["customer_tier"] == {"status": "possible", "basis": attr["customer_tier"]["basis"], "ground": None} and "Tick it only if" in attr["customer_tier"]["basis"]
     assert attr["statement_date"]["status"] is None
-    assert attr["dateOfBirth"]["status"] == "too_many_values" and out["needsBinning"] == [{"name": "dateOfBirth", "distinct": 200}]
+    assert attr["dateOfBirth"] == {"status": "too_many_values", "basis": 'Name matches "date_of_birth"', "ground": "age"}
+    assert out["needsBinning"] == [{"name": "dateOfBirth", "distinct": 200}]
     assert out["uncoveredGrounds"] == ["religion", "disability", "language", "marital status"]
+    # "category" counts through its values only: ordinary categories are not suggested.
+    plain_category = frame[["label", "prediction"]].assign(category=rng.choice(["retail", "sme", "corporate"], size=n))
+    assert inspect_csv(plain_category.to_csv(index=False).encode())["suggested"]["attributes"] == []
     # Nothing that looks protected: no fallback guess, the person chooses.
     plain = inspect_csv(frame[["customer_tier", "label", "prediction"]].to_csv(index=False).encode())
     assert plain["suggested"]["attributes"] == [] and plain["attributeSource"] == "none"
@@ -89,7 +97,8 @@ def test_inspect_reads_values_flags_binning_and_lists_uncovered_grounds():
 
 def test_inspect_reuses_the_last_runs_attributes():
     data = _csv()
-    older = inspect_csv(data, {"mapping": {"attributes": ["gender", "dropped_column"]}})
+    # A column that is gone from the file, or is mapped as the outcome this time, is not reused.
+    older = inspect_csv(data, {"mapping": {"attributes": ["gender", "dropped_column", "label"]}})
     assert older["suggested"]["attributes"] == ["gender"] and older["attributeSource"] == "confirmed"
     assert older["previousRunUnconfirmed"] is True and older["confirmedBy"] is None
     region = next(c["attribute"] for c in older["columns"] if c["name"] == "region")
@@ -127,7 +136,8 @@ def test_confirmed_run_records_the_confirmation_and_the_next_inspect_reuses_it()
     stored = next(e for e in client.get(f"{base}/evidence").json() if e["id"] == ok.json()["evidenceId"])["metadata"]
     record = stored["attribute_confirmation"]
     assert stored["file_sha256"] == inspected["fileSha256"] == record["fileSha256"]
-    assert record["via"] == "ui" and record["source"] == "inferred" and set(record["suggested"]) == {"gender", "region"}
+    assert record["via"] == "ui" and record["confirmed"] is True and record["source"] == "inferred" and set(record["suggested"]) == {"gender", "region"}
+    assert record["confirmedBy"] == "admin@test.invalid" and record["confirmedAt"] == summary["at"] and summary["at"]
     assert record["removed"] == ["region"] and record["added"] == [] and record["removalReason"].startswith("Region only")
     assert record["suggestedReasons"]["region"] == 'Name matches "region"' and record["uncoveredReason"] == "Not collected for this product"
 
@@ -139,8 +149,21 @@ def test_confirmed_run_records_the_confirmation_and_the_next_inspect_reuses_it()
     api = client.post(f"{base}/fairness-runs", files={"file": ("p.csv", data, "text/csv")}, data={"outcome": "label", "prediction": "prediction", "attributes": "region"})
     assert api.status_code == 200, api.text
     assert api.json()["confirmation"]["confirmed"] is False and api.json()["confirmation"]["by"] is None
+    api_record = next(e for e in client.get(f"{base}/evidence").json() if e["id"] == api.json()["evidenceId"])["metadata"]["attribute_confirmation"]
+    assert api_record["via"] == "api" and api_record["confirmed"] is False and api_record["confirmedAt"] is None
     last = client.post(f"{base}/fairness-runs/inspect", files={"file": ("q.csv", data, "text/csv")}).json()
     assert last["suggested"]["attributes"] == ["region"] and last["previousRunUnconfirmed"] is True and last["confirmedBy"] is None
+
+    # A run stored before confirmation existed lists no confirmation, and its mapping is still reused.
+    import json
+    from sqlalchemy import text as sql
+    from database.connection import db_manager
+    with db_manager.SessionLocal() as session:
+        session.execute(sql("UPDATE governance_evidence SET metadata_json = :m WHERE id = :id"), {"m": json.dumps({"mapping": {"attributes": ["gender"]}}), "id": api.json()["evidenceId"]})
+        session.commit()
+    assert client.get(f"{base}/fairness-runs").json()[0]["confirmation"] is None
+    oldest = client.post(f"{base}/fairness-runs/inspect", files={"file": ("q.csv", data, "text/csv")}).json()
+    assert oldest["suggested"]["attributes"] == ["gender"] and oldest["attributeSource"] == "confirmed" and oldest["previousRunUnconfirmed"] is True
 
 
 def test_run_measures_every_metric_with_intervals():
