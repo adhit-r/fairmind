@@ -390,6 +390,9 @@ export const viewSystemFile = (state: SystemFileState, scopeKey: string) => read
 export const enterSystemFileScope = (state: SystemFileState, scopeKey: string): SystemFileState =>
   state.scopeKey === scopeKey ? state : { scopeKey, value: PENDING }
 
+/** True while the organisations are still loading and none is selected yet: fetching now would only be redone once the org arrives. */
+export const systemFileAwaitsOrg = (orgsLoading: boolean, organizationId: string | null | undefined) => orgsLoading && !organizationId
+
 type Get = <T>(path: string) => Promise<ApiResponse<T>>
 
 /** Fetch one system's file into its scope; every write is dropped once the state has moved to another scope. */
@@ -434,15 +437,16 @@ export async function loadSystemFile(get: Get, systemId: string, scopeKey: strin
 
 /** Everything the system file shows, fetched once per organisation and system from the governance API. */
 export function useSystemFile(systemId: string | undefined) {
-  const { selectedOrg } = useOrg()
+  const { selectedOrg, isLoading: orgsLoading } = useOrg()
   const scopeKey = systemFileScopeKey(selectedOrg?.id, systemId)
+  const awaitsOrg = systemFileAwaitsOrg(orgsLoading, selectedOrg?.id)
   const [state, setState] = useState<SystemFileState>(() => ({ scopeKey, value: PENDING }))
   const { file, loading, error } = viewSystemFile(state, scopeKey)
 
   const refresh = useCallback(async () => {
-    if (!systemId) return
+    if (!systemId || awaitsOrg) return
     await loadSystemFile((path) => apiClient.get(path), systemId, scopeKey, setState)
-  }, [scopeKey, systemId])
+  }, [awaitsOrg, scopeKey, systemId])
 
   useEffect(() => {
     setState((s) => enterSystemFileScope(s, scopeKey))

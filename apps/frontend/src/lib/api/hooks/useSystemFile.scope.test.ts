@@ -5,6 +5,7 @@ import type { ApiResponse } from '../api-client'
 import {
   enterSystemFileScope,
   loadSystemFile,
+  systemFileAwaitsOrg,
   systemFileScopeKey,
   viewSystemFile,
   type SystemFileState,
@@ -93,5 +94,12 @@ describe('system file scope', () => {
     await stale
     assert.equal(h.state.scopeKey, SYSTEM_B)
     assert.equal(viewSystemFile(h.state, SYSTEM_B).file.system, null)
+  })
+
+  test('waits for the organisations before fetching, so a cold load fetches the file once', () => {
+    assert.equal(systemFileAwaitsOrg(true, null), true)
+    assert.equal(systemFileAwaitsOrg(true, 'org-1'), false)
+    assert.equal(systemFileAwaitsOrg(false, 'org-1'), false)
+    assert.equal(systemFileAwaitsOrg(false, null), false)
   })
 })
