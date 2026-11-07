@@ -56,6 +56,9 @@ outputs:
 runs:
   using: composite
   steps:
+    # Every input is passed through env vars and referenced as a shell variable.
+    # Interpolating ${{ inputs.* }} directly into a run: script lets a crafted
+    # input value inject shell commands on the runner (template injection).
     - name: Install the fairmind CLI
       shell: bash
       env:
@@ -70,10 +73,16 @@ runs:
       env:
         FAIRMIND_API_URL: ${{ inputs.api-url }}
         FAIRMIND_API_KEY: ${{ inputs.api-key }}
+        SYSTEM: ${{ inputs.system }}
+        PREDICTIONS: ${{ inputs.predictions }}
+        OUTCOME: ${{ inputs.outcome }}
+        ATTRIBUTES: ${{ inputs.attributes }}
+        PREDICTION: ${{ inputs.prediction }}
+        SCORE: ${{ inputs.score }}
       run: |
-        args=(test --system "${{ inputs.system }}" --file "${{ inputs.predictions }}" --outcome "${{ inputs.outcome }}" --attributes "${{ inputs.attributes }}")
-        [ -n "${{ inputs.prediction }}" ] && args+=(--prediction "${{ inputs.prediction }}")
-        [ -n "${{ inputs.score }}" ] && args+=(--score "${{ inputs.score }}")
+        args=(test --system "$SYSTEM" --file "$PREDICTIONS" --outcome "$OUTCOME" --attributes "$ATTRIBUTES")
+        [ -n "$PREDICTION" ] && args+=(--prediction "$PREDICTION")
+        [ -n "$SCORE" ] && args+=(--score "$SCORE")
         # The test's own exit code is informational here; the gate below decides.
         fairmind "${args[@]}" || true
 
@@ -83,9 +92,12 @@ runs:
       env:
         FAIRMIND_API_URL: ${{ inputs.api-url }}
         FAIRMIND_API_KEY: ${{ inputs.api-key }}
+        SYSTEM: ${{ inputs.system }}
+        ALLOW_CONDITIONAL: ${{ inputs.allow-conditional }}
+        REQUIRE_APPROVAL: ${{ inputs.require-approval }}
       run: |
         set +e
-        fairmind gate --system "${{ inputs.system }}" --json > gate.json
+        fairmind gate --system "$SYSTEM" --json > gate.json
         code=$?
         set -e
         if [ "$code" -eq 3 ]; then cat gate.json; exit 3; fi
@@ -93,13 +105,13 @@ runs:
         approval=$(python -c 'import json; print(json.load(open("gate.json")).get("approvalStatus", "not_reported"))')
         echo "verdict=$verdict" >> "$GITHUB_OUTPUT"
         echo "approval=$approval" >> "$GITHUB_OUTPUT"
-        fairmind gate --system "${{ inputs.system }}" || true
-        if [ "${{ inputs.require-approval }}" = "true" ] && [ "$approval" != "approved" ]; then
-          echo "::error title=FairMind release gate::release decision is $approval for system ${{ inputs.system }}"
+        fairmind gate --system "$SYSTEM" || true
+        if [ "$REQUIRE_APPROVAL" = "true" ] && [ "$approval" != "approved" ]; then
+          echo "::error title=FairMind release gate::release decision is $approval for system $SYSTEM"
           exit 1
         fi
         if [ "$verdict" = "go" ]; then exit 0; fi
         # An approved conditional go passes require-approval: the reviewer accepted its conditions.
-        if [ "$verdict" = "conditional_go" ] && { [ "${{ inputs.allow-conditional }}" = "true" ] || [ "${{ inputs.require-approval }}" = "true" ]; }; then exit 0; fi
-        echo "::error title=FairMind release gate::$verdict for system ${{ inputs.system }}"
+        if [ "$verdict" = "conditional_go" ] && { [ "$ALLOW_CONDITIONAL" = "true" ] || [ "$REQUIRE_APPROVAL" = "true" ]; }; then exit 0; fi
+        echo "::error title=FairMind release gate::$verdict for system $SYSTEM"
         exit 1

@@ -5,6 +5,7 @@ Handles dataset upload, schema inference, and management.
 """
 
 import os
+import re
 import uuid
 import pandas as pd
 import numpy as np
@@ -17,6 +18,14 @@ from core.container import service, ServiceLifetime
 from core.exceptions import ValidationError, InvalidDataError, NotFoundError
 from core.interfaces import ILogger
 from config.settings import settings
+
+
+def _quote_ident(name: str) -> str:
+    """Quote an SQL identifier (DuckDB): wrap in double quotes and double any
+    embedded quote. Required for identifiers derived from untrusted file content
+    (column names, table names) — DuckDB cannot bind identifiers as parameters,
+    so f-stringing a raw name is SQL injection."""
+    return '"' + str(name).replace('"', '""') + '"'
 
 
 class UploadedFile(Protocol):
@@ -550,10 +559,13 @@ class DatasetService(AsyncBaseService):
             
             duckdb_manager = inject(DuckDBManager)
             
-            # Register file as a view
-            table_name = f"dataset_{file_path.stem.replace('-', '_')}"
+            # Register file as a view. table_name is derived from the uploaded
+            # file name, so sanitize it to a bare identifier (letters, digits,
+            # underscore) before it reaches any query — never trust file_path.stem.
+            safe_stem = re.sub(r"\W", "_", file_path.stem)
+            table_name = f"dataset_{safe_stem}"
             duckdb_manager.register_file(table_name, str(file_path))
-            
+
             # Get schema info
             schema_query = f"DESCRIBE {table_name}"
             schema_df = duckdb_manager.query_df(schema_query)
@@ -575,10 +587,13 @@ class DatasetService(AsyncBaseService):
                 # Note: Doing this for every column might be slow for huge datasets
                 # Optimization: Only do it for numeric columns or use APPROX_COUNT_DISTINCT
                 
+                # col_name comes from the file's own header row — quote it as an
+                # identifier so a crafted column name can't break out into SQL.
+                qcol = _quote_ident(col_name)
                 stats_query = f"""
-                    SELECT 
-                        COUNT({col_name}) as non_null_count,
-                        APPROX_COUNT_DISTINCT({col_name}) as unique_count
+                    SELECT
+                        COUNT({qcol}) as non_null_count,
+                        APPROX_COUNT_DISTINCT({qcol}) as unique_count
                     FROM {table_name}
                 """
                 stats = duckdb_manager.execute_query(stats_query)[0]
