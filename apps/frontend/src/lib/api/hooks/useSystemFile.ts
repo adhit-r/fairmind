@@ -145,6 +145,8 @@ export interface GatePathOption {
 export interface GatePath {
   target: 'go' | 'conditional_go' | null
   options: GatePathOption[]
+  /** The shortest route to Go when Go is reachable; null when it is not, or when a warning-level policy rule caps the verdict. */
+  toGo?: GatePathOption | null
   ceiling: { confidence: number; verdict: Verdict }
   notes: string[]
   approvalBlockers: Array<{ key: string; text: string; met: boolean }>
