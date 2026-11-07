@@ -1592,6 +1592,8 @@ async def create_system_evidence(
     membership = _require_evidence_system_access(
         db, system_id, current_user, mutate=True
     )
+    if request.evidence_type in RECORD_ONLY_EVIDENCE_TYPES:
+        raise HTTPException(status_code=422, detail="Record the tier and rules on the system file, not as uploaded evidence")
     if request.control_id:
         _require_untrusted_external_evidence_linking_enabled()
         _validate_control_link_scope(

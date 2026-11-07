@@ -129,6 +129,9 @@ def _attribute_column(name: str, series: pd.Series) -> Dict[str, Any]:
     basis = f'Name matches "{hint}"' if hint else None
     if hint and distinct > MAX_ATTRIBUTE_VALUES:
         return {"status": "too_many_values", "basis": basis, "ground": ground}
+    if hint and distinct < 2:
+        # run_fairness refuses a one-value attribute, so suggesting it would only force a removal reason.
+        return {"status": None, "basis": f"{basis}, but every row has the same value, so groups cannot be compared", "ground": ground}
     values = {str(v).strip().lower() for v in series.dropna().unique()} if 2 <= distinct <= 12 else set()
     if values and values <= RESERVATION_VALUES:
         return {"status": "suggested", "basis": "The values look like reservation categories", "ground": "caste or social category"}

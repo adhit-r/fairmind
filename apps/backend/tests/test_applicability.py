@@ -264,3 +264,22 @@ def test_seal_carries_the_tier_and_the_applicability_record():
     assert gate["riskTier"] == "high" and gate["effectiveTier"] == "high" and gate["applicabilityEvidenceId"] == record["evidenceId"]
     assert gate["reasons"] and gate["verdict"] == "no_go" and len(gate["checks"]) == 5
     assert seal["evidenceCount"] == 1 and seal["verification"]["status"] == "intact"
+
+
+def test_accepting_a_lower_tier_waits_for_a_pending_request():
+    org = str(uuid.uuid4())
+    owner, reviewer = _client(org, "owner@test.invalid"), _client(org, "reviewer@test.invalid")
+    sid = _system(owner, tier="high")
+    body = {"answers": CREDIT_EU, "tier": "medium", "frameworks": ["EUAIA"], "reason": "A credit officer signs every decline; the model only ranks."}
+    assert owner.put(f"{GOV}/systems/{sid}/applicability", json=body).status_code == 200
+    assert owner.post(f"{GOV}/approval/system/{sid}/request", json={}).status_code == 200
+    blocked = reviewer.post(f"{GOV}/systems/{sid}/applicability/accept-override", json={})
+    assert blocked.status_code == 409 and "pending" in blocked.json()["detail"]
+
+
+def test_generic_evidence_upload_cannot_forge_an_applicability_record():
+    client = _client(str(uuid.uuid4()), "owner@test.invalid")
+    sid = _system(client)
+    for evidence_type in ("applicability_decision", "applicability_override_accepted"):
+        forged = client.post(f"{GOV}/systems/{sid}/evidence", json={"evidence_type": evidence_type, "title": "x", "content": {}})
+        assert forged.status_code == 422, forged.text

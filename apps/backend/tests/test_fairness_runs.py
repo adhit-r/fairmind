@@ -93,6 +93,10 @@ def test_inspect_reads_values_flags_binning_and_lists_uncovered_grounds():
     # Nothing that looks protected: no fallback guess, the person chooses.
     plain = inspect_csv(frame[["customer_tier", "label", "prediction"]].to_csv(index=False).encode())
     assert plain["suggested"]["attributes"] == [] and plain["attributeSource"] == "none"
+    # A protected-looking column with one value cannot be compared, so it is not suggested.
+    single = inspect_csv(frame[["label", "prediction"]].assign(gender="F").to_csv(index=False).encode())
+    single_attr = {c["name"]: c["attribute"] for c in single["columns"]}["gender"]
+    assert single["suggested"]["attributes"] == [] and single_attr["status"] is None and "same value" in single_attr["basis"]
 
 
 def test_inspect_reuses_the_last_runs_attributes():

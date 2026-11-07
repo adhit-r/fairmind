@@ -153,6 +153,10 @@ async def accept_applicability_override(
         raise HTTPException(status_code=409, detail="Nothing to accept")
     if actor == record.get("confirmedBy"):
         raise HTTPException(status_code=403, detail="The person who lowered the tier cannot accept it")
+    # Accepting changes the tier the gate uses, so it waits for a pending request like a tier change does.
+    approval = _fetch_latest_system_approval(db, system_id)
+    if approval and approval["status"] == "pending":
+        raise HTTPException(status_code=409, detail="An approval request is pending; decide it before accepting the lower tier")
     record = {**record, "overrideAcceptedBy": actor, "overrideAcceptedAt": _utc_now_iso()}
     _save(
         db, http, actor, system_id, tier=stored_tier, metadata=metadata, record=record,
