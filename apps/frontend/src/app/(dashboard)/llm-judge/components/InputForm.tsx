@@ -33,7 +33,7 @@ export function InputForm({
   availableCategories,
 }: InputFormProps) {
   const [text, setText] = useState('')
-  const [selectedJudge, setSelectedJudge] = useState('gpt-4-turbo')
+  const [selectedJudge, setSelectedJudge] = useState('gpt-6.1-sol')
   const [selectedCategories, setSelectedCategories] = useState<string[]>(['gender', 'race'])
   const [targetModel, setTargetModel] = useState('unknown')
   const [localError, setLocalError] = useState<string | null>(null)
@@ -273,7 +273,7 @@ export function InputForm({
         <input
           id="target-model"
           type="text"
-          placeholder="e.g., gpt-4, claude-3, unknown"
+          placeholder="e.g., support-bot-v2, unknown"
           value={targetModel}
           onChange={(e) => setTargetModel(e.target.value)}
           disabled={loading}
