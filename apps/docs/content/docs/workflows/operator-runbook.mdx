@@ -10,7 +10,7 @@ All paths below are under `/api/v1/ai-governance/organizations/{org_id}`. Every 
 ## Prerequisites
 
 - An approved deployment change turns on `ASSURANCE_V2_ENABLED` and only the child gates this run needs. See [Configuration](/docs/reference/configuration#assurance-v2-gates).
-- The database is PostgreSQL with migrations `013` to `013m` applied. Governance decisions refuse to write on any other database.
+- The database is PostgreSQL with migrations `013` to `013m` applied, `ASSURANCE_MIGRATION_SCHEMA` is set, and the backend starts cleanly with the master switch on. Startup fails closed if the migration ledger or catalog fingerprint does not match; on Neon or PostgreSQL 18 this currently happens until the fingerprint is re-measured. See [Startup requirements](/docs/reference/configuration#startup-requirements).
 - The organization, workspace, system, memberships, and [permissions](/docs/reference/permissions-and-separation) exist for the test scope.
 - A trust policy, issuer, and signing key are active, and the evaluator registration is approved.
 - A reviewer and a decider exist who are each distinct from the run requester, the submitter, and the linker.
@@ -26,13 +26,13 @@ All paths below are under `/api/v1/ai-governance/organizations/{org_id}`. Every 
 6. Link the exact admitted Passport revision with `POST .../evidence-admissions/{admission_id}/passport-revisions/{passport_revision_id}/link`.
 7. Have the independent reviewer accept or reject it with `POST .../passport-revisions/{passport_revision_id}/review`.
 8. Fetch the run again with `GET /systems/{system_id}/evaluation-v2/runs/{run_id}`. Check the technical, evidence-result, admission, review, freshness, and decision-eligibility fields one by one.
-9. If `decisionEvidenceCurrentlyEligible` is true, the independent decider may record a decision with `POST .../runs/{run_id}/decisions`. Keep the decision's evidence-set hash and freshness data with the change record.
+9. If `decisionEvidenceCurrentlyEligible` is true, the independent decider may record a decision with `POST /workspaces/{workspace_id}/systems/{system_id}/evaluation-v2/runs/{run_id}/decisions`. Note the workspace segment: run reads in step 8 omit it, but evidence and decision routes need it. Keep the decision's evidence-set hash and freshness data with the change record.
 
 ## Stop conditions
 
 Stop and investigate if any of these appear:
 
-- a route returns `404` because its gate is off;
+- a route returns `404`: either its gate is off or the path is wrong, so check the path segments first;
 - a permission or the exact organization, workspace, or system scope is denied;
 - the Passport is `unverified`, `expired`, `superseded`, `rejected`, or `trust_error`;
 - the evidence is pending review, rejected, stale, or not decision-eligible when you try to decide;

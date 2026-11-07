@@ -48,7 +48,7 @@ A violation returns `evidence_review_separation_required`. Reviews are frozen on
 
 A normal governance decision has the same independence rule: the decider cannot be the run requester, any evidence submitter, or any evidence linker. A violation returns `governance_decision_separation_required`.
 
-Governance decisions, override grants, and owner overrides require PostgreSQL. On any other database the route returns `409 governance_decision_postgresql_required`.
+Assurance V2 as a whole requires PostgreSQL: with the master switch on, the backend does not start on any other database. See [Configuration](/docs/reference/configuration#startup-requirements).
 
 ## Separation overrides
 
