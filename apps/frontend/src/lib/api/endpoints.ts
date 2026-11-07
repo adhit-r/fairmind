@@ -103,7 +103,6 @@ export const API_ENDPOINTS = {
     policies: (orgId: string) => `/api/v1/ai-governance/organizations/${orgId}/policies`,
     complianceAssess: '/api/v1/ai-governance/compliance/assess',
     complianceFrameworks: '/api/v1/ai-governance/compliance/frameworks',
-    frameworkControls: (framework: string) => `/api/v1/ai-governance/compliance/frameworks/${framework}/controls`,
     lifecycleProcess: '/api/v1/ai-governance/lifecycle/process',
     lifecycleSummary: (systemId: string) => `/api/v1/ai-governance/lifecycle/${systemId}/summary`,
     lifecycleChecks: '/api/v1/ai-governance/lifecycle/checks',

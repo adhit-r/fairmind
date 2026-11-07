@@ -368,6 +368,13 @@ def test_environmental_gate_blocks_deployment_approval(environmental_governance_
             metrics={"kg_co2e_per_1000_requests": 0.0001},
         ),
     )
+    # An undisclosed assessment counts 0 in the release gate; one attestation lets low tier read conditional go,
+    # so the environmental rule is what blocks.
+    attest = client.post(
+        f"/api/v1/ai-governance/systems/{system_id}/attestations",
+        json={"check": "data_governance", "statement": "Training data lineage is recorded in the data catalogue.", "reference": "DC-7"},
+    )
+    assert attest.status_code == 200, attest.text
 
     # Create an approval request for this system and try to approve it.
     r = client.post(

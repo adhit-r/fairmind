@@ -20,7 +20,6 @@ export { useDatasets } from './useDatasets'
 export { useAuditLogs } from './useAuditLogs'
 export { useMonitoring, useSystemHealth } from './useMonitoring'
 export { useAnalytics } from './useAnalytics'
-export { useCompliance } from './useCompliance'
 export { useEvaluationRuns } from './useEvaluationRuns'
 export type {
   CreateEvaluationPlanInput,

@@ -1,4 +1,4 @@
-FROM node:22-alpine AS build
+FROM node:22-alpine@sha256:0e1754758c2df4cfa3e68d59e2e1b7374bb7fd9ea6328eaaacf15cc934af8202 AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -12,7 +12,7 @@ ARG PUBLIC_POSTHOG_KEY
 ARG PUBLIC_POSTHOG_HOST
 RUN npm run build
 
-FROM caddy:2.10-alpine
+FROM caddy:2.10-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
 COPY --from=build /app/dist /srv
 # Run as a non-root user. The Caddy binary carries cap_net_bind_service, so it
 # can still bind :80 unprivileged; chown the dirs Caddy reads/writes.

@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
-from config.auth import TokenData, UserRole, get_current_active_user, require_admin
+from config.auth import TokenData, UserRole, get_current_active_user
 from config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -193,27 +193,6 @@ def _requests_external_url_artifact(
         and _has_nonblank_external_url(content.get("url"))
     )
 
-
-FRAMEWORKS: List[Dict[str, Any]] = [
-    {
-        "id": "eu_ai_act",
-        "name": "EU AI Act",
-        "description": "European Union AI regulation",
-        "controls": ["risk_management", "transparency", "human_oversight", "incident_reporting"],
-    },
-    {
-        "id": "iso_42001",
-        "name": "ISO/IEC 42001",
-        "description": "AI management system standard",
-        "controls": ["governance", "policy", "monitoring", "continuous_improvement"],
-    },
-    {
-        "id": "nist_ai_rmf",
-        "name": "NIST AI RMF",
-        "description": "NIST AI Risk Management Framework",
-        "controls": ["govern", "map", "measure", "manage"],
-    },
-]
 
 def _resolve_risk_library_files() -> List[tuple[str, Path]]:
     """
@@ -530,6 +509,10 @@ class ApprovalDecisionRequest(BaseModel):
 
 class SystemApprovalRequestCreateRequest(BaseModel):
     requested_by: Optional[str] = None
+
+
+# The release gate trusts these metadata keys; only the server routes that measure something stamp them.
+GATE_PROVENANCE_KEYS = ("provenance_class", "provenance")
 
 
 class EvidenceCollectRequest(BaseModel):
@@ -1025,34 +1008,6 @@ def _fetch_approval_decisions(db: Session, request_id: str) -> List[Dict[str, An
         }
         for row in rows
     ]
-    priority_counts = {"low": 0, "medium": 0, "high": 0, "critical": 0}
-    retest_required = 0
-    linked_risk_refs = 0
-
-    for task in tasks:
-        status = task.get("status") or "open"
-        if status in status_counts:
-            status_counts[status] += 1
-        priority = task.get("priority") or "medium"
-        if priority in priority_counts:
-            priority_counts[priority] += 1
-        if task.get("retestRequired"):
-            retest_required += 1
-        linked_risk_refs += len(task.get("linkedRiskIds") or [])
-
-    active = sum(status_counts[key] for key in ("open", "in_progress", "blocked", "ready_for_retest"))
-    completed = status_counts["resolved"] + status_counts["closed"]
-
-    return {
-        "systemId": system_id,
-        "totalTasks": len(tasks),
-        "activeTasks": active,
-        "completedTasks": completed,
-        "retestRequiredTasks": retest_required,
-        "linkedRiskRefs": linked_risk_refs,
-        "byStatus": status_counts,
-        "byPriority": priority_counts,
-    }
 
 
 def _fetch_evidence_records(db: Session, system_id: str) -> List[Dict[str, Any]]:
@@ -1430,106 +1385,13 @@ async def assess_risks(
 
 @router.get("/compliance/frameworks")
 async def get_frameworks():
-    return FRAMEWORKS
+    """Frameworks from the pack catalogue, each with its active requirement keys as controls."""
+    from api.routes.pack_catalogue import FRAMEWORK_KEYS, FRAMEWORKS
 
-
-@router.get("/compliance/frameworks/{framework}/controls")
-async def get_framework_controls(framework: str):
-    found = next((f for f in FRAMEWORKS if f["id"] == framework), None)
-    if not found:
-        raise HTTPException(status_code=404, detail="Framework not found")
-    return {
-        "framework": framework,
-        "controls": found["controls"],
-    }
-
-
-# ---------------------------------------------------------------------------
-# Framework Controls (DB-backed CRUD)
-# ---------------------------------------------------------------------------
-
-
-class FrameworkControlCreateRequest(BaseModel):
-    control_id: str = Field(min_length=1)
-    title: str = Field(min_length=1)
-    description: str = ""
-    status: str = Field(default="not_started")
-    owner: Optional[str] = None
-    evidence_required: int = Field(default=0, ge=0)
-
-
-@router.get("/frameworks/{framework}/controls")
-async def list_framework_controls(framework: str, db: Session = Depends(get_db)):
-    """List all controls stored in the DB for a given framework."""
-    _ensure_tables(db)
-    rows = db.execute(
-        text(
-            "SELECT id, framework, control_id, title, description, status, owner, evidence_required, created_at, updated_at "
-            "FROM governance_framework_controls WHERE framework = :framework ORDER BY control_id"
-        ),
-        {"framework": framework},
-    ).fetchall()
     return [
-        {
-            "id": row[0],
-            "framework": row[1],
-            "controlId": row[2],
-            "title": row[3],
-            "description": row[4],
-            "status": row[5],
-            "owner": row[6],
-            "evidenceRequired": row[7],
-            "createdAt": row[8],
-            "updatedAt": row[9],
-        }
-        for row in rows
+        {"id": fw.key, "name": fw.name, "description": fw.version or "", "controls": sorted(FRAMEWORK_KEYS[fw.key])}
+        for fw in FRAMEWORKS.values()
     ]
-
-
-# The control catalogue is shared: every organisation and seed_env_controls read
-# it by framework alone, so only a platform admin may add to it.
-@router.post("/frameworks/{framework}/controls", dependencies=[Depends(require_admin)])
-async def create_framework_control(
-    framework: str,
-    request: FrameworkControlCreateRequest,
-    db: Session = Depends(get_db),
-):
-    """Create a framework control record in the DB."""
-    _ensure_tables(db)
-    control_id_pk = str(uuid.uuid4())
-    now = _utc_now_iso()
-    db.execute(
-        text(
-            "INSERT INTO governance_framework_controls "
-            "(id, framework, control_id, title, description, status, owner, evidence_required, created_at, updated_at) "
-            "VALUES (:id, :framework, :control_id, :title, :description, :status, :owner, :evidence_required, :created_at, :updated_at)"
-        ),
-        {
-            "id": control_id_pk,
-            "framework": framework,
-            "control_id": request.control_id,
-            "title": request.title,
-            "description": request.description,
-            "status": request.status,
-            "owner": request.owner,
-            "evidence_required": request.evidence_required,
-            "created_at": now,
-            "updated_at": now,
-        },
-    )
-    db.commit()
-    return {
-        "id": control_id_pk,
-        "framework": framework,
-        "controlId": request.control_id,
-        "title": request.title,
-        "description": request.description,
-        "status": request.status,
-        "owner": request.owner,
-        "evidenceRequired": request.evidence_required,
-        "createdAt": now,
-        "updatedAt": now,
-    }
 
 
 # ---------------------------------------------------------------------------
@@ -2617,6 +2479,8 @@ async def collect_evidence(
         content=request.content,
     ):
         _require_untrusted_external_evidence_linking_enabled()
+    # A client cannot declare its own record measured; the gate reads what is left as manual.
+    metadata = {k: v for k, v in request.metadata.items() if k not in GATE_PROVENANCE_KEYS}
     evidence_id = str(uuid.uuid4())
     now = _utc_now_iso()
     db.execute(
@@ -2636,7 +2500,7 @@ async def collect_evidence(
             "confidence": request.confidence,
             "status": "draft",
             "uploaded_by": current_user.email or current_user.user_id,
-            "metadata_json": json.dumps(request.metadata),
+            "metadata_json": json.dumps(metadata),
             "captured_at": now,
             "created_at": now,
         },
@@ -2648,11 +2512,11 @@ async def collect_evidence(
         "type": request.type,
         "content": request.content,
         "confidence": request.confidence,
-        "metadata": request.metadata,
+        "metadata": metadata,
         "timestamp": now,
         "linkedEntityCount": 0,
         "linkedEntities": [],
-        "metadataSummary": _evidence_metadata_summary(request.metadata, request.content, 0, request.confidence),
+        "metadataSummary": _evidence_metadata_summary(metadata, request.content, 0, request.confidence),
         "workflowState": "collected",
     }
 
