@@ -42,7 +42,10 @@ def test_tools_are_registered(client):
         async with create_connected_server_and_client_session(create_server(client)._mcp_server) as session:
             return {t.name for t in (await session.list_tools()).tools}
 
-    assert asyncio.run(go()) == {"list_systems", "release_gate", "clause_map", "run_fairness_test", "record_monitoring_snapshot", "attest_check"}
+    assert asyncio.run(go()) == {
+        "list_systems", "release_gate", "clause_map", "run_fairness_test", "record_monitoring_snapshot", "attest_check",
+        "list_evaluations", "describe_evaluation", "run_evaluation",
+    }
 
 
 def test_release_gate_text_and_structured(client):
@@ -115,3 +118,32 @@ def test_api_error_becomes_tool_error_with_server_message(client):
     client.gate.side_effect = FairMindError("GET /gate failed: AI system not found", 404)
     result = call(client, "release_gate", {"system_id": "nope"})
     assert result.isError and "404" in result.content[0].text and "AI system not found" in result.content[0].text
+
+
+def test_list_and_describe_evaluations(client):
+    client.evaluations.return_value = [{"id": "EV-DAT-01", "name": "Data drift", "measures": "PSI", "runnable": True}]
+    client.evaluation_engine.return_value = {
+        "method": "PSI per column", "live": False, "platform": False,
+        "slots": [{"name": "baseline", "kind": "csv", "required": True, "help": "reference data"}],
+        "params": [{"name": "threshold", "kind": "number", "required": False, "help": "PSI limit"}],
+        "alternate": None,
+    }
+    listed = call(client, "list_evaluations", {"query": "drift"})
+    assert "EV-DAT-01  runnable  Data drift" in listed.content[0].text
+    client.evaluations.assert_called_once_with("drift")
+    text = call(client, "describe_evaluation", {"evaluation_id": "EV-DAT-01"}).content[0].text
+    assert "file baseline (csv): reference data" in text and "param threshold (number)" in text
+
+
+def test_run_evaluation_passes_files_params_and_mode(client):
+    client.run_evaluation.return_value = {"id": "ev1", "evaluationId": "EV-SEC-01", "status": "failed", "summary": "3 of 20 probes leaked", "metrics": {"leak_rate": 0.15}}
+    result = call(client, "run_evaluation", {"system_id": "s1", "evaluation_id": "EV-SEC-01", "params": {"probes": 20}, "live": True})
+    assert not result.isError
+    assert "EV-SEC-01: FAILED, evidence ev1" in result.content[0].text and "leak_rate: 0.150" in result.content[0].text
+    client.run_evaluation.assert_called_once_with("s1", "EV-SEC-01", None, {"probes": 20}, live=True, source="upload")
+
+
+def test_run_evaluation_error_is_a_tool_error(client):
+    client.run_evaluation.side_effect = FairMindError("Evaluation EV-SEC-01 failed: no judge")
+    result = call(client, "run_evaluation", {"system_id": "s1", "evaluation_id": "EV-SEC-01", "use_connection": True})
+    assert result.isError and "no judge" in result.content[0].text

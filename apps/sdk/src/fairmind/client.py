@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import os
+import time
+from contextlib import ExitStack
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Union
 
@@ -12,6 +15,7 @@ from . import __version__
 from .types import Attestation, AttestableCheck, ClauseMap, FairnessRun, Gate, MonitoringRun, System
 
 GOV = "/api/v1/ai-governance"
+PACKS = "/api/v1/packs"
 DEFAULT_API_URL = "http://localhost:8010"
 
 # legacy framework ids -> catalogue keys, as accepted by the report request
@@ -168,3 +172,76 @@ class FairMind:
         if reference:
             body["reference"] = reference
         return self._call("POST", f"{GOV}/systems/{system_id}/attestations", json=body)
+
+    # -- catalogue evaluations ---------------------------------------------
+
+    def organization_id(self) -> str:
+        """The organisation the evaluation endpoints act in: FAIRMIND_ORG_ID, else the key's first organisation."""
+        if not getattr(self, "_org_id", None):
+            org = os.environ.get("FAIRMIND_ORG_ID")
+            if not org:
+                orgs = self._call("GET", "/api/v1/organizations").get("organizations") or []
+                if not orgs:
+                    raise FairMindError("This key belongs to no organisation")
+                org = orgs[0]["id"]
+            self._org_id = org
+        return self._org_id
+
+    def _packs(self, method: str, path: str, **kwargs: Any) -> Any:
+        params = {**kwargs.pop("params", {}), "org_id": self.organization_id()}
+        return self._call(method, f"{PACKS}{path}", params=params, **kwargs)
+
+    def evaluations(self, query: Optional[str] = None, pillar: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Catalogue evaluations; `runnable` is true for those FairMind computes itself."""
+        params = {k: v for k, v in (("q", query), ("pillar", pillar)) if v}
+        return self._packs("GET", "/evaluations", params=params)
+
+    def evaluation_engine(self, evaluation_id: str) -> Dict[str, Any]:
+        """The files (slots) and params an evaluation takes, and its live alternate if it has one."""
+        return self._packs("GET", f"/evaluations/{evaluation_id}/engine")
+
+    def evaluation_runs(self, evaluation_id: str, system_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        params = {"system_id": system_id} if system_id else {}
+        return self._packs("GET", f"/evaluations/{evaluation_id}/runs", params=params)
+
+    def run_evaluation(
+        self,
+        system_id: str,
+        evaluation_id: str,
+        files: Optional[Dict[str, PathLike]] = None,
+        params: Optional[Dict[str, Any]] = None,
+        *,
+        live: bool = False,
+        source: str = "upload",
+        timeout: float = 900.0,
+        poll_interval: float = 3.0,
+    ) -> Dict[str, Any]:
+        """Run a catalogue evaluation and return the stored run (status passed, failed or insufficient, metrics, detail).
+
+        `files` maps the engine's slot names to local paths. `live=True` runs the evaluation's behaviour test
+        against the system's connected endpoint; `source="connection"` reads the organisation's agent platform.
+        Behaviour tests run as background jobs on the server; this waits for them up to `timeout` seconds.
+        """
+        data = {"system_id": system_id, "params": json.dumps(params or {}), "source": source}
+        if live:
+            data["mode"] = "live"
+        with ExitStack() as stack:
+            uploads = {}
+            for slot, path in (files or {}).items():
+                p = Path(path)
+                if not p.is_file():
+                    raise FairMindError(f"No such file: {p}")
+                uploads[slot] = (p.name, stack.enter_context(p.open("rb")))
+            result = self._packs("POST", f"/evaluations/{evaluation_id}/runs", data=data, files=uploads or None)
+        job = result.get("job") if isinstance(result, dict) else None
+        if not job:
+            return result
+        deadline = time.monotonic() + timeout
+        while job["status"] not in ("done", "failed"):
+            if time.monotonic() > deadline:
+                raise FairMindError(f"Evaluation job {job['id']} is still running after {timeout:.0f}s; check it later")
+            time.sleep(poll_interval)
+            job = self._packs("GET", f"/evaluation-jobs/{job['id']}")
+        if job["status"] == "failed":
+            raise FairMindError(f"Evaluation {evaluation_id} failed: {job.get('error') or 'no reason given'}")
+        return self._packs("GET", f"/evaluation-runs/{job['evidenceId']}")
