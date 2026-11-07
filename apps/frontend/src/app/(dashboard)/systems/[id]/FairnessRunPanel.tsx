@@ -13,20 +13,23 @@ const MIN_REASON = 12
 
 type Column = CsvInspection['columns'][number]
 
-/** Grounds FairMind looks for and the name hints that cover each, as the backend lists them; used to show what the ticked columns leave out. */
-const GROUNDS: Array<[string, string[]]> = [
-  ['gender', ['gender', 'sex']],
-  ['age', ['age', 'dob', 'date of birth', 'birth date', 'birthdate']],
-  ['caste or social category', ['caste', 'social category']],
-  ['religion', ['religion']],
-  ['disability', ['disability']],
-  ['language', ['language']],
-  ['marital status', ['marital']],
-  ['region', ['region', 'state', 'district', 'urban rural', 'city tier']],
-]
+/**
+ * Grounds FairMind looks for and the column-name hint for each, copied from the backend (fairness_run_service
+ * GROUNDS and ATTRIBUTE_HINTS) so the uncovered grounds shown here are the ones the server will ask a reason for.
+ */
+const GROUNDS = ['gender', 'age', 'caste or social category', 'religion', 'disability', 'language', 'marital status', 'region']
+const HINTS: Record<string, string | null> = {
+  gender: 'gender', sex: 'gender',
+  age: 'age', age_band: 'age', age_group: 'age', dob: 'age', date_of_birth: 'age', birth_date: 'age', birthdate: 'age',
+  caste: 'caste or social category', social_category: 'caste or social category',
+  religion: 'religion', disability: 'disability', language: 'language', marital: 'marital status',
+  region: 'region', state: 'region', district: 'region', urban_rural: 'region', city_tier: 'region',
+  race: null, ethnicity: null, nationality: null,
+}
 const GENDER_VALUES = new Set(['m', 'f', 'male', 'female', 'x', 'other', 'transgender', 'nonbinary', 'non-binary'])
 const RESERVATION_VALUES = new Set(['gen', 'general', 'obc', 'sc', 'st', 'ews'])
-const BINARY_VALUES = new Set(['0', '1', '0.0', '1.0', 'true', 'false', 'yes', 'no'])
+// Case matters: the backend reads Yes/No but not YES/NO as binary (TRUE/FALSE arrive as booleans, sampled "True"/"False").
+const BINARY_VALUES = new Set(['0', '1', '0.0', '1.0', 'true', 'false', 'True', 'False', 'yes', 'no', 'Yes', 'No'])
 
 function pct(v: number) {
   return `${Math.round(v * 100)}%`
@@ -38,39 +41,65 @@ function on(iso: string | null) {
   return iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : ''
 }
 
-/** Lower-case words of a column name, camelCase split: "applicantAgeBand" gives applicant, age, band. */
+/** Lower-case words of a column name, split as the backend splits them: "applicantAgeBand" gives applicant, age, band; "DOBDate" gives dob, date. */
 export function words(name: string): string[] {
-  return name.replace(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)
+  return (name.match(/[A-Z]+(?![a-z])|[A-Z]?[a-z]+|[0-9]+/g) ?? []).map((t) => t.toLowerCase())
 }
 
-/** The grounds a column covers: a hint as whole adjacent words of its name, or values that look like gender or reservation categories. */
-export function groundsOf(c: Pick<Column, 'name' | 'distinct' | 'sample'>): string[] {
-  const ws = words(c.name)
-  const matches = (hint: string) => {
-    const h = hint.split(' ')
-    return ws.some((_, i) => h.every((t, j) => ws[i + j] === t))
-  }
+/**
+ * The one ground a column covers, by the backend's rules: values that look like reservation categories or gender
+ * win, then the longest hint found as whole adjacent words of the name. A column the inspection gave no status
+ * (it was mapped as outcome, prediction or score, or is no candidate) covers nothing.
+ */
+export function groundOf(c: Pick<Column, 'name' | 'distinct' | 'sample' | 'attribute'>): string | null {
+  if (c.attribute.status === null) return null
   // ponytail: only the sampled values reach the browser, so value checks need every distinct value sampled; the server checks the whole column
-  const values = c.sample.length >= c.distinct ? c.sample.map((v) => v.toLowerCase()) : []
-  const all = (set: Set<string>) => values.length > 0 && values.every((v) => set.has(v))
-  return GROUNDS.filter(
-    ([g, hints]) =>
-      hints.some(matches) ||
-      (g === 'region' && c.name.trim().toLowerCase() === 'tier') ||
-      (g === 'gender' && all(GENDER_VALUES)) ||
-      (g === 'caste or social category' && all(RESERVATION_VALUES)),
-  ).map(([g]) => g)
+  const values = c.distinct >= 2 && c.sample.length >= c.distinct ? c.sample.map((v) => v.trim().toLowerCase()) : []
+  if (values.length && values.every((v) => RESERVATION_VALUES.has(v))) return 'caste or social category'
+  if (values.length && values.every((v) => GENDER_VALUES.has(v))) return 'gender'
+  if (c.name.trim().toLowerCase() === 'tier') return 'region'
+  const ws = words(c.name)
+  let best: [number, string] | null = null
+  for (const hint of Object.keys(HINTS)) {
+    const run = words(hint)
+    const found = ws.some((_, i) => run.every((t, j) => ws[i + j] === t))
+    if (found && (!best || run.length > best[0] || (run.length === best[0] && hint > best[1]))) best = [run.length, hint]
+  }
+  return best ? HINTS[best[1]] : null
 }
 
 /** Grounds none of the ticked columns covers. For display; the server recomputes it when the run is confirmed. */
 export function uncoveredGrounds(columns: Column[], ticked: string[]): string[] {
-  const covered = new Set(columns.filter((c) => ticked.includes(c.name)).flatMap(groundsOf))
-  return GROUNDS.map(([g]) => g).filter((g) => !covered.has(g))
+  const covered = new Set(columns.filter((c) => ticked.includes(c.name)).map(groundOf))
+  return GROUNDS.filter((g) => !covered.has(g))
 }
 
 /** True when the outcome is not 0/1, true/false or yes/no, so the run must be told which value is favourable. */
 export function needsFavourable(sample: string[]): boolean {
-  return sample.some((v) => !BINARY_VALUES.has(v.toLowerCase()))
+  return sample.some((v) => !BINARY_VALUES.has(v))
+}
+
+/**
+ * What a confirmed run sends and what it still needs. A column picked as outcome, prediction or score is not
+ * sent as a protected attribute; if it was suggested, it counts as unticked and needs the removal reason.
+ */
+export function confirmState(inspection: CsvInspection, mapping: FairnessMapping, removalReason: string, uncoveredReason: string) {
+  const mapped = new Set([mapping.outcome, mapping.prediction, mapping.score])
+  const attributes = mapping.attributes.filter((a) => !mapped.has(a))
+  const removed = inspection.suggested.attributes.filter((a) => !attributes.includes(a))
+  const uncovered = uncoveredGrounds(inspection.columns, attributes)
+  const outcomeSample = inspection.columns.find((c) => c.name === mapping.outcome)?.sample ?? []
+  const favourable = Boolean(mapping.outcome) && needsFavourable(outcomeSample)
+  const ready = Boolean(
+    inspection.fileSha256 &&
+      mapping.outcome &&
+      (mapping.prediction || mapping.score) &&
+      attributes.length > 0 &&
+      (!favourable || mapping.favorableLabel) &&
+      (removed.length === 0 || removalReason.trim().length >= MIN_REASON) &&
+      (uncovered.length === 0 || uncoveredReason.trim().length >= MIN_REASON),
+  )
+  return { mapped, attributes, removed, uncovered, outcomeSample, favourable, ready }
 }
 
 /** "gender", "gender and age", "gender, age and region". */
@@ -112,16 +141,15 @@ export function FairnessRunPanel({
 
   const columns = inspection?.columns.map((c) => c.name) ?? []
   const suggested = inspection?.suggested.attributes ?? []
-  const mapped = new Set([mapping.outcome, mapping.prediction, mapping.score])
+  const state = inspection ? confirmState(inspection, mapping, removalReason, uncoveredReason) : null
+  const { mapped, attributes, removed, uncovered, outcomeSample, favourable } = state ?? {
+    mapped: new Set<string | undefined>(), attributes: [], removed: [], uncovered: [], outcomeSample: [], favourable: false,
+  }
   const rank = (c: Column) => (suggested.includes(c.name) ? 0 : c.attribute.status === 'possible' ? 1 : c.attribute.status === 'too_many_values' ? 3 : 2)
   // Columns over 50 values stay hidden unless their name looks protected, then they show disabled with the bin hint.
   const rows = (inspection?.columns ?? [])
     .filter((c) => !mapped.has(c.name) && (c.distinct <= 50 || c.attribute.status === 'too_many_values'))
     .sort((a, b) => rank(a) - rank(b))
-  const removed = suggested.filter((a) => !mapping.attributes.includes(a))
-  const uncovered = inspection ? uncoveredGrounds(inspection.columns, mapping.attributes) : []
-  const outcomeSample = inspection?.columns.find((c) => c.name === mapping.outcome)?.sample ?? []
-  const favourable = Boolean(mapping.outcome) && needsFavourable(outcomeSample)
 
   async function pick(f: File | null) {
     setResult(null)
@@ -159,7 +187,7 @@ export function FairnessRunPanel({
       uncoveredReason: uncovered.length ? uncoveredReason.trim() : undefined,
     }
     try {
-      const out = await run(file, mapping, confirmation)
+      const out = await run(file, { ...mapping, attributes }, confirmation)
       setNotTested(uncovered.length ? { grounds: uncovered, reason: confirmation.uncoveredReason } : null)
       setResult(out)
       onDone?.(out)
@@ -173,16 +201,7 @@ export function FairnessRunPanel({
   const toggleAttribute = (name: string) =>
     setMapping((m) => ({ ...m, attributes: m.attributes.includes(name) ? m.attributes.filter((a) => a !== name) : [...m.attributes, name] }))
 
-  const canRun = Boolean(
-    file &&
-      inspection?.fileSha256 &&
-      mapping.outcome &&
-      (mapping.prediction || mapping.score) &&
-      mapping.attributes.length > 0 &&
-      (!favourable || mapping.favorableLabel) &&
-      (removed.length === 0 || removalReason.trim().length >= MIN_REASON) &&
-      (uncovered.length === 0 || uncoveredReason.trim().length >= MIN_REASON),
-  )
+  const canRun = Boolean(file && state?.ready)
 
   return (
     <div id="first-verdict" className="grid gap-3 rounded-[12px] border border-[var(--fm-line)] bg-[var(--fm-bg)] p-4 sm:col-span-2 xl:col-span-3">
@@ -266,7 +285,7 @@ export function FairnessRunPanel({
                       <tr key={c.name} className={cn('border-t border-[var(--fm-line)] align-top', wasSuggested && !ticked && 'bg-[#fffaf6]', binning && 'opacity-75')}>
                         <td className="py-2.5 pr-2">
                           <input id={id} type="checkbox" checked={ticked} disabled={binning} onChange={() => toggleAttribute(c.name)} className="h-[18px] w-[18px] accent-[var(--fm-ink)]" />
-                          <label htmlFor={id} className="sr-only">{c.name} is a protected attribute</label>
+                          <label htmlFor={id} className="sr-only">{binning ? `${c.name} cannot be grouped` : `${c.name} is a protected attribute`}</label>
                         </td>
                         <td className="py-2.5 pr-2 font-semibold">
                           <span className="mr-1.5">{c.name}</span>
@@ -330,9 +349,9 @@ export function FairnessRunPanel({
               {busy === 'run' ? 'Running' : 'Confirm attributes and run'}
             </button>
             <span className="max-w-[640px] text-[11.5px] leading-[1.45] text-[var(--fm-ink3)]">
-              {mapping.attributes.length === 0
+              {attributes.length === 0
                 ? 'Tick the protected attributes to test.'
-                : `You confirm ${listText(mapping.attributes)} ${mapping.attributes.length === 1 ? 'is the protected attribute' : 'are the protected attributes'} for this test. The suggestion, your changes, your reasons and the file fingerprint are saved with the result. Monitoring reuses these attributes.`}
+                : `You confirm ${listText(attributes)} ${attributes.length === 1 ? 'is the protected attribute' : 'are the protected attributes'} for this test. The suggestion, your changes, your reasons and the file fingerprint are saved with the result. Monitoring reuses these attributes.`}
             </span>
           </div>
         </div>
