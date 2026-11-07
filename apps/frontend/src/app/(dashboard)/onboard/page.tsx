@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { useSystemContext, type AISystemSummary } from '@/components/workflow/SystemContext'
 import { ApplicabilityForm } from '@/components/workflow/ApplicabilityForm'
 import { confirmApplicability, type ApplicabilityDraft } from '@/lib/api/hooks/useApplicability'
@@ -15,6 +15,8 @@ const label = 'block text-[12.5px] font-medium text-[var(--fm-ink2)]'
 /**
  * Register one AI system. Creates a workspace and the system, records the confirmed tier and frameworks,
  * then opens the system file. If recording the tier fails, a retry records it on the system already created.
+ * Both creates carry ids chosen once per visit, so a retry after a timeout or a failed step replays them
+ * and gets back the workspace and system already made rather than new ones.
  */
 export default function OnboardPage() {
   const { createWorkspaceAndSystem } = useSystemContext()
@@ -23,6 +25,7 @@ export default function OnboardPage() {
   const [error, setError] = useState<string | null>(null)
   const [draft, setDraft] = useState<ApplicabilityDraft | null>(null)
   const [registeredId, setRegisteredId] = useState<string | null>(null)
+  const ids = useRef<{ workspace: string; system: string } | null>(null)
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -34,7 +37,9 @@ export default function OnboardPage() {
     let id = registeredId
     try {
       if (!id) {
+        ids.current ??= { workspace: crypto.randomUUID(), system: crypto.randomUUID() }
         const system = await createWorkspaceAndSystem({
+          ids: ids.current,
           workspaceName: v('workspace'),
           workspaceOwner: v('workspaceOwner'),
           systemName: v('name'),

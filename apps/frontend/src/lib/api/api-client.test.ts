@@ -270,3 +270,30 @@ test('names the field and reason of a request validation failure', async () => {
   assert.equal(result.success, false)
   assert.equal(result.error, 'email: value is not a valid email address')
 })
+
+test('retries only idempotent methods unless a POST or PATCH opts in', async () => {
+  installBrowser()
+  const client = new ApiClient('https://fairmind.test')
+  const failures: Array<[string, () => Promise<Response>]> = [
+    ['5xx', async () => response(503, { detail: 'unavailable' })],
+    ['timeout', async () => { throw Object.assign(new Error('aborted'), { name: 'AbortError' }) }],
+  ]
+  for (const [failure, fail] of failures) {
+    let attempts = 0
+    globalThis.fetch = (async () => { attempts += 1; return fail() }) as typeof fetch
+    const options = { maxRetries: 2, retryDelay: 0, timeout: 50 }
+    const cases: Array<[string, () => Promise<unknown>, number]> = [
+      ['GET', () => client.get('/x', options), 3],
+      ['PUT', () => client.put('/x', {}, options), 3],
+      ['DELETE', () => client.delete('/x', options), 3],
+      ['POST', () => client.post('/x', {}, options), 1],
+      ['PATCH', () => client.patch('/x', {}, options), 1],
+      ['POST opted in', () => client.post('/x', {}, { ...options, enableRetry: true }), 3],
+    ]
+    for (const [name, call, expected] of cases) {
+      attempts = 0
+      await call()
+      assert.equal(attempts, expected, `${name} after a ${failure}`)
+    }
+  }
+})

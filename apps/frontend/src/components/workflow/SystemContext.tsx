@@ -90,6 +90,8 @@ type SystemContextValue = {
     systemVersion?: string
     businessLine?: string
     complianceFrameworks?: string[]
+    /** Client-chosen ids: replaying a create with the same ids returns the rows it made instead of new ones. */
+    ids?: { workspace: string; system: string }
   }) => Promise<AISystemSummary>
 }
 
@@ -206,10 +208,12 @@ export function SystemContextProvider({ children }: { children: React.ReactNode 
     systemVersion?: string
     businessLine?: string
     complianceFrameworks?: string[]
+    ids?: { workspace: string; system: string }
   }) => {
     const workspaceResponse: ApiResponse<WorkspaceRecord> = await apiClient.post(
       API_ENDPOINTS.aiGovernance.workspaces,
       {
+        ...(params.ids && { id: params.ids.workspace }),
         name: params.workspaceName,
         owner: params.workspaceOwner,
       }
@@ -222,6 +226,7 @@ export function SystemContextProvider({ children }: { children: React.ReactNode 
     const systemResponse: ApiResponse<AISystemRecord> = await apiClient.post(
       API_ENDPOINTS.aiGovernance.systems,
       {
+        ...(params.ids && { id: params.ids.system }),
         workspace_id: workspaceResponse.data.id,
         name: params.systemName,
         owner: params.systemOwner,
