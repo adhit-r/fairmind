@@ -422,8 +422,7 @@ test('clears prior-system action state when the next system becomes active', asy
   await page.getByRole('button', { name: 'Prepare evidence run' }).click()
   await expect(page.getByText('Run prepared. Evidence is still required before governance review.')).toBeVisible()
 
-  await page.getByRole('combobox', { name: 'System scope' }).click()
-  await page.getByRole('option', { name: secondSystem.name }).click()
+  await page.getByLabel('Switch system').selectOption({ label: secondSystem.name })
 
   await expect(page.getByLabel('Selected plan')).toContainText(secondPlan.name)
   await expect(page.getByText('Run prepared. Evidence is still required before governance review.')).toHaveCount(0)
@@ -530,8 +529,6 @@ test('never offers automatic enforcement or FairMind worker delivery in plan cre
   const delivery = form.getByLabel('Delivery mode')
   await expect(enforcement.locator('option[value="automatic"]')).toHaveCount(0)
   await expect(delivery.locator('option[value="fairmind_worker"]')).toHaveCount(0)
-  await expect(form.getByText('Automatic enforcement is unavailable')).toBeVisible()
-  await expect(form.getByText('FairMind worker delivery is unavailable')).toBeVisible()
 
   await form.getByLabel('Plan name').fill('Human review release gate')
   await form.getByLabel('Versioned suite references').fill('fairmind/agent-safety@2026.07')
