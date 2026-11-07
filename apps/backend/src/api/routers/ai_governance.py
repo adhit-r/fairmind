@@ -761,6 +761,7 @@ def _serialize_workspace_row(row: Any) -> Dict[str, Any]:
 
 
 def _serialize_ai_system_row(row: Any) -> Dict[str, Any]:
+    metadata = _load_json_value(row[6], {})
     return {
         "id": row[0],
         "workspaceId": row[1],
@@ -768,7 +769,9 @@ def _serialize_ai_system_row(row: Any) -> Dict[str, Any]:
         "owner": row[3],
         "riskTier": row[4],
         "lifecycleStage": row[5],
-        "metadata": _load_json_value(row[6], {}),
+        "metadata": metadata,
+        # The confirmed tier and frameworks (routers/applicability.py); None until a person confirms them.
+        "applicability": metadata.get("applicability"),
         "createdAt": row[7],
         "updatedAt": row[8],
     }
@@ -1085,7 +1088,19 @@ def _fetch_evidence_records(db: Session, system_id: str) -> List[Dict[str, Any]]
     ]
 
 
+# Decision records stored as evidence so seals hash them; they are not evidence of a control,
+# so they neither move the lifecycle stage nor count toward readiness.
+RECORD_ONLY_EVIDENCE_TYPES = {"applicability_decision", "applicability_override_accepted"}
+
+
+def _reject_record_only_type(evidence_type: str) -> None:
+    """Only the applicability routes write these types; every generic evidence write refuses them."""
+    if evidence_type in RECORD_ONLY_EVIDENCE_TYPES:
+        raise HTTPException(status_code=422, detail="Record the tier and rules on the system file, not as uploaded evidence")
+
+
 def _summarize_evidence(records: List[Dict[str, Any]], system_id: str) -> Dict[str, Any]:
+    records = [r for r in records if r.get("type") not in RECORD_ONLY_EVIDENCE_TYPES]
     if not records:
         return {
             "systemId": system_id,
@@ -1241,7 +1256,8 @@ async def create_ai_system(request: AISystemCreateRequest, http: Request, db: Se
             "owner": request.owner,
             "risk_tier": request.risk_tier,
             "lifecycle_stage": request.lifecycle_stage,
-            "metadata_json": json.dumps(request.metadata),
+            # applicability is written only by PUT /systems/{id}/applicability, never taken from the client.
+            "metadata_json": json.dumps({k: v for k, v in request.metadata.items() if k != "applicability"}),
             "created_at": now,
             "updated_at": now,
         },
@@ -1582,6 +1598,7 @@ async def create_system_evidence(
     membership = _require_evidence_system_access(
         db, system_id, current_user, mutate=True
     )
+    _reject_record_only_type(request.evidence_type)
     if request.control_id:
         _require_untrusted_external_evidence_linking_enabled()
         _validate_control_link_scope(
@@ -2540,6 +2557,7 @@ async def collect_evidence_v2(
     membership = _require_evidence_system_access(
         db, request.system_id, current_user, mutate=True
     )
+    _reject_record_only_type(request.type)
     if _requests_external_url_artifact(
         artifact_kind=request.artifact_kind,
         file_url=request.file_url,
@@ -2592,6 +2610,7 @@ async def collect_evidence(
     membership = _require_evidence_system_access(
         db, request.system_id, current_user, mutate=True
     )
+    _reject_record_only_type(request.type)
     if _requests_external_url_artifact(
         artifact_kind=request.metadata.get("artifact_kind"),
         file_url=request.metadata.get("file_url"),
